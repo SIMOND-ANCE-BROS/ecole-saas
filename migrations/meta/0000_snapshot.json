@@ -1,0 +1,3112 @@
+{
+  "id": "95e77456-22f3-46ef-a3b7-6c5801c1f214",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.affectation_paiement": {
+      "name": "affectation_paiement",
+      "schema": "",
+      "columns": {
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "paiement_id": {
+          "name": "paiement_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "echeance_id": {
+          "name": "echeance_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "montant_centimes": {
+          "name": "montant_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "affectation_paiement_ecole_id_ecole_id_fk": {
+          "name": "affectation_paiement_ecole_id_ecole_id_fk",
+          "tableFrom": "affectation_paiement",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "affectation_paiement_paiement_id_paiement_id_fk": {
+          "name": "affectation_paiement_paiement_id_paiement_id_fk",
+          "tableFrom": "affectation_paiement",
+          "tableTo": "paiement",
+          "columnsFrom": [
+            "paiement_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "affectation_paiement_echeance_id_echeance_id_fk": {
+          "name": "affectation_paiement_echeance_id_echeance_id_fk",
+          "tableFrom": "affectation_paiement",
+          "tableTo": "echeance",
+          "columnsFrom": [
+            "echeance_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "affectation_paiement_paiement_id_echeance_id_pk": {
+          "name": "affectation_paiement_paiement_id_echeance_id_pk",
+          "columns": [
+            "paiement_id",
+            "echeance_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.carnet": {
+      "name": "carnet",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payeur_id": {
+          "name": "payeur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nb_personnes": {
+          "name": "nb_personnes",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seances_total": {
+          "name": "seances_total",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prix_centimes": {
+          "name": "prix_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "achete_le": {
+          "name": "achete_le",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "carnet_ecole_id_ecole_id_fk": {
+          "name": "carnet_ecole_id_ecole_id_fk",
+          "tableFrom": "carnet",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "carnet_payeur_id_payeur_id_fk": {
+          "name": "carnet_payeur_id_payeur_id_fk",
+          "tableFrom": "carnet",
+          "tableTo": "payeur",
+          "columnsFrom": [
+            "payeur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "carnet_personnes": {
+          "name": "carnet_personnes",
+          "value": "\"carnet\".\"nb_personnes\" BETWEEN 1 AND 4"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.carnet_utilisation": {
+      "name": "carnet_utilisation",
+      "schema": "",
+      "columns": {
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "carnet_id": {
+          "name": "carnet_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seance_id": {
+          "name": "seance_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "carnet_utilisation_ecole_id_ecole_id_fk": {
+          "name": "carnet_utilisation_ecole_id_ecole_id_fk",
+          "tableFrom": "carnet_utilisation",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "carnet_utilisation_carnet_id_carnet_id_fk": {
+          "name": "carnet_utilisation_carnet_id_carnet_id_fk",
+          "tableFrom": "carnet_utilisation",
+          "tableTo": "carnet",
+          "columnsFrom": [
+            "carnet_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "carnet_utilisation_seance_id_seance_id_fk": {
+          "name": "carnet_utilisation_seance_id_seance_id_fk",
+          "tableFrom": "carnet_utilisation",
+          "tableTo": "seance",
+          "columnsFrom": [
+            "seance_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "carnet_utilisation_carnet_id_seance_id_pk": {
+          "name": "carnet_utilisation_carnet_id_seance_id_pk",
+          "columns": [
+            "carnet_id",
+            "seance_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.connecteur_facturation": {
+      "name": "connecteur_facturation",
+      "schema": "",
+      "columns": {
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "outil": {
+          "name": "outil",
+          "type": "outil_facturation",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "identifiants_chiffres": {
+          "name": "identifiants_chiffres",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "one_connect_actif": {
+          "name": "one_connect_actif",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "actif": {
+          "name": "actif",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "maj_le": {
+          "name": "maj_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "connecteur_facturation_ecole_id_ecole_id_fk": {
+          "name": "connecteur_facturation_ecole_id_ecole_id_fk",
+          "tableFrom": "connecteur_facturation",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.cours": {
+      "name": "cours",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "saison_id": {
+          "name": "saison_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "discipline_id": {
+          "name": "discipline_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "salle_id": {
+          "name": "salle_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "intervenant_id": {
+          "name": "intervenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "type_cours",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'collectif'"
+        },
+        "niveau": {
+          "name": "niveau",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "age_min": {
+          "name": "age_min",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "age_max": {
+          "name": "age_max",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "jour_semaine": {
+          "name": "jour_semaine",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "heure_debut": {
+          "name": "heure_debut",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "duree_minutes": {
+          "name": "duree_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "capacite_max": {
+          "name": "capacite_max",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "cours_saison_id_jour_semaine_index": {
+          "name": "cours_saison_id_jour_semaine_index",
+          "columns": [
+            {
+              "expression": "saison_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "jour_semaine",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "cours_ecole_id_ecole_id_fk": {
+          "name": "cours_ecole_id_ecole_id_fk",
+          "tableFrom": "cours",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "cours_saison_id_saison_id_fk": {
+          "name": "cours_saison_id_saison_id_fk",
+          "tableFrom": "cours",
+          "tableTo": "saison",
+          "columnsFrom": [
+            "saison_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "cours_discipline_id_discipline_id_fk": {
+          "name": "cours_discipline_id_discipline_id_fk",
+          "tableFrom": "cours",
+          "tableTo": "discipline",
+          "columnsFrom": [
+            "discipline_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "cours_salle_id_salle_id_fk": {
+          "name": "cours_salle_id_salle_id_fk",
+          "tableFrom": "cours",
+          "tableTo": "salle",
+          "columnsFrom": [
+            "salle_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "cours_intervenant_id_intervenant_id_fk": {
+          "name": "cours_intervenant_id_intervenant_id_fk",
+          "tableFrom": "cours",
+          "tableTo": "intervenant",
+          "columnsFrom": [
+            "intervenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "cours_jour": {
+          "name": "cours_jour",
+          "value": "\"cours\".\"jour_semaine\" BETWEEN 1 AND 7"
+        },
+        "cours_duree": {
+          "name": "cours_duree",
+          "value": "\"cours\".\"duree_minutes\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.danseur": {
+      "name": "danseur",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payeur_id": {
+          "name": "payeur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prenom": {
+          "name": "prenom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date_naissance": {
+          "name": "date_naissance",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contact_urgence": {
+          "name": "contact_urgence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "telephone_urgence": {
+          "name": "telephone_urgence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "danseur_payeur_id_index": {
+          "name": "danseur_payeur_id_index",
+          "columns": [
+            {
+              "expression": "payeur_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "danseur_ecole_id_nom_index": {
+          "name": "danseur_ecole_id_nom_index",
+          "columns": [
+            {
+              "expression": "ecole_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "nom",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "danseur_ecole_id_ecole_id_fk": {
+          "name": "danseur_ecole_id_ecole_id_fk",
+          "tableFrom": "danseur",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "danseur_payeur_id_payeur_id_fk": {
+          "name": "danseur_payeur_id_payeur_id_fk",
+          "tableFrom": "danseur",
+          "tableTo": "payeur",
+          "columnsFrom": [
+            "payeur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.discipline": {
+      "name": "discipline",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "discipline_ecole_id_ecole_id_fk": {
+          "name": "discipline_ecole_id_ecole_id_fk",
+          "tableFrom": "discipline",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "discipline_ecole_id_nom_unique": {
+          "name": "discipline_ecole_id_nom_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "ecole_id",
+            "nom"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.document_danseur": {
+      "name": "document_danseur",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "danseur_id": {
+          "name": "danseur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "type_document",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "accorde": {
+          "name": "accorde",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "valide_jusqu": {
+          "name": "valide_jusqu",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fichier": {
+          "name": "fichier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "document_danseur_ecole_id_ecole_id_fk": {
+          "name": "document_danseur_ecole_id_ecole_id_fk",
+          "tableFrom": "document_danseur",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "document_danseur_danseur_id_danseur_id_fk": {
+          "name": "document_danseur_danseur_id_danseur_id_fk",
+          "tableFrom": "document_danseur",
+          "tableTo": "danseur",
+          "columnsFrom": [
+            "danseur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.echeance": {
+      "name": "echeance",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "facture_id": {
+          "name": "facture_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rang": {
+          "name": "rang",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date_prevue": {
+          "name": "date_prevue",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "montant_centimes": {
+          "name": "montant_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "statut": {
+          "name": "statut",
+          "type": "statut_echeance",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'a_venir'"
+        }
+      },
+      "indexes": {
+        "echeance_ouvertes": {
+          "name": "echeance_ouvertes",
+          "columns": [
+            {
+              "expression": "ecole_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date_prevue",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"echeance\".\"statut\" IN ('a_venir', 'partielle', 'en_retard')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "echeance_ecole_id_ecole_id_fk": {
+          "name": "echeance_ecole_id_ecole_id_fk",
+          "tableFrom": "echeance",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "echeance_facture_id_facture_id_fk": {
+          "name": "echeance_facture_id_facture_id_fk",
+          "tableFrom": "echeance",
+          "tableTo": "facture",
+          "columnsFrom": [
+            "facture_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "echeance_facture_id_rang_unique": {
+          "name": "echeance_facture_id_rang_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "facture_id",
+            "rang"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ecole": {
+      "name": "ecole",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "raison_sociale": {
+          "name": "raison_sociale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "siren": {
+          "name": "siren",
+          "type": "char(9)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "regime_tva": {
+          "name": "regime_tva",
+          "type": "regime_tva",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'non_applicable'"
+        },
+        "mention_tva": {
+          "name": "mention_tva",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fuseau": {
+          "name": "fuseau",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Europe/Paris'"
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "ecole_slug_unique": {
+          "name": "ecole_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "slug"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.facture": {
+      "name": "facture",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payeur_id": {
+          "name": "payeur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "statut": {
+          "name": "statut",
+          "type": "statut_facture",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'a_envoyer'"
+        },
+        "outil": {
+          "name": "outil",
+          "type": "outil_facturation",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ref_outil": {
+          "name": "ref_outil",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "numero": {
+          "name": "numero",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "date_emission": {
+          "name": "date_emission",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_ht_centimes": {
+          "name": "total_ht_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "total_tva_centimes": {
+          "name": "total_tva_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "total_ttc_centimes": {
+          "name": "total_ttc_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "avoir_de": {
+          "name": "avoir_de",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pdf_url": {
+          "name": "pdf_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "facture_payeur_id_index": {
+          "name": "facture_payeur_id_index",
+          "columns": [
+            {
+              "expression": "payeur_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "facture_ecole_id_ecole_id_fk": {
+          "name": "facture_ecole_id_ecole_id_fk",
+          "tableFrom": "facture",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "facture_payeur_id_payeur_id_fk": {
+          "name": "facture_payeur_id_payeur_id_fk",
+          "tableFrom": "facture",
+          "tableTo": "payeur",
+          "columnsFrom": [
+            "payeur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "facture_avoir_de_facture_id_fk": {
+          "name": "facture_avoir_de_facture_id_fk",
+          "tableFrom": "facture",
+          "tableTo": "facture",
+          "columnsFrom": [
+            "avoir_de"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "facture_ecole_id_numero_unique": {
+          "name": "facture_ecole_id_numero_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "ecole_id",
+            "numero"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.fermeture": {
+      "name": "fermeture",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "saison_id": {
+          "name": "saison_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "libelle": {
+          "name": "libelle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "debut": {
+          "name": "debut",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fin": {
+          "name": "fin",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "fermeture_ecole_id_ecole_id_fk": {
+          "name": "fermeture_ecole_id_ecole_id_fk",
+          "tableFrom": "fermeture",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "fermeture_saison_id_saison_id_fk": {
+          "name": "fermeture_saison_id_saison_id_fk",
+          "tableFrom": "fermeture",
+          "tableTo": "saison",
+          "columnsFrom": [
+            "saison_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.inscription": {
+      "name": "inscription",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payeur_id": {
+          "name": "payeur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "saison_id": {
+          "name": "saison_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tarif_id": {
+          "name": "tarif_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "statut": {
+          "name": "statut",
+          "type": "statut_inscription",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "date_inscription": {
+          "name": "date_inscription",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "prix_brut_centimes": {
+          "name": "prix_brut_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "remise_centimes": {
+          "name": "remise_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "prix_net_centimes": {
+          "name": "prix_net_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "generated": {
+            "as": "prix_brut_centimes - remise_centimes",
+            "type": "stored"
+          }
+        },
+        "reductions": {
+          "name": "reductions",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        }
+      },
+      "indexes": {
+        "inscription_payeur_id_saison_id_index": {
+          "name": "inscription_payeur_id_saison_id_index",
+          "columns": [
+            {
+              "expression": "payeur_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "saison_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inscription_ecole_id_ecole_id_fk": {
+          "name": "inscription_ecole_id_ecole_id_fk",
+          "tableFrom": "inscription",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "inscription_payeur_id_payeur_id_fk": {
+          "name": "inscription_payeur_id_payeur_id_fk",
+          "tableFrom": "inscription",
+          "tableTo": "payeur",
+          "columnsFrom": [
+            "payeur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "inscription_saison_id_saison_id_fk": {
+          "name": "inscription_saison_id_saison_id_fk",
+          "tableFrom": "inscription",
+          "tableTo": "saison",
+          "columnsFrom": [
+            "saison_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "inscription_tarif_id_tarif_id_fk": {
+          "name": "inscription_tarif_id_tarif_id_fk",
+          "tableFrom": "inscription",
+          "tableTo": "tarif",
+          "columnsFrom": [
+            "tarif_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.inscription_cours": {
+      "name": "inscription_cours",
+      "schema": "",
+      "columns": {
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inscription_id": {
+          "name": "inscription_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "danseur_id": {
+          "name": "danseur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cours_id": {
+          "name": "cours_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "inscription_cours_ecole_id_ecole_id_fk": {
+          "name": "inscription_cours_ecole_id_ecole_id_fk",
+          "tableFrom": "inscription_cours",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "inscription_cours_inscription_id_inscription_id_fk": {
+          "name": "inscription_cours_inscription_id_inscription_id_fk",
+          "tableFrom": "inscription_cours",
+          "tableTo": "inscription",
+          "columnsFrom": [
+            "inscription_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "inscription_cours_danseur_id_danseur_id_fk": {
+          "name": "inscription_cours_danseur_id_danseur_id_fk",
+          "tableFrom": "inscription_cours",
+          "tableTo": "danseur",
+          "columnsFrom": [
+            "danseur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "inscription_cours_cours_id_cours_id_fk": {
+          "name": "inscription_cours_cours_id_cours_id_fk",
+          "tableFrom": "inscription_cours",
+          "tableTo": "cours",
+          "columnsFrom": [
+            "cours_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "inscription_cours_inscription_id_danseur_id_cours_id_pk": {
+          "name": "inscription_cours_inscription_id_danseur_id_cours_id_pk",
+          "columns": [
+            "inscription_id",
+            "danseur_id",
+            "cours_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.intervenant": {
+      "name": "intervenant",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prenom": {
+          "name": "prenom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "statut": {
+          "name": "statut",
+          "type": "statut_intervenant",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "siren": {
+          "name": "siren",
+          "type": "char(9)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "regime_tva": {
+          "name": "regime_tva",
+          "type": "regime_tva",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "est_dirigeant": {
+          "name": "est_dirigeant",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "mode_remuneration": {
+          "name": "mode_remuneration",
+          "type": "mode_remuneration",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tarif_centimes": {
+          "name": "tarif_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actif": {
+          "name": "actif",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "intervenant_ecole_id_ecole_id_fk": {
+          "name": "intervenant_ecole_id_ecole_id_fk",
+          "tableFrom": "intervenant",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.journal": {
+      "name": "journal",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quand": {
+          "name": "quand",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "qui": {
+          "name": "qui",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "table_cible": {
+          "name": "table_cible",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ligne_id": {
+          "name": "ligne_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "avant": {
+          "name": "avant",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "apres": {
+          "name": "apres",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "journal_ecole_id_table_cible_ligne_id_index": {
+          "name": "journal_ecole_id_table_cible_ligne_id_index",
+          "columns": [
+            {
+              "expression": "ecole_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "table_cible",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ligne_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "journal_ecole_id_ecole_id_fk": {
+          "name": "journal_ecole_id_ecole_id_fk",
+          "tableFrom": "journal",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "journal_qui_membre_id_fk": {
+          "name": "journal_qui_membre_id_fk",
+          "tableFrom": "journal",
+          "tableTo": "membre",
+          "columnsFrom": [
+            "qui"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ligne_facture": {
+      "name": "ligne_facture",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "facture_id": {
+          "name": "facture_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "libelle": {
+          "name": "libelle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantite_milliemes": {
+          "name": "quantite_milliemes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1000
+        },
+        "prix_unitaire_centimes": {
+          "name": "prix_unitaire_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "taux_tva_points_base": {
+          "name": "taux_tva_points_base",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "inscription_id": {
+          "name": "inscription_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "carnet_id": {
+          "name": "carnet_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "ligne_facture_ecole_id_ecole_id_fk": {
+          "name": "ligne_facture_ecole_id_ecole_id_fk",
+          "tableFrom": "ligne_facture",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ligne_facture_facture_id_facture_id_fk": {
+          "name": "ligne_facture_facture_id_facture_id_fk",
+          "tableFrom": "ligne_facture",
+          "tableTo": "facture",
+          "columnsFrom": [
+            "facture_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ligne_facture_inscription_id_inscription_id_fk": {
+          "name": "ligne_facture_inscription_id_inscription_id_fk",
+          "tableFrom": "ligne_facture",
+          "tableTo": "inscription",
+          "columnsFrom": [
+            "inscription_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ligne_facture_carnet_id_carnet_id_fk": {
+          "name": "ligne_facture_carnet_id_carnet_id_fk",
+          "tableFrom": "ligne_facture",
+          "tableTo": "carnet",
+          "columnsFrom": [
+            "carnet_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.membre": {
+      "name": "membre",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "role_membre",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "intervenant_id": {
+          "name": "intervenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actif": {
+          "name": "actif",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "membre_ecole_id_ecole_id_fk": {
+          "name": "membre_ecole_id_ecole_id_fk",
+          "tableFrom": "membre",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "membre_intervenant_id_intervenant_id_fk": {
+          "name": "membre_intervenant_id_intervenant_id_fk",
+          "tableFrom": "membre",
+          "tableTo": "intervenant",
+          "columnsFrom": [
+            "intervenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "membre_ecole_id_user_id_unique": {
+          "name": "membre_ecole_id_user_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "ecole_id",
+            "user_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.paiement": {
+      "name": "paiement",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payeur_id": {
+          "name": "payeur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "montant_centimes": {
+          "name": "montant_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "moyen": {
+          "name": "moyen",
+          "type": "moyen_paiement",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reference": {
+          "name": "reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "saisi_par": {
+          "name": "saisi_par",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "synchro_outil": {
+          "name": "synchro_outil",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "paiement_ecole_id_ecole_id_fk": {
+          "name": "paiement_ecole_id_ecole_id_fk",
+          "tableFrom": "paiement",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "paiement_payeur_id_payeur_id_fk": {
+          "name": "paiement_payeur_id_payeur_id_fk",
+          "tableFrom": "paiement",
+          "tableTo": "payeur",
+          "columnsFrom": [
+            "payeur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "paiement_saisi_par_membre_id_fk": {
+          "name": "paiement_saisi_par_membre_id_fk",
+          "tableFrom": "paiement",
+          "tableTo": "membre",
+          "columnsFrom": [
+            "saisi_par"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.payeur": {
+      "name": "payeur",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "type_payeur",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'particulier'"
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prenom": {
+          "name": "prenom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "raison_sociale": {
+          "name": "raison_sociale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "siren": {
+          "name": "siren",
+          "type": "char(9)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "telephone": {
+          "name": "telephone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "adresse": {
+          "name": "adresse",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ref_outil": {
+          "name": "ref_outil",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "payeur_ecole_id_nom_index": {
+          "name": "payeur_ecole_id_nom_index",
+          "columns": [
+            {
+              "expression": "ecole_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "nom",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "payeur_ecole_id_ecole_id_fk": {
+          "name": "payeur_ecole_id_ecole_id_fk",
+          "tableFrom": "payeur",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "payeur_pro_siren": {
+          "name": "payeur_pro_siren",
+          "value": "\"payeur\".\"type\" = 'particulier' OR \"payeur\".\"siren\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.presence": {
+      "name": "presence",
+      "schema": "",
+      "columns": {
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seance_id": {
+          "name": "seance_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "danseur_id": {
+          "name": "danseur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "present": {
+          "name": "present",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "presence_ecole_id_ecole_id_fk": {
+          "name": "presence_ecole_id_ecole_id_fk",
+          "tableFrom": "presence",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "presence_seance_id_seance_id_fk": {
+          "name": "presence_seance_id_seance_id_fk",
+          "tableFrom": "presence",
+          "tableTo": "seance",
+          "columnsFrom": [
+            "seance_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "presence_danseur_id_danseur_id_fk": {
+          "name": "presence_danseur_id_danseur_id_fk",
+          "tableFrom": "presence",
+          "tableTo": "danseur",
+          "columnsFrom": [
+            "danseur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "presence_seance_id_danseur_id_pk": {
+          "name": "presence_seance_id_danseur_id_pk",
+          "columns": [
+            "seance_id",
+            "danseur_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.reduction": {
+      "name": "reduction",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "saison_id": {
+          "name": "saison_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "taux_points_base": {
+          "name": "taux_points_base",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "montant_centimes": {
+          "name": "montant_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "non_cumulable_avec": {
+          "name": "non_cumulable_avec",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "reduction_ecole_id_ecole_id_fk": {
+          "name": "reduction_ecole_id_ecole_id_fk",
+          "tableFrom": "reduction",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "reduction_saison_id_saison_id_fk": {
+          "name": "reduction_saison_id_saison_id_fk",
+          "tableFrom": "reduction",
+          "tableTo": "saison",
+          "columnsFrom": [
+            "saison_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "reduction_saison_id_code_unique": {
+          "name": "reduction_saison_id_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "saison_id",
+            "code"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "reduction_valeur": {
+          "name": "reduction_valeur",
+          "value": "\"reduction\".\"taux_points_base\" IS NOT NULL OR \"reduction\".\"montant_centimes\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.releve_intervenant": {
+      "name": "releve_intervenant",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "intervenant_id": {
+          "name": "intervenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mois": {
+          "name": "mois",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nb_seances": {
+          "name": "nb_seances",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "minutes": {
+          "name": "minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "montant_du_centimes": {
+          "name": "montant_du_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "facture_recue": {
+          "name": "facture_recue",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "montant_facture_centimes": {
+          "name": "montant_facture_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "statut": {
+          "name": "statut",
+          "type": "statut_releve",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'a_controler'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "releve_intervenant_ecole_id_ecole_id_fk": {
+          "name": "releve_intervenant_ecole_id_ecole_id_fk",
+          "tableFrom": "releve_intervenant",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "releve_intervenant_intervenant_id_intervenant_id_fk": {
+          "name": "releve_intervenant_intervenant_id_intervenant_id_fk",
+          "tableFrom": "releve_intervenant",
+          "tableTo": "intervenant",
+          "columnsFrom": [
+            "intervenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "releve_intervenant_intervenant_id_mois_unique": {
+          "name": "releve_intervenant_intervenant_id_mois_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "intervenant_id",
+            "mois"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.saison": {
+      "name": "saison",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "libelle": {
+          "name": "libelle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date_debut": {
+          "name": "date_debut",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date_fin": {
+          "name": "date_fin",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "saison_ecole_id_ecole_id_fk": {
+          "name": "saison_ecole_id_ecole_id_fk",
+          "tableFrom": "saison",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "saison_ecole_id_libelle_unique": {
+          "name": "saison_ecole_id_libelle_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "ecole_id",
+            "libelle"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "saison_dates": {
+          "name": "saison_dates",
+          "value": "\"saison\".\"date_fin\" > \"saison\".\"date_debut\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.salle": {
+      "name": "salle",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "site_id": {
+          "name": "site_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "capacite": {
+          "name": "capacite",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "salle_ecole_id_ecole_id_fk": {
+          "name": "salle_ecole_id_ecole_id_fk",
+          "tableFrom": "salle",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "salle_site_id_site_id_fk": {
+          "name": "salle_site_id_site_id_fk",
+          "tableFrom": "salle",
+          "tableTo": "site",
+          "columnsFrom": [
+            "site_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.seance": {
+      "name": "seance",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cours_id": {
+          "name": "cours_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "statut": {
+          "name": "statut",
+          "type": "statut_seance",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'prevue'"
+        },
+        "intervenant_id": {
+          "name": "intervenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "seance_ecole_id_date_index": {
+          "name": "seance_ecole_id_date_index",
+          "columns": [
+            {
+              "expression": "ecole_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "seance_intervenant_id_date_index": {
+          "name": "seance_intervenant_id_date_index",
+          "columns": [
+            {
+              "expression": "intervenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "seance_ecole_id_ecole_id_fk": {
+          "name": "seance_ecole_id_ecole_id_fk",
+          "tableFrom": "seance",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "seance_cours_id_cours_id_fk": {
+          "name": "seance_cours_id_cours_id_fk",
+          "tableFrom": "seance",
+          "tableTo": "cours",
+          "columnsFrom": [
+            "cours_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "seance_intervenant_id_intervenant_id_fk": {
+          "name": "seance_intervenant_id_intervenant_id_fk",
+          "tableFrom": "seance",
+          "tableTo": "intervenant",
+          "columnsFrom": [
+            "intervenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "seance_cours_id_date_unique": {
+          "name": "seance_cours_id_date_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "cours_id",
+            "date"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.site": {
+      "name": "site",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "adresse": {
+          "name": "adresse",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "permanence": {
+          "name": "permanence",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "site_ecole_id_ecole_id_fk": {
+          "name": "site_ecole_id_ecole_id_fk",
+          "tableFrom": "site",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.tarif": {
+      "name": "tarif",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ecole_id": {
+          "name": "ecole_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "saison_id": {
+          "name": "saison_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "public": {
+          "name": "public",
+          "type": "public_tarif",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "periodicite": {
+          "name": "periodicite",
+          "type": "periodicite",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "duree_hebdo_minutes": {
+          "name": "duree_hebdo_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nb_cours_max": {
+          "name": "nb_cours_max",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prix_centimes": {
+          "name": "prix_centimes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "tarif_ecole_id_ecole_id_fk": {
+          "name": "tarif_ecole_id_ecole_id_fk",
+          "tableFrom": "tarif",
+          "tableTo": "ecole",
+          "columnsFrom": [
+            "ecole_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tarif_saison_id_saison_id_fk": {
+          "name": "tarif_saison_id_saison_id_fk",
+          "tableFrom": "tarif",
+          "tableTo": "saison",
+          "columnsFrom": [
+            "saison_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "tarif_saison_id_public_periodicite_duree_hebdo_minutes_nb_cours_max_unique": {
+          "name": "tarif_saison_id_public_periodicite_duree_hebdo_minutes_nb_cours_max_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "saison_id",
+            "public",
+            "periodicite",
+            "duree_hebdo_minutes",
+            "nb_cours_max"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.mode_remuneration": {
+      "name": "mode_remuneration",
+      "schema": "public",
+      "values": [
+        "heure",
+        "cours",
+        "forfait_mensuel"
+      ]
+    },
+    "public.moyen_paiement": {
+      "name": "moyen_paiement",
+      "schema": "public",
+      "values": [
+        "cheque",
+        "especes",
+        "carte",
+        "virement",
+        "prelevement",
+        "cheque_vacances",
+        "pass_sport",
+        "autre"
+      ]
+    },
+    "public.outil_facturation": {
+      "name": "outil_facturation",
+      "schema": "public",
+      "values": [
+        "pennylane",
+        "abby",
+        "shine"
+      ]
+    },
+    "public.periodicite": {
+      "name": "periodicite",
+      "schema": "public",
+      "values": [
+        "trimestre",
+        "annee",
+        "unite"
+      ]
+    },
+    "public.public_tarif": {
+      "name": "public_tarif",
+      "schema": "public",
+      "values": [
+        "enfant",
+        "adulte",
+        "couple",
+        "etudiant"
+      ]
+    },
+    "public.regime_tva": {
+      "name": "regime_tva",
+      "schema": "public",
+      "values": [
+        "franchise_293b",
+        "assujetti",
+        "non_applicable"
+      ]
+    },
+    "public.role_membre": {
+      "name": "role_membre",
+      "schema": "public",
+      "values": [
+        "direction",
+        "accueil",
+        "professeur"
+      ]
+    },
+    "public.statut_echeance": {
+      "name": "statut_echeance",
+      "schema": "public",
+      "values": [
+        "a_venir",
+        "payee",
+        "partielle",
+        "en_retard",
+        "annulee"
+      ]
+    },
+    "public.statut_facture": {
+      "name": "statut_facture",
+      "schema": "public",
+      "values": [
+        "a_envoyer",
+        "brouillon_outil",
+        "emise",
+        "rejetee",
+        "annulee"
+      ]
+    },
+    "public.statut_inscription": {
+      "name": "statut_inscription",
+      "schema": "public",
+      "values": [
+        "essai",
+        "liste_attente",
+        "active",
+        "abandon",
+        "terminee"
+      ]
+    },
+    "public.statut_intervenant": {
+      "name": "statut_intervenant",
+      "schema": "public",
+      "values": [
+        "micro_entreprise",
+        "societe",
+        "salarie"
+      ]
+    },
+    "public.statut_releve": {
+      "name": "statut_releve",
+      "schema": "public",
+      "values": [
+        "a_controler",
+        "conforme",
+        "ecart",
+        "paye"
+      ]
+    },
+    "public.statut_seance": {
+      "name": "statut_seance",
+      "schema": "public",
+      "values": [
+        "prevue",
+        "effectuee",
+        "annulee"
+      ]
+    },
+    "public.type_cours": {
+      "name": "type_cours",
+      "schema": "public",
+      "values": [
+        "collectif",
+        "particulier",
+        "competition",
+        "stage"
+      ]
+    },
+    "public.type_document": {
+      "name": "type_document",
+      "schema": "public",
+      "values": [
+        "certificat_medical",
+        "autorisation_parentale",
+        "droit_image",
+        "autre"
+      ]
+    },
+    "public.type_payeur": {
+      "name": "type_payeur",
+      "schema": "public",
+      "values": [
+        "particulier",
+        "professionnel"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
