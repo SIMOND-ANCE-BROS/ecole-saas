@@ -21,6 +21,9 @@ jobs:
     env:
       DATABASE_URL: postgres://app_user:app_user@localhost:5432/ecole
       DATABASE_ADMIN_URL: postgres://proprio:proprio@localhost:5432/ecole
+      # Valeur réservée aux tests de la CI, sans rapport avec un vrai secret.
+      BETTER_AUTH_SECRET: secret-de-test-ci-uniquement-0123456789abcdef
+      BETTER_AUTH_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

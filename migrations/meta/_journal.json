@@ -64,6 +64,20 @@
       "when": 1792416225152,
       "tag": "0008_tarif_carnet_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792418710100,
+      "tag": "0009_authentification",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792420164023,
+      "tag": "0010_tentatives_connexion",
+      "breakpoints": true
     }
   ]
 }
