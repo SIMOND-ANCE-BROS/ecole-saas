@@ -1,6 +1,6 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { lireFamille, rechercherFamilles } from "./familles";
+import { lireFamille, listerFamilles, rechercherFamilles } from "./familles";
 import { avecEcole } from "./index";
 
 /**
@@ -96,5 +96,12 @@ describe("lireFamille", () => {
 
   it("renvoie null pour un identifiant mal formé", async () => {
     expect(await avecEcole(ecole, (tx) => lireFamille(tx, "pas-un-uuid"))).toBeNull();
+  });
+});
+
+describe("listerFamilles", () => {
+  it("liste toutes les familles de l’école par nom, sans celles d’une autre école", async () => {
+    const familles = await avecEcole(ecole, (tx) => listerFamilles(tx));
+    expect(familles.map((f) => f.nom)).toEqual(["Lefèvre", "Martin"]);
   });
 });

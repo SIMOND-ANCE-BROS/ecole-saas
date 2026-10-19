@@ -85,6 +85,13 @@
       "when": 1792430089632,
       "tag": "0011_inscription_public_periodicite",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792434701461,
+      "tag": "0012_inscription_cree_le",
+      "breakpoints": true
     }
   ]
 }

@@ -37,6 +37,17 @@ function contient(texte: string): string {
   return `%${texte.replace(/[\\%_]/g, "\\$&")}%`;
 }
 
+const colonnesFamille = {
+  id: payeur.id,
+  nom: payeur.nom,
+  prenom: payeur.prenom,
+  raisonSociale: payeur.raisonSociale,
+  email: payeur.email,
+  telephone: payeur.telephone,
+  danseurs: sql<string[]>`coalesce((SELECT array_agg(${danseur.prenom} ORDER BY ${danseur.prenom})
+      FROM ${danseur} WHERE ${danseurDuPayeur}), '{}')`,
+};
+
 export type ResultatFamille = {
   id: string;
   nom: string;
@@ -71,20 +82,16 @@ export async function rechercherFamilles(tx: Tx, saisie: string): Promise<Result
   }
 
   return tx
-    .select({
-      id: payeur.id,
-      nom: payeur.nom,
-      prenom: payeur.prenom,
-      raisonSociale: payeur.raisonSociale,
-      email: payeur.email,
-      telephone: payeur.telephone,
-      danseurs: sql<string[]>`coalesce((SELECT array_agg(${danseur.prenom} ORDER BY ${danseur.prenom})
-          FROM ${danseur} WHERE ${danseurDuPayeur}), '{}')`,
-    })
+    .select(colonnesFamille)
     .from(payeur)
     .where(or(...conditions))
     .orderBy(asc(payeur.nom), asc(payeur.prenom))
     .limit(RESULTATS_MAX);
+}
+
+/** Toutes les familles de l'école, par nom (sans recherche saisie). */
+export async function listerFamilles(tx: Tx, limite = 200): Promise<ResultatFamille[]> {
+  return tx.select(colonnesFamille).from(payeur).orderBy(asc(payeur.nom), asc(payeur.prenom)).limit(limite);
 }
 
 export type Famille = {
