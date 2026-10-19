@@ -13,6 +13,27 @@ const COMPTES = [
   { email: "direction@demo.test", nom: "Direction Démo", role: "direction" },
 ] as const;
 
+type FamilleDemo = {
+  nom: string;
+  prenom?: string;
+  type?: "particulier" | "professionnel";
+  raisonSociale?: string;
+  siren?: string;
+  email?: string;
+  telephone?: string;
+  adresse?: string;
+  danseurs: [prenom: string, naissance: string | null][];
+};
+
+const FAMILLES: FamilleDemo[] = [
+  { nom: "Lefèvre", prenom: "Hélène", email: "helene.lefevre@demo.test", telephone: "06 12 34 56 78", adresse: "12 rue des Lilas, 69100 Villeurbanne", danseurs: [["Zoé", "2015-03-10"], ["Noé", "2017-11-02"]] },
+  { nom: "Martin", prenom: "Paul", email: "paul.martin@demo.test", telephone: "06 98 76 54 32", danseurs: [["Léa", "2014-06-21"]] },
+  { nom: "Bernard", prenom: "Émilie", telephone: "07 11 22 33 44", danseurs: [["Alice", "2016-01-15"], ["Louis", "2016-01-15"], ["Jules", "2019-09-30"]] },
+  { nom: "Rivière", prenom: "Alex", email: "alex.riviere@demo.test", danseurs: [["Alex", "1996-04-05"]] },
+  { nom: "Petit", prenom: "Sarah", telephone: "06 55 44 33 22", danseurs: [["Chloé", "2013-12-24"]] },
+  { nom: "Ateliers Démo", type: "professionnel", raisonSociale: "CSE des Ateliers Démo", siren: "000000000", email: "cse@demo.test", danseurs: [] },
+];
+
 if (process.env.NODE_ENV === "production") throw new Error("Données de démonstration refusées en production");
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
@@ -35,6 +56,23 @@ async function principal() {
     await admin`
       INSERT INTO membre (ecole_id, user_id, role) VALUES (${ecole.id}, ${userId}, ${compte.role})
       ON CONFLICT (ecole_id, user_id) DO NOTHING`;
+  }
+
+  // Familles fictives (aucune personne réelle), créées une seule fois.
+  const [{ n }] = await admin`SELECT count(*)::int AS n FROM payeur WHERE ecole_id = ${ecole.id}`;
+  if (n === 0) {
+    for (const f of FAMILLES) {
+      const [p] = await admin`
+        INSERT INTO payeur (ecole_id, type, nom, prenom, raison_sociale, siren, email, telephone, adresse)
+        VALUES (${ecole.id}, ${f.type ?? "particulier"}, ${f.nom}, ${f.prenom ?? null}, ${f.raisonSociale ?? null},
+                ${f.siren ?? null}, ${f.email ?? null}, ${f.telephone ?? null}, ${f.adresse ?? null})
+        RETURNING id`;
+      for (const [prenom, naissance] of f.danseurs) {
+        await admin`
+          INSERT INTO danseur (ecole_id, payeur_id, nom, prenom, date_naissance)
+          VALUES (${ecole.id}, ${p.id}, ${f.nom}, ${prenom}, ${naissance})`;
+      }
+    }
   }
 
   console.log(`École de démonstration prête. Comptes : ${COMPTES.map((c) => c.email).join(", ")}`);
