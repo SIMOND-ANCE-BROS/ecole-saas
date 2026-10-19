@@ -50,6 +50,20 @@
       "when": 1792413408654,
       "tag": "0006_droits_par_defaut",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792416179665,
+      "tag": "0007_tarif_carnet",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792416225152,
+      "tag": "0008_tarif_carnet_rls",
+      "breakpoints": true
     }
   ]
 }
