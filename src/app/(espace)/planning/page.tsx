@@ -36,32 +36,32 @@ export default async function PagePlanning() {
 
   return (
     <section className="flex flex-col gap-4">
-      <h1 className="text-xl font-semibold">Planning {saison.libelle}</h1>
+      <h1 className="titre-page">Planning {saison.libelle}</h1>
       {cours.length === 0 ? (
         <p className="text-sm">Aucun cours pour cette saison.</p>
       ) : (
         <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(14rem,1fr))]">
           {jours.map((jour) => (
             <section key={jour ?? "stage"} aria-labelledby={`jour-${jour ?? "stage"}`} className="flex flex-col gap-2">
-              <h2 id={`jour-${jour ?? "stage"}`} className="border-b border-neutral-300 pb-1 text-sm font-semibold dark:border-neutral-700">
+              <h2 id={`jour-${jour ?? "stage"}`} className="border-b border-bordure pb-1 text-sm font-semibold">
                 {jour ? JOURS[jour] : "Stages"}
               </h2>
               <ul className="flex flex-col gap-2">
                 {cours
                   .filter((c) => c.jourSemaine === jour)
                   .map((c) => (
-                    <li key={c.id} className="rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700">
+                    <li key={c.id} className="rounded-md border border-bordure bg-surface px-2 py-1 text-sm">
                       <p className="font-medium">
                         <span className="tabular-nums">
                           {c.heureDebut}–{fin(c.heureDebut, c.dureeMinutes)}
                         </span>{" "}
                         {c.discipline}
                       </p>
-                      <p className="text-xs text-neutral-700 dark:text-neutral-300">
+                      <p className="text-xs text-doux">
                         {[c.salle, c.site].join(" · ")} — {c.intervenant}
                       </p>
                       {(ages(c.ageMin, c.ageMax) || c.niveau) && (
-                        <p className="text-xs text-neutral-700 dark:text-neutral-300">
+                        <p className="text-xs text-doux">
                           {[ages(c.ageMin, c.ageMax), c.niveau].filter(Boolean).join(" · ")}
                         </p>
                       )}

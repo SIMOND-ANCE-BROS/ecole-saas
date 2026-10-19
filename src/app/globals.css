@@ -1,44 +1,110 @@
 @import "tailwindcss";
 
+/*
+ * Jetons de couleur de l'interface (clair / sombre). Utilisables en classes
+ * Tailwind : bg-fond, bg-surface, border-bordure, text-texte, text-doux,
+ * bg-accent, text-accent, bg-accent-doux.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --fond: #f5f6fa;
+  --surface: #ffffff;
+  --bordure: #dce0e8;
+  --texte: #1c2030;
+  --doux: #5a6175;
+  --accent: #4f46e5;
+  --accent-fort: #4338ca;
+  --accent-doux: #eef0ff;
+  --sur-accent: #ffffff;
+  --alerte-fond: #fff4dc;
+  --alerte-texte: #7a4b00;
+  --erreur: #b42318;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --fond: #11131a;
+    --surface: #191c25;
+    --bordure: #2b3040;
+    --texte: #e6e8ef;
+    --doux: #9ba2b4;
+    --accent: #8e92f7;
+    --accent-fort: #a5a8fa;
+    --accent-doux: #252a45;
+    --sur-accent: #11131a;
+    --alerte-fond: #3a2c10;
+    --alerte-texte: #f6d58e;
+    --erreur: #f19c94;
   }
+}
+
+@theme inline {
+  --color-fond: var(--fond);
+  --color-surface: var(--surface);
+  --color-bordure: var(--bordure);
+  --color-texte: var(--texte);
+  --color-doux: var(--doux);
+  --color-accent: var(--accent);
+  --color-accent-fort: var(--accent-fort);
+  --color-accent-doux: var(--accent-doux);
+  --color-sur-accent: var(--sur-accent);
+  --color-alerte-fond: var(--alerte-fond);
+  --color-alerte-texte: var(--alerte-texte);
+  --color-erreur: var(--erreur);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--fond);
+  color: var(--texte);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
-/* Contrôles de formulaire communs : compacts (saisie rapide à l'accueil), focus toujours visible. */
+/* Composants communs : compacts (saisie rapide à l'accueil), focus toujours visible. */
 @layer components {
   .champ {
-    @apply rounded border border-neutral-400 bg-transparent px-2 py-1.5 text-sm
-      focus:outline-2 focus:outline-offset-1 focus:outline-blue-600 dark:border-neutral-600;
+    @apply rounded-md border border-bordure bg-surface px-2 py-1.5 text-sm text-texte
+      placeholder:text-doux focus:outline-2 focus:outline-offset-1 focus:outline-accent;
   }
   .bouton-principal {
-    @apply rounded bg-blue-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-800
-      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600
-      disabled:opacity-60;
+    @apply inline-flex items-center justify-center rounded-md bg-accent px-3 py-1.5 text-sm font-medium
+      text-sur-accent hover:bg-accent-fort focus-visible:outline-2 focus-visible:outline-offset-2
+      focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50;
   }
   .bouton-secondaire {
-    @apply rounded border border-neutral-400 px-3 py-1.5 text-sm hover:bg-neutral-100
-      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600
-      dark:border-neutral-600 dark:hover:bg-neutral-800;
+    @apply inline-flex items-center rounded-md border border-bordure bg-surface px-3 py-1.5 text-sm
+      hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
+  }
+  .lien {
+    @apply text-accent underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-accent;
+  }
+  /* Bloc de contenu : bordé, sans ombre. */
+  .panneau {
+    @apply rounded-lg border border-bordure bg-surface;
+  }
+  /* Tableau dense : lignes d'environ 32 px, en-têtes en casse normale. */
+  .tableau {
+    @apply w-full text-left text-sm;
+  }
+  .tableau th {
+    @apply border-b border-bordure px-3 py-2 text-xs font-medium text-doux;
+  }
+  .tableau td {
+    @apply border-b border-bordure px-3 py-1.5 align-top;
+  }
+  .tableau tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  .tableau tbody tr:hover {
+    @apply bg-accent-doux/40;
+  }
+  .titre-page {
+    @apply text-xl font-semibold tracking-tight;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
   }
 }

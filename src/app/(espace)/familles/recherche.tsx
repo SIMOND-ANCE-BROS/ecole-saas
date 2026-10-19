@@ -37,7 +37,7 @@ export function Recherche({ valeurInitiale }: { valeurInitiale: string }) {
         onChange={(e) => setValeur(e.target.value)}
         className="champ w-96 max-w-full"
       />
-      <span aria-live="polite" className="text-xs text-neutral-600 dark:text-neutral-400">
+      <span aria-live="polite" className="text-xs text-doux">
         {enCours ? "Recherche…" : ""}
       </span>
     </div>

@@ -26,11 +26,11 @@ export default async function PageInscription({ params }: PageProps<"/familles/[
   return (
     <section className="flex flex-col gap-4">
       <p className="text-sm">
-        <Link href={`/familles/${famille.id}`} className="underline-offset-2 hover:underline">
+        <Link href={`/familles/${famille.id}`} className="lien">
           ← {nom}
         </Link>
       </p>
-      <h1 className="text-xl font-semibold">
+      <h1 className="titre-page">
         Nouvelle inscription {saison ? `· ${saison.libelle}` : ""}
       </h1>
       {!saison ? (
