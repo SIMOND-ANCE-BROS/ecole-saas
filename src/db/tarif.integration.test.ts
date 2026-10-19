@@ -74,6 +74,16 @@ describe("tarif", () => {
     });
   });
 
+  it("refuse une discipline d’une autre école", async () => {
+    await avecSaison(async (tx, ids) => {
+      const [autre] = await tx`INSERT INTO ecole (nom, slug) VALUES ('Autre école', 'autre-ecole') RETURNING id`;
+      const [etrangere] = await tx`INSERT INTO discipline (ecole_id, nom) VALUES (${autre.id}, 'Zumba') RETURNING id`;
+      await expect(tx.savepoint((sp) => insererTarif(sp, ids, [60, 60], etrangere.id))).rejects.toMatchObject({
+        constraint_name: "tarif_discipline_meme_ecole_fk",
+      });
+    });
+  });
+
   it("refuse une combinaison vide ou une durée nulle", async () => {
     await avecSaison(async (tx, ids) => {
       for (const combinaison of [[], [0, 60]]) {

@@ -17,6 +17,7 @@ import {
   char,
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -268,7 +269,13 @@ export const discipline = pgTable(
     ecoleId: ecoleId(),
     nom: text("nom").notNull(),
   },
-  (t) => [unique().on(t.ecoleId, t.nom)],
+  (t) => [
+    unique().on(t.ecoleId, t.nom),
+    // Cible des clés étrangères composites (ecole_id, discipline_id) : une
+    // référence ne peut pas viser une discipline d'une autre école (la
+    // vérification d'une clé étrangère ignore la RLS).
+    unique("discipline_ecole_id_id_unique").on(t.ecoleId, t.id),
+  ],
 );
 
 export const cours = pgTable(
@@ -357,7 +364,7 @@ export const tarif = pgTable(
     // Durées des cours de la semaine, en minutes, triées : {45,45,60} = « 45 min + 45 min + 1 h 00 ».
     combinaison: smallint("combinaison").array().notNull(),
     // Forfait réservé à une discipline (ex. « Zumba 2 h 00 ») ; NULL = toutes disciplines.
-    disciplineId: uuid("discipline_id").references(() => discipline.id),
+    disciplineId: uuid("discipline_id"),
     prixCentimes: integer("prix_centimes").notNull(),
   },
   (t) => [
@@ -366,6 +373,12 @@ export const tarif = pgTable(
       .on(t.saisonId, t.public, t.periodicite, t.combinaison, t.disciplineId)
       .nullsNotDistinct(),
     check("tarif_combinaison", sql`cardinality(${t.combinaison}) >= 1 AND 0 < ALL(${t.combinaison})`),
+    // Composite : la discipline appartient à la même école (MATCH SIMPLE : NULL accepté).
+    foreignKey({
+      name: "tarif_discipline_meme_ecole_fk",
+      columns: [t.ecoleId, t.disciplineId],
+      foreignColumns: [discipline.ecoleId, discipline.id],
+    }),
   ],
 );
 

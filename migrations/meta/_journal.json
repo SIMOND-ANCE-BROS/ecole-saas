@@ -29,6 +29,13 @@
       "when": 1792400650258,
       "tag": "0003_tarif_combinaison_suppression",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792400960610,
+      "tag": "0004_tarif_discipline_meme_ecole",
+      "breakpoints": true
     }
   ]
 }
