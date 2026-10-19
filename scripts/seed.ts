@@ -138,6 +138,41 @@ async function principal() {
     }
   }
 
+  // Grille tarifaire et réduction fratrie de démonstration (montants en euros).
+  const [{ nbTarifs }] = await admin`SELECT count(*)::int AS "nbTarifs" FROM tarif WHERE saison_id = ${saison.id}`;
+  if (nbTarifs === 0) {
+    const GRILLE: [publicTarif: string, combinaison: number[], trimestre: number, annee: number][] = [
+      ["enfant", [45], 85, 210],
+      ["enfant", [60], 110, 280],
+      ["enfant", [90], 150, 380],
+      ["enfant", [45, 60], 165, 415],
+      ["enfant", [60, 60], 185, 475],
+      ["enfant", [60, 90], 220, 560],
+      ["enfant", [45, 90], 200, 500],
+      ["enfant", [90, 90], 255, 645],
+      ["enfant", [60, 60, 60], 230, 590],
+      ["adulte", [60], 120, 305],
+      ["adulte", [90], 165, 420],
+      ["adulte", [60, 60], 205, 520],
+      ["adulte", [60, 90], 240, 615],
+      ["adulte", [90, 90], 280, 715],
+      ["couple", [60], 230, 550],
+      ["couple", [90], 295, 755],
+      ["etudiant", [60], 115, 290],
+      ["etudiant", [90], 155, 400],
+    ];
+    for (const [publicTarif, combinaison, trimestre, annee] of GRILLE) {
+      for (const [periodicite, euros] of [["trimestre", trimestre], ["annee", annee]] as const) {
+        await admin`
+          INSERT INTO tarif (ecole_id, saison_id, public, periodicite, combinaison, prix_centimes)
+          VALUES (${ecole.id}, ${saison.id}, ${publicTarif}, ${periodicite}, ${`{${combinaison.join(",")}}`}::smallint[], ${euros * 100})`;
+      }
+    }
+    await admin`
+      INSERT INTO reduction (ecole_id, saison_id, code, taux_points_base, seuil_danseurs, publics, cumulable_multi_disciplines)
+      VALUES (${ecole.id}, ${saison.id}, 'fratrie', 1000, 2, '{enfant}', false)`;
+  }
+
   console.log(`École de démonstration prête. Comptes : ${COMPTES.map((c) => c.email).join(", ")}`);
   console.log(`Mot de passe : ${process.env.SEED_MOT_DE_PASSE ? "(SEED_MOT_DE_PASSE)" : MOT_DE_PASSE}`);
 }

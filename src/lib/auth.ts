@@ -12,6 +12,11 @@ import { account, session, user, verification } from "../db/schema";
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema: { user, session, account, verification } }),
   emailAndPassword: { enabled: true, disableSignUp: true },
+  // Origines acceptées en plus de BETTER_AUTH_URL (ex. accès par l'IP du poste en local).
+  trustedOrigins: (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean),
   // Porte d'entrée unique : la connexion passe par la server action, qui limite
   // les tentatives (limite-connexion.ts). La route HTTP publique est fermée.
   disabledPaths: ["/sign-in/email"],

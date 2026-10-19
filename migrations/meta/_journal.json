@@ -78,6 +78,13 @@
       "when": 1792420164023,
       "tag": "0010_tentatives_connexion",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792430089632,
+      "tag": "0011_inscription_public_periodicite",
+      "breakpoints": true
     }
   ]
 }
