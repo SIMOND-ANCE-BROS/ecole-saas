@@ -27,6 +27,9 @@ export default async function LayoutEspace({ children }: LayoutProps<"/">) {
           <Link href="/familles" className="underline-offset-2 hover:underline">
             Familles
           </Link>
+          <Link href="/planning" className="underline-offset-2 hover:underline">
+            Planning
+          </Link>
         </nav>
         <div className="ml-auto flex items-center gap-3">
           <Link href="/ecoles" className="underline-offset-2 hover:underline">
