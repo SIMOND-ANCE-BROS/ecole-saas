@@ -24,7 +24,7 @@ export async function enregistrerCours(id: string | null, saisie: unknown): Prom
     return saison ? creerCours(tx, saison.id, donnees.data) : { ok: false as const, message: "Aucune saison n’est paramétrée." };
   });
   if (!resultat.ok) return { message: resultat.message, erreurs: {} };
-  redirect(`/planning?enregistre=${resultat.id}`);
+  redirect(id === null ? `/planning?enregistre=${resultat.id}` : `/planning/cours/${resultat.id}?modifie=1`);
 }
 
 export async function supprimer(id: string): Promise<Refus> {

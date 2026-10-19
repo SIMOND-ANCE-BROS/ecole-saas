@@ -1,7 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { avecEcole } from "./index";
-import { coursDeLaSaison, saisonCourante } from "./planning";
+import { coursDeLaSaison, coursDuPlanning, inscritsDuCours, saisonCourante } from "./planning";
 
 /** Planning, lu comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
 
@@ -48,7 +48,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const t of ["cours", "intervenant", "salle", "site", "discipline", "saison"]) {
+  for (const t of ["inscription_cours", "inscription", "danseur", "payeur", "cours", "intervenant", "salle", "site", "discipline", "saison"]) {
     await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
   }
   await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
@@ -91,5 +91,36 @@ describe("coursDeLaSaison", () => {
       ageMax: 10,
       niveau: "Débutant",
     });
+  });
+});
+
+describe("coursDuPlanning et inscritsDuCours", () => {
+  it("lit un cours et ses danseurs actifs, à l’essai ou en attente, sans les abandons", async () => {
+    const [jazz] = await admin`SELECT c.id FROM cours c JOIN discipline d ON d.id = c.discipline_id
+      WHERE c.ecole_id = ${ecole} AND d.nom = 'Jazz'`;
+    const [p] = await admin`INSERT INTO payeur (ecole_id, nom, prenom, telephone) VALUES (${ecole}, 'Bernard', 'Émilie', '07 11 22 33 44') RETURNING id`;
+    const danseurs: Record<string, string> = {};
+    for (const prenom of ["Louis", "Alice", "Jules", "Zoé"]) {
+      [{ id: danseurs[prenom] }] = await admin`
+        INSERT INTO danseur (ecole_id, payeur_id, nom, prenom, date_naissance) VALUES (${ecole}, ${p.id}, 'Bernard', ${prenom}, '2016-01-15') RETURNING id`;
+    }
+    for (const [prenom, statut] of [["Louis", "active"], ["Alice", "essai"], ["Jules", "liste_attente"], ["Zoé", "abandon"]]) {
+      const [i] = await admin`
+        INSERT INTO inscription (ecole_id, saison_id, payeur_id, public, periodicite, prix_brut_centimes, statut)
+        VALUES (${ecole}, ${saison2026}, ${p.id}, 'enfant', 'trimestre', 10000, ${statut}) RETURNING id`;
+      await admin`INSERT INTO inscription_cours (ecole_id, inscription_id, danseur_id, cours_id) VALUES (${ecole}, ${i.id}, ${danseurs[prenom]}, ${jazz.id})`;
+    }
+
+    expect(await avecEcole(ecole, (tx) => coursDuPlanning(tx, jazz.id))).toMatchObject({ discipline: "Jazz", inscrits: 1 });
+    const inscrits = await avecEcole(ecole, (tx) => inscritsDuCours(tx, jazz.id));
+    expect(inscrits.map((i) => `${i.prenom} ${i.statut}`)).toEqual(["Alice essai", "Jules liste_attente", "Louis active"]);
+    expect(inscrits[0]).toMatchObject({ famille: "Bernard", telephone: "07 11 22 33 44", payeurId: p.id, dateNaissance: "2016-01-15" });
+  });
+
+  it("ne lit pas le cours d’une autre école, ni ses inscrits", async () => {
+    const [salsa] = await admin`SELECT id FROM cours WHERE ecole_id = ${autreEcole}`;
+    expect(await avecEcole(ecole, (tx) => coursDuPlanning(tx, salsa.id))).toBeNull();
+    expect(await avecEcole(ecole, (tx) => inscritsDuCours(tx, salsa.id))).toEqual([]);
+    expect(await avecEcole(ecole, (tx) => coursDuPlanning(tx, "pas-un-uuid"))).toBeNull();
   });
 });

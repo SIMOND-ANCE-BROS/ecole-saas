@@ -300,7 +300,7 @@ export function FormulaireCours({ cours, referentiel, planning, jour }: Props) {
         <button type="submit" className="bouton-principal" disabled={envoi}>
           {envoi ? "Enregistrement…" : cours ? "Enregistrer les modifications" : "Créer le cours"}
         </button>
-        <Link href="/planning" className="bouton-secondaire">
+        <Link href={cours ? `/planning/cours/${cours.id}` : "/planning"} className="bouton-secondaire">
           Annuler
         </Link>
         {cours &&
