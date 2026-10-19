@@ -58,10 +58,11 @@ Next.js 16 (App Router) · React 19 · TypeScript strict · PostgreSQL 16 · Dri
 
 ```bash
 npm run dev          # serveur local
-npm test             # Vitest
-npm run typecheck    # tsc --noEmit
+npm test             # Vitest (tests unitaires)
+npm run test:integration  # tests contre la base locale (dont le garde-fou RLS)
+npm run typecheck    # next typegen + tsc --noEmit
 npm run lint         # ESLint
-npm run db:up        # PostgreSQL local (Docker)
+npm run db:up        # PostgreSQL local (Docker, port 5433)
 npm run db:generate  # nouvelle migration après modification du schéma
 npm run db:migrate   # appliquer les migrations
 ```
@@ -110,12 +111,13 @@ migrations/               générées par drizzle-kit + migrations SQL personnal
 - Toute fonction du domaine a ses tests Vitest, écrits **avant ou avec** le code. Priorité absolue : moteur de tarif, réductions, échéanciers, relevés des professeurs.
 - Couvrir les cas limites réels : fratrie de trois enfants, couple + réduction, abandon en cours de trimestre, remplacement d'un professeur, centimes restants d'une répartition.
 - Les comportements de sécurité (RLS, inaltérabilité) se testent contre une vraie base PostgreSQL, pas avec des mocks.
-- Recommandé : un test qui échoue si une table portant `ecole_id` n'a pas la RLS activée.
+- Garde-fou en place : `src/db/rls.integration.test.ts` échoue si une table portant `ecole_id` n'a pas la RLS activée et forcée avec la politique `isolation_ecole`. Fichiers `*.integration.test.ts`, lancés par `npm run test:integration` et en CI.
 
 ## 9. Façon de travailler
 
-- Avant de terminer une tâche : `npm run lint`, `npm run typecheck`, `npm test` doivent passer.
+- Avant de terminer une tâche : `npm run lint`, `npm run typecheck`, `npm test` doivent passer, et `npm run test:integration` si la base est concernée.
 - Petits commits, messages en français à l'impératif (« Ajoute le calcul de la réduction fratrie »).
+- Tout travail part d'une issue et passe par une branche et une PR, jamais de commit direct sur `main` ; aucun merge sans accord explicite. Conventions (titres, types, Priority/Effort, labels, préfixes de branches, Project) : `docs/guides/gestion-des-issues.md`, résumées dans `AGENTS.md`.
 - **Demander avant** d'ajouter une dépendance. Versions figées exactes, publiées depuis au moins 14 jours. Pas de dépendance pour ce qui tient en quelques lignes.
 - Ne pas modifier `migrations/0001_rls.sql`, les triggers d'inaltérabilité ou `avecEcole()` sans le signaler explicitement.
 - Si une décision d'architecture change, mettre à jour ce fichier dans le même commit.
