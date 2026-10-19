@@ -756,6 +756,21 @@ export const account = pgTable(
   (t) => [index().on(t.userId)],
 );
 
+/**
+ * Échecs de connexion récents, pour limiter les essais de mots de passe
+ * (src/lib/limite-connexion.ts). La clé est un HMAC de l'e-mail ou de l'IP :
+ * aucune donnée personnelle en clair. Purgée au fil de l'eau.
+ */
+export const tentativeConnexion = pgTable(
+  "tentative_connexion",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    cle: text("cle").notNull(),
+    quand: timestamp("quand", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index().on(t.cle, t.quand)],
+);
+
 export const verification = pgTable("verification", {
   id: text("id").primaryKey(),
   identifier: text("identifier").notNull(),

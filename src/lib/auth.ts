@@ -12,6 +12,9 @@ import { account, session, user, verification } from "../db/schema";
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema: { user, session, account, verification } }),
   emailAndPassword: { enabled: true, disableSignUp: true },
+  // Porte d'entrée unique : la connexion passe par la server action, qui limite
+  // les tentatives (limite-connexion.ts). La route HTTP publique est fermée.
+  disabledPaths: ["/sign-in/email"],
   session: {
     additionalFields: {
       // Fixée côté serveur seulement (choisirEcole), jamais par le navigateur.
