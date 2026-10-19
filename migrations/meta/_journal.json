@@ -15,6 +15,27 @@
       "when": 1792156301880,
       "tag": "0001_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792400601174,
+      "tag": "0002_tarif_combinaison_ajout",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792400650258,
+      "tag": "0003_tarif_combinaison_suppression",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792400960610,
+      "tag": "0004_tarif_discipline_meme_ecole",
+      "breakpoints": true
     }
   ]
 }
