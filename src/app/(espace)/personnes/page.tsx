@@ -3,13 +3,13 @@ import Link from "next/link";
 import { avecEcole } from "@/db";
 import { listerPersonnes, nomAffiche, rechercherPersonnes } from "@/db/personnes";
 import { ageAu, aujourdhuiAParis } from "@/domaine/personnes/age";
-import { contexteEcole } from "@/lib/session";
+import { exigerRole } from "@/lib/session";
 import { ResultatsNavigables } from "./resultats";
 
 export const metadata: Metadata = { title: "Personnes" };
 
 export default async function PagePersonnes({ searchParams }: PageProps<"/personnes">) {
-  const { ecoleId, role } = await contexteEcole();
+  const { ecoleId } = await exigerRole("direction", "accueil");
   const { q } = await searchParams;
   const saisie = typeof q === "string" ? q.trim() : "";
   const personnes = await avecEcole(ecoleId, (tx) => (saisie ? rechercherPersonnes(tx, saisie) : listerPersonnes(tx)));
@@ -26,11 +26,9 @@ export default async function PagePersonnes({ searchParams }: PageProps<"/person
               : `${personnes.length} personne${personnes.length > 1 ? "s" : ""} : danseurs, parents, payeurs. Tapez dans la recherche en haut (Ctrl K) pour filtrer.`}
           </p>
         </div>
-        {role !== "professeur" && (
-          <Link href="/personnes/nouvelle" className="bouton-principal">
-            Nouvelle personne
-          </Link>
-        )}
+        <Link href="/personnes/nouvelle" className="bouton-principal">
+          Nouvelle personne
+        </Link>
       </div>
       {personnes.length === 0 ? (
         <p className="text-sm">
