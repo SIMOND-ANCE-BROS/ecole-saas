@@ -64,6 +64,14 @@ describe("Limitation des tentatives de connexion", () => {
     expect(resultats.filter(Boolean).length).toBeLessThanOrEqual(LIMITES.parPaire);
   });
 
+  it("ne prolonge pas le blocage quand on s’acharne (les tentatives refusées ne comptent pas)", async () => {
+    await tentatives(email("acharne"), ip(10), LIMITES.parPaire + 20);
+    const [{ n }] = await admin`
+      SELECT count(*)::int AS n FROM tentative_connexion
+      WHERE cle = ${cleDeTentative("paire", `${email("acharne")}|${ip(10)}`)}`;
+    expect(n).toBe(LIMITES.parPaire);
+  });
+
   it("efface les tentatives de l’adresse après une connexion réussie", async () => {
     await tentatives(email("oubli"), ip(5), LIMITES.parPaire);
     expect(await enregistrerTentative(email("oubli"), ip(5))).toBe(false);

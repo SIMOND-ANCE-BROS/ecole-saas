@@ -45,11 +45,15 @@ function cles(email: string, ip: string | null) {
 /**
  * Enregistre une tentative puis vérifie les limites, nouvelle tentative
  * comprise. Renvoie false si la connexion doit être refusée sans vérifier le
- * mot de passe.
+ * mot de passe ; la tentative refusée est alors retirée, pour que s'acharner
+ * ne prolonge pas le blocage (il expire après la dernière tentative acceptée).
  */
 export async function enregistrerTentative(email: string, ip: string | null): Promise<boolean> {
   const limites = cles(email, ip);
-  await db.insert(tentativeConnexion).values(limites.map(({ cle }) => ({ cle })));
+  const inserees = await db
+    .insert(tentativeConnexion)
+    .values(limites.map(({ cle }) => ({ cle })))
+    .returning({ id: tentativeConnexion.id });
   const comptes = await db
     .select({ cle: tentativeConnexion.cle, n: count() })
     .from(tentativeConnexion)
@@ -65,7 +69,16 @@ export async function enregistrerTentative(email: string, ip: string | null): Pr
     .groupBy(tentativeConnexion.cle);
   // Purge au fil de l'eau : rien n'est gardé au-delà d'une journée.
   await db.delete(tentativeConnexion).where(lt(tentativeConnexion.quand, sql`now() - interval '1 day'`));
-  return limites.every(({ cle, max }) => (comptes.find((c) => c.cle === cle)?.n ?? 0) <= max);
+  const autorisee = limites.every(({ cle, max }) => (comptes.find((c) => c.cle === cle)?.n ?? 0) <= max);
+  if (!autorisee) {
+    await db.delete(tentativeConnexion).where(
+      inArray(
+        tentativeConnexion.id,
+        inserees.map((l) => l.id),
+      ),
+    );
+  }
+  return autorisee;
 }
 
 /** Après une connexion réussie : l'adresse et la paire repartent de zéro (pas l'IP). */
