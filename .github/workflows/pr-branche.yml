@@ -1,0 +1,35 @@
+name: Nom de branche
+
+# Bloque une PR vers main dont la branche n'a pas un préfixe autorisé
+# (docs/guides/gestion-des-issues.md §8). Liste blanche : rien ne passe sans nom.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+  verifier:
+    name: Vérifier le nom de la branche
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Préfixe autorisé
+        env:
+          HEAD: ${{ github.head_ref }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          echo "PR : $HEAD → $BASE"
+          if [ "$BASE" != "main" ]; then
+            echo "Base $BASE : pas de règle."
+            exit 0
+          fi
+          AUTORISES="^(feature|fix|refactor|test|docs|chore|hotfix|claude|dependabot)/"
+          if echo "$HEAD" | grep -qE "$AUTORISES"; then
+            echo "Branche valide."
+            exit 0
+          fi
+          echo "::error::La branche '$HEAD' ne peut pas viser main."
+          echo "Préfixes autorisés : feature/ fix/ refactor/ test/ docs/ chore/ hotfix/ claude/ dependabot/"
+          echo "Renommer avant d'ouvrir la PR (renommer après ferme la PR) : git branch -m feature/${HEAD##*/}"
+          exit 1
