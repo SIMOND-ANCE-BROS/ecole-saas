@@ -443,6 +443,31 @@ export const reduction = pgTable(
   ],
 );
 
+/**
+ * Grille des carnets de cours particuliers : une ligne par nombre de séances
+ * et tranche de personnes (« jusqu'à personnes_max »). Au-delà de la dernière
+ * tranche : devis, prix saisi sur le carnet.
+ */
+export const tarifCarnet = pgTable(
+  "tarif_carnet",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ecoleId: ecoleId(),
+    saisonId: uuid("saison_id").notNull(),
+    nbSeances: smallint("nb_seances").notNull(),
+    personnesMax: smallint("personnes_max").notNull(),
+    prixCentimes: integer("prix_centimes").notNull(),
+  },
+  (t) => [
+    unique("tarif_carnet_case_unique").on(t.saisonId, t.nbSeances, t.personnesMax),
+    check(
+      "tarif_carnet_valeurs",
+      sql`${t.nbSeances} >= 1 AND ${t.personnesMax} >= 1 AND ${t.prixCentimes} >= 0`,
+    ),
+    memeEcole(t, t.saisonId, saison),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // Inscriptions
 // ---------------------------------------------------------------------------
@@ -489,7 +514,10 @@ export const inscriptionCours = pgTable(
   ],
 );
 
-/** Cours particuliers : carnets de 1, 5 ou 10 séances, pour 1 à 4 personnes. */
+/**
+ * Cours particuliers : un carnet acheté, prix figé à l'achat (grille `tarif_carnet`
+ * ou devis). Nombres de séances et de personnes : données de l'école, pas de limite ici.
+ */
 export const carnet = pgTable(
   "carnet",
   {
@@ -502,7 +530,7 @@ export const carnet = pgTable(
     acheteLe: date("achete_le").notNull().defaultNow(),
   },
   (t) => [
-    check("carnet_personnes", sql`${t.nbPersonnes} BETWEEN 1 AND 4`),
+    check("carnet_personnes", sql`${t.nbPersonnes} >= 1 AND ${t.seancesTotal} >= 1`),
     cibleMemeEcole(t),
     memeEcole(t, t.payeurId, payeur),
   ],

@@ -4,7 +4,7 @@
  * Ne jamais importer depuis le code applicatif : en production, la grille vient
  * de la table `tarif` de chaque école.
  */
-import type { LigneTarif, Periodicite, Public, RegleReduction } from "../types";
+import type { LigneTarif, LigneTarifCarnet, Periodicite, Public, RegleReduction } from "../types";
 
 export const ZUMBA = "discipline-zumba";
 
@@ -84,6 +84,31 @@ const enfants: LigneTarif[] = (
 ]);
 
 export const grilleRibas: LigneTarif[] = [...adultes, ...enfants];
+
+/**
+ * Page 3, cours particuliers : « 1 OU 2 PERSONNES », « 3 PERSONNES », « 4 PERSONNES » ;
+ * « 1h00 » = carnet d'une séance. Au-delà de 4 personnes : devis.
+ */
+export const grilleCarnetsRibas: LigneTarifCarnet[] = (
+  [
+    [1, 50, 65, 80],
+    [5, 240, 310, 380],
+    [10, 450, 585, 720],
+  ] as const
+).flatMap(([nbSeances, deux, trois, quatre]) =>
+  (
+    [
+      [2, deux],
+      [3, trois],
+      [4, quatre],
+    ] as const
+  ).map(([personnesMax, euros]) => ({
+    id: `ribas-carnet-${nbSeances}-${personnesMax}`,
+    nbSeances,
+    personnesMax,
+    prixCentimes: euros * 100,
+  })),
+);
 
 /** « 2 enfants et plus (frères et sœurs) : -10 % — non cumulable avec un forfait 2 disciplines » */
 export const fratrieRibas: RegleReduction = {

@@ -81,6 +81,31 @@ export type ResultatInscription =
     }
   | { reference: string; statut: "erreur"; erreur: ErreurTarif };
 
+// ---------------------------------------------------------------------------
+// Carnets de cours particuliers
+// ---------------------------------------------------------------------------
+
+/** Une case de la grille des carnets (table `tarif_carnet`). */
+export type LigneTarifCarnet = {
+  id: string;
+  nbSeances: number;
+  /** La ligne vaut pour « jusqu'à N personnes » ; la tranche commence après la ligne inférieure. */
+  personnesMax: number;
+  prixCentimes: number;
+};
+
+export type DemandeCarnet = { nbSeances: number; nbPersonnes: number };
+
+export type ResultatCarnet =
+  | {
+      statut: "ok";
+      ligneTarifCarnetId: string;
+      /** Ex. « Carnet de 5 cours · 1 à 2 personnes » */
+      libelle: string;
+      prixCentimes: number;
+    }
+  | { statut: "erreur"; erreur: { code: "hors_grille"; message: string } };
+
 export type ResultatTarif = {
   inscriptions: ResultatInscription[];
   /** Totaux des seules inscriptions tarifées. */
