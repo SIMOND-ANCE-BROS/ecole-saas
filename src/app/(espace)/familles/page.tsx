@@ -8,24 +8,31 @@ import { ResultatsNavigables } from "./resultats";
 export const metadata: Metadata = { title: "Familles" };
 
 export default async function PageFamilles({ searchParams }: PageProps<"/familles">) {
-  const { ecoleId } = await contexteEcole();
+  const { ecoleId, role } = await contexteEcole();
   const { q } = await searchParams;
   const saisie = typeof q === "string" ? q.trim() : "";
   const familles = await avecEcole(ecoleId, (tx) => (saisie ? rechercherFamilles(tx, saisie) : listerFamilles(tx)));
 
   return (
     <section className="flex max-w-5xl flex-col gap-4">
-      <div>
-        <h1 className="titre-page">Familles</h1>
-        <p className="text-sm text-doux" aria-live="polite">
-          {saisie
-            ? `${familles.length} résultat${familles.length > 1 ? "s" : ""} pour « ${saisie} »`
-            : `${familles.length} famille${familles.length > 1 ? "s" : ""} · tapez dans la recherche en haut (Ctrl K) pour filtrer`}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="titre-page">Familles</h1>
+          <p className="text-sm text-doux" aria-live="polite">
+            {saisie
+              ? `${familles.length} résultat${familles.length > 1 ? "s" : ""} pour « ${saisie} »`
+              : `${familles.length} famille${familles.length > 1 ? "s" : ""}, tapez dans la recherche en haut (Ctrl K) pour filtrer`}
+          </p>
+        </div>
+        {role !== "professeur" && (
+          <Link href="/familles/nouvelle" className="bouton-principal">
+            Nouvelle famille
+          </Link>
+        )}
       </div>
       {familles.length === 0 ? (
         <p className="text-sm">
-          {saisie.length < 2 ? "Tapez au moins deux caractères." : "Aucune famille ne correspond : vérifiez l’orthographe ou cherchez par téléphone."}
+          {saisie.length < 2 ? "Tapez au moins deux caractères." : "Aucune famille ne correspond : vérifiez l’orthographe, cherchez par téléphone ou créez-la avec « Nouvelle famille »."}
         </p>
       ) : (
         <ResultatsNavigables>
