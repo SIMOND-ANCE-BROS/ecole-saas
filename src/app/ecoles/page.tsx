@@ -14,7 +14,7 @@ export default async function PageEcoles() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 p-6">
-      <h1 className="text-2xl font-semibold">Choisir une école</h1>
+      <h1 className="titre-page text-2xl">Choisir une école</h1>
       {ecoles.length === 0 ? (
         <p>Votre compte n’est rattaché à aucune école active. Contactez la direction de votre école.</p>
       ) : (
@@ -25,7 +25,7 @@ export default async function PageEcoles() {
                 <input type="hidden" name="ecoleId" value={e.id} />
                 <button type="submit" className="bouton-secondaire flex w-full justify-between">
                   <span>{e.nom}</span>
-                  <span className="text-neutral-600 dark:text-neutral-400">{LIBELLE_ROLE[e.role]}</span>
+                  <span className="text-doux">{LIBELLE_ROLE[e.role]}</span>
                 </button>
               </form>
             </li>

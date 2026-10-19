@@ -78,7 +78,7 @@ export function FormulaireInscription({ payeurId, danseurs, cours }: Props) {
                 onChange={() => setDanseurIds(publicChoisi === "couple" ? basculer(danseurIds, d.id) : [d.id])}
               />
               {d.prenom}
-              {d.age !== null && <span className="text-neutral-600 dark:text-neutral-400">({d.age} ans)</span>}
+              {d.age !== null && <span className="text-doux">({d.age} ans)</span>}
             </label>
           ))}
         </fieldset>
@@ -127,15 +127,15 @@ export function FormulaireInscription({ payeurId, danseurs, cours }: Props) {
             value={filtre}
             onChange={(e) => setFiltre(e.target.value)}
           />
-          <ul className="flex max-h-96 flex-col overflow-y-auto rounded border border-neutral-300 dark:border-neutral-700">
+          <ul className="panneau flex max-h-96 flex-col overflow-y-auto">
             {coursVisibles.map((c) => (
-              <li key={c.id} className="border-b border-neutral-200 last:border-0 dark:border-neutral-800">
+              <li key={c.id} className="border-b border-bordure last:border-0 ">
                 <label className="flex items-center gap-2 px-2 py-1 text-sm">
                   <input type="checkbox" checked={coursIds.includes(c.id)} onChange={() => setCoursIds(basculer(coursIds, c.id))} />
                   <span className="w-20 shrink-0">{c.jourSemaine ? JOURS[c.jourSemaine] : "Stage"}</span>
                   <span className="w-12 shrink-0 tabular-nums">{c.heureDebut}</span>
                   <span className="font-medium">{c.discipline}</span>
-                  <span className="text-neutral-600 dark:text-neutral-400">
+                  <span className="text-doux">
                     {c.dureeMinutes} min{c.niveau ? ` · ${c.niveau}` : ""} · {c.salle}
                   </span>
                 </label>
@@ -145,9 +145,9 @@ export function FormulaireInscription({ payeurId, danseurs, cours }: Props) {
         </fieldset>
       </div>
 
-      <aside aria-live="polite" className="flex flex-col gap-3 self-start rounded border border-neutral-300 p-3 text-sm dark:border-neutral-700">
-        <h2 className="font-semibold">Prix {calcul && <span className="font-normal text-neutral-600">· calcul…</span>}</h2>
-        {!resultat && <p className="text-neutral-600 dark:text-neutral-400">Choisissez un danseur et des cours.</p>}
+      <aside aria-live="polite" className="panneau flex flex-col gap-3 self-start p-3 text-sm lg:sticky lg:top-16">
+        <h2 className="font-semibold">Prix {calcul && <span className="font-normal text-doux">· calcul…</span>}</h2>
+        {!resultat && <p className="text-doux">Choisissez un danseur et des cours.</p>}
         {resultat?.statut === "invalide" && <p role="alert">{resultat.message}</p>}
         {nouvelle?.statut === "erreur" && <p role="alert">{nouvelle.erreur.message}</p>}
         {nouvelle?.statut === "ok" && (
@@ -157,7 +157,7 @@ export function FormulaireInscription({ payeurId, danseurs, cours }: Props) {
               <dd className="tabular-nums">{formaterEuros(nouvelle.prixBrutCentimes)}</dd>
             </div>
             {nouvelle.reductions.map((r) => (
-              <div key={r.code} className={r.statut === "ecartee" ? "text-neutral-600 dark:text-neutral-400" : ""}>
+              <div key={r.code} className={r.statut === "ecartee" ? "text-doux" : ""}>
                 <div className="flex justify-between gap-2">
                   <dt>Réduction {r.code}{r.statut === "ecartee" ? " (écartée)" : ""}</dt>
                   <dd className="tabular-nums">{r.statut === "appliquee" ? `−${formaterEuros(r.montantCentimes)}` : "—"}</dd>
@@ -165,7 +165,7 @@ export function FormulaireInscription({ payeurId, danseurs, cours }: Props) {
                 <p className="text-xs">{r.motif}</p>
               </div>
             ))}
-            <div className="mt-1 flex justify-between gap-2 border-t border-neutral-300 pt-1 font-semibold dark:border-neutral-700">
+            <div className="mt-1 flex justify-between gap-2 border-t border-bordure pt-1 font-semibold ">
               <dt>Total</dt>
               <dd className="tabular-nums">{formaterEuros(nouvelle.prixNetCentimes)}</dd>
             </div>
@@ -173,12 +173,12 @@ export function FormulaireInscription({ payeurId, danseurs, cours }: Props) {
         )}
         {resultat?.statut === "ok" &&
           resultat.autres.map((a) => (
-            <p key={a.reference} className="rounded bg-amber-100 p-2 text-xs text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
+            <p key={a.reference} className="rounded bg-alerte-fond p-2 text-xs text-alerte-texte">
               L’inscription déjà enregistrée de {a.danseurs} aurait une remise de {formaterEuros(a.remiseRecalculee)} au lieu de{" "}
               {formaterEuros(a.remiseEnregistree)} : à régulariser par un avoir si l’école le décide.
             </p>
           ))}
-        {refus && <p role="alert" className="text-red-700 dark:text-red-400">{refus}</p>}
+        {refus && <p role="alert" className="text-erreur">{refus}</p>}
         <button type="submit" className="bouton-principal" disabled={!peutEnregistrer}>
           {envoi ? "Enregistrement…" : "Enregistrer l’inscription"}
         </button>

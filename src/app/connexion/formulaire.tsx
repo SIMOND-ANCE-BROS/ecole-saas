@@ -39,7 +39,7 @@ export function FormulaireConnexion() {
         />
       </div>
       {etat.erreur && (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className="text-sm text-erreur">
           {etat.erreur}
         </p>
       )}

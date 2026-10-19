@@ -6,8 +6,8 @@ export default async function Accueil() {
   const [{ user }, contexte] = await Promise.all([sessionCourante(), contexteEcole()]);
   return (
     <section className="flex flex-col gap-2">
-      <h1 className="text-xl font-semibold">Bonjour {user.name}</h1>
-      <p className="text-sm text-neutral-700 dark:text-neutral-300">
+      <h1 className="titre-page">Bonjour {user.name}</h1>
+      <p className="text-sm text-doux">
         Connecté·e en tant que {LIBELLE_ROLE[contexte.role]}.
       </p>
     </section>
