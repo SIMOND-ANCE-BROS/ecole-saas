@@ -43,6 +43,13 @@
       "when": 1792404508078,
       "tag": "0005_cles_etrangeres_meme_ecole",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792413408654,
+      "tag": "0006_droits_par_defaut",
+      "breakpoints": true
     }
   ]
 }
