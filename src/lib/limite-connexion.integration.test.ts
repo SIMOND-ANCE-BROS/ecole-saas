@@ -1,7 +1,7 @@
 import postgres from "postgres";
 import { afterAll, describe, expect, it } from "vitest";
 import { auth } from "./auth";
-import { cleDeTentative, connexionBloquee, effacerEchecs, LIMITES, noterEchec } from "./limite-connexion";
+import { cleDeTentative, effacerTentatives, enregistrerTentative, ipDeConfiance, LIMITES } from "./limite-connexion";
 
 /** Limitation des tentatives de connexion, contre la vraie base (données fictives nettoyées). */
 
@@ -12,52 +12,94 @@ const admin = postgres(url, { max: 1, onnotice: () => {} });
 const suffixe = Math.random().toString(36).slice(2, 8);
 const email = (n: string) => `${n}-${suffixe}@exemple.test`;
 const ip = (n: number) => `203.0.113.${n}`;
-const cles: string[] = [];
+const adresses: string[] = [];
+const ips: string[] = [];
 
-async function echecs(adresse: string, depuis: string, n: number) {
-  for (let i = 0; i < n; i++) await noterEchec(adresse, depuis);
-  cles.push(cleDeTentative("email", adresse), cleDeTentative("ip", depuis));
+/** n tentatives ; renvoie le nombre de tentatives autorisées. */
+async function tentatives(adresse: string, depuis: string | null, n: number) {
+  adresses.push(adresse);
+  if (depuis) ips.push(depuis);
+  let autorisees = 0;
+  for (let i = 0; i < n; i++) if (await enregistrerTentative(adresse, depuis)) autorisees++;
+  return autorisees;
 }
 
 afterAll(async () => {
+  const cles = [
+    ...adresses.flatMap((a) => [cleDeTentative("email", a), ...ips.map((i) => cleDeTentative("paire", `${a}|${i}`)), cleDeTentative("paire", `${a}|`)]),
+    ...ips.map((i) => cleDeTentative("ip", i)),
+  ];
   await admin`DELETE FROM tentative_connexion WHERE cle IN ${admin(cles)}`;
   await admin.end();
 });
 
 describe("Limitation des tentatives de connexion", () => {
-  it("bloque une adresse e-mail après trop d’échecs, sans toucher les autres", async () => {
-    await echecs(email("cible"), ip(1), LIMITES.parEmail - 1);
-    expect(await connexionBloquee(email("cible"), ip(2))).toBe(false);
-    await echecs(email("cible"), ip(1), 1);
-    expect(await connexionBloquee(email("cible"), ip(2))).toBe(true);
-    expect(await connexionBloquee(email("autre"), ip(2))).toBe(false);
+  it("bloque une adresse e-mail depuis une même IP au-delà de la limite de la paire", async () => {
+    expect(await tentatives(email("cible"), ip(1), LIMITES.parPaire + 2)).toBe(LIMITES.parPaire);
   });
 
-  it("bloque une adresse IP qui essaie beaucoup d’adresses e-mail", async () => {
-    for (let i = 0; i < LIMITES.parIp; i++) await echecs(email(`balayage-${i}`), ip(3), 1);
-    expect(await connexionBloquee(email("nouvelle"), ip(3))).toBe(true);
-    expect(await connexionBloquee(email("nouvelle"), ip(4))).toBe(false);
+  it("laisse la vraie personne se connecter depuis une autre IP (pas de blocage du compte d’autrui)", async () => {
+    await tentatives(email("victime"), ip(2), LIMITES.parPaire + 3);
+    expect(await enregistrerTentative(email("victime"), ip(9))).toBe(true);
   });
 
-  it("efface les échecs d’une adresse après une connexion réussie", async () => {
-    await echecs(email("oubli"), ip(5), LIMITES.parEmail);
-    expect(await connexionBloquee(email("oubli"), ip(6))).toBe(true);
-    await effacerEchecs(email("oubli"));
-    expect(await connexionBloquee(email("oubli"), ip(6))).toBe(false);
+  it("borne malgré tout le nombre total d’essais sur une même adresse", async () => {
+    let autorisees = 0;
+    for (let i = 0; i < LIMITES.parEmail + 5; i++) autorisees += await tentatives(email("globale"), ip(100 + (i % 50)), 1);
+    expect(autorisees).toBe(LIMITES.parEmail);
+  });
+
+  it("bloque une IP qui balaye beaucoup d’adresses", async () => {
+    let autorisees = 0;
+    for (let i = 0; i < LIMITES.parIp + 3; i++) autorisees += await tentatives(email(`balayage-${i}`), ip(3), 1);
+    expect(autorisees).toBe(LIMITES.parIp);
+  });
+
+  it("résiste aux tentatives simultanées", async () => {
+    adresses.push(email("course"));
+    ips.push(ip(4));
+    const resultats = await Promise.all(
+      Array.from({ length: 10 }, () => enregistrerTentative(email("course"), ip(4))),
+    );
+    expect(resultats.filter(Boolean).length).toBeLessThanOrEqual(LIMITES.parPaire);
+  });
+
+  it("efface les tentatives de l’adresse après une connexion réussie", async () => {
+    await tentatives(email("oubli"), ip(5), LIMITES.parPaire);
+    expect(await enregistrerTentative(email("oubli"), ip(5))).toBe(false);
+    await effacerTentatives(email("oubli"), ip(5));
+    expect(await enregistrerTentative(email("oubli"), ip(5))).toBe(true);
+  });
+
+  it("sans IP de confiance, applique la limite de la paire à l’adresse seule", async () => {
+    expect(await tentatives(email("sans-ip"), null, LIMITES.parPaire + 1)).toBe(LIMITES.parPaire);
   });
 
   it("ne compte plus les tentatives sorties de la fenêtre", async () => {
-    await echecs(email("ancienne"), ip(7), LIMITES.parEmail);
+    await tentatives(email("ancienne"), ip(7), LIMITES.parPaire);
     await admin`
       UPDATE tentative_connexion SET quand = now() - make_interval(mins => ${LIMITES.fenetreMinutes + 1})
-      WHERE cle = ${cleDeTentative("email", email("ancienne"))}`;
-    expect(await connexionBloquee(email("ancienne"), ip(8))).toBe(false);
+      WHERE cle IN (${cleDeTentative("email", email("ancienne"))}, ${cleDeTentative("paire", `${email("ancienne")}|${ip(7)}`)})`;
+    expect(await enregistrerTentative(email("ancienne"), ip(7))).toBe(true);
   });
 
   it("ne stocke ni l’adresse e-mail ni l’IP en clair", async () => {
     const lignes = await admin`SELECT cle FROM tentative_connexion WHERE cle = ${cleDeTentative("email", email("cible"))}`;
     expect(lignes.length).toBeGreaterThan(0);
     expect(lignes[0].cle).not.toContain("@");
+  });
+});
+
+describe("IP du client", () => {
+  const entetes = new Headers({ "x-forwarded-for": "6.6.6.6", "x-real-ip": "198.51.100.7" });
+
+  it("ignore les en-têtes fournis par le client tant qu’aucun proxy de confiance n’est configuré", () => {
+    expect(ipDeConfiance(entetes, undefined)).toBeNull();
+  });
+
+  it("lit uniquement l’en-tête posé par le proxy de confiance", () => {
+    expect(ipDeConfiance(entetes, "x-real-ip")).toBe("198.51.100.7");
+    expect(ipDeConfiance(new Headers(), "x-real-ip")).toBeNull();
   });
 });
 

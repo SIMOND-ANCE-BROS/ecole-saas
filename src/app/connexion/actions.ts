@@ -7,7 +7,7 @@ import { z } from "zod";
 import { ecolesDe } from "@/db";
 import { choisirEcole, idDeSession } from "@/lib/acces-ecole";
 import { auth } from "@/lib/auth";
-import { connexionBloquee, effacerEchecs, LIMITES, noterEchec } from "@/lib/limite-connexion";
+import { effacerTentatives, enregistrerTentative, ipDeConfiance, LIMITES } from "@/lib/limite-connexion";
 
 export type EtatConnexion = { erreur: string | null; email: string };
 
@@ -24,10 +24,9 @@ export async function seConnecter(_etat: EtatConnexion, formData: FormData): Pro
   }
 
   const entetes = await headers();
-  // IP fiable seulement derrière un proxy de confiance (à régler à l'hébergement) ;
-  // la limite par adresse e-mail protège dans tous les cas.
-  const ip = entetes.get("x-forwarded-for")?.split(",")[0]?.trim() || entetes.get("x-real-ip") || "inconnue";
-  if (await connexionBloquee(donnees.data.email, ip)) {
+  // Tentative enregistrée avant la vérification du mot de passe (voir limite-connexion.ts).
+  const ip = ipDeConfiance(entetes);
+  if (!(await enregistrerTentative(donnees.data.email, ip))) {
     return {
       erreur: `Trop de tentatives de connexion. Réessayez dans ${LIMITES.fenetreMinutes} minutes.`,
       email,
@@ -42,13 +41,10 @@ export async function seConnecter(_etat: EtatConnexion, formData: FormData): Pro
     });
   } catch (e) {
     // Même message pour un compte inconnu ou un mauvais mot de passe.
-    if (isAPIError(e)) {
-      await noterEchec(donnees.data.email, ip);
-      return { erreur: "Adresse e-mail ou mot de passe incorrect.", email };
-    }
+    if (isAPIError(e)) return { erreur: "Adresse e-mail ou mot de passe incorrect.", email };
     throw e;
   }
-  await effacerEchecs(donnees.data.email);
+  await effacerTentatives(donnees.data.email, ip);
 
   // Une seule école : choisie d'office, sans passer par la liste.
   const ecoles = await ecolesDe(connexion.user.id);
