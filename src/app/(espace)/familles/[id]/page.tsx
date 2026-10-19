@@ -16,7 +16,7 @@ export const metadata: Metadata = { title: "Fiche famille" };
 
 export default async function PageFamille({ params, searchParams }: PageProps<"/familles/[id]">) {
   const { ecoleId, role } = await contexteEcole();
-  const [{ id }, { inscription: confirmation }] = await Promise.all([params, searchParams]);
+  const [{ id }, { inscription: confirmation, famille: etatFamille }] = await Promise.all([params, searchParams]);
   const aujourdhui = aujourdhuiAParis();
   const { famille, saison, inscriptions } = await avecEcole(ecoleId, async (tx) => {
     const f = await lireFamille(tx, id);
@@ -39,6 +39,12 @@ export default async function PageFamille({ params, searchParams }: PageProps<"/
         <span className="text-doux"> / {nom}</span>
       </nav>
 
+      {(etatFamille === "creee" || etatFamille === "modifiee") && (
+        <p role="status" className="rounded-md border border-accent bg-accent-doux px-3 py-2 text-sm">
+          {etatFamille === "creee" ? "Famille créée." : "Coordonnées enregistrées."}
+        </p>
+      )}
+
       {confirmation === "enregistree" && (
         <p role="status" className="rounded-md border border-accent bg-accent-doux px-3 py-2 text-sm">
           Inscription enregistrée.
@@ -52,11 +58,18 @@ export default async function PageFamille({ params, searchParams }: PageProps<"/
             {famille.type === "professionnel" ? "Payeur professionnel (entreprise, CSE…)" : "Particulier"}
           </p>
         </div>
-        {peutInscrire && (
-          <Link href={`/familles/${famille.id}/inscription`} className="bouton-principal">
-            Nouvelle inscription
-          </Link>
-        )}
+        <div className="flex gap-2">
+          {role !== "professeur" && (
+            <Link href={`/familles/${famille.id}/modifier`} className="bouton-secondaire">
+              Modifier
+            </Link>
+          )}
+          {peutInscrire && (
+            <Link href={`/familles/${famille.id}/inscription`} className="bouton-principal">
+              Nouvelle inscription
+            </Link>
+          )}
+        </div>
       </header>
 
       <dl className="panneau grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1.5 p-4 text-sm">
