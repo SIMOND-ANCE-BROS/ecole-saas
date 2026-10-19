@@ -343,7 +343,7 @@ export const presence = pgTable(
 // ---------------------------------------------------------------------------
 // Tarifs et réductions
 // ---------------------------------------------------------------------------
-/** Une ligne par case de la grille : public × périodicité × durée hebdo cumulée. */
+/** Une ligne par case de la grille : public × périodicité × combinaison de cours (× discipline). */
 export const tarif = pgTable(
   "tarif",
   {
@@ -354,12 +354,18 @@ export const tarif = pgTable(
       .references(() => saison.id),
     public: publicTarif("public").notNull(),
     periodicite: periodicite("periodicite").notNull(),
-    dureeHebdoMinutes: integer("duree_hebdo_minutes").notNull(),
-    nbCoursMax: smallint("nb_cours_max"),
+    // Durées des cours de la semaine, en minutes, triées : {45,45,60} = « 45 min + 45 min + 1 h 00 ».
+    combinaison: smallint("combinaison").array().notNull(),
+    // Forfait réservé à une discipline (ex. « Zumba 2 h 00 ») ; NULL = toutes disciplines.
+    disciplineId: uuid("discipline_id").references(() => discipline.id),
     prixCentimes: integer("prix_centimes").notNull(),
   },
   (t) => [
-    unique().on(t.saisonId, t.public, t.periodicite, t.dureeHebdoMinutes, t.nbCoursMax),
+    // NULLS NOT DISTINCT : deux lignes « toutes disciplines » identiques sont refusées.
+    unique("tarif_case_unique")
+      .on(t.saisonId, t.public, t.periodicite, t.combinaison, t.disciplineId)
+      .nullsNotDistinct(),
+    check("tarif_combinaison", sql`cardinality(${t.combinaison}) >= 1 AND 0 < ALL(${t.combinaison})`),
   ],
 );
 
@@ -371,10 +377,16 @@ export const reduction = pgTable(
     saisonId: uuid("saison_id")
       .notNull()
       .references(() => saison.id),
-    code: text("code").notNull(), // 'fratrie', 'deux_disciplines'
+    code: text("code").notNull(), // type de réduction connu du moteur de tarif : 'fratrie'
     tauxPointsBase: integer("taux_points_base"), // 1000 = 10 %
     montantCentimes: integer("montant_centimes"),
     nonCumulableAvec: text("non_cumulable_avec").array().notNull().default(sql`'{}'::text[]`),
+    // Nombre minimal de danseurs éligibles du même payeur (fratrie : 2).
+    seuilDanseurs: smallint("seuil_danseurs").notNull().default(1),
+    // Publics éligibles ; vide = tous.
+    publics: publicTarif("publics").array().notNull().default(sql`'{}'::public_tarif[]`),
+    // false : écartée sur un forfait dont les cours relèvent d'au moins 2 disciplines.
+    cumulableMultiDisciplines: boolean("cumulable_multi_disciplines").notNull().default(true),
   },
   (t) => [
     unique().on(t.saisonId, t.code),
