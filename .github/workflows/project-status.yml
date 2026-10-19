@@ -1,0 +1,98 @@
+name: Statut du Project
+
+# Fait suivre au Project « École de danse — Roadmap » l'avancement du travail
+# (docs/guides/gestion-des-issues.md §8) :
+#
+#   issue ouverte / rouverte          → Todo
+#   PR brouillon qui référence #N     → In Progress
+#   PR prête à relire                 → In Review
+#   PR mergée, `Closes/Fixes #N`      → Done (GitHub ferme l'issue)
+#   PR mergée, `Refs #N`              → In Progress (l'issue attend d'autres PR)
+#   PR fermée sans merge              → Todo
+#   issue fermée                      → Done
+#
+# Écrire dans un Project d'organisation demande un jeton dédié (secret
+# PROJECT_TOKEN) : GITHUB_TOKEN ne le peut pas. Sans le secret, rien n'est fait.
+
+on:
+  issues:
+    types: [opened, reopened, closed]
+  pull_request:
+    types: [opened, reopened, ready_for_review, converted_to_draft, edited, closed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-status-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  PROJECT_OWNER: SIMOND-ANCE-BROS
+  PROJECT_NUMBER: 2
+
+jobs:
+  synchroniser:
+    name: Synchroniser le Project
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: >-
+      github.event_name == 'issues' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Déplacer les cartes
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          ISSUE: ${{ github.event.issue.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::Secret PROJECT_TOKEN absent : Project non mis à jour."
+            exit 0
+          fi
+          move() { bash .github/scripts/project-status.sh "$@"; }
+
+          if [ "$EVENT" = "issues" ]; then
+            case "$ACTION" in
+              opened|reopened) move "Todo" "$ISSUE" ;;
+              closed)          move "Done" "$ISSUE" ;;
+            esac
+            exit 0
+          fi
+
+          # Issues citées dans la description de la PR (lue depuis l'environnement, jamais interpolée).
+          closing=$(grep -oiE '\b(close[sd]?|fix(e[sd])?|resolve[sd]?) +#[0-9]+' <<<"$PR_BODY" \
+            | grep -oE '[0-9]+' | sort -u || true)
+          refs=$(grep -oiE '\brefs? +#[0-9]+' <<<"$PR_BODY" | grep -oE '[0-9]+' | sort -u || true)
+          all=$(printf '%s\n%s\n' "$closing" "$refs" | grep -E '^[0-9]+$' | sort -u || true)
+
+          if [ -z "$all" ]; then
+            echo "::warning::La PR ne référence aucune issue (Closes #N / Refs #N) : voir docs/guides/gestion-des-issues.md."
+            exit 0
+          fi
+
+          # shellcheck disable=SC2086
+          case "$ACTION" in
+            closed)
+              if [ "$PR_MERGED" = "true" ]; then
+                if [ -n "$closing" ]; then move "Done" $closing; fi
+                if [ -n "$refs" ]; then move "In Progress" $refs; fi
+              else
+                move "Todo" $all
+              fi
+              ;;
+            *)
+              if [ "$PR_DRAFT" = "true" ]; then move "In Progress" $all; else move "In Review" $all; fi
+              ;;
+          esac
