@@ -54,7 +54,7 @@ Ces valeurs vont dans les tables `tarif`, `reduction`, `site`, `salle`, `interve
 
 ## 5. Stack
 
-Next.js 16 (App Router) · React 19 · TypeScript strict · PostgreSQL 16 · Drizzle ORM · Zod · Tailwind 4 · Vitest. À venir : shadcn/ui, Better Auth, pg-boss (tâches de fond), Playwright.
+Next.js 16 (App Router) · React 19 · TypeScript strict · PostgreSQL 16 · Drizzle ORM · Zod · Tailwind 4 · Vitest · Better Auth. À venir : shadcn/ui, pg-boss (tâches de fond), Playwright.
 
 ```bash
 npm run dev          # serveur local
@@ -65,6 +65,7 @@ npm run lint         # ESLint
 npm run db:up        # PostgreSQL local (Docker, port 5433)
 npm run db:generate  # nouvelle migration après modification du schéma
 npm run db:migrate   # appliquer les migrations
+npm run db:seed      # données de démonstration locales
 ```
 
 ## 6. Organisation du code
@@ -93,6 +94,7 @@ migrations/               générées par drizzle-kit + migrations SQL personnal
 - Toute référence entre deux tables métier est une clé étrangère composite `(ecole_id, x_id)` : `memeEcole(t, colonne, cible)` dans `src/db/schema.ts`, la table visée déclarant `cibleMemeEcole(t)`. Jamais de `.references()` simple entre tables métier : la vérification d'une clé étrangère ignore la RLS. Garde-fou : `src/db/cles-etrangeres.integration.test.ts`.
 - Le rôle `app_admin` (BYPASSRLS) est réservé aux scripts d'administration, jamais au code de l'application.
 - `ecoleId` vient toujours de la session côté serveur, jamais d'un paramètre envoyé par le navigateur.
+- Chaque page et chaque server action protégée appelle `contexteEcole()` ou `exigerRole()` (`src/lib/session.ts`), puis `avecEcole(ecoleId, …)`. Jamais de contrôle d'accès dans un layout (non réexécuté à chaque navigation) ni dans `proxy.ts` (redirection optimiste seulement).
 
 **Argent et dates**
 - Montants en **centimes entiers** (`*_centimes`), taux en **points de base** (1000 = 10 %). Utiliser `src/lib/montant.ts`. Aucun `number` à virgule pour de l'argent, aucun `parseFloat` sur un montant.

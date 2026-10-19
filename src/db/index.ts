@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
@@ -20,13 +20,18 @@ export function avecEcole<T>(ecoleId: string, fn: (tx: Tx) => Promise<T>): Promi
   });
 }
 
-/** Liste les écoles d'un utilisateur, à la connexion (avant d'en choisir une). */
+/**
+ * Liste les écoles où un utilisateur est membre actif, à la connexion (avant
+ * d'en choisir une). Un membre désactivé n'y a plus accès.
+ */
 export function ecolesDe(userId: string) {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select set_config('app.user_id', ${userId}, true)`);
     return tx
       .select({ id: schema.ecole.id, nom: schema.ecole.nom, role: schema.membre.role })
       .from(schema.membre)
-      .innerJoin(schema.ecole, sql`${schema.ecole.id} = ${schema.membre.ecoleId}`);
+      .innerJoin(schema.ecole, sql`${schema.ecole.id} = ${schema.membre.ecoleId}`)
+      .where(eq(schema.membre.actif, true))
+      .orderBy(schema.ecole.nom);
   });
 }

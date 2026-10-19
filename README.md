@@ -9,10 +9,11 @@ Next.js (App Router) · TypeScript · PostgreSQL · Drizzle ORM · Zod · Tailwi
 ## Démarrer
 
 ```bash
-cp .env.example .env
+cp .env.example .env   # puis renseigner BETTER_AUTH_SECRET (openssl rand -hex 32)
 npm install
 npm run db:up        # PostgreSQL local via Docker
 npm run db:migrate   # schéma + Row Level Security
+npm run db:seed      # école et comptes de démonstration (accueil@demo.test)
 npm run dev
 ```
 
@@ -27,6 +28,7 @@ npm run dev
 | `npm run lint` | ESLint |
 | `npm run db:generate` | génère une migration après modification de `src/db/schema.ts` |
 | `npm run db:migrate` | applique les migrations |
+| `npm run db:seed` | données de démonstration locales (école fictive, comptes accueil et direction) |
 
 ## Architecture
 
