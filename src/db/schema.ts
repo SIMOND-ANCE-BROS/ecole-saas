@@ -482,6 +482,10 @@ export const inscription = pgTable(
     payeurId: uuid("payeur_id").notNull(),
     saisonId: uuid("saison_id").notNull(),
     tarifId: uuid("tarif_id"),
+    // Public et périodicité choisis : nécessaires pour recalculer la fratrie
+    // avec les inscriptions existantes, même sans tarif retenu (prix manuel).
+    public: publicTarif("public").notNull(),
+    periodicite: periodicite("periodicite").notNull(),
     statut: statutInscription("statut").notNull().default("active"),
     dateInscription: date("date_inscription").notNull().defaultNow(),
     prixBrutCentimes: integer("prix_brut_centimes").notNull(),

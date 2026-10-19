@@ -3,18 +3,27 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { avecEcole } from "@/db";
 import { lireFamille } from "@/db/familles";
+import { inscriptionsDeLaFamille } from "@/db/inscriptions";
+import { saisonCourante } from "@/db/planning";
 import { ageAu, aujourdhuiAParis } from "@/domaine/familles/age";
+import { formaterEuros } from "@/lib/montant";
 import { contexteEcole } from "@/lib/session";
+
+const PERIODICITE = { trimestre: "trimestre", annee: "année", unite: "unité" } as const;
 
 export const metadata: Metadata = { title: "Fiche famille" };
 
 export default async function PageFamille({ params }: PageProps<"/familles/[id]">) {
-  const { ecoleId } = await contexteEcole();
+  const { ecoleId, role } = await contexteEcole();
   const { id } = await params;
-  const famille = await avecEcole(ecoleId, (tx) => lireFamille(tx, id));
+  const aujourdhui = aujourdhuiAParis();
+  const { famille, saison, inscriptions } = await avecEcole(ecoleId, async (tx) => {
+    const f = await lireFamille(tx, id);
+    const s = f ? await saisonCourante(tx, aujourdhui) : null;
+    return { famille: f, saison: s, inscriptions: f && s ? await inscriptionsDeLaFamille(tx, f.id, s.id) : [] };
+  });
   if (!famille) notFound();
 
-  const aujourdhui = aujourdhuiAParis();
   const nom = famille.raisonSociale ?? [famille.nom, famille.prenom].filter(Boolean).join(" ");
 
   return (
@@ -53,6 +62,40 @@ export default async function PageFamille({ params }: PageProps<"/familles/[id]"
                 <td className="py-1 pr-4">{d.prenom}</td>
                 <td className="py-1 pr-4">{d.nom}</td>
                 <td className="py-1">{d.dateNaissance ? `${ageAu(d.dateNaissance, aujourdhui)} ans` : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div className="flex items-center gap-4">
+        <h2 className="text-base font-semibold">Inscriptions {saison?.libelle}</h2>
+        {saison && famille.danseurs.length > 0 && role !== "professeur" && (
+          <Link href={`/familles/${famille.id}/inscription`} className="bouton-principal">
+            Nouvelle inscription
+          </Link>
+        )}
+      </div>
+      {inscriptions.length === 0 ? (
+        <p className="text-sm">Aucune inscription pour cette saison.</p>
+      ) : (
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-neutral-300 text-xs uppercase text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
+            <tr>
+              <th scope="col" className="py-1 pr-4 font-medium">Danseur</th>
+              <th scope="col" className="py-1 pr-4 font-medium">Cours</th>
+              <th scope="col" className="py-1 pr-4 font-medium">Formule</th>
+              <th scope="col" className="py-1 text-right font-medium">Prix</th>
+            </tr>
+          </thead>
+          <tbody>
+            {inscriptions.map((i) => (
+              <tr key={i.id} className="border-b border-neutral-200 dark:border-neutral-800">
+                <td className="py-1 pr-4">{i.danseurs}</td>
+                <td className="py-1 pr-4">{i.cours.join(", ")}</td>
+                <td className="py-1 pr-4">
+                  {i.public}, {PERIODICITE[i.periodicite]}
+                </td>
+                <td className="py-1 text-right tabular-nums">{formaterEuros(i.prixNetCentimes)}</td>
               </tr>
             ))}
           </tbody>
