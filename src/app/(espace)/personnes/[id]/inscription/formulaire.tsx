@@ -23,12 +23,15 @@ type Props = {
   payeurId: string;
   danseurs: { id: string; prenom: string; age: number | null }[];
   cours: CoursPlanning[];
+  /** Danseur choisi d'avance (bouton « Inscrire » de sa fiche). */
+  danseurInitial?: string;
 };
 
-export function FormulaireInscription({ payeurId, danseurs, cours }: Props) {
-  const [danseurIds, setDanseurIds] = useState<string[]>(danseurs.length === 1 ? [danseurs[0].id] : []);
+export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitial }: Props) {
+  const initial = danseurs.find((d) => d.id === danseurInitial) ?? (danseurs.length === 1 ? danseurs[0] : undefined);
+  const [danseurIds, setDanseurIds] = useState<string[]>(initial ? [initial.id] : []);
   const [publicChoisi, setPublic] = useState<SaisieFormulaire["public"]>(
-    danseurs.length === 1 && danseurs[0].age !== null && danseurs[0].age >= 18 ? "adulte" : "enfant",
+    initial && initial.age !== null && initial.age >= 18 ? "adulte" : "enfant",
   );
   const [periodicite, setPeriodicite] = useState<SaisieFormulaire["periodicite"]>("trimestre");
   const [coursIds, setCoursIds] = useState<string[]>([]);

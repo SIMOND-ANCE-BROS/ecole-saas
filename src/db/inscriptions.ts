@@ -11,7 +11,8 @@ import type {
   ResultatInscription,
 } from "../domaine/tarif/types";
 import type { Tx } from "./index";
-import { cours, danseur, discipline, inscription, inscriptionCours, reduction, tarif } from "./schema";
+import { danseursPayables } from "./personnes";
+import { cours, discipline, inscription, inscriptionCours, personne, reduction, tarif } from "./schema";
 
 /**
  * Inscriptions : chargement des données de l'école, validation de la saisie,
@@ -111,11 +112,9 @@ async function valider(tx: Tx, payeurId: string, saisonId: string, saisie: Saisi
   if (saisie.public !== "couple" && danseurIds.length !== 1) return "Une inscription individuelle concerne un seul danseur.";
   if (![...danseurIds, ...coursIds].every((id) => uuid.safeParse(id).success)) return "Saisie invalide.";
 
-  const danseurs = await tx
-    .select({ id: danseur.id })
-    .from(danseur)
-    .where(and(inArray(danseur.id, danseurIds), eq(danseur.payeurId, payeurId)));
-  if (danseurs.length !== danseurIds.length) return "Ce danseur n’est pas rattaché à cette famille.";
+  const payables = new Set((await danseursPayables(tx, payeurId)).map((d) => d.id));
+  if (!danseurIds.every((id) => payables.has(id)))
+    return "Cette personne ne paie pas pour ce danseur : ajoutez le lien « paie pour » sur sa fiche.";
 
   if (coursIds.length === 0) return [];
   const choisis = await tx
@@ -155,11 +154,7 @@ export async function apercuInscription(
     ],
   });
 
-  const prenoms = new Map(
-    (await tx.select({ id: danseur.id, prenom: danseur.prenom }).from(danseur).where(eq(danseur.payeurId, payeurId))).map(
-      (d) => [d.id, d.prenom],
-    ),
-  );
+  const prenoms = new Map((await danseursPayables(tx, payeurId)).map((d) => [d.id, d.prenom]));
   const autres = existantes.flatMap((e): ImpactExistante[] => {
     const r = resultat.inscriptions.find((i) => i.reference === e.reference);
     const remiseRecalculee = r?.statut === "ok" ? r.remiseCentimes : e.remiseEnregistree;
@@ -215,7 +210,7 @@ export async function enregistrerInscription(
   return { ok: true, id };
 }
 
-export type InscriptionFamille = {
+export type InscriptionPayee = {
   id: string;
   danseurs: string;
   public: Public;
@@ -224,8 +219,8 @@ export type InscriptionFamille = {
   prixNetCentimes: number;
 };
 
-/** Inscriptions actives d'une famille pour la saison, triées par danseur. */
-export async function inscriptionsDeLaFamille(tx: Tx, payeurId: string, saisonId: string): Promise<InscriptionFamille[]> {
+/** Inscriptions actives payées par une personne pour la saison, triées par danseur. */
+export async function inscriptionsPayeesPar(tx: Tx, payeurId: string, saisonId: string): Promise<InscriptionPayee[]> {
   const lignes = await tx
     .select({
       id: inscription.id,
@@ -240,13 +235,13 @@ export async function inscriptionsDeLaFamille(tx: Tx, payeurId: string, saisonId
   const liens = await tx
     .select({
       inscriptionId: inscriptionCours.inscriptionId,
-      prenom: danseur.prenom,
+      prenom: sql<string>`coalesce(${personne.prenom}, ${personne.nom})`,
       discipline: discipline.nom,
       jour: cours.jourSemaine,
       heure: cours.heureDebut,
     })
     .from(inscriptionCours)
-    .innerJoin(danseur, eq(danseur.id, inscriptionCours.danseurId))
+    .innerJoin(personne, eq(personne.id, inscriptionCours.danseurId))
     .innerJoin(cours, eq(cours.id, inscriptionCours.coursId))
     .innerJoin(discipline, eq(discipline.id, cours.disciplineId))
     .where(

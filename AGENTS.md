@@ -11,6 +11,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 # Conventions du projet
 
 - SaaS multi-école : chaque table métier porte `ecole_id`, l'isolation est assurée par la Row Level Security (`migrations/0001_rls.sql`). Toute requête métier passe par `avecEcole()` (`src/db/index.ts`).
+- Pas de « famille » : des personnes (`personne`) et des liens entre elles (`lien` : représentant légal, conjoint, autre ; drapeaux « paie pour » et « contact d'urgence »). Un adulte seul est son propre payeur. La fratrie porte sur les danseurs d'un même payeur (#67).
 - Montants en centimes entiers (`*_centimes`), taux en points de base. Utiliser `src/lib/montant.ts`, jamais de nombres à virgule pour l'argent.
 - Le numéro de facture vient de l'outil de facturation de l'école (Pennylane, Abby, Shine) : ne jamais le générer ici.
 - Paiements et journal sont inaltérables : on corrige par une écriture inverse.

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { avecEcole } from "@/db";
 import { coursDuPlanning, inscritsDuCours } from "@/db/planning";
-import { ageAu, aujourdhuiAParis } from "@/domaine/familles/age";
+import { ageAu, aujourdhuiAParis } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
 import { ages, fin, JOURS } from "../../format";
 import { BoutonImprimer } from "./imprimer";
@@ -117,7 +117,7 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
         </h2>
         {inscrits.length === 0 ? (
           <p className="text-sm text-doux">
-            Personne n’est encore inscrit. Les inscriptions se font depuis la fiche de la famille.
+            Personne n’est encore inscrit. Les inscriptions se font depuis la fiche du danseur ou de la personne qui paie.
           </p>
         ) : (
           <div className="panneau overflow-x-auto">
@@ -126,7 +126,7 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
                 <tr>
                   <th>Danseur</th>
                   <th className="text-right">Âge</th>
-                  <th>Famille</th>
+                  <th>Payeur</th>
                   <th>Téléphone</th>
                   <th className="print:hidden">Inscrit le</th>
                 </tr>
@@ -140,7 +140,7 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
                   return (
                     <tr key={i.danseurId}>
                       <td className="font-medium">
-                        <Link href={`/danseurs/${i.danseurId}`} className="lien">
+                        <Link href={`/personnes/${i.danseurId}`} className="lien">
                           {i.prenom} {i.nom}
                         </Link>
                         {statut && <span className={`ml-2 rounded px-1.5 text-xs font-normal ${statut.classe}`}>{statut.libelle}</span>}
@@ -150,8 +150,8 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
                         {horsTranche && <span className="sr-only"> (hors tranche d’âge)</span>}
                       </td>
                       <td>
-                        <Link href={`/familles/${i.payeurId}`} className="lien">
-                          {i.famille}
+                        <Link href={`/personnes/${i.payeurId}`} className="lien">
+                          {i.payeur}
                         </Link>
                       </td>
                       <td className="whitespace-nowrap tabular-nums">

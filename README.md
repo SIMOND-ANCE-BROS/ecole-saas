@@ -1,6 +1,6 @@
 # Gestion d'école de danse
 
-Logiciel SaaS de gestion pour écoles de danse : inscriptions, planning, fiches familles et danseurs, rémunération des professeurs, facturation connectée à une plateforme agréée (facturation électronique et e-reporting). Premier client : École de danse Ribas, Villeurbanne.
+Logiciel SaaS de gestion pour écoles de danse : inscriptions, planning, fiches des personnes (danseurs, parents, payeurs) et de leurs liens, rémunération des professeurs, facturation connectée à une plateforme agréée (facturation électronique et e-reporting). Premier client : École de danse Ribas, Villeurbanne.
 
 ## Stack
 

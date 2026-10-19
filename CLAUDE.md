@@ -6,7 +6,7 @@ Ce fichier est la référence pour tout agent qui développe ce projet. Lis-le e
 
 ## 1. Le projet
 
-- Logiciel SaaS de gestion pour écoles de danse : familles et élèves, inscriptions, planning, facturation, encaissements, rémunération des professeurs.
+- Logiciel SaaS de gestion pour écoles de danse : élèves et personnes liées (parents, payeurs), inscriptions, planning, facturation, encaissements, rémunération des professeurs.
 - Premier client (« client fondateur ») : École de danse Ribas, Villeurbanne. Mise en production visée : **été 2027**, pour les inscriptions de la rentrée.
 - Le produit doit être **réplicable pour d'autres écoles** : tout ce qui est propre à Ribas est une donnée, jamais du code.
 - Utilisateurs V1 : la direction et l'accueil, sur un ordinateur Windows, dans un navigateur. Usage intensif pendant les permanences d'inscription : la **saisie rapide** prime sur l'esthétique.
@@ -129,7 +129,7 @@ migrations/               générées par drizzle-kit + migrations SQL personnal
 ## 10. Interface
 
 - Textes en français, avec apostrophe typographique (’) et guillemets « » dans les contenus affichés.
-- Pensé pour l'ordinateur de l'accueil d'abord : formulaires utilisables au clavier, recherche instantanée d'une famille, peu de clics pour une inscription.
+- Pensé pour l'ordinateur de l'accueil d'abord : formulaires utilisables au clavier, recherche instantanée d'une personne, peu de clics pour une inscription.
 - Accessible : libellés sur tous les champs, contrastes suffisants, mode sombre.
 
 ## 11. Feuille de route V1

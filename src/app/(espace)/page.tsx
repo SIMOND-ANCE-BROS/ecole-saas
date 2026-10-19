@@ -2,7 +2,7 @@ import Link from "next/link";
 import { avecEcole } from "@/db";
 import { coursDeLaSaison, saisonCourante } from "@/db/planning";
 import { chiffresSaison, dernieresInscriptions } from "@/db/tableau-de-bord";
-import { aujourdhuiAParis } from "@/domaine/familles/age";
+import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { formaterEuros } from "@/lib/montant";
 import { contexteEcole, sessionCourante } from "@/lib/session";
 
@@ -46,8 +46,8 @@ export default async function Accueil() {
           <p className="text-sm text-doux">Saison {saison.libelle}</p>
         </div>
         <div className="flex gap-2">
-          <Link href="/familles" className="bouton-principal">
-            Inscrire une famille
+          <Link href="/personnes" className="bouton-principal">
+            Inscrire quelqu’un
           </Link>
           <Link href="/planning" className="bouton-secondaire">
             Voir le planning
@@ -80,13 +80,13 @@ export default async function Accueil() {
             Dernières inscriptions
           </h2>
           {dernieres.length === 0 ? (
-            <p className="text-sm text-doux">Aucune inscription pour l’instant. Recherchez une famille pour commencer.</p>
+            <p className="text-sm text-doux">Aucune inscription pour l’instant. Recherchez une personne pour commencer.</p>
           ) : (
             <div className="panneau overflow-x-auto">
               <table className="tableau">
                 <thead>
                   <tr>
-                    <th>Famille</th>
+                    <th>Payeur</th>
                     <th>Danseur</th>
                     <th className="text-right">Prix</th>
                   </tr>
@@ -95,8 +95,8 @@ export default async function Accueil() {
                   {dernieres.map((d) => (
                     <tr key={d.id}>
                       <td>
-                        <Link href={`/familles/${d.payeurId}`} className="lien">
-                          {d.famille}
+                        <Link href={`/personnes/${d.payeurId}`} className="lien">
+                          {d.payeur}
                         </Link>
                       </td>
                       <td>{d.danseurs}</td>

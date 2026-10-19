@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { avecEcole } from "@/db";
 import { creerCours, modifierCours, saisieCoursValide, supprimerCours } from "@/db/cours";
 import { saisonCourante } from "@/db/planning";
-import { aujourdhuiAParis } from "@/domaine/familles/age";
+import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
 
 export type Refus = { message: string; erreurs: Partial<Record<string, string>> };

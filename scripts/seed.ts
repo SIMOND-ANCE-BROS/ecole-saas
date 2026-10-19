@@ -13,6 +13,7 @@ const COMPTES = [
   { email: "direction@demo.test", nom: "Direction Démo", role: "direction" },
 ] as const;
 
+/** Un payeur et les danseurs dont il paie les cours. */
 type FamilleDemo = {
   nom: string;
   prenom?: string;
@@ -58,19 +59,27 @@ async function principal() {
       ON CONFLICT (ecole_id, user_id) DO NOTHING`;
   }
 
-  // Familles fictives (aucune personne réelle), créées une seule fois.
-  const [{ n }] = await admin`SELECT count(*)::int AS n FROM payeur WHERE ecole_id = ${ecole.id}`;
+  // Personnes fictives (aucune personne réelle), créées une seule fois. Un danseur
+  // qui porte le prénom du payeur est le payeur lui-même (adulte seul).
+  const [{ n }] = await admin`SELECT count(*)::int AS n FROM personne WHERE ecole_id = ${ecole.id}`;
   if (n === 0) {
     for (const f of FAMILLES) {
       const [p] = await admin`
-        INSERT INTO payeur (ecole_id, type, nom, prenom, raison_sociale, siren, email, telephone, adresse)
+        INSERT INTO personne (ecole_id, type, nom, prenom, raison_sociale, siren, email, telephone, adresse)
         VALUES (${ecole.id}, ${f.type ?? "particulier"}, ${f.nom}, ${f.prenom ?? null}, ${f.raisonSociale ?? null},
                 ${f.siren ?? null}, ${f.email ?? null}, ${f.telephone ?? null}, ${f.adresse ?? null})
         RETURNING id`;
       for (const [prenom, naissance] of f.danseurs) {
+        if (prenom === f.prenom) {
+          await admin`UPDATE personne SET date_naissance = ${naissance} WHERE id = ${p.id}`;
+          continue;
+        }
+        const [d] = await admin`
+          INSERT INTO personne (ecole_id, nom, prenom, date_naissance)
+          VALUES (${ecole.id}, ${f.nom}, ${prenom}, ${naissance}) RETURNING id`;
         await admin`
-          INSERT INTO danseur (ecole_id, payeur_id, nom, prenom, date_naissance)
-          VALUES (${ecole.id}, ${p.id}, ${f.nom}, ${prenom}, ${naissance})`;
+          INSERT INTO lien (ecole_id, personne_id, lie_a_id, type, paie_pour, contact_urgence)
+          VALUES (${ecole.id}, ${p.id}, ${d.id}, 'representant_legal', true, true)`;
       }
     }
   }
