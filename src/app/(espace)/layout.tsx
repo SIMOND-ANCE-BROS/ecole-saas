@@ -23,7 +23,7 @@ export default async function LayoutEspace({ children }: LayoutProps<"/">) {
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <aside className="flex shrink-0 flex-col gap-6 border-b border-bordure bg-surface p-3 md:sticky md:top-0 md:h-screen md:w-52 md:border-r md:border-b-0">
+      <aside className="flex shrink-0 flex-col gap-6 print:hidden border-b border-bordure bg-surface p-3 md:sticky md:top-0 md:h-screen md:w-52 md:border-r md:border-b-0">
         <div className="flex items-center gap-2 px-1">
           <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-md bg-accent text-sm font-semibold text-sur-accent">
             {nom.charAt(0)}
@@ -45,7 +45,7 @@ export default async function LayoutEspace({ children }: LayoutProps<"/">) {
         </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 border-b border-bordure bg-fond/90 px-4 py-2 backdrop-blur">
+        <header className="sticky top-0 z-10 print:hidden border-b border-bordure bg-fond/90 px-4 py-2 backdrop-blur">
           {/* useSearchParams exige une frontière Suspense. */}
           <Suspense>
             <RechercheGlobale />
