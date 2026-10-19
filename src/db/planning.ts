@@ -25,8 +25,10 @@ export type CoursPlanning = {
   dureeMinutes: number;
   disciplineId: string;
   discipline: string;
+  salleId: string;
   salle: string;
   site: string;
+  intervenantId: string;
   /** « Prénom Nom » */
   intervenant: string;
   ageMin: number | null;
@@ -58,8 +60,10 @@ export async function coursDeLaSaison(tx: Tx, saisonId: string): Promise<CoursPl
       dureeMinutes: cours.dureeMinutes,
       disciplineId: cours.disciplineId,
       discipline: discipline.nom,
+      salleId: cours.salleId,
       salle: salle.nom,
       site: site.nom,
+      intervenantId: cours.intervenantId,
       prenom: intervenant.prenom,
       nom: intervenant.nom,
       ageMin: cours.ageMin,

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { Apercu } from "@/db/inscriptions";
 import type { CoursPlanning } from "@/db/planning";
+import { seChevauchent } from "@/domaine/planning/chevauchement";
 import { formaterEuros } from "@/lib/montant";
 import { apercu, inscrire, type SaisieFormulaire } from "./actions";
 
@@ -65,17 +66,10 @@ export function FormulaireInscription({ payeurId, danseurs, cours }: Props) {
 
   // Cours choisis qui se chevauchent le même jour.
   const choisis = cours.filter((c) => coursIds.includes(c.id));
-  const minutes = (h: string) => Number(h.slice(0, 2)) * 60 + Number(h.slice(3, 5));
   const chevauchements = choisis.flatMap((a, i) =>
     choisis
       .slice(i + 1)
-      .filter(
-        (b) =>
-          a.jourSemaine !== null &&
-          a.jourSemaine === b.jourSemaine &&
-          minutes(a.heureDebut) < minutes(b.heureDebut) + b.dureeMinutes &&
-          minutes(b.heureDebut) < minutes(a.heureDebut) + a.dureeMinutes,
-      )
+      .filter((b) => seChevauchent(a, b))
       .map((b) => `${a.discipline} et ${b.discipline} le ${JOURS[a.jourSemaine ?? 0].toLowerCase()}`),
   );
 
