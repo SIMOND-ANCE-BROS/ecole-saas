@@ -89,6 +89,7 @@ migrations/               générées par drizzle-kit + migrations SQL personnal
 **Multi-école et sécurité**
 - Toute requête métier passe par `avecEcole(ecoleId, tx => …)`. Ne jamais utiliser `db` directement pour des données métier.
 - Toute nouvelle table métier porte `ecole_id` **et** reçoit, dans une migration SQL, `ENABLE` + `FORCE ROW LEVEL SECURITY` et la politique `isolation_ecole` (modèle dans `migrations/0001_rls.sql`, qui ne s'applique qu'aux tables existantes à sa création).
+- Les droits de `app_user` sur une nouvelle table ou séquence sont accordés automatiquement (droits par défaut, `migrations/0006_droits_par_defaut.sql`, garde-fou `src/db/droits.integration.test.ts`) ; la RLS, elle, reste à ajouter à chaque fois.
 - Toute référence entre deux tables métier est une clé étrangère composite `(ecole_id, x_id)` : `memeEcole(t, colonne, cible)` dans `src/db/schema.ts`, la table visée déclarant `cibleMemeEcole(t)`. Jamais de `.references()` simple entre tables métier : la vérification d'une clé étrangère ignore la RLS. Garde-fou : `src/db/cles-etrangeres.integration.test.ts`.
 - Le rôle `app_admin` (BYPASSRLS) est réservé aux scripts d'administration, jamais au code de l'application.
 - `ecoleId` vient toujours de la session côté serveur, jamais d'un paramètre envoyé par le navigateur.
