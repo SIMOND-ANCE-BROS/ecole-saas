@@ -140,7 +140,9 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
                   return (
                     <tr key={i.danseurId}>
                       <td className="font-medium">
-                        {i.prenom} {i.nom}
+                        <Link href={`/danseurs/${i.danseurId}`} className="lien">
+                          {i.prenom} {i.nom}
+                        </Link>
                         {statut && <span className={`ml-2 rounded px-1.5 text-xs font-normal ${statut.classe}`}>{statut.libelle}</span>}
                       </td>
                       <td className={`text-right tabular-nums ${horsTranche ? "font-medium text-alerte-texte" : ""}`} title={horsTranche ? "Hors tranche d’âge du cours" : undefined}>
