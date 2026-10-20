@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import type { CoursPlanning } from "@/db/planning";
 import type { Horaire } from "@/domaine/planning/horaires";
 import { Agenda } from "./agenda";
-import { ages, fin, JOURS } from "./format";
+import { ages, fin, JOURS, marqueRecurrence, recurrenceTexte } from "./format";
 import { FILTRES_VIDES, filtrerPlanning } from "./filtres";
 
 type Props = {
@@ -108,7 +108,7 @@ export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale
             <section key={jour ?? "stage"} aria-labelledby={`jour-${jour ?? "stage"}`} className="flex flex-col gap-2">
               <div className="flex items-baseline justify-between border-b border-bordure pb-1">
                 <h2 id={`jour-${jour ?? "stage"}`} className="text-sm font-semibold">
-                  {jour ? JOURS[jour] : "Stages"}
+                  {jour ? JOURS[jour] : "À dates précises"}
                 </h2>
                 {modifiable && jour && (
                   <Link
@@ -147,6 +147,9 @@ export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale
                         <p className="text-xs text-doux">
                           {c.salle}, {c.site} — {c.intervenant}
                         </p>
+                        {(c.jourSemaine === null || marqueRecurrence(c)) && (
+                          <p className="text-xs text-doux">{c.jourSemaine === null ? recurrenceTexte(c) : marqueRecurrence(c)}</p>
+                        )}
                         {(ages(c.ageMin, c.ageMax) || c.niveau) && (
                           <p className="text-xs text-doux">{[ages(c.ageMin, c.ageMax), c.niveau].filter(Boolean).join(", ")}</p>
                         )}

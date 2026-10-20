@@ -1,8 +1,8 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { datesDesSeances } from "../domaine/planning/seances";
+import { datesDuCours, type Recurrence } from "../domaine/planning/seances";
 import type { Tx } from "./index";
-import { cours, discipline, fermeture, inscription, inscriptionCours, intervenant, personne, presence, saison, salle, seance } from "./schema";
+import { cours, coursDate, discipline, fermeture, inscription, inscriptionCours, intervenant, personne, presence, saison, salle, seance } from "./schema";
 
 /**
  * Séances (occurrences datées des cours), fermetures et appel. Toujours avec
@@ -72,17 +72,32 @@ export async function synchroniserSeances(tx: Tx, saisonId: string, aujourdhui: 
   const debut = s.debut > aujourdhui ? s.debut : aujourdhui;
   const fermetures = await listerFermetures(tx, saisonId);
   const tous = await tx
-    .select({ id: cours.id, jourSemaine: cours.jourSemaine, intervenantId: cours.intervenantId })
+    .select({
+      id: cours.id,
+      recurrence: cours.recurrence,
+      jourSemaine: cours.jourSemaine,
+      dateDebut: cours.dateDebut,
+      dateFin: cours.dateFin,
+      intervenantId: cours.intervenantId,
+    })
     .from(cours)
-    .where(and(eq(cours.saisonId, saisonId), isNotNull(cours.jourSemaine)));
+    .where(eq(cours.saisonId, saisonId));
+  const ponctuelles = await tx
+    .select({ coursId: coursDate.coursId, date: coursDate.date })
+    .from(coursDate)
+    .innerJoin(cours, eq(cours.id, coursDate.coursId))
+    .where(eq(cours.saisonId, saisonId));
 
-  const attendues = tous.flatMap((c) =>
-    datesDesSeances({ debut, fin: s.fin, jourSemaine: c.jourSemaine as number, fermetures }).map((date) => ({
-      coursId: c.id,
-      date,
-      intervenantId: c.intervenantId,
-    })),
-  );
+  // Toute la saison, puis à partir de `debut` : l'alternance « une semaine sur deux » se cale sur la première date.
+  const attendues = tous.flatMap((c) => {
+    const r: Recurrence =
+      c.recurrence === "dates"
+        ? { type: "dates", dates: ponctuelles.filter((p) => p.coursId === c.id).map((p) => p.date) }
+        : { type: c.recurrence, jourSemaine: c.jourSemaine as number, dateDebut: c.dateDebut, dateFin: c.dateFin };
+    return datesDuCours(r, { debut: s.debut, fin: s.fin }, fermetures)
+      .filter((date) => date >= debut)
+      .map((date) => ({ coursId: c.id, date, intervenantId: c.intervenantId }));
+  });
   const ajoutees =
     attendues.length === 0
       ? []

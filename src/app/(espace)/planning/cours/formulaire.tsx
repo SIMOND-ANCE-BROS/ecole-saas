@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { type CoursEdite, type ReferentielPlanning, TYPES_COURS } from "@/db/cours";
+import { type CoursEdite, RECURRENCES, type ReferentielPlanning, TYPES_COURS } from "@/db/cours";
 import type { CoursPlanning } from "@/db/planning";
 import { conflits } from "@/domaine/planning/chevauchement";
 import { horsHoraires } from "@/domaine/planning/horaires";
@@ -39,6 +39,9 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
     adresseSite: "",
     intervenantId: cours?.intervenantId ?? r.intervenants[0]?.id ?? "",
     type: cours?.type ?? "collectif",
+    recurrence: cours?.recurrence ?? "hebdomadaire",
+    dateDebut: cours?.dateDebut ?? "",
+    dateFin: cours?.dateFin ?? "",
     jourSemaine: String(cours?.jourSemaine ?? jour ?? 1),
     heureDebut: cours?.heureDebut ?? heure ?? "17:00",
     dureeMinutes: String(cours?.dureeMinutes ?? duree ?? 60),
@@ -47,6 +50,8 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
     niveau: cours?.niveau ?? "",
     capaciteMax: cours?.capaciteMax?.toString() ?? "",
   });
+  // Dates d'un cours ponctuel ; une ligne vide pour commencer.
+  const [dates, setDates] = useState<string[]>(cours?.dates.length ? cours.dates : [""]);
   const [refus, setRefus] = useState<Refus | null>(null);
   const [envoi, demarrer] = useTransition();
   const formulaire = useRef<HTMLFormElement>(null);
@@ -56,7 +61,7 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
   const [confirmerSuppression, setConfirmer] = useState(false);
   const maj = (champ: keyof typeof v) => (e: { target: { value: string } }) => setV({ ...v, [champ]: e.target.value });
 
-  const stage = v.type === "stage";
+  const ponctuel = v.recurrence === "dates";
   const salleChoisie = r.salles.find((s) => s.id === v.salleId);
   const disciplineExistante = r.disciplines.find((d) => d.nom.toLowerCase() === v.discipline.trim().toLowerCase());
 
@@ -72,7 +77,11 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
           },
     intervenantId: v.intervenantId,
     type: v.type,
-    jourSemaine: stage ? null : Number(v.jourSemaine),
+    recurrence: v.recurrence,
+    jourSemaine: ponctuel ? null : Number(v.jourSemaine),
+    dateDebut: ponctuel || !v.dateDebut ? null : v.dateDebut,
+    dateFin: ponctuel || !v.dateFin ? null : v.dateFin,
+    dates: ponctuel ? dates.filter(Boolean) : [],
     heureDebut: v.heureDebut,
     dureeMinutes: Number(v.dureeMinutes),
     ageMin: entier(v.ageMin),
@@ -94,13 +103,13 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
   // Créneau hors des horaires d'ouverture du site de la salle (simple avertissement : un cours exceptionnel reste possible).
   const siteDeLaSalle = r.salles.find((s) => s.id === v.salleId)?.siteId;
   const horsOuverture =
-    !stage && siteDeLaSalle && saisie.jourSemaine && saisie.dureeMinutes > 0
+    !ponctuel && siteDeLaSalle && saisie.jourSemaine && saisie.dureeMinutes > 0
       ? horsHoraires({ jourSemaine: saisie.jourSemaine, heureDebut: v.heureDebut, dureeMinutes: saisie.dureeMinutes }, r.horaires[siteDeLaSalle] ?? [])
       : null;
 
   // Indisponibilités de l'intervenant sur les dates à venir du créneau, vérifiées côté serveur après une pause.
   const [datesIndispo, setDatesIndispo] = useState<string[]>([]);
-  const cle = stage ? "" : `${v.intervenantId}|${v.jourSemaine}|${v.heureDebut}|${v.dureeMinutes}`;
+  const cle = ponctuel ? "" : `${v.intervenantId}|${v.jourSemaine}|${v.heureDebut}|${v.dureeMinutes}`;
   useEffect(() => {
     if (!cle) return;
     const [intervenantId, jour, heure, duree] = cle.split("|");
@@ -187,7 +196,16 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
         </div>
         <div className="flex flex-col gap-1">
           {libelle("type", "Type")}
-          <select id="type" className="champ" value={v.type} onChange={maj("type")}>
+          <select
+            id="type"
+            className="champ"
+            value={v.type}
+            onChange={(e) => {
+              const type = e.target.value as typeof v.type;
+              // Un nouveau stage a en général des dates précises.
+              setV({ ...v, type, recurrence: !cours && type === "stage" ? "dates" : v.recurrence });
+            }}
+          >
             {Object.entries(TYPES_COURS).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
@@ -199,7 +217,50 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
 
       <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-3">
         <legend className="px-1 text-sm font-semibold">Créneau</legend>
-        {!stage && (
+        <div className="flex flex-col gap-1 sm:col-span-3">
+          {libelle("recurrence", "Récurrence")}
+          <select id="recurrence" className="champ sm:max-w-xs" value={v.recurrence} onChange={maj("recurrence")}>
+            {Object.entries(RECURRENCES).map(([k, l]) => (
+              <option key={k} value={k}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </div>
+        {ponctuel ? (
+          <div className="flex flex-col gap-1 sm:col-span-3">
+            <span className="text-sm font-medium" id="dates-libelle">
+              Dates
+            </span>
+            <ul className="flex flex-wrap gap-2" aria-labelledby="dates-libelle">
+              {dates.map((d, i) => (
+                <li key={i} className="flex items-center gap-1">
+                  <label className="sr-only" htmlFor={`date-${i}`}>
+                    Date {i + 1}
+                  </label>
+                  <input
+                    id={`date-${i}`}
+                    type="date"
+                    className="champ"
+                    value={d}
+                    onChange={(e) => setDates(dates.map((x, j) => (j === i ? e.target.value : x)))}
+                    {...(i === 0 ? invalide("dates") : {})}
+                  />
+                  {dates.length > 1 && (
+                    <button type="button" className="bouton-secondaire px-2" aria-label={`Retirer la date ${i + 1}`} onClick={() => setDates(dates.filter((_, j) => j !== i))}>
+                      ×
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="lien self-start text-sm" onClick={() => setDates([...dates, ""])}>
+              Ajouter une date
+            </button>
+            {erreur("dates")}
+            <p className="text-xs text-doux">Les dates précises ne tiennent pas compte des fermetures (un stage peut avoir lieu pendant les vacances).</p>
+          </div>
+        ) : (
           <div className="flex flex-col gap-1">
             {libelle("jour", "Jour")}
             <select id="jour" className="champ" value={v.jourSemaine} onChange={maj("jourSemaine")}>
@@ -233,6 +294,22 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
           </div>
           {erreur("dureeMinutes")}
         </div>
+        {!ponctuel && (
+          <fieldset className="flex flex-wrap items-end gap-3 sm:col-span-3">
+            <legend className="mb-1 text-sm font-medium">
+              Période <span className="font-normal text-doux">(facultatif : vide, toute la saison)</span>
+            </legend>
+            <div className="flex flex-col gap-1">
+              {libelle("date-debut", "Du")}
+              <input id="date-debut" type="date" className="champ" value={v.dateDebut} onChange={maj("dateDebut")} />
+            </div>
+            <div className="flex flex-col gap-1">
+              {libelle("date-fin", "Au")}
+              <input id="date-fin" type="date" className="champ" value={v.dateFin} onChange={maj("dateFin")} {...invalide("dateFin")} />
+            </div>
+            {erreur("dateFin")}
+          </fieldset>
+        )}
       </fieldset>
 
       <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">

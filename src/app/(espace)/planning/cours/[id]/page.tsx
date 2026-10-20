@@ -7,7 +7,7 @@ import { seancesEnConflit } from "@/db/disponibilites";
 import { seancesDuCours } from "@/db/seances";
 import { ageAu, aujourdhuiAParis } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
-import { ages, fin, JOURS } from "../../format";
+import { ages, fin, recurrenceTexte } from "../../format";
 import { BoutonImprimer } from "./imprimer";
 
 export const metadata: Metadata = { title: "Cours" };
@@ -43,9 +43,8 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
   const essais = inscrits.filter((i) => i.statut === "essai").length;
   const attente = inscrits.filter((i) => i.statut === "liste_attente").length;
   const complet = cours.capaciteMax !== null && actifs >= cours.capaciteMax;
-  const creneau = cours.jourSemaine
-    ? `${JOURS[cours.jourSemaine]} ${cours.heureDebut}–${fin(cours.heureDebut, cours.dureeMinutes)}`
-    : `Stage, ${cours.heureDebut}–${fin(cours.heureDebut, cours.dureeMinutes)}`;
+  // « Chaque lundi 17:00–18:00 », « Un mercredi sur deux… », « Le sam. 24 oct., … 10:00–12:00 » (#90).
+  const creneau = `${recurrenceTexte(cours)}, ${cours.heureDebut}–${fin(cours.heureDebut, cours.dureeMinutes)}`;
   const public_ = [ages(cours.ageMin, cours.ageMax), cours.niveau].filter(Boolean).join(", ");
 
   return (

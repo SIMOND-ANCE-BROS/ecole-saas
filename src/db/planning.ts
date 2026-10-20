@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
+import { datesDuCoursSql } from "./cours";
 import type { Tx } from "./index";
 import { alias } from "drizzle-orm/pg-core";
 import { nomAffiche } from "./personnes";
@@ -31,6 +32,11 @@ export type CoursPlanning = {
   salleId: string;
   salle: string;
   siteId: string;
+  /** Récurrence (#90) ; `dates` : cours ponctuel, sans jour. */
+  recurrence: "hebdomadaire" | "quinzaine" | "dates";
+  dateDebut: string | null;
+  dateFin: string | null;
+  dates: string[];
   site: string;
   intervenantId: string;
   /** « Prénom Nom » */
@@ -79,6 +85,10 @@ async function lireCoursPlanning(tx: Tx, filtre: SQL): Promise<CoursPlanning[]> 
       salle: salle.nom,
       siteId: site.id,
       site: site.nom,
+      recurrence: cours.recurrence,
+      dateDebut: cours.dateDebut,
+      dateFin: cours.dateFin,
+      dates: datesDuCoursSql,
       intervenantId: cours.intervenantId,
       prenom: intervenant.prenom,
       nom: intervenant.nom,

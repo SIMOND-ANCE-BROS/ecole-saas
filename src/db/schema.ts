@@ -52,6 +52,8 @@ export const regimeTva = pgEnum("regime_tva", ["franchise_293b", "assujetti", "n
 export const modeRemuneration = pgEnum("mode_remuneration", ["heure", "cours", "forfait_mensuel"]);
 export const typeCours = pgEnum("type_cours", ["collectif", "particulier", "competition", "stage"]);
 export const statutSeance = pgEnum("statut_seance", ["prevue", "effectuee", "annulee"]);
+/** Chaque semaine, une semaine sur deux, ou à des dates précises (#90). */
+export const recurrenceCours = pgEnum("recurrence_cours", ["hebdomadaire", "quinzaine", "dates"]);
 export const origineIndisponibilite = pgEnum("origine_indisponibilite", ["saisie", "google", "microsoft"]);
 export const fournisseurAgenda = pgEnum("fournisseur_agenda", ["google", "microsoft"]);
 export const publicTarif = pgEnum("public_tarif", ["enfant", "adulte", "couple", "etudiant"]);
@@ -434,13 +436,19 @@ export const cours = pgTable(
     niveau: text("niveau"),
     ageMin: smallint("age_min"),
     ageMax: smallint("age_max"),
-    jourSemaine: smallint("jour_semaine"), // 1 = lundi ; NULL pour un stage
+    recurrence: recurrenceCours("recurrence").notNull().default("hebdomadaire"),
+    jourSemaine: smallint("jour_semaine"), // 1 = lundi ; NULL pour des dates précises (table cours_date)
+    // Période limitée d'un cours régulier dans la saison ; NULL : depuis le début, jusqu'à la fin.
+    dateDebut: date("date_debut"),
+    dateFin: date("date_fin"),
     heureDebut: time("heure_debut").notNull(),
     dureeMinutes: integer("duree_minutes").notNull(),
     capaciteMax: integer("capacite_max"),
   },
   (t) => [
     check("cours_jour", sql`${t.jourSemaine} BETWEEN 1 AND 7`),
+    check("cours_recurrence_jour", sql`(${t.recurrence} = 'dates') = (${t.jourSemaine} IS NULL)`),
+    check("cours_periode", sql`${t.dateDebut} IS NULL OR ${t.dateFin} IS NULL OR ${t.dateDebut} <= ${t.dateFin}`),
     check("cours_duree", sql`${t.dureeMinutes} > 0`),
     index().on(t.saisonId, t.jourSemaine),
     cibleMemeEcole(t),
@@ -449,6 +457,17 @@ export const cours = pgTable(
     memeEcole(t, t.salleId, salle),
     memeEcole(t, t.intervenantId, intervenant),
   ],
+);
+
+/** Dates d'un cours ponctuel (récurrence « dates » : stage, cours exceptionnel). */
+export const coursDate = pgTable(
+  "cours_date",
+  {
+    ecoleId: ecoleId(),
+    coursId: uuid("cours_id").notNull(),
+    date: date("date").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.coursId, t.date] }), memeEcole(t, t.coursId, cours).onDelete("cascade")],
 );
 
 export const seance = pgTable(

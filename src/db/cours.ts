@@ -2,7 +2,7 @@ import { and, asc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Tx } from "./index";
 import { horairesParSite } from "./parametres";
-import { cours, discipline, inscriptionCours, intervenant, presence, salle, seance, site } from "./schema";
+import { cours, coursDate, discipline, inscriptionCours, intervenant, presence, salle, seance, site } from "./schema";
 
 /** Édition du planning (cours, disciplines, salles), toujours avec la transaction d'`avecEcole()` (RLS). */
 
@@ -11,6 +11,10 @@ export const TYPES_COURS = { collectif: "Collectif", particulier: "Particulier",
 const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uuid`;
 const nomCourt = z.string().trim().min(1).max(100);
 const entierOuNul = (min: number, max: number) => z.int().min(min).max(max).nullable();
+const dateOuNulle = z.iso.date("Date invalide").nullable();
+
+/** Récurrences proposées (#90). */
+export const RECURRENCES = { hebdomadaire: "Chaque semaine", quinzaine: "Une semaine sur deux", dates: "À des dates précises" } as const;
 
 export const saisieCoursValide = z
   .object({
@@ -25,7 +29,11 @@ export const saisieCoursValide = z
     ]),
     intervenantId: z.uuid(),
     type: z.enum(["collectif", "particulier", "competition", "stage"]),
+    recurrence: z.enum(["hebdomadaire", "quinzaine", "dates"]),
     jourSemaine: entierOuNul(1, 7),
+    dateDebut: dateOuNulle,
+    dateFin: dateOuNulle,
+    dates: z.array(z.iso.date("Date invalide")).max(100, "100 dates au plus"),
     heureDebut: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM"),
     dureeMinutes: z.int().min(5).max(600),
     ageMin: entierOuNul(0, 120),
@@ -42,7 +50,9 @@ export const saisieCoursValide = z
     path: ["ageMax"],
     message: "L’âge maximum est inférieur à l’âge minimum",
   })
-  .refine((c) => c.type === "stage" || c.jourSemaine !== null, { path: ["jourSemaine"], message: "Jour obligatoire" });
+  .refine((c) => c.recurrence === "dates" || c.jourSemaine !== null, { path: ["jourSemaine"], message: "Jour obligatoire" })
+  .refine((c) => c.recurrence !== "dates" || c.dates.length > 0, { path: ["dates"], message: "Ajoutez au moins une date" })
+  .refine((c) => c.dateDebut === null || c.dateFin === null || c.dateDebut <= c.dateFin, { path: ["dateFin"], message: "La fin précède le début" });
 
 export type SaisieCours = z.output<typeof saisieCoursValide>;
 export type Resultat = { ok: true; id: string } | { ok: false; message: string };
@@ -55,7 +65,12 @@ export type CoursEdite = {
   salleId: string;
   intervenantId: string;
   type: keyof typeof TYPES_COURS;
+  recurrence: keyof typeof RECURRENCES;
   jourSemaine: number | null;
+  dateDebut: string | null;
+  dateFin: string | null;
+  /** Dates d'un cours ponctuel, triées. */
+  dates: string[];
   heureDebut: string;
   dureeMinutes: number;
   ageMin: number | null;
@@ -63,6 +78,10 @@ export type CoursEdite = {
   niveau: string | null;
   capaciteMax: number | null;
 };
+
+/** Dates d'un cours ponctuel, triées (texte `YYYY-MM-DD`). */
+export const datesDuCoursSql = sql<string[]>`coalesce((
+  SELECT array_agg(cd.date::text ORDER BY cd.date) FROM cours_date cd WHERE cd.cours_id = ${cours}.${sql.identifier("id")}), '{}')`;
 
 export async function lireCours(tx: Tx, id: string): Promise<CoursEdite | null> {
   if (!z.uuid().safeParse(id).success) return null;
@@ -75,7 +94,11 @@ export async function lireCours(tx: Tx, id: string): Promise<CoursEdite | null> 
       salleId: cours.salleId,
       intervenantId: cours.intervenantId,
       type: cours.type,
+      recurrence: cours.recurrence,
       jourSemaine: cours.jourSemaine,
+      dateDebut: cours.dateDebut,
+      dateFin: cours.dateFin,
+      dates: datesDuCoursSql,
       heureDebut: cours.heureDebut,
       dureeMinutes: cours.dureeMinutes,
       ageMin: cours.ageMin,
@@ -163,10 +186,15 @@ async function valeurs(tx: Tx, saisie: SaisieCours, garde?: string) {
   if (!salleId) return { ok: false as const, message: "Salle introuvable." };
   const disciplineId = await resoudreDiscipline(tx, saisie.discipline);
   if (!disciplineId) return { ok: false as const, message: "Discipline introuvable." };
-  const { intervenantId, type, jourSemaine, heureDebut, dureeMinutes, ageMin, ageMax, niveau, capaciteMax } = saisie;
+  const { intervenantId, type, recurrence, heureDebut, dureeMinutes, ageMin, ageMax, niveau, capaciteMax } = saisie;
+  // Dates précises : ni jour ni période ; cours régulier : pas de dates.
+  const ponctuel = recurrence === "dates";
+  const jourSemaine = ponctuel ? null : saisie.jourSemaine;
+  const [dateDebut, dateFin] = ponctuel ? [null, null] : [saisie.dateDebut, saisie.dateFin];
   return {
     ok: true as const,
-    valeurs: { disciplineId, salleId, intervenantId, type, jourSemaine, heureDebut, dureeMinutes, ageMin, ageMax, niveau, capaciteMax },
+    valeurs: { disciplineId, salleId, intervenantId, type, recurrence, jourSemaine, dateDebut, dateFin, heureDebut, dureeMinutes, ageMin, ageMax, niveau, capaciteMax },
+    dates: ponctuel ? [...new Set(saisie.dates)].sort() : [],
   };
 }
 
@@ -177,7 +205,13 @@ export async function creerCours(tx: Tx, saisonId: string, saisie: SaisieCours):
     .insert(cours)
     .values({ ...r.valeurs, ecoleId: ECOLE_COURANTE, saisonId })
     .returning({ id: cours.id });
+  await remplacerDates(tx, id, r.dates);
   return { ok: true, id };
+}
+
+async function remplacerDates(tx: Tx, coursId: string, dates: string[]) {
+  await tx.delete(coursDate).where(eq(coursDate.coursId, coursId));
+  if (dates.length > 0) await tx.insert(coursDate).values(dates.map((date) => ({ ecoleId: ECOLE_COURANTE, coursId, date })));
 }
 
 export async function modifierCours(tx: Tx, id: string, saisie: SaisieCours): Promise<Resultat> {
@@ -186,6 +220,7 @@ export async function modifierCours(tx: Tx, id: string, saisie: SaisieCours): Pr
   const r = await valeurs(tx, saisie, existant.intervenantId);
   if (!r.ok) return r;
   await tx.update(cours).set(r.valeurs).where(eq(cours.id, id));
+  await remplacerDates(tx, id, r.dates);
   // Nouveau titulaire : il reprend les séances à venir de l'ancien, pas celles d'un remplaçant.
   if (r.valeurs.intervenantId !== existant.intervenantId) {
     await tx
@@ -244,7 +279,7 @@ export async function deplacerCours(tx: Tx, id: string, creneau: z.input<typeof 
   if (!c.success) return { statut: "refus", message: c.error.issues[0].message };
   const existant = await lireCours(tx, id);
   if (!existant) return { statut: "refus", message: "Ce cours n’existe plus." };
-  if (existant.type === "stage") return { statut: "refus", message: "Un stage n’a pas de jour de semaine : modifiez-le depuis sa fiche." };
+  if (existant.recurrence === "dates") return { statut: "refus", message: "Un cours à dates précises se modifie depuis sa fiche." };
   if (versMinutesFin(c.data) > 24 * 60) return { statut: "refus", message: "Le cours finirait après minuit." };
   if (!confirme) {
     const [{ n }] = await tx
