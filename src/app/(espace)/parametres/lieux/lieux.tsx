@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import type { LigneSite } from "@/db/parametres";
 import { changerSalle, changerSite, nouveauSite, nouvelleSalle, retirerSalle, retirerSite } from "../actions";
+import { HorairesSite } from "./horaires";
 
 const capaciteDe = (v: string) => (v.trim() === "" ? null : Number(v));
 
@@ -79,6 +80,8 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
                 </span>
               </div>
             )}
+
+            <HorairesSite siteId={s.id} nom={s.nom} horaires={s.horaires} />
 
             <ul className="divide-y divide-bordure rounded-md border border-bordure">
               {s.salles.map((x) =>

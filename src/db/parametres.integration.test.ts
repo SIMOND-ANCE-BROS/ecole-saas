@@ -6,6 +6,8 @@ import {
   creerSaison,
   creerSalle,
   creerSite,
+  enregistrerHoraires,
+  horairesParSite,
   listerDisciplines,
   listerLieux,
   listerSaisons,
@@ -38,7 +40,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const t of ["tarif_carnet", "reduction", "tarif", "cours", "intervenant", "salle", "site", "discipline", "saison"]) {
+  for (const t of ["horaire_site", "tarif_carnet", "reduction", "tarif", "cours", "intervenant", "salle", "site", "discipline", "saison"]) {
     await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
   }
   await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
@@ -139,5 +141,32 @@ describe("sites et salles", () => {
       ok: false,
       message: "Site introuvable.",
     });
+  });
+});
+
+describe("horaires des sites (#90)", () => {
+  it("enregistre, remplace et relit les horaires d'un site", async () => {
+    const semaine = [1, 2, 3, 4, 5].map((j) => ({ jourSemaine: j, ouverture: "16:30", fermeture: "22:00" }));
+    expect(await avecEcole(ecole, (tx) => enregistrerHoraires(tx, centre, semaine))).toEqual({ ok: true, id: centre });
+    await avecEcole(ecole, (tx) => enregistrerHoraires(tx, centre, [{ jourSemaine: 6, ouverture: "09:00", fermeture: "13:00" }]));
+    expect((await avecEcole(ecole, (tx) => horairesParSite(tx)))[centre]).toEqual([{ jourSemaine: 6, ouverture: "09:00", fermeture: "13:00" }]);
+    expect((await avecEcole(ecole, (tx) => listerLieux(tx))).find((l) => l.id === centre)?.horaires).toHaveLength(1);
+  });
+
+  it("refuse un jour en double, une fermeture avant l'ouverture, un site d'une autre école", async () => {
+    expect(
+      await avecEcole(ecole, (tx) =>
+        enregistrerHoraires(tx, centre, [
+          { jourSemaine: 1, ouverture: "09:00", fermeture: "12:00" },
+          { jourSemaine: 1, ouverture: "14:00", fermeture: "18:00" },
+        ]),
+      ),
+    ).toEqual({ ok: false, message: "Un même jour est saisi deux fois." });
+    expect(await avecEcole(ecole, (tx) => enregistrerHoraires(tx, centre, [{ jourSemaine: 2, ouverture: "18:00", fermeture: "09:00" }]))).toEqual({
+      ok: false,
+      message: "L’heure de fermeture doit suivre l’ouverture.",
+    });
+    expect(await avecEcole(autreEcole, (tx) => enregistrerHoraires(tx, centre, []))).toEqual({ ok: false, message: "Ce site n’existe plus." });
+    expect(await avecEcole(autreEcole, (tx) => horairesParSite(tx))).toEqual({});
   });
 });

@@ -5,7 +5,7 @@ import { FILTRES_VIDES, filtrerPlanning } from "./filtres";
 const base: CoursPlanning = {
   id: "cours-1", jourSemaine: 1, heureDebut: "18:00", dureeMinutes: 60,
   disciplineId: "jazz", discipline: "Jazz", salleId: "salle-centre", salle: "Salle 1",
-  site: "Centre", intervenantId: "prof-1", intervenant: "Intervenant fictif",
+  siteId: "site-centre", site: "Centre", intervenantId: "prof-1", intervenant: "Intervenant fictif",
   ageMin: null, ageMax: null, niveau: null, capaciteMax: 20, inscrits: 12,
 };
 const cours = [base,

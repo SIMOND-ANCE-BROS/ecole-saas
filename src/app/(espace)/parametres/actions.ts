@@ -7,6 +7,7 @@ import {
   creerSaison,
   creerSalle,
   creerSite,
+  enregistrerHoraires,
   modifierSaison,
   modifierSalle,
   modifierSite,
@@ -50,6 +51,12 @@ export async function nouveauSite(saisie: unknown) {
 }
 export async function changerSite(id: string, saisie: unknown) {
   return agir("lieux", (tx) => modifierSite(tx, id, saisie as never));
+}
+export async function changerHoraires(siteId: string, horaires: unknown) {
+  const r = await agir("lieux", (tx) => enregistrerHoraires(tx, siteId, horaires as never));
+  // L'agenda du planning dépend des horaires.
+  revalidatePath("/planning");
+  return r;
 }
 export async function retirerSite(id: string) {
   return agir("lieux", (tx) => supprimerSite(tx, id));

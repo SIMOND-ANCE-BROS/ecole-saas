@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { CoursPlanning } from "@/db/planning";
+import type { Horaire } from "@/domaine/planning/horaires";
 import { Agenda } from "./agenda";
 import { ages, fin, JOURS } from "./format";
 import { FILTRES_VIDES, filtrerPlanning } from "./filtres";
@@ -15,10 +16,12 @@ type Props = {
   misEnAvant?: string;
   /** Vue choisie (`?vue=`), semaine par défaut. */
   vue: "semaine" | "liste";
+  /** Horaires d'ouverture par site (#90) : bornent l'agenda. */
+  horaires: Record<string, Horaire[]>;
 };
 
 /** Planning de la semaine, filtrable par discipline, site, salle et intervenant, avec l'effectif de chaque cours. */
-export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale }: Props) {
+export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale, horaires }: Props) {
   const [filtres, setFiltres] = useState(FILTRES_VIDES);
   const [vue, setVue] = useState(vueInitiale);
   const choisirVue = (v: "semaine" | "liste") => {
@@ -32,6 +35,9 @@ export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale
   const intervenants = [...new Map(cours.map((c) => [c.intervenantId, c.intervenant])).entries()].sort((a, b) => a[1].localeCompare(b[1], "fr"));
   const visibles = filtrerPlanning(cours, filtres);
   const filtresActifs = Object.values(filtres).some(Boolean);
+  // Horaires des sites affichés : le site (ou celui de la salle) filtré, sinon tous.
+  const siteFiltre = salleId ? cours.find((c) => c.salleId === salleId)?.siteId : site ? cours.find((c) => c.site === site)?.siteId : undefined;
+  const horairesAffiches = siteFiltre ? (horaires[siteFiltre] ?? []) : Object.values(horaires).flat();
   const jours = [...new Set(visibles.map((c) => c.jourSemaine))].sort((a, b) => (a ?? 8) - (b ?? 8));
 
   return (
@@ -95,7 +101,7 @@ export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale
       {visibles.length === 0 ? (
         <div className="panneau flex flex-col items-start gap-3 p-5"><p className="text-sm text-doux">{cours.length === 0 ? "Aucun cours n’est encore programmé." : "Aucun cours ne correspond à cette combinaison de filtres."}</p>{filtresActifs && <button type="button" className="bouton-secondaire" onClick={() => setFiltres(FILTRES_VIDES)}>Afficher tous les cours</button>}</div>
       ) : vue === "semaine" ? (
-        <Agenda cours={visibles} tous={cours} modifiable={modifiable} misEnAvant={misEnAvant} />
+        <Agenda cours={visibles} tous={cours} modifiable={modifiable} misEnAvant={misEnAvant} horaires={horairesAffiches} />
       ) : (
         <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
           {jours.map((jour) => (

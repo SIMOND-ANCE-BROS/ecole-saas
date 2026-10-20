@@ -5,9 +5,11 @@ import { redirect } from "next/navigation";
 import { avecEcole } from "@/db";
 import { creerCours, deplacerCours, lireCours, modifierCours, saisieCoursValide, supprimerCours } from "@/db/cours";
 import { conflitsCreneau } from "@/db/disponibilites";
+import { horairesParSite } from "@/db/parametres";
 import { coursDeLaSaison, saisonCourante } from "@/db/planning";
 import { synchroniserSeances } from "@/db/seances";
 import { conflits } from "@/domaine/planning/chevauchement";
+import { horsHoraires } from "@/domaine/planning/horaires";
 import { JOURS_COURTS } from "@/domaine/planning/jours";
 import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
@@ -87,6 +89,10 @@ export async function deplacer(coursId: string, creneau: unknown, confirme: bool
           return x.salle ? `${autre.salle} déjà occupée (${quand})` : `${autre.intervenant} donne déjà un cours (${quand})`;
         })
       : [];
+    if (moi && c.jourSemaine) {
+      const hors = horsHoraires({ jourSemaine: c.jourSemaine, heureDebut: c.heureDebut, dureeMinutes: c.dureeMinutes }, (await horairesParSite(tx))[moi.siteId] ?? []);
+      if (hors) alertes.push(hors);
+    }
     if (c.jourSemaine) {
       const dates = await conflitsCreneau(
         tx,

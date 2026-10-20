@@ -30,6 +30,7 @@ export type CoursPlanning = {
   discipline: string;
   salleId: string;
   salle: string;
+  siteId: string;
   site: string;
   intervenantId: string;
   /** « Prénom Nom » */
@@ -76,6 +77,7 @@ async function lireCoursPlanning(tx: Tx, filtre: SQL): Promise<CoursPlanning[]> 
       discipline: discipline.nom,
       salleId: cours.salleId,
       salle: salle.nom,
+      siteId: site.id,
       site: site.nom,
       intervenantId: cours.intervenantId,
       prenom: intervenant.prenom,
