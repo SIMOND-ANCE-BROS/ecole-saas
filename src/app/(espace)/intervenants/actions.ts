@@ -3,9 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 import { avecEcole } from "@/db";
 import { creerJetonAgenda, revoquerJetonAgenda } from "@/db/agenda";
+import { ajouterIndisponibilite, supprimerIndisponibilite } from "@/db/disponibilites";
 import { creerIntervenant, modifierIntervenant, saisieIntervenantValide } from "@/db/intervenants";
+import { instantParis } from "@/domaine/planning/disponibilite";
 import { lireEuros } from "@/lib/montant";
 import { exigerRole } from "@/lib/session";
 
@@ -72,4 +75,35 @@ export async function revoquerLienAgenda(intervenantId: string): Promise<{ messa
   const ok = await avecEcole(ecoleId, (tx) => revoquerJetonAgenda(tx, intervenantId));
   revalidatePath(`/intervenants/${intervenantId}`);
   return { message: ok ? null : "Cet intervenant n’existe plus." };
+}
+
+const saisieIndisponibilite = z
+  .object({
+    du: z.iso.date("Date de début invalide"),
+    au: z.iso.date("Date de fin invalide"),
+    de: z.union([z.literal(""), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure invalide")]),
+    a: z.union([z.literal(""), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure invalide")]),
+    libelle: z.string().max(100),
+  })
+  .refine((s) => (s.de === "") === (s.a === ""), "Indiquez les deux heures, ou aucune pour des journées entières.");
+
+/** Journées entières (sans heures) ou plage horaire, en heure de Paris. */
+export async function ajouterIndispo(intervenantId: string, saisie: unknown): Promise<{ message: string | null }> {
+  const { ecoleId } = await exigerRole("direction");
+  const s = saisieIndisponibilite.safeParse(saisie);
+  if (!s.success) return { message: s.error.issues[0].message };
+  const { du, au, de, a, libelle } = s.data;
+  const lendemain = new Date(Date.parse(au) + 86_400_000).toISOString().slice(0, 10);
+  const debut = new Date(instantParis(du, de || "00:00"));
+  const fin = new Date(de ? instantParis(au, a) : instantParis(lendemain, "00:00"));
+  const r = await avecEcole(ecoleId, (tx) => ajouterIndisponibilite(tx, intervenantId, { debut, fin, libelle }));
+  revalidatePath(`/intervenants/${intervenantId}`);
+  return { message: r.ok ? null : r.message };
+}
+
+export async function retirerIndispo(intervenantId: string, id: string): Promise<{ message: string | null }> {
+  const { ecoleId } = await exigerRole("direction");
+  const r = await avecEcole(ecoleId, (tx) => supprimerIndisponibilite(tx, id));
+  revalidatePath(`/intervenants/${intervenantId}`);
+  return { message: r.ok ? null : r.message };
 }

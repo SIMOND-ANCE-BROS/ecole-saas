@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { type CoursEdite, type ReferentielPlanning, TYPES_COURS } from "@/db/cours";
 import type { CoursPlanning } from "@/db/planning";
 import { conflits } from "@/domaine/planning/chevauchement";
-import { enregistrerCours, type Refus, supprimer } from "./actions";
+import { enregistrerCours, type Refus, supprimer, verifierCreneau } from "./actions";
 
 const JOURS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const DUREES = [45, 60, 90, 120];
 const NOUVELLE = "nouvelle";
+const dateCourte = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
 type Props = {
   cours: CoursEdite | null;
@@ -79,6 +80,20 @@ export function FormulaireCours({ cours, referentiel, planning, jour }: Props) {
     const quoi = [c.salle && `la salle ${autre.salle}`, c.intervenant && autre.intervenant].filter(Boolean).join(" et ");
     return `${quoi} : ${autre.discipline} à ${autre.heureDebut}`;
   });
+
+  // Indisponibilités de l'intervenant sur les dates à venir du créneau, vérifiées côté serveur après une pause.
+  const [datesIndispo, setDatesIndispo] = useState<string[]>([]);
+  const cle = stage ? "" : `${v.intervenantId}|${v.jourSemaine}|${v.heureDebut}|${v.dureeMinutes}`;
+  useEffect(() => {
+    if (!cle) return;
+    const [intervenantId, jour, heure, duree] = cle.split("|");
+    const minuteur = setTimeout(async () => {
+      setDatesIndispo(await verifierCreneau(cours?.id ?? null, { intervenantId, jourSemaine: Number(jour), heureDebut: heure, dureeMinutes: Number(duree) }));
+    }, 300);
+    return () => clearTimeout(minuteur);
+  }, [cle, cours?.id]);
+  const indispoAffichees = cle ? datesIndispo : [];
+  const intervenantChoisi = r.intervenants.find((i) => i.id === v.intervenantId);
 
   const erreur = (champ: string) =>
     refus?.erreurs[champ] && (
@@ -278,6 +293,18 @@ export function FormulaireCours({ cours, referentiel, planning, jour }: Props) {
           />
         </div>
       </fieldset>
+
+      {indispoAffichees.length > 0 && (
+        <div role="status" className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
+          <p className="font-medium">
+            {intervenantChoisi?.prenom} est indisponible {indispoAffichees.length > 1 ? `${indispoAffichees.length} fois` : "une fois"} sur ce créneau :
+          </p>
+          <p>
+            {indispoAffichees.slice(0, 6).map((d) => dateCourte.format(new Date(`${d}T00:00:00Z`))).join(", ")}
+            {indispoAffichees.length > 6 && "…"}
+          </p>
+        </div>
+      )}
 
       {recouvrements.length > 0 && (
         <div role="status" className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
