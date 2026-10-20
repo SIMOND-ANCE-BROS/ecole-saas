@@ -1,12 +1,12 @@
 import Link from "next/link";
 import type { InscriptionPayee } from "@/db/inscriptions";
 import type { FichePersonne } from "@/db/personnes";
+import { LIBELLES_STATUT_INSCRIPTION as STATUT } from "@/domaine/inscription/statuts";
 import { formaterEuros } from "@/lib/montant";
 import { JOURS } from "../planning/format";
 
 /** Sections communes aux fiches élève et contact. */
 
-const STATUT = { active: "Inscrit", essai: "À l’essai", liste_attente: "En attente", abandon: "Abandon", terminee: "Terminé" } as const;
 const DOCUMENT = {
   certificat_medical: "Certificat médical",
   autorisation_parentale: "Autorisation parentale",

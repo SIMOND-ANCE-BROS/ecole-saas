@@ -1,7 +1,9 @@
-import { and, asc, eq, or, sql } from "drizzle-orm";
+import { and, asc, eq, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { COLONNES_CONTACTS, COLONNES_ELEVES } from "../domaine/filtres/colonnes";
 import { FILTRE_VIDE, type Filtre } from "../domaine/filtres/filtres";
+import { LIBELLES_STATUT_INSCRIPTION, PRIORITE_STATUT } from "../domaine/inscription/statuts";
+import { JOURS_COURTS } from "../domaine/planning/jours";
 import { aujourdhuiAParis } from "../domaine/personnes/age";
 import { conditionFiltre } from "./filtres";
 import type { Tx } from "./index";
@@ -47,10 +49,21 @@ export type LigneEleve = {
   responsables: string[];
   /** Nom du payeur ; null quand l'élève paie lui-même (ou qu'aucun payeur n'est indiqué). */
   factureA: string | null;
+  /** E-mail de l'élève, sinon celui d'un responsable. */
+  email: string | null;
+  /** Cours de la saison (inscriptions actives ou à l'essai) : « Jazz lun. 17:00 ». */
+  cours: string[];
+  /** Statut d'inscription de la saison (« Inscrit », « En attente »…), null sans inscription. */
+  inscription: string | null;
+  /** Personnes à prévenir : « Sophie Martin, 06 12 34 56 78 ». */
+  prevenir: string[];
 };
 
-/** Filtres par colonne (#87) ; `aujourdhui` (Paris) sert au calcul de l'âge. */
-export type OptionsListe = { filtre?: Filtre; aujourdhui?: string };
+/**
+ * Filtres par colonne (#87) ; `aujourdhui` (Paris) sert au calcul de l'âge,
+ * `saisonId` aux colonnes « Cours suivis » et « Inscription » (#89).
+ */
+export type OptionsListe = { filtre?: Filtre; aujourdhui?: string; saisonId?: string | null };
 
 // Colonnes calculées des listes : les mêmes expressions servent à l'affichage et aux filtres.
 const telephoneEleve = sql<string | null>`coalesce(${personne.telephone}, (
@@ -66,21 +79,72 @@ const elevesDuContact = sql<string[]>`coalesce((
   SELECT array_agg(DISTINCT coalesce(e.prenom, e.nom)) FROM lien l JOIN personne e ON e.id = l.lie_a_id
   WHERE l.personne_id = ${idCourant} AND e.eleve AND (l.type = 'representant_legal' OR l.paie_pour)), '{}')`;
 
+const emailEleve = sql<string | null>`coalesce(${personne.email}, (
+  SELECT r.email FROM lien l JOIN personne r ON r.id = l.personne_id
+  WHERE l.lie_a_id = ${idCourant} AND l.type = 'representant_legal' AND r.email IS NOT NULL ORDER BY r.nom LIMIT 1))`;
+const prevenirEleve = sql<string[]>`coalesce((
+  SELECT array_agg(concat_ws(', ', ${nomSql("r")}, r.telephone) ORDER BY r.nom) FROM lien l JOIN personne r ON r.id = l.personne_id
+  WHERE l.lie_a_id = ${idCourant} AND l.contact_urgence), '{}')`;
+
+/** CASE SQL d'après une table de libellés (les libellés passent en paramètres). */
+const libelles = (valeur: SQL, table: Record<string | number, string>) =>
+  sql`CASE ${valeur} ${sql.join(
+    Object.entries(table).map(([k, v]) => sql`WHEN ${k} THEN ${v}`),
+    sql` `,
+  )} END`;
+
+/** Cours suivis cette saison (inscriptions actives ou à l'essai), triés par jour et heure. */
+function coursEleve(saisonId: string | null): SQL<string[]> {
+  if (!saisonId) return sql<string[]>`'{}'::text[]`;
+  const jour = libelles(sql`c.jour_semaine::text`, Object.fromEntries(JOURS_COURTS.map((j, i) => [i, j]).slice(1)));
+  return sql<string[]>`coalesce((
+    SELECT array_agg(x.libelle ORDER BY x.jour NULLS LAST, x.heure) FROM (
+      SELECT DISTINCT concat_ws(' ', d.nom, ${jour}, to_char(c.heure_debut, 'HH24:MI')) AS libelle, c.jour_semaine AS jour, c.heure_debut AS heure
+      FROM inscription_cours ic
+      JOIN inscription i ON i.id = ic.inscription_id
+      JOIN cours c ON c.id = ic.cours_id
+      JOIN discipline d ON d.id = c.discipline_id
+      WHERE ic.danseur_id = ${idCourant} AND i.saison_id = ${saisonId} AND i.statut IN ('active', 'essai')
+    ) x), '{}')`;
+}
+
+/** Statut d'inscription de la saison ; le plus favorable si l'élève en a plusieurs. */
+function inscriptionEleve(saisonId: string | null): SQL<string | null> {
+  if (!saisonId) return sql<string | null>`NULL::text`;
+  return sql<string | null>`(
+    SELECT ${libelles(sql`i.statut::text`, LIBELLES_STATUT_INSCRIPTION)}
+    FROM inscription i JOIN inscription_cours ic ON ic.inscription_id = i.id
+    WHERE ic.danseur_id = ${idCourant} AND i.saison_id = ${saisonId}
+    ORDER BY array_position(${sql`ARRAY[${sql.join(PRIORITE_STATUT.map((st) => sql`${st}`), sql`, `)}]::text[]`}, i.statut::text) LIMIT 1)`;
+}
+
 /**
  * Élèves de l'école, par nom. La recherche porte sur l'élève et sur ses
  * proches (nom, téléphone…) : on retrouve un enfant par sa mère. Les filtres
  * par colonne s'appliquent en SQL, avant la limite de la liste.
  */
-export async function listerEleves(tx: Tx, saisie = "", { filtre = FILTRE_VIDE, aujourdhui = aujourdhuiAParis() }: OptionsListe = {}): Promise<LigneEleve[]> {
+export async function listerEleves(
+  tx: Tx,
+  saisie = "",
+  { filtre = FILTRE_VIDE, aujourdhui = aujourdhuiAParis(), saisonId = null }: OptionsListe = {},
+): Promise<LigneEleve[]> {
   const surEleve = conditionRecherche(saisie);
   const surProche = conditionRecherche(saisie, "r");
   if (saisie.trim() && !surEleve) return [];
+  const valideSaison = saisonId && estUuid(saisonId) ? saisonId : null;
+  const coursSaison = coursEleve(valideSaison);
+  const statutSaison = inscriptionEleve(valideSaison);
   const surColonnes = conditionFiltre(filtre, COLONNES_ELEVES, {
     nom: { sql: nomSql("personne") },
     age: { sql: sql`date_part('year', age(${aujourdhui}::date, ${personne.dateNaissance}))` },
     responsables: { sql: responsablesEleve, liste: true },
     facture: { sql: factureAEleve },
     telephone: { sql: telephoneEleve },
+    naissance: { sql: sql`${personne.dateNaissance}` },
+    email: { sql: emailEleve },
+    cours: { sql: coursSaison, liste: true },
+    inscription: { sql: statutSaison },
+    prevenir: { sql: prevenirEleve, liste: true },
   });
   return tx
     .select({
@@ -91,6 +155,10 @@ export async function listerEleves(tx: Tx, saisie = "", { filtre = FILTRE_VIDE, 
       telephone: telephoneEleve,
       responsables: responsablesEleve,
       factureA: factureAEleve,
+      email: emailEleve,
+      cours: coursSaison,
+      inscription: statutSaison,
+      prevenir: prevenirEleve,
     })
     .from(personne)
     .where(

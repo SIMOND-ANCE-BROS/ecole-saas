@@ -8,6 +8,7 @@ import { conflitsCreneau } from "@/db/disponibilites";
 import { coursDeLaSaison, saisonCourante } from "@/db/planning";
 import { synchroniserSeances } from "@/db/seances";
 import { conflits } from "@/domaine/planning/chevauchement";
+import { JOURS_COURTS } from "@/domaine/planning/jours";
 import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
 
@@ -60,7 +61,6 @@ export type RetourDeplacement =
   | { statut: "confirmer"; inscrits: number }
   | { statut: "refus"; message: string };
 
-const JOURS_COURTS = ["", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."];
 const dateCourte = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
 
 /**

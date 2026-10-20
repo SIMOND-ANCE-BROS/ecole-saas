@@ -91,6 +91,22 @@ describe("appliquerFiltre", () => {
   });
 });
 
+describe("dates", () => {
+  const COL: DefColonne[] = [{ id: "naissance", libelle: "Naissance", type: "date" }];
+  const L = [{ n: "2018-03-01" }, { n: "2014-01-10" }, { n: null }];
+  const f = (x: string[]) => appliquerFiltre(L, lireFiltre(x, null, COL), [{ ...COL[0], valeur: (l: { n: string | null }) => l.n }]).map((l) => l.n);
+  it("avant, après, le ; vide ; une valeur qui n'est pas une date est ignorée", () => {
+    expect(f(["naissance.inf.2015-01-01"])).toEqual(["2014-01-10"]);
+    expect(f(["naissance.sup.2015-01-01"])).toEqual(["2018-03-01"]);
+    expect(f(["naissance.egal.2018-03-01"])).toEqual(["2018-03-01"]);
+    expect(f(["naissance.vide"])).toEqual([null]);
+    expect(lireFiltre(["naissance.inf.01/01/2015", "naissance.contient.2015"], null, COL).conditions).toEqual([]);
+  });
+  it("libellé lisible", () => {
+    expect(libelleCondition({ colonne: "naissance", operateur: "inf", valeur: "2015-01-01" }, COL)).toBe("Naissance avant le 01/01/2015");
+  });
+});
+
 it("libelleCondition", () => {
   expect(libelleCondition({ colonne: "age", operateur: "sup", valeur: "10" }, COLONNES)).toBe("Âge > 10");
   expect(libelleCondition({ colonne: "nom", operateur: "contient", valeur: "Martin" }, COLONNES)).toBe("Élève contient « Martin »");

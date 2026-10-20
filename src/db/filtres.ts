@@ -48,6 +48,24 @@ function condition(c: Condition, def: DefColonne, e: ExpressionColonne): SQL | u
     }
   }
 
+  if (def.type === "date") {
+    const d = sql`(${e.sql})::date`;
+    switch (c.operateur) {
+      case "vide":
+        return sql`${d} IS NULL`;
+      case "non_vide":
+        return sql`${d} IS NOT NULL`;
+      case "egal":
+        return sql`${d} = ${v}::date`;
+      case "inf":
+        return sql`${d} < ${v}::date`;
+      case "sup":
+        return sql`${d} > ${v}::date`;
+      default:
+        return undefined;
+    }
+  }
+
   const brut = e.liste ? sql`array_to_string(${e.sql}, ', ')` : sql`(${e.sql})::text`;
   const t =
     def.type === "telephone" ? sql`regexp_replace(coalesce(${brut}, ''), '[^0-9]', '', 'g')` : normaliser(sql`coalesce(${brut}, '')`);
