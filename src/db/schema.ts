@@ -53,6 +53,7 @@ export const modeRemuneration = pgEnum("mode_remuneration", ["heure", "cours", "
 export const typeCours = pgEnum("type_cours", ["collectif", "particulier", "competition", "stage"]);
 export const statutSeance = pgEnum("statut_seance", ["prevue", "effectuee", "annulee"]);
 export const origineIndisponibilite = pgEnum("origine_indisponibilite", ["saisie", "google", "microsoft"]);
+export const fournisseurAgenda = pgEnum("fournisseur_agenda", ["google", "microsoft"]);
 export const publicTarif = pgEnum("public_tarif", ["enfant", "adulte", "couple", "etudiant"]);
 export const periodicite = pgEnum("periodicite", ["trimestre", "annee", "unite"]);
 export const statutInscription = pgEnum("statut_inscription", [
@@ -342,6 +343,26 @@ export const indisponibilite = pgTable(
     index().on(t.intervenantId, t.debut),
     memeEcole(t, t.intervenantId, intervenant),
   ],
+);
+
+/**
+ * Agenda Google ou Microsoft connecté par un intervenant : jeton de
+ * rafraîchissement chiffré (src/lib/chiffrement.ts), jamais en clair.
+ */
+export const connexionAgenda = pgTable(
+  "connexion_agenda",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ecoleId: ecoleId(),
+    intervenantId: uuid("intervenant_id").notNull(),
+    fournisseur: fournisseurAgenda("fournisseur").notNull(),
+    compte: text("compte"),
+    jetonChiffre: text("jeton_chiffre").notNull(),
+    derniereSynchro: timestamp("derniere_synchro", { withTimezone: true }),
+    erreur: text("erreur"),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique().on(t.intervenantId), memeEcole(t, t.intervenantId, intervenant)],
 );
 
 // ---------------------------------------------------------------------------

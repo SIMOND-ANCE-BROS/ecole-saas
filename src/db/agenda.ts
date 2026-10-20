@@ -43,12 +43,8 @@ export async function etatAgenda(tx: Tx, intervenantId: string): Promise<Date | 
   return i?.creeLe ?? null;
 }
 
-/**
- * Séances de l'intervenant au jeton donné, à partir de `depuis`, y compris ses
- * remplacements ; null si le jeton est inconnu ou révoqué. Aucune donnée
- * d'élève : titre du cours et lieu seulement.
- */
-export async function lireAgenda(tx: Tx, jeton: string, depuis: string): Promise<{ nom: string; seances: SeanceAgenda[] } | null> {
+/** Intervenant actif au jeton donné (page personnelle de l'intervenant) ; null sinon. */
+export async function intervenantDuJeton(tx: Tx, jeton: string): Promise<{ id: string; prenom: string; ecole: string } | null> {
   if (!/^[A-Za-z0-9_-]{43}$/.test(jeton)) return null;
   const [i] = await tx
     .select({ id: intervenant.id, prenom: intervenant.prenom, ecole: ecole.nom })
@@ -56,6 +52,16 @@ export async function lireAgenda(tx: Tx, jeton: string, depuis: string): Promise
     .innerJoin(ecole, eq(ecole.id, intervenant.ecoleId))
     // Un intervenant parti (inactif) ne reçoit plus rien, même avec un ancien lien.
     .where(and(eq(intervenant.jetonAgendaHash, empreinte(jeton)), eq(intervenant.actif, true)));
+  return i ?? null;
+}
+
+/**
+ * Séances de l'intervenant au jeton donné, à partir de `depuis`, y compris ses
+ * remplacements ; null si le jeton est inconnu ou révoqué. Aucune donnée
+ * d'élève : titre du cours et lieu seulement.
+ */
+export async function lireAgenda(tx: Tx, jeton: string, depuis: string): Promise<{ nom: string; seances: SeanceAgenda[] } | null> {
+  const i = await intervenantDuJeton(tx, jeton);
   if (!i) return null;
 
   const lignes = await tx
