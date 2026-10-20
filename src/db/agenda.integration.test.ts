@@ -1,6 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { creerJetonAgenda, etatAgenda, lireAgenda, revoquerJetonAgenda } from "./agenda";
+import { lireIntervenant, modifierIntervenant } from "./intervenants";
 import { avecEcole } from "./index";
 
 /** Abonnement iCal d'un intervenant, comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
@@ -80,5 +81,20 @@ describe("abonnement iCal", () => {
     expect(await avecEcole(ecole, (tx) => revoquerJetonAgenda(tx, camille))).toBe(true);
     expect(await avecEcole(ecole, (tx) => lireAgenda(tx, nouveau, "2026-10-20"))).toBeNull();
     expect(await avecEcole(ecole, (tx) => etatAgenda(tx, camille))).toBeNull();
+  });
+
+  it("coupe le lien d’un intervenant désactivé, même remis en base à la main", async () => {
+    const jeton = (await avecEcole(ecole, (tx) => creerJetonAgenda(tx, ines))) as string;
+    const fiche = await avecEcole(ecole, (tx) => lireIntervenant(tx, ines));
+    if (!fiche) throw new Error("intervenant introuvable");
+    const { id, ...saisie } = fiche;
+    expect(id).toBe(ines);
+    await avecEcole(ecole, (tx) => modifierIntervenant(tx, ines, { ...saisie, actif: false }));
+    expect(await avecEcole(ecole, (tx) => etatAgenda(tx, ines))).toBeNull();
+
+    // Même si l'empreinte revenait (restauration de sauvegarde), un inactif ne lit rien.
+    const [{ empreinte }] = await admin`SELECT encode(sha256(${jeton}::bytea), 'hex') AS empreinte`;
+    await admin`UPDATE intervenant SET jeton_agenda_hash = ${empreinte} WHERE id = ${ines}`;
+    expect(await avecEcole(ecole, (tx) => lireAgenda(tx, jeton, "2026-10-20"))).toBeNull();
   });
 });

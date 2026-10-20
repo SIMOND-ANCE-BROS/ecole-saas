@@ -80,6 +80,12 @@ export async function creerIntervenant(tx: Tx, saisie: SaisieIntervenant): Promi
 /** false si l'intervenant n'existe pas dans l'école courante. */
 export async function modifierIntervenant(tx: Tx, id: string, saisie: SaisieIntervenant): Promise<boolean> {
   if (!z.uuid().safeParse(id).success) return false;
-  const lignes = await tx.update(intervenant).set(saisie).where(eq(intervenant.id, id)).returning({ id: intervenant.id });
+  // Désactiver un intervenant coupe aussi son abonnement à l'agenda.
+  const coupure = saisie.actif ? {} : { jetonAgendaHash: null, jetonAgendaCreeLe: null };
+  const lignes = await tx
+    .update(intervenant)
+    .set({ ...saisie, ...coupure })
+    .where(eq(intervenant.id, id))
+    .returning({ id: intervenant.id });
   return lignes.length === 1;
 }

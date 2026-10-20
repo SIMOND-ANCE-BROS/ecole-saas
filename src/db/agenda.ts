@@ -54,7 +54,8 @@ export async function lireAgenda(tx: Tx, jeton: string, depuis: string): Promise
     .select({ id: intervenant.id, prenom: intervenant.prenom, ecole: ecole.nom })
     .from(intervenant)
     .innerJoin(ecole, eq(ecole.id, intervenant.ecoleId))
-    .where(eq(intervenant.jetonAgendaHash, empreinte(jeton)));
+    // Un intervenant parti (inactif) ne reçoit plus rien, même avec un ancien lien.
+    .where(and(eq(intervenant.jetonAgendaHash, empreinte(jeton)), eq(intervenant.actif, true)));
   if (!i) return null;
 
   const lignes = await tx
