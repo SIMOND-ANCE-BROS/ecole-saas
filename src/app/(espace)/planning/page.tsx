@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Planning" };
 
 export default async function PagePlanning({ searchParams }: PageProps<"/planning">) {
   const { ecoleId, role } = await contexteEcole();
-  const { enregistre, supprime } = await searchParams;
+  const { enregistre, supprime, vue } = await searchParams;
   const { saison, cours } = await avecEcole(ecoleId, async (tx) => {
     const s = await saisonCourante(tx, aujourdhuiAParis());
     return { saison: s, cours: s ? await coursDeLaSaison(tx, s.id) : [] };
@@ -53,7 +53,7 @@ export default async function PagePlanning({ searchParams }: PageProps<"/plannin
           Aucun cours pour cette saison.{direction && " Créez le premier avec « Nouveau cours »."}
         </p>
       ) : (
-        <GrillePlanning cours={cours} modifiable={direction} misEnAvant={confirme?.id} />
+        <GrillePlanning cours={cours} modifiable={direction} misEnAvant={confirme?.id} vue={vue === "liste" ? "liste" : "semaine"} />
       )}
     </section>
   );

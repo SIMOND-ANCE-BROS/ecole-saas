@@ -18,11 +18,14 @@ type Props = {
   planning: CoursPlanning[];
   /** Jour proposé pour un nouveau cours (lien « + » d'une colonne du planning). */
   jour?: number;
+  /** Créneau proposé depuis la vue agenda. */
+  heure?: string;
+  duree?: number;
 };
 
 const entier = (v: string) => (v.trim() === "" ? null : Number(v));
 
-export function FormulaireCours({ cours, referentiel, planning, jour }: Props) {
+export function FormulaireCours({ cours, referentiel, planning, jour, heure, duree }: Props) {
   const r = referentiel;
   const [v, setV] = useState({
     discipline: cours?.discipline ?? "",
@@ -35,8 +38,8 @@ export function FormulaireCours({ cours, referentiel, planning, jour }: Props) {
     intervenantId: cours?.intervenantId ?? r.intervenants[0]?.id ?? "",
     type: cours?.type ?? "collectif",
     jourSemaine: String(cours?.jourSemaine ?? jour ?? 1),
-    heureDebut: cours?.heureDebut ?? "17:00",
-    dureeMinutes: String(cours?.dureeMinutes ?? 60),
+    heureDebut: cours?.heureDebut ?? heure ?? "17:00",
+    dureeMinutes: String(cours?.dureeMinutes ?? duree ?? 60),
     ageMin: cours?.ageMin?.toString() ?? "",
     ageMax: cours?.ageMax?.toString() ?? "",
     niveau: cours?.niveau ?? "",
