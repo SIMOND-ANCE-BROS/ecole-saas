@@ -3,25 +3,11 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { CoursPlanning } from "@/db/planning";
-
-const JOURS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
-
-function fin(heure: string, duree: number): string {
-  const [h, m] = heure.split(":").map(Number);
-  const total = h * 60 + m + duree;
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-}
-
-function ages(min: number | null, max: number | null): string | null {
-  if (min && max) return `${min} à ${max} ans`;
-  if (min) return `dès ${min} ans`;
-  if (max) return `jusqu’à ${max} ans`;
-  return null;
-}
+import { ages, fin, JOURS } from "./format";
 
 type Props = {
   cours: CoursPlanning[];
-  /** Direction : chaque cours mène à sa modification, chaque jour propose « + ». */
+  /** Direction : chaque jour propose « + » pour créer un cours. */
   modifiable: boolean;
   /** Cours tout juste enregistré, signalé dans la grille. */
   misEnAvant?: string;
@@ -102,13 +88,9 @@ export function GrillePlanning({ cours, modifiable, misEnAvant }: Props) {
                             <span className="tabular-nums">
                               {c.heureDebut}–{fin(c.heureDebut, c.dureeMinutes)}
                             </span>{" "}
-                            {modifiable ? (
-                              <Link href={`/planning/cours/${c.id}/modifier`} className="lien">
-                                {c.discipline}
-                              </Link>
-                            ) : (
-                              c.discipline
-                            )}
+                            <Link href={`/planning/cours/${c.id}`} className="lien">
+                              {c.discipline}
+                            </Link>
                           </p>
                           {complet && (
                             <span className="rounded bg-alerte-fond px-1.5 text-xs font-medium text-alerte-texte">Complet</span>

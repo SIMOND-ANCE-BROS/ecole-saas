@@ -30,7 +30,11 @@ export default async function PageModifierCours({ params }: PageProps<"/planning
         <Link href="/planning" className="lien">
           Planning
         </Link>
-        <span className="text-doux"> / {cours.discipline}</span>
+        <span className="text-doux"> / </span>
+        <Link href={`/planning/cours/${cours.id}`} className="lien">
+          {cours.discipline}
+        </Link>
+        <span className="text-doux"> / Modifier</span>
       </nav>
       <h1 className="titre-page">Modifier le cours : {cours.discipline}</h1>
       <FormulaireCours cours={cours} referentiel={donnees.referentiel} planning={donnees.planning} />
