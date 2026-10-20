@@ -1,5 +1,9 @@
 import { and, asc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { COLONNES_CONTACTS, COLONNES_ELEVES } from "../domaine/filtres/colonnes";
+import { FILTRE_VIDE, type Filtre } from "../domaine/filtres/filtres";
+import { aujourdhuiAParis } from "../domaine/personnes/age";
+import { conditionFiltre } from "./filtres";
 import type { Tx } from "./index";
 import {
   ajouterLien,
@@ -45,29 +49,48 @@ export type LigneEleve = {
   factureA: string | null;
 };
 
+/** Filtres par colonne (#87) ; `aujourdhui` (Paris) sert au calcul de l'âge. */
+export type OptionsListe = { filtre?: Filtre; aujourdhui?: string };
+
+// Colonnes calculées des listes : les mêmes expressions servent à l'affichage et aux filtres.
+const telephoneEleve = sql<string | null>`coalesce(${personne.telephone}, (
+  SELECT r.telephone FROM lien l JOIN personne r ON r.id = l.personne_id
+  WHERE l.lie_a_id = ${idCourant} AND l.contact_urgence AND r.telephone IS NOT NULL ORDER BY r.nom LIMIT 1))`;
+const responsablesEleve = sql<string[]>`coalesce((
+  SELECT array_agg(${nomSql("r")} ORDER BY r.prenom) FROM lien l JOIN personne r ON r.id = l.personne_id
+  WHERE l.lie_a_id = ${idCourant} AND l.type = 'representant_legal'), '{}')`;
+const factureAEleve = sql<string | null>`(
+  SELECT ${nomSql("r")} FROM lien l JOIN personne r ON r.id = l.personne_id
+  WHERE l.lie_a_id = ${idCourant} AND l.paie_pour ORDER BY r.nom LIMIT 1)`;
+const elevesDuContact = sql<string[]>`coalesce((
+  SELECT array_agg(DISTINCT coalesce(e.prenom, e.nom)) FROM lien l JOIN personne e ON e.id = l.lie_a_id
+  WHERE l.personne_id = ${idCourant} AND e.eleve AND (l.type = 'representant_legal' OR l.paie_pour)), '{}')`;
+
 /**
  * Élèves de l'école, par nom. La recherche porte sur l'élève et sur ses
- * proches (nom, téléphone…) : on retrouve un enfant par sa mère.
+ * proches (nom, téléphone…) : on retrouve un enfant par sa mère. Les filtres
+ * par colonne s'appliquent en SQL, avant la limite de la liste.
  */
-export async function listerEleves(tx: Tx, saisie = ""): Promise<LigneEleve[]> {
+export async function listerEleves(tx: Tx, saisie = "", { filtre = FILTRE_VIDE, aujourdhui = aujourdhuiAParis() }: OptionsListe = {}): Promise<LigneEleve[]> {
   const surEleve = conditionRecherche(saisie);
   const surProche = conditionRecherche(saisie, "r");
   if (saisie.trim() && !surEleve) return [];
+  const surColonnes = conditionFiltre(filtre, COLONNES_ELEVES, {
+    nom: { sql: nomSql("personne") },
+    age: { sql: sql`date_part('year', age(${aujourdhui}::date, ${personne.dateNaissance}))` },
+    responsables: { sql: responsablesEleve, liste: true },
+    facture: { sql: factureAEleve },
+    telephone: { sql: telephoneEleve },
+  });
   return tx
     .select({
       id: personne.id,
       prenom: personne.prenom,
       nom: personne.nom,
       dateNaissance: personne.dateNaissance,
-      telephone: sql<string | null>`coalesce(${personne.telephone}, (
-        SELECT r.telephone FROM lien l JOIN personne r ON r.id = l.personne_id
-        WHERE l.lie_a_id = ${idCourant} AND l.contact_urgence AND r.telephone IS NOT NULL ORDER BY r.nom LIMIT 1))`,
-      responsables: sql<string[]>`coalesce((
-        SELECT array_agg(${nomSql("r")} ORDER BY r.prenom) FROM lien l JOIN personne r ON r.id = l.personne_id
-        WHERE l.lie_a_id = ${idCourant} AND l.type = 'representant_legal'), '{}')`,
-      factureA: sql<string | null>`(
-        SELECT ${nomSql("r")} FROM lien l JOIN personne r ON r.id = l.personne_id
-        WHERE l.lie_a_id = ${idCourant} AND l.paie_pour ORDER BY r.nom LIMIT 1)`,
+      telephone: telephoneEleve,
+      responsables: responsablesEleve,
+      factureA: factureAEleve,
     })
     .from(personne)
     .where(
@@ -76,6 +99,7 @@ export async function listerEleves(tx: Tx, saisie = ""): Promise<LigneEleve[]> {
         surEleve
           ? or(surEleve, sql`EXISTS (SELECT 1 FROM lien l JOIN personne r ON r.id = l.personne_id WHERE l.lie_a_id = ${idCourant} AND ${surProche})`)
           : undefined,
+        surColonnes,
       ),
     )
     .orderBy(asc(personne.nom), asc(personne.prenom))
@@ -95,9 +119,15 @@ export type LigneContact = {
 };
 
 /** Contacts : qui n'est pas élève, ou qui est responsable ou payeur d'un élève. */
-export async function listerContacts(tx: Tx, saisie = ""): Promise<LigneContact[]> {
+export async function listerContacts(tx: Tx, saisie = "", { filtre = FILTRE_VIDE }: OptionsListe = {}): Promise<LigneContact[]> {
   const condition = conditionRecherche(saisie);
   if (saisie.trim() && !condition) return [];
+  const surColonnes = conditionFiltre(filtre, COLONNES_CONTACTS, {
+    nom: { sql: nomSql("personne") },
+    eleves: { sql: elevesDuContact, liste: true },
+    telephone: { sql: sql`${personne.telephone}` },
+    email: { sql: sql`${personne.email}` },
+  });
   return tx
     .select({
       id: personne.id,
@@ -107,9 +137,7 @@ export async function listerContacts(tx: Tx, saisie = ""): Promise<LigneContact[
       raisonSociale: personne.raisonSociale,
       telephone: personne.telephone,
       email: personne.email,
-      eleves: sql<string[]>`coalesce((
-        SELECT array_agg(DISTINCT coalesce(e.prenom, e.nom)) FROM lien l JOIN personne e ON e.id = l.lie_a_id
-        WHERE l.personne_id = ${idCourant} AND e.eleve AND (l.type = 'representant_legal' OR l.paie_pour)), '{}')`,
+      eleves: elevesDuContact,
     })
     .from(personne)
     .where(
@@ -119,6 +147,7 @@ export async function listerContacts(tx: Tx, saisie = ""): Promise<LigneContact[
           sql`EXISTS (SELECT 1 FROM lien l WHERE l.personne_id = ${idCourant} AND (l.type = 'representant_legal' OR l.paie_pour))`,
         ),
         condition ?? undefined,
+        surColonnes,
       ),
     )
     .orderBy(asc(personne.nom), asc(personne.prenom))

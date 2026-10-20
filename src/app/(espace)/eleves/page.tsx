@@ -1,10 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { avecEcole } from "@/db";
 import { listerContacts, listerEleves } from "@/db/eleves";
 import { nomAffiche } from "@/db/personnes";
+import { COLONNES_ELEVES } from "@/domaine/filtres/colonnes";
+import { lireFiltre } from "@/domaine/filtres/filtres";
 import { ageAu, aujourdhuiAParis } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
+import { BarreFiltres } from "../_filtres/barre-filtres";
 import { ResultatsNavigables } from "../_personnes/resultats";
 import { Telephone } from "../_personnes/sections";
 
@@ -13,13 +17,15 @@ export const metadata: Metadata = { title: "Élèves" };
 /** Élèves de l'école ; une recherche montre aussi les contacts qui correspondent (parent, payeur). */
 export default async function PageEleves({ searchParams }: PageProps<"/eleves">) {
   const { ecoleId } = await exigerRole("direction", "accueil");
-  const { q } = await searchParams;
+  const { q, f, mode } = await searchParams;
   const saisie = typeof q === "string" ? q.trim() : "";
+  const filtre = lireFiltre(f, mode, COLONNES_ELEVES);
+  const filtrage = filtre.conditions.length > 0;
+  const aujourdhui = aujourdhuiAParis();
   const { eleves, contacts } = await avecEcole(ecoleId, async (tx) => ({
-    eleves: await listerEleves(tx, saisie),
+    eleves: await listerEleves(tx, saisie, { filtre, aujourdhui }),
     contacts: saisie ? await listerContacts(tx, saisie) : [],
   }));
-  const aujourdhui = aujourdhuiAParis();
   const pluriel = (n: number, mot: string) => `${n} ${mot}${n > 1 ? "s" : ""}`;
 
   return (
@@ -29,7 +35,8 @@ export default async function PageEleves({ searchParams }: PageProps<"/eleves">)
           <h1 className="titre-page">Élèves</h1>
           <p className="text-sm text-doux" aria-live="polite">
             {saisie ? `${pluriel(eleves.length, "élève")} pour « ${saisie} »` : pluriel(eleves.length, "élève")}
-            {!saisie && <span className="hidden sm:inline">. Recherche par nom, téléphone, ou nom d’un parent (Ctrl K).</span>}
+            {filtrage && " avec ces filtres"}
+            {!saisie && !filtrage && <span className="hidden sm:inline">. Recherche par nom, téléphone, ou nom d’un parent (Ctrl K).</span>}
           </p>
         </div>
         <Link href="/eleves/nouveau" className="bouton-principal">
@@ -37,9 +44,16 @@ export default async function PageEleves({ searchParams }: PageProps<"/eleves">)
         </Link>
       </div>
 
+      {/* useSearchParams exige une frontière Suspense. */}
+      <Suspense>
+        <BarreFiltres colonnes={COLONNES_ELEVES} quoi="les élèves" />
+      </Suspense>
+
       <ResultatsNavigables>
         {eleves.length === 0 ? (
-          <p className="text-sm">{saisie.length === 1 ? "Tapez au moins deux caractères." : "Aucun élève ne correspond."}</p>
+          <p className="text-sm">
+            {saisie.length === 1 ? "Tapez au moins deux caractères." : filtrage ? "Aucun élève ne correspond à ces filtres." : "Aucun élève ne correspond."}
+          </p>
         ) : (
           <>
             <ul className="panneau divide-y divide-bordure sm:hidden">
