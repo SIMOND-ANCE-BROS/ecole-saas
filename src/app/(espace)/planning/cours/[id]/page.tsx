@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { avecEcole } from "@/db";
 import { coursDuPlanning, inscritsDuCours } from "@/db/planning";
+import { seancesEnConflit } from "@/db/disponibilites";
 import { seancesDuCours } from "@/db/seances";
 import { ageAu, aujourdhuiAParis } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
@@ -25,10 +26,17 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
   const [{ id }, { modifie }] = await Promise.all([params, searchParams]);
   const donnees = await avecEcole(ecoleId, async (tx) => {
     const cours = await coursDuPlanning(tx, id);
-    return cours ? { cours, inscrits: await inscritsDuCours(tx, cours.id), seances: await seancesDuCours(tx, cours.id) } : null;
+    return cours
+      ? {
+          cours,
+          inscrits: await inscritsDuCours(tx, cours.id),
+          seances: await seancesDuCours(tx, cours.id),
+          enConflit: await seancesEnConflit(tx, cours.id, aujourdhuiAParis()),
+        }
+      : null;
   });
   if (!donnees) notFound();
-  const { cours, inscrits, seances } = donnees;
+  const { cours, inscrits, seances, enConflit } = donnees;
   const aujourdhui = aujourdhuiAParis();
 
   const actifs = inscrits.filter((i) => i.statut === "active").length;
@@ -134,11 +142,13 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
               <li key={s.id}>
                 <Link
                   href={`/planning/seances/${s.id}`}
-                  className={`flex flex-col rounded-md border px-2.5 py-1 hover:border-accent ${s.date === aujourdhui ? "border-accent bg-accent-doux" : "border-bordure"} ${s.statut === "annulee" ? "text-doux line-through" : ""}`}
+                  className={`flex flex-col rounded-md border px-2.5 py-1 hover:border-accent ${enConflit.has(s.id) ? "border-alerte-texte bg-alerte-fond" : s.date === aujourdhui ? "border-accent bg-accent-doux" : "border-bordure"} ${s.statut === "annulee" ? "text-doux line-through" : ""}`}
                 >
                   <span className="tabular-nums">{dateSeance.format(new Date(`${s.date}T00:00:00Z`))}</span>
                   <span className="text-xs text-doux">
-                    {s.statut === "annulee"
+                    {enConflit.has(s.id)
+                      ? "prof indisponible"
+                      : s.statut === "annulee"
                       ? "annulée"
                       : s.statut === "effectuee"
                         ? `${s.presents} présent${s.presents > 1 ? "s" : ""}${s.absents ? `, ${s.absents} abs.` : ""}`

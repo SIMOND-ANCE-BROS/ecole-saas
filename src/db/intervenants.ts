@@ -1,5 +1,6 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { supprimerConnexion } from "./connexions-agenda";
 import type { Tx } from "./index";
 import { intervenant } from "./schema";
 
@@ -12,6 +13,8 @@ export const REGIMES_TVA = {
   non_applicable: "Non applicable",
 } as const;
 export const MODES_REMUNERATION = { heure: "à l’heure", cours: "au cours", forfait_mensuel: "forfait mensuel" } as const;
+/** Unité du tarif selon le mode de rémunération. */
+export const UNITES_REMUNERATION = { heure: "heure", cours: "cours", forfait_mensuel: "mois" } as const;
 
 const cles = <T extends object>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
 
@@ -80,12 +83,13 @@ export async function creerIntervenant(tx: Tx, saisie: SaisieIntervenant): Promi
 /** false si l'intervenant n'existe pas dans l'école courante. */
 export async function modifierIntervenant(tx: Tx, id: string, saisie: SaisieIntervenant): Promise<boolean> {
   if (!z.uuid().safeParse(id).success) return false;
-  // Désactiver un intervenant coupe aussi son abonnement à l'agenda.
+  // Désactiver un intervenant coupe aussi son abonnement et son agenda connecté.
   const coupure = saisie.actif ? {} : { jetonAgendaHash: null, jetonAgendaCreeLe: null };
   const lignes = await tx
     .update(intervenant)
     .set({ ...saisie, ...coupure })
     .where(eq(intervenant.id, id))
     .returning({ id: intervenant.id });
+  if (lignes.length === 1 && !saisie.actif) await supprimerConnexion(tx, id);
   return lignes.length === 1;
 }

@@ -52,6 +52,8 @@ export const regimeTva = pgEnum("regime_tva", ["franchise_293b", "assujetti", "n
 export const modeRemuneration = pgEnum("mode_remuneration", ["heure", "cours", "forfait_mensuel"]);
 export const typeCours = pgEnum("type_cours", ["collectif", "particulier", "competition", "stage"]);
 export const statutSeance = pgEnum("statut_seance", ["prevue", "effectuee", "annulee"]);
+export const origineIndisponibilite = pgEnum("origine_indisponibilite", ["saisie", "google", "microsoft"]);
+export const fournisseurAgenda = pgEnum("fournisseur_agenda", ["google", "microsoft"]);
 export const publicTarif = pgEnum("public_tarif", ["enfant", "adulte", "couple", "etudiant"]);
 export const periodicite = pgEnum("periodicite", ["trimestre", "annee", "unite"]);
 export const statutInscription = pgEnum("statut_inscription", [
@@ -318,6 +320,49 @@ export const intervenant = pgTable(
     jetonAgendaCreeLe: timestamp("jeton_agenda_cree_le", { withTimezone: true }),
   },
   (t) => [cibleMemeEcole(t)],
+);
+
+/**
+ * Plage où un intervenant n'est pas disponible : saisie par la direction, ou
+ * lue dans son agenda (plage occupée seulement, jamais le contenu).
+ */
+export const indisponibilite = pgTable(
+  "indisponibilite",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ecoleId: ecoleId(),
+    intervenantId: uuid("intervenant_id").notNull(),
+    debut: timestamp("debut", { withTimezone: true }).notNull(),
+    fin: timestamp("fin", { withTimezone: true }).notNull(),
+    origine: origineIndisponibilite("origine").notNull().default("saisie"),
+    libelle: text("libelle"), // saisie seulement
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("indisponibilite_fin", sql`${t.fin} > ${t.debut}`),
+    index().on(t.intervenantId, t.debut),
+    memeEcole(t, t.intervenantId, intervenant),
+  ],
+);
+
+/**
+ * Agenda Google ou Microsoft connecté par un intervenant : jeton de
+ * rafraîchissement chiffré (src/lib/chiffrement.ts), jamais en clair.
+ */
+export const connexionAgenda = pgTable(
+  "connexion_agenda",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ecoleId: ecoleId(),
+    intervenantId: uuid("intervenant_id").notNull(),
+    fournisseur: fournisseurAgenda("fournisseur").notNull(),
+    compte: text("compte"),
+    jetonChiffre: text("jeton_chiffre").notNull(),
+    derniereSynchro: timestamp("derniere_synchro", { withTimezone: true }),
+    erreur: text("erreur"),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique().on(t.intervenantId), memeEcole(t, t.intervenantId, intervenant)],
 );
 
 // ---------------------------------------------------------------------------

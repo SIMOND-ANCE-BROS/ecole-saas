@@ -281,7 +281,7 @@ export default async function PagePersonne({ params, searchParams }: PageProps<"
         </section>
       )}
         </div>
-        <aside aria-label="Coordonnées et contacts d’urgence" className="lg:sticky lg:top-20">
+        <aside aria-label="Coordonnées et contacts d’urgence" className="order-first lg:sticky lg:top-20 lg:order-last">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
         <section aria-labelledby="coordonnees" className="panneau flex flex-col gap-1 p-4 text-sm">
           <h2 id="coordonnees" className="text-sm font-semibold">
@@ -303,7 +303,7 @@ export default async function PagePersonne({ params, searchParams }: PageProps<"
               En cas d’urgence
             </h2>
             {urgences.length === 0 ? (
-              <span className="text-doux">Personne n’est indiqué. Cochez « à prévenir » sur un lien ci-dessous.</span>
+              <span className="text-doux">Personne n’est indiqué. Cochez « à prévenir » sur un lien de la section « Liens ».</span>
             ) : (
               urgences.map((l) => (
                 <span key={l.id} className="flex flex-wrap gap-x-2">

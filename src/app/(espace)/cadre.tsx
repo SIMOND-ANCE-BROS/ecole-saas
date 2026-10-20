@@ -25,7 +25,12 @@ export function Cadre({ volet, entete, children }: Props) {
 
   return (
     <div className="flex min-h-screen w-full flex-col md:flex-row">
-      <a href="#contenu" className="sr-only fixed left-3 top-3 z-50 rounded-md bg-surface p-3 text-accent focus:not-sr-only">Aller au contenu</a>
+      <a
+        href="#contenu"
+        className="fixed top-3 left-3 z-50 -translate-y-[200%] rounded-md border border-accent bg-surface p-3 text-accent focus:translate-y-0"
+      >
+        Aller au contenu
+      </a>
       <aside
         id="volet"
         className={`${ouvert ? "fixed inset-0 z-40 flex overflow-y-auto" : "hidden"} shrink-0 flex-col gap-6 border-bordure bg-surface p-3 print:hidden md:sticky md:top-0 md:flex md:h-screen md:w-52 md:border-r`}

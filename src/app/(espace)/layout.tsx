@@ -58,4 +58,3 @@ export default async function LayoutEspace({ children }: LayoutProps<"/">) {
     </Cadre>
   );
 }
-

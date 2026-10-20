@@ -94,4 +94,3 @@ export function LiensPersonne({ liens, prenom }: { liens: LienFiche[]; prenom: s
     </div>
   );
 }
-

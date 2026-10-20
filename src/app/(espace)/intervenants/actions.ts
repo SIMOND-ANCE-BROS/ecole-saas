@@ -3,11 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 import { avecEcole } from "@/db";
 import { creerJetonAgenda, revoquerJetonAgenda } from "@/db/agenda";
+import { supprimerConnexion } from "@/db/connexions-agenda";
+import { ajouterIndisponibilite, supprimerIndisponibilite } from "@/db/disponibilites";
 import { creerIntervenant, modifierIntervenant, saisieIntervenantValide } from "@/db/intervenants";
+import { instantParis } from "@/domaine/planning/disponibilite";
+import { pagePersonnelle } from "@/lib/agenda-public";
 import { lireEuros } from "@/lib/montant";
 import { exigerRole } from "@/lib/session";
+import { synchroniserAgenda } from "@/lib/synchro-agenda";
 
 export type EtatFormulaire = {
   /** Incrémenté à chaque refus : le formulaire est remonté avec la saisie renvoyée. */
@@ -59,12 +65,13 @@ async function origine(): Promise<string> {
 }
 
 /** Crée ou remplace le lien d'abonnement à l'agenda ; l'adresse n'est montrée qu'une fois. */
-export async function creerLienAgenda(intervenantId: string): Promise<{ url: string } | { message: string }> {
+export async function creerLienAgenda(intervenantId: string): Promise<{ url: string; page: string } | { message: string }> {
   const { ecoleId } = await exigerRole("direction");
   const jeton = await avecEcole(ecoleId, (tx) => creerJetonAgenda(tx, intervenantId));
   if (!jeton) return { message: "Cet intervenant n’existe plus." };
   revalidatePath(`/intervenants/${intervenantId}`);
-  return { url: `${await origine()}/agenda/${ecoleId}/${jeton}.ics` };
+  const base = await origine();
+  return { url: `${base}/agenda/${ecoleId}/${jeton}.ics`, page: `${base}${pagePersonnelle(ecoleId, jeton)}` };
 }
 
 export async function revoquerLienAgenda(intervenantId: string): Promise<{ message: string | null }> {
@@ -72,4 +79,49 @@ export async function revoquerLienAgenda(intervenantId: string): Promise<{ messa
   const ok = await avecEcole(ecoleId, (tx) => revoquerJetonAgenda(tx, intervenantId));
   revalidatePath(`/intervenants/${intervenantId}`);
   return { message: ok ? null : "Cet intervenant n’existe plus." };
+}
+
+const saisieIndisponibilite = z
+  .object({
+    du: z.iso.date("Date de début invalide"),
+    au: z.iso.date("Date de fin invalide"),
+    de: z.union([z.literal(""), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure invalide")]),
+    a: z.union([z.literal(""), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure invalide")]),
+    libelle: z.string().max(100),
+  })
+  .refine((s) => (s.de === "") === (s.a === ""), "Indiquez les deux heures, ou aucune pour des journées entières.");
+
+/** Journées entières (sans heures) ou plage horaire, en heure de Paris. */
+export async function ajouterIndispo(intervenantId: string, saisie: unknown): Promise<{ message: string | null }> {
+  const { ecoleId } = await exigerRole("direction");
+  const s = saisieIndisponibilite.safeParse(saisie);
+  if (!s.success) return { message: s.error.issues[0].message };
+  const { du, au, de, a, libelle } = s.data;
+  const lendemain = new Date(Date.parse(au) + 86_400_000).toISOString().slice(0, 10);
+  const debut = new Date(instantParis(du, de || "00:00"));
+  const fin = new Date(de ? instantParis(au, a) : instantParis(lendemain, "00:00"));
+  const r = await avecEcole(ecoleId, (tx) => ajouterIndisponibilite(tx, intervenantId, { debut, fin, libelle }));
+  revalidatePath(`/intervenants/${intervenantId}`);
+  return { message: r.ok ? null : r.message };
+}
+
+export async function retirerIndispo(intervenantId: string, id: string): Promise<{ message: string | null }> {
+  const { ecoleId } = await exigerRole("direction");
+  const r = await avecEcole(ecoleId, (tx) => supprimerIndisponibilite(tx, id));
+  revalidatePath(`/intervenants/${intervenantId}`);
+  return { message: r.ok ? null : r.message };
+}
+
+export async function synchroniserMaintenant(intervenantId: string): Promise<{ message: string }> {
+  const { ecoleId } = await exigerRole("direction");
+  const r = await synchroniserAgenda(ecoleId, intervenantId);
+  revalidatePath(`/intervenants/${intervenantId}`);
+  return { message: r.ok ? `Agenda mis à jour : ${r.plages} plage${r.plages > 1 ? "s" : ""} occupée${r.plages > 1 ? "s" : ""}.` : r.message };
+}
+
+export async function deconnecterAgenda(intervenantId: string): Promise<{ message: string }> {
+  const { ecoleId } = await exigerRole("direction");
+  const ok = await avecEcole(ecoleId, (tx) => supprimerConnexion(tx, intervenantId));
+  revalidatePath(`/intervenants/${intervenantId}`);
+  return { message: ok ? "Agenda déconnecté." : "Aucun agenda connecté." };
 }

@@ -1,16 +1,29 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { creerLienAgenda, revoquerLienAgenda } from "../actions";
+import { creerLienAgenda, deconnecterAgenda, revoquerLienAgenda, synchroniserMaintenant } from "../actions";
 
 const dateCourte = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+const dateHeure = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
 
 /**
  * Lien d'abonnement à l'agenda de l'intervenant. L'adresse n'est montrée qu'à
  * sa création (seule son empreinte est gardée) : la recréer remplace l'ancienne.
  */
-export function AbonnementAgenda({ intervenantId, prenom, actifDepuis }: { intervenantId: string; prenom: string; actifDepuis: string | null }) {
-  const [url, setUrl] = useState<string | null>(null);
+type Connexion = { fournisseur: string; compte: string | null; derniereSynchro: string | null; erreur: string | null };
+
+export function AbonnementAgenda({
+  intervenantId,
+  prenom,
+  actifDepuis,
+  connexion,
+}: {
+  intervenantId: string;
+  prenom: string;
+  actifDepuis: string | null;
+  connexion: Connexion | null;
+}) {
+  const [url, setUrl] = useState<{ url: string; page: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [copie, setCopie] = useState(false);
   const [enCours, demarrer] = useTransition();
@@ -19,7 +32,7 @@ export function AbonnementAgenda({ intervenantId, prenom, actifDepuis }: { inter
     demarrer(async () => {
       const r = await creerLienAgenda(intervenantId);
       if ("url" in r) {
-        setUrl(r.url);
+        setUrl(r);
         setMessage(null);
         setCopie(false);
       } else setMessage(r.message);
@@ -32,29 +45,33 @@ export function AbonnementAgenda({ intervenantId, prenom, actifDepuis }: { inter
           Agenda de {prenom}
         </h2>
         <p className="text-doux">
-          Un lien privé que {prenom} ajoute une fois à son agenda (Google, Apple, Outlook). Ses séances, remplacements et annulations
-          y apparaissent ensuite d’eux-mêmes, sans nom d’élève.
+          Une page privée pour {prenom} : s’abonner à ses séances (Google, Apple, Outlook) et connecter son agenda pour que ses
+          indisponibilités remontent ici. Aucun nom d’élève n’en sort ; seules ses plages occupées y entrent.
         </p>
       </div>
 
       {url ? (
         <div className="flex flex-col gap-2">
           <label htmlFor="lien-agenda" className="font-medium">
-            Lien à transmettre à {prenom} (affiché une seule fois)
+            Page à transmettre à {prenom} (affichée une seule fois)
           </label>
           <div className="flex gap-2">
-            <input id="lien-agenda" readOnly className="champ min-w-0 flex-1 font-mono text-xs" value={url} onFocus={(e) => e.currentTarget.select()} />
+            <input id="lien-agenda" readOnly className="champ min-w-0 flex-1 font-mono text-xs" value={url.page} onFocus={(e) => e.currentTarget.select()} />
             <button
               type="button"
               className="bouton-secondaire shrink-0"
               onClick={async () => {
-                await navigator.clipboard.writeText(url);
+                await navigator.clipboard.writeText(url.page);
                 setCopie(true);
               }}
             >
               {copie ? "Copié" : "Copier"}
             </button>
           </div>
+          <p className="text-doux">
+            Abonnement direct, sans la page :{" "}
+            <span className="font-mono text-xs break-all">{url.url}</span>
+          </p>
           <ul className="list-disc pl-5 text-doux">
             <li>Google Agenda (ordinateur) : « Autres agendas », « + », « À partir de l’URL », puis coller le lien.</li>
             <li>iPhone : Réglages, Calendrier, Comptes, « Ajouter un compte », « Autre », « Ajouter un calendrier avec abonnement ».</li>
@@ -70,8 +87,32 @@ export function AbonnementAgenda({ intervenantId, prenom, actifDepuis }: { inter
         </p>
       )}
 
+      {connexion ? (
+        <div className="flex flex-col gap-1 rounded-md border border-bordure p-3">
+          <p>
+            Agenda connecté : {connexion.fournisseur}
+            {connexion.compte && ` (${connexion.compte})`}.
+          </p>
+          {connexion.erreur ? (
+            <p className="text-alerte-texte">{connexion.erreur}</p>
+          ) : (
+            connexion.derniereSynchro && <p className="text-doux">Dernière mise à jour : {dateHeure.format(new Date(connexion.derniereSynchro))}.</p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="bouton-secondaire" disabled={enCours} onClick={() => demarrer(async () => setMessage((await synchroniserMaintenant(intervenantId)).message))}>
+              Synchroniser maintenant
+            </button>
+            <button type="button" className="bouton-secondaire" disabled={enCours} onClick={() => demarrer(async () => setMessage((await deconnecterAgenda(intervenantId)).message))}>
+              Déconnecter
+            </button>
+          </div>
+        </div>
+      ) : (
+        actifDepuis && <p className="text-doux">Aucun agenda connecté par {prenom} pour l’instant.</p>
+      )}
+
       {message && (
-        <p role="alert" className="text-erreur">
+        <p role="status" className="font-medium">
           {message}
         </p>
       )}

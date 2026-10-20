@@ -13,7 +13,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:up": "docker compose up -d db",
-    "db:seed": "tsx --env-file=.env scripts/seed.ts"
+    "db:seed": "tsx --env-file=.env scripts/seed.ts",
+    "agendas:synchroniser": "tsx --env-file=.env scripts/synchroniser-agendas.ts"
   },
   "dependencies": {
     "better-auth": "1.7.7",

@@ -17,7 +17,7 @@ export function Navigation({ role }: { role: "direction" | "accueil" | "professe
   const actif = (href: string) => (href === "/" ? chemin === "/" : chemin.startsWith(href));
   return (
     <nav aria-label="Navigation principale" className="flex flex-col gap-0.5">
-      {LIENS.filter((l) => (l.href !== "/intervenants" || role === "direction") && (l.href !== "/personnes" || role !== "professeur")).map((l) => (
+      {LIENS.filter((l) => (l.href !== "/intervenants" || role !== "professeur") && (l.href !== "/personnes" || role !== "professeur")).map((l) => (
         <Link
           key={l.href}
           href={l.href}
@@ -111,4 +111,3 @@ export function RechercheGlobale() {
     </form>
   );
 }
-

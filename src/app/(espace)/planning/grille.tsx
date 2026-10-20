@@ -14,7 +14,7 @@ type Props = {
   misEnAvant?: string;
 };
 
-/** Planning de la semaine, filtrable par discipline et par site, avec l'effectif de chaque cours. */
+/** Planning de la semaine, filtrable par discipline, site, salle et intervenant, avec l'effectif de chaque cours. */
 export function GrillePlanning({ cours, modifiable, misEnAvant }: Props) {
   const [filtres, setFiltres] = useState(FILTRES_VIDES);
   const { discipline, site, salleId, intervenantId } = filtres;

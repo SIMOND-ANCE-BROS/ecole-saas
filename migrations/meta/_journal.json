@@ -120,6 +120,20 @@
       "when": 1792479123646,
       "tag": "0016_agenda_intervenant",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792481439786,
+      "tag": "0017_indisponibilites",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792482169514,
+      "tag": "0018_connexions_agenda",
+      "breakpoints": true
     }
   ]
 }

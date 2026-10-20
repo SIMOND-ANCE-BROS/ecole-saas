@@ -115,7 +115,7 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
           ))}
         </ol>
       </nav>
-      <fieldset disabled={envoi} className="flex min-w-0 flex-col gap-4">
+      <div className="flex min-w-0 flex-col gap-4">
         <legend className="sr-only">Choix de l’inscription</legend>
         <fieldset id="choix-danseur" className="panneau flex flex-col gap-2 p-3">
           <legend className="text-sm font-semibold">Danseur{publicChoisi === "couple" ? "s (deux)" : ""}</legend>
@@ -228,7 +228,7 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
             </p>
           )}
         </fieldset>
-      </fieldset>
+      </div>
 
       <aside id="prix-inscription" aria-live="polite" aria-busy={calcul} className="panneau flex flex-col gap-3 self-start p-3 text-sm lg:sticky lg:top-16">
         <h2 className="font-semibold">Récapitulatif de l’inscription</h2>

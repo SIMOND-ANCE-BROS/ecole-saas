@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
-import { type Intervenant, MODES_REMUNERATION, REGIMES_TVA, STATUTS } from "@/db/intervenants";
+import { type Intervenant, MODES_REMUNERATION, REGIMES_TVA, STATUTS, UNITES_REMUNERATION } from "@/db/intervenants";
 import { enregistrerIntervenant, type EtatFormulaire } from "./actions";
 
-const UNITE = { heure: "€ / heure", cours: "€ / cours", forfait_mensuel: "€ / mois" } as const;
+type Mode = keyof typeof UNITES_REMUNERATION;
 
 /** Montant en centimes → saisie en euros (« 40 », « 40,50 »), sans nombre à virgule. */
 const enEuros = (c: number) => `${Math.trunc(c / 100)}${c % 100 ? `,${String(c % 100).padStart(2, "0")}` : ""}`;
@@ -44,7 +44,7 @@ type PropsChamps = {
 function Champs({ etat, envoyer, enCours, edition, initial, retour }: PropsChamps) {
   const v = etat.valeurs ?? initial;
   const [statut, setStatut] = useState(v.statut);
-  const [mode, setMode] = useState(v.modeRemuneration as keyof typeof UNITE);
+  const [mode, setMode] = useState(v.modeRemuneration as Mode);
   const e = etat.erreurs;
   const formulaire = useRef<HTMLFormElement>(null);
 
@@ -134,7 +134,7 @@ function Champs({ etat, envoyer, enCours, edition, initial, retour }: PropsChamp
             name="modeRemuneration"
             className="champ"
             defaultValue={v.modeRemuneration}
-            onChange={(x) => setMode(x.target.value as keyof typeof UNITE)}
+            onChange={(x) => setMode(x.target.value as Mode)}
           >
             {Object.entries(MODES_REMUNERATION).map(([k, l]) => (
               <option key={k} value={k}>
@@ -143,7 +143,7 @@ function Champs({ etat, envoyer, enCours, edition, initial, retour }: PropsChamp
             ))}
           </select>
         </div>
-        {champ("tarif", `Tarif (${UNITE[mode]})`, { inputMode: "decimal", autoComplete: "off", required: true })}
+        {champ("tarif", `Tarif (€ / ${UNITES_REMUNERATION[mode]})`, { inputMode: "decimal", autoComplete: "off", required: true })}
       </fieldset>
 
       {edition && (

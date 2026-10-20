@@ -78,9 +78,26 @@ export function ChoixLien({ ficheId, ficheNom }: Props) {
             setRefus(null);
           }}
         />
-        {!choisie && <div role="status" className="text-sm text-doux">
-          {!rechercheActive ? "Saisissez au moins deux caractères." : !actuelle ? "Recherche…" : actuelle.erreur ? <span>Recherche indisponible. <button type="button" className="lien" onClick={() => setEssai((n) => n + 1)}>Réessayer</button></span> : resultats.length === 0 ? "Aucune personne trouvée." : `${resultats.length} résultat(s)`}
-        </div>}
+        {/* Région toujours présente : son contenu change, et les lecteurs d'écran l'annoncent. */}
+        <div role="status" className="text-sm text-doux">
+          {!choisie &&
+            (!rechercheActive ? (
+              "Saisissez au moins deux caractères."
+            ) : !actuelle ? (
+              "Recherche…"
+            ) : actuelle.erreur ? (
+              <span>
+                Recherche indisponible.{" "}
+                <button type="button" className="lien" onClick={() => setEssai((n) => n + 1)}>
+                  Réessayer
+                </button>
+              </span>
+            ) : resultats.length === 0 ? (
+              "Aucune personne trouvée."
+            ) : (
+              `${resultats.length} résultat${resultats.length > 1 ? "s" : ""}`
+            ))}
+        </div>
         {rechercheActive && resultats.length > 0 && !choisie && (
           <ul className="panneau max-h-64 divide-y divide-bordure overflow-y-auto text-sm">
             {resultats.map((p) => (
