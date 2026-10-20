@@ -10,6 +10,7 @@ const LIENS = [
   { href: "/contacts", libelle: "Contacts" },
   { href: "/planning", libelle: "Planning" },
   { href: "/intervenants", libelle: "Intervenants" },
+  { href: "/parametres", libelle: "Paramètres" },
 ];
 
 /** Liens de la barre latérale ; la page courante est signalée (aria-current). */
@@ -18,7 +19,9 @@ export function Navigation({ role }: { role: "direction" | "accueil" | "professe
   const actif = (href: string) => (href === "/" ? chemin === "/" : chemin.startsWith(href));
   return (
     <nav aria-label="Navigation principale" className="flex flex-col gap-0.5">
-      {LIENS.filter((l) => role !== "professeur" || !["/intervenants", "/eleves", "/contacts"].includes(l.href)).map((l) => (
+      {LIENS.filter(
+        (l) => (l.href !== "/parametres" || role === "direction") && (role !== "professeur" || !["/intervenants", "/eleves", "/contacts"].includes(l.href)),
+      ).map((l) => (
         <Link
           key={l.href}
           href={l.href}
