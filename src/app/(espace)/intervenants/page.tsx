@@ -81,7 +81,8 @@ export default async function PageIntervenants({ searchParams }: PageProps<"/int
                 nom: `${i.prenom} ${i.nom}`,
                 statut: STATUTS[i.statut],
                 cours: i.coursSaison,
-                tarif: `${formaterEuros(i.tarifCentimes)} ${MODES_REMUNERATION[i.modeRemuneration]}`,
+                // Jamais envoyé au navigateur de l'accueil : masquer la colonne ne suffit pas.
+                ...(direction ? { tarif: `${formaterEuros(i.tarifCentimes)} ${MODES_REMUNERATION[i.modeRemuneration]}` } : {}),
                 email: i.email,
               },
             }))}
