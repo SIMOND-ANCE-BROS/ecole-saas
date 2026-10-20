@@ -2,6 +2,8 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { avecEcole } from "./index";
 import { apercuInscription, enregistrerInscription, inscriptionsDeLaFamille } from "./inscriptions";
+import { coursDeLaSaison } from "./planning";
+import { chiffresSaison, dernieresInscriptions } from "./tableau-de-bord";
 
 /** Inscriptions, exécutées comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
 
@@ -125,5 +127,26 @@ describe("Refus", () => {
     if (!r.ok) expect(r.message).toContain("prix à saisir par l’accueil");
     const [{ apres }] = await admin`SELECT count(*)::int AS apres FROM inscription WHERE ecole_id = ${ids.ecole}`;
     expect(apres).toBe(avant);
+  });
+});
+
+describe("Tableau de bord et effectifs", () => {
+  it("compte les inscriptions, les danseurs et le montant de la saison", async () => {
+    const chiffres = await avecEcole(ids.ecole, (tx) => chiffresSaison(tx, ids.saison));
+    expect(chiffres).toEqual({ inscriptions: 2, danseurs: 2, totalNetCentimes: 11000 + 14850 });
+  });
+
+  it("liste les dernières inscriptions, la plus récente d’abord", async () => {
+    const dernieres = await avecEcole(ids.ecole, (tx) => dernieresInscriptions(tx, ids.saison));
+    expect(dernieres.map((d) => [d.danseurs, d.famille, d.prixNetCentimes])).toEqual([
+      ["Noé", "Famille Test", 14850],
+      ["Zoé", "Famille Test", 11000],
+    ]);
+  });
+
+  it("donne l’effectif de chaque cours", async () => {
+    const cours = await avecEcole(ids.ecole, (tx) => coursDeLaSaison(tx, ids.saison));
+    const effectif = Object.fromEntries(cours.map((c) => [c.id, c.inscrits]));
+    expect(effectif).toEqual({ [ids.jazz60]: 2, [ids.jazz45]: 1, [ids.classique60]: 0 });
   });
 });

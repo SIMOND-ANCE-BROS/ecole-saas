@@ -1,0 +1,1 @@
+ALTER TABLE "inscription" ADD COLUMN "cree_le" timestamp with time zone DEFAULT now() NOT NULL;

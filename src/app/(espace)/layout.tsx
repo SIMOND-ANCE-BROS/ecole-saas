@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { eq } from "drizzle-orm";
 import { avecEcole } from "@/db";
 import { ecole } from "@/db/schema";
@@ -45,7 +46,10 @@ export default async function LayoutEspace({ children }: LayoutProps<"/">) {
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 border-b border-bordure bg-fond/90 px-4 py-2 backdrop-blur">
-          <RechercheGlobale />
+          {/* useSearchParams exige une frontière Suspense. */}
+          <Suspense>
+            <RechercheGlobale />
+          </Suspense>
         </header>
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </div>

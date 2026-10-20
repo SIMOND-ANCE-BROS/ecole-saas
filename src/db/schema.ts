@@ -494,6 +494,7 @@ export const inscription = pgTable(
       sql`prix_brut_centimes - remise_centimes`,
     ),
     reductions: text("reductions").array().notNull().default(sql`'{}'::text[]`),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index().on(t.payeurId, t.saisonId),

@@ -57,6 +57,28 @@ export function FormulaireInscription({ payeurId, danseurs, cours }: Props) {
   const nouvelle = resultat?.statut === "ok" ? resultat.nouvelle : null;
   const peutEnregistrer = nouvelle?.statut === "ok" && !envoi;
 
+  // Cours adaptés à l'âge du ou des danseurs choisis d'abord ; les autres restent sélectionnables.
+  const agesChoisis = danseurs.filter((d) => danseurIds.includes(d.id) && d.age !== null).map((d) => d.age as number);
+  const adapte = (c: CoursPlanning) =>
+    agesChoisis.length === 0 || agesChoisis.every((a) => (c.ageMin === null || a >= c.ageMin) && (c.ageMax === null || a <= c.ageMax));
+  const coursTries = [...coursVisibles.filter(adapte), ...coursVisibles.filter((c) => !adapte(c))];
+
+  // Cours choisis qui se chevauchent le même jour.
+  const choisis = cours.filter((c) => coursIds.includes(c.id));
+  const minutes = (h: string) => Number(h.slice(0, 2)) * 60 + Number(h.slice(3, 5));
+  const chevauchements = choisis.flatMap((a, i) =>
+    choisis
+      .slice(i + 1)
+      .filter(
+        (b) =>
+          a.jourSemaine !== null &&
+          a.jourSemaine === b.jourSemaine &&
+          minutes(a.heureDebut) < minutes(b.heureDebut) + b.dureeMinutes &&
+          minutes(b.heureDebut) < minutes(a.heureDebut) + a.dureeMinutes,
+      )
+      .map((b) => `${a.discipline} et ${b.discipline} le ${JOURS[a.jourSemaine ?? 0].toLowerCase()}`),
+  );
+
   return (
     <form
       className="grid gap-6 lg:grid-cols-[1fr_22rem]"
@@ -64,6 +86,12 @@ export function FormulaireInscription({ payeurId, danseurs, cours }: Props) {
         e.preventDefault();
         setRefus(null);
         demarrerEnvoi(async () => setRefus((await inscrire(saisie)).message));
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && peutEnregistrer) {
+          e.preventDefault();
+          e.currentTarget.requestSubmit();
+        }
       }}
     >
       <div className="flex flex-col gap-4">
@@ -128,20 +156,52 @@ export function FormulaireInscription({ payeurId, danseurs, cours }: Props) {
             onChange={(e) => setFiltre(e.target.value)}
           />
           <ul className="panneau flex max-h-96 flex-col overflow-y-auto">
-            {coursVisibles.map((c) => (
-              <li key={c.id} className="border-b border-bordure last:border-0 ">
-                <label className="flex items-center gap-2 px-2 py-1 text-sm">
-                  <input type="checkbox" checked={coursIds.includes(c.id)} onChange={() => setCoursIds(basculer(coursIds, c.id))} />
-                  <span className="w-20 shrink-0">{c.jourSemaine ? JOURS[c.jourSemaine] : "Stage"}</span>
-                  <span className="w-12 shrink-0 tabular-nums">{c.heureDebut}</span>
-                  <span className="font-medium">{c.discipline}</span>
-                  <span className="text-doux">
-                    {c.dureeMinutes} min{c.niveau ? ` · ${c.niveau}` : ""} · {c.salle}
-                  </span>
-                </label>
-              </li>
-            ))}
+            {coursTries.map((c) => {
+              const restantes = c.capaciteMax === null ? null : c.capaciteMax - c.inscrits;
+              return (
+                <li key={c.id} className={`border-b border-bordure last:border-0 ${adapte(c) ? "" : "opacity-60"}`}>
+                  <label className="flex items-center gap-2 px-2 py-1 text-sm hover:bg-accent-doux/40">
+                    <input type="checkbox" checked={coursIds.includes(c.id)} onChange={() => setCoursIds(basculer(coursIds, c.id))} />
+                    <span className="w-20 shrink-0">{c.jourSemaine ? JOURS[c.jourSemaine] : "Stage"}</span>
+                    <span className="w-12 shrink-0 tabular-nums">{c.heureDebut}</span>
+                    <span className="font-medium">{c.discipline}</span>
+                    <span className="text-doux">
+                      {c.dureeMinutes} min{c.niveau ? `, ${c.niveau}` : ""}, {c.salle}
+                      {!adapte(c) && ", hors tranche d’âge"}
+                    </span>
+                    {restantes !== null && (
+                      <span
+                        className={`ml-auto shrink-0 text-xs tabular-nums ${restantes <= 0 ? "rounded bg-alerte-fond px-1.5 font-medium text-alerte-texte" : "text-doux"}`}
+                      >
+                        {restantes <= 0 ? "complet" : `${restantes} place${restantes > 1 ? "s" : ""}`}
+                      </span>
+                    )}
+                  </label>
+                </li>
+              );
+            })}
           </ul>
+          {choisis.length > 0 && (
+            <ul aria-label="Cours choisis" className="flex flex-wrap gap-1.5">
+              {choisis.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    className="rounded-md border border-accent bg-accent-doux px-2 py-0.5 text-xs hover:border-accent-fort"
+                    onClick={() => setCoursIds(coursIds.filter((x) => x !== c.id))}
+                    aria-label={`Retirer ${c.discipline} ${c.jourSemaine ? JOURS[c.jourSemaine] : ""} ${c.heureDebut}`}
+                  >
+                    {c.discipline} {c.jourSemaine ? JOURS[c.jourSemaine].slice(0, 3).toLowerCase() + "." : ""} {c.heureDebut} ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {chevauchements.length > 0 && (
+            <p role="alert" className="rounded-md bg-alerte-fond px-2 py-1 text-xs text-alerte-texte">
+              Horaires qui se chevauchent : {chevauchements.join(" ; ")}.
+            </p>
+          )}
         </fieldset>
       </div>
 
@@ -182,6 +242,7 @@ export function FormulaireInscription({ payeurId, danseurs, cours }: Props) {
         <button type="submit" className="bouton-principal" disabled={!peutEnregistrer}>
           {envoi ? "Enregistrement…" : "Enregistrer l’inscription"}
         </button>
+        <p className="text-center text-xs text-doux">ou Ctrl + Entrée</p>
       </aside>
     </form>
   );

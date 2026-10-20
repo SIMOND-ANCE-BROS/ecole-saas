@@ -32,7 +32,21 @@ export type CoursPlanning = {
   ageMin: number | null;
   ageMax: number | null;
   niveau: string | null;
+  capaciteMax: number | null;
+  /** Danseurs distincts inscrits (inscriptions actives). */
+  inscrits: number;
 };
+
+/**
+ * Effectif d'un cours, écrit avec les noms de tables : dans un `select`, Drizzle
+ * n'écrit pas le nom de table devant `cours.id`, qui serait ambigu ici.
+ */
+const effectif = sql<number>`(
+  SELECT count(DISTINCT ic.danseur_id)::int
+  FROM inscription_cours ic
+  JOIN inscription i ON i.id = ic.inscription_id AND i.statut = 'active'
+  WHERE ic.cours_id = ${cours}.${sql.identifier("id")}
+)`;
 
 /** Cours d'une saison, par jour puis par heure. */
 export async function coursDeLaSaison(tx: Tx, saisonId: string): Promise<CoursPlanning[]> {
@@ -51,6 +65,8 @@ export async function coursDeLaSaison(tx: Tx, saisonId: string): Promise<CoursPl
       ageMin: cours.ageMin,
       ageMax: cours.ageMax,
       niveau: cours.niveau,
+      capaciteMax: cours.capaciteMax,
+      inscrits: effectif,
     })
     .from(cours)
     .innerJoin(discipline, eq(discipline.id, cours.disciplineId))

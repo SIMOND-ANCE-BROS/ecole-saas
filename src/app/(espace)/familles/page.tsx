@@ -1,54 +1,63 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { avecEcole } from "@/db";
-import { rechercherFamilles } from "@/db/familles";
+import { listerFamilles, rechercherFamilles } from "@/db/familles";
 import { contexteEcole } from "@/lib/session";
-import { Recherche } from "./recherche";
+import { ResultatsNavigables } from "./resultats";
 
 export const metadata: Metadata = { title: "Familles" };
 
 export default async function PageFamilles({ searchParams }: PageProps<"/familles">) {
   const { ecoleId } = await contexteEcole();
   const { q } = await searchParams;
-  const saisie = typeof q === "string" ? q : "";
-  const resultats = saisie ? await avecEcole(ecoleId, (tx) => rechercherFamilles(tx, saisie)) : [];
+  const saisie = typeof q === "string" ? q.trim() : "";
+  const familles = await avecEcole(ecoleId, (tx) => (saisie ? rechercherFamilles(tx, saisie) : listerFamilles(tx)));
 
   return (
-    <section className="flex flex-col gap-4">
-      <h1 className="titre-page">Familles</h1>
-      <Recherche valeurInitiale={saisie} />
-      {saisie.trim().length >= 2 &&
-        (resultats.length === 0 ? (
-          <p className="text-sm">Aucune famille ne correspond à « {saisie.trim()} ».</p>
-        ) : (
+    <section className="flex max-w-5xl flex-col gap-4">
+      <div>
+        <h1 className="titre-page">Familles</h1>
+        <p className="text-sm text-doux" aria-live="polite">
+          {saisie
+            ? `${familles.length} résultat${familles.length > 1 ? "s" : ""} pour « ${saisie} »`
+            : `${familles.length} famille${familles.length > 1 ? "s" : ""} · tapez dans la recherche en haut (Ctrl K) pour filtrer`}
+        </p>
+      </div>
+      {familles.length === 0 ? (
+        <p className="text-sm">
+          {saisie.length < 2 ? "Tapez au moins deux caractères." : "Aucune famille ne correspond : vérifiez l’orthographe ou cherchez par téléphone."}
+        </p>
+      ) : (
+        <ResultatsNavigables>
           <div className="panneau overflow-x-auto">
-<table className="tableau">
-            <caption className="sr-only">Familles correspondant à la recherche</caption>
-<thead>
-              <tr>
-                <th scope="col">Payeur</th>
-                <th scope="col">Danseurs</th>
-                <th scope="col">Téléphone</th>
-                <th scope="col">E-mail</th>
-              </tr>
-            </thead>
-            <tbody>
-              {resultats.map((f) => (
-                <tr key={f.id}>
-                  <td>
-                    <Link href={`/familles/${f.id}`} className="font-medium lien">
-                      {f.raisonSociale ?? [f.nom, f.prenom].filter(Boolean).join(" ")}
-                    </Link>
-                  </td>
-                  <td>{f.danseurs.join(", ") || "—"}</td>
-                  <td className="whitespace-nowrap">{f.telephone ?? "—"}</td>
-                  <td>{f.email ?? "—"}</td>
+            <table className="tableau">
+              <caption className="sr-only">Familles</caption>
+              <thead>
+                <tr>
+                  <th>Payeur</th>
+                  <th>Danseurs</th>
+                  <th>Téléphone</th>
+                  <th>E-mail</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-</div>
-        ))}
+              </thead>
+              <tbody>
+                {familles.map((f) => (
+                  <tr key={f.id}>
+                    <td>
+                      <Link href={`/familles/${f.id}`} data-resultat className="lien font-medium">
+                        {f.raisonSociale ?? [f.nom, f.prenom].filter(Boolean).join(" ")}
+                      </Link>
+                    </td>
+                    <td>{f.danseurs.join(", ") || "—"}</td>
+                    <td className="whitespace-nowrap tabular-nums">{f.telephone ?? "—"}</td>
+                    <td>{f.email ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </ResultatsNavigables>
+      )}
     </section>
   );
 }

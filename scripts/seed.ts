@@ -138,6 +138,11 @@ async function principal() {
     }
   }
 
+  // Capacité des cours de démonstration : celle de leur salle, si elle n'est pas renseignée.
+  await admin`
+    UPDATE cours SET capacite_max = s.capacite FROM salle s
+    WHERE cours.salle_id = s.id AND cours.ecole_id = ${ecole.id} AND cours.capacite_max IS NULL`;
+
   // Grille tarifaire et réduction fratrie de démonstration (montants en euros).
   const [{ nbTarifs }] = await admin`SELECT count(*)::int AS "nbTarifs" FROM tarif WHERE saison_id = ${saison.id}`;
   if (nbTarifs === 0) {
