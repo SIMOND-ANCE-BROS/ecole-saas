@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { CoursPlanning } from "@/db/planning";
-import { aimanter, bornesJournee, disposer, versHeure, versMinutes } from "@/domaine/planning/agenda";
+import { aimanter, disposer, versHeure, versMinutes } from "@/domaine/planning/agenda";
+import { cadreAgenda, type Horaire, plagesOuvertes } from "@/domaine/planning/horaires";
 import { deplacer, type RetourDeplacement } from "./cours/actions";
 import { fin, JOURS } from "./format";
 
@@ -27,6 +28,8 @@ type Props = {
   tous: CoursPlanning[];
   modifiable: boolean;
   misEnAvant?: string;
+  /** Horaires d'ouverture des sites affichés (#90) ; vide : agenda libre. */
+  horaires: Horaire[];
 };
 
 /**
@@ -36,7 +39,7 @@ type Props = {
  * appui sur un créneau vide propose un cours d'une heure. Au clavier, chaque
  * cours ouvre sa fiche, où le créneau se modifie.
  */
-export function Agenda({ cours, tous, modifiable, misEnAvant }: Props) {
+export function Agenda({ cours, tous, modifiable, misEnAvant, horaires }: Props) {
   const router = useRouter();
   const [enCours, demarrer] = useTransition();
   /** Créneau affiché pendant un geste, puis jusqu'au rechargement des données. */
@@ -49,8 +52,19 @@ export function Agenda({ cours, tous, modifiable, misEnAvant }: Props) {
 
   const hebdo = cours.filter((c) => c.jourSemaine !== null);
   const stages = cours.filter((c) => c.jourSemaine === null);
-  const { debut: ouverture, fin: fermeture } = bornesJournee(tous);
-  const jours = [1, 2, 3, 4, 5, 6, ...(tous.some((c) => c.jourSemaine === 7) ? [7] : [])];
+  const { jours, debut: ouverture, fin: fermeture } = cadreAgenda(horaires, tous);
+  /** Tranches fermées d'un jour (grisées), quand des horaires sont connus. */
+  const fermees = (jour: number) => {
+    if (horaires.length === 0) return [];
+    const r: { debut: number; fin: number }[] = [];
+    let curseur = ouverture;
+    for (const p of plagesOuvertes(horaires, jour)) {
+      if (p.debut > curseur) r.push({ debut: curseur, fin: Math.min(p.debut, fermeture) });
+      curseur = Math.max(curseur, p.fin);
+    }
+    if (curseur < fermeture) r.push({ debut: curseur, fin: fermeture });
+    return r;
+  };
   const affiches = hebdo.map((c) => (apercu?.id === c.id ? { ...c, ...apercu } : c));
   const places = disposer(affiches);
   const hauteur = (fermeture - ouverture) * PX;
@@ -286,6 +300,15 @@ export function Agenda({ cours, tous, modifiable, misEnAvant }: Props) {
               onPointerDown={(e) => saisirVide(e, j)}
               onClick={(e) => toucherVide(e, j)}
             >
+              {fermees(j).map((z) => (
+                <div
+                  key={z.debut}
+                  aria-hidden
+                  title="Site fermé"
+                  className="pointer-events-none absolute inset-x-0 bg-[repeating-linear-gradient(45deg,transparent_0_6px,var(--bordure)_6px_7px)] opacity-70"
+                  style={{ top: (z.debut - ouverture) * PX, height: (z.fin - z.debut) * PX }}
+                />
+              ))}
               {selection?.jour === j && (
                 <div
                   className="pointer-events-none absolute inset-x-1 z-10 rounded border-2 border-dashed border-accent bg-accent-doux/60 px-1.5 text-xs font-medium"

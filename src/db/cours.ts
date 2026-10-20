@@ -1,6 +1,7 @@
 import { and, asc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Tx } from "./index";
+import { horairesParSite } from "./parametres";
 import { cours, discipline, inscriptionCours, intervenant, presence, salle, seance, site } from "./schema";
 
 /** Édition du planning (cours, disciplines, salles), toujours avec la transaction d'`avecEcole()` (RLS). */
@@ -104,7 +105,8 @@ export async function referentielPlanning(tx: Tx, inclure?: string) {
       .where(inclure ? or(eq(intervenant.actif, true), eq(intervenant.id, inclure)) : eq(intervenant.actif, true))
       .orderBy(asc(intervenant.prenom), asc(intervenant.nom)),
   ];
-  return { disciplines, salles, sites, intervenants };
+  // Horaires d'ouverture par site (#90) : le formulaire prévient d'un créneau qui en sort.
+  return { disciplines, salles, sites, intervenants, horaires: await horairesParSite(tx) };
 }
 export type ReferentielPlanning = Awaited<ReturnType<typeof referentielPlanning>>;
 

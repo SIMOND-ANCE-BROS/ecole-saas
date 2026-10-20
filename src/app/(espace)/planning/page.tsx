@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { avecEcole } from "@/db";
+import { horairesParSite } from "@/db/parametres";
 import { coursDeLaSaison, saisonCourante } from "@/db/planning";
 import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { contexteEcole } from "@/lib/session";
@@ -11,9 +12,9 @@ export const metadata: Metadata = { title: "Planning" };
 export default async function PagePlanning({ searchParams }: PageProps<"/planning">) {
   const { ecoleId, role } = await contexteEcole();
   const { enregistre, supprime, vue } = await searchParams;
-  const { saison, cours } = await avecEcole(ecoleId, async (tx) => {
+  const { saison, cours, horaires } = await avecEcole(ecoleId, async (tx) => {
     const s = await saisonCourante(tx, aujourdhuiAParis());
-    return { saison: s, cours: s ? await coursDeLaSaison(tx, s.id) : [] };
+    return { saison: s, cours: s ? await coursDeLaSaison(tx, s.id) : [], horaires: await horairesParSite(tx) };
   });
 
   if (!saison) {
@@ -53,7 +54,7 @@ export default async function PagePlanning({ searchParams }: PageProps<"/plannin
           Aucun cours pour cette saison.{direction && " Créez le premier avec « Nouveau cours »."}
         </p>
       ) : (
-        <GrillePlanning cours={cours} modifiable={direction} misEnAvant={confirme?.id} vue={vue === "liste" ? "liste" : "semaine"} />
+        <GrillePlanning cours={cours} modifiable={direction} misEnAvant={confirme?.id} vue={vue === "liste" ? "liste" : "semaine"} horaires={horaires} />
       )}
     </section>
   );

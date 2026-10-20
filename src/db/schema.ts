@@ -202,6 +202,27 @@ export const site = pgTable(
   (t) => [cibleMemeEcole(t)],
 );
 
+/**
+ * Jours et heures d'ouverture d'un site (#90) : un jour absent est fermé. Un
+ * site sans aucun horaire saisi n'impose rien (le planning reste libre).
+ */
+export const horaireSite = pgTable(
+  "horaire_site",
+  {
+    ecoleId: ecoleId(),
+    siteId: uuid("site_id").notNull(),
+    jourSemaine: smallint("jour_semaine").notNull(), // 1 = lundi … 7 = dimanche
+    ouverture: time("ouverture").notNull(),
+    fermeture: time("fermeture").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.siteId, t.jourSemaine] }),
+    check("horaire_site_jour", sql`${t.jourSemaine} BETWEEN 1 AND 7`),
+    check("horaire_site_ordre", sql`${t.fermeture} > ${t.ouverture}`),
+    memeEcole(t, t.siteId, site).onDelete("cascade"),
+  ],
+);
+
 export const salle = pgTable(
   "salle",
   {

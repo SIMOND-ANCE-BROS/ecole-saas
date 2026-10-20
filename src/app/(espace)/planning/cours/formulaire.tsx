@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { type CoursEdite, type ReferentielPlanning, TYPES_COURS } from "@/db/cours";
 import type { CoursPlanning } from "@/db/planning";
 import { conflits } from "@/domaine/planning/chevauchement";
+import { horsHoraires } from "@/domaine/planning/horaires";
 import { enregistrerCours, type Refus, supprimer, verifierCreneau } from "./actions";
 import { Annuler } from "@/app/(espace)/_panneau/panneau";
 
@@ -85,9 +86,17 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
     planning,
   ).map((c) => {
     const autre = planning.find((p) => p.id === c.id)!;
-    const quoi = [c.salle && `la salle ${autre.salle}`, c.intervenant && autre.intervenant].filter(Boolean).join(" et ");
-    return `${quoi} : ${autre.discipline} à ${autre.heureDebut}`;
+    const quand = `${autre.discipline} à ${autre.heureDebut}`;
+    if (c.salle && c.intervenant) return `${autre.salle} et ${autre.intervenant} déjà pris (${quand})`;
+    return c.salle ? `${autre.salle} déjà occupée (${quand})` : `${autre.intervenant} donne déjà un cours (${quand})`;
   });
+
+  // Créneau hors des horaires d'ouverture du site de la salle (simple avertissement : un cours exceptionnel reste possible).
+  const siteDeLaSalle = r.salles.find((s) => s.id === v.salleId)?.siteId;
+  const horsOuverture =
+    !stage && siteDeLaSalle && saisie.jourSemaine && saisie.dureeMinutes > 0
+      ? horsHoraires({ jourSemaine: saisie.jourSemaine, heureDebut: v.heureDebut, dureeMinutes: saisie.dureeMinutes }, r.horaires[siteDeLaSalle] ?? [])
+      : null;
 
   // Indisponibilités de l'intervenant sur les dates à venir du créneau, vérifiées côté serveur après une pause.
   const [datesIndispo, setDatesIndispo] = useState<string[]>([]);
@@ -313,6 +322,12 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
             {indispoAffichees.length > 6 && "…"}
           </p>
         </div>
+      )}
+
+      {horsOuverture && (
+        <p role="status" className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
+          {horsOuverture} Le cours reste possible.
+        </p>
       )}
 
       {recouvrements.length > 0 && (

@@ -1,7 +1,8 @@
 import { and, asc, desc, eq, ne, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
+import type { Horaire } from "../domaine/planning/horaires";
 import type { Tx } from "./index";
-import { cours, discipline, saison, salle, site } from "./schema";
+import { cours, discipline, horaireSite, saison, salle, site } from "./schema";
 
 /**
  * Paramètres de l'école (#80) : saisons, disciplines, sites et salles. Tout ce
@@ -156,7 +157,7 @@ export async function supprimerDiscipline(tx: Tx, id: string): Promise<Resultat>
 // ---------------------------------------------------------------------------
 
 export type LigneSalle = { id: string; nom: string; capacite: number | null; cours: number };
-export type LigneSite = { id: string; nom: string; adresse: string; permanence: boolean; salles: LigneSalle[] };
+export type LigneSite = { id: string; nom: string; adresse: string; permanence: boolean; salles: LigneSalle[]; horaires: Horaire[] };
 
 export async function listerLieux(tx: Tx): Promise<LigneSite[]> {
   const sites = await tx
@@ -174,8 +175,10 @@ export async function listerLieux(tx: Tx): Promise<LigneSite[]> {
     })
     .from(salle)
     .orderBy(asc(salle.nom));
+  const horaires = await horairesParSite(tx);
   return sites.map((s) => ({
     ...s,
+    horaires: horaires[s.id] ?? [],
     salles: salles.filter((x) => x.siteId === s.id).map((x) => ({ id: x.id, nom: x.nom, capacite: x.capacite, cours: x.cours })),
   }));
 }
@@ -210,6 +213,36 @@ export async function supprimerSite(tx: Tx, id: string): Promise<Resultat> {
   if (x) return { ok: false, message: `${s.nom} a encore des salles : retirez-les d’abord.` };
   await tx.delete(site).where(eq(site.id, id));
   return { ok: true, id };
+}
+
+/** Horaires de chaque site, par identifiant de site (jours dans l'ordre). */
+export async function horairesParSite(tx: Tx): Promise<Record<string, Horaire[]>> {
+  const lignes = await tx
+    .select({ siteId: horaireSite.siteId, jourSemaine: horaireSite.jourSemaine, ouverture: horaireSite.ouverture, fermeture: horaireSite.fermeture })
+    .from(horaireSite)
+    .orderBy(asc(horaireSite.jourSemaine));
+  const r: Record<string, Horaire[]> = {};
+  for (const l of lignes) (r[l.siteId] ??= []).push({ jourSemaine: l.jourSemaine, ouverture: l.ouverture.slice(0, 5), fermeture: l.fermeture.slice(0, 5) });
+  return r;
+}
+
+const heure = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM");
+export const horairesValides = z
+  .array(z.object({ jourSemaine: z.int().min(1).max(7), ouverture: heure, fermeture: heure }))
+  .max(7)
+  .refine((h) => new Set(h.map((x) => x.jourSemaine)).size === h.length, "Un même jour est saisi deux fois.")
+  .refine((h) => h.every((x) => x.fermeture > x.ouverture), "L’heure de fermeture doit suivre l’ouverture.");
+
+/** Remplace les horaires d'un site ; une liste vide retire toute contrainte d'horaires. */
+export async function enregistrerHoraires(tx: Tx, siteId: string, saisie: z.input<typeof horairesValides>): Promise<Resultat> {
+  const h = horairesValides.safeParse(saisie);
+  if (!h.success) return { ok: false, message: h.error.issues[0].message };
+  if (!estUuid(siteId)) return { ok: false, message: "Ce site n’existe plus." };
+  const [s] = await tx.select({ id: site.id }).from(site).where(eq(site.id, siteId));
+  if (!s) return { ok: false, message: "Ce site n’existe plus." };
+  await tx.delete(horaireSite).where(eq(horaireSite.siteId, siteId));
+  if (h.data.length > 0) await tx.insert(horaireSite).values(h.data.map((x) => ({ ...x, siteId, ecoleId: ECOLE_COURANTE })));
+  return { ok: true, id: siteId };
 }
 
 export const saisieSalleValide = z.object({
