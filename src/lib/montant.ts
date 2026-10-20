@@ -28,3 +28,13 @@ const formateur = new Intl.NumberFormat("fr-FR", { style: "currency", currency: 
 export function formaterEuros(centimes: number): string {
   return formateur.format(centimes / 100);
 }
+
+/**
+ * Saisie en euros (« 40 », « 40,50 », « 1 234,56 € ») → centimes entiers, sans
+ * passer par un nombre à virgule ; null si la saisie n'est pas un montant positif.
+ */
+export function lireEuros(saisie: string): number | null {
+  const m = /^(\d+)(?:[,.](\d{1,2}))?$/.exec(saisie.replace(/[\s €]/g, ""));
+  if (!m) return null;
+  return Number(m[1]) * 100 + Number((m[2] ?? "").padEnd(2, "0"));
+}

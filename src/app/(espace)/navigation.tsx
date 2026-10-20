@@ -8,6 +8,7 @@ const LIENS = [
   { href: "/", libelle: "Accueil" },
   { href: "/familles", libelle: "Familles" },
   { href: "/planning", libelle: "Planning" },
+  { href: "/intervenants", libelle: "Intervenants" },
 ];
 
 /** Liens de la barre latérale ; la page courante est signalée (aria-current). */
