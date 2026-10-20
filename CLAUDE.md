@@ -131,6 +131,7 @@ migrations/               générées par drizzle-kit + migrations SQL personnal
 - Textes en français, avec apostrophe typographique (’) et guillemets « » dans les contenus affichés.
 - Pensé pour l'ordinateur de l'accueil d'abord : formulaires utilisables au clavier, recherche instantanée d'une personne, peu de clics pour une inscription.
 - Accessible : libellés sur tous les champs, contrastes suffisants, mode sombre.
+- Formulaires et fiche d'un cours : une vraie page, aussi ouverte en **panneau latéral** par-dessus la page courante (route interceptée dans `src/app/(espace)/@modal/(.)…`, composant `Panneau` de `_panneau/panneau.tsx`). Le bouton d'annulation est `<Annuler href=…>` (retour arrière dans un panneau). Un nouveau formulaire de création ou de modification suit ce modèle.
 
 ## 11. Feuille de route V1
 

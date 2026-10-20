@@ -14,9 +14,10 @@ const LIBELLE_ROLE = { direction: "Direction", accueil: "Accueil", professeur: "
  * Cadre de l'espace connecté : barre latérale (école, navigation, compte) et
  * recherche globale. Il n'affiche que des informations : chaque page et chaque
  * action refait sa propre vérification (contexteEcole), un layout n'étant pas
- * réexécuté à chaque navigation.
+ * réexécuté à chaque navigation. `modal` : panneau latéral des routes
+ * interceptées (`@modal`), vide le reste du temps.
  */
-export default async function LayoutEspace({ children }: LayoutProps<"/">) {
+export default async function LayoutEspace({ children, modal }: LayoutProps<"/">) {
   const [{ ecoleId, role }, { user }] = await Promise.all([contexteEcole(), sessionCourante()]);
   const [{ nom }] = await avecEcole(ecoleId, (tx) =>
     tx.select({ nom: ecole.nom }).from(ecole).where(eq(ecole.id, ecoleId)),
@@ -55,6 +56,7 @@ export default async function LayoutEspace({ children }: LayoutProps<"/">) {
       }
     >
       {children}
+      {modal}
     </Cadre>
   );
 }

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { ageAu } from "@/domaine/personnes/age";
 import { type Choix, ChoixPersonne, versSaisie } from "../../_personnes/choix-personne";
 import { creerEleveGuide, type RefusEleve } from "../actions";
+import { Annuler } from "@/app/(espace)/_panneau/panneau";
 
 type Facturation = "eleve" | "responsable" | "autre";
 
@@ -190,9 +191,7 @@ export function GuideNouvelEleve({ aujourdhui, responsableInitial }: { aujourdhu
         <button type="submit" className="bouton-principal" disabled={envoi}>
           {envoi ? "Enregistrement…" : "Créer l’élève"}
         </button>
-        <Link href="/eleves" className="bouton-secondaire">
-          Annuler
-        </Link>
+        <Annuler href="/eleves" />
       </div>
     </form>
   );

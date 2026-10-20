@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { FichePersonne } from "@/db/personnes";
 import { creerContact, modifierIdentite, type Refus } from "./actions";
+import { Annuler } from "@/app/(espace)/_panneau/panneau";
 
 type Props = {
   /** Personne modifiée ; null pour la création d'un contact (un élève se crée avec le formulaire guidé). */
@@ -157,9 +158,7 @@ export function FormulairePersonne({ personne, pour, nomPropose }: Props) {
         <button type="submit" className="bouton-principal" disabled={envoi}>
           {envoi ? "Enregistrement…" : personne ? "Enregistrer les modifications" : "Créer le contact"}
         </button>
-        <Link href={personne ? `/${pour}/${personne.id}` : `/${pour}`} className="bouton-secondaire">
-          Annuler
-        </Link>
+        <Annuler href={personne ? `/${pour}/${personne.id}` : `/${pour}`} />
       </div>
     </form>
   );

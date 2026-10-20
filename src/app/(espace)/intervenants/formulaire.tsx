@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { type Intervenant, MODES_REMUNERATION, REGIMES_TVA, STATUTS, UNITES_REMUNERATION } from "@/db/intervenants";
 import { enregistrerIntervenant, type EtatFormulaire } from "./actions";
+import { Annuler } from "@/app/(espace)/_panneau/panneau";
 
 type Mode = keyof typeof UNITES_REMUNERATION;
 
@@ -160,9 +160,7 @@ function Champs({ etat, envoyer, enCours, edition, initial, retour }: PropsChamp
         <button type="submit" className="bouton-principal" disabled={enCours}>
           {enCours ? "Enregistrement…" : edition ? "Enregistrer les modifications" : "Ajouter l’intervenant"}
         </button>
-        <Link href={retour} className="bouton-secondaire">
-          Annuler
-        </Link>
+        <Annuler href={retour} />
       </div>
     </form>
   );

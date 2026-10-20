@@ -125,3 +125,29 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+
+/* Panneau latéral (routes interceptées) : à droite, plein écran sur téléphone. */
+.panneau-lateral {
+  @apply fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-none w-full max-w-2xl border-l border-bordure bg-fond p-0 text-texte shadow-xl;
+}
+.panneau-lateral::backdrop {
+  background: rgb(0 0 0 / 0.35);
+}
+.panneau-lateral[open] {
+  animation: entree-panneau 160ms ease-out;
+}
+/* Le panneau a son propre bouton de fermeture : le fil d’Ariane de la page y serait redondant. */
+.panneau-lateral nav[aria-label="Fil d’Ariane"] {
+  display: none;
+}
+@keyframes entree-panneau {
+  from {
+    transform: translateX(2rem);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panneau-lateral[open] {
+    animation: none;
+  }
+}
