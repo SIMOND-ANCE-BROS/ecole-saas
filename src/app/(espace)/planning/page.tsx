@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { avecEcole } from "@/db";
 import { coursDeLaSaison, saisonCourante } from "@/db/planning";
-import { aujourdhuiAParis } from "@/domaine/familles/age";
+import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { contexteEcole } from "@/lib/session";
 import { GrillePlanning } from "./grille";
 

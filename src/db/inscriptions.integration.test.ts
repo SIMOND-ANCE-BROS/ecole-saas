@@ -1,7 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { avecEcole } from "./index";
-import { apercuInscription, enregistrerInscription, inscriptionsDeLaFamille } from "./inscriptions";
+import { apercuInscription, enregistrerInscription, inscriptionsPayeesPar } from "./inscriptions";
 import { coursDeLaSaison } from "./planning";
 import { chiffresSaison, dernieresInscriptions } from "./tableau-de-bord";
 
@@ -38,15 +38,18 @@ beforeAll(async () => {
   ids.jazz45 = await cours(ids.saison, jazz.id, 45, 2);
   ids.classique60 = await cours(ids.saison, classique.id, 60, 3);
   ids.autreSaison60 = await cours(ids.autreSaison, jazz.id, 60, 1);
-  [{ id: ids.payeur }] = await admin`INSERT INTO payeur (ecole_id, nom, prenom) VALUES (${e}, 'Famille', 'Test') RETURNING id`;
-  [{ id: ids.autrePayeur }] = await admin`INSERT INTO payeur (ecole_id, nom, prenom) VALUES (${e}, 'Autre', 'Famille') RETURNING id`;
-  [{ id: ids.zoe }] = await admin`INSERT INTO danseur (ecole_id, payeur_id, nom, prenom) VALUES (${e}, ${ids.payeur}, 'Famille', 'Zoé') RETURNING id`;
-  [{ id: ids.noe }] = await admin`INSERT INTO danseur (ecole_id, payeur_id, nom, prenom) VALUES (${e}, ${ids.payeur}, 'Famille', 'Noé') RETURNING id`;
-  [{ id: ids.etranger }] = await admin`INSERT INTO danseur (ecole_id, payeur_id, nom, prenom) VALUES (${e}, ${ids.autrePayeur}, 'Autre', 'Max') RETURNING id`;
+  [{ id: ids.payeur }] = await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${e}, 'Famille', 'Test') RETURNING id`;
+  [{ id: ids.autrePayeur }] = await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${e}, 'Autre', 'Famille') RETURNING id`;
+  [{ id: ids.zoe }] = await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${e}, 'Famille', 'Zoé') RETURNING id`;
+  [{ id: ids.noe }] = await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${e}, 'Famille', 'Noé') RETURNING id`;
+  [{ id: ids.etranger }] = await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${e}, 'Autre', 'Max') RETURNING id`;
+  for (const [payeur, danseur] of [[ids.payeur, ids.zoe], [ids.payeur, ids.noe], [ids.autrePayeur, ids.etranger]]) {
+    await admin`INSERT INTO lien (ecole_id, personne_id, lie_a_id, type, paie_pour) VALUES (${e}, ${payeur}, ${danseur}, 'representant_legal', true)`;
+  }
 });
 
 afterAll(async () => {
-  for (const t of ["inscription_cours", "inscription", "cours", "danseur", "payeur", "intervenant", "salle", "site", "discipline", "reduction", "tarif", "saison"]) {
+  for (const t of ["inscription_cours", "inscription", "cours", "lien", "personne", "intervenant", "salle", "site", "discipline", "reduction", "tarif", "saison"]) {
     await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id = $1`, [ids.ecole]);
   }
   await admin`DELETE FROM ecole WHERE id = ${ids.ecole}`;
@@ -97,8 +100,8 @@ describe("Inscription", () => {
     expect(ligne).toMatchObject({ prix_brut_centimes: 16500, remise_centimes: 1650, reductions: ["fratrie"] });
   });
 
-  it("liste les inscriptions de la famille pour la saison", async () => {
-    const liste = await avecEcole(ids.ecole, (tx) => inscriptionsDeLaFamille(tx, ids.payeur, ids.saison));
+  it("liste les inscriptions payées par la personne pour la saison", async () => {
+    const liste = await avecEcole(ids.ecole, (tx) => inscriptionsPayeesPar(tx, ids.payeur, ids.saison));
     expect(liste.map((i) => [i.danseurs, i.prixNetCentimes])).toEqual([
       ["Noé", 14850],
       ["Zoé", 11000],
@@ -138,9 +141,9 @@ describe("Tableau de bord et effectifs", () => {
 
   it("liste les dernières inscriptions, la plus récente d’abord", async () => {
     const dernieres = await avecEcole(ids.ecole, (tx) => dernieresInscriptions(tx, ids.saison));
-    expect(dernieres.map((d) => [d.danseurs, d.famille, d.prixNetCentimes])).toEqual([
-      ["Noé", "Famille Test", 14850],
-      ["Zoé", "Famille Test", 11000],
+    expect(dernieres.map((d) => [d.danseurs, d.payeur, d.prixNetCentimes])).toEqual([
+      ["Noé", "Test Famille", 14850],
+      ["Zoé", "Test Famille", 11000],
     ]);
   });
 

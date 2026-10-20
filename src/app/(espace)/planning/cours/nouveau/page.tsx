@@ -3,7 +3,7 @@ import Link from "next/link";
 import { avecEcole } from "@/db";
 import { referentielPlanning } from "@/db/cours";
 import { coursDeLaSaison, saisonCourante } from "@/db/planning";
-import { aujourdhuiAParis } from "@/domaine/familles/age";
+import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
 import { FormulaireCours } from "../formulaire";
 

@@ -51,7 +51,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const t of ["inscription_cours", "inscription", "danseur", "payeur", "cours", "salle", "site", "discipline", "intervenant", "saison"]) {
+  for (const t of ["inscription_cours", "inscription", "lien", "personne", "cours", "salle", "site", "discipline", "intervenant", "saison"]) {
     await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
   }
   await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
@@ -129,8 +129,8 @@ describe("supprimerCours", () => {
   it("refuse de supprimer un cours avec des inscrits", async () => {
     const r = await avecEcole(ecole, (tx) => creerCours(tx, saison, base));
     const id = r.ok ? r.id : "";
-    const [p] = await admin`INSERT INTO payeur (ecole_id, nom) VALUES (${ecole}, 'Martin') RETURNING id`;
-    const [d] = await admin`INSERT INTO danseur (ecole_id, payeur_id, nom, prenom) VALUES (${ecole}, ${p.id}, 'Martin', 'Léa') RETURNING id`;
+    const [p] = await admin`INSERT INTO personne (ecole_id, nom) VALUES (${ecole}, 'Martin') RETURNING id`;
+    const [d] = await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${ecole}, 'Martin', 'Léa') RETURNING id`;
     const [i] = await admin`
       INSERT INTO inscription (ecole_id, saison_id, payeur_id, public, periodicite, prix_brut_centimes, statut)
       VALUES (${ecole}, ${saison}, ${p.id}, 'enfant', 'trimestre', 10000, 'active') RETURNING id`;

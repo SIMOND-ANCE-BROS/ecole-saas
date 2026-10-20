@@ -3,7 +3,7 @@ import Link from "next/link";
 import { avecEcole } from "@/db";
 import { listerIntervenants, MODES_REMUNERATION, STATUTS } from "@/db/intervenants";
 import { saisonCourante } from "@/db/planning";
-import { aujourdhuiAParis } from "@/domaine/familles/age";
+import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { formaterEuros } from "@/lib/montant";
 import { exigerRole } from "@/lib/session";
 

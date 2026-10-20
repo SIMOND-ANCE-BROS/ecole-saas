@@ -35,7 +35,8 @@ import {
 // ---------------------------------------------------------------------------
 // Types énumérés
 // ---------------------------------------------------------------------------
-export const typePayeur = pgEnum("type_payeur", ["particulier", "professionnel"]);
+export const typePersonne = pgEnum("type_personne", ["particulier", "professionnel"]);
+export const typeLien = pgEnum("type_lien", ["representant_legal", "conjoint", "autre"]);
 export const typeDocument = pgEnum("type_document", [
   "certificat_medical",
   "autorisation_parentale",
@@ -224,50 +225,59 @@ export const fermeture = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Familles et danseurs
+// Personnes et liens (plus de « famille » : voir #67)
 // ---------------------------------------------------------------------------
-export const payeur = pgTable(
-  "payeur",
+/**
+ * Toute personne connue de l'école : danseur, parent, conjoint, contact
+ * d'urgence, ou payeur professionnel (entreprise, CSE). Un adulte seul est à la
+ * fois danseur et payeur : pas de « famille » à créer.
+ */
+export const personne = pgTable(
+  "personne",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    type: typePayeur("type").notNull().default("particulier"),
+    type: typePersonne("type").notNull().default("particulier"),
     nom: text("nom").notNull(),
     prenom: text("prenom"),
     raisonSociale: text("raison_sociale"),
     siren: char("siren", { length: 9 }),
+    dateNaissance: date("date_naissance"),
     email: text("email"),
     telephone: text("telephone"),
     adresse: text("adresse"),
+    notes: text("notes"), // santé, consignes : visibles par l'accueil et la direction
     refOutil: text("ref_outil"), // id du client dans l'outil de facturation
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check("payeur_pro_siren", sql`${t.type} = 'particulier' OR ${t.siren} IS NOT NULL`),
+    check("personne_pro_siren", sql`${t.type} = 'particulier' OR ${t.siren} IS NOT NULL`),
     index().on(t.ecoleId, t.nom),
     cibleMemeEcole(t),
   ],
 );
 
-export const danseur = pgTable(
-  "danseur",
+/**
+ * Lien orienté : `personne` est <type> de `lie_a` (Hélène, représentante
+ * légale de Zoé). Un conjoint n'est enregistré qu'une fois, dans un sens.
+ */
+export const lien = pgTable(
+  "lien",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    payeurId: uuid("payeur_id").notNull(),
-    nom: text("nom").notNull(),
-    prenom: text("prenom").notNull(),
-    dateNaissance: date("date_naissance"),
-    contactUrgence: text("contact_urgence"),
-    telephoneUrgence: text("telephone_urgence"),
-    notes: text("notes"),
-    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    personneId: uuid("personne_id").notNull(),
+    lieAId: uuid("lie_a_id").notNull(),
+    type: typeLien("type").notNull(),
+    contactUrgence: boolean("contact_urgence").notNull().default(false),
+    paiePour: boolean("paie_pour").notNull().default(false),
   },
   (t) => [
-    index().on(t.payeurId),
-    index().on(t.ecoleId, t.nom),
-    cibleMemeEcole(t),
-    memeEcole(t, t.payeurId, payeur),
+    unique().on(t.personneId, t.lieAId),
+    check("lien_distinct", sql`${t.personneId} <> ${t.lieAId}`),
+    index().on(t.lieAId),
+    memeEcole(t, t.personneId, personne),
+    memeEcole(t, t.lieAId, personne),
   ],
 );
 
@@ -282,7 +292,7 @@ export const documentDanseur = pgTable(
     valideJusqu: date("valide_jusqu"),
     fichier: text("fichier"),
   },
-  (t) => [memeEcole(t, t.danseurId, danseur)],
+  (t) => [memeEcole(t, t.danseurId, personne)],
 );
 
 // ---------------------------------------------------------------------------
@@ -384,7 +394,7 @@ export const presence = pgTable(
   (t) => [
     primaryKey({ columns: [t.seanceId, t.danseurId] }),
     memeEcole(t, t.seanceId, seance),
-    memeEcole(t, t.danseurId, danseur),
+    memeEcole(t, t.danseurId, personne),
   ],
 );
 
@@ -499,7 +509,7 @@ export const inscription = pgTable(
   (t) => [
     index().on(t.payeurId, t.saisonId),
     cibleMemeEcole(t),
-    memeEcole(t, t.payeurId, payeur),
+    memeEcole(t, t.payeurId, personne),
     memeEcole(t, t.saisonId, saison),
     memeEcole(t, t.tarifId, tarif),
   ],
@@ -516,7 +526,7 @@ export const inscriptionCours = pgTable(
   (t) => [
     primaryKey({ columns: [t.inscriptionId, t.danseurId, t.coursId] }),
     memeEcole(t, t.inscriptionId, inscription),
-    memeEcole(t, t.danseurId, danseur),
+    memeEcole(t, t.danseurId, personne),
     memeEcole(t, t.coursId, cours),
   ],
 );
@@ -539,7 +549,7 @@ export const carnet = pgTable(
   (t) => [
     check("carnet_personnes", sql`${t.nbPersonnes} >= 1 AND ${t.seancesTotal} >= 1`),
     cibleMemeEcole(t),
-    memeEcole(t, t.payeurId, payeur),
+    memeEcole(t, t.payeurId, personne),
   ],
 );
 
@@ -582,7 +592,7 @@ export const facture = pgTable(
     unique().on(t.ecoleId, t.numero),
     index().on(t.payeurId),
     cibleMemeEcole(t),
-    memeEcole(t, t.payeurId, payeur),
+    memeEcole(t, t.payeurId, personne),
     memeEcole(t, t.avoirDe, t),
   ],
 );
@@ -645,7 +655,7 @@ export const paiement = pgTable(
   },
   (t) => [
     cibleMemeEcole(t),
-    memeEcole(t, t.payeurId, payeur),
+    memeEcole(t, t.payeurId, personne),
     memeEcole(t, t.saisiPar, membre),
   ],
 );

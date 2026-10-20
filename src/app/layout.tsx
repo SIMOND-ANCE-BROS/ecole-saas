@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: { default: "Gestion d’école de danse", template: "%s · Gestion d’école de danse" },
-  description: "Familles, inscriptions, planning, facturation et paie des professeurs.",
+  description: "Danseurs et payeurs, inscriptions, planning, facturation et paie des professeurs.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

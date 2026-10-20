@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 const LIENS = [
   { href: "/", libelle: "Accueil" },
-  { href: "/familles", libelle: "Familles" },
+  { href: "/personnes", libelle: "Personnes" },
   { href: "/planning", libelle: "Planning" },
   { href: "/intervenants", libelle: "Intervenants" },
 ];
@@ -32,8 +32,8 @@ export function Navigation() {
 }
 
 /**
- * Recherche de familles accessible partout. Ctrl K (ou Cmd K) y place le
- * curseur ; sur la page Familles, la liste se met à jour pendant la frappe ;
+ * Recherche de personnes accessible partout. Ctrl K (ou Cmd K) y place le
+ * curseur ; sur la page Personnes, la liste se met à jour pendant la frappe ;
  * flèche bas pour descendre dans les résultats.
  */
 export function RechercheGlobale() {
@@ -41,8 +41,8 @@ export function RechercheGlobale() {
   const router = useRouter();
   const chemin = usePathname();
   const parametres = useSearchParams();
-  const surFamilles = chemin === "/familles";
-  const [valeur, setValeur] = useState(surFamilles ? (parametres.get("q") ?? "") : "");
+  const surPersonnes = chemin === "/personnes";
+  const [valeur, setValeur] = useState(surPersonnes ? (parametres.get("q") ?? "") : "");
 
   useEffect(() => {
     const raccourci = (e: KeyboardEvent) => {
@@ -57,7 +57,7 @@ export function RechercheGlobale() {
   }, []);
 
   const aller = (q: string, remplacer: boolean) => {
-    const cible = q.trim() ? `/familles?q=${encodeURIComponent(q.trim())}` : "/familles";
+    const cible = q.trim() ? `/personnes?q=${encodeURIComponent(q.trim())}` : "/personnes";
     if (remplacer) router.replace(cible);
     else router.push(cible);
   };
@@ -68,24 +68,24 @@ export function RechercheGlobale() {
       className="flex w-full max-w-xl items-center gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        aller(valeur, surFamilles);
+        aller(valeur, surPersonnes);
       }}
     >
       <label htmlFor="recherche-globale" className="sr-only">
-        Rechercher une famille
+        Rechercher une personne
       </label>
       <input
         ref={champ}
         id="recherche-globale"
         type="search"
         autoComplete="off"
-        placeholder="Rechercher une famille : nom, prénom d’un danseur, téléphone…"
+        placeholder="Rechercher une personne : nom, prénom, téléphone, e-mail…"
         className="champ w-full"
         value={valeur}
-        autoFocus={surFamilles}
+        autoFocus={surPersonnes}
         onChange={(e) => {
           setValeur(e.target.value);
-          if (surFamilles) aller(e.target.value, true);
+          if (surPersonnes) aller(e.target.value, true);
         }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") {

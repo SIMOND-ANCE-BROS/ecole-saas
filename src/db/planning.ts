@@ -1,7 +1,9 @@
 import { and, asc, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Tx } from "./index";
-import { cours, danseur, discipline, inscription, inscriptionCours, intervenant, payeur, saison, salle, site } from "./schema";
+import { alias } from "drizzle-orm/pg-core";
+import { nomAffiche } from "./personnes";
+import { cours, discipline, inscription, inscriptionCours, intervenant, personne, saison, salle, site } from "./schema";
 
 /** Lectures du planning, toujours avec la transaction d'`avecEcole()` (RLS). */
 
@@ -106,7 +108,7 @@ export type Inscrit = {
   dateNaissance: string | null;
   payeurId: string;
   /** Nom du payeur (raison sociale pour un professionnel). */
-  famille: string;
+  payeur: string;
   telephone: string | null;
   email: string | null;
   statut: "active" | "essai" | "liste_attente";
@@ -116,16 +118,21 @@ export type Inscrit = {
 /** Danseurs du cours en cours d'année (actifs, à l'essai, en liste d'attente), par nom puis prénom. */
 export async function inscritsDuCours(tx: Tx, coursId: string): Promise<Inscrit[]> {
   if (!z.uuid().safeParse(coursId).success) return [];
-  return tx
+  const danseur = alias(personne, "danseur");
+  const payeur = alias(personne, "payeur");
+  const lignes = await tx
     .selectDistinctOn([danseur.nom, danseur.prenom, danseur.id], {
       danseurId: danseur.id,
       prenom: danseur.prenom,
       nom: danseur.nom,
       dateNaissance: danseur.dateNaissance,
       payeurId: payeur.id,
-      famille: sql<string>`coalesce(${payeur.raisonSociale}, ${payeur.nom})`,
-      telephone: payeur.telephone,
-      email: payeur.email,
+      payeurNom: payeur.nom,
+      payeurPrenom: payeur.prenom,
+      raisonSociale: payeur.raisonSociale,
+      // Téléphone du danseur, sinon celui de son payeur (un enfant n'en a souvent pas).
+      telephone: sql<string | null>`coalesce(${danseur.telephone}, ${payeur.telephone})`,
+      email: sql<string | null>`coalesce(${danseur.email}, ${payeur.email})`,
       statut: sql<Inscrit["statut"]>`${inscription.statut}`,
       dateInscription: inscription.dateInscription,
     })
@@ -135,4 +142,9 @@ export async function inscritsDuCours(tx: Tx, coursId: string): Promise<Inscrit[
     .innerJoin(payeur, eq(payeur.id, inscription.payeurId))
     .where(and(eq(inscriptionCours.coursId, coursId), inArray(inscription.statut, ["active", "essai", "liste_attente"])))
     .orderBy(asc(danseur.nom), asc(danseur.prenom), asc(danseur.id), sql`${inscription.statut} = 'active' DESC`);
+  return lignes.map(({ payeurNom, payeurPrenom, raisonSociale, prenom, ...l }) => ({
+    ...l,
+    prenom: prenom ?? "",
+    payeur: nomAffiche({ nom: payeurNom, prenom: payeurPrenom, raisonSociale }),
+  }));
 }

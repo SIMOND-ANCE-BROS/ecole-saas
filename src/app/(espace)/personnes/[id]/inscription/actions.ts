@@ -5,7 +5,7 @@ import { z } from "zod";
 import { avecEcole } from "@/db";
 import { type Apercu, apercuInscription, enregistrerInscription } from "@/db/inscriptions";
 import { saisonCourante } from "@/db/planning";
-import { aujourdhuiAParis } from "@/domaine/familles/age";
+import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
 
 const saisieValide = z.object({
@@ -45,5 +45,5 @@ export async function inscrire(saisie: SaisieFormulaire): Promise<{ message: str
     return enregistrerInscription(tx, payeurId, saison.id, reste);
   });
   if (!resultat.ok) return { message: resultat.message };
-  redirect(`/familles/${payeurId}?inscription=enregistree`);
+  redirect(`/personnes/${payeurId}?inscription=enregistree`);
 }

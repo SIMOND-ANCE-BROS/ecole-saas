@@ -48,7 +48,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const t of ["inscription_cours", "inscription", "danseur", "payeur", "cours", "intervenant", "salle", "site", "discipline", "saison"]) {
+  for (const t of ["inscription_cours", "inscription", "lien", "personne", "cours", "intervenant", "salle", "site", "discipline", "saison"]) {
     await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
   }
   await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
@@ -98,11 +98,11 @@ describe("coursDuPlanning et inscritsDuCours", () => {
   it("lit un cours et ses danseurs actifs, à l’essai ou en attente, sans les abandons", async () => {
     const [jazz] = await admin`SELECT c.id FROM cours c JOIN discipline d ON d.id = c.discipline_id
       WHERE c.ecole_id = ${ecole} AND d.nom = 'Jazz'`;
-    const [p] = await admin`INSERT INTO payeur (ecole_id, nom, prenom, telephone) VALUES (${ecole}, 'Bernard', 'Émilie', '07 11 22 33 44') RETURNING id`;
+    const [p] = await admin`INSERT INTO personne (ecole_id, nom, prenom, telephone) VALUES (${ecole}, 'Bernard', 'Émilie', '07 11 22 33 44') RETURNING id`;
     const danseurs: Record<string, string> = {};
     for (const prenom of ["Louis", "Alice", "Jules", "Zoé"]) {
       [{ id: danseurs[prenom] }] = await admin`
-        INSERT INTO danseur (ecole_id, payeur_id, nom, prenom, date_naissance) VALUES (${ecole}, ${p.id}, 'Bernard', ${prenom}, '2016-01-15') RETURNING id`;
+        INSERT INTO personne (ecole_id, nom, prenom, date_naissance) VALUES (${ecole}, 'Bernard', ${prenom}, '2016-01-15') RETURNING id`;
     }
     for (const [prenom, statut] of [["Louis", "active"], ["Alice", "essai"], ["Jules", "liste_attente"], ["Zoé", "abandon"]]) {
       const [i] = await admin`
@@ -114,7 +114,7 @@ describe("coursDuPlanning et inscritsDuCours", () => {
     expect(await avecEcole(ecole, (tx) => coursDuPlanning(tx, jazz.id))).toMatchObject({ discipline: "Jazz", inscrits: 1 });
     const inscrits = await avecEcole(ecole, (tx) => inscritsDuCours(tx, jazz.id));
     expect(inscrits.map((i) => `${i.prenom} ${i.statut}`)).toEqual(["Alice essai", "Jules liste_attente", "Louis active"]);
-    expect(inscrits[0]).toMatchObject({ famille: "Bernard", telephone: "07 11 22 33 44", payeurId: p.id, dateNaissance: "2016-01-15" });
+    expect(inscrits[0]).toMatchObject({ payeur: "Émilie Bernard", telephone: "07 11 22 33 44", payeurId: p.id, dateNaissance: "2016-01-15" });
   });
 
   it("ne lit pas le cours d’une autre école, ni ses inscrits", async () => {

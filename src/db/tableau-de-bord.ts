@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { Tx } from "./index";
-import { inscription, payeur } from "./schema";
+import { nomAffiche } from "./personnes";
+import { inscription, personne } from "./schema";
 
 /** Lectures du tableau de bord, toujours avec la transaction d'`avecEcole()` (RLS). */
 
@@ -26,7 +27,8 @@ export async function chiffresSaison(tx: Tx, saisonId: string): Promise<Chiffres
 export type DerniereInscription = {
   id: string;
   payeurId: string;
-  famille: string;
+  /** Nom du payeur. */
+  payeur: string;
   danseurs: string;
   prixNetCentimes: number;
 };
@@ -37,18 +39,18 @@ export async function dernieresInscriptions(tx: Tx, saisonId: string, nombre = 8
     .select({
       id: inscription.id,
       payeurId: inscription.payeurId,
-      nom: payeur.nom,
-      prenom: payeur.prenom,
-      raisonSociale: payeur.raisonSociale,
+      nom: personne.nom,
+      prenom: personne.prenom,
+      raisonSociale: personne.raisonSociale,
       prixNetCentimes: inscription.prixNetCentimes,
       danseurs: sql<string | null>`(
-        SELECT string_agg(DISTINCT d.prenom, ' et ') FROM inscription_cours ic
-        JOIN danseur d ON d.id = ic.danseur_id
+        SELECT string_agg(DISTINCT coalesce(d.prenom, d.nom), ' et ') FROM inscription_cours ic
+        JOIN personne d ON d.id = ic.danseur_id
         WHERE ic.inscription_id = ${inscription}.${sql.identifier("id")}
       )`,
     })
     .from(inscription)
-    .innerJoin(payeur, eq(payeur.id, inscription.payeurId))
+    .innerJoin(personne, eq(personne.id, inscription.payeurId))
     .where(and(eq(inscription.saisonId, saisonId), eq(inscription.statut, "active")))
     .orderBy(desc(inscription.creeLe))
     .limit(nombre);
@@ -56,7 +58,7 @@ export async function dernieresInscriptions(tx: Tx, saisonId: string, nombre = 8
   return lignes.map((l) => ({
     id: l.id,
     payeurId: l.payeurId,
-    famille: l.raisonSociale ?? [l.nom, l.prenom].filter(Boolean).join(" "),
+    payeur: nomAffiche(l),
     danseurs: l.danseurs ?? "—",
     prixNetCentimes: l.prixNetCentimes ?? 0,
   }));
