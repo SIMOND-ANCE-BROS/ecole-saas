@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { CoursPlanning } from "@/db/planning";
+import { Agenda } from "./agenda";
 import { ages, fin, JOURS } from "./format";
 import { FILTRES_VIDES, filtrerPlanning } from "./filtres";
 
@@ -12,11 +13,18 @@ type Props = {
   modifiable: boolean;
   /** Cours tout juste enregistré, signalé dans la grille. */
   misEnAvant?: string;
+  /** Vue choisie (`?vue=`), semaine par défaut. */
+  vue: "semaine" | "liste";
 };
 
 /** Planning de la semaine, filtrable par discipline, site, salle et intervenant, avec l'effectif de chaque cours. */
-export function GrillePlanning({ cours, modifiable, misEnAvant }: Props) {
+export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale }: Props) {
   const [filtres, setFiltres] = useState(FILTRES_VIDES);
+  const [vue, setVue] = useState(vueInitiale);
+  const choisirVue = (v: "semaine" | "liste") => {
+    setVue(v);
+    window.history.replaceState(null, "", v === "semaine" ? "/planning" : "/planning?vue=liste");
+  };
   const { discipline, site, salleId, intervenantId } = filtres;
   const disciplines = useMemo(() => [...new Set(cours.map((c) => c.discipline))].sort(), [cours]);
   const sites = useMemo(() => [...new Set(cours.map((c) => c.site))].sort(), [cours]);
@@ -69,10 +77,25 @@ export function GrillePlanning({ cours, modifiable, misEnAvant }: Props) {
         <p className="pb-1.5 text-sm text-doux" aria-live="polite">
           {visibles.length} cours sur {cours.length}
         </p>
+        <div role="group" aria-label="Affichage" className="ml-auto flex overflow-hidden rounded-md border border-bordure text-sm">
+          {(["semaine", "liste"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={vue === v}
+              className={`px-3 py-1.5 ${vue === v ? "bg-accent text-sur-accent" : "hover:bg-accent-doux"}`}
+              onClick={() => choisirVue(v)}
+            >
+              {v === "semaine" ? "Semaine" : "Liste"}
+            </button>
+          ))}
+        </div>
       </div>
 
       {visibles.length === 0 ? (
         <div className="panneau flex flex-col items-start gap-3 p-5"><p className="text-sm text-doux">{cours.length === 0 ? "Aucun cours n’est encore programmé." : "Aucun cours ne correspond à cette combinaison de filtres."}</p>{filtresActifs && <button type="button" className="bouton-secondaire" onClick={() => setFiltres(FILTRES_VIDES)}>Afficher tous les cours</button>}</div>
+      ) : vue === "semaine" ? (
+        <Agenda cours={visibles} tous={cours} modifiable={modifiable} misEnAvant={misEnAvant} />
       ) : (
         <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
           {jours.map((jour) => (

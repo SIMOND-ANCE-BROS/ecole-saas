@@ -1,6 +1,6 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { creerCours, lireCours, modifierCours, referentielPlanning, type SaisieCours, supprimerCours } from "./cours";
+import { creerCours, deplacerCours, lireCours, modifierCours, referentielPlanning, type SaisieCours, supprimerCours } from "./cours";
 import { avecEcole } from "./index";
 
 /** Édition du planning, comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
@@ -150,5 +150,46 @@ describe("referentielPlanning", () => {
     expect(r.intervenants.map((i) => i.id)).toEqual([prof]);
     expect(r.sites.map((s) => s.nom)).toContain("Centre");
     expect(r.disciplines.map((d) => d.nom)).toContain("Jazz");
+  });
+});
+
+describe("deplacerCours (vue agenda)", () => {
+  it("déplace et étire un cours sans inscrit", async () => {
+    const r = await avecEcole(ecole, (tx) => creerCours(tx, saison, base));
+    const id = r.ok ? r.id : "";
+    expect(await avecEcole(ecole, (tx) => deplacerCours(tx, id, { jourSemaine: 4, heureDebut: "18:15", dureeMinutes: 90 }, false))).toEqual({ statut: "ok", id });
+    expect(await avecEcole(ecole, (tx) => lireCours(tx, id))).toMatchObject({ jourSemaine: 4, heureDebut: "18:15", dureeMinutes: 90 });
+  });
+
+  it("demande confirmation quand des élèves sont inscrits, puis déplace", async () => {
+    const r = await avecEcole(ecole, (tx) => creerCours(tx, saison, base));
+    const id = r.ok ? r.id : "";
+    const [p] = await admin`INSERT INTO personne (ecole_id, nom) VALUES (${ecole}, 'Payeur') RETURNING id`;
+    const [d] = await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${ecole}, 'Petit', 'Lou') RETURNING id`;
+    const [i] = await admin`INSERT INTO inscription (ecole_id, saison_id, payeur_id, public, periodicite, prix_brut_centimes, statut)
+      VALUES (${ecole}, ${saison}, ${p.id}, 'enfant', 'trimestre', 10000, 'active') RETURNING id`;
+    await admin`INSERT INTO inscription_cours (ecole_id, inscription_id, danseur_id, cours_id) VALUES (${ecole}, ${i.id}, ${d.id}, ${id})`;
+    const creneau = { jourSemaine: 5, heureDebut: "17:00", dureeMinutes: 60 };
+    expect(await avecEcole(ecole, (tx) => deplacerCours(tx, id, creneau, false))).toEqual({ statut: "confirmer", inscrits: 1 });
+    expect((await avecEcole(ecole, (tx) => lireCours(tx, id)))?.jourSemaine).toBe(3);
+    expect(await avecEcole(ecole, (tx) => deplacerCours(tx, id, creneau, true))).toEqual({ statut: "ok", id });
+    expect((await avecEcole(ecole, (tx) => lireCours(tx, id)))?.jourSemaine).toBe(5);
+  });
+
+  it("refuse un cours qui finirait après minuit, un stage, et un cours d’une autre école", async () => {
+    const r = await avecEcole(ecole, (tx) => creerCours(tx, saison, base));
+    const id = r.ok ? r.id : "";
+    expect(await avecEcole(ecole, (tx) => deplacerCours(tx, id, { jourSemaine: 3, heureDebut: "23:30", dureeMinutes: 60 }, true))).toEqual({
+      statut: "refus",
+      message: "Le cours finirait après minuit.",
+    });
+    const stage = await avecEcole(ecole, (tx) => creerCours(tx, saison, { ...base, type: "stage", jourSemaine: null }));
+    expect(await avecEcole(ecole, (tx) => deplacerCours(tx, stage.ok ? stage.id : "", { jourSemaine: 3, heureDebut: "10:00", dureeMinutes: 60 }, true))).toMatchObject({
+      statut: "refus",
+    });
+    expect(await avecEcole(autreEcole, (tx) => deplacerCours(tx, id, { jourSemaine: 2, heureDebut: "10:00", dureeMinutes: 60 }, true))).toEqual({
+      statut: "refus",
+      message: "Ce cours n’existe plus.",
+    });
   });
 });
