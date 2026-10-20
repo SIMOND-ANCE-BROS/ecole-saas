@@ -3,22 +3,26 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { avecEcole } from "@/db";
 import { listerContacts } from "@/db/eleves";
+import { lirePreference } from "@/db/preferences";
 import { nomAffiche } from "@/db/personnes";
 import { COLONNES_CONTACTS } from "@/domaine/filtres/colonnes";
 import { lireFiltre, versParametres } from "@/domaine/filtres/filtres";
 import { exigerRole } from "@/lib/session";
-import { BarreFiltres } from "../_filtres/barre-filtres";
+import { TableauListe } from "../_filtres/tableau-liste";
 import { ResultatsNavigables } from "../_personnes/resultats";
 
 export const metadata: Metadata = { title: "Contacts" };
 
 /** Parents, payeurs et organismes (CSE, entreprises). */
 export default async function PageContacts({ searchParams }: PageProps<"/contacts">) {
-  const { ecoleId } = await exigerRole("direction", "accueil");
+  const { ecoleId, userId } = await exigerRole("direction", "accueil");
   const { q, f, mode } = await searchParams;
   const saisie = typeof q === "string" ? q.trim() : "";
   const filtre = lireFiltre(f, mode, COLONNES_CONTACTS);
-  const contacts = await avecEcole(ecoleId, (tx) => listerContacts(tx, saisie, { filtre }));
+  const { contacts, disposition } = await avecEcole(ecoleId, async (tx) => ({
+    contacts: await listerContacts(tx, saisie, { filtre }),
+    disposition: await lirePreference(tx, userId, "contacts"),
+  }));
 
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
@@ -44,43 +48,25 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
           Rechercher
         </button>
       </form>
-      <Suspense>
-        <BarreFiltres colonnes={COLONNES_CONTACTS} quoi="les contacts" />
-      </Suspense>
-      {contacts.length === 0 ? (
-        <p className="text-sm">{filtre.conditions.length > 0 ? "Aucun contact ne correspond à ces filtres." : saisie ? "Aucun contact ne correspond." : "Aucun contact pour l’instant."}</p>
-      ) : (
-        <ResultatsNavigables>
-          <div className="panneau overflow-x-auto">
-            <table className="tableau">
-              <caption className="sr-only">Contacts</caption>
-              <thead>
-                <tr>
-                  <th>Contact</th>
-                  <th>Pour les élèves</th>
-                  <th>Téléphone</th>
-                  <th className="hidden sm:table-cell">E-mail</th>
-                </tr>
-              </thead>
-              <tbody>
-                {contacts.map((c) => (
-                  <tr key={c.id}>
-                    <td>
-                      <Link href={`/contacts/${c.id}`} data-resultat className="lien font-medium">
-                        {nomAffiche(c)}
-                      </Link>
-                      {c.type === "professionnel" && <span className="ml-2 text-xs text-doux">organisme</span>}
-                    </td>
-                    <td>{c.eleves.join(", ") || <span className="text-doux">—</span>}</td>
-                    <td className="whitespace-nowrap tabular-nums">{c.telephone ?? "—"}</td>
-                    <td className="hidden break-all sm:table-cell">{c.email ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </ResultatsNavigables>
-      )}
+      <ResultatsNavigables>
+        <Suspense>
+          <TableauListe
+            liste="contacts"
+            quoi="les contacts"
+            legende="Contacts"
+            colonnes={COLONNES_CONTACTS}
+            disposition={disposition}
+            lien="nom"
+            vide={filtre.conditions.length > 0 ? "Aucun contact ne correspond à ces filtres." : saisie ? "Aucun contact ne correspond." : "Aucun contact pour l’instant."}
+            lignes={contacts.map((c) => ({
+              id: c.id,
+              href: `/contacts/${c.id}`,
+              marque: c.type === "professionnel" ? "organisme" : undefined,
+              cellules: { nom: nomAffiche(c), eleves: c.eleves, telephone: c.telephone, email: c.email },
+            }))}
+          />
+        </Suspense>
+      </ResultatsNavigables>
     </section>
   );
 }

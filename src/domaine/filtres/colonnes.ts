@@ -8,9 +8,9 @@ import type { DefColonne } from "./filtres";
 
 export const COLONNES_ELEVES: DefColonne[] = [
   { id: "nom", libelle: "Élève", type: "texte" },
-  { id: "age", libelle: "Âge", type: "nombre" },
+  { id: "age", libelle: "Âge", type: "nombre", droite: true },
   { id: "responsables", libelle: "Responsables", type: "texte" },
-  { id: "facture", libelle: "Facturé à", type: "texte" },
+  { id: "facture", libelle: "Facturé à", type: "texte", siVide: "l’élève" },
   { id: "telephone", libelle: "Téléphone", type: "telephone" },
 ];
 
@@ -18,12 +18,18 @@ export const COLONNES_CONTACTS: DefColonne[] = [
   { id: "nom", libelle: "Contact", type: "texte" },
   { id: "eleves", libelle: "Pour les élèves", type: "texte" },
   { id: "telephone", libelle: "Téléphone", type: "telephone" },
-  { id: "email", libelle: "E-mail", type: "texte" },
+  { id: "email", libelle: "E-mail", type: "texte", courriel: true },
 ];
 
 export const COLONNES_INTERVENANTS: DefColonne[] = [
   { id: "nom", libelle: "Nom", type: "texte" },
   { id: "statut", libelle: "Statut", type: "texte" },
-  { id: "cours", libelle: "Cours", type: "nombre" },
-  { id: "email", libelle: "E-mail", type: "texte" },
+  { id: "cours", libelle: "Cours", type: "nombre", droite: true },
+  /** Réservée à la direction : la page la retire pour l'accueil. */
+  { id: "tarif", libelle: "Tarif", type: "texte", droite: true, filtrable: false },
+  { id: "email", libelle: "E-mail", type: "texte", courriel: true },
 ];
+
+/** Listes dont la disposition des colonnes est mémorisée par membre (#89). */
+export const LISTES = { eleves: COLONNES_ELEVES, contacts: COLONNES_CONTACTS, intervenants: COLONNES_INTERVENANTS } as const;
+export type Liste = keyof typeof LISTES;

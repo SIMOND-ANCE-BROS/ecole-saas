@@ -3,24 +3,27 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { avecEcole } from "@/db";
 import { listerIntervenants, MODES_REMUNERATION, STATUTS } from "@/db/intervenants";
+import { lirePreference } from "@/db/preferences";
 import { saisonCourante } from "@/db/planning";
 import { COLONNES_INTERVENANTS } from "@/domaine/filtres/colonnes";
 import { appliquerFiltre, type Cellule, lireFiltre } from "@/domaine/filtres/filtres";
 import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { formaterEuros } from "@/lib/montant";
 import { exigerRole } from "@/lib/session";
-import { BarreFiltres } from "../_filtres/barre-filtres";
+import { TableauListe } from "../_filtres/tableau-liste";
 
 export const metadata: Metadata = { title: "Intervenants" };
 
 export default async function PageIntervenants({ searchParams }: PageProps<"/intervenants">) {
-  const { ecoleId, role } = await exigerRole("direction", "accueil");
+  const { ecoleId, role, userId } = await exigerRole("direction", "accueil");
   const { enregistre, f, mode } = await searchParams;
-  const { saison, intervenants } = await avecEcole(ecoleId, async (tx) => {
+  const { saison, intervenants, disposition } = await avecEcole(ecoleId, async (tx) => {
     const s = await saisonCourante(tx, aujourdhuiAParis());
-    return { saison: s, intervenants: s ? await listerIntervenants(tx, s.id) : [] };
+    return { saison: s, intervenants: s ? await listerIntervenants(tx, s.id) : [], disposition: await lirePreference(tx, userId, "intervenants") };
   });
   const direction = role === "direction";
+  // Le tarif des intervenants n'est montré qu'à la direction.
+  const colonnes = direction ? COLONNES_INTERVENANTS : COLONNES_INTERVENANTS.filter((c) => c.id !== "tarif");
   // Liste complète déjà chargée (quelques intervenants) : filtrage en mémoire, mêmes règles qu'en SQL.
   const filtre = lireFiltre(f, mode, COLONNES_INTERVENANTS);
   const valeurs: Record<string, (i: (typeof intervenants)[number]) => Cellule> = {
@@ -29,7 +32,7 @@ export default async function PageIntervenants({ searchParams }: PageProps<"/int
     cours: (i) => i.coursSaison,
     email: (i) => i.email,
   };
-  const visibles = appliquerFiltre(intervenants, filtre, COLONNES_INTERVENANTS.map((c) => ({ ...c, valeur: valeurs[c.id] })));
+  const visibles = appliquerFiltre(intervenants, filtre, colonnes.map((c) => ({ ...c, valeur: valeurs[c.id] ?? (() => null) })));
   const confirme = intervenants.find((i) => i.id === enregistre);
 
   return (
@@ -60,60 +63,30 @@ export default async function PageIntervenants({ searchParams }: PageProps<"/int
           Aucun intervenant pour l’instant.{direction && " Ajoutez les professeurs avant de construire le planning."}
         </p>
       ) : (
-        <>
-          <Suspense>
-            <BarreFiltres colonnes={COLONNES_INTERVENANTS} quoi="les intervenants" />
-          </Suspense>
-          {visibles.length === 0 ? (
-            <p className="text-sm">Aucun intervenant ne correspond à ces filtres.</p>
-          ) : (
-            <div className="panneau overflow-x-auto">
-              <table className="tableau">
-                <thead>
-                  <tr>
-                    <th>Nom</th>
-                    <th className="hidden sm:table-cell">Statut</th>
-                    <th className="text-right">Cours</th>
-                    {direction && <th className="text-right">Tarif</th>}
-                    <th className="hidden sm:table-cell">Contact</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibles.map((i) => (
-                    <tr key={i.id} className={i.actif ? "" : "text-doux"}>
-                      <td className="font-medium">
-                        {direction ? (
-                          <Link href={`/intervenants/${i.id}`} className="lien">
-                            {i.prenom} {i.nom}
-                          </Link>
-                        ) : (
-                          `${i.prenom} ${i.nom}`
-                        )}
-                        {!i.actif && <span className="ml-2 rounded bg-alerte-fond px-1.5 text-xs text-alerte-texte">inactif</span>}
-                      </td>
-                      <td className="hidden sm:table-cell">{STATUTS[i.statut]}</td>
-                      <td className="text-right tabular-nums">{i.coursSaison}</td>
-                      {direction && (
-                        <td className="text-right whitespace-nowrap tabular-nums">
-                          {formaterEuros(i.tarifCentimes)} <span className="text-doux">{MODES_REMUNERATION[i.modeRemuneration]}</span>
-                        </td>
-                      )}
-                      <td className="hidden sm:table-cell">
-                        {i.email ? (
-                          <a href={`mailto:${i.email}`} className="lien">
-                            {i.email}
-                          </a>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
+        <Suspense>
+          <TableauListe
+            liste="intervenants"
+            quoi="les intervenants"
+            legende="Intervenants"
+            colonnes={colonnes}
+            disposition={disposition}
+            lien="nom"
+            vide="Aucun intervenant ne correspond à ces filtres."
+            lignes={visibles.map((i) => ({
+              id: i.id,
+              href: direction ? `/intervenants/${i.id}` : undefined,
+              attenue: !i.actif,
+              marque: i.actif ? undefined : "inactif",
+              cellules: {
+                nom: `${i.prenom} ${i.nom}`,
+                statut: STATUTS[i.statut],
+                cours: i.coursSaison,
+                tarif: `${formaterEuros(i.tarifCentimes)} ${MODES_REMUNERATION[i.modeRemuneration]}`,
+                email: i.email,
+              },
+            }))}
+          />
+        </Suspense>
       )}
     </section>
   );
