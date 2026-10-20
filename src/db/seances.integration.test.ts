@@ -1,15 +1,18 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { datesDuCours } from "../domaine/planning/seances";
+import { ajouterJours } from "../domaine/planning/semaine";
 import { creerCours, lireCours, modifierCours, supprimerCours } from "./cours";
 import { avecEcole } from "./index";
 import {
   ajouterFermeture,
   annulerSeance,
+  deplacerSeance,
   changerIntervenant,
   enregistrerAppel,
   lireAppel,
   listerFermetures,
+  seancesDeLaSemaine,
   seancesDuCours,
   seancesDuJour,
   supprimerFermeture,
@@ -266,5 +269,64 @@ describe("récurrences (#90)", () => {
     expect(await datesDe(stage)).toEqual(["2026-11-21"]);
 
     for (const id of [quinzaine, periode, stage]) expect((await avecEcole(ecole, (tx) => supprimerCours(tx, id))).ok).toBe(true);
+  });
+});
+
+describe("planning daté : déplacer une séance (#90)", () => {
+  let lundi: string;
+  const liste = async () =>
+    (
+      await admin`SELECT id, date::text AS date, date_prevue::text AS prevue, to_char(heure_debut, 'HH24:MI') AS heure, intervenant_id AS prof
+        FROM seance WHERE cours_id = ${lundi} ORDER BY date`
+    ).map((r) => ({ id: r.id as string, date: r.date as string, prevue: r.prevue as string | null, heure: r.heure as string | null, prof: r.prof as string }));
+  const deplacer = (id: string, creneau: { date: string; heureDebut: string; dureeMinutes: number }, portee: "seance" | "suivantes") =>
+    avecEcole(ecole, async (tx) => {
+      const r = await deplacerSeance(tx, id, creneau, portee);
+      if (r.statut === "ok") await synchroniserSeances(tx, r.saisonId, AUJOURDHUI, r.depuis ?? undefined);
+      return r;
+    });
+
+  beforeAll(async () => {
+    const modele = await admin`SELECT discipline_id, salle_id FROM cours WHERE id = ${mercredi}`;
+    [{ id: lundi }] = await admin`INSERT INTO cours (ecole_id, saison_id, discipline_id, salle_id, intervenant_id, jour_semaine, heure_debut, duree_minutes)
+      VALUES (${ecole}, ${saison}, ${modele[0].discipline_id}, ${modele[0].salle_id}, ${camille}, 1, '10:00', 60) RETURNING id`;
+    await synchroniser();
+  });
+
+  it("cette séance seulement : elle change de jour et d'heure, sans être recréée à sa date d'origine", async () => {
+    const avant = await liste();
+    const cible = avant[1];
+    expect(await deplacer(cible.id, { date: "2026-10-27", heureDebut: "11:30", dureeMinutes: 60 }, "seance")).toMatchObject({ statut: "ok" });
+    await synchroniser();
+    const apres = await liste();
+    expect(apres).toHaveLength(avant.length);
+    expect(apres.find((x) => x.id === cible.id)).toMatchObject({ date: "2026-10-27", prevue: cible.date, heure: "11:30" });
+    const semaine = await avecEcole(ecole, (tx) => seancesDeLaSemaine(tx, "2026-10-26"));
+    expect(semaine.find((x) => x.id === cible.id)).toMatchObject({ heureDebut: "11:30", deplacee: true });
+  });
+
+  it("refuse une date déjà prise par le cours, hors saison, ou une séance annulée", async () => {
+    const [a, b] = await liste();
+    expect(await deplacer(a.id, { date: b.date, heureDebut: "10:00", dureeMinutes: 60 }, "seance")).toEqual({ statut: "refus", message: "Ce cours a déjà une séance ce jour-là." });
+    expect(await deplacer(a.id, { date: "2027-01-04", heureDebut: "10:00", dureeMinutes: 60 }, "seance")).toEqual({ statut: "refus", message: "Cette date est en dehors de la saison." });
+    await avecEcole(ecole, (tx) => annulerSeance(tx, a.id));
+    expect((await deplacer(a.id, { date: "2026-10-20", heureDebut: "10:00", dureeMinutes: 60 }, "seance")).statut).toBe("refus");
+  });
+
+  it("cette séance et les suivantes : le cours change, les précédentes gardent leur heure, le remplaçant reste", async () => {
+    const avant = await liste();
+    const [, , pivot, ensuite] = avant;
+    await avecEcole(ecole, (tx) => changerIntervenant(tx, ensuite.id, ines));
+    const r = await deplacer(pivot.id, { date: ajouterJours(pivot.date, 1), heureDebut: "18:30", dureeMinutes: 90 }, "suivantes");
+    expect(r).toMatchObject({ statut: "ok" });
+    const [c] = await admin`SELECT jour_semaine, to_char(heure_debut, 'HH24:MI') AS h, duree_minutes FROM cours WHERE id = ${lundi}`;
+    expect(c).toMatchObject({ jour_semaine: 2, h: "18:30", duree_minutes: 90 });
+    const apres = await liste();
+    // Avant le pivot : toujours le lundi, heure d'origine figée (sauf la séance déjà déplacée).
+    for (const x of apres.filter((x) => (x.prevue ?? x.date) < pivot.date)) expect(x.heure === "10:00" || x.heure === "11:30").toBe(true);
+    // À partir du pivot : le mardi, à l'heure du cours ; le remplaçant de la séance suivante est gardé.
+    const suivantes = apres.filter((x) => x.date > pivot.date);
+    expect(suivantes.every((x) => new Date(`${x.date}T00:00:00Z`).getUTCDay() === 2 && x.heure === null)).toBe(true);
+    expect(apres.find((x) => x.id === ensuite.id)?.prof).toBe(ines);
   });
 });

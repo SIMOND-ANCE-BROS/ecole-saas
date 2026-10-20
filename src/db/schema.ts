@@ -477,6 +477,11 @@ export const seance = pgTable(
     ecoleId: ecoleId(),
     coursId: uuid("cours_id").notNull(),
     date: date("date").notNull(),
+    // Séance déplacée (#90) : sa date d'origine, qui sert de repère à la génération des séances.
+    datePrevue: date("date_prevue"),
+    // Heure et durée propres à la séance (déplacée, ou figée avant un changement de créneau) ; NULL : celles du cours.
+    heureDebut: time("heure_debut"),
+    dureeMinutes: integer("duree_minutes"),
     statut: statutSeance("statut").notNull().default("prevue"),
     intervenantId: uuid("intervenant_id").notNull(), // remplaçant possible
   },

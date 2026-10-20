@@ -3,6 +3,7 @@ import { and, asc, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { SeanceAgenda } from "../domaine/planning/ical";
 import type { Tx } from "./index";
+import { dureeEffective, heureEffective } from "./seances";
 import { cours, discipline, ecole, intervenant, salle, seance, site } from "./schema";
 
 /**
@@ -69,8 +70,8 @@ export async function lireAgenda(tx: Tx, jeton: string, depuis: string): Promise
       id: seance.id,
       date: seance.date,
       statut: seance.statut,
-      heureDebut: cours.heureDebut,
-      dureeMinutes: cours.dureeMinutes,
+      heureDebut: heureEffective,
+      dureeMinutes: dureeEffective,
       discipline: discipline.nom,
       niveau: cours.niveau,
       salle: salle.nom,
@@ -83,7 +84,7 @@ export async function lireAgenda(tx: Tx, jeton: string, depuis: string): Promise
     .innerJoin(salle, eq(salle.id, cours.salleId))
     .innerJoin(site, eq(site.id, salle.siteId))
     .where(and(eq(seance.intervenantId, i.id), gte(seance.date, depuis)))
-    .orderBy(asc(seance.date), asc(cours.heureDebut));
+    .orderBy(asc(seance.date), heureEffective);
 
   return {
     nom: `Cours de ${i.prenom}, ${i.ecole}`,

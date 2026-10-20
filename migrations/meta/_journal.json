@@ -162,6 +162,13 @@
       "when": 1792525027058,
       "tag": "0022_recurrence_cours",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792525884226,
+      "tag": "0023_seance_deplacee",
+      "breakpoints": true
     }
   ]
 }
