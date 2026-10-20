@@ -220,3 +220,41 @@ export async function supprimerCours(tx: Tx, id: string): Promise<Resultat> {
   await tx.delete(cours).where(eq(cours.id, id));
   return { ok: true, id };
 }
+
+export const creneauValide = z.object({
+  jourSemaine: z.int().min(1).max(7),
+  heureDebut: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM"),
+  dureeMinutes: z.int().min(5).max(600),
+});
+
+export type ResultatDeplacement =
+  | { statut: "ok"; id: string }
+  | { statut: "confirmer"; inscrits: number }
+  | { statut: "refus"; message: string };
+
+/**
+ * Déplace (jour, heure) ou étire (durée) un cours depuis la vue agenda. Si des
+ * élèves y sont inscrits (actifs ou à l'essai), il faut d'abord confirmer.
+ * Les séances à venir sont recalculées par l'appelant (synchroniserSeances).
+ */
+export async function deplacerCours(tx: Tx, id: string, creneau: z.input<typeof creneauValide>, confirme: boolean): Promise<ResultatDeplacement> {
+  const c = creneauValide.safeParse(creneau);
+  if (!c.success) return { statut: "refus", message: c.error.issues[0].message };
+  const existant = await lireCours(tx, id);
+  if (!existant) return { statut: "refus", message: "Ce cours n’existe plus." };
+  if (existant.type === "stage") return { statut: "refus", message: "Un stage n’a pas de jour de semaine : modifiez-le depuis sa fiche." };
+  if (versMinutesFin(c.data) > 24 * 60) return { statut: "refus", message: "Le cours finirait après minuit." };
+  if (!confirme) {
+    const [{ n }] = await tx
+      .select({ n: sql<number>`count(DISTINCT ${inscriptionCours.danseurId})::int` })
+      .from(inscriptionCours)
+      .innerJoin(sql`inscription i`, sql`i.id = ${inscriptionCours.inscriptionId} AND i.statut IN ('active', 'essai')`)
+      .where(eq(inscriptionCours.coursId, id));
+    if (n > 0) return { statut: "confirmer", inscrits: n };
+  }
+  await tx.update(cours).set(c.data).where(eq(cours.id, id));
+  return { statut: "ok", id };
+}
+
+const versMinutesFin = (c: { heureDebut: string; dureeMinutes: number }) =>
+  Number(c.heureDebut.slice(0, 2)) * 60 + Number(c.heureDebut.slice(3, 5)) + c.dureeMinutes;
