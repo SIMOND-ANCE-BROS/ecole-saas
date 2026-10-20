@@ -1,7 +1,10 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { avecEcole } from "@/db";
+import { creerJetonAgenda, revoquerJetonAgenda } from "@/db/agenda";
 import { creerIntervenant, modifierIntervenant, saisieIntervenantValide } from "@/db/intervenants";
 import { lireEuros } from "@/lib/montant";
 import { exigerRole } from "@/lib/session";
@@ -45,4 +48,28 @@ export async function enregistrerIntervenant(id: string | null, etat: EtatFormul
   );
   if (resultat === null) return refus({ formulaire: "Cet intervenant n’existe plus." });
   redirect(`/intervenants?enregistre=${resultat}`);
+}
+
+/** Adresse publique de l'application, prise sur la requête (derrière un proxy : en-têtes X-Forwarded-*). */
+async function origine(): Promise<string> {
+  const h = await headers();
+  const hote = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const protocole = h.get("x-forwarded-proto") ?? (hote.startsWith("localhost") ? "http" : "https");
+  return `${protocole}://${hote}`;
+}
+
+/** Crée ou remplace le lien d'abonnement à l'agenda ; l'adresse n'est montrée qu'une fois. */
+export async function creerLienAgenda(intervenantId: string): Promise<{ url: string } | { message: string }> {
+  const { ecoleId } = await exigerRole("direction");
+  const jeton = await avecEcole(ecoleId, (tx) => creerJetonAgenda(tx, intervenantId));
+  if (!jeton) return { message: "Cet intervenant n’existe plus." };
+  revalidatePath(`/intervenants/${intervenantId}`);
+  return { url: `${await origine()}/agenda/${ecoleId}/${jeton}.ics` };
+}
+
+export async function revoquerLienAgenda(intervenantId: string): Promise<{ message: string | null }> {
+  const { ecoleId } = await exigerRole("direction");
+  const ok = await avecEcole(ecoleId, (tx) => revoquerJetonAgenda(tx, intervenantId));
+  revalidatePath(`/intervenants/${intervenantId}`);
+  return { message: ok ? null : "Cet intervenant n’existe plus." };
 }
