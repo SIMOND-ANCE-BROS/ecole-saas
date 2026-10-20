@@ -27,7 +27,7 @@ export default async function LayoutEspace({ children }: LayoutProps<"/">) {
       entete={
         // useSearchParams exige une frontière Suspense.
         <Suspense>
-          <RechercheGlobale />
+          {role !== "professeur" && <RechercheGlobale />}
         </Suspense>
       }
       volet={
@@ -38,7 +38,7 @@ export default async function LayoutEspace({ children }: LayoutProps<"/">) {
             </span>
             <span className="text-sm leading-tight font-semibold">{nom}</span>
           </div>
-          <Navigation />
+          <Navigation role={role} />
           <div className="mt-auto flex flex-col gap-1 border-t border-bordure pt-3 text-sm">
             <span className="px-1 font-medium">{user.name}</span>
             <span className="px-1 text-xs text-doux">{LIBELLE_ROLE[role]}</span>
@@ -58,3 +58,4 @@ export default async function LayoutEspace({ children }: LayoutProps<"/">) {
     </Cadre>
   );
 }
+

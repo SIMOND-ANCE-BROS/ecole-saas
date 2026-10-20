@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useTransition } from "react";
 
 const LIENS = [
   { href: "/", libelle: "Accueil" },
@@ -12,12 +12,12 @@ const LIENS = [
 ];
 
 /** Liens de la barre latérale ; la page courante est signalée (aria-current). */
-export function Navigation() {
+export function Navigation({ role }: { role: "direction" | "accueil" | "professeur" }) {
   const chemin = usePathname();
   const actif = (href: string) => (href === "/" ? chemin === "/" : chemin.startsWith(href));
   return (
     <nav aria-label="Navigation principale" className="flex flex-col gap-0.5">
-      {LIENS.map((l) => (
+      {LIENS.filter((l) => (l.href !== "/intervenants" || role === "direction") && (l.href !== "/personnes" || role !== "professeur")).map((l) => (
         <Link
           key={l.href}
           href={l.href}
@@ -42,7 +42,14 @@ export function RechercheGlobale() {
   const chemin = usePathname();
   const parametres = useSearchParams();
   const surPersonnes = chemin === "/personnes";
-  const [valeur, setValeur] = useState(surPersonnes ? (parametres.get("q") ?? "") : "");
+  const recherche = surPersonnes ? (parametres.get("q") ?? "") : "";
+  const [enCours, naviguer] = useTransition();
+
+  // L’URL redevient la référence une fois la navigation terminée, y compris
+  // après Précédent/Suivant. Ne pas écraser la frappe pendant une transition.
+  useEffect(() => {
+    if (!enCours && champ.current && champ.current.value.trim() !== recherche) champ.current.value = recherche;
+  }, [recherche, chemin, enCours]);
 
   useEffect(() => {
     const raccourci = (e: KeyboardEvent) => {
@@ -58,8 +65,10 @@ export function RechercheGlobale() {
 
   const aller = (q: string, remplacer: boolean) => {
     const cible = q.trim() ? `/personnes?q=${encodeURIComponent(q.trim())}` : "/personnes";
-    if (remplacer) router.replace(cible);
-    else router.push(cible);
+    naviguer(() => {
+      if (remplacer) router.replace(cible, { scroll: false });
+      else router.push(cible);
+    });
   };
 
   return (
@@ -68,7 +77,7 @@ export function RechercheGlobale() {
       className="flex w-full max-w-xl items-center gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        aller(valeur, surPersonnes);
+        aller(champ.current?.value ?? "", surPersonnes);
       }}
     >
       <label htmlFor="recherche-globale" className="sr-only">
@@ -81,14 +90,14 @@ export function RechercheGlobale() {
         autoComplete="off"
         placeholder="Rechercher : nom, prénom, téléphone…"
         className="champ w-full"
-        value={valeur}
+        defaultValue={recherche}
+        aria-describedby="etat-recherche"
         autoFocus={surPersonnes}
         onChange={(e) => {
-          setValeur(e.target.value);
           if (surPersonnes) aller(e.target.value, true);
         }}
         onKeyDown={(e) => {
-          if (e.key === "ArrowDown") {
+          if (e.key === "ArrowDown" && !enCours) {
             const premier = document.querySelector<HTMLAnchorElement>("#resultats a[data-resultat]");
             if (premier) {
               e.preventDefault();
@@ -97,7 +106,9 @@ export function RechercheGlobale() {
           }
         }}
       />
+      <span id="etat-recherche" role="status" className="shrink-0 text-xs text-doux">{enCours ? "Recherche…" : ""}</span>
       <kbd className="hidden shrink-0 rounded border border-bordure px-1.5 py-0.5 text-xs text-doux sm:inline">Ctrl K</kbd>
     </form>
   );
 }
+

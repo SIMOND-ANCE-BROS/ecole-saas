@@ -49,9 +49,9 @@ export default async function Accueil() {
           <p className="text-sm text-doux">Saison {saison.libelle}</p>
         </div>
         <div className="flex gap-2">
-          <Link href="/personnes" className="bouton-principal">
+          {role !== "professeur" && <Link href="/personnes" className="bouton-principal">
             Inscrire quelqu’un
-          </Link>
+          </Link>}
           <Link href="/planning" className="bouton-secondaire">
             Voir le planning
           </Link>
@@ -81,6 +81,9 @@ export default async function Accueil() {
         <h2 id="jour" className="text-base font-semibold">
           Séances du jour
         </h2>
+        {duJour.length > 0 && <p className="text-sm text-doux">
+          {duJour.filter((s) => s.statut !== "annulee" && !s.appelFait).length} appel(s) à faire · {duJour.filter((s) => s.statut !== "annulee" && s.appelFait).length} fait(s) · {duJour.filter((s) => s.statut === "annulee").length} séance(s) annulée(s)
+        </p>}
         {duJour.length === 0 ? (
           <p className="text-sm text-doux">Pas de cours aujourd’hui.</p>
         ) : (
@@ -152,18 +155,19 @@ export default async function Accueil() {
                   <tr>
                     <th>Cours</th>
                     <th>Créneau</th>
-                    <th className="text-right">Places</th>
+                    <th className="text-right">Occupation</th>
                   </tr>
                 </thead>
                 <tbody>
                   {presqueComplets.map((c) => (
                     <tr key={c.id}>
-                      <td>{c.discipline}</td>
+                      <td><Link className="lien" href={`/planning/cours/${c.id}`}>{c.discipline}</Link></td>
                       <td>
                         {c.jourSemaine ? JOURS[c.jourSemaine] : "stage"} {c.heureDebut}
                       </td>
                       <td className="text-right tabular-nums">
                         {c.inscrits} / {c.capaciteMax}
+                        <span className="block text-xs text-doux">{c.inscrits >= (c.capaciteMax ?? 0) ? "Complet" : `${(c.capaciteMax ?? 0) - c.inscrits} place(s) restante(s)`}</span>
                       </td>
                     </tr>
                   ))}

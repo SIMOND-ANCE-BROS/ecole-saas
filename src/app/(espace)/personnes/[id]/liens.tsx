@@ -48,7 +48,7 @@ export function LiensPersonne({ liens, prenom }: { liens: LienFiche[]; prenom: s
                   {l.autre.telephone}
                 </a>
               )}
-              <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span className="flex w-full flex-col items-start gap-2">
                 <label className="flex items-center gap-1.5" title={`${de} paie les cours de ${vers}`}>
                   <input
                     type="checkbox"
@@ -56,7 +56,7 @@ export function LiensPersonne({ liens, prenom }: { liens: LienFiche[]; prenom: s
                     disabled={enCours}
                     onChange={(e) => agir(() => changerDrapeaux(l.id, l.type, { paiePour: e.target.checked, contactUrgence: l.contactUrgence }))}
                   />
-                  {l.sens === "vers" ? "paie ses cours" : `${prenom} paie`}
+                  {de} paie les cours de {vers}
                 </label>
                 <label className="flex items-center gap-1.5" title={`${de} est à prévenir en cas d’urgence pour ${vers}`}>
                   <input
@@ -65,7 +65,7 @@ export function LiensPersonne({ liens, prenom }: { liens: LienFiche[]; prenom: s
                     disabled={enCours}
                     onChange={(e) => agir(() => changerDrapeaux(l.id, l.type, { paiePour: l.paiePour, contactUrgence: e.target.checked }))}
                   />
-                  {l.sens === "vers" ? "à prévenir" : `${prenom} à prévenir`}
+                  {de} est à prévenir en cas d’urgence pour {vers}
                 </label>
                 {aRetirer === l.id ? (
                   <span className="flex items-center gap-2">
@@ -94,3 +94,4 @@ export function LiensPersonne({ liens, prenom }: { liens: LienFiche[]; prenom: s
     </div>
   );
 }
+

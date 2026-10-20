@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { FichePersonne } from "@/db/personnes";
 import { creer, modifier, type Refus } from "./actions";
 import { RELATIONS, type Relation } from "./relations";
@@ -33,6 +33,10 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
   const [contactUrgence, setContactUrgence] = useState(lienAvec ? RELATIONS[lienAvec.relation].type === "representant_legal" : false);
   const [refus, setRefus] = useState<Refus | null>(null);
   const [envoi, demarrer] = useTransition();
+  const formulaire = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (refus) formulaire.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
+  }, [refus]);
   const pro = v.type === "professionnel";
   const maj = (champ: keyof typeof v) => (e: { target: { value: string } }) => setV({ ...v, [champ]: e.target.value });
 
@@ -78,6 +82,7 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
 
   return (
     <form
+      ref={formulaire}
       className="flex w-full min-w-0 flex-col gap-5"
       noValidate
       onSubmit={(e) => {
@@ -86,7 +91,7 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
       }}
     >
       <fieldset className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        <legend className="mb-2 text-sm font-semibold">Personne</legend>
+        <legend className="px-1 text-sm font-semibold">Personne</legend>
         {(
           [
             ["particulier", "Particulier"],
@@ -100,6 +105,8 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
         ))}
       </fieldset>
 
+      <fieldset className="panneau p-4">
+        <legend className="px-1 text-sm font-semibold">Identité</legend>
       {pro ? (
         <div className="grid gap-3 sm:grid-cols-2">
           {champ("raisonSociale", "Raison sociale", { autoFocus: !personne })}
@@ -110,15 +117,17 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
         <div className="grid gap-3 sm:grid-cols-3">
           {champ("prenom", "Prénom", { autoFocus: !personne })}
           {champ("nom", "Nom")}
-          {champ("dateNaissance", "Date de naissance", { type: "date" })}
+          {champ("dateNaissance", "Date de naissance (facultative)", { type: "date" })}
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      </fieldset>
+      <fieldset className="panneau grid gap-3 p-4 sm:grid-cols-2">
+        <legend className="px-1 text-sm font-semibold">Coordonnées (facultatives)</legend>
         {champ("telephone", "Téléphone", { type: "tel", inputMode: "tel" })}
         {champ("email", "E-mail", { type: "email" })}
         <div className="sm:col-span-2">{champ("adresse", "Adresse (pour les factures et attestations)")}</div>
-      </div>
+      </fieldset>
 
       {!pro && (
         <div className="flex flex-col gap-1">
@@ -159,7 +168,7 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
       )}
 
       {refus?.doublons ? (
-        <div role="alert" className="flex flex-col gap-2 rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
+        <div tabIndex={-1} role="alert" className="flex flex-col gap-2 rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
           <p className="font-medium">{refus.message} Vérifiez avant de créer un doublon :</p>
           <ul className="flex flex-col gap-0.5">
             {refus.doublons.map((d) => (
@@ -177,13 +186,13 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
         </div>
       ) : (
         refus && (
-          <p role="alert" className="text-sm text-erreur">
+          <p tabIndex={-1} role="alert" className="text-sm text-erreur">
             {refus.message}
           </p>
         )
       )}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2 border-t border-bordure pt-4">
         <button type="submit" className="bouton-principal" disabled={envoi}>
           {envoi ? "Enregistrement…" : personne ? "Enregistrer les modifications" : "Créer la personne"}
         </button>
