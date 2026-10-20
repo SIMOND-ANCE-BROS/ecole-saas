@@ -45,5 +45,5 @@ export async function inscrire(saisie: SaisieFormulaire): Promise<{ message: str
     return enregistrerInscription(tx, payeurId, saison.id, reste);
   });
   if (!resultat.ok) return { message: resultat.message };
-  redirect(`/personnes/${payeurId}?inscription=enregistree`);
+  redirect(`/eleves/${reste.danseurIds[0]}?inscription=enregistree`);
 }

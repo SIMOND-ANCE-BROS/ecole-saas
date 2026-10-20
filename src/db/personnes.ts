@@ -82,26 +82,35 @@ export type ResultatPersonne = {
  * Recherche par nom, prénom, raison sociale, e-mail ou téléphone (chiffres
  * seuls, espaces ignorés). Insensible aux accents et à la casse.
  */
-export async function rechercherPersonnes(tx: Tx, saisie: string): Promise<ResultatPersonne[]> {
+/**
+ * Condition « la personne `alias` correspond à la saisie » : nom, prénom (dans
+ * les deux ordres), raison sociale, e-mail, téléphone (chiffres seuls), sans
+ * accents ni majuscules ; null si la saisie est trop courte.
+ */
+export function conditionRecherche(saisie: string, alias = "personne"): SQL | null {
   const texte = normaliser(saisie);
-  if (texte.length < LONGUEUR_MINIMALE) return [];
+  if (texte.length < LONGUEUR_MINIMALE) return null;
   const motif = contient(texte);
+  const col = (c: string) => sql`translate(lower(coalesce(${sql.identifier(alias)}.${sql.identifier(c)}, '')), ${ACCENTS}, ${SANS_ACCENTS})`;
   const conditions: SQL[] = [
-    sql`${normaliserColonne(personne.nom)} LIKE ${motif}`,
-    sql`${normaliserColonne(personne.prenom)} LIKE ${motif}`,
-    sql`${normaliserColonne(personne.raisonSociale)} LIKE ${motif}`,
-    sql`(${normaliserColonne(personne.prenom)} || ' ' || ${normaliserColonne(personne.nom)}) LIKE ${motif}`,
-    sql`(${normaliserColonne(personne.nom)} || ' ' || ${normaliserColonne(personne.prenom)}) LIKE ${motif}`,
-    sql`lower(coalesce(${personne.email}, '')) LIKE ${motif}`,
+    sql`${col("nom")} LIKE ${motif}`,
+    sql`${col("prenom")} LIKE ${motif}`,
+    sql`${col("raison_sociale")} LIKE ${motif}`,
+    sql`(${col("prenom")} || ' ' || ${col("nom")}) LIKE ${motif}`,
+    sql`(${col("nom")} || ' ' || ${col("prenom")}) LIKE ${motif}`,
+    sql`lower(coalesce(${sql.identifier(alias)}.email, '')) LIKE ${motif}`,
   ];
-  if (chiffres(texte).length >= 4) conditions.push(sql`${telephoneEnChiffres} LIKE ${contient(chiffres(texte))}`);
+  if (chiffres(texte).length >= 4) {
+    conditions.push(sql`regexp_replace(coalesce(${sql.identifier(alias)}.telephone, ''), '[^0-9]', '', 'g') LIKE ${contient(chiffres(texte))}`);
+  }
+  return or(...conditions) ?? null;
+}
 
-  return tx
-    .select(colonnesResultat)
-    .from(personne)
-    .where(or(...conditions))
-    .orderBy(asc(personne.nom), asc(personne.prenom))
-    .limit(RESULTATS_MAX);
+/** Recherche dans toutes les personnes de l'école (voir conditionRecherche). */
+export async function rechercherPersonnes(tx: Tx, saisie: string): Promise<ResultatPersonne[]> {
+  const condition = conditionRecherche(saisie);
+  if (!condition) return [];
+  return tx.select(colonnesResultat).from(personne).where(condition).orderBy(asc(personne.nom), asc(personne.prenom)).limit(RESULTATS_MAX);
 }
 
 /** Toutes les personnes de l'école, par nom (sans recherche saisie). */
@@ -246,7 +255,7 @@ export async function lirePersonne(tx: Tx, id: string): Promise<FichePersonne | 
 }
 
 /**
- * Danseurs qu'un payeur peut inscrire : lui-même s'il est un particulier, et
+ * Danseurs qu'un payeur peut inscrire : lui-même s'il est élève, et
  * les personnes pour qui il paie (lien « paie pour »). Par prénom.
  */
 export async function danseursPayables(
@@ -259,7 +268,8 @@ export async function danseursPayables(
     .from(personne)
     .where(
       or(
-        and(eq(personne.id, payeurId), eq(personne.type, "particulier")),
+        // Le payeur lui-même seulement s'il est élève : un parent qui paie n'est pas proposé à l'inscription.
+        and(eq(personne.id, payeurId), eq(personne.eleve, true)),
         sql`EXISTS (SELECT 1 FROM lien l WHERE l.personne_id = ${payeurId} AND l.lie_a_id = ${idCourant} AND l.paie_pour)`,
       ),
     )
@@ -337,7 +347,7 @@ const valeursPersonne = (f: SaisiePersonne) => ({
 });
 
 /** Personnes déjà connues avec le même téléphone, le même e-mail, les mêmes nom et prénom ou la même raison sociale. */
-async function doublonsProbables(tx: Tx, f: SaisiePersonne): Promise<Doublon[]> {
+export async function doublonsProbables(tx: Tx, f: SaisiePersonne): Promise<Doublon[]> {
   const conditions: SQL[] = [];
   if (f.telephone && chiffres(f.telephone).length >= 6) conditions.push(sql`${telephoneEnChiffres} = ${chiffres(f.telephone)}`);
   if (f.email) conditions.push(sql`lower(${personne.email}) = lower(${f.email})`);
