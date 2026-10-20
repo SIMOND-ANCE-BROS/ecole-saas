@@ -3,19 +3,18 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { FichePersonne } from "@/db/personnes";
-import { creer, modifier, type Refus } from "./actions";
-import { RELATIONS, type Relation } from "./relations";
+import { creerContact, modifierIdentite, type Refus } from "./actions";
 
 type Props = {
-  /** Personne modifiée ; null pour une création. */
+  /** Personne modifiée ; null pour la création d'un contact (un élève se crée avec le formulaire guidé). */
   personne: Omit<FichePersonne, "liens" | "cours" | "documents"> | null;
-  /** Création depuis une fiche : la nouvelle personne y sera liée. */
-  lienAvec?: { ficheId: string; ficheNom: string; relation: Relation };
-  /** Nom de famille proposé (enfant ajouté depuis la fiche d'un parent). */
+  /** Fiche d'où l'on vient : élève (naissance et notes) ou contact. */
+  pour: "eleves" | "contacts";
   nomPropose?: string;
 };
 
-export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
+/** Identité et coordonnées d'un élève ou d'un contact. */
+export function FormulairePersonne({ personne, pour, nomPropose }: Props) {
   const [v, setV] = useState({
     type: personne?.type ?? "particulier",
     nom: personne?.type === "professionnel" ? (personne.nom === personne.raisonSociale ? "" : personne.nom) : (personne?.nom ?? nomPropose ?? ""),
@@ -28,9 +27,6 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
     adresse: personne?.adresse ?? "",
     notes: personne?.notes ?? "",
   });
-  const [relation, setRelation] = useState<Relation>(lienAvec?.relation ?? "representant");
-  const [paiePour, setPaiePour] = useState(lienAvec ? RELATIONS[lienAvec.relation].type === "representant_legal" : false);
-  const [contactUrgence, setContactUrgence] = useState(lienAvec ? RELATIONS[lienAvec.relation].type === "representant_legal" : false);
   const [refus, setRefus] = useState<Refus | null>(null);
   const [envoi, demarrer] = useTransition();
   const formulaire = useRef<HTMLFormElement>(null);
@@ -46,16 +42,9 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
     siren: pro ? v.siren : "",
     dateNaissance: pro ? "" : v.dateNaissance,
   };
-  const nouvelle = pro ? v.raisonSociale || "La nouvelle personne" : [v.prenom, v.nom].filter(Boolean).join(" ") || "La nouvelle personne";
-  const [de, vers] = lienAvec && RELATIONS[relation].de === "fiche" ? [lienAvec.ficheNom, nouvelle] : [nouvelle, lienAvec?.ficheNom];
+  const eleve = pour === "eleves";
   const envoyer = (confirme: boolean) =>
-    demarrer(async () =>
-      setRefus(
-        personne
-          ? await modifier(personne.id, saisie)
-          : await creer(saisie, confirme, lienAvec ? { ficheId: lienAvec.ficheId, relation, paiePour, contactUrgence } : null),
-      ),
-    );
+    demarrer(async () => setRefus(personne ? await modifierIdentite(personne.id, saisie, pour) : await creerContact(saisie, confirme)));
 
   const champ = (nom: keyof typeof v, libelle: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
     <div className="flex flex-col gap-1">
@@ -90,8 +79,8 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
         envoyer(false);
       }}
     >
-      <fieldset className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        <legend className="px-1 text-sm font-semibold">Personne</legend>
+      {!eleve && <fieldset className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        <legend className="px-1 text-sm font-semibold">Contact</legend>
         {(
           [
             ["particulier", "Particulier"],
@@ -103,7 +92,7 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
             {libelle}
           </label>
         ))}
-      </fieldset>
+      </fieldset>}
 
       <fieldset className="panneau p-4">
         <legend className="px-1 text-sm font-semibold">Identité</legend>
@@ -114,10 +103,10 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
           <div className="sm:col-span-2">{champ("nom", "Contact (facultatif)")}</div>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className={`grid gap-3 ${eleve ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
           {champ("prenom", "Prénom", { autoFocus: !personne })}
           {champ("nom", "Nom")}
-          {champ("dateNaissance", "Date de naissance (facultative)", { type: "date" })}
+          {eleve && champ("dateNaissance", "Date de naissance", { type: "date" })}
         </div>
       )}
 
@@ -129,7 +118,7 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
         <div className="sm:col-span-2">{champ("adresse", "Adresse (pour les factures et attestations)")}</div>
       </fieldset>
 
-      {!pro && (
+      {eleve && (
         <div className="flex flex-col gap-1">
           <label htmlFor="notes" className="text-sm font-medium">
             Notes (santé, allergies, consignes)
@@ -139,41 +128,13 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
         </div>
       )}
 
-      {lienAvec && (
-        <fieldset className="panneau flex flex-col gap-2 p-3 text-sm">
-          <legend className="px-1 text-sm font-semibold">Lien avec {lienAvec.ficheNom}</legend>
-          <label htmlFor="relation">Pour {lienAvec.ficheNom}, c’est :</label>
-          <select id="relation" className="champ" value={relation} onChange={(e) => {
-              // Un représentant légal paie et est prévenu en cas d'urgence, sauf avis contraire.
-              const r = e.target.value as Relation;
-              setRelation(r);
-              setPaiePour(RELATIONS[r].type === "representant_legal");
-              setContactUrgence(RELATIONS[r].type === "representant_legal");
-            }}>
-            {Object.entries(RELATIONS).map(([k, r]) => (
-              <option key={k} value={k}>
-                {r.libelle}
-              </option>
-            ))}
-          </select>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={paiePour} onChange={(e) => setPaiePour(e.target.checked)} />
-            {de} paie les cours de {vers}
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={contactUrgence} onChange={(e) => setContactUrgence(e.target.checked)} />
-            {de} est à prévenir en cas d’urgence pour {vers}
-          </label>
-        </fieldset>
-      )}
-
       {refus?.doublons ? (
         <div tabIndex={-1} role="alert" className="flex flex-col gap-2 rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
           <p className="font-medium">{refus.message} Vérifiez avant de créer un doublon :</p>
           <ul className="flex flex-col gap-0.5">
             {refus.doublons.map((d) => (
               <li key={d.id}>
-                <Link href={`/personnes/${d.id}`} className="lien">
+                <Link href={`/personnes/${d.id}`} className="lien" target="_blank">
                   {d.nom}
                 </Link>
                 {d.telephone && <span className="tabular-nums">, {d.telephone}</span>}
@@ -194,9 +155,9 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
 
       <div className="flex flex-wrap items-center gap-2 border-t border-bordure pt-4">
         <button type="submit" className="bouton-principal" disabled={envoi}>
-          {envoi ? "Enregistrement…" : personne ? "Enregistrer les modifications" : "Créer la personne"}
+          {envoi ? "Enregistrement…" : personne ? "Enregistrer les modifications" : "Créer le contact"}
         </button>
-        <Link href={personne ? `/personnes/${personne.id}` : lienAvec ? `/personnes/${lienAvec.ficheId}` : "/personnes"} className="bouton-secondaire">
+        <Link href={personne ? `/${pour}/${personne.id}` : `/${pour}`} className="bouton-secondaire">
           Annuler
         </Link>
       </div>

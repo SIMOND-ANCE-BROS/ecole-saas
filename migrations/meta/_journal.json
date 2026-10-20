@@ -134,6 +134,13 @@
       "when": 1792482169514,
       "tag": "0018_connexions_agenda",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792486586103,
+      "tag": "0019_personne_eleve",
+      "breakpoints": true
     }
   ]
 }

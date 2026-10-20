@@ -4,11 +4,11 @@ import { notFound } from "next/navigation";
 import { avecEcole } from "@/db";
 import { lirePersonne, nomAffiche } from "@/db/personnes";
 import { exigerRole } from "@/lib/session";
-import { FormulairePersonne } from "../../formulaire";
+import { FormulairePersonne } from "../../../_personnes/formulaire";
 
-export const metadata: Metadata = { title: "Modifier une personne" };
+export const metadata: Metadata = { title: "Modifier un élève" };
 
-export default async function PageModifierPersonne({ params }: PageProps<"/personnes/[id]/modifier">) {
+export default async function PageModifierEleve({ params }: PageProps<"/eleves/[id]/modifier">) {
   const { ecoleId } = await exigerRole("direction", "accueil");
   const { id } = await params;
   const fiche = await avecEcole(ecoleId, (tx) => lirePersonne(tx, id));
@@ -17,13 +17,17 @@ export default async function PageModifierPersonne({ params }: PageProps<"/perso
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <Link href={`/personnes/${fiche.id}`} className="lien">
+        <Link href="/eleves" className="lien">
+          Élèves
+        </Link>
+        <span className="text-doux"> / </span>
+        <Link href={`/eleves/${fiche.id}`} className="lien">
           {nomAffiche(fiche)}
         </Link>
         <span className="text-doux"> / Modifier</span>
       </nav>
       <h1 className="titre-page">Modifier {nomAffiche(fiche)}</h1>
-      <FormulairePersonne personne={fiche} />
+      <FormulairePersonne personne={fiche} pour="eleves" />
     </section>
   );
 }
