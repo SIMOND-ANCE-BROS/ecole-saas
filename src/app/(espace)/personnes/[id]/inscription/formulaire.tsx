@@ -157,18 +157,20 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
               const restantes = c.capaciteMax === null ? null : c.capaciteMax - c.inscrits;
               return (
                 <li key={c.id} className={`border-b border-bordure last:border-0 ${adapte(c) ? "" : "opacity-60"}`}>
-                  <label className="flex items-center gap-2 px-2 py-1 text-sm hover:bg-accent-doux/40">
-                    <input type="checkbox" checked={coursIds.includes(c.id)} onChange={() => setCoursIds(basculer(coursIds, c.id))} />
-                    <span className="w-20 shrink-0">{c.jourSemaine ? JOURS[c.jourSemaine] : "Stage"}</span>
-                    <span className="w-12 shrink-0 tabular-nums">{c.heureDebut}</span>
-                    <span className="font-medium">{c.discipline}</span>
-                    <span className="text-doux">
-                      {c.dureeMinutes} min{c.niveau ? `, ${c.niveau}` : ""}, {c.salle}
-                      {!adapte(c) && ", hors tranche d’âge"}
+                  <label className="flex items-start gap-2 px-2 py-2 text-sm hover:bg-accent-doux/40 sm:items-center sm:py-1">
+                    <input type="checkbox" className="mt-0.5 sm:mt-0" checked={coursIds.includes(c.id)} onChange={() => setCoursIds(basculer(coursIds, c.id))} />
+                    <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+                      <span className="w-20 shrink-0">{c.jourSemaine ? JOURS[c.jourSemaine] : "Stage"}</span>
+                      <span className="w-12 shrink-0 tabular-nums">{c.heureDebut}</span>
+                      <span className="font-medium">{c.discipline}</span>
+                      <span className="basis-full text-doux sm:basis-auto">
+                        {c.dureeMinutes} min{c.niveau ? `, ${c.niveau}` : ""}, {c.salle}
+                        {!adapte(c) && ", hors tranche d’âge"}
+                      </span>
                     </span>
                     {restantes !== null && (
                       <span
-                        className={`ml-auto shrink-0 text-xs tabular-nums ${restantes <= 0 ? "rounded bg-alerte-fond px-1.5 font-medium text-alerte-texte" : "text-doux"}`}
+                        className={`shrink-0 text-xs tabular-nums ${restantes <= 0 ? "rounded bg-alerte-fond px-1.5 font-medium text-alerte-texte" : "text-doux"}`}
                       >
                         {restantes <= 0 ? "complet" : `${restantes} place${restantes > 1 ? "s" : ""}`}
                       </span>
@@ -239,7 +241,7 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
         <button type="submit" className="bouton-principal" disabled={!peutEnregistrer}>
           {envoi ? "Enregistrement…" : "Enregistrer l’inscription"}
         </button>
-        <p className="text-center text-xs text-doux">ou Ctrl + Entrée</p>
+        <p className="hidden text-center text-xs text-doux sm:block">ou Ctrl + Entrée</p>
       </aside>
     </form>
   );

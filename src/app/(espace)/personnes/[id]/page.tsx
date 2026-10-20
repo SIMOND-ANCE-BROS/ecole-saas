@@ -231,7 +231,7 @@ export default async function PagePersonne({ params, searchParams }: PageProps<"
                   <tr>
                     <th scope="col">Danseur</th>
                     <th scope="col">Cours</th>
-                    <th scope="col">Formule</th>
+                    <th scope="col" className="hidden sm:table-cell">Formule</th>
                     <th scope="col" className="text-right">
                       Prix
                     </th>
@@ -242,7 +242,7 @@ export default async function PagePersonne({ params, searchParams }: PageProps<"
                     <tr key={i.id}>
                       <td className="font-medium">{i.danseurs}</td>
                       <td>{i.cours.join(", ")}</td>
-                      <td>
+                      <td className="hidden sm:table-cell">
                         {PUBLIC[i.public]}, {PERIODICITE[i.periodicite]}
                       </td>
                       <td className="text-right tabular-nums">{formaterEuros(i.prixNetCentimes)}</td>
@@ -251,7 +251,10 @@ export default async function PagePersonne({ params, searchParams }: PageProps<"
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={3} className="px-3 py-2 text-right font-medium">
+                    <td colSpan={3} className="hidden px-3 py-2 text-right font-medium sm:table-cell">
+                      Total de la saison
+                    </td>
+                    <td colSpan={2} className="px-3 py-2 text-right font-medium sm:hidden">
                       Total de la saison
                     </td>
                     <td className="px-3 py-2 text-right font-semibold tabular-nums">{formaterEuros(totalPaye)}</td>

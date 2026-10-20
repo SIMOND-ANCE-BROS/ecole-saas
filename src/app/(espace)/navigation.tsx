@@ -22,7 +22,7 @@ export function Navigation() {
           key={l.href}
           href={l.href}
           aria-current={actif(l.href) ? "page" : undefined}
-          className="rounded-md border-l-[3px] border-transparent px-3 py-1.5 text-sm text-doux hover:bg-accent-doux hover:text-texte focus-visible:outline-2 focus-visible:outline-accent aria-[current=page]:border-accent aria-[current=page]:bg-accent-doux aria-[current=page]:font-medium aria-[current=page]:text-texte"
+          className="rounded-md border-l-[3px] border-transparent px-3 py-2.5 text-base md:py-1.5 md:text-sm text-doux hover:bg-accent-doux hover:text-texte focus-visible:outline-2 focus-visible:outline-accent aria-[current=page]:border-accent aria-[current=page]:bg-accent-doux aria-[current=page]:font-medium aria-[current=page]:text-texte"
         >
           {l.libelle}
         </Link>
@@ -79,7 +79,7 @@ export function RechercheGlobale() {
         id="recherche-globale"
         type="search"
         autoComplete="off"
-        placeholder="Rechercher une personne : nom, prénom, téléphone, e-mail…"
+        placeholder="Rechercher : nom, prénom, téléphone…"
         className="champ w-full"
         value={valeur}
         autoFocus={surPersonnes}

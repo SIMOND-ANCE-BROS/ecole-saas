@@ -103,6 +103,15 @@ body {
   }
 }
 
+/* Écran tactile : cibles d'au moins 44 px, sans changer la densité à la souris. */
+@media (pointer: coarse) {
+  .champ,
+  .bouton-principal,
+  .bouton-secondaire {
+    min-height: 2.75rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
