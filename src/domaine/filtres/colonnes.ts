@@ -12,6 +12,12 @@ export const COLONNES_ELEVES: DefColonne[] = [
   { id: "responsables", libelle: "Responsables", type: "texte" },
   { id: "facture", libelle: "Facturé à", type: "texte", siVide: "l’élève" },
   { id: "telephone", libelle: "Téléphone", type: "telephone" },
+  // Proposées dans « Colonnes », masquées par défaut (#89).
+  { id: "naissance", libelle: "Naissance", type: "date", parDefaut: false },
+  { id: "email", libelle: "E-mail", type: "texte", courriel: true, parDefaut: false },
+  { id: "cours", libelle: "Cours suivis", type: "texte", parDefaut: false },
+  { id: "inscription", libelle: "Inscription", type: "texte", parDefaut: false, siVide: "aucune" },
+  { id: "prevenir", libelle: "À prévenir", type: "texte", parDefaut: false },
 ];
 
 export const COLONNES_CONTACTS: DefColonne[] = [

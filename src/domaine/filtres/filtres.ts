@@ -7,7 +7,8 @@
  * peut contenir des points, seuls les deux premiers séparent.
  */
 
-export type TypeColonne = "texte" | "nombre" | "telephone";
+/** `date` : jour `YYYY-MM-DD` (date de naissance…). */
+export type TypeColonne = "texte" | "nombre" | "telephone" | "date";
 
 export type DefColonne = {
   id: string;
@@ -53,6 +54,7 @@ export const OPERATEURS: Record<TypeColonne, Operateur[]> = {
   texte: TEXTE,
   telephone: ["contient", "commence", "vide", "non_vide"],
   nombre: ["egal", "different", "sup", "sup_egal", "inf", "inf_egal", "vide", "non_vide"],
+  date: ["egal", "inf", "sup", "vide", "non_vide"],
 };
 
 export const LIBELLES_OPERATEURS: Record<Operateur, string> = {
@@ -71,7 +73,14 @@ export const LIBELLES_OPERATEURS: Record<Operateur, string> = {
   non_vide: "n’est pas vide",
 };
 
+const LIBELLES_DATE: Partial<Record<Operateur, string>> = { egal: "le", inf: "avant le", sup: "après le" };
+
+/** Libellé d'un opérateur selon le type de la colonne (« avant le » pour une date). */
+export const libelleOperateur = (o: Operateur, type: TypeColonne) => (type === "date" && LIBELLES_DATE[o]) || LIBELLES_OPERATEURS[o];
+
 export const sansValeur = (o: Operateur) => o === "vide" || o === "non_vide";
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Correspondances d'accents, partagées avec la traduction SQL (`translate`). */
 export const ACCENTS = "àâäáãåéèêëíìîïóòôöõúùûüçñÿ";
@@ -99,6 +108,7 @@ export function lireNombre(v: string): number | null {
 export function valeurNormalisee(c: Condition, type: TypeColonne): string | number | null {
   if (sansValeur(c.operateur)) return "";
   if (type === "nombre") return lireNombre(c.valeur);
+  if (type === "date") return DATE.test(c.valeur.trim()) ? c.valeur.trim() : null;
   const v = type === "telephone" ? chiffres(c.valeur) : normaliserTexte(c.valeur);
   return v === "" ? null : v;
 }
@@ -158,6 +168,13 @@ function evaluer(cellule: Cellule, c: Condition, type: TypeColonne): boolean {
         return false;
     }
   }
+  if (type === "date") {
+    const d = typeof cellule === "string" && cellule !== "" ? cellule.slice(0, 10) : null;
+    if (c.operateur === "vide") return d === null;
+    if (c.operateur === "non_vide") return d !== null;
+    if (d === null || typeof v !== "string") return false;
+    return c.operateur === "egal" ? d === v : c.operateur === "inf" ? d < v : c.operateur === "sup" ? d > v : false;
+  }
   const brut = Array.isArray(cellule) ? cellule.join(", ") : cellule == null ? "" : String(cellule);
   const t = type === "telephone" ? chiffres(brut) : normaliserTexte(brut);
   const cible = String(v);
@@ -198,8 +215,9 @@ export function appliquerFiltre<T>(lignes: T[], filtre: Filtre, colonnes: (DefCo
 /** « Âge > 10 », « Responsables contient « Martin » », « Téléphone est vide » : pour les pastilles. */
 export function libelleCondition(c: Condition, colonnes: DefColonne[]): string {
   const def = colonnes.find((d) => d.id === c.colonne);
-  const op = LIBELLES_OPERATEURS[c.operateur];
+  const op = libelleOperateur(c.operateur, def?.type ?? "texte");
   const nom = def?.libelle ?? c.colonne;
   if (sansValeur(c.operateur)) return `${nom} ${op}`;
+  if (def?.type === "date") return `${nom} ${op} ${c.valeur.split("-").reverse().join("/")}`;
   return def?.type === "nombre" ? `${nom} ${op} ${c.valeur}` : `${nom} ${op} « ${c.valeur} »`;
 }

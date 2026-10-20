@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { avecEcole } from "@/db";
 import { listerContacts, listerEleves } from "@/db/eleves";
+import { saisonCourante } from "@/db/planning";
 import { lirePreference } from "@/db/preferences";
 import { nomAffiche } from "@/db/personnes";
 import { COLONNES_ELEVES } from "@/domaine/filtres/colonnes";
@@ -23,11 +24,14 @@ export default async function PageEleves({ searchParams }: PageProps<"/eleves">)
   const filtre = lireFiltre(f, mode, COLONNES_ELEVES);
   const filtrage = filtre.conditions.length > 0;
   const aujourdhui = aujourdhuiAParis();
-  const { eleves, contacts, disposition } = await avecEcole(ecoleId, async (tx) => ({
-    eleves: await listerEleves(tx, saisie, { filtre, aujourdhui }),
-    contacts: saisie ? await listerContacts(tx, saisie) : [],
-    disposition: await lirePreference(tx, userId, "eleves"),
-  }));
+  const { eleves, contacts, disposition } = await avecEcole(ecoleId, async (tx) => {
+    const saison = await saisonCourante(tx, aujourdhui);
+    return {
+      eleves: await listerEleves(tx, saisie, { filtre, aujourdhui, saisonId: saison?.id }),
+      contacts: saisie ? await listerContacts(tx, saisie) : [],
+      disposition: await lirePreference(tx, userId, "eleves"),
+    };
+  });
   const messageVide = saisie.length === 1 ? "Tapez au moins deux caractères." : filtrage ? "Aucun élève ne correspond à ces filtres." : "Aucun élève ne correspond.";
   const pluriel = (n: number, mot: string) => `${n} ${mot}${n > 1 ? "s" : ""}`;
 
@@ -67,6 +71,11 @@ export default async function PageEleves({ searchParams }: PageProps<"/eleves">)
                 responsables: e.responsables,
                 facture: e.factureA,
                 telephone: e.telephone,
+                naissance: e.dateNaissance,
+                email: e.email,
+                cours: e.cours,
+                inscription: e.inscription,
+                prevenir: e.prevenir,
               },
             }))}
             mobile={

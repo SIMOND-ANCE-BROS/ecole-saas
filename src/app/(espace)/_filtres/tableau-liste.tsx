@@ -4,7 +4,7 @@ import Link from "next/link";
 import { type ReactNode, useId, useRef, useState, useTransition } from "react";
 import type { Liste } from "@/domaine/filtres/colonnes";
 import { basculer, type Disposition, deplacer, dispositionParDefaut, ecrireDisposition, lireDisposition } from "@/domaine/filtres/disposition";
-import { type Condition, CONDITIONS_MAX, type DefColonne, LIBELLES_OPERATEURS, libelleCondition, type Mode, OPERATEURS, sansValeur } from "@/domaine/filtres/filtres";
+import { type Condition, CONDITIONS_MAX, type DefColonne, libelleCondition, libelleOperateur, type Mode, OPERATEURS, sansValeur } from "@/domaine/filtres/filtres";
 import { enregistrerColonnes } from "./actions";
 import { type FiltreAdresse, useFiltreAdresse } from "./filtre-adresse";
 
@@ -164,6 +164,7 @@ function Cellule({ def, valeur }: { def: DefColonne; valeur: ValeurCellule }) {
       </a>
     );
   }
+  if (def.type === "date") return t.slice(0, 10).split("-").reverse().join("/");
   if (def.courriel) {
     return (
       <a href={`mailto:${t}`} className="lien break-all">
@@ -290,7 +291,7 @@ function LigneCondition({ def, c, rang, f, i }: { def: DefColonne; c: Condition;
       <select id={`${id}-op`} className="champ" value={c.operateur} onChange={(e) => f.modifier(i, { operateur: e.target.value as Condition["operateur"] })}>
         {OPERATEURS[def.type].map((o) => (
           <option key={o} value={o}>
-            {LIBELLES_OPERATEURS[o]}
+            {libelleOperateur(o, def.type)}
           </option>
         ))}
       </select>
@@ -302,6 +303,7 @@ function LigneCondition({ def, c, rang, f, i }: { def: DefColonne; c: Condition;
           <input
             id={`${id}-valeur`}
             className="champ w-36"
+            type={def.type === "date" ? "date" : "text"}
             inputMode={def.type === "nombre" ? "decimal" : def.type === "telephone" ? "tel" : "text"}
             value={c.valeur}
             aria-invalid={incomplete || undefined}
