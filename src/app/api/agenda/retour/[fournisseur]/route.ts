@@ -38,7 +38,11 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/agenda/retou
 
   try {
     const { jetonRafraichissement, compte } = await echangerCode(f, id, { code, verificateur: cookie.verificateur, redirection: redirectionOAuth(f) });
-    await avecEcole(etat.ecoleId, (tx) => enregistrerConnexion(tx, etat.intervenantId, { fournisseur: f, compte, jetonChiffre: chiffrer(jetonRafraichissement) }));
+    // L'intervenant a pu être désactivé entre le départ et le retour : rien n'est alors enregistré.
+    const enregistre = await avecEcole(etat.ecoleId, (tx) =>
+      enregistrerConnexion(tx, etat.intervenantId, { fournisseur: f, compte, jetonChiffre: chiffrer(jetonRafraichissement) }),
+    );
+    if (!enregistre) return retour("erreur");
   } catch {
     return retour("erreur");
   }

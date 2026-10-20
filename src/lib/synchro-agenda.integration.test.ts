@@ -3,6 +3,7 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { avecEcole } from "../db";
 import { enregistrerConnexion, etatConnexion, supprimerConnexion } from "../db/connexions-agenda";
+import { lireIntervenant, modifierIntervenant } from "../db/intervenants";
 import { listerIndisponibilites } from "../db/disponibilites";
 import { chiffrer, dechiffrer } from "./chiffrement";
 import { synchroniserAgenda } from "./synchro-agenda";
@@ -94,6 +95,20 @@ describe("synchroniserAgenda", () => {
   it("déconnecte l’agenda ; la saisie reste", async () => {
     expect(await avecEcole(ecole, (tx) => supprimerConnexion(tx, camille))).toBe(true);
     expect((await plagesDe()).some((i) => i.origine === "saisie")).toBe(true);
+    expect(await synchroniserAgenda(ecole, camille, fetch, MAINTENANT)).toEqual({ ok: false, message: "Aucun agenda connecté." });
+  });
+
+  it("n’enregistre ni ne synchronise l’agenda d’un intervenant désactivé, et efface sa connexion", async () => {
+    await avecEcole(ecole, (tx) => enregistrerConnexion(tx, camille, { fournisseur: "microsoft", compte: null, jetonChiffre: chiffrer("r") }));
+    const fiche = await avecEcole(ecole, (tx) => lireIntervenant(tx, camille));
+    if (!fiche) throw new Error("intervenant introuvable");
+    const { id, ...saisie } = fiche;
+    expect(id).toBe(camille);
+    await avecEcole(ecole, (tx) => modifierIntervenant(tx, camille, { ...saisie, actif: false }));
+    expect(await avecEcole(ecole, (tx) => etatConnexion(tx, camille))).toBeNull();
+    expect(await avecEcole(ecole, (tx) => enregistrerConnexion(tx, camille, { fournisseur: "microsoft", compte: null, jetonChiffre: chiffrer("r") }))).toBe(false);
+    // Même une ligne restée en base (restauration) est ignorée.
+    await admin`INSERT INTO connexion_agenda (ecole_id, intervenant_id, fournisseur, jeton_chiffre) VALUES (${ecole}, ${camille}, 'microsoft', ${chiffrer("r")})`;
     expect(await synchroniserAgenda(ecole, camille, fetch, MAINTENANT)).toEqual({ ok: false, message: "Aucun agenda connecté." });
   });
 });

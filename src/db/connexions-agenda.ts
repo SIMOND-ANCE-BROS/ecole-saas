@@ -2,7 +2,7 @@ import { and, eq, gt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Fournisseur } from "../connecteurs/agenda/oauth";
 import type { Tx } from "./index";
-import { connexionAgenda, indisponibilite } from "./schema";
+import { connexionAgenda, indisponibilite, intervenant } from "./schema";
 
 /** Agendas connectés des intervenants, toujours avec la transaction d'`avecEcole()` (RLS). */
 
@@ -11,12 +11,21 @@ const estUuid = (v: string) => z.uuid().safeParse(v).success;
 
 export type EtatConnexion = { fournisseur: Fournisseur; compte: string | null; derniereSynchro: Date | null; erreur: string | null };
 
-/** Enregistre (ou remplace) l'agenda connecté d'un intervenant ; le jeton arrive déjà chiffré. */
+/**
+ * Enregistre (ou remplace) l'agenda connecté d'un intervenant actif ; le jeton
+ * arrive déjà chiffré. false si l'intervenant n'existe pas ou n'est plus actif.
+ */
 export async function enregistrerConnexion(
   tx: Tx,
   intervenantId: string,
   c: { fournisseur: Fournisseur; compte: string | null; jetonChiffre: string },
-): Promise<void> {
+): Promise<boolean> {
+  if (!estUuid(intervenantId)) return false;
+  const [i] = await tx
+    .select({ id: intervenant.id })
+    .from(intervenant)
+    .where(and(eq(intervenant.id, intervenantId), eq(intervenant.actif, true)));
+  if (!i) return false;
   await tx
     .insert(connexionAgenda)
     .values({ ...c, intervenantId, ecoleId: ECOLE_COURANTE })
@@ -24,6 +33,7 @@ export async function enregistrerConnexion(
       target: connexionAgenda.intervenantId,
       set: { ...c, derniereSynchro: null, erreur: null, creeLe: sql`now()` },
     });
+  return true;
 }
 
 export async function etatConnexion(tx: Tx, intervenantId: string): Promise<EtatConnexion | null> {
@@ -46,12 +56,18 @@ export async function lireConnexion(tx: Tx, intervenantId: string) {
   const [c] = await tx
     .select({ fournisseur: connexionAgenda.fournisseur, jetonChiffre: connexionAgenda.jetonChiffre })
     .from(connexionAgenda)
-    .where(eq(connexionAgenda.intervenantId, intervenantId));
+    .innerJoin(intervenant, eq(intervenant.id, connexionAgenda.intervenantId))
+    .where(and(eq(connexionAgenda.intervenantId, intervenantId), eq(intervenant.actif, true)));
   return c ?? null;
 }
 
 export async function intervenantsConnectes(tx: Tx): Promise<string[]> {
-  return (await tx.select({ id: connexionAgenda.intervenantId }).from(connexionAgenda)).map((c) => c.id);
+  const lignes = await tx
+    .select({ id: connexionAgenda.intervenantId })
+    .from(connexionAgenda)
+    .innerJoin(intervenant, eq(intervenant.id, connexionAgenda.intervenantId))
+    .where(eq(intervenant.actif, true));
+  return lignes.map((c) => c.id);
 }
 
 /** Résultat d'une synchronisation ; un jeton renouvelé par le fournisseur remplace l'ancien. */
