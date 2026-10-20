@@ -17,7 +17,7 @@ export default async function PageFermetures() {
   });
 
   return (
-    <section className="flex max-w-3xl flex-col gap-4">
+    <section className="flex w-full min-w-0 flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
         <Link href="/planning" className="lien">
           Planning

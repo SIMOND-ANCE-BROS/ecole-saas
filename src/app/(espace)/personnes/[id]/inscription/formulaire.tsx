@@ -5,6 +5,7 @@ import type { Apercu } from "@/db/inscriptions";
 import type { CoursPlanning } from "@/db/planning";
 import { seChevauchent } from "@/domaine/planning/chevauchement";
 import { formaterEuros } from "@/lib/montant";
+import { requeteDifferee } from "@/lib/requete-differee";
 import { apercu, inscrire, type SaisieFormulaire } from "./actions";
 
 const JOURS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
@@ -36,9 +37,9 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
   const [periodicite, setPeriodicite] = useState<SaisieFormulaire["periodicite"]>("trimestre");
   const [coursIds, setCoursIds] = useState<string[]>([]);
   const [filtre, setFiltre] = useState("");
-  const [dernierApercu, setApercu] = useState<Apercu | null>(null);
+  const [dernierApercu, setApercu] = useState<{ saisie: SaisieFormulaire; essai: number; resultat: Apercu | null; erreur: boolean } | null>(null);
+  const [essaiCalcul, setEssaiCalcul] = useState(0);
   const [refus, setRefus] = useState<string | null>(null);
-  const [calcul, demarrerCalcul] = useTransition();
   const [envoi, demarrerEnvoi] = useTransition();
 
   const saisie: SaisieFormulaire = useMemo(
@@ -46,20 +47,25 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
     [payeurId, danseurIds, publicChoisi, periodicite, coursIds],
   );
 
-  // Aperçu recalculé côté serveur après une courte pause ; rien tant qu'aucun danseur n'est choisi.
+  // Aucun prix d’une sélection précédente n’est présenté comme le prix courant.
   useEffect(() => {
-    if (danseurIds.length === 0) return;
-    const minuteur = setTimeout(() => demarrerCalcul(async () => setApercu(await apercu(saisie))), 150);
-    return () => clearTimeout(minuteur);
-  }, [saisie, danseurIds.length]);
-  const resultat = danseurIds.length > 0 ? dernierApercu : null;
+    if (saisie.danseurIds.length === 0 || saisie.coursIds.length === 0) return;
+    return requeteDifferee(
+      () => apercu(saisie),
+      (resultat) => setApercu({ saisie, essai: essaiCalcul, resultat, erreur: false }),
+      () => setApercu({ saisie, essai: essaiCalcul, resultat: null, erreur: true }),
+    );
+  }, [saisie, essaiCalcul]);
+  const courant = dernierApercu?.saisie === saisie && dernierApercu.essai === essaiCalcul ? dernierApercu : null;
+  const calcul = danseurIds.length > 0 && coursIds.length > 0 && courant === null;
+  const resultat = courant?.resultat ?? null;
 
   const basculer = (liste: string[], id: string) => (liste.includes(id) ? liste.filter((x) => x !== id) : [...liste, id]);
   const coursVisibles = cours.filter((c) =>
     `${c.discipline} ${c.niveau ?? ""} ${JOURS[c.jourSemaine ?? 0]}`.toLowerCase().includes(filtre.trim().toLowerCase()),
   );
   const nouvelle = resultat?.statut === "ok" ? resultat.nouvelle : null;
-  const peutEnregistrer = nouvelle?.statut === "ok" && !envoi;
+  const peutEnregistrer = nouvelle?.statut === "ok" && !calcul && !envoi;
 
   // Cours adaptés à l'âge du ou des danseurs choisis d'abord ; les autres restent sélectionnables.
   const agesChoisis = danseurs.filter((d) => danseurIds.includes(d.id) && d.age !== null).map((d) => d.age as number);
@@ -81,6 +87,7 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
       className="grid gap-6 lg:grid-cols-[1fr_22rem]"
       onSubmit={(e) => {
         e.preventDefault();
+        if (!peutEnregistrer) return;
         setRefus(null);
         demarrerEnvoi(async () => setRefus((await inscrire(saisie)).message));
       }}
@@ -91,8 +98,26 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
         }
       }}
     >
-      <div className="flex flex-col gap-4">
-        <fieldset className="flex flex-col gap-1">
+      <nav aria-label="Repères de saisie" className="lg:col-span-2">
+        <ol className="grid grid-cols-3 gap-2 text-sm">
+          {[
+            { cible: "choix-danseur", titre: "Danseur & formule", complet: danseurIds.length > 0 },
+            { cible: "choix-cours", titre: "Cours", complet: coursIds.length > 0 },
+            { cible: "prix-inscription", titre: "Vérification du prix", complet: peutEnregistrer },
+          ].map((etape, index) => (
+            <li key={etape.cible}>
+              <a href={`#${etape.cible}`} className={`flex h-full items-center gap-2 rounded-md border px-3 py-2 ${etape.complet ? "border-accent bg-accent-doux" : "border-bordure bg-surface text-doux"}`}>
+                <span aria-hidden className="font-semibold">{index + 1}</span>
+                <span>{etape.titre}</span>
+                {etape.complet && <span className="sr-only"> : renseigné</span>}
+              </a>
+            </li>
+          ))}
+        </ol>
+      </nav>
+      <fieldset disabled={envoi} className="flex min-w-0 flex-col gap-4">
+        <legend className="sr-only">Choix de l’inscription</legend>
+        <fieldset id="choix-danseur" className="panneau flex flex-col gap-2 p-3">
           <legend className="text-sm font-semibold">Danseur{publicChoisi === "couple" ? "s (deux)" : ""}</legend>
           {danseurs.map((d) => (
             <label key={d.id} className="flex items-center gap-2 text-sm">
@@ -141,7 +166,7 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
           </div>
         </div>
 
-        <fieldset className="flex flex-col gap-2">
+        <fieldset id="choix-cours" className="flex flex-col gap-2">
           <legend className="text-sm font-semibold">Cours ({coursIds.length} choisi{coursIds.length > 1 ? "s" : ""})</legend>
           <label className="sr-only" htmlFor="filtre-cours">Filtrer les cours</label>
           <input
@@ -153,6 +178,7 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
             onChange={(e) => setFiltre(e.target.value)}
           />
           <ul className="panneau flex max-h-96 flex-col overflow-y-auto">
+            {coursTries.length === 0 && <li className="flex flex-col items-start gap-2 p-3 text-doux"><p>{cours.length === 0 ? "Aucun cours n’est disponible pour cette saison." : "Aucun cours ne correspond à votre recherche."}</p>{filtre && <button type="button" className="bouton-secondaire" onClick={() => setFiltre("")}>Effacer le filtre</button>}</li>}
             {coursTries.map((c) => {
               const restantes = c.capaciteMax === null ? null : c.capaciteMax - c.inscrits;
               return (
@@ -202,11 +228,18 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
             </p>
           )}
         </fieldset>
-      </div>
+      </fieldset>
 
-      <aside aria-live="polite" className="panneau flex flex-col gap-3 self-start p-3 text-sm lg:sticky lg:top-16">
-        <h2 className="font-semibold">Prix {calcul && <span className="font-normal text-doux">· calcul…</span>}</h2>
-        {!resultat && <p className="text-doux">Choisissez un danseur et des cours.</p>}
+      <aside id="prix-inscription" aria-live="polite" aria-busy={calcul} className="panneau flex flex-col gap-3 self-start p-3 text-sm lg:sticky lg:top-16">
+        <h2 className="font-semibold">Récapitulatif de l’inscription</h2>
+        <div className="border-b border-bordure pb-3 text-xs text-doux">
+          <p className="text-sm font-medium text-texte">{danseurs.filter((d) => danseurIds.includes(d.id)).map((d) => d.prenom).join(" et ") || "Aucun danseur sélectionné"}</p>
+          <p>{PUBLICS.find(([v]) => v === publicChoisi)?.[1]} · {PERIODICITES.find(([v]) => v === periodicite)?.[1]}</p>
+          <p>{choisis.length} cours · {choisis.reduce((total, c) => total + c.dureeMinutes, 0)} min par semaine</p>
+        </div>
+        {calcul && <p role="status" className="text-doux">Calcul du prix de votre sélection…</p>}
+        {courant?.erreur && <div role="alert" className="flex flex-col gap-2 text-erreur"><p>Le prix n’a pas pu être calculé. Votre sélection est conservée.</p><button type="button" className="bouton-secondaire self-start" onClick={() => setEssaiCalcul((n) => n + 1)}>Réessayer le calcul</button></div>}
+        {!resultat && !calcul && !courant?.erreur && <p className="text-doux">{danseurIds.length === 0 ? "Choisissez d’abord un danseur." : "Choisissez au moins un cours pour connaître le prix."}</p>}
         {resultat?.statut === "invalide" && <p role="alert">{resultat.message}</p>}
         {nouvelle?.statut === "erreur" && <p role="alert">{nouvelle.erreur.message}</p>}
         {nouvelle?.statut === "ok" && (
@@ -224,7 +257,7 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
                 <p className="text-xs">{r.motif}</p>
               </div>
             ))}
-            <div className="mt-1 flex justify-between gap-2 border-t border-bordure pt-1 font-semibold ">
+            <div className="mt-2 flex justify-between gap-2 border-t border-bordure pt-3 text-base font-semibold">
               <dt>Total</dt>
               <dd className="tabular-nums">{formaterEuros(nouvelle.prixNetCentimes)}</dd>
             </div>
@@ -241,6 +274,7 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
         <button type="submit" className="bouton-principal" disabled={!peutEnregistrer}>
           {envoi ? "Enregistrement…" : "Enregistrer l’inscription"}
         </button>
+        <p className="text-xs text-doux">Vérifiez le prix avant d’enregistrer. Aucun paiement n’est encaissé à cette étape.</p>
         <p className="hidden text-center text-xs text-doux sm:block">ou Ctrl + Entrée</p>
       </aside>
     </form>

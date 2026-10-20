@@ -31,7 +31,7 @@ export function ChoixLien({ ficheId, ficheNom }: Props) {
   const [de, vers] = r.de === "fiche" ? [ficheNom, autre] : [autre, ficheNom];
 
   return (
-    <div className="flex max-w-2xl flex-col gap-5">
+    <div className="flex w-full min-w-0 flex-col gap-5">
       <fieldset className="flex flex-col gap-1.5 text-sm">
         <legend className="mb-1 text-sm font-semibold">Pour {ficheNom}, l’autre personne est :</legend>
         {Object.entries(RELATIONS).map(([k, rel]) => (

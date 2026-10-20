@@ -24,7 +24,8 @@ export function Cadre({ volet, entete, children }: Props) {
   }, [ouvert]);
 
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
+    <div className="flex min-h-screen w-full flex-col md:flex-row">
+      <a href="#contenu" className="sr-only fixed left-3 top-3 z-50 rounded-md bg-surface p-3 text-accent focus:not-sr-only">Aller au contenu</a>
       <aside
         id="volet"
         className={`${ouvert ? "fixed inset-0 z-40 flex overflow-y-auto" : "hidden"} shrink-0 flex-col gap-6 border-bordure bg-surface p-3 print:hidden md:sticky md:top-0 md:flex md:h-screen md:w-52 md:border-r`}
@@ -54,7 +55,7 @@ export function Cadre({ volet, entete, children }: Props) {
           </button>
           {entete}
         </header>
-        <main className="flex-1 p-3 sm:p-4 md:p-6">{children}</main>
+        <main id="contenu" tabIndex={-1} className="w-full min-w-0 flex-1 p-3 sm:p-4 md:p-6">{children}</main>
       </div>
     </div>
   );

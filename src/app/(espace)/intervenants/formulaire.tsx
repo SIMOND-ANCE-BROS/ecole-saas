@@ -75,7 +75,7 @@ function Champs({ etat, envoyer, enCours, edition, initial }: PropsChamps) {
   );
 
   return (
-    <form ref={formulaire} action={envoyer} className="flex max-w-2xl flex-col gap-5" noValidate>
+    <form ref={formulaire} action={envoyer} className="flex w-full min-w-0 flex-col gap-5" noValidate>
       {e.formulaire && (
         <p role="alert" className="text-sm text-erreur">
           {e.formulaire}

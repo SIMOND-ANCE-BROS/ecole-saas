@@ -42,7 +42,7 @@ export default async function Accueil() {
     .sort((a, b) => b.inscrits / (b.capaciteMax ?? 1) - a.inscrits / (a.capaciteMax ?? 1));
 
   return (
-    <section className="flex max-w-5xl flex-col gap-6">
+    <section className="flex w-full min-w-0 flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="titre-page">Bonjour {prenom}</h1>

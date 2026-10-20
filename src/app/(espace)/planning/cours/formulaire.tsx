@@ -96,7 +96,7 @@ export function FormulaireCours({ cours, referentiel, planning, jour }: Props) {
 
   return (
     <form
-      className="flex max-w-3xl flex-col gap-5"
+      className="flex w-full min-w-0 flex-col gap-5"
       noValidate
       onSubmit={(e) => {
         e.preventDefault();

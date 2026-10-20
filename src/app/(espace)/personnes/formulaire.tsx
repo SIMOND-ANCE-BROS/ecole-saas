@@ -78,7 +78,7 @@ export function FormulairePersonne({ personne, lienAvec, nomPropose }: Props) {
 
   return (
     <form
-      className="flex max-w-2xl flex-col gap-5"
+      className="flex w-full min-w-0 flex-col gap-5"
       noValidate
       onSubmit={(e) => {
         e.preventDefault();

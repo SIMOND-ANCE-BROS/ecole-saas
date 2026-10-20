@@ -16,7 +16,7 @@ export default async function PagePersonnes({ searchParams }: PageProps<"/person
   const aujourdhui = aujourdhuiAParis();
 
   return (
-    <section className="flex max-w-5xl flex-col gap-4">
+    <section className="flex w-full min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="titre-page">Personnes</h1>
