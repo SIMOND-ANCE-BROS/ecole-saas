@@ -313,6 +313,9 @@ export const intervenant = pgTable(
     modeRemuneration: modeRemuneration("mode_remuneration").notNull(),
     tarifCentimes: integer("tarif_centimes").notNull(), // par heure, cours ou mois
     actif: boolean("actif").notNull().default(true),
+    // Abonnement à l'agenda : seule l'empreinte SHA-256 du jeton est gardée.
+    jetonAgendaHash: text("jeton_agenda_hash").unique(),
+    jetonAgendaCreeLe: timestamp("jeton_agenda_cree_le", { withTimezone: true }),
   },
   (t) => [cibleMemeEcole(t)],
 );
