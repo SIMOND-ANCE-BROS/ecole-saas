@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { CoursPlanning } from "@/db/planning";
 
@@ -18,8 +19,16 @@ function ages(min: number | null, max: number | null): string | null {
   return null;
 }
 
+type Props = {
+  cours: CoursPlanning[];
+  /** Direction : chaque cours mène à sa modification, chaque jour propose « + ». */
+  modifiable: boolean;
+  /** Cours tout juste enregistré, signalé dans la grille. */
+  misEnAvant?: string;
+};
+
 /** Planning de la semaine, filtrable par discipline et par site, avec l'effectif de chaque cours. */
-export function GrillePlanning({ cours }: { cours: CoursPlanning[] }) {
+export function GrillePlanning({ cours, modifiable, misEnAvant }: Props) {
   const [discipline, setDiscipline] = useState("");
   const [site, setSite] = useState("");
   const disciplines = useMemo(() => [...new Set(cours.map((c) => c.discipline))].sort(), [cours]);
@@ -63,9 +72,20 @@ export function GrillePlanning({ cours }: { cours: CoursPlanning[] }) {
         <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
           {jours.map((jour) => (
             <section key={jour ?? "stage"} aria-labelledby={`jour-${jour ?? "stage"}`} className="flex flex-col gap-2">
-              <h2 id={`jour-${jour ?? "stage"}`} className="border-b border-bordure pb-1 text-sm font-semibold">
-                {jour ? JOURS[jour] : "Stages"}
-              </h2>
+              <div className="flex items-baseline justify-between border-b border-bordure pb-1">
+                <h2 id={`jour-${jour ?? "stage"}`} className="text-sm font-semibold">
+                  {jour ? JOURS[jour] : "Stages"}
+                </h2>
+                {modifiable && jour && (
+                  <Link
+                    href={`/planning/cours/nouveau?jour=${jour}`}
+                    className="lien px-1 text-sm"
+                    aria-label={`Nouveau cours le ${JOURS[jour].toLowerCase()}`}
+                  >
+                    +
+                  </Link>
+                )}
+              </div>
               <ul className="flex flex-col gap-2">
                 {visibles
                   .filter((c) => c.jourSemaine === jour)
@@ -73,13 +93,22 @@ export function GrillePlanning({ cours }: { cours: CoursPlanning[] }) {
                     const complet = c.capaciteMax !== null && c.inscrits >= c.capaciteMax;
                     const remplissage = c.capaciteMax ? Math.min(1, c.inscrits / c.capaciteMax) : 0;
                     return (
-                      <li key={c.id} className="panneau flex flex-col gap-0.5 px-2.5 py-2 text-sm">
+                      <li
+                        key={c.id}
+                        className={`panneau flex flex-col gap-0.5 px-2.5 py-2 text-sm ${c.id === misEnAvant ? "border-accent ring-1 ring-accent" : ""}`}
+                      >
                         <div className="flex items-baseline justify-between gap-2">
                           <p className="font-medium">
                             <span className="tabular-nums">
                               {c.heureDebut}–{fin(c.heureDebut, c.dureeMinutes)}
                             </span>{" "}
-                            {c.discipline}
+                            {modifiable ? (
+                              <Link href={`/planning/cours/${c.id}/modifier`} className="lien">
+                                {c.discipline}
+                              </Link>
+                            ) : (
+                              c.discipline
+                            )}
                           </p>
                           {complet && (
                             <span className="rounded bg-alerte-fond px-1.5 text-xs font-medium text-alerte-texte">Complet</span>
