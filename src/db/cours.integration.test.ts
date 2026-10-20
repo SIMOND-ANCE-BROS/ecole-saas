@@ -40,7 +40,11 @@ beforeAll(async () => {
     salle: { id: salle },
     intervenantId: prof,
     type: "collectif",
+    recurrence: "hebdomadaire",
     jourSemaine: 3,
+    dateDebut: null,
+    dateFin: null,
+    dates: [],
     heureDebut: "17:00",
     dureeMinutes: 60,
     ageMin: 8,
@@ -183,9 +187,10 @@ describe("deplacerCours (vue agenda)", () => {
       statut: "refus",
       message: "Le cours finirait après minuit.",
     });
-    const stage = await avecEcole(ecole, (tx) => creerCours(tx, saison, { ...base, type: "stage", jourSemaine: null }));
-    expect(await avecEcole(ecole, (tx) => deplacerCours(tx, stage.ok ? stage.id : "", { jourSemaine: 3, heureDebut: "10:00", dureeMinutes: 60 }, true))).toMatchObject({
+    const stage = await avecEcole(ecole, (tx) => creerCours(tx, saison, { ...base, type: "stage", recurrence: "dates", jourSemaine: null, dates: ["2026-10-24"] }));
+    expect(await avecEcole(ecole, (tx) => deplacerCours(tx, stage.ok ? stage.id : "", { jourSemaine: 3, heureDebut: "10:00", dureeMinutes: 60 }, true))).toEqual({
       statut: "refus",
+      message: "Un cours à dates précises se modifie depuis sa fiche.",
     });
     expect(await avecEcole(autreEcole, (tx) => deplacerCours(tx, id, { jourSemaine: 2, heureDebut: "10:00", dureeMinutes: 60 }, true))).toEqual({
       statut: "refus",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { datesDesSeances } from "./seances";
+import { datesDesSeances, datesDuCours } from "./seances";
 
 describe("datesDesSeances", () => {
   it("donne chaque mercredi de la période, bornes comprises", () => {
@@ -43,5 +43,38 @@ describe("datesDesSeances", () => {
 
   it("ne donne rien pour une période vide ou inversée", () => {
     expect(datesDesSeances({ debut: "2026-10-01", fin: "2026-09-01", jourSemaine: 3, fermetures: [] })).toEqual([]);
+  });
+});
+
+describe("datesDuCours (#90)", () => {
+  const SAISON = { debut: "2026-09-01", fin: "2026-10-31" };
+  const TOUSSAINT = [{ debut: "2026-10-17", fin: "2026-11-01" }];
+  const hebdo = (jourSemaine: number, dateDebut: string | null = null, dateFin: string | null = null) =>
+    ({ type: "hebdomadaire", jourSemaine, dateDebut, dateFin }) as const;
+
+  it("chaque semaine : comme avant, hors fermetures", () => {
+    expect(datesDuCours(hebdo(1), SAISON, TOUSSAINT)).toEqual(datesDesSeances({ ...SAISON, jourSemaine: 1, fermetures: TOUSSAINT }));
+  });
+
+  it("période limitée : seulement entre les deux dates, et dans la saison", () => {
+    expect(datesDuCours(hebdo(3, "2026-09-20", "2026-10-07"), SAISON, [])).toEqual(["2026-09-23", "2026-09-30", "2026-10-07"]);
+    expect(datesDuCours(hebdo(3, "2026-08-01", null), SAISON, [])[0]).toBe("2026-09-02");
+    expect(datesDuCours(hebdo(3, "2026-10-10", "2026-10-01"), SAISON, [])).toEqual([]);
+  });
+
+  it("une semaine sur deux : alternance calée sur la première date, non décalée par une fermeture", () => {
+    const quinzaine = { type: "quinzaine", jourSemaine: 1, dateDebut: null, dateFin: null } as const;
+    // Lundis de la saison : 7, 14, 21, 28 sept., 5, 12, 19, 26 oct. ; une sur deux à partir du 7.
+    expect(datesDuCours(quinzaine, SAISON, [])).toEqual(["2026-09-07", "2026-09-21", "2026-10-05", "2026-10-19"]);
+    // Fermeture du 19 octobre : la séance saute, les autres gardent leur semaine.
+    expect(datesDuCours(quinzaine, SAISON, TOUSSAINT)).toEqual(["2026-09-07", "2026-09-21", "2026-10-05"]);
+    expect(datesDuCours({ ...quinzaine, dateDebut: "2026-09-14" }, SAISON, [])).toEqual(["2026-09-14", "2026-09-28", "2026-10-12", "2026-10-26"]);
+  });
+
+  it("dates précises : triées, sans doublon, dans la saison, même pendant une fermeture", () => {
+    expect(datesDuCours({ type: "dates", dates: ["2026-10-24", "2026-09-12", "2026-10-24", "2027-01-05"] }, SAISON, TOUSSAINT)).toEqual([
+      "2026-09-12",
+      "2026-10-24",
+    ]);
   });
 });

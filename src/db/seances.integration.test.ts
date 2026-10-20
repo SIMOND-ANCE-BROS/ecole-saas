@@ -1,6 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { lireCours, modifierCours, supprimerCours } from "./cours";
+import { datesDuCours } from "../domaine/planning/seances";
+import { creerCours, lireCours, modifierCours, supprimerCours } from "./cours";
 import { avecEcole } from "./index";
 import {
   ajouterFermeture,
@@ -62,7 +63,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const t of ["presence", "seance", "fermeture", "inscription_cours", "inscription", "lien", "personne", "cours", "intervenant", "salle", "site", "discipline", "saison"]) {
+  for (const t of ["presence", "seance", "cours_date", "fermeture", "inscription_cours", "inscription", "lien", "personne", "cours", "intervenant", "salle", "site", "discipline", "saison"]) {
     await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
   }
   await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
@@ -183,8 +184,8 @@ describe("cours et séances", () => {
     const avant = await seances();
     const cours = await avecEcole(ecole, (tx) => lireCours(tx, mercredi));
     if (!cours) throw new Error("cours introuvable");
-    const { type, jourSemaine, heureDebut, dureeMinutes, ageMin, ageMax, niveau, capaciteMax } = cours;
-    const saisie = { type, jourSemaine, heureDebut, dureeMinutes, ageMin, ageMax, niveau, capaciteMax };
+    const { type, recurrence, jourSemaine, dateDebut, dateFin, dates, heureDebut, dureeMinutes, ageMin, ageMax, niveau, capaciteMax } = cours;
+    const saisie = { type, recurrence, jourSemaine, dateDebut, dateFin, dates, heureDebut, dureeMinutes, ageMin, ageMax, niveau, capaciteMax };
     const r = await avecEcole(ecole, (tx) =>
       modifierCours(tx, mercredi, { ...saisie, discipline: { id: cours.disciplineId }, salle: { id: cours.salleId }, intervenantId: ines }),
     );
@@ -201,5 +202,69 @@ describe("cours et séances", () => {
       ok: false,
       message: "Des appels ont été faits pour ce cours : il ne peut pas être supprimé.",
     });
+  });
+});
+
+describe("récurrences (#90)", () => {
+  const datesDe = async (coursId: string) =>
+    (await admin`SELECT date::text AS date FROM seance WHERE cours_id = ${coursId} ORDER BY date`).map((r) => r.date as string);
+
+  it("une semaine sur deux, sur une période, et à dates précises (vacances comprises)", async () => {
+    const modele = await avecEcole(ecole, (tx) => lireCours(tx, mercredi));
+    if (!modele) throw new Error("cours introuvable");
+    const base = {
+      discipline: { id: modele.disciplineId },
+      salle: { id: modele.salleId },
+      intervenantId: camille,
+      type: "collectif" as const,
+      heureDebut: "10:00",
+      dureeMinutes: 60,
+      ageMin: null,
+      ageMax: null,
+      niveau: null,
+      capaciteMax: null,
+      dateDebut: null,
+      dateFin: null,
+      dates: [],
+    };
+    const fermetures = (await avecEcole(ecole, (tx) => listerFermetures(tx, saison))).map(({ debut, fin }) => ({ debut, fin }));
+    const creer = (saisie: Parameters<typeof creerCours>[2]) =>
+      avecEcole(ecole, async (tx) => {
+        const r = await creerCours(tx, saison, saisie);
+        if (!r.ok) throw new Error(r.message);
+        return r.id;
+      });
+    const quinzaine = await creer({ ...base, recurrence: "quinzaine", jourSemaine: 1 });
+    const periode = await creer({ ...base, recurrence: "hebdomadaire", jourSemaine: 2, dateDebut: "2026-11-01", dateFin: "2026-11-17" });
+    const stage = await creer({ ...base, type: "stage", recurrence: "dates", jourSemaine: null, dates: ["2026-11-21", "2026-10-26", "2026-10-26"] });
+    await synchroniser();
+
+    const saisonEntiere = { debut: "2026-09-01", fin: "2026-11-30" };
+    expect(await datesDe(quinzaine)).toEqual(
+      datesDuCours({ type: "quinzaine", jourSemaine: 1, dateDebut: null, dateFin: null }, saisonEntiere, fermetures).filter((d) => d >= AUJOURDHUI),
+    );
+    expect(await datesDe(periode)).toEqual(
+      datesDuCours({ type: "hebdomadaire", jourSemaine: 2, dateDebut: "2026-11-01", dateFin: "2026-11-17" }, saisonEntiere, fermetures),
+    );
+    expect(await datesDe(stage)).toEqual(["2026-10-26", "2026-11-21"]);
+    expect((await avecEcole(ecole, (tx) => lireCours(tx, stage)))?.dates).toEqual(["2026-10-26", "2026-11-21"]);
+
+    // Le stage passe à une seule date : la séance retirée disparaît.
+    await avecEcole(ecole, async (tx) => {
+      const c = await lireCours(tx, stage);
+      if (!c) throw new Error("stage introuvable");
+      const { type, recurrence, jourSemaine, dateDebut, dateFin, heureDebut, dureeMinutes, ageMin, ageMax, niveau, capaciteMax } = c;
+      await modifierCours(tx, stage, {
+        type, recurrence, jourSemaine, dateDebut, dateFin, heureDebut, dureeMinutes, ageMin, ageMax, niveau, capaciteMax,
+        dates: ["2026-11-21"],
+        discipline: { id: c.disciplineId },
+        salle: { id: c.salleId },
+        intervenantId: c.intervenantId,
+      });
+    });
+    await synchroniser();
+    expect(await datesDe(stage)).toEqual(["2026-11-21"]);
+
+    for (const id of [quinzaine, periode, stage]) expect((await avecEcole(ecole, (tx) => supprimerCours(tx, id))).ok).toBe(true);
   });
 });

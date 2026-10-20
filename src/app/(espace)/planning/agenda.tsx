@@ -7,7 +7,7 @@ import type { CoursPlanning } from "@/db/planning";
 import { aimanter, disposer, versHeure, versMinutes } from "@/domaine/planning/agenda";
 import { cadreAgenda, type Horaire, plagesOuvertes } from "@/domaine/planning/horaires";
 import { deplacer, type RetourDeplacement } from "./cours/actions";
-import { fin, JOURS } from "./format";
+import { fin, JOURS, marqueRecurrence, recurrenceTexte } from "./format";
 
 /** Hauteur d'une minute à l'écran (px) : une heure fait 64 px. */
 const PX = 64 / 60;
@@ -22,7 +22,7 @@ type Geste =
 type Cible = { apercu?: { id: string } & Creneau; selection?: { jour: number; debut: number; duree: number } };
 
 type Props = {
-  /** Cours visibles (filtres appliqués) ; les stages sont listés sous l'agenda. */
+  /** Cours visibles (filtres appliqués) ; les cours à dates précises sont listés sous l'agenda. */
   cours: CoursPlanning[];
   /** Tous les cours de la saison : plage horaire stable quels que soient les filtres. */
   tous: CoursPlanning[];
@@ -51,7 +51,7 @@ export function Agenda({ cours, tous, modifiable, misEnAvant, horaires }: Props)
   const vientDeGlisser = useRef(false);
 
   const hebdo = cours.filter((c) => c.jourSemaine !== null);
-  const stages = cours.filter((c) => c.jourSemaine === null);
+  const ponctuels = cours.filter((c) => c.jourSemaine === null);
   const { jours, debut: ouverture, fin: fermeture } = cadreAgenda(horaires, tous);
   /** Tranches fermées d'un jour (grisées), quand des horaires sont connus. */
   const fermees = (jour: number) => {
@@ -353,6 +353,7 @@ export function Agenda({ cours, tous, modifiable, misEnAvant, horaires }: Props)
                         <span className="block font-semibold">
                           {c.discipline}
                           {complet && <span className="font-normal text-alerte-texte"> · complet</span>}
+                          {marqueRecurrence(c) && <span className="ml-1 rounded bg-surface px-1 font-normal text-doux">{marqueRecurrence(c)}</span>}
                         </span>
                         <span className="block tabular-nums">
                           {c.heureDebut}–{fin(c.heureDebut, c.dureeMinutes)}
@@ -380,19 +381,19 @@ export function Agenda({ cours, tous, modifiable, misEnAvant, horaires }: Props)
         </div>
       </div>
 
-      {stages.length > 0 && (
-        <section aria-labelledby="agenda-stages" className="flex flex-col gap-1">
-          <h2 id="agenda-stages" className="text-sm font-semibold">
-            Stages
+      {ponctuels.length > 0 && (
+        <section aria-labelledby="agenda-ponctuels" className="flex flex-col gap-1">
+          <h2 id="agenda-ponctuels" className="text-sm font-semibold">
+            À dates précises (stages, cours exceptionnels)
           </h2>
-          <ul className="flex flex-wrap gap-2 text-sm">
-            {stages.map((s) => (
-              <li key={s.id} className="panneau px-2.5 py-1">
-                <Link href={`/planning/cours/${s.id}`} className="lien">
+          <ul className="flex flex-col gap-1 text-sm">
+            {ponctuels.map((s) => (
+              <li key={s.id} className="panneau px-2.5 py-1.5">
+                <Link href={`/planning/cours/${s.id}`} className="lien font-medium">
                   {s.discipline}
                 </Link>{" "}
                 <span className="text-doux">
-                  {s.heureDebut}–{fin(s.heureDebut, s.dureeMinutes)}, {s.salle}
+                  {s.heureDebut}–{fin(s.heureDebut, s.dureeMinutes)}, {s.salle} — {recurrenceTexte(s)}
                 </span>
               </li>
             ))}
