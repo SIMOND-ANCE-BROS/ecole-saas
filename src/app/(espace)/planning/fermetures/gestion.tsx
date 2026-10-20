@@ -24,13 +24,13 @@ export function GestionFermetures({ fermetures, debutSaison, finSaison }: Props)
   return (
     <div className="flex flex-col gap-5">
       <form
-        className="panneau grid gap-3 p-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end"
+        className="panneau grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto] lg:items-end"
         onSubmit={(e) => {
           e.preventDefault();
           agir(() => fermer({ ...v, fin: v.fin || v.debut }), "Fermeture ajoutée, séances mises à jour.", () => setV({ libelle: "", debut: "", fin: "" }));
         }}
       >
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-1">
           <label htmlFor="libelle" className="text-sm font-medium">
             Libellé
           </label>
@@ -48,7 +48,7 @@ export function GestionFermetures({ fermetures, debutSaison, finSaison }: Props)
           </label>
           <input id="fin" type="date" className="champ" min={v.debut || debutSaison} max={finSaison} value={v.fin} onChange={(e) => setV({ ...v, fin: e.target.value })} />
         </div>
-        <button type="submit" className="bouton-principal" disabled={enCours}>
+        <button type="submit" className="bouton-principal sm:col-span-2 sm:justify-self-start lg:col-span-1" disabled={enCours}>
           Ajouter
         </button>
       </form>

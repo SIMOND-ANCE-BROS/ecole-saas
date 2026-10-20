@@ -65,7 +65,7 @@ export function GrillePlanning({ cours, modifiable, misEnAvant }: Props) {
                 {modifiable && jour && (
                   <Link
                     href={`/planning/cours/nouveau?jour=${jour}`}
-                    className="lien px-1 text-sm"
+                    className="lien -my-1 px-2 py-1 text-base"
                     aria-label={`Nouveau cours le ${JOURS[jour].toLowerCase()}`}
                   >
                     +

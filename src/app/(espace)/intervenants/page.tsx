@@ -52,10 +52,10 @@ export default async function PageIntervenants({ searchParams }: PageProps<"/int
             <thead>
               <tr>
                 <th>Nom</th>
-                <th>Statut</th>
+                <th className="hidden sm:table-cell">Statut</th>
                 <th className="text-right">Cours</th>
                 {direction && <th className="text-right">Tarif</th>}
-                <th>Contact</th>
+                <th className="hidden sm:table-cell">Contact</th>
               </tr>
             </thead>
             <tbody>
@@ -71,14 +71,14 @@ export default async function PageIntervenants({ searchParams }: PageProps<"/int
                     )}
                     {!i.actif && <span className="ml-2 rounded bg-alerte-fond px-1.5 text-xs text-alerte-texte">inactif</span>}
                   </td>
-                  <td>{STATUTS[i.statut]}</td>
+                  <td className="hidden sm:table-cell">{STATUTS[i.statut]}</td>
                   <td className="text-right tabular-nums">{i.coursSaison}</td>
                   {direction && (
                     <td className="text-right whitespace-nowrap tabular-nums">
                       {formaterEuros(i.tarifCentimes)} <span className="text-doux">{MODES_REMUNERATION[i.modeRemuneration]}</span>
                     </td>
                   )}
-                  <td>
+                  <td className="hidden sm:table-cell">
                     {i.email ? (
                       <a href={`mailto:${i.email}`} className="lien">
                         {i.email}

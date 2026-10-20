@@ -168,9 +168,9 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
                 <tr>
                   <th>Danseur</th>
                   <th className="text-right">Âge</th>
-                  <th>Payeur</th>
+                  <th className="hidden sm:table-cell">Payeur</th>
                   <th>Téléphone</th>
-                  <th className="print:hidden">Inscrit le</th>
+                  <th className="hidden sm:table-cell print:hidden">Inscrit le</th>
                 </tr>
               </thead>
               <tbody>
@@ -191,7 +191,7 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
                         {age ?? "—"}
                         {horsTranche && <span className="sr-only"> (hors tranche d’âge)</span>}
                       </td>
-                      <td>
+                      <td className="hidden sm:table-cell">
                         <Link href={`/personnes/${i.payeurId}`} className="lien">
                           {i.payeur}
                         </Link>
@@ -205,7 +205,7 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
                           "—"
                         )}
                       </td>
-                      <td className="text-doux print:hidden">{dateCourte.format(new Date(i.dateInscription))}</td>
+                      <td className="hidden text-doux sm:table-cell print:hidden">{dateCourte.format(new Date(i.dateInscription))}</td>
                     </tr>
                   );
                 })}

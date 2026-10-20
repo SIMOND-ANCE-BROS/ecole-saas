@@ -59,20 +59,20 @@ export default async function Accueil() {
       </div>
 
       <dl
-        className={`panneau grid grid-cols-1 divide-y divide-bordure sm:divide-x sm:divide-y-0 ${role === "direction" ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}
+        className={`panneau grid divide-x divide-bordure ${role === "direction" ? "grid-cols-3" : "grid-cols-2"}`}
       >
-        <div className="px-4 py-3">
+        <div className="px-3 py-3 sm:px-4">
           <dt className="text-xs text-doux">Inscriptions</dt>
-          <dd className="text-2xl font-semibold tabular-nums">{chiffres.inscriptions}</dd>
+          <dd className="text-lg font-semibold tabular-nums sm:text-2xl">{chiffres.inscriptions}</dd>
         </div>
-        <div className="px-4 py-3">
+        <div className="px-3 py-3 sm:px-4">
           <dt className="text-xs text-doux">Danseurs inscrits</dt>
-          <dd className="text-2xl font-semibold tabular-nums">{chiffres.danseurs}</dd>
+          <dd className="text-lg font-semibold tabular-nums sm:text-2xl">{chiffres.danseurs}</dd>
         </div>
         {role === "direction" && (
-          <div className="px-4 py-3">
+          <div className="px-3 py-3 sm:px-4">
             <dt className="text-xs text-doux">Montant inscrit</dt>
-            <dd className="text-2xl font-semibold tabular-nums">{formaterEuros(chiffres.totalNetCentimes)}</dd>
+            <dd className="text-lg font-semibold tabular-nums sm:text-2xl">{formaterEuros(chiffres.totalNetCentimes)}</dd>
           </div>
         )}
       </dl>

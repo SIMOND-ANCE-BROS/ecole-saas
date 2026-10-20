@@ -111,7 +111,7 @@ export function FicheAppel({ appel, intervenants }: Props) {
                         type="button"
                         tabIndex={-1}
                         aria-pressed={p === true}
-                        className="rounded-md border border-bordure px-3 py-1 text-sm aria-pressed:border-accent aria-pressed:bg-accent aria-pressed:text-sur-accent"
+                        className="rounded-md border border-bordure px-3 py-2 text-sm sm:py-1 aria-pressed:border-accent aria-pressed:bg-accent aria-pressed:text-sur-accent"
                         onClick={() => marquer(d.id, true)}
                       >
                         Présent
@@ -120,7 +120,7 @@ export function FicheAppel({ appel, intervenants }: Props) {
                         type="button"
                         tabIndex={-1}
                         aria-pressed={p === false}
-                        className="rounded-md border border-bordure px-3 py-1 text-sm aria-pressed:border-alerte-texte aria-pressed:bg-alerte-fond aria-pressed:text-alerte-texte"
+                        className="rounded-md border border-bordure px-3 py-2 text-sm sm:py-1 aria-pressed:border-alerte-texte aria-pressed:bg-alerte-fond aria-pressed:text-alerte-texte"
                         onClick={() => marquer(d.id, false)}
                       >
                         Absent
@@ -134,7 +134,7 @@ export function FicheAppel({ appel, intervenants }: Props) {
               <button type="button" className="bouton-principal" disabled={enCours} onClick={enregistrer}>
                 {enCours ? "Enregistrement…" : "Enregistrer l’appel"}
               </button>
-              <span className="text-xs text-doux">ou Ctrl + Entrée</span>
+              <span className="hidden text-xs text-doux sm:inline">ou Ctrl + Entrée</span>
             </div>
           </>
         )}
