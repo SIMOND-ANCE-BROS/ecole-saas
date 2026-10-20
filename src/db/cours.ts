@@ -1,7 +1,7 @@
 import { and, asc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Tx } from "./index";
-import { cours, discipline, inscriptionCours, intervenant, salle, site } from "./schema";
+import { cours, discipline, inscriptionCours, intervenant, presence, salle, seance, site } from "./schema";
 
 /** Édition du planning (cours, disciplines, salles), toujours avec la transaction d'`avecEcole()` (RLS). */
 
@@ -184,6 +184,20 @@ export async function modifierCours(tx: Tx, id: string, saisie: SaisieCours): Pr
   const r = await valeurs(tx, saisie, existant.intervenantId);
   if (!r.ok) return r;
   await tx.update(cours).set(r.valeurs).where(eq(cours.id, id));
+  // Nouveau titulaire : il reprend les séances à venir de l'ancien, pas celles d'un remplaçant.
+  if (r.valeurs.intervenantId !== existant.intervenantId) {
+    await tx
+      .update(seance)
+      .set({ intervenantId: r.valeurs.intervenantId })
+      .where(
+        and(
+          eq(seance.coursId, id),
+          eq(seance.intervenantId, existant.intervenantId),
+          eq(seance.statut, "prevue"),
+          sql`${seance.date} >= (now() AT TIME ZONE 'Europe/Paris')::date`,
+        ),
+      );
+  }
   return { ok: true, id };
 }
 
@@ -195,6 +209,14 @@ export async function supprimerCours(tx: Tx, id: string): Promise<Resultat> {
     .from(inscriptionCours)
     .where(eq(inscriptionCours.coursId, id));
   if (n > 0) return { ok: false, message: `Ce cours a ${n} inscription${n > 1 ? "s" : ""} : il ne peut pas être supprimé.` };
+  const [appel] = await tx
+    .select({ seanceId: presence.seanceId })
+    .from(presence)
+    .innerJoin(seance, eq(seance.id, presence.seanceId))
+    .where(eq(seance.coursId, id))
+    .limit(1);
+  if (appel) return { ok: false, message: "Des appels ont été faits pour ce cours : il ne peut pas être supprimé." };
+  await tx.delete(seance).where(eq(seance.coursId, id));
   await tx.delete(cours).where(eq(cours.id, id));
   return { ok: true, id };
 }

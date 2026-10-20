@@ -2,8 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { avecEcole } from "@/db";
-import { creerCours, modifierCours, saisieCoursValide, supprimerCours } from "@/db/cours";
+import { creerCours, lireCours, modifierCours, saisieCoursValide, supprimerCours } from "@/db/cours";
 import { saisonCourante } from "@/db/planning";
+import { synchroniserSeances } from "@/db/seances";
 import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
 
@@ -18,10 +19,14 @@ export async function enregistrerCours(id: string | null, saisie: unknown): Prom
     for (const p of donnees.error.issues) erreurs[String(p.path[0])] ??= p.message;
     return { message: "Vérifiez les champs signalés.", erreurs };
   }
+  const aujourdhui = aujourdhuiAParis();
   const resultat = await avecEcole(ecoleId, async (tx) => {
-    if (id !== null) return modifierCours(tx, id, donnees.data);
-    const saison = await saisonCourante(tx, aujourdhuiAParis());
-    return saison ? creerCours(tx, saison.id, donnees.data) : { ok: false as const, message: "Aucune saison n’est paramétrée." };
+    const saisonId = id !== null ? (await lireCours(tx, id))?.saisonId : (await saisonCourante(tx, aujourdhui))?.id;
+    if (!saisonId) return { ok: false as const, message: id !== null ? "Ce cours n’existe plus." : "Aucune saison n’est paramétrée." };
+    const r = id !== null ? await modifierCours(tx, id, donnees.data) : await creerCours(tx, saisonId, donnees.data);
+    // Séances à venir recalculées dans la même transaction (jour changé, nouveau cours…).
+    if (r.ok) await synchroniserSeances(tx, saisonId, aujourdhui);
+    return r;
   });
   if (!resultat.ok) return { message: resultat.message, erreurs: {} };
   redirect(id === null ? `/planning?enregistre=${resultat.id}` : `/planning/cours/${resultat.id}?modifie=1`);

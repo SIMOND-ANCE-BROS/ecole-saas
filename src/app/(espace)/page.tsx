@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { avecEcole } from "@/db";
 import { coursDeLaSaison, saisonCourante } from "@/db/planning";
+import { seancesDuJour } from "@/db/seances";
 import { chiffresSaison, dernieresInscriptions } from "@/db/tableau-de-bord";
 import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { formaterEuros } from "@/lib/montant";
@@ -13,14 +14,16 @@ const TAUX_PRESQUE_COMPLET = 0.8;
 export default async function Accueil() {
   const [{ user }, { ecoleId, role }] = await Promise.all([sessionCourante(), contexteEcole()]);
   const donnees = await avecEcole(ecoleId, async (tx) => {
-    const saison = await saisonCourante(tx, aujourdhuiAParis());
+    const aujourdhui = aujourdhuiAParis();
+    const saison = await saisonCourante(tx, aujourdhui);
     if (!saison) return null;
-    const [chiffres, dernieres, cours] = [
+    const [chiffres, dernieres, cours, duJour] = [
       await chiffresSaison(tx, saison.id),
       await dernieresInscriptions(tx, saison.id),
       await coursDeLaSaison(tx, saison.id),
+      await seancesDuJour(tx, aujourdhui),
     ];
-    return { saison, chiffres, dernieres, cours };
+    return { saison, chiffres, dernieres, cours, duJour };
   });
 
   const prenom = user.name.split(" ")[0];
@@ -33,7 +36,7 @@ export default async function Accueil() {
     );
   }
 
-  const { saison, chiffres, dernieres, cours } = donnees;
+  const { saison, chiffres, dernieres, cours, duJour } = donnees;
   const presqueComplets = cours
     .filter((c) => c.capaciteMax && c.inscrits / c.capaciteMax >= TAUX_PRESQUE_COMPLET)
     .sort((a, b) => b.inscrits / (b.capaciteMax ?? 1) - a.inscrits / (a.capaciteMax ?? 1));
@@ -73,6 +76,33 @@ export default async function Accueil() {
           </div>
         )}
       </dl>
+
+      <section aria-labelledby="jour" className="flex flex-col gap-2">
+        <h2 id="jour" className="text-base font-semibold">
+          Séances du jour
+        </h2>
+        {duJour.length === 0 ? (
+          <p className="text-sm text-doux">Pas de cours aujourd’hui.</p>
+        ) : (
+          <ul className="panneau divide-y divide-bordure text-sm">
+            {duJour.map((s) => (
+              <li key={s.id} className={`flex flex-wrap items-baseline gap-x-3 px-3 py-2 ${s.statut === "annulee" ? "text-doux" : ""}`}>
+                <span className="w-12 tabular-nums">{s.heureDebut}</span>
+                <span className={`font-medium ${s.statut === "annulee" ? "line-through" : ""}`}>
+                  {s.discipline}
+                  {s.niveau && ` ${s.niveau}`}
+                </span>
+                <span className="text-doux">
+                  {s.salle}, {s.intervenant}
+                </span>
+                <Link href={`/planning/seances/${s.id}`} className={`ml-auto ${s.appelFait || s.statut === "annulee" ? "lien text-doux" : "bouton-secondaire"}`}>
+                  {s.statut === "annulee" ? "Annulée" : s.appelFait ? "Appel fait" : "Faire l’appel"}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section aria-labelledby="dernieres" className="flex flex-col gap-2">

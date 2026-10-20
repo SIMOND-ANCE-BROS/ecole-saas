@@ -196,6 +196,11 @@ export default async function PagePersonne({ params, searchParams }: PageProps<"
                 <span className="tabular-nums">
                   {c.jourSemaine ? JOURS[c.jourSemaine] : "Stage"} {c.heureDebut}
                 </span>
+                {c.presents + c.absents > 0 && (
+                  <span className={`text-xs ${c.absents > c.presents ? "text-alerte-texte" : "text-doux"}`}>
+                    présent {c.presents} fois sur {c.presents + c.absents}
+                  </span>
+                )}
                 <span className={`ml-auto text-xs ${c.statut === "active" ? "text-doux" : "font-medium text-alerte-texte"}`}>
                   {STATUT[c.statut]}
                 </span>

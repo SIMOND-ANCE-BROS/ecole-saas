@@ -28,9 +28,14 @@ export default async function PagePlanning({ searchParams }: PageProps<"/plannin
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="titre-page">Planning {saison.libelle}</h1>
         {direction && (
-          <Link href="/planning/cours/nouveau" className="bouton-principal">
-            Nouveau cours
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/planning/fermetures" className="bouton-secondaire">
+              Fermetures
+            </Link>
+            <Link href="/planning/cours/nouveau" className="bouton-principal">
+              Nouveau cours
+            </Link>
+          </div>
         )}
       </div>
       {confirme && (

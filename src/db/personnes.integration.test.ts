@@ -127,7 +127,7 @@ describe("lirePersonne", () => {
       },
     ]);
     expect(z?.cours).toEqual([
-      { id: jazz, saison: "2026-2027", discipline: "Jazz", niveau: null, jourSemaine: 3, heureDebut: "17:00", statut: "active", payeurId: helene },
+      { id: jazz, saison: "2026-2027", discipline: "Jazz", niveau: null, jourSemaine: 3, heureDebut: "17:00", statut: "active", payeurId: helene, presents: 0, absents: 0 },
     ]);
     expect(z?.documents).toEqual([{ type: "certificat_medical", accorde: true, valideJusqu: "2027-09-30" }]);
 
