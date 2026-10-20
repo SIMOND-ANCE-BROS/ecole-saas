@@ -6,6 +6,7 @@ import { type CoursEdite, type ReferentielPlanning, TYPES_COURS } from "@/db/cou
 import type { CoursPlanning } from "@/db/planning";
 import { conflits } from "@/domaine/planning/chevauchement";
 import { enregistrerCours, type Refus, supprimer, verifierCreneau } from "./actions";
+import { Annuler } from "@/app/(espace)/_panneau/panneau";
 
 const JOURS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const DUREES = [45, 60, 90, 120];
@@ -335,9 +336,7 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
         <button type="submit" className="bouton-principal" disabled={envoi}>
           {envoi ? "Enregistrement…" : cours ? "Enregistrer les modifications" : "Créer le cours"}
         </button>
-        <Link href={cours ? `/planning/cours/${cours.id}` : "/planning"} className="bouton-secondaire">
-          Annuler
-        </Link>
+        <Annuler href={cours ? `/planning/cours/${cours.id}` : "/planning"} />
         {cours &&
           (confirmerSuppression ? (
             <span className="ml-auto flex items-center gap-2 text-sm">
