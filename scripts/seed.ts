@@ -74,12 +74,12 @@ async function principal() {
         RETURNING id`;
       for (const [prenom, naissance] of f.danseurs) {
         if (prenom === f.prenom) {
-          await admin`UPDATE personne SET date_naissance = ${naissance} WHERE id = ${p.id}`;
+          await admin`UPDATE personne SET date_naissance = ${naissance}, eleve = true WHERE id = ${p.id}`;
           continue;
         }
         const [d] = await admin`
-          INSERT INTO personne (ecole_id, nom, prenom, date_naissance)
-          VALUES (${ecole.id}, ${f.nom}, ${prenom}, ${naissance}) RETURNING id`;
+          INSERT INTO personne (ecole_id, nom, prenom, date_naissance, eleve)
+          VALUES (${ecole.id}, ${f.nom}, ${prenom}, ${naissance}, true) RETURNING id`;
         await admin`
           INSERT INTO lien (ecole_id, personne_id, lie_a_id, type, paie_pour, contact_urgence)
           VALUES (${ecole.id}, ${p.id}, ${d.id}, 'representant_legal', true, true)`;

@@ -99,7 +99,7 @@ export function FicheAppel({ appel, intervenants }: Props) {
                     }}
                   >
                     <span className="min-w-40 flex-1">
-                      <Link href={`/personnes/${d.id}`} className="lien font-medium" tabIndex={-1}>
+                      <Link href={`/eleves/${d.id}`} className="lien font-medium" tabIndex={-1}>
                         {d.prenom} {d.nom}
                       </Link>
                       {d.age !== null && <span className="text-doux"> ({d.age} ans)</span>}

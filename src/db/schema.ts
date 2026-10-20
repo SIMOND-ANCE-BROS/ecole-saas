@@ -249,6 +249,8 @@ export const personne = pgTable(
     telephone: text("telephone"),
     adresse: text("adresse"),
     notes: text("notes"), // santé, consignes : visibles par l'accueil et la direction
+    // Élève de l'école (danseur) ; sinon contact : parent, payeur, organisme.
+    eleve: boolean("eleve").notNull().default(false),
     refOutil: text("ref_outil"), // id du client dans l'outil de facturation
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
   },

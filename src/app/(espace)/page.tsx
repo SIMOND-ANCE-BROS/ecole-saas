@@ -49,8 +49,8 @@ export default async function Accueil() {
           <p className="text-sm text-doux">Saison {saison.libelle}</p>
         </div>
         <div className="flex gap-2">
-          {role !== "professeur" && <Link href="/personnes" className="bouton-principal">
-            Inscrire quelqu’un
+          {role !== "professeur" && <Link href="/eleves/nouveau" className="bouton-principal">
+            Nouvel élève
           </Link>}
           <Link href="/planning" className="bouton-secondaire">
             Voir le planning

@@ -6,7 +6,8 @@ import { useEffect, useRef, useTransition } from "react";
 
 const LIENS = [
   { href: "/", libelle: "Accueil" },
-  { href: "/personnes", libelle: "Personnes" },
+  { href: "/eleves", libelle: "Élèves" },
+  { href: "/contacts", libelle: "Contacts" },
   { href: "/planning", libelle: "Planning" },
   { href: "/intervenants", libelle: "Intervenants" },
 ];
@@ -17,7 +18,7 @@ export function Navigation({ role }: { role: "direction" | "accueil" | "professe
   const actif = (href: string) => (href === "/" ? chemin === "/" : chemin.startsWith(href));
   return (
     <nav aria-label="Navigation principale" className="flex flex-col gap-0.5">
-      {LIENS.filter((l) => (l.href !== "/intervenants" || role !== "professeur") && (l.href !== "/personnes" || role !== "professeur")).map((l) => (
+      {LIENS.filter((l) => role !== "professeur" || !["/intervenants", "/eleves", "/contacts"].includes(l.href)).map((l) => (
         <Link
           key={l.href}
           href={l.href}
@@ -32,8 +33,8 @@ export function Navigation({ role }: { role: "direction" | "accueil" | "professe
 }
 
 /**
- * Recherche de personnes accessible partout. Ctrl K (ou Cmd K) y place le
- * curseur ; sur la page Personnes, la liste se met à jour pendant la frappe ;
+ * Recherche d’élèves (et des contacts liés) accessible partout. Ctrl K (ou Cmd K) y place le
+ * curseur ; sur la page Élèves, la liste se met à jour pendant la frappe ;
  * flèche bas pour descendre dans les résultats.
  */
 export function RechercheGlobale() {
@@ -41,8 +42,8 @@ export function RechercheGlobale() {
   const router = useRouter();
   const chemin = usePathname();
   const parametres = useSearchParams();
-  const surPersonnes = chemin === "/personnes";
-  const recherche = surPersonnes ? (parametres.get("q") ?? "") : "";
+  const surEleves = chemin === "/eleves";
+  const recherche = surEleves ? (parametres.get("q") ?? "") : "";
   const [enCours, naviguer] = useTransition();
 
   // L’URL redevient la référence une fois la navigation terminée, y compris
@@ -64,7 +65,7 @@ export function RechercheGlobale() {
   }, []);
 
   const aller = (q: string, remplacer: boolean) => {
-    const cible = q.trim() ? `/personnes?q=${encodeURIComponent(q.trim())}` : "/personnes";
+    const cible = q.trim() ? `/eleves?q=${encodeURIComponent(q.trim())}` : "/eleves";
     naviguer(() => {
       if (remplacer) router.replace(cible, { scroll: false });
       else router.push(cible);
@@ -77,24 +78,24 @@ export function RechercheGlobale() {
       className="flex w-full max-w-xl items-center gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        aller(champ.current?.value ?? "", surPersonnes);
+        aller(champ.current?.value ?? "", surEleves);
       }}
     >
       <label htmlFor="recherche-globale" className="sr-only">
-        Rechercher une personne
+        Rechercher un élève ou un parent
       </label>
       <input
         ref={champ}
         id="recherche-globale"
         type="search"
         autoComplete="off"
-        placeholder="Rechercher : nom, prénom, téléphone…"
+        placeholder="Élève, parent, téléphone…"
         className="champ w-full"
         defaultValue={recherche}
         aria-describedby="etat-recherche"
-        autoFocus={surPersonnes}
+        autoFocus={surEleves}
         onChange={(e) => {
-          if (surPersonnes) aller(e.target.value, true);
+          if (surEleves) aller(e.target.value, true);
         }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" && !enCours) {

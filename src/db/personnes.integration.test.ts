@@ -62,6 +62,7 @@ beforeAll(async () => {
   zoe = await inserer(ecole, { nom: "Lefèvre", prenom: "Zoé", date_naissance: "2015-03-10", notes: "Asthme" });
   noe = await inserer(ecole, { nom: "Lefèvre", prenom: "Noé", date_naissance: "2017-11-02" });
   alex = await inserer(ecole, { nom: "Rivière", prenom: "Alex", date_naissance: "1996-04-05", telephone: "07 11 22 33 44" });
+  await admin`UPDATE personne SET eleve = true WHERE id = ${alex}`;
   cse = await inserer(ecole, { type: "professionnel", nom: "CSE Ateliers", raison_sociale: "CSE Ateliers", siren: "123456789" });
   etrangere = await inserer(autreEcole, { nom: "Lefèvre", prenom: "Inconnue", telephone: "0612345678" });
   await lier(helene, zoe, "representant_legal", true, true);
@@ -142,8 +143,11 @@ describe("lirePersonne", () => {
 });
 
 describe("danseursPayables et payeursDe", () => {
-  it("un parent inscrit lui-même et ceux pour qui il paie", async () => {
+  it("un parent inscrit ceux pour qui il paie, et lui-même seulement s’il est élève", async () => {
+    expect((await avecEcole(ecole, (tx) => danseursPayables(tx, helene))).map((d) => d.prenom)).toEqual(["Noé", "Zoé"]);
+    await admin`UPDATE personne SET eleve = true WHERE id = ${helene}`;
     expect((await avecEcole(ecole, (tx) => danseursPayables(tx, helene))).map((d) => d.prenom)).toEqual(["Hélène", "Noé", "Zoé"]);
+    await admin`UPDATE personne SET eleve = false WHERE id = ${helene}`;
   });
 
   it("un professionnel n’inscrit que ceux pour qui il paie ; un adulte seul s’inscrit lui-même", async () => {
