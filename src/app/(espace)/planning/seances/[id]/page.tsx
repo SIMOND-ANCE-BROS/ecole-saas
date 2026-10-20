@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { avecEcole } from "@/db";
 import { referentielPlanning } from "@/db/cours";
+import { disponibilitesSeance } from "@/db/disponibilites";
 import { lireAppel } from "@/db/seances";
 import { ageAu } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
@@ -20,10 +21,21 @@ export default async function PageAppel({ params }: PageProps<"/planning/seances
     const appel = await lireAppel(tx, id);
     if (!appel) return null;
     const { intervenants } = await referentielPlanning(tx, appel.intervenantId);
-    return { appel, intervenants: intervenants.map((i) => ({ id: i.id, nom: `${i.prenom} ${i.nom}` })) };
+    const dispo = await disponibilitesSeance(tx, appel.id);
+    const classement = new Map(dispo?.remplacants.map((r, rang) => [r.id, { ...r, rang }]));
+    // Intervenant de la séance d'abord, puis remplaçants libres, puis les autres avec leur motif.
+    const options = intervenants
+      .map((i) => {
+        const r = classement.get(i.id);
+        const etat = i.id === appel.intervenantId ? "" : r?.libre ? " (libre)" : r?.motif ? ` (${r.motif})` : "";
+        return { id: i.id, nom: `${i.prenom} ${i.nom}${etat}`, rang: i.id === appel.intervenantId ? -1 : (r?.rang ?? 999) };
+      })
+      .sort((a, b) => a.rang - b.rang)
+      .map((o) => ({ id: o.id, nom: o.nom }));
+    return { appel, intervenants: options, indisponible: dispo?.indisponible ?? false, libres: dispo?.remplacants.filter((r) => r.libre).length ?? 0 };
   });
   if (!donnees) notFound();
-  const { appel, intervenants } = donnees;
+  const { appel, intervenants, indisponible, libres } = donnees;
   const date = dateLongue.format(new Date(`${appel.date}T00:00:00Z`));
 
   return (
@@ -47,6 +59,12 @@ export default async function PageAppel({ params }: PageProps<"/planning/seances
           {date}, {appel.heureDebut}–{fin(appel.heureDebut, appel.dureeMinutes)}, {appel.salle}
         </p>
       </div>
+      {indisponible && appel.statut !== "annulee" && (
+        <p role="alert" className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
+          L’intervenant de cette séance est indisponible.{" "}
+          {libres > 0 ? `${libres} remplaçant${libres > 1 ? "s" : ""} libre${libres > 1 ? "s" : ""} en tête de la liste « Intervenant de la séance ».` : "Aucun autre intervenant n’est libre à cette heure."}
+        </p>
+      )}
       <FicheAppel
         appel={{
           ...appel,

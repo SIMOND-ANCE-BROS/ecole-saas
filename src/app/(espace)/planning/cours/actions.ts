@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { avecEcole } from "@/db";
 import { creerCours, lireCours, modifierCours, saisieCoursValide, supprimerCours } from "@/db/cours";
+import { conflitsCreneau } from "@/db/disponibilites";
 import { saisonCourante } from "@/db/planning";
 import { synchroniserSeances } from "@/db/seances";
 import { aujourdhuiAParis } from "@/domaine/personnes/age";
@@ -37,4 +38,17 @@ export async function supprimer(id: string): Promise<Refus> {
   const resultat = await avecEcole(ecoleId, (tx) => supprimerCours(tx, id));
   if (!resultat.ok) return { message: resultat.message, erreurs: {} };
   redirect("/planning?supprime=1");
+}
+
+/** Dates à venir où l'intervenant choisi serait indisponible sur ce créneau (pendant la saisie). */
+export async function verifierCreneau(
+  coursId: string | null,
+  creneau: { intervenantId: string; jourSemaine: number; heureDebut: string; dureeMinutes: number },
+): Promise<string[]> {
+  const { ecoleId } = await exigerRole("direction");
+  const aujourdhui = aujourdhuiAParis();
+  return avecEcole(ecoleId, async (tx) => {
+    const saisonId = coursId ? (await lireCours(tx, coursId))?.saisonId : (await saisonCourante(tx, aujourdhui))?.id;
+    return saisonId ? conflitsCreneau(tx, { ...creneau, saisonId }, aujourdhui) : [];
+  });
 }
