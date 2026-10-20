@@ -170,6 +170,23 @@ export const membre = pgTable(
   ],
 );
 
+/**
+ * Disposition des colonnes d'une liste (élèves, contacts…) propre à chaque
+ * membre (#89) : identifiants des colonnes affichées, dans l'ordre. Une simple
+ * préférence d'affichage, supprimée avec le membre.
+ */
+export const preferenceListe = pgTable(
+  "preference_liste",
+  {
+    ecoleId: ecoleId(),
+    membreId: uuid("membre_id").notNull(),
+    liste: text("liste").notNull(),
+    colonnes: text("colonnes").array().notNull(),
+    modifieLe: timestamp("modifie_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.membreId, t.liste] }), memeEcole(t, t.membreId, membre).onDelete("cascade")],
+);
+
 // ---------------------------------------------------------------------------
 // Lieux et calendrier
 // ---------------------------------------------------------------------------

@@ -32,6 +32,11 @@ describe("lireFiltre", () => {
     expect(lireFiltre(["inconnue.contient.a", "age.contient.3", "nom.contient.", "age.sup.dix", "nom"], undefined, COLONNES).conditions).toEqual([]);
   });
 
+  it("ignore une colonne non filtrable", () => {
+    const avecTarif: DefColonne[] = [...COLONNES, { id: "tarif", libelle: "Tarif", type: "texte", filtrable: false }];
+    expect(lireFiltre(["tarif.contient.30"], null, avecTarif).conditions).toEqual([]);
+  });
+
   it("ne garde que 8 conditions et revient au mode ET par défaut", () => {
     const f = lireFiltre(Array.from({ length: 12 }, () => "nom.non_vide"), "nimporte", COLONNES);
     expect(f.conditions).toHaveLength(8);
@@ -87,6 +92,7 @@ describe("appliquerFiltre", () => {
 });
 
 it("libelleCondition", () => {
-  expect(libelleCondition({ colonne: "age", operateur: "sup", valeur: "10" }, COLONNES)).toBe("Âge > « 10 »");
+  expect(libelleCondition({ colonne: "age", operateur: "sup", valeur: "10" }, COLONNES)).toBe("Âge > 10");
+  expect(libelleCondition({ colonne: "nom", operateur: "contient", valeur: "Martin" }, COLONNES)).toBe("Élève contient « Martin »");
   expect(libelleCondition({ colonne: "telephone", operateur: "vide", valeur: "" }, COLONNES)).toBe("Téléphone est vide");
 });

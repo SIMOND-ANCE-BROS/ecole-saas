@@ -9,7 +9,21 @@
 
 export type TypeColonne = "texte" | "nombre" | "telephone";
 
-export type DefColonne = { id: string; libelle: string; type: TypeColonne };
+export type DefColonne = {
+  id: string;
+  libelle: string;
+  type: TypeColonne;
+  /** false : colonne proposée mais masquée tant que le membre ne l'affiche pas (#89). */
+  parDefaut?: boolean;
+  /** Nombres : alignés à droite. */
+  droite?: boolean;
+  /** false : colonne affichée mais sans filtre (montant mis en forme…). */
+  filtrable?: boolean;
+  /** Adresse e-mail : affichée en lien `mailto:`. */
+  courriel?: boolean;
+  /** Texte d'une cellule vide (« l’élève » pour « Facturé à »), sinon un tiret. */
+  siVide?: string;
+};
 
 export type Operateur =
   | "contient"
@@ -100,7 +114,7 @@ export function lireFiltre(f: string | string[] | undefined | null, mode: string
     const operateur = (i === -1 ? "" : j === -1 ? b.slice(i + 1) : b.slice(i + 1, j)) as Operateur;
     const valeur = j === -1 ? "" : b.slice(j + 1);
     const def = colonnes.find((c) => c.id === colonne);
-    if (!def || !OPERATEURS[def.type].includes(operateur)) continue;
+    if (!def || def.filtrable === false || !OPERATEURS[def.type].includes(operateur)) continue;
     const c = { colonne, operateur, valeur: sansValeur(operateur) ? "" : valeur };
     if (valeurNormalisee(c, def.type) !== null) conditions.push(c);
   }
@@ -181,9 +195,11 @@ export function appliquerFiltre<T>(lignes: T[], filtre: Filtre, colonnes: (DefCo
   });
 }
 
-/** « Âge > « 10 » », « Téléphone est vide » : pour les pastilles et les messages. */
+/** « Âge > 10 », « Responsables contient « Martin » », « Téléphone est vide » : pour les pastilles. */
 export function libelleCondition(c: Condition, colonnes: DefColonne[]): string {
   const def = colonnes.find((d) => d.id === c.colonne);
   const op = LIBELLES_OPERATEURS[c.operateur];
-  return sansValeur(c.operateur) ? `${def?.libelle ?? c.colonne} ${op}` : `${def?.libelle ?? c.colonne} ${op} « ${c.valeur} »`;
+  const nom = def?.libelle ?? c.colonne;
+  if (sansValeur(c.operateur)) return `${nom} ${op}`;
+  return def?.type === "nombre" ? `${nom} ${op} ${c.valeur}` : `${nom} ${op} « ${c.valeur} »`;
 }
