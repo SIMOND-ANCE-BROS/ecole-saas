@@ -3,6 +3,7 @@ import { z } from "zod";
 import { conflits, type Indisponibilite, intervalleSeance, remplacantsLibres } from "../domaine/planning/disponibilite";
 import { datesDesSeances } from "../domaine/planning/seances";
 import type { Tx } from "./index";
+import { dureeEffective, heureEffective } from "./seances";
 import { cours, discipline, fermeture, indisponibilite, intervenant, saison, seance } from "./schema";
 
 /**
@@ -146,8 +147,8 @@ export async function seancesEnConflit(tx: Tx, coursId: string, aujourdhui: stri
     .select({
       id: seance.id,
       date: seance.date,
-      heureDebut: cours.heureDebut,
-      dureeMinutes: cours.dureeMinutes,
+      heureDebut: heureEffective,
+      dureeMinutes: dureeEffective,
       intervenantId: seance.intervenantId,
     })
     .from(seance)
@@ -179,8 +180,8 @@ export async function disponibilitesSeance(tx: Tx, seanceId: string): Promise<{ 
     .select({
       id: seance.id,
       date: seance.date,
-      heureDebut: cours.heureDebut,
-      dureeMinutes: cours.dureeMinutes,
+      heureDebut: heureEffective,
+      dureeMinutes: dureeEffective,
       intervenantId: seance.intervenantId,
       discipline: discipline.nom,
       saisonId: cours.saisonId,
@@ -208,7 +209,7 @@ export async function disponibilitesSeance(tx: Tx, seanceId: string): Promise<{ 
     .orderBy(asc(intervenant.prenom), asc(intervenant.nom));
 
   const memeJour = await tx
-    .select({ id: seance.id, date: seance.date, heureDebut: cours.heureDebut, dureeMinutes: cours.dureeMinutes, intervenantId: seance.intervenantId })
+    .select({ id: seance.id, date: seance.date, heureDebut: heureEffective, dureeMinutes: dureeEffective, intervenantId: seance.intervenantId })
     .from(seance)
     .innerJoin(cours, eq(cours.id, seance.coursId))
     .where(and(eq(seance.date, s.date), ne(seance.statut, "annulee")));

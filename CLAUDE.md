@@ -22,7 +22,7 @@ Ce fichier est la référence pour tout agent qui développe ce projet. Lis-le e
 | Inscription | Un forfait souscrit par un payeur pour une saison ; couvre un ou deux danseurs (tarif couple). |
 | Forfait | Prix calculé selon la **durée hebdomadaire cumulée** des cours choisis, pas selon chaque cours. |
 | Cours | Créneau récurrent (jour, heure, durée, salle, professeur). |
-| Séance | Occurrence datée d'un cours. Sert à l'appel, aux carnets et à la paie des professeurs. |
+| Séance | Occurrence datée d'un cours. Sert à l'appel, aux carnets et à la paie des professeurs. Générée selon la récurrence du cours (chaque semaine, une semaine sur deux, période, dates précises) ; déplacée seule, elle garde sa date d'origine (`date_prevue`) et peut avoir sa propre heure. |
 | Carnet | Pack de cours particuliers (1, 5 ou 10 séances, 1 à 4 personnes). |
 | Intervenant | Professeur. Facture l'école (micro-entreprise, société) ou est salarié. |
 | Relevé | Calcul mensuel de ce que l'école doit à un intervenant, d'après les séances effectuées. |

@@ -23,11 +23,13 @@ type Props = {
   /** Créneau proposé depuis la vue agenda. */
   heure?: string;
   duree?: number;
+  /** Date cliquée dans le planning daté : première date si l'on choisit « à des dates précises ». */
+  date?: string;
 };
 
 const entier = (v: string) => (v.trim() === "" ? null : Number(v));
 
-export function FormulaireCours({ cours, referentiel, planning, jour, heure, duree }: Props) {
+export function FormulaireCours({ cours, referentiel, planning, jour, heure, duree, date }: Props) {
   const r = referentiel;
   const [v, setV] = useState({
     discipline: cours?.discipline ?? "",
@@ -51,7 +53,7 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
     capaciteMax: cours?.capaciteMax?.toString() ?? "",
   });
   // Dates d'un cours ponctuel ; une ligne vide pour commencer.
-  const [dates, setDates] = useState<string[]>(cours?.dates.length ? cours.dates : [""]);
+  const [dates, setDates] = useState<string[]>(cours?.dates.length ? cours.dates : [date ?? ""]);
   const [refus, setRefus] = useState<Refus | null>(null);
   const [envoi, demarrer] = useTransition();
   const formulaire = useRef<HTMLFormElement>(null);

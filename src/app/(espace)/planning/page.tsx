@@ -3,6 +3,8 @@ import Link from "next/link";
 import { avecEcole } from "@/db";
 import { horairesParSite } from "@/db/parametres";
 import { coursDeLaSaison, saisonCourante } from "@/db/planning";
+import { fermeturesEntre, seancesDeLaSemaine } from "@/db/seances";
+import { ajouterJours, dateValide, lundiDe } from "@/domaine/planning/semaine";
 import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { contexteEcole } from "@/lib/session";
 import { GrillePlanning } from "./grille";
@@ -11,10 +13,18 @@ export const metadata: Metadata = { title: "Planning" };
 
 export default async function PagePlanning({ searchParams }: PageProps<"/planning">) {
   const { ecoleId, role } = await contexteEcole();
-  const { enregistre, supprime, vue } = await searchParams;
-  const { saison, cours, horaires } = await avecEcole(ecoleId, async (tx) => {
-    const s = await saisonCourante(tx, aujourdhuiAParis());
-    return { saison: s, cours: s ? await coursDeLaSaison(tx, s.id) : [], horaires: await horairesParSite(tx) };
+  const { enregistre, supprime, vue, semaine } = await searchParams;
+  const aujourdhui = aujourdhuiAParis();
+  const lundi = lundiDe(dateValide(semaine) ?? aujourdhui);
+  const { saison, cours, horaires, seances, fermetures } = await avecEcole(ecoleId, async (tx) => {
+    const s = await saisonCourante(tx, aujourdhui);
+    return {
+      saison: s,
+      cours: s ? await coursDeLaSaison(tx, s.id) : [],
+      horaires: await horairesParSite(tx),
+      seances: await seancesDeLaSemaine(tx, lundi),
+      fermetures: await fermeturesEntre(tx, lundi, ajouterJours(lundi, 6)),
+    };
   });
 
   if (!saison) {
@@ -54,7 +64,13 @@ export default async function PagePlanning({ searchParams }: PageProps<"/plannin
           Aucun cours pour cette saison.{direction && " Créez le premier avec « Nouveau cours »."}
         </p>
       ) : (
-        <GrillePlanning cours={cours} modifiable={direction} misEnAvant={confirme?.id} vue={vue === "liste" ? "liste" : "semaine"} horaires={horaires} />
+        <GrillePlanning cours={cours} modifiable={direction} misEnAvant={confirme?.id} vue={vue === "liste" ? "liste" : vue === "type" ? "type" : "datee"}
+          horaires={horaires}
+          lundi={lundi}
+          aujourdhui={aujourdhui}
+          seances={seances}
+          fermetures={fermetures}
+        />
       )}
     </section>
   );

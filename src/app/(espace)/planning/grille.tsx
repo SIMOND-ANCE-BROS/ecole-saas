@@ -3,10 +3,15 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { CoursPlanning } from "@/db/planning";
+import type { SeancePlanning } from "@/db/seances";
 import type { Horaire } from "@/domaine/planning/horaires";
-import { Agenda } from "./agenda";
 import { ages, fin, JOURS, marqueRecurrence, recurrenceTexte } from "./format";
 import { FILTRES_VIDES, filtrerPlanning } from "./filtres";
+import { SemaineDatee } from "./semaine-datee";
+import { SemaineType } from "./semaine-type";
+
+export type VuePlanning = "datee" | "type" | "liste";
+const VUES: Record<VuePlanning, string> = { datee: "Par semaine", type: "Semaine type", liste: "Liste" };
 
 type Props = {
   cours: CoursPlanning[];
@@ -14,19 +19,24 @@ type Props = {
   modifiable: boolean;
   /** Cours tout juste enregistré, signalé dans la grille. */
   misEnAvant?: string;
-  /** Vue choisie (`?vue=`), semaine par défaut. */
-  vue: "semaine" | "liste";
+  /** Vue choisie (`?vue=`) : semaine datée par défaut (#90). */
+  vue: VuePlanning;
+  /** Semaine datée affichée : son lundi, ses séances et ses fermetures. */
+  lundi: string;
+  aujourdhui: string;
+  seances: SeancePlanning[];
+  fermetures: { libelle: string; debut: string; fin: string }[];
   /** Horaires d'ouverture par site (#90) : bornent l'agenda. */
   horaires: Record<string, Horaire[]>;
 };
 
 /** Planning de la semaine, filtrable par discipline, site, salle et intervenant, avec l'effectif de chaque cours. */
-export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale, horaires }: Props) {
+export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale, horaires, lundi, aujourdhui, seances, fermetures }: Props) {
   const [filtres, setFiltres] = useState(FILTRES_VIDES);
   const [vue, setVue] = useState(vueInitiale);
-  const choisirVue = (v: "semaine" | "liste") => {
+  const choisirVue = (v: VuePlanning) => {
     setVue(v);
-    window.history.replaceState(null, "", v === "semaine" ? "/planning" : "/planning?vue=liste");
+    window.history.replaceState(null, "", v === "datee" ? `/planning?semaine=${lundi}` : `/planning?vue=${v}`);
   };
   const { discipline, site, salleId, intervenantId } = filtres;
   const disciplines = useMemo(() => [...new Set(cours.map((c) => c.discipline))].sort(), [cours]);
@@ -84,7 +94,7 @@ export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale
           {visibles.length} cours sur {cours.length}
         </p>
         <div role="group" aria-label="Affichage" className="ml-auto flex overflow-hidden rounded-md border border-bordure text-sm">
-          {(["semaine", "liste"] as const).map((v) => (
+          {(Object.keys(VUES) as VuePlanning[]).map((v) => (
             <button
               key={v}
               type="button"
@@ -92,7 +102,7 @@ export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale
               className={`px-3 py-1.5 ${vue === v ? "bg-accent text-sur-accent" : "hover:bg-accent-doux"}`}
               onClick={() => choisirVue(v)}
             >
-              {v === "semaine" ? "Semaine" : "Liste"}
+              {VUES[v]}
             </button>
           ))}
         </div>
@@ -100,8 +110,17 @@ export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale
 
       {visibles.length === 0 ? (
         <div className="panneau flex flex-col items-start gap-3 p-5"><p className="text-sm text-doux">{cours.length === 0 ? "Aucun cours n’est encore programmé." : "Aucun cours ne correspond à cette combinaison de filtres."}</p>{filtresActifs && <button type="button" className="bouton-secondaire" onClick={() => setFiltres(FILTRES_VIDES)}>Afficher tous les cours</button>}</div>
-      ) : vue === "semaine" ? (
-        <Agenda cours={visibles} tous={cours} modifiable={modifiable} misEnAvant={misEnAvant} horaires={horairesAffiches} />
+      ) : vue === "datee" ? (
+        <SemaineDatee
+          seances={filtrerPlanning(seances, filtres)}
+          lundi={lundi}
+          aujourdhui={aujourdhui}
+          fermetures={fermetures}
+          horaires={horairesAffiches}
+          modifiable={modifiable}
+        />
+      ) : vue === "type" ? (
+        <SemaineType cours={visibles} tous={cours} modifiable={modifiable} misEnAvant={misEnAvant} horaires={horairesAffiches} />
       ) : (
         <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
           {jours.map((jour) => (
