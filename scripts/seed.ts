@@ -5,6 +5,9 @@
  *   npm run db:seed
  */
 import postgres from "postgres";
+import { avecEcole } from "../src/db";
+import { synchroniserSeances } from "../src/db/seances";
+import { aujourdhuiAParis } from "../src/domaine/personnes/age";
 import { creerCompte } from "../src/lib/comptes";
 
 const MOT_DE_PASSE = process.env.SEED_MOT_DE_PASSE ?? "demo-ecole-de-danse";
@@ -186,6 +189,20 @@ async function principal() {
       INSERT INTO reduction (ecole_id, saison_id, code, taux_points_base, seuil_danseurs, publics, cumulable_multi_disciplines)
       VALUES (${ecole.id}, ${saison.id}, 'fratrie', 1000, 2, '{enfant}', false)`;
   }
+
+  // Fermetures de démonstration (dates fictives) puis séances à venir, comme l'application les crée.
+  const [{ nbFermetures }] = await admin`SELECT count(*)::int AS "nbFermetures" FROM fermeture WHERE saison_id = ${saison.id}`;
+  if (nbFermetures === 0) {
+    for (const [libelle, debut, fin] of [
+      ["Vacances d’automne", "2026-10-17", "2026-11-01"],
+      ["Jour férié", "2026-11-11", "2026-11-11"],
+      ["Vacances de fin d’année", "2026-12-19", "2027-01-03"],
+    ]) {
+      await admin`INSERT INTO fermeture (ecole_id, saison_id, libelle, debut, fin) VALUES (${ecole.id}, ${saison.id}, ${libelle}, ${debut}, ${fin})`;
+    }
+  }
+  const { ajoutees } = await avecEcole(ecole.id, (tx) => synchroniserSeances(tx, saison.id, aujourdhuiAParis()));
+  console.log(`Séances à venir créées : ${ajoutees}`);
 
   console.log(`École de démonstration prête. Comptes : ${COMPTES.map((c) => c.email).join(", ")}`);
   console.log(`Mot de passe : ${process.env.SEED_MOT_DE_PASSE ? "(SEED_MOT_DE_PASSE)" : MOT_DE_PASSE}`);

@@ -150,9 +150,18 @@ export type FichePersonne = {
     heureDebut: string;
     statut: (typeof inscription.statut.enumValues)[number];
     payeurId: string;
+    /** Appels faits pour ce danseur dans ce cours. */
+    presents: number;
+    absents: number;
   }[];
   documents: { type: (typeof documentDanseur.type.enumValues)[number]; accorde: boolean; valideJusqu: string | null }[];
 };
+
+/** Présences ou absences d'un danseur aux séances du cours de la ligne. */
+const presences = (danseurId: string, present: boolean) => sql<number>`(
+  SELECT count(*)::int FROM presence p JOIN seance s ON s.id = p.seance_id
+  WHERE s.cours_id = ${cours}.${sql.identifier("id")} AND p.danseur_id = ${danseurId} AND p.present = ${present}
+)`;
 
 export async function lirePersonne(tx: Tx, id: string): Promise<FichePersonne | null> {
   if (!z.uuid().safeParse(id).success) return null;
@@ -204,6 +213,8 @@ export async function lirePersonne(tx: Tx, id: string): Promise<FichePersonne | 
       heureDebut: cours.heureDebut,
       statut: inscription.statut,
       payeurId: inscription.payeurId,
+      presents: presences(id, true),
+      absents: presences(id, false),
     })
     .from(inscriptionCours)
     .innerJoin(inscription, eq(inscription.id, inscriptionCours.inscriptionId))
