@@ -85,9 +85,16 @@ export default async function PageFamille({ params, searchParams }: PageProps<"/
       </dl>
 
       <section aria-labelledby="danseurs" className="flex flex-col gap-2">
-        <h2 id="danseurs" className="text-base font-semibold">
-          Danseurs
-        </h2>
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 id="danseurs" className="text-base font-semibold">
+            Danseurs
+          </h2>
+          {role !== "professeur" && (
+            <Link href={`/familles/${famille.id}/danseurs/nouveau`} className="lien text-sm">
+              Ajouter un danseur
+            </Link>
+          )}
+        </div>
         {famille.danseurs.length === 0 ? (
           <p className="text-sm text-doux">Aucun danseur rattaché à cette famille.</p>
         ) : (
@@ -104,7 +111,11 @@ export default async function PageFamille({ params, searchParams }: PageProps<"/
               <tbody>
                 {famille.danseurs.map((d) => (
                   <tr key={d.id}>
-                    <td className="font-medium">{d.prenom}</td>
+                    <td className="font-medium">
+                      <Link href={`/danseurs/${d.id}`} className="lien">
+                        {d.prenom}
+                      </Link>
+                    </td>
                     <td>{d.nom}</td>
                     <td className="tabular-nums">{d.dateNaissance ? `${ageAu(d.dateNaissance, aujourdhui)} ans` : "—"}</td>
                     <td className={inscritsCetteSaison.has(d.prenom) ? "" : "text-doux"}>
