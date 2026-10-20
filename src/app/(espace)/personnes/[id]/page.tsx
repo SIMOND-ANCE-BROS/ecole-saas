@@ -65,10 +65,10 @@ export default async function PagePersonne({ params, searchParams }: PageProps<"
   const saisonRecente = p.cours[0]?.saison;
   const coursActuels = p.cours.filter((c) => c.saison === saisonRecente);
   const historique = p.cours.filter((c) => c.saison !== saisonRecente);
-  const totalPaye = payees.reduce((s, i) => s + i.prixNetCentimes, 0);
+  const totalPrisEnCharge = payees.reduce((s, i) => s + i.prixNetCentimes, 0);
 
   return (
-    <article className="flex max-w-4xl flex-col gap-5">
+    <article className="flex w-full min-w-0 flex-col gap-5">
       <nav aria-label="Fil d’Ariane" className="text-sm">
         <Link href="/personnes" className="lien">
           Personnes
@@ -95,7 +95,7 @@ export default async function PagePersonne({ params, searchParams }: PageProps<"
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href={`/personnes/${p.id}/modifier`} className="bouton-secondaire">
-            Modifier
+            Modifier la fiche
           </Link>
           {inscrire.length === 1 && (
             <Link href={`/personnes/${inscrire[0].id}/inscription?danseur=${p.id}`} className="bouton-principal">
@@ -127,46 +127,19 @@ export default async function PagePersonne({ params, searchParams }: PageProps<"
         </section>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <section aria-labelledby="coordonnees" className="panneau flex flex-col gap-1 p-4 text-sm">
-          <h2 id="coordonnees" className="text-xs text-doux">
-            Coordonnées
-          </h2>
-          {p.telephone ? tel(p.telephone) : <span className="text-doux">Pas de téléphone</span>}
-          {p.email ? (
-            <a href={`mailto:${p.email}`} className="lien">
-              {p.email}
-            </a>
-          ) : (
-            <span className="text-doux">Pas d’e-mail</span>
-          )}
-          {p.adresse && <span>{p.adresse}</span>}
-        </section>
-        {p.type === "particulier" && (
-          <section aria-labelledby="urgence" className="panneau flex flex-col gap-1 p-4 text-sm">
-            <h2 id="urgence" className="text-xs text-doux">
-              En cas d’urgence
-            </h2>
-            {urgences.length === 0 ? (
-              <span className="text-doux">Personne n’est indiqué. Cochez « à prévenir » sur un lien ci-dessous.</span>
-            ) : (
-              urgences.map((l) => (
-                <span key={l.id} className="flex flex-wrap gap-x-2">
-                  <Link href={`/personnes/${l.autre.id}`} className="lien font-medium">
-                    {l.autre.nom}
-                  </Link>
-                  {l.autre.telephone ? tel(l.autre.telephone) : <span className="text-erreur">sans téléphone</span>}
-                </span>
-              ))
-            )}
-          </section>
-        )}
-      </div>
-
+      <nav aria-label="Sections de la fiche" className="flex flex-wrap gap-2 border-y border-bordure py-2 text-sm">
+        <a href="#liens" className="bouton-secondaire">Personnes liées</a>
+        {coursActuels.length > 0 && <a href="#cours" className="bouton-secondaire">Cours suivis</a>}
+        {(payees.length > 0 || paiePourAutres) && <a href="#payees" className="bouton-secondaire">Prises en charge</a>}
+        <a href="#coordonnees" className="bouton-secondaire">Coordonnées</a>
+        {(p.documents.length > 0 || p.cours.length > 0) && <a href="#documents" className="bouton-secondaire">Documents</a>}
+      </nav>
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="flex min-w-0 flex-col gap-5">
       <section aria-labelledby="liens" className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between gap-2">
           <h2 id="liens" className="text-base font-semibold">
-            Liens
+            Personnes liées
           </h2>
           <Link href={`/personnes/${p.id}/liens/nouveau`} className="lien text-sm">
             Ajouter un lien
@@ -214,7 +187,7 @@ export default async function PagePersonne({ params, searchParams }: PageProps<"
         <section aria-labelledby="payees" className="flex flex-col gap-2">
           <div className="flex items-baseline justify-between gap-2">
             <h2 id="payees" className="text-base font-semibold">
-              Inscriptions payées par {prenom} {saison && saison.libelle}
+              Inscriptions prises en charge {saison && `· ${saison.libelle}`}
             </h2>
             {saison && (
               <Link href={`/personnes/${p.id}/inscription`} className="lien text-sm">
@@ -222,6 +195,7 @@ export default async function PagePersonne({ params, searchParams }: PageProps<"
               </Link>
             )}
           </div>
+          <p className="text-xs text-doux">Montants des inscriptions à la charge de {prenom}. Ce total ne représente ni un montant encaissé, ni un solde restant dû.</p>
           {payees.length === 0 ? (
             <p className="text-sm text-doux">Aucune inscription pour cette saison.</p>
           ) : (
@@ -252,12 +226,12 @@ export default async function PagePersonne({ params, searchParams }: PageProps<"
                 <tfoot>
                   <tr>
                     <td colSpan={3} className="hidden px-3 py-2 text-right font-medium sm:table-cell">
-                      Total de la saison
+                      Total des inscriptions
                     </td>
                     <td colSpan={2} className="px-3 py-2 text-right font-medium sm:hidden">
-                      Total de la saison
+                      Total des inscriptions
                     </td>
-                    <td className="px-3 py-2 text-right font-semibold tabular-nums">{formaterEuros(totalPaye)}</td>
+                    <td className="px-3 py-2 text-right font-semibold tabular-nums">{formaterEuros(totalPrisEnCharge)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -306,6 +280,46 @@ export default async function PagePersonne({ params, searchParams }: PageProps<"
           </ul>
         </section>
       )}
+        </div>
+        <aside aria-label="Coordonnées et contacts d’urgence" className="order-first lg:sticky lg:top-20 lg:order-last">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+        <section aria-labelledby="coordonnees" className="panneau flex flex-col gap-1 p-4 text-sm">
+          <h2 id="coordonnees" className="text-sm font-semibold">
+            Coordonnées
+          </h2>
+          {p.telephone ? tel(p.telephone) : <span className="text-doux">Pas de téléphone</span>}
+          {p.email ? (
+            <a href={`mailto:${p.email}`} className="lien">
+              {p.email}
+            </a>
+          ) : (
+            <span className="text-doux">Pas d’e-mail</span>
+          )}
+          {p.adresse && <span>{p.adresse}</span>}
+        </section>
+        {p.type === "particulier" && (
+          <section aria-labelledby="urgence" className="panneau flex flex-col gap-1 p-4 text-sm">
+            <h2 id="urgence" className="text-sm font-semibold">
+              En cas d’urgence
+            </h2>
+            {urgences.length === 0 ? (
+              <span className="text-doux">Personne n’est indiqué. Cochez « à prévenir » sur un lien de la section « Liens ».</span>
+            ) : (
+              urgences.map((l) => (
+                <span key={l.id} className="flex flex-wrap gap-x-2">
+                  <Link href={`/personnes/${l.autre.id}`} className="lien font-medium">
+                    {l.autre.nom}
+                  </Link>
+                  {l.autre.telephone ? tel(l.autre.telephone) : <span className="text-erreur">sans téléphone</span>}
+                </span>
+              ))
+            )}
+          </section>
+        )}
+      </div>
+
+        </aside>
+      </div>
     </article>
   );
 }

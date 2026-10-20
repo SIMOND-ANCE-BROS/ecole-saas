@@ -39,7 +39,7 @@ export function AbonnementAgenda({
     });
 
   return (
-    <section aria-labelledby="agenda" className="panneau flex max-w-2xl flex-col gap-3 p-4 text-sm">
+    <section aria-labelledby="agenda" className="panneau flex w-full min-w-0 flex-col gap-3 p-4 text-sm">
       <div>
         <h2 id="agenda" className="text-base font-semibold">
           Agenda de {prenom}

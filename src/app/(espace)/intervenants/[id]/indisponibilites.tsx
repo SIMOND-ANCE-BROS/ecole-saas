@@ -31,7 +31,7 @@ export function Indisponibilites({ intervenantId, prenom, indispos }: { interven
   const maj = (champ: keyof typeof v) => (e: { target: { value: string } }) => setV({ ...v, [champ]: e.target.value });
 
   return (
-    <section aria-labelledby="indisponibilites" className="panneau flex max-w-2xl flex-col gap-3 p-4 text-sm">
+    <section aria-labelledby="indisponibilites" className="panneau flex min-w-0 flex-col gap-3 p-4 text-sm">
       <div>
         <h2 id="indisponibilites" className="text-base font-semibold">
           Indisponibilités de {prenom}

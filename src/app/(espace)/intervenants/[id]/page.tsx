@@ -3,12 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { avecEcole } from "@/db";
 import { etatAgenda } from "@/db/agenda";
+import { NOM_FOURNISSEUR } from "@/connecteurs/agenda/oauth";
 import { etatConnexion } from "@/db/connexions-agenda";
 import { listerIndisponibilites } from "@/db/disponibilites";
-import { lireIntervenant } from "@/db/intervenants";
+import { lireIntervenant, MODES_REMUNERATION, REGIMES_TVA, STATUTS, UNITES_REMUNERATION } from "@/db/intervenants";
+import { formaterEuros } from "@/lib/montant";
 import { exigerRole } from "@/lib/session";
-import { NOM_FOURNISSEUR } from "@/connecteurs/agenda/oauth";
-import { FormulaireIntervenant } from "../formulaire";
 import { AbonnementAgenda } from "./agenda";
 import { Indisponibilites } from "./indisponibilites";
 
@@ -40,8 +40,58 @@ export default async function PageIntervenant({ params }: PageProps<"/intervenan
         </Link>
         <span className="text-doux"> / {nom}</span>
       </nav>
-      <h1 className="titre-page">{nom}</h1>
-      <FormulaireIntervenant intervenant={intervenant} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="titre-page">{nom}</h1>
+          <p className="text-sm text-doux">
+            {intervenant.actif ? "Actif" : "Inactif"}
+            {intervenant.estDirigeant && ", dirigeant de l’école"}
+          </p>
+        </div>
+        <Link href={`/intervenants/${id}/modifier`} className="bouton-secondaire">
+          Modifier la fiche
+        </Link>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="panneau p-4" aria-labelledby="identite">
+          <h2 id="identite" className="mb-3 font-semibold">
+            Coordonnées et statut
+          </h2>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 text-sm">
+            <dt className="text-doux">E-mail</dt>
+            <dd className="break-all">
+              {intervenant.email ? (
+                <a className="lien" href={`mailto:${intervenant.email}`}>
+                  {intervenant.email}
+                </a>
+              ) : (
+                "Non renseigné"
+              )}
+            </dd>
+            <dt className="text-doux">Statut</dt>
+            <dd>{STATUTS[intervenant.statut]}</dd>
+            {intervenant.statut !== "salarie" && (
+              <>
+                <dt className="text-doux">SIREN</dt>
+                <dd>{intervenant.siren || "Non renseigné"}</dd>
+              </>
+            )}
+            <dt className="text-doux">TVA</dt>
+            <dd>{REGIMES_TVA[intervenant.regimeTva]}</dd>
+          </dl>
+        </section>
+        <section className="panneau p-4" aria-labelledby="remuneration">
+          <h2 id="remuneration" className="mb-3 font-semibold">
+            Rémunération
+          </h2>
+          <p className="text-sm">{MODES_REMUNERATION[intervenant.modeRemuneration]}</p>
+          <p className="mt-2 text-xl font-semibold tabular-nums">
+            {formaterEuros(intervenant.tarifCentimes)}{" "}
+            <span className="text-sm font-normal text-doux">/ {UNITES_REMUNERATION[intervenant.modeRemuneration]}</span>
+          </p>
+          <p className="mt-2 text-xs text-doux">Tarif de référence. Ce montant n’est pas un relevé à payer.</p>
+        </section>
+      </div>
       <Indisponibilites
         intervenantId={intervenant.id}
         prenom={intervenant.prenom}

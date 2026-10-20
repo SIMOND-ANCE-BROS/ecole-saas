@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
+import { requeteDifferee } from "@/lib/requete-differee";
 import type { ResultatPersonne } from "@/db/personnes";
 import { nomAffiche } from "@/domaine/personnes/nom";
 import { chercherPersonnes, lierExistante } from "../../../actions";
@@ -13,7 +14,11 @@ type Props = { ficheId: string; ficheNom: string };
 export function ChoixLien({ ficheId, ficheNom }: Props) {
   const [relation, setRelation] = useState<Relation>("representant");
   const [saisie, setSaisie] = useState("");
-  const [resultats, setResultats] = useState<ResultatPersonne[]>([]);
+  const [reponse, setReponse] = useState<{ saisie: string; essai: number; resultats: ResultatPersonne[]; erreur: boolean } | null>(null);
+  const [essai, setEssai] = useState(0);
+  const actuelle = reponse?.saisie === saisie && reponse.essai === essai ? reponse : null;
+  const resultats = actuelle?.resultats ?? [];
+  const rechercheActive = saisie.trim().length >= 2;
   const [choisie, setChoisie] = useState<ResultatPersonne | null>(null);
   const [paiePour, setPaiePour] = useState(true);
   const [contactUrgence, setContactUrgence] = useState(true);
@@ -22,16 +27,19 @@ export function ChoixLien({ ficheId, ficheNom }: Props) {
 
   useEffect(() => {
     if (saisie.trim().length < 2) return;
-    const minuteur = setTimeout(async () => setResultats((await chercherPersonnes(saisie)).filter((r) => r.id !== ficheId)), 150);
-    return () => clearTimeout(minuteur);
-  }, [saisie, ficheId]);
+    return requeteDifferee(
+      () => chercherPersonnes(saisie),
+      (resultats) => setReponse({ saisie, essai, resultats: resultats.filter((r) => r.id !== ficheId), erreur: false }),
+      () => setReponse({ saisie, essai, resultats: [], erreur: true }),
+    );
+  }, [saisie, ficheId, essai]);
 
   const r = RELATIONS[relation];
   const autre = choisie ? nomAffiche(choisie) : "l’autre personne";
   const [de, vers] = r.de === "fiche" ? [ficheNom, autre] : [autre, ficheNom];
 
   return (
-    <div className="flex max-w-2xl flex-col gap-5">
+    <div className="flex w-full min-w-0 flex-col gap-5">
       <fieldset className="flex flex-col gap-1.5 text-sm">
         <legend className="mb-1 text-sm font-semibold">Pour {ficheNom}, l’autre personne est :</legend>
         {Object.entries(RELATIONS).map(([k, rel]) => (
@@ -67,10 +75,30 @@ export function ChoixLien({ ficheId, ficheNom }: Props) {
           onChange={(e) => {
             setSaisie(e.target.value);
             setChoisie(null);
-            if (e.target.value.trim().length < 2) setResultats([]);
+            setRefus(null);
           }}
         />
-        {resultats.length > 0 && !choisie && (
+        {/* Région toujours présente : son contenu change, et les lecteurs d'écran l'annoncent. */}
+        <div role="status" className="text-sm text-doux">
+          {!choisie &&
+            (!rechercheActive ? (
+              "Saisissez au moins deux caractères."
+            ) : !actuelle ? (
+              "Recherche…"
+            ) : actuelle.erreur ? (
+              <span>
+                Recherche indisponible.{" "}
+                <button type="button" className="lien" onClick={() => setEssai((n) => n + 1)}>
+                  Réessayer
+                </button>
+              </span>
+            ) : resultats.length === 0 ? (
+              "Aucune personne trouvée."
+            ) : (
+              `${resultats.length} résultat${resultats.length > 1 ? "s" : ""}`
+            ))}
+        </div>
+        {rechercheActive && resultats.length > 0 && !choisie && (
           <ul className="panneau max-h-64 divide-y divide-bordure overflow-y-auto text-sm">
             {resultats.map((p) => (
               <li key={p.id}>

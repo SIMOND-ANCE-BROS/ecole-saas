@@ -39,7 +39,7 @@ export default async function PageAppel({ params }: PageProps<"/planning/seances
   const date = dateLongue.format(new Date(`${appel.date}T00:00:00Z`));
 
   return (
-    <section className="flex max-w-4xl flex-col gap-4">
+    <section className="flex w-full min-w-0 flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
         <Link href="/planning" className="lien">
           Planning

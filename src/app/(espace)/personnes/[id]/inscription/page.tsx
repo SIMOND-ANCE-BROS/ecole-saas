@@ -35,7 +35,7 @@ export default async function PageInscription({ params, searchParams }: PageProp
       </nav>
       <div>
         <h1 className="titre-page">Nouvelle inscription{saison && ` ${saison.libelle}`}</h1>
-        <p className="text-sm text-doux">Payée par {nom}</p>
+        <p className="text-sm text-doux">Payeur : {nom}</p>
       </div>
       {!saison ? (
         <p className="text-sm">Aucune saison n’est paramétrée.</p>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { type CoursEdite, type ReferentielPlanning, TYPES_COURS } from "@/db/cours";
 import type { CoursPlanning } from "@/db/planning";
 import { conflits } from "@/domaine/planning/chevauchement";
@@ -44,6 +44,10 @@ export function FormulaireCours({ cours, referentiel, planning, jour }: Props) {
   });
   const [refus, setRefus] = useState<Refus | null>(null);
   const [envoi, demarrer] = useTransition();
+  const formulaire = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (refus) formulaire.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
+  }, [refus]);
   const [confirmerSuppression, setConfirmer] = useState(false);
   const maj = (champ: keyof typeof v) => (e: { target: { value: string } }) => setV({ ...v, [champ]: e.target.value });
 
@@ -111,15 +115,16 @@ export function FormulaireCours({ cours, referentiel, planning, jour }: Props) {
 
   return (
     <form
-      className="flex max-w-3xl flex-col gap-5"
+      ref={formulaire}
+      className="flex w-full min-w-0 flex-col gap-5"
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
         demarrer(async () => setRefus(await enregistrerCours(cours?.id ?? null, saisie)));
       }}
     >
-      <fieldset className="grid gap-3 sm:grid-cols-2">
-        <legend className="mb-2 text-sm font-semibold">Cours</legend>
+      <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
+        <legend className="px-1 text-sm font-semibold">Cours</legend>
         <div className="flex flex-col gap-1">
           {libelle("discipline", "Discipline")}
           <input
@@ -179,8 +184,8 @@ export function FormulaireCours({ cours, referentiel, planning, jour }: Props) {
         </div>
       </fieldset>
 
-      <fieldset className="grid gap-3 sm:grid-cols-3">
-        <legend className="mb-2 text-sm font-semibold">Créneau</legend>
+      <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-3">
+        <legend className="px-1 text-sm font-semibold">Créneau</legend>
         {!stage && (
           <div className="flex flex-col gap-1">
             {libelle("jour", "Jour")}
@@ -217,8 +222,8 @@ export function FormulaireCours({ cours, referentiel, planning, jour }: Props) {
         </div>
       </fieldset>
 
-      <fieldset className="grid gap-3 sm:grid-cols-2">
-        <legend className="mb-2 text-sm font-semibold">Lieu</legend>
+      <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
+        <legend className="px-1 text-sm font-semibold">Lieu</legend>
         <div className="flex flex-col gap-1 sm:col-span-2">
           {libelle("salle", "Salle")}
           <select id="salle" className="champ" value={v.salleId} onChange={maj("salleId")}>
@@ -269,8 +274,8 @@ export function FormulaireCours({ cours, referentiel, planning, jour }: Props) {
         )}
       </fieldset>
 
-      <fieldset className="grid gap-3 sm:grid-cols-3">
-        <legend className="mb-2 text-sm font-semibold">Public</legend>
+      <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-3">
+        <legend className="px-1 text-sm font-semibold">Public</legend>
         <div className="flex flex-col gap-1">
           {libelle("age-min", "Âge minimum")}
           <input id="age-min" type="number" min={0} className="champ" value={v.ageMin} onChange={maj("ageMin")} />
@@ -318,12 +323,12 @@ export function FormulaireCours({ cours, referentiel, planning, jour }: Props) {
       )}
 
       {refus && (
-        <p role="alert" className="text-sm text-erreur">
+        <p tabIndex={-1} role="alert" className="text-sm text-erreur">
           {refus.message}
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 border-t border-bordure pt-4">
         <button type="submit" className="bouton-principal" disabled={envoi}>
           {envoi ? "Enregistrement…" : cours ? "Enregistrer les modifications" : "Créer le cours"}
         </button>

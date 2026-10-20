@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { CoursPlanning } from "@/db/planning";
 import { ages, fin, JOURS } from "./format";
+import { FILTRES_VIDES, filtrerPlanning } from "./filtres";
 
 type Props = {
   cours: CoursPlanning[];
@@ -13,23 +14,26 @@ type Props = {
   misEnAvant?: string;
 };
 
-/** Planning de la semaine, filtrable par discipline et par site, avec l'effectif de chaque cours. */
+/** Planning de la semaine, filtrable par discipline, site, salle et intervenant, avec l'effectif de chaque cours. */
 export function GrillePlanning({ cours, modifiable, misEnAvant }: Props) {
-  const [discipline, setDiscipline] = useState("");
-  const [site, setSite] = useState("");
+  const [filtres, setFiltres] = useState(FILTRES_VIDES);
+  const { discipline, site, salleId, intervenantId } = filtres;
   const disciplines = useMemo(() => [...new Set(cours.map((c) => c.discipline))].sort(), [cours]);
   const sites = useMemo(() => [...new Set(cours.map((c) => c.site))].sort(), [cours]);
-  const visibles = cours.filter((c) => (!discipline || c.discipline === discipline) && (!site || c.site === site));
-  const jours = [...new Set(visibles.map((c) => c.jourSemaine))];
+  const salles = [...new Map(cours.filter((c) => !site || c.site === site).map((c) => [c.salleId, { id: c.salleId, libelle: `${c.salle} · ${c.site}` }])).values()].sort((a, b) => a.libelle.localeCompare(b.libelle, "fr"));
+  const intervenants = [...new Map(cours.map((c) => [c.intervenantId, c.intervenant])).entries()].sort((a, b) => a[1].localeCompare(b[1], "fr"));
+  const visibles = filtrerPlanning(cours, filtres);
+  const filtresActifs = Object.values(filtres).some(Boolean);
+  const jours = [...new Set(visibles.map((c) => c.jourSemaine))].sort((a, b) => (a ?? 8) - (b ?? 8));
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="panneau flex flex-wrap items-end gap-3 p-3">
         <div className="flex flex-col gap-1">
           <label htmlFor="filtre-discipline" className="text-xs text-doux">
             Discipline
           </label>
-          <select id="filtre-discipline" className="champ" value={discipline} onChange={(e) => setDiscipline(e.target.value)}>
+          <select id="filtre-discipline" className="champ" value={discipline} onChange={(e) => setFiltres({ ...filtres, discipline: e.target.value })}>
             <option value="">Toutes</option>
             {disciplines.map((d) => (
               <option key={d}>{d}</option>
@@ -40,20 +44,35 @@ export function GrillePlanning({ cours, modifiable, misEnAvant }: Props) {
           <label htmlFor="filtre-site" className="text-xs text-doux">
             Site
           </label>
-          <select id="filtre-site" className="champ" value={site} onChange={(e) => setSite(e.target.value)}>
+          <select id="filtre-site" className="champ" value={site} onChange={(e) => setFiltres({ ...filtres, site: e.target.value, salleId: "" })}>
             <option value="">Tous</option>
             {sites.map((s) => (
               <option key={s}>{s}</option>
             ))}
           </select>
         </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="filtre-salle" className="text-xs text-doux">Salle</label>
+          <select id="filtre-salle" className="champ" value={salleId} onChange={(e) => setFiltres({ ...filtres, salleId: e.target.value })}>
+            <option value="">Toutes les salles</option>
+            {salles.map((s) => <option key={s.id} value={s.id}>{s.libelle}</option>)}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="filtre-intervenant" className="text-xs text-doux">Intervenant</label>
+          <select id="filtre-intervenant" className="champ" value={intervenantId} onChange={(e) => setFiltres({ ...filtres, intervenantId: e.target.value })}>
+            <option value="">Tous les intervenants</option>
+            {intervenants.map(([id, nom]) => <option key={id} value={id}>{nom}</option>)}
+          </select>
+        </div>
+        {filtresActifs && <button type="button" className="bouton-secondaire" onClick={() => setFiltres(FILTRES_VIDES)}>Réinitialiser les filtres</button>}
         <p className="pb-1.5 text-sm text-doux" aria-live="polite">
-          {visibles.length} cours
+          {visibles.length} cours sur {cours.length}
         </p>
       </div>
 
       {visibles.length === 0 ? (
-        <p className="text-sm text-doux">Aucun cours ne correspond à ces filtres.</p>
+        <div className="panneau flex flex-col items-start gap-3 p-5"><p className="text-sm text-doux">{cours.length === 0 ? "Aucun cours n’est encore programmé." : "Aucun cours ne correspond à cette combinaison de filtres."}</p>{filtresActifs && <button type="button" className="bouton-secondaire" onClick={() => setFiltres(FILTRES_VIDES)}>Afficher tous les cours</button>}</div>
       ) : (
         <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
           {jours.map((jour) => (

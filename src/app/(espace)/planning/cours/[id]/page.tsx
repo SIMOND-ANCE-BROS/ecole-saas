@@ -49,7 +49,7 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
   const public_ = [ages(cours.ageMin, cours.ageMax), cours.niveau].filter(Boolean).join(", ");
 
   return (
-    <article className="flex max-w-5xl flex-col gap-5">
+    <article className="flex w-full min-w-0 flex-col gap-5">
       <nav aria-label="Fil d’Ariane" className="text-sm print:hidden">
         <Link href="/planning" className="lien">
           Planning

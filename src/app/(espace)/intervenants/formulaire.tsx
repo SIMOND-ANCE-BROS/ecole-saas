@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
-import { type Intervenant, MODES_REMUNERATION, REGIMES_TVA, STATUTS } from "@/db/intervenants";
+import { type Intervenant, MODES_REMUNERATION, REGIMES_TVA, STATUTS, UNITES_REMUNERATION } from "@/db/intervenants";
 import { enregistrerIntervenant, type EtatFormulaire } from "./actions";
 
-const UNITE = { heure: "€ / heure", cours: "€ / cours", forfait_mensuel: "€ / mois" } as const;
+type Mode = keyof typeof UNITES_REMUNERATION;
 
 /** Montant en centimes → saisie en euros (« 40 », « 40,50 »), sans nombre à virgule. */
 const enEuros = (c: number) => `${Math.trunc(c / 100)}${c % 100 ? `,${String(c % 100).padStart(2, "0")}` : ""}`;
@@ -29,7 +29,7 @@ export function FormulaireIntervenant({ intervenant }: { intervenant: Intervenan
   const action = enregistrerIntervenant.bind(null, intervenant?.id ?? null);
   const [etat, envoyer, enCours] = useActionState<EtatFormulaire, FormData>(action, { essai: 0, erreurs: {}, valeurs: null });
   // Remonté après chaque refus pour reprendre la saisie renvoyée par le serveur.
-  return <Champs key={etat.essai} etat={etat} envoyer={envoyer} enCours={enCours} edition={intervenant !== null} initial={versValeurs(intervenant)} />;
+  return <Champs key={etat.essai} etat={etat} envoyer={envoyer} enCours={enCours} retour={intervenant ? `/intervenants/${intervenant.id}` : "/intervenants"} edition={intervenant !== null} initial={versValeurs(intervenant)} />;
 }
 
 type PropsChamps = {
@@ -37,13 +37,14 @@ type PropsChamps = {
   envoyer: (f: FormData) => void;
   enCours: boolean;
   edition: boolean;
+  retour: string;
   initial: Record<string, string>;
 };
 
-function Champs({ etat, envoyer, enCours, edition, initial }: PropsChamps) {
+function Champs({ etat, envoyer, enCours, edition, initial, retour }: PropsChamps) {
   const v = etat.valeurs ?? initial;
   const [statut, setStatut] = useState(v.statut);
-  const [mode, setMode] = useState(v.modeRemuneration as keyof typeof UNITE);
+  const [mode, setMode] = useState(v.modeRemuneration as Mode);
   const e = etat.erreurs;
   const formulaire = useRef<HTMLFormElement>(null);
 
@@ -75,22 +76,22 @@ function Champs({ etat, envoyer, enCours, edition, initial }: PropsChamps) {
   );
 
   return (
-    <form ref={formulaire} action={envoyer} className="flex max-w-2xl flex-col gap-5" noValidate>
+    <form ref={formulaire} action={envoyer} className="flex w-full min-w-0 flex-col gap-5" noValidate>
       {e.formulaire && (
         <p role="alert" className="text-sm text-erreur">
           {e.formulaire}
         </p>
       )}
 
-      <fieldset className="grid gap-3 sm:grid-cols-2">
-        <legend className="mb-2 text-sm font-semibold">Identité</legend>
+      <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
+        <legend className="px-1 text-sm font-semibold">Identité</legend>
         {champ("prenom", "Prénom", { autoComplete: "off", autoFocus: !edition && etat.essai === 0, required: true })}
         {champ("nom", "Nom", { autoComplete: "off", required: true })}
-        <div className="sm:col-span-2">{champ("email", "E-mail (pour l’agenda et les relevés)", { type: "email", autoComplete: "off" })}</div>
+        <div className="sm:col-span-2">{champ("email", "E-mail (facultatif, pour l’agenda et les relevés)", { type: "email", autoComplete: "off" })}</div>
       </fieldset>
 
-      <fieldset className="grid gap-3 sm:grid-cols-2">
-        <legend className="mb-2 text-sm font-semibold">Statut</legend>
+      <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
+        <legend className="px-1 text-sm font-semibold">Statut</legend>
         <div className="flex flex-col gap-1">
           <label htmlFor="statut" className="text-sm font-medium">
             Statut
@@ -103,7 +104,7 @@ function Champs({ etat, envoyer, enCours, edition, initial }: PropsChamps) {
             ))}
           </select>
         </div>
-        {statut !== "salarie" ? champ("siren", "SIREN", { inputMode: "numeric", autoComplete: "off", placeholder: "9 chiffres" }) : <input type="hidden" name="siren" value="" />}
+        {statut !== "salarie" ? champ("siren", "SIREN (facultatif)", { inputMode: "numeric", autoComplete: "off", placeholder: "9 chiffres" }) : <input type="hidden" name="siren" value="" />}
         <div className="flex flex-col gap-1">
           <label htmlFor="regimeTva" className="text-sm font-medium">
             TVA
@@ -122,18 +123,18 @@ function Champs({ etat, envoyer, enCours, edition, initial }: PropsChamps) {
         </label>
       </fieldset>
 
-      <fieldset className="grid gap-3 sm:grid-cols-2">
-        <legend className="mb-2 text-sm font-semibold">Rémunération</legend>
+      <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
+        <legend className="px-1 text-sm font-semibold">Rémunération</legend>
         <div className="flex flex-col gap-1">
           <label htmlFor="modeRemuneration" className="text-sm font-medium">
-            Payé
+            Mode de rémunération
           </label>
           <select
             id="modeRemuneration"
             name="modeRemuneration"
             className="champ"
             defaultValue={v.modeRemuneration}
-            onChange={(x) => setMode(x.target.value as keyof typeof UNITE)}
+            onChange={(x) => setMode(x.target.value as Mode)}
           >
             {Object.entries(MODES_REMUNERATION).map(([k, l]) => (
               <option key={k} value={k}>
@@ -142,7 +143,7 @@ function Champs({ etat, envoyer, enCours, edition, initial }: PropsChamps) {
             ))}
           </select>
         </div>
-        {champ("tarif", `Tarif (${UNITE[mode]})`, { inputMode: "decimal", autoComplete: "off", required: true })}
+        {champ("tarif", `Tarif (€ / ${UNITES_REMUNERATION[mode]})`, { inputMode: "decimal", autoComplete: "off", required: true })}
       </fieldset>
 
       {edition && (
@@ -155,11 +156,11 @@ function Champs({ etat, envoyer, enCours, edition, initial }: PropsChamps) {
         </label>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2 border-t border-bordure pt-4">
         <button type="submit" className="bouton-principal" disabled={enCours}>
           {enCours ? "Enregistrement…" : edition ? "Enregistrer les modifications" : "Ajouter l’intervenant"}
         </button>
-        <Link href="/intervenants" className="bouton-secondaire">
+        <Link href={retour} className="bouton-secondaire">
           Annuler
         </Link>
       </div>

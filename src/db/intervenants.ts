@@ -13,6 +13,8 @@ export const REGIMES_TVA = {
   non_applicable: "Non applicable",
 } as const;
 export const MODES_REMUNERATION = { heure: "à l’heure", cours: "au cours", forfait_mensuel: "forfait mensuel" } as const;
+/** Unité du tarif selon le mode de rémunération. */
+export const UNITES_REMUNERATION = { heure: "heure", cours: "cours", forfait_mensuel: "mois" } as const;
 
 const cles = <T extends object>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
 
