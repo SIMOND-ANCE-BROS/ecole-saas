@@ -15,6 +15,7 @@ import {
   supprimerSalle,
   supprimerSite,
 } from "@/db/parametres";
+import { enregistrerCarnet, enregistrerFratrie, enregistrerPrix, supprimerCarnet } from "@/db/tarifs";
 import { exigerRole } from "@/lib/session";
 
 type Retour = { message: string | null };
@@ -61,4 +62,17 @@ export async function changerSalle(id: string, saisie: unknown) {
 }
 export async function retirerSalle(id: string) {
   return agir("lieux", (tx) => supprimerSalle(tx, id));
+}
+
+export async function prixCase(saisonId: string, saisie: unknown) {
+  return agir("tarifs", (tx) => enregistrerPrix(tx, saisonId, saisie as never));
+}
+export async function regleFratrie(saisonId: string, saisie: unknown) {
+  return agir("tarifs", (tx) => enregistrerFratrie(tx, saisonId, saisie as never));
+}
+export async function carnet(saisonId: string, saisie: unknown) {
+  return agir("tarifs", (tx) => enregistrerCarnet(tx, saisonId, saisie as never));
+}
+export async function retirerCarnet(id: string) {
+  return agir("tarifs", (tx) => supprimerCarnet(tx, id));
 }

@@ -17,6 +17,7 @@ export default async function PageParametres() {
   const salles = lieux.reduce((n, s) => n + s.salles.length, 0);
   const rubriques = [
     { href: "/parametres/saisons", titre: "Saisons", detail: `${saisons.length} saison${saisons.length > 1 ? "s" : ""}, dates et reprise de la grille` },
+    { href: "/parametres/tarifs", titre: "Tarifs et réductions", detail: "Grille des forfaits, réduction fratrie, carnets de cours particuliers" },
     { href: "/parametres/disciplines", titre: "Disciplines", detail: `${disciplines.length} discipline${disciplines.length > 1 ? "s" : ""} proposée${disciplines.length > 1 ? "s" : ""}` },
     { href: "/parametres/lieux", titre: "Sites et salles", detail: `${lieux.length} site${lieux.length > 1 ? "s" : ""}, ${salles} salle${salles > 1 ? "s" : ""}` },
     { href: "/planning/fermetures", titre: "Fermetures", detail: "Vacances, jours fériés, gala" },

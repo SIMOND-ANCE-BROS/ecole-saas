@@ -188,7 +188,7 @@ function valeur(regle: RegleReduction): string {
 }
 
 /** [45, 60] → « 45 min + 1 h 00 » */
-function libelleCombinaison(combinaison: readonly number[]): string {
+export function libelleCombinaison(combinaison: readonly number[]): string {
   return combinaison
     .map((m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`))
     .join(" + ");
