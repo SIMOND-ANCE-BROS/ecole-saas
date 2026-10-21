@@ -9,6 +9,7 @@ const LIENS = [
   { href: "/eleves", libelle: "Élèves" },
   { href: "/contacts", libelle: "Contacts" },
   { href: "/planning", libelle: "Planning" },
+  { href: "/encaissements", libelle: "Encaissements" },
   { href: "/intervenants", libelle: "Intervenants" },
   { href: "/parametres", libelle: "Paramètres" },
 ];
@@ -20,7 +21,7 @@ export function Navigation({ role }: { role: "direction" | "accueil" | "professe
   return (
     <nav aria-label="Navigation principale" className="flex flex-col gap-0.5">
       {LIENS.filter(
-        (l) => (l.href !== "/parametres" || role === "direction") && (role !== "professeur" || !["/intervenants", "/eleves", "/contacts"].includes(l.href)),
+        (l) => (l.href !== "/parametres" || role === "direction") && (role !== "professeur" || !["/intervenants", "/eleves", "/contacts", "/encaissements"].includes(l.href)),
       ).map((l) => (
         <Link
           key={l.href}

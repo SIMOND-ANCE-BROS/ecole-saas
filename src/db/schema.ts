@@ -780,6 +780,34 @@ export const paiement = pgTable(
   ],
 );
 
+/** Moyens remis à la banque (ou à l'ANCV) par bordereau (#98). */
+export const moyenRemise = pgEnum("moyen_remise", ["cheque", "especes", "cheque_vacances"]);
+
+/** Remise en banque : un bordereau de chèques, d'espèces ou de chèques vacances déposés ensemble (#98). */
+export const remise = pgTable(
+  "remise",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ecoleId: ecoleId(),
+    date: date("date").notNull(),
+    moyen: moyenRemise("moyen").notNull(),
+    creePar: uuid("cree_par"),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [cibleMemeEcole(t), memeEcole(t, t.creePar, membre)],
+);
+
+/** Paiements d'une remise ; un paiement ne figure que dans une seule remise (le paiement, inaltérable, n'est pas modifié). */
+export const remisePaiement = pgTable(
+  "remise_paiement",
+  {
+    ecoleId: ecoleId(),
+    remiseId: uuid("remise_id").notNull(),
+    paiementId: uuid("paiement_id").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.paiementId] }), index().on(t.remiseId), memeEcole(t, t.remiseId, remise).onDelete("cascade"), memeEcole(t, t.paiementId, paiement)],
+);
+
 export const affectationPaiement = pgTable(
   "affectation_paiement",
   {

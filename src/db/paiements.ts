@@ -54,7 +54,7 @@ export type Resultat = { ok: true; ids: string[] } | { ok: false; message: strin
  * table : dans un `select`, Drizzle l'écrirait seul, et il désignerait alors
  * la ligne de la sous-requête.
  */
-const dejaCorrige = sql<number>`coalesce((SELECT -sum(c.montant_centimes) FROM paiement c WHERE c.corrige_id = ${paiement}.${sql.identifier("id")}), 0)::int`;
+export const dejaCorrige = sql<number>`coalesce((SELECT -sum(c.montant_centimes) FROM paiement c WHERE c.corrige_id = ${paiement}.${sql.identifier("id")}), 0)::int`;
 
 /** Membre de l'école courante qui saisit (pour `saisi_par` et le journal). */
 async function membreDe(tx: Tx, userId: string): Promise<string | null> {
