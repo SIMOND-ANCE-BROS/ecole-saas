@@ -169,6 +169,13 @@
       "when": 1792525884226,
       "tag": "0023_seance_deplacee",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792569629025,
+      "tag": "0024_paiement_cheques",
+      "breakpoints": true
     }
   ]
 }
