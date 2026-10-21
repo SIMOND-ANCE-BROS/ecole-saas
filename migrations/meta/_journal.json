@@ -176,6 +176,13 @@
       "when": 1792569629025,
       "tag": "0024_paiement_cheques",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792572950932,
+      "tag": "0025_remises",
+      "breakpoints": true
     }
   ]
 }
