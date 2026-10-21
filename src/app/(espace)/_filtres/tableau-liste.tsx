@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { type ReactNode, useId, useRef, useState, useTransition } from "react";
 import type { Liste } from "@/domaine/filtres/colonnes";
-import { basculer, type Disposition, deplacer, dispositionParDefaut, ecrireDisposition, lireDisposition } from "@/domaine/filtres/disposition";
+import { basculer, type Disposition, deplacer, dispositionParDefaut, ecrireDisposition, lireDisposition, placer, redimensionner } from "@/domaine/filtres/disposition";
 import { type Condition, CONDITIONS_MAX, type DefColonne, libelleCondition, libelleOperateur, type Mode, OPERATEURS, sansValeur } from "@/domaine/filtres/filtres";
 import { enregistrerColonnes } from "./actions";
 import { type FiltreAdresse, useFiltreAdresse } from "./filtre-adresse";
@@ -50,6 +50,12 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
   const [echec, setEchec] = useState(false);
   const defs = new Map(colonnes.map((c) => [c.id, c]));
   const visibles = dispo.filter((d) => d.visible).flatMap((d) => defs.get(d.id) ?? []);
+  const masquees = dispo.filter((d) => !d.visible).flatMap((d) => defs.get(d.id) ?? []);
+  const largeurDe = (id: string) => dispo.find((d) => d.id === id)?.largeur ?? null;
+  const style = (id: string) => {
+    const l = largeurDe(id);
+    return l ? { width: l, minWidth: l, maxWidth: l } : undefined;
+  };
 
   function changerDispo(d: Disposition) {
     setDispo(d);
@@ -57,26 +63,51 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
     demarrer(async () => setEchec(!(await enregistrerColonnes(liste, ecrireDisposition(d)))));
   }
 
+  // Glisser-déposer d'un en-tête (souris) ; au clavier, les flèches du menu « Colonnes ».
+  const [glissee, setGlissee] = useState<string | null>(null);
+  const [survolee, setSurvolee] = useState<string | null>(null);
+
+  // Largeur : on tire le bord droit d'un en-tête ; enregistrée au lâcher, double-clic pour l'automatique.
+  // Pendant ce geste, l'en-tête (déplaçable) ne doit pas partir en glisser-déposer.
+  const enRedimension = useRef(false);
+  function redimensionnerA(e: React.PointerEvent<HTMLElement>, id: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    enRedimension.current = true;
+    const th = e.currentTarget.parentElement as HTMLElement;
+    const depart = e.clientX;
+    const initiale = th.getBoundingClientRect().width;
+    let courante = dispo;
+    const bouger = (ev: PointerEvent) => {
+      courante = redimensionner(dispo, id, initiale + ev.clientX - depart);
+      setDispo(courante);
+    };
+    const lacher = () => {
+      enRedimension.current = false;
+      window.removeEventListener("pointermove", bouger);
+      window.removeEventListener("pointerup", lacher);
+      if (courante !== dispo) changerDispo(courante);
+    };
+    window.addEventListener("pointermove", bouger);
+    window.addEventListener("pointerup", lacher);
+  }
+
   const completes = f.filtre.conditions.flatMap((c, i) => (f.complete(c) ? [{ c, i }] : []));
   const mode = (m: Mode) => f.changer({ ...f.filtre, mode: m });
+  const choixMode = f.filtre.conditions.length > 1 && <ChoixMode mode={f.filtre.mode} changer={mode} />;
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <Bulle titre={`Colonnes et filtres de ${quoi}`} bouton="Colonnes" classeBouton="bouton-secondaire" largeur="w-[22rem]">
+        <Bulle
+          titre={`Colonnes et filtres de ${quoi}`}
+          bouton={masquees.length ? `Colonnes (${masquees.length} disponible${masquees.length > 1 ? "s" : ""})` : "Colonnes"}
+          classeBouton="bouton-secondaire"
+          largeur="w-[22rem]"
+        >
           <MenuColonnes colonnes={defs} dispo={dispo} changer={changerDispo} f={f} parDefaut={() => changerDispo(dispositionParDefaut(colonnes))} />
         </Bulle>
-        {completes.length > 1 && (
-          <fieldset className="flex items-center gap-2">
-            <legend className="sr-only">Combinaison des filtres</legend>
-            {(["et", "ou"] as Mode[]).map((m) => (
-              <label key={m} className="flex items-center gap-1">
-                <input type="radio" name={`mode-${liste}`} checked={f.filtre.mode === m} onChange={() => mode(m)} />
-                {m === "et" ? "toutes les conditions" : "au moins une"}
-              </label>
-            ))}
-          </fieldset>
-        )}
+        {choixMode}
         <ul className="flex flex-wrap gap-1.5" aria-label="Filtres actifs">
           {completes.map(({ c, i }, k) => (
             <li key={i} className="flex items-center gap-1 rounded-full border border-accent bg-accent-doux py-0.5 pr-1 pl-2.5">
@@ -105,19 +136,81 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
           <thead>
             <tr>
               {visibles.map((d) => (
-                <th key={d.id} scope="col" className={d.droite ? "text-right" : ""}>
-                  <span className={`inline-flex items-center gap-1 ${d.droite ? "flex-row-reverse" : ""}`}>
-                    {d.libelle}
-                    {d.filtrable !== false && <BulleFiltre def={d} f={f} />}
+                <th
+                  key={d.id}
+                  scope="col"
+                  draggable
+                  onMouseDown={(e) => {
+                    // Une poignée de largeur saisie : pas de glisser-déposer natif.
+                    if ((e.target as HTMLElement).dataset.poignee) e.preventDefault();
+                  }}
+                  style={style(d.id)}
+                  className={`relative cursor-grab select-none ${glissee === d.id ? "opacity-50" : ""} ${survolee === d.id && glissee !== d.id ? "shadow-[inset_3px_0_0_var(--accent)]" : ""}`}
+                  title="Glissez pour déplacer la colonne"
+                  onDragStart={(e) => {
+                    if (enRedimension.current) return e.preventDefault();
+                    setGlissee(d.id);
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", d.id);
+                  }}
+                  onDragOver={(e) => {
+                    if (!glissee) return;
+                    e.preventDefault();
+                    setSurvolee(d.id);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (glissee) changerDispo(placer(dispo, glissee, d.id));
+                    setGlissee(null);
+                    setSurvolee(null);
+                  }}
+                  onDragEnd={() => {
+                    setGlissee(null);
+                    setSurvolee(null);
+                  }}
+                >
+                  {/* Entonnoir toujours à droite du titre, même pour une colonne de nombres. */}
+                  <span className={`flex items-center gap-1 ${d.droite ? "justify-end" : ""}`}>
+                    <span className="truncate">{d.libelle}</span>
+                    {d.filtrable !== false && (
+                      <BulleFiltre def={d} f={f} choixMode={choixMode} masquer={visibles.length > 1 ? () => changerDispo(basculer(dispo, d.id)) : null} />
+                    )}
                   </span>
+                  <span
+                    aria-hidden
+                    data-poignee="1"
+                    title="Tirez pour changer la largeur, double-cliquez pour la largeur automatique"
+                    className="absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize hover:bg-accent/40"
+                    onPointerDown={(e) => redimensionnerA(e, d.id)}
+                    onDoubleClick={() => changerDispo(redimensionner(dispo, d.id, null))}
+                  />
                 </th>
               ))}
+              <th scope="col" className="w-8 px-1 text-right">
+                <Bulle titre="Ajouter une colonne" libelleBouton="Ajouter une colonne" bouton="+" classeBouton="rounded px-2 py-0.5 text-base leading-none text-accent hover:bg-accent-doux">
+                  <p className="mb-2 font-medium">Ajouter une colonne</p>
+                  {masquees.length === 0 ? (
+                    <p className="text-doux">Toutes les colonnes sont affichées.</p>
+                  ) : (
+                    <ul className="flex flex-col gap-1">
+                      {masquees.map((c) => (
+                        <li key={c.id}>
+                          <button type="button" className="lien" onClick={() => changerDispo(placer(basculer(dispo, c.id), c.id, null))}>
+                            {c.libelle}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="mt-2 text-xs text-doux">Pour retirer une colonne : son entonnoir, puis « Masquer la colonne ». Tout l’ordre : bouton « Colonnes ».</p>
+                </Bulle>
+              </th>
             </tr>
           </thead>
           <tbody>
             {lignes.length === 0 ? (
               <tr>
-                <td colSpan={visibles.length} className="py-3 text-doux">
+                <td colSpan={visibles.length + 1} className="py-3 text-doux">
                   {vide}
                 </td>
               </tr>
@@ -125,7 +218,7 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
               lignes.map((l) => (
                 <tr key={l.id} className={l.attenue ? "text-doux" : ""}>
                   {visibles.map((d) => (
-                    <td key={d.id} className={d.droite ? "text-right tabular-nums" : ""}>
+                    <td key={d.id} style={style(d.id)} className={`${d.droite ? "text-right tabular-nums" : ""} ${largeurDe(d.id) ? "break-words" : ""}`}>
                       {d.id === lien ? (
                         <>
                           {l.href ? (
@@ -142,6 +235,7 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
                       )}
                     </td>
                   ))}
+                  <td />
                 </tr>
               ))
             )}
@@ -242,7 +336,7 @@ function Bulle({
 }
 
 /** Bouton de filtre d'un en-tête : indique combien de conditions portent sur la colonne. */
-function BulleFiltre({ def, f }: { def: DefColonne; f: FiltreAdresse }) {
+function BulleFiltre({ def, f, choixMode, masquer }: { def: DefColonne; f: FiltreAdresse; choixMode: ReactNode; masquer: (() => void) | null }) {
   const n = f.filtre.conditions.filter((c) => c.colonne === def.id && f.complete(c)).length;
   return (
     <Bulle
@@ -261,7 +355,35 @@ function BulleFiltre({ def, f }: { def: DefColonne; f: FiltreAdresse }) {
     >
       <p className="mb-2 font-medium">{def.libelle}</p>
       <ConditionsColonne def={def} f={f} />
+      {choixMode && <div className="mt-3 border-t border-bordure pt-2">{choixMode}</div>}
+      {masquer && (
+        <button type="button" className="lien mt-3 block text-xs text-doux" onClick={masquer}>
+          Masquer la colonne
+        </button>
+      )}
     </Bulle>
+  );
+}
+
+/** ET / OU : toutes les conditions de tous les filtres, ou au moins une. */
+function ChoixMode({ mode, changer }: { mode: Mode; changer: (m: Mode) => void }) {
+  return (
+    <div role="group" aria-label="Combinaison des filtres" className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-doux">Garder les lignes qui remplissent</span>
+      <span className="inline-flex overflow-hidden rounded-md border border-bordure">
+        {(["et", "ou"] as Mode[]).map((m) => (
+          <button
+            key={m}
+            type="button"
+            aria-pressed={mode === m}
+            className={`px-2.5 py-1 ${mode === m ? "bg-accent text-sur-accent" : "hover:bg-accent-doux"}`}
+            onClick={() => changer(m)}
+          >
+            {m === "et" ? "toutes les conditions (ET)" : "au moins une (OU)"}
+          </button>
+        ))}
+      </span>
+    </div>
   );
 }
 
