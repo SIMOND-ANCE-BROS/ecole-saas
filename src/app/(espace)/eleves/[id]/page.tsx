@@ -4,10 +4,12 @@ import { notFound } from "next/navigation";
 import { avecEcole } from "@/db";
 import { lireEleve } from "@/db/eleves";
 import { inscriptionsPayeesPar } from "@/db/inscriptions";
+import { paiementsDe, soldeDe } from "@/db/paiements";
 import { nomAffiche } from "@/db/personnes";
 import { saisonCourante } from "@/db/planning";
 import { ageAu, aujourdhuiAParis } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
+import { SectionPaiements } from "../../_personnes/paiements";
 import { Bandeau, CoursSuivis, Documents, InscriptionsFacturees, jourDe, Notes, Telephone } from "../../_personnes/sections";
 import { Facturation } from "./facturation";
 import { Proches } from "./proches";
@@ -20,19 +22,32 @@ const BANDEAUX: Record<string, string> = {
   enregistree: "Inscription enregistrée.",
 };
 
+/** Bandeau après un encaissement (`?encaisse=3`). */
+const encaisses = (n: unknown) => {
+  const k = Number(n);
+  return Number.isInteger(k) && k > 0 ? `${k} règlement${k > 1 ? "s" : ""} encaissé${k > 1 ? "s" : ""}.` : undefined;
+};
+
 export default async function PageEleve({ params, searchParams }: PageProps<"/eleves/[id]">) {
-  const { ecoleId } = await exigerRole("direction", "accueil");
-  const [{ id }, { enregistre, inscription }] = await Promise.all([params, searchParams]);
+  const { ecoleId, role } = await exigerRole("direction", "accueil");
+  const [{ id }, { enregistre, inscription, encaisse }] = await Promise.all([params, searchParams]);
   const aujourdhui = aujourdhuiAParis();
   const donnees = await avecEcole(ecoleId, async (tx) => {
     const eleve = await lireEleve(tx, id, aujourdhui);
     if (!eleve) return null;
     const saison = await saisonCourante(tx, aujourdhui);
     // Un élève majeur qui paie lui-même voit ici ses inscriptions facturées.
-    return { eleve, saison, facturees: saison ? await inscriptionsPayeesPar(tx, eleve.id, saison.id) : [] };
+    const paieLuiMeme = eleve.factureA.type !== "personne";
+    return {
+      eleve,
+      saison,
+      facturees: saison ? await inscriptionsPayeesPar(tx, eleve.id, saison.id) : [],
+      solde: paieLuiMeme ? await soldeDe(tx, eleve.id, aujourdhui) : null,
+      paiements: paieLuiMeme ? await paiementsDe(tx, eleve.id) : [],
+    };
   });
   if (!donnees) notFound();
-  const { eleve: e, saison, facturees } = donnees;
+  const { eleve: e, saison, facturees, solde, paiements } = donnees;
 
   const nom = nomAffiche(e);
   const prenom = e.prenom ?? nom;
@@ -49,7 +64,7 @@ export default async function PageEleve({ params, searchParams }: PageProps<"/el
         </Link>
         <span className="text-doux"> / {nom}</span>
       </nav>
-      <Bandeau texte={bandeau} />
+      <Bandeau texte={encaisses(encaisse) ?? bandeau} />
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -116,6 +131,17 @@ export default async function PageEleve({ params, searchParams }: PageProps<"/el
           <Proches eleveId={e.id} prenom={prenom} responsables={e.responsables} autres={e.autres} />
           <CoursSuivis cours={e.cours} />
           {saison && <InscriptionsFacturees inscriptions={facturees} saison={saison.libelle} />}
+          {e.factureA.type === "personne" ? (
+            <p className="text-sm text-doux">
+              Paiements : sur la fiche de{" "}
+              <Link href={`/contacts/${e.factureA.id}`} className="lien">
+                {e.factureA.nom}
+              </Link>
+              , qui paie pour {prenom}.
+            </p>
+          ) : (
+            <SectionPaiements payeurId={e.id} solde={solde} paiements={paiements} retour={`/eleves/${e.id}`} direction={role === "direction"} aujourdhui={aujourdhui} />
+          )}
           <Documents documents={e.documents} aujourdhui={aujourdhui} />
         </div>
       </div>

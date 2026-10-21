@@ -4,29 +4,44 @@ import { notFound } from "next/navigation";
 import { avecEcole } from "@/db";
 import { lireContact } from "@/db/eleves";
 import { inscriptionsPayeesPar } from "@/db/inscriptions";
+import { paiementsDe, soldeDe } from "@/db/paiements";
 import { nomAffiche } from "@/db/personnes";
 import { saisonCourante } from "@/db/planning";
 import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
 import { Bandeau, InscriptionsFacturees, Telephone } from "../../_personnes/sections";
+import { SectionPaiements } from "../../_personnes/paiements";
 import { DevenirEleve } from "./devenir-eleve";
 
 export const metadata: Metadata = { title: "Fiche contact" };
 
 const BANDEAUX: Record<string, string> = { cree: "Contact créé.", modifie: "Fiche enregistrée." };
 
+/** Bandeau après un encaissement (`?encaisse=3`). */
+const encaisses = (n: unknown) => {
+  const k = Number(n);
+  return Number.isInteger(k) && k > 0 ? `${k} règlement${k > 1 ? "s" : ""} encaissé${k > 1 ? "s" : ""}.` : undefined;
+};
+
+
 export default async function PageContact({ params, searchParams }: PageProps<"/contacts/[id]">) {
-  const { ecoleId } = await exigerRole("direction", "accueil");
-  const [{ id }, { enregistre }] = await Promise.all([params, searchParams]);
+  const { ecoleId, role } = await exigerRole("direction", "accueil");
+  const [{ id }, { enregistre, encaisse }] = await Promise.all([params, searchParams]);
   const aujourdhui = aujourdhuiAParis();
   const donnees = await avecEcole(ecoleId, async (tx) => {
     const contact = await lireContact(tx, id);
     if (!contact) return null;
     const saison = await saisonCourante(tx, aujourdhui);
-    return { contact, saison, facturees: saison ? await inscriptionsPayeesPar(tx, contact.id, saison.id) : [] };
+    return {
+      contact,
+      saison,
+      facturees: saison ? await inscriptionsPayeesPar(tx, contact.id, saison.id) : [],
+      solde: await soldeDe(tx, contact.id, aujourdhui),
+      paiements: await paiementsDe(tx, contact.id),
+    };
   });
   if (!donnees) notFound();
-  const { contact: c, saison, facturees } = donnees;
+  const { contact: c, saison, facturees, solde, paiements } = donnees;
   const nom = nomAffiche(c);
   const prenom = c.prenom ?? nom;
   const roles = (e: (typeof c.eleves)[number]) =>
@@ -40,7 +55,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
         </Link>
         <span className="text-doux"> / {nom}</span>
       </nav>
-      <Bandeau texte={BANDEAUX[String(enregistre)]} />
+      <Bandeau texte={encaisses(encaisse) ?? BANDEAUX[String(enregistre)]} />
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -108,6 +123,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
             )}
           </section>
           {saison && <InscriptionsFacturees inscriptions={facturees} saison={saison.libelle} />}
+          <SectionPaiements payeurId={c.id} solde={solde} paiements={paiements} retour={`/contacts/${c.id}`} direction={role === "direction"} aujourdhui={aujourdhui} />
         </div>
       </div>
     </article>

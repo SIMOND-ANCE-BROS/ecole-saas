@@ -760,15 +760,23 @@ export const paiement = pgTable(
     date: date("date").notNull().defaultNow(),
     montantCentimes: integer("montant_centimes").notNull(),
     moyen: moyenPaiement("moyen").notNull(),
-    reference: text("reference"),
+    reference: text("reference"), // numéro de chèque, d'autorisation…
+    // Banque ou titulaire d'un chèque quand ce n'est pas le payeur (#97).
+    emetteur: text("emetteur"),
+    // Chèque à encaisser plus tard (remis à l'inscription, encaissé au trimestre) ; NULL : tout de suite.
+    encaissementPrevu: date("encaissement_prevu"),
+    // Correction : paiement négatif qui annule tout ou partie de ce paiement-ci.
+    corrigeId: uuid("corrige_id"),
     saisiPar: uuid("saisi_par"),
     synchroOutil: boolean("synchro_outil").notNull().default(false),
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("paiement_montant", sql`${t.montantCentimes} <> 0`),
     cibleMemeEcole(t),
     memeEcole(t, t.payeurId, personne),
     memeEcole(t, t.saisiPar, membre),
+    memeEcole(t, t.corrigeId, t),
   ],
 );
 
