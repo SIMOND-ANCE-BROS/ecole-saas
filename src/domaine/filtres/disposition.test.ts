@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { basculer, deplacer, ecrireDisposition, lireDisposition } from "./disposition";
+import { basculer, deplacer, ecrireDisposition, lireDisposition, placer, redimensionner } from "./disposition";
 import type { DefColonne } from "./filtres";
 
 const COLONNES: DefColonne[] = [
@@ -40,5 +40,28 @@ describe("modifier", () => {
     expect(vue(basculer(d, "naissance"))).toBe("nom age telephone naissance");
     const seule = lireDisposition(COLONNES, ["nom", "-age", "-telephone", "-naissance"]);
     expect(vue(basculer(seule, "nom"))).toBe(vue(seule));
+  });
+});
+
+describe("largeurs et glisser-déposer (#102)", () => {
+  it("lit et écrit les largeurs, bornées ; l'ancien format reste lu", () => {
+    const d = lireDisposition(COLONNES, ["nom@180", "-age@20", "telephone@9999", "naissance@abc"]);
+    expect(d).toEqual([
+      { id: "nom", visible: true, largeur: 180 },
+      { id: "age", visible: false, largeur: 60 },
+      { id: "telephone", visible: true, largeur: 800 },
+      { id: "naissance", visible: true },
+    ]);
+    expect(vue(d)).toBe("nom@180 -age@60 telephone@800 naissance");
+    expect(vue(redimensionner(d, "nom", null))).toBe("nom -age@60 telephone@800 naissance");
+    expect(vue(redimensionner(d, "naissance", 123.6))).toBe("nom@180 -age@60 telephone@800 naissance@124");
+  });
+
+  it("place une colonne devant une autre, ou à la fin", () => {
+    const d = lireDisposition(COLONNES, null);
+    expect(vue(placer(d, "telephone", "nom"))).toBe("telephone nom age -naissance");
+    expect(vue(placer(d, "nom", null))).toBe("age telephone -naissance nom");
+    expect(vue(placer(d, "nom", "nom"))).toBe(vue(d));
+    expect(vue(placer(d, "inconnue", "nom"))).toBe(vue(d));
   });
 });
