@@ -5,6 +5,7 @@ import {
   type DefColonne,
   type Filtre,
   SANS_ACCENTS,
+  type Tri,
   valeurNormalisee,
 } from "../domaine/filtres/filtres";
 
@@ -101,4 +102,22 @@ export function conditionFiltre(filtre: Filtre, colonnes: DefColonne[], expressi
   });
   if (parties.length === 0) return undefined;
   return filtre.mode === "ou" ? or(...parties) : and(...parties);
+}
+
+/**
+ * Clé ORDER BY d'une colonne triée (#107), avec les règles de `trierLignes` :
+ * accents et majuscules ignorés, nombres et dates dans leur ordre, vides en
+ * dernier. undefined sans tri (l'appelant garde son ordre par défaut).
+ */
+export function ordreColonne(tri: Tri | null, colonnes: DefColonne[], expressions: Record<string, ExpressionColonne>): SQL | undefined {
+  const def = tri && colonnes.find((d) => d.id === tri.colonne);
+  const e = tri && expressions[tri.colonne];
+  if (!tri || !def || !e || def.triable === false) return undefined;
+  const cle =
+    def.type === "nombre"
+      ? sql`(${e.sql})::numeric`
+      : def.type === "date"
+        ? sql`(${e.sql})::date`
+        : sql`nullif(${normaliser(e.liste ? sql`array_to_string(${e.sql}, ', ')` : sql`(${e.sql})::text`)}, '')`;
+  return tri.sens === "desc" ? sql`${cle} DESC NULLS LAST` : sql`${cle} ASC NULLS LAST`;
 }

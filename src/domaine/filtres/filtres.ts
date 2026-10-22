@@ -20,6 +20,10 @@ export type DefColonne = {
   droite?: boolean;
   /** false : colonne affichée mais sans filtre (montant mis en forme…). */
   filtrable?: boolean;
+  /** Colonne qui identifie la ligne (le nom) : toujours affichée, jamais masquable (#107). */
+  obligatoire?: boolean;
+  /** false : un clic sur le titre ne trie pas. */
+  triable?: boolean;
   /** Adresse e-mail : affichée en lien `mailto:`. */
   courriel?: boolean;
   /** Texte d'une cellule vide (« l’élève » pour « Facturé à »), sinon un tiret. */
@@ -220,4 +224,37 @@ export function libelleCondition(c: Condition, colonnes: DefColonne[]): string {
   if (sansValeur(c.operateur)) return `${nom} ${op}`;
   if (def?.type === "date") return `${nom} ${op} ${c.valeur.split("-").reverse().join("/")}`;
   return def?.type === "nombre" ? `${nom} ${op} ${c.valeur}` : `${nom} ${op} « ${c.valeur} »`;
+}
+
+/** Tri d'une liste par une colonne (#107), dans l'adresse : `?sort=age&order=desc`. */
+export type Tri = { colonne: string; sens: "asc" | "desc" };
+
+/** Tri de l'adresse s'il porte sur une colonne connue et triable ; sinon null (ordre par défaut). */
+export function lireTri(sort: string | string[] | undefined | null, order: string | string[] | undefined | null, colonnes: DefColonne[]): Tri | null {
+  const colonne = Array.isArray(sort) ? sort[0] : sort;
+  const def = colonnes.find((c) => c.id === colonne);
+  if (!def || def.triable === false) return null;
+  return { colonne: def.id, sens: (Array.isArray(order) ? order[0] : order) === "desc" ? "desc" : "asc" };
+}
+
+/** Clic sur un titre de colonne : croissant, puis décroissant, puis l'ordre par défaut. */
+export function triSuivant(tri: Tri | null, colonne: string): Tri | null {
+  if (tri?.colonne !== colonne) return { colonne, sens: "asc" };
+  return tri.sens === "asc" ? { colonne, sens: "desc" } : null;
+}
+
+/** Tri en mémoire, avec les règles du tri SQL : accents ignorés, nombres en ordre numérique, vides en dernier. */
+export function trierLignes<L>(lignes: L[], tri: Tri | null, valeur: (l: L, colonne: string) => Cellule): L[] {
+  if (!tri) return lignes;
+  const cle = (v: Cellule) => (Array.isArray(v) ? v.join(", ") : v);
+  const sens = tri.sens === "asc" ? 1 : -1;
+  return [...lignes].sort((a, b) => {
+    const x = cle(valeur(a, tri.colonne));
+    const y = cle(valeur(b, tri.colonne));
+    const xVide = x == null || x === "";
+    const yVide = y == null || y === "";
+    if (xVide || yVide) return xVide === yVide ? 0 : xVide ? 1 : -1;
+    if (typeof x === "number" && typeof y === "number") return (x - y) * sens;
+    return normaliserTexte(String(x)).localeCompare(normaliserTexte(String(y)), "fr", { numeric: true }) * sens;
+  });
 }

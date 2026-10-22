@@ -23,6 +23,11 @@ describe("lireDisposition", () => {
     expect(vue(lireDisposition(COLONNES, ["age", "nom"]))).toBe("age nom telephone -naissance");
   });
 
+  it("une colonne obligatoire (le nom) reste affichée, même masquée par une ancienne préférence", () => {
+    const avecNom = COLONNES.map((c) => (c.id === "nom" ? { ...c, obligatoire: true } : c));
+    expect(vue(lireDisposition(avecNom, ["-nom@120", "age"]))).toBe("nom@120 age telephone -naissance");
+  });
+
   it("au moins une colonne visible", () => {
     expect(vue(lireDisposition(COLONNES, ["-nom", "-age", "-telephone", "-naissance"]))).toBe("nom -age -telephone -naissance");
   });

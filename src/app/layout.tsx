@@ -1,3 +1,6 @@
+// globals.css d'abord : sa première ligne fixe l'ordre des couches (theme, base, mantine…) ;
+// importé après Mantine, la couche mantine passerait sous la remise à zéro de Tailwind.
+import "./globals.css";
 import "@mantine/core/styles.layer.css";
 import "@mantine/dates/styles.layer.css";
 import "@mantine/notifications/styles.layer.css";
@@ -5,7 +8,6 @@ import { ColorSchemeScript, mantineHtmlProps } from "@mantine/core";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Fournisseurs } from "./fournisseurs";
-import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

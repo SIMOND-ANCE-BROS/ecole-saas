@@ -6,7 +6,7 @@ import { listerIntervenants, MODES_REMUNERATION, STATUTS } from "@/db/intervenan
 import { lirePreference } from "@/db/preferences";
 import { saisonCourante } from "@/db/planning";
 import { COLONNES_INTERVENANTS } from "@/domaine/filtres/colonnes";
-import { appliquerFiltre, type Cellule, lireFiltre } from "@/domaine/filtres/filtres";
+import { appliquerFiltre, type Cellule, lireFiltre, lireTri, trierLignes } from "@/domaine/filtres/filtres";
 import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { formaterEuros } from "@/lib/montant";
 import { exigerRole } from "@/lib/session";
@@ -16,7 +16,7 @@ export const metadata: Metadata = { title: "Intervenants" };
 
 export default async function PageIntervenants({ searchParams }: PageProps<"/intervenants">) {
   const { ecoleId, role, userId } = await exigerRole("direction", "accueil");
-  const { enregistre, f, mode } = await searchParams;
+  const { enregistre, f, mode, sort, order } = await searchParams;
   const { saison, intervenants, disposition } = await avecEcole(ecoleId, async (tx) => {
     const s = await saisonCourante(tx, aujourdhuiAParis());
     return { saison: s, intervenants: s ? await listerIntervenants(tx, s.id) : [], disposition: await lirePreference(tx, userId, "intervenants") };
@@ -32,7 +32,11 @@ export default async function PageIntervenants({ searchParams }: PageProps<"/int
     cours: (i) => i.coursSaison,
     email: (i) => i.email,
   };
-  const visibles = appliquerFiltre(intervenants, filtre, colonnes.map((c) => ({ ...c, valeur: valeurs[c.id] ?? (() => null) })));
+  const visibles = trierLignes(
+    appliquerFiltre(intervenants, filtre, colonnes.map((c) => ({ ...c, valeur: valeurs[c.id] ?? (() => null) }))),
+    lireTri(sort, order, colonnes),
+    (i, colonne) => valeurs[colonne]?.(i),
+  );
   const confirme = intervenants.find((i) => i.id === enregistre);
 
   return (

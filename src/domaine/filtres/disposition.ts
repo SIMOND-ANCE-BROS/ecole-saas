@@ -24,11 +24,12 @@ export const dispositionParDefaut = (colonnes: DefColonne[]): Disposition => col
 /**
  * Disposition d'un membre : identifiants inconnus et doublons ignorés,
  * colonnes absentes ajoutées à la fin avec leur visibilité par défaut. Au
- * moins une colonne reste visible.
+ * moins une colonne reste visible, et toujours une colonne obligatoire (le nom).
  */
 export function lireDisposition(colonnes: DefColonne[], enregistree: string[] | null | undefined): Disposition {
   if (!enregistree) return dispositionParDefaut(colonnes);
   const connues = new Set(colonnes.map((c) => c.id));
+  const obligatoires = new Set(colonnes.filter((c) => c.obligatoire).map((c) => c.id));
   const vues = new Set<string>();
   const d: Disposition = [];
   for (const brut of enregistree) {
@@ -37,7 +38,7 @@ export function lireDisposition(colonnes: DefColonne[], enregistree: string[] | 
     if (!connues.has(id) || vues.has(id)) continue;
     vues.add(id);
     const largeur = l && /^\d+$/.test(l) ? borner(Number(l)) : null;
-    d.push({ id, visible: !masquee, ...(largeur ? { largeur } : {}) });
+    d.push({ id, visible: !masquee || obligatoires.has(id), ...(largeur ? { largeur } : {}) });
   }
   for (const c of colonnes) if (!vues.has(c.id)) d.push({ id: c.id, visible: visibleParDefaut(c) });
   if (!d.some((c) => c.visible) && d.length > 0) d[0] = { ...d[0], visible: true };

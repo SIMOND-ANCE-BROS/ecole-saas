@@ -1,10 +1,25 @@
 "use client";
 
+import { Chip, Select } from "@mantine/core";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useId, useRef, useState, useTransition } from "react";
 import type { Liste } from "@/domaine/filtres/colonnes";
 import { basculer, type Disposition, deplacer, dispositionParDefaut, ecrireDisposition, lireDisposition, placer, redimensionner } from "@/domaine/filtres/disposition";
-import { type Condition, CONDITIONS_MAX, type DefColonne, libelleCondition, libelleOperateur, type Mode, OPERATEURS, sansValeur } from "@/domaine/filtres/filtres";
+import {
+  type Condition,
+  CONDITIONS_MAX,
+  type DefColonne,
+  libelleCondition,
+  libelleOperateur,
+  lireTri,
+  type Mode,
+  OPERATEURS,
+  sansValeur,
+  type Tri,
+  triSuivant,
+} from "@/domaine/filtres/filtres";
+import { choisir, choixActif, conditionsAvancees, type GroupeRaccourcis } from "@/domaine/filtres/raccourcis";
 import { enregistrerColonnes } from "./actions";
 import { type FiltreAdresse, useFiltreAdresse } from "./filtre-adresse";
 
@@ -33,18 +48,54 @@ type Props = {
   lien: string;
   /** Message quand aucune ligne ne s'affiche. */
   vide: string;
-  /** Affichage propre au téléphone (le tableau y est masqué) ; les filtres restent dans « Colonnes ». */
+  /** Affichage propre au téléphone (le tableau y est masqué) ; seuls les boutons de filtre y servent. */
   mobile?: ReactNode;
+  /** Boutons de filtre prêts à l'emploi (#107), au-dessus du tableau. */
+  raccourcis?: GroupeRaccourcis[];
+  /** Action proposée quand la liste est vide sans filtre (« Nouvel élève »). */
+  actionVide?: ReactNode;
 };
 
+/** Au-delà, une liste de choix (cours) remplace les boutons. */
+const BOUTONS_MAX = 5;
+
 /**
- * Liste en tableau (#89) : un bouton de filtre dans chaque en-tête, un menu
- * « Colonnes » pour afficher, masquer et réordonner (mémorisé pour le membre)
- * et filtrer aussi les colonnes masquées. Les filtres vont dans l'adresse ;
- * la page filtre côté serveur et renvoie les lignes.
+ * Liste en tableau (#89, #107), pensée pour l'accueil : des boutons de filtre
+ * en clair au-dessus (« Inscrits », « Mineurs », un cours), un clic sur un
+ * titre pour trier, toute la ligne cliquable pour ouvrir la fiche. Les filtres
+ * par colonne (entonnoirs, ET / OU) restent derrière « Filtres avancés ». Le
+ * menu « Colonnes » affiche, masque et réordonne (mémorisé pour le membre).
+ * Filtres et tri vont dans l'adresse ; la page relit et interroge le serveur.
  */
-export function TableauListe({ liste, quoi, legende, colonnes, disposition, lignes, lien, vide, mobile }: Props) {
+export function TableauListe({ liste, quoi, legende, colonnes, disposition, lignes, lien, vide, mobile, raccourcis = [], actionVide }: Props) {
   const f = useFiltreAdresse(colonnes);
+  const router = useRouter();
+  const chemin = usePathname();
+  const params = useSearchParams();
+  const [triEnCours, demarrerTri] = useTransition();
+  const tri = lireTri(params.get("sort"), params.get("order"), colonnes);
+  const avancees = conditionsAvancees(f.filtre, raccourcis);
+  const [avance, setAvance] = useState(avancees.length > 0);
+
+  function trier(colonne: string) {
+    const suivant: Tri | null = triSuivant(tri, colonne);
+    const p = new URLSearchParams(params.toString());
+    p.delete("sort");
+    p.delete("order");
+    if (suivant) {
+      p.set("sort", suivant.colonne);
+      p.set("order", suivant.sens);
+    }
+    const texte = p.toString();
+    demarrerTri(() => router.replace(texte ? `${chemin}?${texte}` : chemin, { scroll: false }));
+  }
+
+  /** Clic sur une ligne : ouvre la fiche, sauf sur un lien ou un bouton, ou pendant une sélection de texte. */
+  function ouvrir(e: React.MouseEvent<HTMLTableRowElement>, href: string | undefined) {
+    if (!href || (e.target as HTMLElement).closest("a, button, input, select") || window.getSelection()?.toString()) return;
+    if (e.ctrlKey || e.metaKey) window.open(href, "_blank");
+    else router.push(href);
+  }
   const [dispo, setDispo] = useState<Disposition>(() => lireDisposition(colonnes, disposition));
   const [enregistrement, demarrer] = useTransition();
   const [echec, setEchec] = useState(false);
@@ -95,39 +146,63 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
   const completes = f.filtre.conditions.flatMap((c, i) => (f.complete(c) ? [{ c, i }] : []));
   const mode = (m: Mode) => f.changer({ ...f.filtre, mode: m });
   const choixMode = f.filtre.conditions.length > 1 && <ChoixMode mode={f.filtre.mode} changer={mode} />;
+  const nbAvancees = avancees.filter((c) => f.complete(c)).length;
+  const filtre = completes.length > 0;
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <Bulle
-          titre={`Colonnes et filtres de ${quoi}`}
-          bouton={masquees.length ? `Colonnes (${masquees.length} disponible${masquees.length > 1 ? "s" : ""})` : "Colonnes"}
-          classeBouton="bouton-secondaire"
-          largeur="w-[22rem]"
-        >
-          <MenuColonnes colonnes={defs} dispo={dispo} changer={changerDispo} f={f} parDefaut={() => changerDispo(dispositionParDefaut(colonnes))} />
-        </Bulle>
-        {choixMode}
-        <ul className="flex flex-wrap gap-1.5" aria-label="Filtres actifs">
-          {completes.map(({ c, i }, k) => (
-            <li key={i} className="flex items-center gap-1 rounded-full border border-accent bg-accent-doux py-0.5 pr-1 pl-2.5">
-              {k > 0 && <span className="text-xs text-doux">{f.filtre.mode === "et" ? "et" : "ou"}</span>}
-              {libelleCondition(c, colonnes)}
-              <button type="button" className="rounded-full px-1.5 hover:bg-surface" aria-label={`Retirer le filtre ${libelleCondition(c, colonnes)}`} onClick={() => f.retirer(i)}>
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-        {completes.length > 0 && (
-          <button type="button" className="lien" onClick={() => f.changer({ mode: "et", conditions: [] })}>
-            Effacer les filtres
-          </button>
-        )}
-        <span className="text-xs text-doux" role="status">
-          {f.enCours ? "Filtrage…" : enregistrement ? "Enregistrement des colonnes…" : echec ? "Disposition non enregistrée : réessayez." : ""}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        {raccourcis.map((g) => (
+          <Raccourcis key={g.id} groupe={g} actif={choixActif(g, f.filtre)} choisir={(id) => f.changer(choisir(f.filtre, g, id))} />
+        ))}
+        <span className="flex flex-wrap items-center gap-2 sm:ml-auto">
+          <span className="text-xs text-doux" role="status">
+            {f.enCours || triEnCours ? "Mise à jour…" : enregistrement ? "Enregistrement des colonnes…" : echec ? "Disposition non enregistrée : réessayez." : ""}
+          </span>
+          {filtre && (
+            <button type="button" className="lien" onClick={() => f.changer({ mode: "et", conditions: [] })}>
+              Effacer les filtres
+            </button>
+          )}
+          {/* Sur téléphone, les cartes n'ont ni colonnes ni entonnoirs : seuls les boutons de filtre servent. */}
+          <span className={`flex-wrap items-center gap-2 ${mobile ? "hidden sm:flex" : "flex"}`}>
+            <button type="button" className="bouton-secondaire" aria-expanded={avance} onClick={() => setAvance(!avance)}>
+              Filtres avancés{nbAvancees ? ` (${nbAvancees})` : ""}
+            </button>
+            <Bulle
+              titre={`Colonnes de ${quoi}`}
+              bouton={masquees.length ? `Colonnes (${masquees.length} de plus)` : "Colonnes"}
+              classeBouton="bouton-secondaire"
+              largeur="w-[22rem]"
+            >
+              <MenuColonnes colonnes={defs} dispo={dispo} changer={changerDispo} f={f} avance={avance} parDefaut={() => changerDispo(dispositionParDefaut(colonnes))} />
+            </Bulle>
+          </span>
         </span>
       </div>
+
+      {avance && (
+        <div className={`flex-wrap items-center gap-2 rounded-md border border-dashed border-bordure px-3 py-2 text-sm ${mobile ? "hidden sm:flex" : "flex"}`}>
+          {completes.length === 0 ? (
+            <span className="text-doux">Filtrez une colonne avec l’entonnoir de son titre.</span>
+          ) : (
+            <>
+              {choixMode}
+              <ul className="flex flex-wrap gap-1.5" aria-label="Filtres actifs">
+                {completes.map(({ c, i }, k) => (
+                  <li key={i} className="flex items-center gap-1 rounded-full border border-accent bg-accent-doux py-0.5 pr-1 pl-2.5">
+                    {k > 0 && <span className="text-xs text-doux">{f.filtre.mode === "et" ? "et" : "ou"}</span>}
+                    {libelleCondition(c, colonnes)}
+                    <button type="button" className="rounded-full px-1.5 hover:bg-surface" aria-label={`Retirer le filtre ${libelleCondition(c, colonnes)}`} onClick={() => f.retirer(i)}>
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
 
       {mobile && <div className="sm:hidden">{mobile}</div>}
       <div className={`panneau overflow-x-auto ${mobile ? "hidden sm:block" : ""}`}>
@@ -139,6 +214,7 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
                 <th
                   key={d.id}
                   scope="col"
+                  aria-sort={tri?.colonne === d.id ? (tri.sens === "asc" ? "ascending" : "descending") : undefined}
                   draggable
                   onMouseDown={(e) => {
                     // Une poignée de largeur saisie : pas de glisser-déposer natif.
@@ -146,7 +222,6 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
                   }}
                   style={style(d.id)}
                   className={`relative cursor-grab select-none ${glissee === d.id ? "opacity-50" : ""} ${survolee === d.id && glissee !== d.id ? "shadow-[inset_3px_0_0_var(--accent)]" : ""}`}
-                  title="Glissez pour déplacer la colonne"
                   onDragStart={(e) => {
                     if (enRedimension.current) return e.preventDefault();
                     setGlissee(d.id);
@@ -171,9 +246,18 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
                 >
                   {/* Entonnoir toujours à droite du titre, même pour une colonne de nombres. */}
                   <span className={`flex items-center gap-1 ${d.droite ? "justify-end" : ""}`}>
-                    <span className="truncate">{d.libelle}</span>
-                    {d.filtrable !== false && (
-                      <BulleFiltre def={d} f={f} choixMode={choixMode} masquer={visibles.length > 1 ? () => changerDispo(basculer(dispo, d.id)) : null} />
+                    {d.triable === false ? (
+                      <span className="truncate">{d.libelle}</span>
+                    ) : (
+                      <button type="button" className="flex min-w-0 items-center gap-1 rounded hover:text-accent" title="Cliquez pour trier" onClick={() => trier(d.id)}>
+                        <span className="truncate">{d.libelle}</span>
+                        <span aria-hidden className={`text-xs ${tri?.colonne === d.id ? "text-accent" : "text-transparent"}`}>
+                          {tri?.colonne === d.id && tri.sens === "desc" ? "▼" : "▲"}
+                        </span>
+                      </button>
+                    )}
+                    {avance && d.filtrable !== false && (
+                      <BulleFiltre def={d} f={f} choixMode={choixMode} masquer={visibles.length > 1 && !d.obligatoire ? () => changerDispo(basculer(dispo, d.id)) : null} />
                     )}
                   </span>
                   <span
@@ -210,13 +294,22 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
           <tbody>
             {lignes.length === 0 ? (
               <tr>
-                <td colSpan={visibles.length + 1} className="py-3 text-doux">
-                  {vide}
+                <td colSpan={visibles.length + 1} className="py-6 text-center">
+                  <p className="text-doux">{vide}</p>
+                  <div className="mt-3 flex justify-center gap-3">
+                    {filtre ? (
+                      <button type="button" className="bouton-secondaire" onClick={() => f.changer({ mode: "et", conditions: [] })}>
+                        Effacer les filtres
+                      </button>
+                    ) : (
+                      actionVide
+                    )}
+                  </div>
                 </td>
               </tr>
             ) : (
               lignes.map((l) => (
-                <tr key={l.id} className={l.attenue ? "text-doux" : ""}>
+                <tr key={l.id} className={`${l.attenue ? "text-doux" : ""} ${l.href ? "cursor-pointer" : ""}`} onClick={(e) => ouvrir(e, l.href)}>
                   {visibles.map((d) => (
                     <td key={d.id} style={style(d.id)} className={`${d.droite ? "text-right tabular-nums" : ""} ${largeurDe(d.id) ? "break-words" : ""}`}>
                       {d.id === lien ? (
@@ -458,12 +551,14 @@ function MenuColonnes({
   dispo,
   changer,
   f,
+  avance,
   parDefaut,
 }: {
   colonnes: Map<string, DefColonne>;
   dispo: Disposition;
   changer: (d: Disposition) => void;
   f: FiltreAdresse;
+  avance: boolean;
   parDefaut: () => void;
 }) {
   const derniere = dispo.filter((d) => d.visible).length === 1;
@@ -479,7 +574,7 @@ function MenuColonnes({
             <li key={d.id} className="py-1.5">
               <div className="flex items-center gap-1">
                 <label className="flex flex-1 items-center gap-2">
-                  <input type="checkbox" checked={d.visible} disabled={d.visible && derniere} onChange={() => changer(basculer(dispo, d.id))} />
+                  <input type="checkbox" checked={d.visible} disabled={(d.visible && derniere) || def.obligatoire} onChange={() => changer(basculer(dispo, d.id))} />
                   {def.libelle}
                 </label>
                 <button
@@ -501,7 +596,7 @@ function MenuColonnes({
                   ↓
                 </button>
               </div>
-              {def.filtrable !== false && (
+              {avance && def.filtrable !== false && (
                 <details className="mt-1 pl-6" open={n > 0 || undefined}>
                   <summary className="cursor-pointer text-xs text-doux">Filtrer{n ? ` (${n})` : ""}</summary>
                   <div className="mt-1.5">
@@ -516,6 +611,41 @@ function MenuColonnes({
       <button type="button" className="lien mt-1 self-start text-sm" onClick={parDefaut}>
         Revenir à la disposition par défaut
       </button>
+    </div>
+  );
+}
+
+/**
+ * Un groupe de boutons de filtre : des pastilles (« Inscrits », « En attente »)
+ * dont une seule est active, un nouveau clic la désactive ; une liste de
+ * choix quand il y en a trop (les cours).
+ */
+function Raccourcis({ groupe, actif, choisir }: { groupe: GroupeRaccourcis; actif: string | null; choisir: (id: string | null) => void }) {
+  if (groupe.choix.length === 0) return null;
+  if (groupe.choix.length > BOUTONS_MAX) {
+    return (
+      <Select
+        aria-label={groupe.libelle}
+        placeholder={`${groupe.libelle} : tous`}
+        data={groupe.choix.map((c) => ({ value: c.id, label: c.libelle }))}
+        value={actif}
+        onChange={choisir}
+        searchable
+        clearable
+        nothingFoundMessage="Aucun"
+        size="sm"
+        w={190}
+      />
+    );
+  }
+  return (
+    <div role="group" aria-label={groupe.libelle} className="flex flex-wrap items-center gap-1">
+      <span className="text-doux">{groupe.libelle} :</span>
+      {groupe.choix.map((c) => (
+        <Chip key={c.id} size="xs" checked={actif === c.id} onChange={() => choisir(actif === c.id ? null : c.id)}>
+          {c.libelle}
+        </Chip>
+      ))}
     </div>
   );
 }

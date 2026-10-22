@@ -1,9 +1,10 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { COLONNES_CONTACTS, COLONNES_ELEVES } from "../domaine/filtres/colonnes";
-import { appliquerFiltre, lireFiltre } from "../domaine/filtres/filtres";
+import { COLONNES_CONTACTS, COLONNES_ELEVES, RACCOURCIS_ELEVES, raccourcisCours } from "../domaine/filtres/colonnes";
+import { appliquerFiltre, FILTRE_VIDE, lireFiltre, lireTri, versParametres } from "../domaine/filtres/filtres";
+import { choisir } from "../domaine/filtres/raccourcis";
 import { ageAu } from "../domaine/personnes/age";
-import { type LigneEleve, listerContacts, listerEleves } from "./eleves";
+import { type LigneEleve, libellesCoursSaison, listerContacts, listerEleves } from "./eleves";
 import { avecEcole } from "./index";
 
 /** Filtres par colonne traduits en SQL (#87), comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
@@ -71,6 +72,31 @@ const eleves = async (f: string[], mode?: string) =>
   );
 const contacts = async (f: string[]) =>
   (await avecEcole(ecole, (tx) => listerContacts(tx, "", { filtre: lireFiltre(f, null, COLONNES_CONTACTS) }))).map((c) => c.raisonSociale ?? c.prenom);
+
+const tries = async (sort: string, order: string) =>
+  (await avecEcole(ecole, (tx) => listerEleves(tx, "", { tri: lireTri(sort, order, COLONNES_ELEVES), aujourdhui: AUJOURDHUI, saisonId: saison }))).map((e) => e.prenom);
+
+describe("tri et boutons de filtre (#107)", () => {
+  it("trie par une colonne, les vides en dernier dans les deux sens", async () => {
+    expect(await tries("age", "asc")).toEqual(["Léa", "Hugo", "Inès"]);
+    expect(await tries("age", "desc")).toEqual(["Hugo", "Léa", "Inès"]);
+    expect(await tries("nom", "desc")).toEqual(["Léa", "Inès", "Hugo"]);
+    expect(await tries("responsables", "asc")).toEqual(["Inès", "Léa", "Hugo"]);
+  });
+
+  it("chaque bouton filtre comme prévu (libellés des statuts et des cours compris)", async () => {
+    const parBouton = (groupe: (typeof RACCOURCIS_ELEVES)[number], choix: string) =>
+      eleves(versParametres(choisir(FILTRE_VIDE, groupe, choix)).map(([, v]) => v));
+    const [inscription, age] = RACCOURCIS_ELEVES;
+    expect(await parBouton(inscription, "inscrits")).toEqual(["Léa"]);
+    expect(await parBouton(inscription, "attente")).toEqual(["Hugo"]);
+    expect(await parBouton(inscription, "sans")).toEqual(["Inès"]);
+    expect(await parBouton(age, "mineurs")).toEqual(["Hugo", "Léa"]);
+    const libelles = await avecEcole(ecole, (tx) => libellesCoursSaison(tx, saison));
+    expect(libelles).toEqual(["Jazz lun. 17:00"]);
+    expect(await parBouton(raccourcisCours(libelles), libelles[0])).toEqual(["Léa"]);
+  });
+});
 
 describe("élèves", () => {
   it("nom, accents ignorés, sans voir l'autre école", async () => {
