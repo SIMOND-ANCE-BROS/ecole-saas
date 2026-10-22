@@ -1,28 +1,28 @@
 ---
 name: Bug
-about: Un comportement existant est faux
-title: 'DOMAINE: symptôme observé'
+about: An existing behaviour is wrong
+title: 'AREA: observed symptom'
 type: Bug
 assignees: ''
 ---
 
-<!-- Conventions : docs/guides/gestion-des-issues.md — type, champs Priority et Effort, labels de zone, milestone, epic parente. Aucune donnée personnelle réelle. -->
+<!-- Conventions: docs/guides/issues.md — type, Priority and Effort fields, area labels, milestone, parent epic. No real personal data. -->
 
-## Contexte
+## Context
 
-<!-- Où et quand, en une ou deux phrases. -->
+<!-- Where and when, in one or two sentences. -->
 
-## Constat
+## Observed
 
-<!-- Étapes pour reproduire, attendu / obtenu, preuve (`fichier:ligne`, sortie de commande, capture). -->
+<!-- Steps to reproduce, expected / actual, evidence (`file:line`, command output, screenshot). -->
 
 1.
 
-## Critères d’acceptation
+## Acceptance criteria
 
-- [ ] Test qui reproduit le bug, puis passe
+- [ ] A test reproduces the bug, then passes
 - [ ]
 
-## Liens
+## Links
 
-<!-- Epic, issues liées, PR. -->
+<!-- Epic, related issues, PRs. -->

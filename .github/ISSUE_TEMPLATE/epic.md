@@ -1,19 +1,19 @@
 ---
 name: Epic
-about: Un thème qui regroupe plusieurs issues
-title: 'Thème, sans préfixe'
+about: A theme grouping several issues
+title: 'Theme, without prefix'
 type: Epic
 assignees: ''
 ---
 
-<!-- Conventions : docs/guides/gestion-des-issues.md — pas de Priority sur une epic (elle vit sur ses sub-issues), Effort, labels de zone, milestone ou icebox. Les livrables sont des sub-issues. -->
+<!-- Conventions: docs/guides/issues.md — no Priority on an epic (it lives on its sub-issues), Effort, area labels, milestone or icebox. Deliverables are sub-issues. -->
 
-## Contexte
+## Context
 
-## Attendu
+## Expected
 
-## Critères d’acceptation
+## Acceptance criteria
 
-- [ ] Toutes les sub-issues sont fermées
+- [ ] All sub-issues are closed
 
-## Hors périmètre
+## Out of scope

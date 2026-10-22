@@ -8,23 +8,25 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-# Conventions du projet
+# Project conventions
 
-- SaaS multi-école : chaque table métier porte `ecole_id`, l'isolation est assurée par la Row Level Security (`migrations/0001_rls.sql`). Toute requête métier passe par `avecEcole()` (`src/db/index.ts`).
-- Pas de « famille » : des personnes (`personne`) et des liens entre elles (`lien` : représentant légal, conjoint, autre ; drapeaux « paie pour » et « contact d'urgence »). Un adulte seul est son propre payeur. La fratrie porte sur les danseurs d'un même payeur (#67). L'interface parle d'élèves (`personne.eleve`) et de contacts, de responsables, de « à prévenir » et de « Facturé à » : jamais de « lien » abstrait (#77).
-- Montants en centimes entiers (`*_centimes`), taux en points de base. Utiliser `src/lib/montant.ts`, jamais de nombres à virgule pour l'argent.
-- Le numéro de facture vient de l'outil de facturation de l'école (Pennylane, Abby, Shine) : ne jamais le générer ici.
-- Paiements et journal sont inaltérables : on corrige par une écriture inverse.
-- Rien de spécifique à une école ne doit être codé en dur : tarifs, réductions, mentions TVA sont des données.
-- Code et commentaires en français pour le métier (noms de tables, de fonctions métier).
+- Multi-school SaaS: every business table carries `ecole_id`; isolation relies on Row Level Security (`migrations/0001_rls.sql`, ADR 0001). Every business query goes through `avecEcole()` (`src/db/index.ts`).
+- No "family" entity: people (`personne`, → `person`) and relationships between them (`lien`, → `relationship`: legal guardian, partner, other; flags "pays for" and "emergency contact"). An adult on their own is their own payer. The siblings discount applies to students of the same payer (#67). The interface talks about students (`personne.eleve`), contacts, guardians, « à prévenir » and « Facturé à »: never an abstract "link" (#77).
+- Amounts in integer cents (`*_centimes`, → `*_cents`), rates in basis points. Use `src/lib/montant.ts`; never floating-point numbers for money.
+- The invoice number comes from the school's invoicing tool (Pennylane, Abby, Shine): never generate it here.
+- Payments and the audit log are immutable: fix with a reverse entry.
+- Nothing school-specific is hard-coded: tariffs, discounts, VAT mentions are data.
+- **Language**: code, database, comments, tests, commits, issues and PRs in **English** (domain lexicon in `CLAUDE.md` §3); everything the end user sees, the PR section « Pour l’accueil et la direction » and the URLs in **French**. French code still present is renamed module by module (#114); never add new French identifiers.
+- TypeScript strict, no `any`. Mantine for every UI control, Tailwind for layout only (`DESIGN.md`).
 
-# Issues, branches et PR (obligatoire)
+# Issues, branches and PRs (mandatory)
 
-Les issues GitHub de `SIMOND-ANCE-BROS/ecole-saas` sont la source de vérité du travail. Conventions complètes : **`docs/guides/gestion-des-issues.md`**, à suivre pour créer, modifier ou fermer une issue.
+GitHub issues of `SIMOND-ANCE-BROS/ecole-saas` are the source of truth for work. Full conventions: **`docs/guides/issues.md`**, to follow when creating, editing or closing an issue.
 
-- **Code → issue.** Toute PR référence au moins une issue (`Closes #N`, ou `Refs #N` si l'issue attend d'autres PR). Pas d'issue ? La créer d'abord, après recherche de doublon.
-- **Branches.** Jamais de commit poussé directement sur `main`. Préfixes autorisés (contrôlés en CI) : `feature/ fix/ refactor/ test/ docs/ chore/ hotfix/ claude/ dependabot/` — pas `feat/` ni `ci/`. Nom conseillé : `feature/11-moteur-tarif`.
-- **PR.** Suivre `.github/pull_request_template.md` : issue, résumé, « Pour l’accueil et la direction », plan de test. **Aucun merge sans accord explicite**, PR par PR.
-- **Découvertes → issue.** Un bug, une dette, une faille, une doc périmée trouvés en chemin ne sont ni corrigés en silence ni laissés dans la conversation : issue avec la preuve (`fichier:ligne`, sortie), citée dans le compte rendu final.
-- **Créer = trier.** Toute issue ouverte a un type (Bug / Feature / Task / Epic), les champs d'organisation `Priority` et `Effort` (via GraphQL `setIssueFieldValue` ; `icebox` à la place de la priorité, pas de priorité sur une Epic), des labels de zone, le milestone (sauf `icebox`), son epic parente, et sa carte dans le Project « École de danse — Roadmap ».
-- **Questions métier** en suspens : dans l'issue (section « Questions ouvertes ») avec le label `blocked`, jamais tranchées par défaut.
+- **Code → issue.** Every PR references at least one issue (`Closes #N`, or `Refs #N` if the issue needs more PRs). No issue? Create it first, after searching for duplicates.
+- **Branches.** Never push directly to `main`. Allowed prefixes (checked in CI): `feature/ fix/ refactor/ test/ docs/ chore/ hotfix/ claude/ dependabot/` — not `feat/` nor `ci/`. Suggested name: `feature/11-tariff-engine`.
+- **Commits and PR titles.** Conventional commits in English: `feat(scope): imperative sentence`.
+- **PR.** Follow `.github/pull_request_template.md`: issue, summary, « Pour l’accueil et la direction » (French), test plan. **No merge without explicit approval**, PR by PR.
+- **Discoveries → issue.** A bug, debt, security gap or stale doc found on the way is neither fixed silently nor left in the conversation: open an issue with evidence (`file:line`, output), cited in the final report.
+- **Create = triage.** Every open issue has a type (Bug / Feature / Task / Epic), the org fields `Priority` and `Effort` (GraphQL `setIssueFieldValue`; `icebox` instead of a priority, no priority on an Epic), area labels, the milestone (unless `icebox`), its parent epic, and its card in the « École de danse — Roadmap » Project.
+- **Open business questions**: in the issue (section "Open questions") with the `blocked` label, never decided by default.
