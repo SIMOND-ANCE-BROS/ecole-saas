@@ -1,3 +1,8 @@
+/*
+ * Ordre des couches (#107) : la remise à zéro de Tailwind (base), puis
+ * Mantine, puis les classes utilitaires de Tailwind, qui gardent le dernier mot.
+ */
+@layer theme, base, mantine, components, utilities;
 @import "tailwindcss";
 
 /*
