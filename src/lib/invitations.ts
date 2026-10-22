@@ -1,5 +1,5 @@
-import { avecEcole } from "../db";
-import { type LienOuvert, lireLien, utiliserLien } from "../db/equipe";
+import { avecEcole, ecolesDe } from "../db";
+import { compteDuMembre, type LienOuvert, lienReinitialisation, lireLien, utiliserLien } from "../db/equipe";
 import { refusMotDePasse } from "../domaine/equipe/regles";
 import { auth } from "./auth";
 import { creerCompte } from "./comptes";
@@ -51,7 +51,7 @@ export async function accepterLien(ecoleId: string, jeton: string, saisie: Saisi
       if (nom.length > 100) return { ok: false, message: "Nom trop long." };
       // Relu juste avant la création : un lien utilisé entre-temps ne crée pas de compte orphelin.
       if (!(await avecEcole(ecoleId, (tx) => lireLien(tx, jeton, new Date())))) return { ok: false, message: EXPIRE };
-      userId = await creerCompte({ email: lien.email, nom, motDePasse: saisie.motDePasse });
+      userId = await creerCompte({ email: lien.email, nom, motDePasse: saisie.motDePasse, emailVerifie: false });
     }
   }
 
@@ -63,4 +63,18 @@ export async function accepterLien(ecoleId: string, jeton: string, saisie: Saisi
     await ctx.internalAdapter.deleteUserSessions(userId);
   }
   return { ok: true, type: lien.type, email: lien.email };
+}
+
+/**
+ * Lien de réinitialisation pour un membre (direction). Refusé si le compte
+ * appartient aussi à une autre école : son mot de passe y donne accès, une
+ * école ne doit pas pouvoir le changer pour une autre.
+ */
+export async function creerLienReinitialisation(ecoleId: string, userId: string, membreId: string) {
+  const compte = await avecEcole(ecoleId, (tx) => compteDuMembre(tx, membreId));
+  if (!compte) return { ok: false as const, message: "Ce membre n’existe plus." };
+  if ((await ecolesDe(compte)).some((e) => e.id !== ecoleId)) {
+    return { ok: false as const, message: "Ce compte sert aussi dans une autre école : la personne doit changer elle-même son mot de passe." };
+  }
+  return avecEcole(ecoleId, (tx) => lienReinitialisation(tx, userId, membreId, new Date()));
 }

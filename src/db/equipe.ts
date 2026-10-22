@@ -28,9 +28,20 @@ export const ROLES = { ...ROLES_INVITABLES, professeur: "Professeur" } as const;
 export type Resultat = { ok: true; id: string } | { ok: false; message: string };
 export type ResultatLien = { ok: true; id: string; jeton: string } | { ok: false; message: string };
 
+/** Membre actif de la direction : seul à gérer l'équipe (vérifié ici aussi, pas seulement par la page). */
 async function membreDe(tx: Tx, userId: string) {
-  const [m] = await tx.select({ id: membre.id }).from(membre).where(and(eq(membre.userId, userId), eq(membre.actif, true)));
+  const [m] = await tx
+    .select({ id: membre.id })
+    .from(membre)
+    .where(and(eq(membre.userId, userId), eq(membre.actif, true), eq(membre.role, "direction")));
   return m?.id ?? null;
+}
+
+/** Compte (global) d'un membre de l'école, ou null. */
+export async function compteDuMembre(tx: Tx, membreId: string): Promise<string | null> {
+  if (!estUuid(membreId)) return null;
+  const [m] = await tx.select({ userId: membre.userId }).from(membre).where(eq(membre.id, membreId));
+  return m?.userId ?? null;
 }
 
 export type MembreListe = { id: string; userId: string; nom: string; email: string; role: Role; actif: boolean };
@@ -111,7 +122,11 @@ export async function modifierMembre(tx: Tx, userId: string, membreId: string, a
   return { ok: true, id: membreId };
 }
 
-/** Lien de réinitialisation du mot de passe d'un membre, valable 24 heures. */
+/**
+ * Lien de réinitialisation du mot de passe d'un membre, valable 24 heures.
+ * L'appelant vérifie d'abord que le compte n'appartient à aucune autre école
+ * (`creerLienReinitialisation`) : le mot de passe est commun à toutes.
+ */
 export async function lienReinitialisation(tx: Tx, userId: string, membreId: string, maintenant: Date): Promise<ResultatLien> {
   if (!estUuid(membreId)) return { ok: false, message: "Ce membre n’existe plus." };
   const qui = await membreDe(tx, userId);

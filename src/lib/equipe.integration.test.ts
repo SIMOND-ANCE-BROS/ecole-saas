@@ -1,10 +1,10 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { avecEcole } from "../db";
-import { inviter, invitationsEnCours, lienReinitialisation, listerMembres, modifierMembre, revoquerInvitation } from "../db/equipe";
+import { inviter, invitationsEnCours, listerMembres, modifierMembre, revoquerInvitation } from "../db/equipe";
 import { auth } from "./auth";
 import { creerCompte } from "./comptes";
-import { accepterLien, ouvrirLien } from "./invitations";
+import { accepterLien, creerLienReinitialisation, ouvrirLien } from "./invitations";
 
 /**
  * Équipe d'une école (#104) : invitations, rôles, réinitialisation, contre la
@@ -119,34 +119,46 @@ describe("rôles et accès", () => {
     expect(t).toEqual({ avant: "true", apres: "false" });
   });
 
-  it("ne retire jamais la dernière personne active de la direction", async () => {
+  it("seule la direction gère l'équipe, même sans passer par la page", async () => {
     const p = await membre(emailProf);
     // Diana passe le prof à l'accueil : elle reste à la direction, c'est permis.
     expect((await avecEcole(ecole, (tx) => modifierMembre(tx, diana, p.id, { role: "accueil", actif: true }))).ok).toBe(true);
-    // Diana est désormais seule à la direction : personne ne peut la retirer.
-    expect(await avecEcole(ecole, (tx) => modifierMembre(tx, prof, dianaMembre, { role: "accueil", actif: true }))).toEqual({
+    // À l'accueil, il ne peut plus toucher à l'équipe ni inviter.
+    expect(await avecEcole(ecole, (tx) => modifierMembre(tx, prof, dianaMembre, { role: "accueil", actif: true }))).toEqual({ ok: false, message: "Accès refusé." });
+    expect(await avecEcole(ecole, (tx) => inviter(tx, prof, { email: `z-${suffixe}@exemple.test`, nom: "Z", role: "direction" }, new Date()))).toEqual({
       ok: false,
-      message: "Il faut au moins une personne active à la direction.",
+      message: "Accès refusé.",
     });
     expect((await avecEcole(ecole, (tx) => modifierMembre(tx, diana, p.id, { role: "direction", actif: true }))).ok).toBe(true);
   });
 });
 
 describe("réinitialisation du mot de passe", () => {
-  it("le lien remplace le mot de passe et ferme les sessions ouvertes", async () => {
+  it("refusée pour un compte qui sert aussi dans une autre école", async () => {
     const p = await membre(emailProf);
-    await connecter(emailProf, MDP);
-    const [{ n: avant }] = await admin`SELECT count(*)::int AS n FROM session WHERE user_id = ${prof}`;
+    expect(await creerLienReinitialisation(ecole, diana, p.id)).toEqual({
+      ok: false,
+      message: "Ce compte sert aussi dans une autre école : la personne doit changer elle-même son mot de passe.",
+    });
+  });
+
+  it("le lien remplace le mot de passe et ferme les sessions ouvertes", async () => {
+    const n = await membre(emailNouvelle);
+    await connecter(emailNouvelle, MDP);
+    const [{ n: avant }] = await admin`SELECT count(*)::int AS n FROM session WHERE user_id = ${n.userId}`;
     expect(avant).toBeGreaterThan(0);
-    const r = await avecEcole(ecole, (tx) => lienReinitialisation(tx, diana, p.id, new Date()));
+    const r = await creerLienReinitialisation(ecole, diana, n.id);
     if (!r.ok) throw new Error(r.message);
-    expect(await ouvrirLien(ecole, r.jeton)).toMatchObject({ type: "reinitialisation", email: emailProf });
+    expect(await ouvrirLien(ecole, r.jeton)).toMatchObject({ type: "reinitialisation", email: emailNouvelle });
     const nouveau = "un tout nouveau mot de passe";
-    expect(await accepterLien(ecole, r.jeton, saisie(nouveau))).toEqual({ ok: true, type: "reinitialisation", email: emailProf });
-    const [{ n: apres }] = await admin`SELECT count(*)::int AS n FROM session WHERE user_id = ${prof}`;
+    expect(await accepterLien(ecole, r.jeton, saisie(nouveau))).toEqual({ ok: true, type: "reinitialisation", email: emailNouvelle });
+    const [{ n: apres }] = await admin`SELECT count(*)::int AS n FROM session WHERE user_id = ${n.userId}`;
     expect(apres).toBe(0);
-    await expect(connecter(emailProf, MDP)).rejects.toThrow();
-    await expect(connecter(emailProf, nouveau)).resolves.toBeTruthy();
+    await expect(connecter(emailNouvelle, MDP)).rejects.toThrow();
+    await expect(connecter(emailNouvelle, nouveau)).resolves.toBeTruthy();
+    // Compte créé par un lien transmis à la main : e-mail non vérifié (#105).
+    const [{ email_verified }] = await admin`SELECT email_verified FROM "user" WHERE id = ${n.userId}`;
+    expect(email_verified).toBe(false);
   });
 
   it("une autre école ne voit ni les membres ni les invitations de celle-ci", async () => {
