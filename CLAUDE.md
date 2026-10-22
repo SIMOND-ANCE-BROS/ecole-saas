@@ -160,7 +160,12 @@ DESIGN.md                    interface rules
 - Every call has a timeout, a bounded number of retries and a structured error; webhooks are idempotent.
 
 **TypeScript**
-- `strict` mode, no `any` (ESLint error), no non-null assertion without a comment saying why it holds.
+- `strict` mode plus `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noFallthroughCasesInSwitch`; no `any` (ESLint error), no non-null assertion without a comment saying why it holds.
+
+**CI** (`.github/workflows/`)
+- Read-only token by default, actions pinned by commit SHA, `persist-credentials: false`, a timeout on every job, stale runs cancelled.
+- `ci-success` aggregates the required jobs (tests, typecheck, lint, integration, `npm audit` on runtime dependencies); `PR conventions` checks the branch prefix and the conventional-commit PR title.
+- Dependabot proposes updates after a 14-day cooldown; `CODEOWNERS` covers sensitive paths only.
 
 ## 9. Tests
 

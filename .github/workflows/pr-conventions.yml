@@ -1,0 +1,65 @@
+name: PR conventions
+
+# Blocks a PR to main whose branch has no allowed prefix, or whose title is not
+# a conventional commit (docs/guides/issues.md §8). The title becomes the
+# squash commit subject. Allow-list: nothing passes without a name.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+concurrency:
+  group: pr-conventions-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  branch:
+    name: Branch name
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Allowed prefix
+        env:
+          HEAD: ${{ github.head_ref }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          echo "PR: $HEAD → $BASE"
+          if [ "$BASE" != "main" ]; then
+            echo "Base $BASE: no rule."
+            exit 0
+          fi
+          ALLOWED="^(feature|fix|refactor|test|docs|chore|hotfix|claude|dependabot)/"
+          if echo "$HEAD" | grep -qE "$ALLOWED"; then
+            echo "Valid branch."
+            exit 0
+          fi
+          echo "::error::Branch '$HEAD' cannot target main."
+          echo "Allowed prefixes: feature/ fix/ refactor/ test/ docs/ chore/ hotfix/ claude/ dependabot/"
+          echo "Rename before opening the PR (renaming afterwards closes it): git branch -m feature/${HEAD##*/}"
+          exit 1
+
+  title:
+    name: PR title
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Conventional commit
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          echo "Title: $TITLE"
+          if [ "$AUTHOR" = "dependabot[bot]" ]; then
+            echo "Dependabot title: accepted."
+            exit 0
+          fi
+          PATTERN='^(feat|fix|refactor|test|docs|chore|perf|security)(\([a-z0-9-]+\))?!?: [^ ].*[^.]$'
+          if printf '%s' "$TITLE" | grep -qE "$PATTERN"; then
+            echo "Valid title."
+            exit 0
+          fi
+          echo "::error::The PR title must be a conventional commit: 'type(scope): imperative sentence', no final period."
+          echo "Types: feat fix refactor test docs chore perf security. Example: feat(enrollment): compute the siblings discount"
+          exit 1

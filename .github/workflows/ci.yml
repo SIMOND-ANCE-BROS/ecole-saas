@@ -5,9 +5,20 @@ on:
     branches: [main]
   pull_request:
 
+# Read-only token by default; jobs ask for more only if they need it.
+permissions:
+  contents: read
+
+# A new push on the same branch cancels the run in progress.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  verifier:
-    runs-on: ubuntu-latest
+  verify:
+    name: verifier
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     services:
       db:
         image: postgres:16
@@ -21,22 +32,59 @@ jobs:
     env:
       DATABASE_URL: postgres://app_user:app_user@localhost:5432/ecole
       DATABASE_ADMIN_URL: postgres://proprio:proprio@localhost:5432/ecole
-      # Valeur réservée aux tests de la CI, sans rapport avec un vrai secret.
+      # Value reserved for CI tests, unrelated to any real secret.
       BETTER_AUTH_SECRET: secret-de-test-ci-uniquement-0123456789abcdef
       BETTER_AUTH_URL: http://localhost:3000
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Rôles PostgreSQL
+      - name: PostgreSQL roles
         run: PGPASSWORD=proprio psql -h localhost -U proprio -d ecole -f docker/init.sql
       - name: Migrations
         run: npm run db:migrate
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-      - name: Tests d’intégration (base réelle)
+      - name: Integration tests (real database)
         run: npm run test:integration
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+      # Production dependencies only: dev-tool alerts are tracked in #108.
+      - name: npm audit (high and critical, runtime dependencies)
+        run: npm audit --omit=dev --audit-level=high
+
+  # Single check to require on main: fails if any job above failed or was skipped.
+  ci-success:
+    name: ci-success
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    needs: [verify, audit]
+    if: always()
+    steps:
+      - name: All required jobs passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Results: $RESULTS"
+          for r in $RESULTS; do
+            if [ "$r" != "success" ]; then
+              echo "::error::A required job did not succeed ($r)."
+              exit 1
+            fi
+          done

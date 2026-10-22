@@ -1,0 +1,40 @@
+# Dependency updates. The 14-day cooldown matches the project rule: only
+# versions published for at least 14 days (CLAUDE.md §10). Every update is a
+# PR reviewed like any other; nothing is merged automatically.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    labels: [dependencies]
+    groups:
+      # Patch and minor updates of dev tools travel together.
+      dev-tools:
+        dependency-type: development
+        update-types: [minor, patch]
+      mantine:
+        patterns: ["@mantine/*"]
+      next-react:
+        patterns: ["next", "react", "react-dom", "eslint-config-next", "@next/*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 14
+    commit-message:
+      prefix: chore
+      include: scope
+    labels: [ci, dependencies]
+    groups:
+      actions:
+        patterns: ["*"]
