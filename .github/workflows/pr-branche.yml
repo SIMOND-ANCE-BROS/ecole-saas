@@ -1,7 +1,7 @@
 name: Nom de branche
 
 # Bloque une PR vers main dont la branche n'a pas un préfixe autorisé
-# (docs/guides/gestion-des-issues.md §8). Liste blanche : rien ne passe sans nom.
+# (docs/guides/issues.md §8). Liste blanche : rien ne passe sans nom.
 
 on:
   pull_request:

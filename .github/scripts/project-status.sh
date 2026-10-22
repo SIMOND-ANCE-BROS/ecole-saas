@@ -6,7 +6,7 @@
 #
 # Env : GH_TOKEN (Projects de l'organisation en écriture + issues du dépôt en lecture),
 #       GITHUB_REPOSITORY, PROJECT_OWNER, PROJECT_NUMBER.
-# Cycle de vie : docs/guides/gestion-des-issues.md §8.
+# Cycle de vie : docs/guides/issues.md §8.
 set -euo pipefail
 
 STATUS="${1:?status attendu}"

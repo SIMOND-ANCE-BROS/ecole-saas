@@ -1,29 +1,31 @@
 ## Issue
 
-<!-- Obligatoire : fait avancer la carte du Project.
-     Closes #N : la PR termine l'issue (fermée au merge).
-     Refs #N   : la PR fait avancer l'issue sans la terminer.
-     Pas d'issue ? La créer d'abord (docs/guides/gestion-des-issues.md). -->
+<!-- Mandatory: moves the Project card.
+     Closes #N : the PR completes the issue (closed on merge).
+     Refs #N   : the PR moves the issue forward without completing it.
+     No issue? Create it first (docs/guides/issues.md).
+     Title: conventional commit, e.g. `feat(enrollment): compute the siblings discount`. -->
 
 Closes #
 
-## Résumé
+## Summary
 
-<!-- 1 à 3 puces : ce que fait la PR et pourquoi. -->
+<!-- 1 to 3 bullets: what the PR does and why. -->
 
 -
 
 ## Pour l’accueil et la direction
 
 <!--
-En français, pour l'école (pas pour un développeur) : ce qui change à l'écran
-ou dans les montants, où le trouver. Une puce par changement visible.
-Écrire « Rien » si la PR n'a aucun effet visible (CI, refactor, tests…).
+In FRENCH, for the school (not for a developer): what changes on screen or in
+amounts, where to find it. One bullet per visible change.
+Write « Rien » if the PR has no visible effect (CI, refactor, tests…).
 -->
 
-## Plan de test
+## Test plan
 
-<!-- Ce qui a été vérifié, et comment. -->
+<!-- What was checked, and how. Screenshot for any visible change (desktop, phone, dark mode). -->
 
 - [ ] `npm run lint`, `npm run typecheck`, `npm test`
-- [ ] `npm run test:integration` (si la base est concernée)
+- [ ] `npm run test:integration` (if the database is involved)
+- [ ] Reviewers run: `code-reviewer` (+ `security-reviewer` / `migration-reviewer` / `billing-reviewer` / `ux-reviewer` when relevant)

@@ -1,149 +1,243 @@
 @AGENTS.md
 
-# CLAUDE.md – Gestion d'école de danse (SaaS)
+# CLAUDE.md – Dance school management (SaaS)
 
-Ce fichier est la référence pour tout agent qui développe ce projet. Lis-le en entier avant de coder. En cas de doute sur une règle métier, **demande** plutôt que d'inventer.
+Reference for every agent working on this project. Read it in full before coding. When a business rule is unclear, **ask** rather than invent.
 
-## 1. Le projet
+## 1. The project
 
-- Logiciel SaaS de gestion pour écoles de danse : élèves et personnes liées (parents, payeurs), inscriptions, planning, facturation, encaissements, rémunération des professeurs.
-- Premier client (« client fondateur ») : École de danse Ribas, Villeurbanne. Mise en production visée : **été 2027**, pour les inscriptions de la rentrée.
-- Le produit doit être **réplicable pour d'autres écoles** : tout ce qui est propre à Ribas est une donnée, jamais du code.
-- Utilisateurs V1 : la direction et l'accueil, sur un ordinateur Windows, dans un navigateur. Usage intensif pendant les permanences d'inscription : la **saisie rapide** prime sur l'esthétique.
-- Développeur unique (Gabin Simond), développement piloté par IA.
+- SaaS for dance schools: students and related people (guardians, payers), enrollments, schedule, invoicing, payments, instructor pay.
+- First customer ("founding customer"): École de danse Ribas, Villeurbanne (France). Target go-live: **summer 2027**, for the autumn enrollments.
+- The product must be **replicable for other schools**: anything specific to Ribas is data, never code.
+- V1 users: management (`director`) and front desk (`front_desk`), on a Windows PC, in a browser. Heavy use during enrollment desk hours: **fast data entry** beats looks.
+- Single developer (Gabin Simond), AI-driven development.
 
-## 2. Vocabulaire métier
+## 2. Languages
 
-| Terme | Sens |
+| What | Language |
 | --- | --- |
-| École | Le locataire (tenant). Toutes les données lui appartiennent. |
-| Payeur | Qui reçoit la facture : parent, entreprise, CSE. Distinct du danseur. |
-| Danseur | L'élève. Rattaché à un payeur. Souvent mineur. |
-| Inscription | Un forfait souscrit par un payeur pour une saison ; couvre un ou deux danseurs (tarif couple). |
-| Forfait | Prix calculé selon la **durée hebdomadaire cumulée** des cours choisis, pas selon chaque cours. |
-| Cours | Créneau récurrent (jour, heure, durée, salle, professeur). |
-| Séance | Occurrence datée d'un cours. Sert à l'appel, aux carnets et à la paie des professeurs. Générée selon la récurrence du cours (chaque semaine, une semaine sur deux, période, dates précises) ; déplacée seule, elle garde sa date d'origine (`date_prevue`) et peut avoir sa propre heure. |
-| Carnet | Pack de cours particuliers (1, 5 ou 10 séances, 1 à 4 personnes). |
-| Intervenant | Professeur. Facture l'école (micro-entreprise, société) ou est salarié. |
-| Relevé | Calcul mensuel de ce que l'école doit à un intervenant, d'après les séances effectuées. |
-| Échéance | Fraction d'une facture payable à une date (paiement en plusieurs fois). |
-| Avoir | Facture négative qui annule tout ou partie d'une facture émise. |
-| Outil de facturation | Pennylane, Abby ou Shine : émet les factures, les numérote, fait l'e-reporting. |
+| Identifiers, files, database (tables, columns, enums), comments, tests | **English** |
+| Commits, PR titles and descriptions, issues, ADRs, developer docs | **English** |
+| Everything an end user sees: screens, messages, e-mails, PDFs, exports | **French**, typographic apostrophe (’) and « » quotes |
+| PR section « Pour l’accueil et la direction » | **French**, written for the school |
+| URLs (Next route folders such as `src/app/(espace)/eleves`) | **French**: they are user-visible |
 
-## 3. Règles métier connues (école Ribas, à paramétrer)
+Code written before this rule is still in French; it is renamed module by module (#114). New code is written in English, using the lexicon below, even next to French code.
 
-- Forfaits trimestriels ou annuels selon la durée hebdo cumulée (45 min, 1 h, 1 h 30 et combinaisons jusqu'à 3 cours) ; grilles enfant, adulte, couple, étudiant ; cours à l'unité.
-- Réduction **fratrie -10 %** dès deux enfants d'un même payeur, **non cumulable** avec le forfait 2 disciplines.
-- 2 sites, 3 salles : Docteur Rollet (2 salles, cours collectifs, permanences), Bons Amis (1 salle, compétition et cours particuliers).
-- 8 professeurs, dont les deux dirigeants (micro-entreprises en franchise de TVA, mention « TVA non applicable, art. 293 B du CGI »).
-- Calendrier : vacances scolaires zone A, gala en juin.
-- Moyens de paiement : chèque, espèces, carte, virement, prélèvement, chèques vacances ANCV, Pass'Sport.
+## 3. Domain lexicon (French → English)
 
-Ces valeurs vont dans les tables `tarif`, `reduction`, `site`, `salle`, `intervenant`, `fermeture`. **Jamais en dur dans le code.**
+Use these names in code and database. User-facing text keeps the French word.
 
-## 4. Facturation électronique (contexte légal)
+| French (UI) | English (code) | Meaning |
+| --- | --- | --- |
+| école | `school` | The tenant. All data belongs to it. |
+| membre (direction, accueil, professeur) | `member` (`director`, `front_desk`, `teacher`) | A user account inside a school, with a role. |
+| personne | `person` | Anyone: student, guardian, payer, organisation. |
+| élève / danseur | `student` (`person.is_student`) | Takes classes. Often a minor. |
+| payeur | `payer` | Receives the invoice: parent, company, works council (CSE). Distinct from the student. |
+| lien (représentant légal, conjoint, autre) | `relationship` (`legal_guardian`, `partner`, `other`) | Link between two people; flags `pays_for`, `emergency_contact`. |
+| fratrie | `siblings` | Students of the same payer. |
+| site, salle | `site`, `room` | Premises and rooms. |
+| saison | `season` | A school year. |
+| fermeture | `closure` | Holidays and days off. |
+| intervenant | `instructor` | Teacher. Invoices the school (sole trader, company) or is an employee. |
+| discipline | `discipline` | Jazz, classical… |
+| cours | `course` | Recurring slot (day, time, length, room, instructor, recurrence). `class` is a reserved word. |
+| séance | `lesson` | Dated occurrence of a course: attendance, lesson packs, instructor pay. Moved alone, it keeps its original date (`planned_date`) and may have its own time. |
+| présence | `attendance` | |
+| inscription | `enrollment` | A package subscribed by a payer for a season; one or two students (couple rate). |
+| statut d’inscription (inscrit, à l’essai, en attente, abandon, terminé) | `active`, `trial`, `waitlist`, `dropped`, `ended` | |
+| forfait | `package` | Price set by the **cumulative weekly duration** of the chosen courses, not per course. |
+| tarif | `tariff` | A price rule (audience, period, weekly duration). |
+| réduction | `discount` | Siblings, two disciplines… |
+| carnet | `lesson_pack` | Pack of private lessons (1, 5 or 10 lessons, 1 to 4 people). |
+| facture, ligne de facture | `invoice`, `invoice_line` | |
+| avoir | `credit_note` | Negative invoice cancelling all or part of an issued invoice. |
+| échéance | `installment` | Part of an invoice payable on a date. |
+| paiement, encaissement | `payment` | Immutable. |
+| moyen de paiement (chèque, espèces, carte, virement, prélèvement, chèques vacances, Pass’Sport) | `cheque`, `cash`, `card`, `transfer`, `direct_debit`, `holiday_voucher`, `pass_sport` | |
+| remise en banque, bordereau | `bank_deposit`, `deposit_slip` | |
+| affectation d’un paiement | `payment_allocation` | |
+| relevé (de l’intervenant) | `instructor_statement` | Monthly amount owed to an instructor from the lessons taught. |
+| journal | `audit_log` | Immutable. |
+| outil de facturation | `invoicing_tool` (`pennylane`, `abby`, `shine`) | Issues and numbers invoices, does e-reporting. |
+| connecteur de facturation | `invoicing_connector` | |
+| régime de TVA (franchise 293 B, assujetti, non applicable) | `vat_regime` (`franchise_293b`, `vat_registered`, `not_applicable`) | |
+| montant en centimes, taux en points de base | `*_cents`, `*_bps` | |
+| indisponibilité, connexion agenda | `unavailability`, `calendar_connection` | |
+| préférence de liste | `list_preference` | |
 
-- Réception des factures électroniques obligatoire depuis le 1er septembre 2026 ; émission et e-reporting obligatoires pour les PME au **1er septembre 2027**.
-- Les ventes aux familles (B2C) passent en **e-reporting** ; les factures des professeurs à l'école sont du **B2B** électronique.
-- Le logiciel n'est pas une plateforme agréée : il **délègue** à l'outil de facturation choisi par l'école.
-- Conséquences dans le code :
-  - Le logiciel **ne génère jamais de numéro de facture** : il stocke celui renvoyé par l'outil.
-  - Une facture émise ne se modifie pas : on émet un **avoir**.
-  - Les mentions TVA viennent de la configuration de l'école (`ecole.regime_tva`, `ecole.mention_tva`).
-- Le régime TVA de l'école et l'outil choisi sont **en attente de l'avis de l'expert-comptable** : garder ces points paramétrables.
+Core helpers after the rename: `avecEcole()` → `withSchool()`, `ecolesDe()` → `schoolsOf()`, `contexteEcole()` → `schoolContext()`, `exigerRole()` → `requireRole()`, `memeEcole()` → `sameSchool()`, RLS policy `isolation_ecole` → `school_isolation`, `src/lib/montant.ts` → `src/lib/money.ts`, `src/domaine/` → `src/domain/`.
 
-## 5. Stack
+A missing term is added here in the same PR that introduces it.
 
-Next.js 16 (App Router) · React 19 · TypeScript strict · PostgreSQL 16 · Drizzle ORM · Zod · Tailwind 4 · Vitest · Better Auth. À venir : shadcn/ui, pg-boss (tâches de fond), Playwright.
+## 4. Known business rules (Ribas, to be configured)
+
+- Quarterly or yearly packages by cumulative weekly duration (45 min, 1 h, 1 h 30 and combinations up to 3 courses); child, adult, couple and student grids; drop-in lessons.
+- **Siblings discount −10 %** from two children of the same payer, **not cumulative** with the two-disciplines package.
+- 2 sites, 3 rooms: Docteur Rollet (2 rooms, group classes, enrollment desk), Bons Amis (1 room, competition and private lessons).
+- 8 instructors, including the two owners (sole traders exempt from VAT, mention « TVA non applicable, art. 293 B du CGI »).
+- Calendar: school holidays zone A, gala in June.
+- Payment methods: cheque, cash, card, transfer, direct debit, ANCV holiday vouchers, Pass’Sport.
+
+These values live in data (`tariff`, `discount`, `site`, `room`, `instructor`, `closure` tables). **Never hard-coded.**
+
+## 5. E-invoicing (legal context, France)
+
+- Receiving e-invoices is mandatory since 1 September 2026; issuing and e-reporting become mandatory for SMEs on **1 September 2027**.
+- Sales to families (B2C) go through **e-reporting**; instructors' invoices to the school are electronic **B2B**.
+- This software is not an approved platform: it **delegates** to the invoicing tool chosen by the school (ADR 0002).
+- In code:
+  - The software **never generates an invoice number**: it stores the one returned by the tool.
+  - An issued invoice is never modified: issue a **credit note**.
+  - VAT mentions come from the school configuration (`school.vat_regime`, `school.vat_mention`).
+- The school's VAT regime and its tool are **pending the accountant's opinion**: keep them configurable.
+
+## 6. Stack
+
+Next.js 16 (App Router) · React 19 · TypeScript strict · PostgreSQL 16 · Drizzle ORM · Zod · Mantine 8 · Tailwind 4 (layout only) · Vitest · Better Auth. Coming: pg-boss (background jobs), Playwright.
 
 ```bash
-npm run dev          # serveur local
-npm test             # Vitest (tests unitaires)
-npm run test:integration  # tests contre la base locale (dont le garde-fou RLS)
-npm run typecheck    # next typegen + tsc --noEmit
-npm run lint         # ESLint
-npm run db:up        # PostgreSQL local (Docker, port 5433)
-npm run db:generate  # nouvelle migration après modification du schéma
-npm run db:migrate   # appliquer les migrations
-npm run db:seed      # données de démonstration locales
+npm run dev               # local server
+npm test                  # Vitest unit tests
+npm run test:integration  # tests against the local database (incl. the RLS guard)
+npm run typecheck         # next typegen + tsc --noEmit
+npm run lint              # ESLint
+npm run db:up             # local PostgreSQL (Docker, port 5433)
+npm run db:generate       # new migration after a schema change
+npm run db:migrate        # apply migrations
+npm run db:seed           # local demo data
 ```
 
-## 6. Organisation du code
+## 7. Code organisation
 
 ```
 src/
-  app/                    routes Next.js (pages, server actions) – fines, sans logique métier
-  db/schema.ts            modèle de données (source de vérité)
-  db/index.ts             connexion + avecEcole() / ecolesDe()
-  domaine/<module>/       logique métier PURE + tests (tarif, inscription, planning, facturation, paie)
-  connecteurs/facturation/  interface commune + une implémentation par outil
-  jobs/                   tâches de fond (synchro facturation, génération des séances)
-  lib/                    utilitaires transverses (montant.ts…)
-migrations/               générées par drizzle-kit + migrations SQL personnalisées (RLS)
+  app/                       Next routes (pages, server actions) – thin, no business logic; folder names are French URLs
+  db/schema.ts               data model (source of truth)
+  db/index.ts                connection + avecEcole() / ecolesDe()
+  domaine/<module>/          PURE business logic + tests (→ src/domain/ after #114)
+  connecteurs/facturation/   common interface + one implementation per tool (→ src/connectors/invoicing/)
+  jobs/                      background jobs (invoicing sync, lesson generation)
+  lib/                       cross-cutting utilities (montant.ts…)
+migrations/                  drizzle-kit migrations + custom SQL migrations (RLS)
+docs/adr/                    architecture decision records
+DESIGN.md                    interface rules
 ```
 
-- La logique métier vit dans `src/domaine/` sous forme de **fonctions pures** (entrées → sorties, sans base ni réseau), testées unitairement. Les routes et server actions ne font que valider, appeler le domaine et persister.
-- Le connecteur de facturation expose une interface unique (`creerClient`, `creerFacture`, `finaliser`, `creerAvoir`, `lireStatut`) ; le reste du code ne connaît jamais l'outil concret.
+- Business logic lives in the domain folder as **pure functions** (input → output, no database, no network), unit-tested. Routes and server actions only validate, call the domain and persist.
+- The invoicing connector exposes one interface (`createCustomer`, `createInvoice`, `finalize`, `createCreditNote`, `readStatus`); the rest of the code never knows the concrete tool.
+- Naming: `camelCase` for variables and functions, `PascalCase` for types and React components, `SCREAMING_SNAKE_CASE` for module constants, `snake_case` in the database, `kebab-case` file names.
 
-## 7. Règles impératives
+## 8. Mandatory rules
 
-**Multi-école et sécurité**
-- Toute requête métier passe par `avecEcole(ecoleId, tx => …)`. Ne jamais utiliser `db` directement pour des données métier.
-- Toute nouvelle table métier porte `ecole_id` **et** reçoit, dans une migration SQL, `ENABLE` + `FORCE ROW LEVEL SECURITY` et la politique `isolation_ecole` (modèle dans `migrations/0001_rls.sql`, qui ne s'applique qu'aux tables existantes à sa création).
-- Les droits de `app_user` sur une nouvelle table ou séquence sont accordés automatiquement (droits par défaut, `migrations/0006_droits_par_defaut.sql`, garde-fou `src/db/droits.integration.test.ts`) ; la RLS, elle, reste à ajouter à chaque fois.
-- Toute référence entre deux tables métier est une clé étrangère composite `(ecole_id, x_id)` : `memeEcole(t, colonne, cible)` dans `src/db/schema.ts`, la table visée déclarant `cibleMemeEcole(t)`. Jamais de `.references()` simple entre tables métier : la vérification d'une clé étrangère ignore la RLS. Garde-fou : `src/db/cles-etrangeres.integration.test.ts`.
-- Le rôle `app_admin` (BYPASSRLS) est réservé aux scripts d'administration, jamais au code de l'application.
-- `ecoleId` vient toujours de la session côté serveur, jamais d'un paramètre envoyé par le navigateur.
-- Chaque page et chaque server action protégée appelle `contexteEcole()` ou `exigerRole()` (`src/lib/session.ts`), puis `avecEcole(ecoleId, …)`. Jamais de contrôle d'accès dans un layout (non réexécuté à chaque navigation) ni dans `proxy.ts` (redirection optimiste seulement).
+**Multi-school and security** (ADR 0001)
+- Every business query goes through `avecEcole(ecoleId, tx => …)`. Never use `db` directly for business data.
+- Every new business table carries `ecole_id` **and** gets, in a SQL migration, `ENABLE` + `FORCE ROW LEVEL SECURITY` and the `isolation_ecole` policy (model in `migrations/0001_rls.sql`, which only covers tables existing when it was written).
+- `app_user` privileges on new tables and sequences are granted automatically (default privileges, `migrations/0006_droits_par_defaut.sql`, guard `src/db/droits.integration.test.ts`); RLS still has to be added every time.
+- Every reference between two business tables is a composite foreign key `(ecole_id, x_id)`: `memeEcole(t, column, target)` in `src/db/schema.ts`, the target declaring `cibleMemeEcole(t)`. Never a plain `.references()` between business tables: foreign-key checks ignore RLS. Guard: `src/db/cles-etrangeres.integration.test.ts`.
+- The `app_admin` role (BYPASSRLS) is for administration scripts only, never application code.
+- `ecoleId` always comes from the server-side session, never from a browser parameter.
+- Every protected page and server action calls `contexteEcole()` or `exigerRole()` (`src/lib/session.ts`), then `avecEcole(ecoleId, …)`. Never access control in a layout (not re-run on navigation) nor in `proxy.ts` (optimistic redirect only).
 
-**Argent et dates**
-- Montants en **centimes entiers** (`*_centimes`), taux en **points de base** (1000 = 10 %). Utiliser `src/lib/montant.ts`. Aucun `number` à virgule pour de l'argent, aucun `parseFloat` sur un montant.
-- Dates sans heure (`date`) manipulées comme chaînes `YYYY-MM-DD` ; fuseau `Europe/Paris` pour tout calcul de jour.
+**Money and dates**
+- Amounts in **integer cents** (`*_centimes`, `*_cents` after the rename), rates in **basis points** (1000 = 10 %). Use `src/lib/montant.ts`. No floating-point number for money, no `parseFloat` on an amount.
+- Dates without time (`date`) are `YYYY-MM-DD` strings; `Europe/Paris` time zone for any day computation.
 
-**Données**
-- Paiements et journal sont **inaltérables** (triggers en base) : une erreur se corrige par une écriture inverse.
-- Ne jamais modifier une migration déjà appliquée : en créer une nouvelle.
-- Valider toute entrée externe (formulaires, API, webhooks) avec Zod.
+**Data**
+- Payments and the audit log are **immutable** (database triggers): an error is fixed by a reverse entry.
+- Never edit an applied migration: create a new one. Renaming a table or column is a new migration too.
+- Validate every external input (forms, API, webhooks) with Zod.
+- Server actions return `{ ok: true, … } | { ok: false, message }`, `message` being French text for the user; never throw an error message at the user.
 
-**Données personnelles (élèves mineurs)**
-- Ne jamais écrire de données personnelles dans les logs (noms, téléphones, santé).
-- Les identifiants des outils de facturation sont stockés chiffrés (`connecteur_facturation.identifiants_chiffres`), jamais en clair, jamais dans le dépôt.
-- Aucun secret dans le code : variables d'environnement, et `.env.example` tenu à jour.
+**Personal data (minors)**
+- Never write personal data to logs (names, phone numbers, health); log technical ids only.
+- Invoicing tool credentials are stored encrypted (`connecteur_facturation.identifiants_chiffres`), never in clear, never in the repository.
+- No secret in code: environment variables, and `.env.example` kept up to date.
+- Issues and PRs are public to the organisation: fictitious data only, no secret names.
 
-## 8. Tests
+**External services** (invoicing tools, calendars)
+- Every call has a timeout, a bounded number of retries and a structured error; webhooks are idempotent.
 
-- Toute fonction du domaine a ses tests Vitest, écrits **avant ou avec** le code. Priorité absolue : moteur de tarif, réductions, échéanciers, relevés des professeurs.
-- Couvrir les cas limites réels : fratrie de trois enfants, couple + réduction, abandon en cours de trimestre, remplacement d'un professeur, centimes restants d'une répartition.
-- Les comportements de sécurité (RLS, inaltérabilité) se testent contre une vraie base PostgreSQL, pas avec des mocks.
-- Garde-fou en place : `src/db/rls.integration.test.ts` échoue si une table portant `ecole_id` n'a pas la RLS activée et forcée avec la politique `isolation_ecole`. Fichiers `*.integration.test.ts`, lancés par `npm run test:integration` et en CI.
+**TypeScript**
+- `strict` mode, no `any` (ESLint error), no non-null assertion without a comment saying why it holds.
 
-## 9. Façon de travailler
+## 9. Tests
 
-- Avant de terminer une tâche : `npm run lint`, `npm run typecheck`, `npm test` doivent passer, et `npm run test:integration` si la base est concernée.
-- Petits commits, messages en français à l'impératif (« Ajoute le calcul de la réduction fratrie »).
-- Tout travail part d'une issue et passe par une branche et une PR, jamais de commit direct sur `main` ; aucun merge sans accord explicite. Conventions (titres, types, Priority/Effort, labels, préfixes de branches, Project) : `docs/guides/gestion-des-issues.md`, résumées dans `AGENTS.md`.
-- **Demander avant** d'ajouter une dépendance. Versions figées exactes, publiées depuis au moins 14 jours. Pas de dépendance pour ce qui tient en quelques lignes.
-- Ne pas modifier `migrations/0001_rls.sql`, les triggers d'inaltérabilité ou `avecEcole()` sans le signaler explicitement.
-- Si une décision d'architecture change, mettre à jour ce fichier dans le même commit.
+- Every domain function has Vitest tests, written **before or with** the code. Top priority: tariff engine, discounts, installment plans, instructor statements.
+- Cover real edge cases: three siblings, couple + discount, dropping out mid-term, instructor replacement, cents left over from a split.
+- Security behaviour (RLS, immutability) is tested against a real PostgreSQL database, never mocks.
+- Guard in place: `src/db/rls.integration.test.ts` fails if a table carrying `ecole_id` lacks forced RLS with the `isolation_ecole` policy. Files `*.integration.test.ts` run with `npm run test:integration` and in CI.
+- A test must be able to fail: assert the behaviour, not the implementation; no snapshot of a whole page.
 
-## 10. Interface
+## 10. Way of working
 
-- Textes en français, avec apostrophe typographique (’) et guillemets « » dans les contenus affichés.
-- Pensé pour l'ordinateur de l'accueil d'abord : formulaires utilisables au clavier, recherche instantanée d'une personne, peu de clics pour une inscription.
-- Accessible : libellés sur tous les champs, contrastes suffisants, mode sombre.
-- Formulaires et fiche d'un cours : une vraie page, aussi ouverte en **panneau latéral** par-dessus la page courante (route interceptée dans `src/app/(espace)/@modal/(.)…`, composant `Panneau` de `_panneau/panneau.tsx`). Le bouton d'annulation est `<Annuler href=…>` (retour arrière dans un panneau). Un nouveau formulaire de création ou de modification suit ce modèle.
+- Every piece of work starts from an issue and goes through a branch and a PR, never a direct commit on `main`; no merge without explicit approval. Conventions: `docs/guides/issues.md`, summarised in `AGENTS.md`.
+- **Conventional commits** in English, imperative: `feat(enrollment): compute the siblings discount`, `fix(lists): keep the sort when searching`. Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`, `security`. The squash-merged PR title follows the same format.
+- **Ask before** adding a dependency. Exact pinned versions, published at least 14 days ago. No dependency for what fits in a few lines.
+- Do not modify `migrations/0001_rls.sql`, the immutability triggers or `avecEcole()` without saying so explicitly.
+- When an architecture decision changes, update this file and add an ADR (`docs/adr/`) in the same PR.
 
-## 11. Feuille de route V1
+**Definition of done** (before asking for a merge)
+1. `npm run lint`, `npm run typecheck`, `npm test` pass, and `npm run test:integration` when the database is involved.
+2. A user-visible change is checked in the browser on desktop, phone width and dark mode, with a screenshot in the PR.
+3. `test-verifier`, then `code-reviewer` (and `security-reviewer`, `migration-reviewer`, `billing-reviewer`, `ux-reviewer` when their area is touched) report no blocking finding.
+4. The PR fills « Pour l’accueil et la direction » in French, or writes « Rien ».
 
-1. [ ] Moteur de tarif et réductions (`src/domaine/tarif`)
-2. [ ] Authentification, membres et rôles (direction, accueil, professeur)
-3. [ ] Familles, danseurs, documents
-4. [ ] Sites, salles, saisons, fermetures, cours ; génération des séances
-5. [ ] Inscriptions (avec le moteur de tarif), carnets
-6. [ ] Factures, échéanciers, avoirs, paiements, attestations
-7. [ ] Connecteur de facturation (outil à confirmer) + tâches de synchronisation
-8. [ ] Relevés des professeurs
-9. [ ] Tableau de bord et export comptable
-10. [ ] Reprise des données de l'ancien logiciel
+## 11. Interface
 
-Hors V1 : espace familles en ligne, inscription et paiement en ligne, accès des professeurs sur mobile.
+Rules in `DESIGN.md`. In short:
+- Built for the front-desk PC first: keyboard-friendly forms, instant person search, few clicks for an enrollment.
+- Mantine components everywhere (ADR 0003); Tailwind only for layout. Custom control classes (`.champ`, `.bouton-principal`…) are being removed (#115).
+- Lists work like Excel autofilters: each column header sorts and filters; one search bar at the top (Ctrl K).
+- Forms and course records: a real page, also opened as a **side panel** over the current page (intercepted route in `src/app/(espace)/@modal/(.)…`, component `Panneau` in `_panneau/panneau.tsx`). The cancel button is `<Annuler href=…>` (back navigation inside a panel).
+- Accessible: labels on every field, sufficient contrast, dark mode.
+
+## 12. What not to do
+
+- Don't query business data with `db` outside `avecEcole()`; don't use `app_admin` in application code.
+- Don't take `ecoleId` (or any tenant id) from the browser.
+- Don't put access control in a layout or in `proxy.ts`.
+- Don't hard-code a price, discount, VAT mention or anything school-specific.
+- Don't generate an invoice number; don't update an issued invoice, a payment or the audit log.
+- Don't use floating-point numbers for money.
+- Don't log personal data; don't put real personal data in issues, PRs, tests or seeds.
+- Don't edit an applied migration.
+- Don't skip git hooks (`--no-verify`) or CI checks.
+- Don't add a dependency without asking.
+- Don't decide an open business rule by default: open a `blocked` issue with the question.
+- Don't merge without explicit approval.
+
+## 13. Agents (`.claude/agents/`)
+
+Delegate with the Agent tool: each agent carries its area's rules and keeps noise out of the main context. Reviewers and the architect are read-only.
+
+| Request looks like… | Delegate to |
+| --- | --- |
+| Run the tests / verify this change | `test-verifier` |
+| Review my diff before push | `code-reviewer` |
+| Diff touches auth, session, RLS, personal data, secrets, workflows | `security-reviewer` |
+| Diff touches `src/db/schema.ts` or `migrations/` | `migration-reviewer` |
+| Diff touches amounts, tariffs, discounts, invoices, payments, statements | `billing-reviewer` |
+| Diff changes a screen | `ux-reviewer` |
+| A business rule is unclear, or a feature depends on one | `business-rules` |
+| Structural choice, "should we…" | `architect` |
+| What to build, scoping, user stories | `product-owner` |
+| Backlog, status report, GitHub issues and Project | `project-manager` |
+
+Default pipeline for a substantial change: implement → `test-verifier` → `code-reviewer` + the matching specialised reviewers in parallel → push → PR.
+
+## 14. V1 roadmap
+
+1. [ ] Tariff engine and discounts
+2. [ ] Authentication, members and roles (director, front desk, teacher)
+3. [ ] People, students, documents
+4. [ ] Sites, rooms, seasons, closures, courses; lesson generation
+5. [ ] Enrollments (with the tariff engine), lesson packs
+6. [ ] Invoices, installment plans, credit notes, payments, certificates
+7. [ ] Invoicing connector (tool to be confirmed) + sync jobs
+8. [ ] Instructor statements
+9. [ ] Dashboard and accounting export
+10. [ ] Data import from the previous software
+
+Out of V1: family online space, online enrollment and payment, instructor mobile access.

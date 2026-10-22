@@ -1,7 +1,7 @@
 name: Statut du Project
 
 # Fait suivre au Project « École de danse — Roadmap » l'avancement du travail
-# (docs/guides/gestion-des-issues.md §8) :
+# (docs/guides/issues.md §8) :
 #
 #   issue ouverte / rouverte          → Todo
 #   PR brouillon qui référence #N     → In Progress
@@ -78,7 +78,7 @@ jobs:
           all=$(printf '%s\n%s\n' "$closing" "$refs" | grep -E '^[0-9]+$' | sort -u || true)
 
           if [ -z "$all" ]; then
-            echo "::warning::La PR ne référence aucune issue (Closes #N / Refs #N) : voir docs/guides/gestion-des-issues.md."
+            echo "::warning::La PR ne référence aucune issue (Closes #N / Refs #N) : voir docs/guides/issues.md."
             exit 0
           fi
 
