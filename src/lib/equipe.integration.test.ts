@@ -161,8 +161,20 @@ describe("réinitialisation du mot de passe", () => {
     expect(email_verified).toBe(false);
   });
 
+  it("un lien créé puis devenu dangereux (compte ajouté, même désactivé, à une autre école) est refusé à l'usage", async () => {
+    const n = await membre(emailNouvelle);
+    const r = await creerLienReinitialisation(ecole, diana, n.id);
+    if (!r.ok) throw new Error(r.message);
+    await admin`INSERT INTO membre (ecole_id, user_id, role, actif) VALUES (${autreEcole}, ${n.userId}, 'accueil', false)`;
+    expect(await accepterLien(ecole, r.jeton, saisie("encore un autre mot de passe"))).toEqual({
+      ok: false,
+      message: "Ce compte sert aussi dans une autre école : la personne doit changer elle-même son mot de passe.",
+    });
+    expect(await creerLienReinitialisation(ecole, diana, n.id)).toMatchObject({ ok: false });
+  });
+
   it("une autre école ne voit ni les membres ni les invitations de celle-ci", async () => {
-    expect((await avecEcole(autreEcole, (tx) => listerMembres(tx))).some((m) => m.email === emailNouvelle)).toBe(false);
+    expect((await avecEcole(autreEcole, (tx) => listerMembres(tx))).some((m) => m.email === emailDiana)).toBe(false);
     expect(await avecEcole(autreEcole, (tx) => invitationsEnCours(tx, new Date()))).toEqual([]);
   });
 });

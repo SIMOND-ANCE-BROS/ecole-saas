@@ -37,6 +37,23 @@ async function membreDe(tx: Tx, userId: string) {
   return m?.id ?? null;
 }
 
+/**
+ * Le compte appartient-il (même désactivé) à une autre école ? Son mot de
+ * passe y donne accès : une école ne doit pas pouvoir le changer pour une
+ * autre. Lu dans la transaction courante grâce à la politique RLS
+ * `mes_appartenances` (app.user_id), remise à vide aussitôt.
+ */
+async function compteAilleurs(tx: Tx, userId: string): Promise<boolean> {
+  await tx.execute(sql`select set_config('app.user_id', ${userId}, true)`);
+  const [{ n }] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(membre)
+    .where(and(eq(membre.userId, userId), sql`${membre.ecoleId} <> ${ECOLE_COURANTE}`));
+  await tx.execute(sql`select set_config('app.user_id', '', true)`);
+  return n > 0;
+}
+export const PARTAGE = "Ce compte sert aussi dans une autre école : la personne doit changer elle-même son mot de passe.";
+
 /** Compte (global) d'un membre de l'école, ou null. */
 export async function compteDuMembre(tx: Tx, membreId: string): Promise<string | null> {
   if (!estUuid(membreId)) return null;
@@ -123,9 +140,9 @@ export async function modifierMembre(tx: Tx, userId: string, membreId: string, a
 }
 
 /**
- * Lien de réinitialisation du mot de passe d'un membre, valable 24 heures.
- * L'appelant vérifie d'abord que le compte n'appartient à aucune autre école
- * (`creerLienReinitialisation`) : le mot de passe est commun à toutes.
+ * Lien de réinitialisation du mot de passe d'un membre, valable 24 heures ;
+ * refusé si le compte appartient aussi à une autre école (revérifié quand le
+ * lien est utilisé).
  */
 export async function lienReinitialisation(tx: Tx, userId: string, membreId: string, maintenant: Date): Promise<ResultatLien> {
   if (!estUuid(membreId)) return { ok: false, message: "Ce membre n’existe plus." };
@@ -133,6 +150,7 @@ export async function lienReinitialisation(tx: Tx, userId: string, membreId: str
   if (!qui) return { ok: false, message: "Accès refusé." };
   const [m] = await tx.select({ userId: membre.userId, email: user.email, nom: user.name }).from(membre).innerJoin(user, eq(user.id, membre.userId)).where(eq(membre.id, membreId));
   if (!m) return { ok: false, message: "Ce membre n’existe plus." };
+  if (await compteAilleurs(tx, m.userId)) return { ok: false, message: PARTAGE };
   await tx.delete(invitation).where(and(eq(invitation.type, "reinitialisation"), eq(invitation.userId, m.userId), isNull(invitation.utiliseLe)));
   const jeton = nouveauJeton();
   const [{ id }] = await tx
@@ -181,21 +199,23 @@ export async function lireLien(tx: Tx, jeton: string, maintenant: Date): Promise
 }
 
 /**
- * Marque le lien utilisé (une seule fois : false s'il l'a déjà été entre-temps)
- * et, pour une invitation, fait entrer le compte dans l'équipe avec le rôle prévu.
+ * Marque le lien utilisé (une seule fois) et, pour une invitation, fait
+ * entrer le compte dans l'équipe avec le rôle prévu. Une réinitialisation est
+ * refusée si le compte a rejoint une autre école depuis la création du lien.
  */
-export async function utiliserLien(tx: Tx, lien: LienOuvert, userId: string): Promise<boolean> {
+export async function utiliserLien(tx: Tx, lien: LienOuvert, userId: string): Promise<"ok" | "expire" | "partage"> {
+  if (lien.type === "reinitialisation" && (await compteAilleurs(tx, userId))) return "partage";
   const marque = await tx
     .update(invitation)
     .set({ utiliseLe: sql`now()` })
     .where(and(eq(invitation.id, lien.id), isNull(invitation.utiliseLe)))
     .returning({ id: invitation.id });
-  if (marque.length !== 1) return false;
+  if (marque.length !== 1) return "expire";
   if (lien.type === "invitation" && lien.role) {
     await tx
       .insert(membre)
       .values({ ecoleId: ECOLE_COURANTE, userId, role: lien.role })
       .onConflictDoUpdate({ target: [membre.ecoleId, membre.userId], set: { role: lien.role, actif: true } });
   }
-  return true;
+  return "ok";
 }
