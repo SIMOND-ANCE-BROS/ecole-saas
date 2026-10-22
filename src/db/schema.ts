@@ -172,6 +172,36 @@ export const membre = pgTable(
   ],
 );
 
+/** Lien envoyé à une personne : rejoindre l'équipe, ou choisir un nouveau mot de passe (#104). */
+export const typeInvitation = pgEnum("type_invitation", ["invitation", "reinitialisation"]);
+
+/**
+ * Invitation dans l'équipe d'une école, ou réinitialisation du mot de passe
+ * d'un membre (#104). Le jeton n'est montré qu'une fois, dans le lien ; seule
+ * son empreinte est gardée. Usage unique, durée limitée.
+ */
+export const invitation = pgTable(
+  "invitation",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ecoleId: ecoleId(),
+    type: typeInvitation("type").notNull(),
+    email: text("email").notNull(),
+    nom: text("nom"),
+    role: roleMembre("role"), // invitation : rôle donné en rejoignant l'école
+    userId: text("user_id").references((): AnyPgColumn => user.id, { onDelete: "cascade" }), // réinitialisation : compte visé
+    jetonHash: text("jeton_hash").notNull().unique(),
+    expireLe: timestamp("expire_le", { withTimezone: true }).notNull(),
+    creePar: uuid("cree_par"),
+    utiliseLe: timestamp("utilise_le", { withTimezone: true }),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("invitation_contenu", sql`(${t.type} = 'invitation' AND ${t.role} IS NOT NULL) OR (${t.type} = 'reinitialisation' AND ${t.userId} IS NOT NULL)`),
+    memeEcole(t, t.creePar, membre),
+  ],
+);
+
 /**
  * Disposition des colonnes d'une liste (élèves, contacts…) propre à chaque
  * membre (#89) : identifiants des colonnes affichées, dans l'ordre. Une simple
