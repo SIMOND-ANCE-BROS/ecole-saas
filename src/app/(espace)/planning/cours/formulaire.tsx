@@ -115,8 +115,11 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
   useEffect(() => {
     if (!cle) return;
     const [intervenantId, jour, heure, duree] = cle.split("|");
-    const minuteur = setTimeout(async () => {
-      setDatesIndispo(await verifierCreneau(cours?.id ?? null, { intervenantId, jourSemaine: Number(jour), heureDebut: heure, dureeMinutes: Number(duree) }));
+    const minuteur = setTimeout(() => {
+      // A failed check shows no warning rather than an unhandled error.
+      verifierCreneau(cours?.id ?? null, { intervenantId, jourSemaine: Number(jour), heureDebut: heure, dureeMinutes: Number(duree) }).then(setDatesIndispo, () =>
+        setDatesIndispo([]),
+      );
     }, 300);
     return () => clearTimeout(minuteur);
   }, [cle, cours?.id]);

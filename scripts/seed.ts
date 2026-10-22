@@ -208,6 +208,13 @@ async function principal() {
   console.log(`Mot de passe : ${process.env.SEED_MOT_DE_PASSE ? "(SEED_MOT_DE_PASSE)" : MOT_DE_PASSE}`);
 }
 
-principal()
-  .finally(() => admin.end())
-  .then(() => process.exit(0));
+// The application pool (src/db) keeps the process alive: exit explicitly.
+void principal()
+  .catch((e: unknown) => {
+    console.error(e);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await admin.end();
+    process.exit(process.exitCode ?? 0);
+  });

@@ -94,11 +94,11 @@ const libelles = (valeur: SQL, table: Record<string | number, string>) =>
     sql` `,
   )} END`;
 
-/** Cours suivis cette saison (inscriptions actives ou à l'essai), triés par jour et heure. */
 /** Libellé court d'un cours `c` de discipline `d` : « Jazz lun. 17:00 ». */
 const libelleCours = () =>
-  sql`concat_ws(' ', d.nom, ${libelles(sql`c.jour_semaine::text`, Object.fromEntries(JOURS_COURTS.map((j, i) => [i, j]).slice(1)))}, to_char(c.heure_debut, 'HH24:MI'))`;
+  sql`concat_ws(' ', d.nom, ${libelles(sql`c.jour_semaine::text`, Object.fromEntries(JOURS_COURTS.map((j, i) => [i, j] as const).slice(1)))}, to_char(c.heure_debut, 'HH24:MI'))`;
 
+/** Cours suivis cette saison (inscriptions actives ou à l'essai), triés par jour et heure. */
 function coursEleve(saisonId: string | null): SQL<string[]> {
   if (!saisonId) return sql<string[]>`'{}'::text[]`;
   return sql<string[]>`coalesce((
