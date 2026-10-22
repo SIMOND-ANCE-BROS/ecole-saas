@@ -49,12 +49,12 @@ describe("largeurs et glisser-déposer (#102)", () => {
     expect(d).toEqual([
       { id: "nom", visible: true, largeur: 180 },
       { id: "age", visible: false, largeur: 60 },
-      { id: "telephone", visible: true, largeur: 800 },
+      { id: "telephone", visible: true, largeur: 1200 },
       { id: "naissance", visible: true },
     ]);
-    expect(vue(d)).toBe("nom@180 -age@60 telephone@800 naissance");
-    expect(vue(redimensionner(d, "nom", null))).toBe("nom -age@60 telephone@800 naissance");
-    expect(vue(redimensionner(d, "naissance", 123.6))).toBe("nom@180 -age@60 telephone@800 naissance@124");
+    expect(vue(d)).toBe("nom@180 -age@60 telephone@1200 naissance");
+    expect(vue(redimensionner(d, "nom", null))).toBe("nom -age@60 telephone@1200 naissance");
+    expect(vue(redimensionner(d, "naissance", 123.6))).toBe("nom@180 -age@60 telephone@1200 naissance@124");
   });
 
   it("place une colonne devant une autre, ou à la fin", () => {

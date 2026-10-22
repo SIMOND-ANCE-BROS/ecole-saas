@@ -13,7 +13,7 @@ export type Disposition = { id: string; visible: boolean; largeur?: number | nul
 
 /** Bornes d'une largeur de colonne choisie à la souris. */
 export const LARGEUR_MIN = 60;
-export const LARGEUR_MAX = 800;
+export const LARGEUR_MAX = 1200;
 const borner = (l: number) => Math.round(Math.min(LARGEUR_MAX, Math.max(LARGEUR_MIN, l)));
 
 const visibleParDefaut = (c: DefColonne) => c.parDefaut !== false;
