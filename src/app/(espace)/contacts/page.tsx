@@ -8,7 +8,6 @@ import { nomAffiche } from "@/db/personnes";
 import { COLONNES_CONTACTS } from "@/domaine/filtres/colonnes";
 import { lireFiltre, lireTri } from "@/domaine/filtres/filtres";
 import { exigerRole } from "@/lib/session";
-import { RechercheListe } from "../_filtres/recherche-liste";
 import { TableauListe } from "../_filtres/tableau-liste";
 import { ResultatsNavigables } from "../_personnes/resultats";
 
@@ -36,9 +35,6 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
           Nouveau contact
         </Link>
       </div>
-      <Suspense>
-        <RechercheListe libelle="Rechercher un contact" exemple="Nom, téléphone, e-mail…" />
-      </Suspense>
       <ResultatsNavigables>
         <Suspense>
           <TableauListe

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appliquerFiltre, type DefColonne, libelleCondition, lireFiltre, lireTri, normaliserTexte, trierLignes, triSuivant, versParametres } from "./filtres";
+import { appliquerFiltre, type DefColonne, libelleCondition, lireFiltre, lireTri, normaliserTexte, trierLignes, versParametres } from "./filtres";
 
 const COLONNES: DefColonne[] = [
   { id: "nom", libelle: "Élève", type: "texte" },
@@ -125,13 +125,6 @@ describe("tri (#107)", () => {
     expect(lireTri(["nom"], undefined, COLS)).toEqual({ colonne: "nom", sens: "asc" });
     expect(lireTri("tarif", "asc", COLS)).toBeNull();
     expect(lireTri("inconnue", "asc", COLS)).toBeNull();
-  });
-
-  it("un clic : croissant, décroissant, puis l'ordre par défaut", () => {
-    expect(triSuivant(null, "age")).toEqual({ colonne: "age", sens: "asc" });
-    expect(triSuivant({ colonne: "age", sens: "asc" }, "age")).toEqual({ colonne: "age", sens: "desc" });
-    expect(triSuivant({ colonne: "age", sens: "desc" }, "age")).toBeNull();
-    expect(triSuivant({ colonne: "age", sens: "desc" }, "nom")).toEqual({ colonne: "nom", sens: "asc" });
   });
 
   it("trie sans tenir compte des accents, les nombres en ordre numérique, les vides en dernier", () => {

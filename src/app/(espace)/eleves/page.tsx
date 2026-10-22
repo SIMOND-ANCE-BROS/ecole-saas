@@ -6,7 +6,7 @@ import { libellesCoursSaison, listerContacts, listerEleves, RESULTATS_MAX } from
 import { saisonCourante } from "@/db/planning";
 import { lirePreference } from "@/db/preferences";
 import { nomAffiche } from "@/db/personnes";
-import { COLONNES_ELEVES, RACCOURCIS_ELEVES, raccourcisCours } from "@/domaine/filtres/colonnes";
+import { COLONNES_ELEVES } from "@/domaine/filtres/colonnes";
 import { lireFiltre, lireTri } from "@/domaine/filtres/filtres";
 import { ageAu, aujourdhuiAParis } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
@@ -72,7 +72,7 @@ export default async function PageEleves({ searchParams }: PageProps<"/eleves">)
             disposition={disposition}
             lien="nom"
             vide={messageVide}
-            raccourcis={[...RACCOURCIS_ELEVES, raccourcisCours(cours)]}
+            choix={{ cours }}
             actionVide={
               !saisie && (
                 <Link href="/eleves/nouveau" className="bouton-principal">

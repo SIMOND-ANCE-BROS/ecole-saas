@@ -6,7 +6,7 @@ import { listerIntervenants, MODES_REMUNERATION, STATUTS } from "@/db/intervenan
 import { lirePreference } from "@/db/preferences";
 import { saisonCourante } from "@/db/planning";
 import { COLONNES_INTERVENANTS } from "@/domaine/filtres/colonnes";
-import { appliquerFiltre, type Cellule, lireFiltre, lireTri, trierLignes } from "@/domaine/filtres/filtres";
+import { appliquerFiltre, type Cellule, lireFiltre, lireTri, normaliserTexte, trierLignes } from "@/domaine/filtres/filtres";
 import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { formaterEuros } from "@/lib/montant";
 import { exigerRole } from "@/lib/session";
@@ -16,7 +16,8 @@ export const metadata: Metadata = { title: "Intervenants" };
 
 export default async function PageIntervenants({ searchParams }: PageProps<"/intervenants">) {
   const { ecoleId, role, userId } = await exigerRole("direction", "accueil");
-  const { enregistre, f, mode, sort, order } = await searchParams;
+  const { enregistre, f, mode, sort, order, q } = await searchParams;
+  const saisie = typeof q === "string" ? normaliserTexte(q) : "";
   const { saison, intervenants, disposition } = await avecEcole(ecoleId, async (tx) => {
     const s = await saisonCourante(tx, aujourdhuiAParis());
     return { saison: s, intervenants: s ? await listerIntervenants(tx, s.id) : [], disposition: await lirePreference(tx, userId, "intervenants") };
@@ -33,7 +34,12 @@ export default async function PageIntervenants({ searchParams }: PageProps<"/int
     email: (i) => i.email,
   };
   const visibles = trierLignes(
-    appliquerFiltre(intervenants, filtre, colonnes.map((c) => ({ ...c, valeur: valeurs[c.id] ?? (() => null) }))),
+    appliquerFiltre(
+      // Recherche du haut (Ctrl K) : nom ou e-mail.
+      intervenants.filter((i) => !saisie || normaliserTexte(`${i.prenom} ${i.nom} ${i.email ?? ""}`).includes(saisie)),
+      filtre,
+      colonnes.map((c) => ({ ...c, valeur: valeurs[c.id] ?? (() => null) })),
+    ),
     lireTri(sort, order, colonnes),
     (i, colonne) => valeurs[colonne]?.(i),
   );
@@ -75,7 +81,8 @@ export default async function PageIntervenants({ searchParams }: PageProps<"/int
             colonnes={colonnes}
             disposition={disposition}
             lien="nom"
-            vide="Aucun intervenant ne correspond à ces filtres."
+            vide={saisie ? "Aucun intervenant ne correspond à cette recherche." : "Aucun intervenant ne correspond à ces filtres."}
+            choix={{ statut: Object.values(STATUTS) }}
             lignes={visibles.map((i) => ({
               id: i.id,
               href: direction ? `/intervenants/${i.id}` : undefined,

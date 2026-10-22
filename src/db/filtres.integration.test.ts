@@ -1,8 +1,8 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { COLONNES_CONTACTS, COLONNES_ELEVES, RACCOURCIS_ELEVES, raccourcisCours } from "../domaine/filtres/colonnes";
-import { appliquerFiltre, FILTRE_VIDE, lireFiltre, lireTri, versParametres } from "../domaine/filtres/filtres";
-import { choisir } from "../domaine/filtres/raccourcis";
+import { ecrireFiltreColonne } from "../domaine/filtres/colonne";
+import { COLONNES_CONTACTS, COLONNES_ELEVES } from "../domaine/filtres/colonnes";
+import { appliquerFiltre, FILTRE_VIDE, lireFiltre, lireTri, VIDE, versParametres } from "../domaine/filtres/filtres";
 import { ageAu } from "../domaine/personnes/age";
 import { type LigneEleve, libellesCoursSaison, listerContacts, listerEleves } from "./eleves";
 import { avecEcole } from "./index";
@@ -84,17 +84,18 @@ describe("tri et boutons de filtre (#107)", () => {
     expect(await tries("responsables", "asc")).toEqual(["Inès", "Léa", "Hugo"]);
   });
 
-  it("chaque bouton filtre comme prévu (libellés des statuts et des cours compris)", async () => {
-    const parBouton = (groupe: (typeof RACCOURCIS_ELEVES)[number], choix: string) =>
-      eleves(versParametres(choisir(FILTRE_VIDE, groupe, choix)).map(([, v]) => v));
-    const [inscription, age] = RACCOURCIS_ELEVES;
-    expect(await parBouton(inscription, "inscrits")).toEqual(["Léa"]);
-    expect(await parBouton(inscription, "attente")).toEqual(["Hugo"]);
-    expect(await parBouton(inscription, "sans")).toEqual(["Inès"]);
-    expect(await parBouton(age, "mineurs")).toEqual(["Hugo", "Léa"]);
+  it("cases à cocher (statut, cours, « vide ») et bornes, comme en mémoire", async () => {
+    const def = (id: string) => COLONNES_ELEVES.find((c) => c.id === id)!;
+    const par = (id: string, fc: Parameters<typeof ecrireFiltreColonne>[2]) =>
+      eleves(versParametres(ecrireFiltreColonne(FILTRE_VIDE, def(id), fc)).map(([, v]) => v));
+    expect(await par("inscription", { choix: ["Inscrit"] })).toEqual(["Léa"]);
+    expect(await par("inscription", { choix: ["En attente", VIDE] })).toEqual(["Hugo", "Inès"]);
     const libelles = await avecEcole(ecole, (tx) => libellesCoursSaison(tx, saison));
     expect(libelles).toEqual(["Jazz lun. 17:00"]);
-    expect(await parBouton(raccourcisCours(libelles), libelles[0])).toEqual(["Léa"]);
+    expect(await par("cours", { choix: libelles })).toEqual(["Léa"]);
+    expect(await par("cours", { choix: [VIDE] })).toEqual(["Hugo", "Inès"]);
+    expect(await par("age", { min: "8", max: "12" })).toEqual(["Hugo", "Léa"]);
+    expect(await par("naissance", { min: "2018-03-01" })).toEqual(["Léa"]);
   });
 });
 

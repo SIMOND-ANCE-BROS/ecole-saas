@@ -5,6 +5,8 @@ import {
   type DefColonne,
   type Filtre,
   SANS_ACCENTS,
+  SEPARATEUR,
+  VIDE,
   type Tri,
   valeurNormalisee,
 } from "../domaine/filtres/filtres";
@@ -58,6 +60,10 @@ function condition(c: Condition, def: DefColonne, e: ExpressionColonne): SQL | u
         return sql`${d} IS NOT NULL`;
       case "egal":
         return sql`${d} = ${v}::date`;
+      case "inf_egal":
+        return sql`${d} <= ${v}::date`;
+      case "sup_egal":
+        return sql`${d} >= ${v}::date`;
       case "inf":
         return sql`${d} < ${v}::date`;
       case "sup":
@@ -87,6 +93,17 @@ function condition(c: Condition, def: DefColonne, e: ExpressionColonne): SQL | u
       return e.liste ? unElement : sql`${t} = ${v}`;
     case "n_est_pas":
       return e.liste ? sql`NOT ${unElement}` : sql`${t} <> ${v}`;
+    case "parmi": {
+      const toutes = String(v).split(SEPARATEUR);
+      const vs = toutes.filter((x) => x !== VIDE);
+      const liste = sql.join(
+        vs.map((x) => sql`${x}`),
+        sql`, `,
+      );
+      const parmi = vs.length === 0 ? undefined : e.liste ? sql`EXISTS (SELECT 1 FROM unnest(${e.sql}) AS element WHERE ${normaliser(sql`element`)} IN (${liste}))` : sql`${t} IN (${liste})`;
+      const vide = toutes.includes(VIDE) ? sql`${t} = ''` : undefined;
+      return parmi && vide ? sql`(${parmi} OR ${vide})` : (parmi ?? vide);
+    }
     default:
       return undefined;
   }
