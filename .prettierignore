@@ -1,0 +1,9 @@
+# Generated or vendored
+.next/
+node_modules/
+coverage/
+next-env.d.ts
+package-lock.json
+migrations/
+.playwright-mcp/
+.claude/worktrees/

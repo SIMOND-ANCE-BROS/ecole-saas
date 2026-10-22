@@ -1,0 +1,19 @@
+#!/bin/sh
+# Versioned pre-push hook (#113): types, then the unit tests related to the
+# files changed since main. PRE_PUSH_FULL=1 runs the whole unit suite.
+. "$(dirname "$0")/_lib.sh"
+require_deps node_modules/.bin/tsc node_modules/.bin/vitest
+set -e
+
+npm run --silent typecheck
+
+base=$(git merge-base HEAD origin/main 2>/dev/null || git rev-parse HEAD~1 2>/dev/null || echo "")
+if [ "${PRE_PUSH_FULL-}" = "1" ] || [ -z "$base" ]; then
+  vitest run
+else
+  changed=$(git diff --name-only --diff-filter=ACMR "$base" HEAD -- '*.ts' '*.tsx' | grep -v '\.integration\.test\.ts$' || true)
+  if [ -n "$changed" ]; then
+    # shellcheck disable=SC2086
+    vitest related --run --passWithNoTests $changed
+  fi
+fi
