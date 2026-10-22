@@ -31,7 +31,17 @@ type Props = {
 };
 
 /** Planning de la semaine, filtrable par discipline, site, salle et intervenant, avec l'effectif de chaque cours. */
-export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale, horaires, lundi, aujourdhui, seances, fermetures }: Props) {
+export function GrillePlanning({
+  cours,
+  modifiable,
+  misEnAvant,
+  vue: vueInitiale,
+  horaires,
+  lundi,
+  aujourdhui,
+  seances,
+  fermetures,
+}: Props) {
   const [filtres, setFiltres] = useState(FILTRES_VIDES);
   const [vue, setVue] = useState(vueInitiale);
   const choisirVue = (v: VuePlanning) => {
@@ -41,12 +51,24 @@ export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale
   const { discipline, site, salleId, intervenantId } = filtres;
   const disciplines = useMemo(() => [...new Set(cours.map((c) => c.discipline))].sort(), [cours]);
   const sites = useMemo(() => [...new Set(cours.map((c) => c.site))].sort(), [cours]);
-  const salles = [...new Map(cours.filter((c) => !site || c.site === site).map((c) => [c.salleId, { id: c.salleId, libelle: `${c.salle} · ${c.site}` }])).values()].sort((a, b) => a.libelle.localeCompare(b.libelle, "fr"));
-  const intervenants = [...new Map(cours.map((c) => [c.intervenantId, c.intervenant])).entries()].sort((a, b) => a[1].localeCompare(b[1], "fr"));
+  const salles = [
+    ...new Map(
+      cours
+        .filter((c) => !site || c.site === site)
+        .map((c) => [c.salleId, { id: c.salleId, libelle: `${c.salle} · ${c.site}` }]),
+    ).values(),
+  ].sort((a, b) => a.libelle.localeCompare(b.libelle, "fr"));
+  const intervenants = [...new Map(cours.map((c) => [c.intervenantId, c.intervenant])).entries()].sort((a, b) =>
+    a[1].localeCompare(b[1], "fr"),
+  );
   const visibles = filtrerPlanning(cours, filtres);
   const filtresActifs = Object.values(filtres).some(Boolean);
   // Horaires des sites affichés : le site (ou celui de la salle) filtré, sinon tous.
-  const siteFiltre = salleId ? cours.find((c) => c.salleId === salleId)?.siteId : site ? cours.find((c) => c.site === site)?.siteId : undefined;
+  const siteFiltre = salleId
+    ? cours.find((c) => c.salleId === salleId)?.siteId
+    : site
+      ? cours.find((c) => c.site === site)?.siteId
+      : undefined;
   const horairesAffiches = siteFiltre ? (horaires[siteFiltre] ?? []) : Object.values(horaires).flat();
   const jours = [...new Set(visibles.map((c) => c.jourSemaine))].sort((a, b) => (a ?? 8) - (b ?? 8));
 
@@ -57,7 +79,12 @@ export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale
           <label htmlFor="filtre-discipline" className="text-xs text-doux">
             Discipline
           </label>
-          <select id="filtre-discipline" className="champ" value={discipline} onChange={(e) => setFiltres({ ...filtres, discipline: e.target.value })}>
+          <select
+            id="filtre-discipline"
+            className="champ"
+            value={discipline}
+            onChange={(e) => setFiltres({ ...filtres, discipline: e.target.value })}
+          >
             <option value="">Toutes</option>
             {disciplines.map((d) => (
               <option key={d}>{d}</option>
@@ -68,7 +95,12 @@ export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale
           <label htmlFor="filtre-site" className="text-xs text-doux">
             Site
           </label>
-          <select id="filtre-site" className="champ" value={site} onChange={(e) => setFiltres({ ...filtres, site: e.target.value, salleId: "" })}>
+          <select
+            id="filtre-site"
+            className="champ"
+            value={site}
+            onChange={(e) => setFiltres({ ...filtres, site: e.target.value, salleId: "" })}
+          >
             <option value="">Tous</option>
             {sites.map((s) => (
               <option key={s}>{s}</option>
@@ -76,24 +108,54 @@ export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label htmlFor="filtre-salle" className="text-xs text-doux">Salle</label>
-          <select id="filtre-salle" className="champ" value={salleId} onChange={(e) => setFiltres({ ...filtres, salleId: e.target.value })}>
+          <label htmlFor="filtre-salle" className="text-xs text-doux">
+            Salle
+          </label>
+          <select
+            id="filtre-salle"
+            className="champ"
+            value={salleId}
+            onChange={(e) => setFiltres({ ...filtres, salleId: e.target.value })}
+          >
             <option value="">Toutes les salles</option>
-            {salles.map((s) => <option key={s.id} value={s.id}>{s.libelle}</option>)}
+            {salles.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.libelle}
+              </option>
+            ))}
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label htmlFor="filtre-intervenant" className="text-xs text-doux">Intervenant</label>
-          <select id="filtre-intervenant" className="champ" value={intervenantId} onChange={(e) => setFiltres({ ...filtres, intervenantId: e.target.value })}>
+          <label htmlFor="filtre-intervenant" className="text-xs text-doux">
+            Intervenant
+          </label>
+          <select
+            id="filtre-intervenant"
+            className="champ"
+            value={intervenantId}
+            onChange={(e) => setFiltres({ ...filtres, intervenantId: e.target.value })}
+          >
             <option value="">Tous les intervenants</option>
-            {intervenants.map(([id, nom]) => <option key={id} value={id}>{nom}</option>)}
+            {intervenants.map(([id, nom]) => (
+              <option key={id} value={id}>
+                {nom}
+              </option>
+            ))}
           </select>
         </div>
-        {filtresActifs && <button type="button" className="bouton-secondaire" onClick={() => setFiltres(FILTRES_VIDES)}>Réinitialiser les filtres</button>}
+        {filtresActifs && (
+          <button type="button" className="bouton-secondaire" onClick={() => setFiltres(FILTRES_VIDES)}>
+            Réinitialiser les filtres
+          </button>
+        )}
         <p className="pb-1.5 text-sm text-doux" aria-live="polite">
           {visibles.length} cours sur {cours.length}
         </p>
-        <div role="group" aria-label="Affichage" className="ml-auto flex overflow-hidden rounded-md border border-bordure text-sm">
+        <div
+          role="group"
+          aria-label="Affichage"
+          className="ml-auto flex overflow-hidden rounded-md border border-bordure text-sm"
+        >
           {(Object.keys(VUES) as VuePlanning[]).map((v) => (
             <button
               key={v}
@@ -109,7 +171,18 @@ export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale
       </div>
 
       {visibles.length === 0 ? (
-        <div className="panneau flex flex-col items-start gap-3 p-5"><p className="text-sm text-doux">{cours.length === 0 ? "Aucun cours n’est encore programmé." : "Aucun cours ne correspond à cette combinaison de filtres."}</p>{filtresActifs && <button type="button" className="bouton-secondaire" onClick={() => setFiltres(FILTRES_VIDES)}>Afficher tous les cours</button>}</div>
+        <div className="panneau flex flex-col items-start gap-3 p-5">
+          <p className="text-sm text-doux">
+            {cours.length === 0
+              ? "Aucun cours n’est encore programmé."
+              : "Aucun cours ne correspond à cette combinaison de filtres."}
+          </p>
+          {filtresActifs && (
+            <button type="button" className="bouton-secondaire" onClick={() => setFiltres(FILTRES_VIDES)}>
+              Afficher tous les cours
+            </button>
+          )}
+        </div>
       ) : vue === "datee" ? (
         <SemaineDatee
           seances={filtrerPlanning(seances, filtres)}
@@ -120,7 +193,13 @@ export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale
           modifiable={modifiable}
         />
       ) : vue === "type" ? (
-        <SemaineType cours={visibles} tous={cours} modifiable={modifiable} misEnAvant={misEnAvant} horaires={horairesAffiches} />
+        <SemaineType
+          cours={visibles}
+          tous={cours}
+          modifiable={modifiable}
+          misEnAvant={misEnAvant}
+          horaires={horairesAffiches}
+        />
       ) : (
         <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
           {jours.map((jour) => (
@@ -160,17 +239,23 @@ export function GrillePlanning({ cours, modifiable, misEnAvant, vue: vueInitiale
                             </Link>
                           </p>
                           {complet && (
-                            <span className="rounded bg-alerte-fond px-1.5 text-xs font-medium text-alerte-texte">Complet</span>
+                            <span className="rounded bg-alerte-fond px-1.5 text-xs font-medium text-alerte-texte">
+                              Complet
+                            </span>
                           )}
                         </div>
                         <p className="text-xs text-doux">
                           {c.salle}, {c.site} — {c.intervenant}
                         </p>
                         {(c.jourSemaine === null || marqueRecurrence(c)) && (
-                          <p className="text-xs text-doux">{c.jourSemaine === null ? recurrenceTexte(c) : marqueRecurrence(c)}</p>
+                          <p className="text-xs text-doux">
+                            {c.jourSemaine === null ? recurrenceTexte(c) : marqueRecurrence(c)}
+                          </p>
                         )}
                         {(ages(c.ageMin, c.ageMax) || c.niveau) && (
-                          <p className="text-xs text-doux">{[ages(c.ageMin, c.ageMax), c.niveau].filter(Boolean).join(", ")}</p>
+                          <p className="text-xs text-doux">
+                            {[ages(c.ageMin, c.ageMax), c.niveau].filter(Boolean).join(", ")}
+                          </p>
                         )}
                         <div className="mt-1 flex items-center gap-2 text-xs">
                           {c.capaciteMax ? (

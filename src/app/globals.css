@@ -124,8 +124,13 @@ body {
 }
 
 /* Repères de la fiche et contrôles clavier, sous l’en-tête fixe. */
-[id] { scroll-margin-top: 6rem; }
-input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+[id] {
+  scroll-margin-top: 6rem;
+}
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
+}
 :where(a, button, input, select, summary):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;

@@ -70,7 +70,9 @@ async function inscriptionsExistantes(tx: Tx, payeurId: string, saisonId: string
       remise: inscription.remiseCentimes,
     })
     .from(inscription)
-    .where(and(eq(inscription.payeurId, payeurId), eq(inscription.saisonId, saisonId), eq(inscription.statut, "active")));
+    .where(
+      and(eq(inscription.payeurId, payeurId), eq(inscription.saisonId, saisonId), eq(inscription.statut, "active")),
+    );
   if (lignes.length === 0) return [];
 
   const liens = await tx
@@ -92,7 +94,9 @@ async function inscriptionsExistantes(tx: Tx, payeurId: string, saisonId: string
 
   return lignes.map((l) => {
     const siens = liens.filter((x) => x.inscriptionId === l.id);
-    const coursUniques = new Map(siens.map((x) => [x.coursId, { disciplineId: x.disciplineId, dureeMinutes: x.dureeMinutes }]));
+    const coursUniques = new Map(
+      siens.map((x) => [x.coursId, { disciplineId: x.disciplineId, dureeMinutes: x.dureeMinutes }]),
+    );
     return {
       reference: l.id,
       danseurIds: [...new Set(siens.map((x) => x.danseurId))],
@@ -105,11 +109,17 @@ async function inscriptionsExistantes(tx: Tx, payeurId: string, saisonId: string
 }
 
 /** Danseurs du payeur et cours de la saison réellement choisis ; sinon le motif du refus. */
-async function valider(tx: Tx, payeurId: string, saisonId: string, saisie: SaisieInscription): Promise<string | CoursChoisi[]> {
+async function valider(
+  tx: Tx,
+  payeurId: string,
+  saisonId: string,
+  saisie: SaisieInscription,
+): Promise<string | CoursChoisi[]> {
   const danseurIds = [...new Set(saisie.danseurIds)];
   const coursIds = [...new Set(saisie.coursIds)];
   if (saisie.public === "couple" && danseurIds.length !== 2) return "Un couple réunit deux danseurs.";
-  if (saisie.public !== "couple" && danseurIds.length !== 1) return "Une inscription individuelle concerne un seul danseur.";
+  if (saisie.public !== "couple" && danseurIds.length !== 1)
+    return "Une inscription individuelle concerne un seul danseur.";
   if (![...danseurIds, ...coursIds].every((id) => uuid.safeParse(id).success)) return "Saisie invalide.";
 
   const payables = new Set((await danseursPayables(tx, payeurId)).map((d) => d.id));
@@ -126,11 +136,15 @@ async function valider(tx: Tx, payeurId: string, saisonId: string, saisie: Saisi
 }
 
 /** Une inscription déjà enregistrée dont la remise changerait avec la nouvelle (ex. fratrie). */
-export type ImpactExistante = { reference: string; danseurs: string; remiseEnregistree: number; remiseRecalculee: number };
+export type ImpactExistante = {
+  reference: string;
+  danseurs: string;
+  remiseEnregistree: number;
+  remiseRecalculee: number;
+};
 
 export type Apercu =
-  | { statut: "invalide"; message: string }
-  | { statut: "ok"; nouvelle: ResultatInscription; autres: ImpactExistante[] };
+  { statut: "invalide"; message: string } | { statut: "ok"; nouvelle: ResultatInscription; autres: ImpactExistante[] };
 
 /** Prix de la nouvelle inscription, calculé avec la grille, les réductions et les autres inscriptions du payeur. */
 export async function apercuInscription(
@@ -150,7 +164,13 @@ export async function apercuInscription(
     reductions,
     inscriptions: [
       ...existantes,
-      { reference: NOUVELLE, danseurIds: saisie.danseurIds, public: saisie.public, periodicite: saisie.periodicite, cours: coursChoisis },
+      {
+        reference: NOUVELLE,
+        danseurIds: saisie.danseurIds,
+        public: saisie.public,
+        periodicite: saisie.periodicite,
+        cours: coursChoisis,
+      },
     ],
   });
 
@@ -229,7 +249,9 @@ export async function inscriptionsPayeesPar(tx: Tx, payeurId: string, saisonId: 
       prixNetCentimes: inscription.prixNetCentimes,
     })
     .from(inscription)
-    .where(and(eq(inscription.payeurId, payeurId), eq(inscription.saisonId, saisonId), eq(inscription.statut, "active")));
+    .where(
+      and(eq(inscription.payeurId, payeurId), eq(inscription.saisonId, saisonId), eq(inscription.statut, "active")),
+    );
   if (lignes.length === 0) return [];
 
   const liens = await tx
@@ -262,7 +284,13 @@ export async function inscriptionsPayeesPar(tx: Tx, payeurId: string, saisonId: 
         periodicite: l.periodicite,
         prixNetCentimes: l.prixNetCentimes ?? 0,
         danseurs: [...new Set(siens.map((x) => x.prenom))].sort().join(" et "),
-        cours: [...new Set(siens.map((x) => `${x.discipline} ${x.jour ? JOURS[x.jour] : ""} ${x.heure.slice(0, 5)}`.replace("  ", " ")))],
+        cours: [
+          ...new Set(
+            siens.map((x) =>
+              `${x.discipline} ${x.jour ? JOURS[x.jour] : ""} ${x.heure.slice(0, 5)}`.replace("  ", " "),
+            ),
+          ),
+        ],
       };
     })
     .sort((a, b) => a.danseurs.localeCompare(b.danseurs, "fr"));

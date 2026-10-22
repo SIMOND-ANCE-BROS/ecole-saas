@@ -2,7 +2,16 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { type Condition, type DefColonne, type Filtre, lireFiltre, OPERATEURS, sansValeur, valeurNormalisee, versParametres } from "@/domaine/filtres/filtres";
+import {
+  type Condition,
+  type DefColonne,
+  type Filtre,
+  lireFiltre,
+  OPERATEURS,
+  sansValeur,
+  valeurNormalisee,
+  versParametres,
+} from "@/domaine/filtres/filtres";
 
 /** Délai avant d'appliquer une valeur tapée (la liste se recharge depuis le serveur). */
 const DELAI = 350;
@@ -30,7 +39,8 @@ export function useFiltreAdresse(colonnes: DefColonne[]) {
       const p = new URLSearchParams(params.toString());
       p.delete("f");
       p.delete("mode");
-      for (const [cle, valeur] of versParametres({ ...f, conditions: f.conditions.filter(complete) })) p.append(cle, valeur);
+      for (const [cle, valeur] of versParametres({ ...f, conditions: f.conditions.filter(complete) }))
+        p.append(cle, valeur);
       const texte = p.toString();
       demarrer(() => router.replace(texte ? `${chemin}?${texte}` : chemin, { scroll: false }));
     };
@@ -59,7 +69,10 @@ export function useFiltreAdresse(colonnes: DefColonne[]) {
 
   /** Nouvelle condition vide sur une colonne : rien à recharger tant qu'elle n'a pas de valeur. */
   function ajouter(colonne: string) {
-    setFiltre({ ...filtre, conditions: [...filtre.conditions, { colonne, operateur: OPERATEURS[typeDe(colonne)][0], valeur: "" }] });
+    setFiltre({
+      ...filtre,
+      conditions: [...filtre.conditions, { colonne, operateur: OPERATEURS[typeDe(colonne)][0], valeur: "" }],
+    });
   }
 
   function retirer(i: number) {
@@ -71,7 +84,18 @@ export function useFiltreAdresse(colonnes: DefColonne[]) {
     setFiltre((f) => ({ ...f, conditions: f.conditions.filter((c) => c.colonne !== colonne || complete(c)) }));
   }
 
-  return { filtre, enCours, typeDe, complete, changer, modifier, ajouter, retirer, nettoyer, appliquer: () => publier(filtre) };
+  return {
+    filtre,
+    enCours,
+    typeDe,
+    complete,
+    changer,
+    modifier,
+    ajouter,
+    retirer,
+    nettoyer,
+    appliquer: () => publier(filtre),
+  };
 }
 
 export type FiltreAdresse = ReturnType<typeof useFiltreAdresse>;

@@ -22,6 +22,10 @@ type CoursPlace = Creneau & { id: string | null; salleId: string; intervenantId:
 export function conflits(cible: CoursPlace, existants: CoursPlace[]) {
   return existants
     .filter((c) => c.id !== cible.id && seChevauchent(cible, c))
-    .map((c) => ({ id: c.id as string, salle: c.salleId === cible.salleId, intervenant: c.intervenantId === cible.intervenantId }))
+    .map((c) => ({
+      id: c.id as string,
+      salle: c.salleId === cible.salleId,
+      intervenant: c.intervenantId === cible.intervenantId,
+    }))
     .filter((c) => c.salle || c.intervenant);
 }

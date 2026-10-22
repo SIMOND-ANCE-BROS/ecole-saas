@@ -6,7 +6,12 @@ import { cours, coursDate, discipline, inscriptionCours, intervenant, presence, 
 
 /** Édition du planning (cours, disciplines, salles), toujours avec la transaction d'`avecEcole()` (RLS). */
 
-export const TYPES_COURS = { collectif: "Collectif", particulier: "Particulier", competition: "Compétition", stage: "Stage" } as const;
+export const TYPES_COURS = {
+  collectif: "Collectif",
+  particulier: "Particulier",
+  competition: "Compétition",
+  stage: "Stage",
+} as const;
 
 const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uuid`;
 const nomCourt = z.string().trim().min(1).max(100);
@@ -14,7 +19,11 @@ const entierOuNul = (min: number, max: number) => z.int().min(min).max(max).null
 const dateOuNulle = z.iso.date("Date invalide").nullable();
 
 /** Récurrences proposées (#90). */
-export const RECURRENCES = { hebdomadaire: "Chaque semaine", quinzaine: "Une semaine sur deux", dates: "À des dates précises" } as const;
+export const RECURRENCES = {
+  hebdomadaire: "Chaque semaine",
+  quinzaine: "Une semaine sur deux",
+  dates: "À des dates précises",
+} as const;
 
 export const saisieCoursValide = z
   .object({
@@ -24,7 +33,10 @@ export const saisieCoursValide = z
       z.object({
         nom: nomCourt,
         capacite: entierOuNul(1, 1000),
-        site: z.union([z.object({ id: z.uuid() }), z.object({ nom: nomCourt, adresse: z.string().trim().min(1).max(300) })]),
+        site: z.union([
+          z.object({ id: z.uuid() }),
+          z.object({ nom: nomCourt, adresse: z.string().trim().min(1).max(300) }),
+        ]),
       }),
     ]),
     intervenantId: z.uuid(),
@@ -50,9 +62,18 @@ export const saisieCoursValide = z
     path: ["ageMax"],
     message: "L’âge maximum est inférieur à l’âge minimum",
   })
-  .refine((c) => c.recurrence === "dates" || c.jourSemaine !== null, { path: ["jourSemaine"], message: "Jour obligatoire" })
-  .refine((c) => c.recurrence !== "dates" || c.dates.length > 0, { path: ["dates"], message: "Ajoutez au moins une date" })
-  .refine((c) => c.dateDebut === null || c.dateFin === null || c.dateDebut <= c.dateFin, { path: ["dateFin"], message: "La fin précède le début" });
+  .refine((c) => c.recurrence === "dates" || c.jourSemaine !== null, {
+    path: ["jourSemaine"],
+    message: "Jour obligatoire",
+  })
+  .refine((c) => c.recurrence !== "dates" || c.dates.length > 0, {
+    path: ["dates"],
+    message: "Ajoutez au moins une date",
+  })
+  .refine((c) => c.dateDebut === null || c.dateFin === null || c.dateDebut <= c.dateFin, {
+    path: ["dateFin"],
+    message: "La fin précède le début",
+  });
 
 export type SaisieCours = z.output<typeof saisieCoursValide>;
 export type Resultat = { ok: true; id: string } | { ok: false; message: string };
@@ -140,7 +161,10 @@ async function resoudreDiscipline(tx: Tx, d: SaisieCours["discipline"]): Promise
     return x?.id ?? null;
   }
   const nom = d.nom.trim();
-  const [x] = await tx.select({ id: discipline.id }).from(discipline).where(sql`lower(${discipline.nom}) = lower(${nom})`);
+  const [x] = await tx
+    .select({ id: discipline.id })
+    .from(discipline)
+    .where(sql`lower(${discipline.nom}) = lower(${nom})`);
   if (x) return x.id;
   const [n] = await tx.insert(discipline).values({ ecoleId: ECOLE_COURANTE, nom }).returning({ id: discipline.id });
   return n.id;
@@ -193,7 +217,22 @@ async function valeurs(tx: Tx, saisie: SaisieCours, garde?: string) {
   const [dateDebut, dateFin] = ponctuel ? [null, null] : [saisie.dateDebut, saisie.dateFin];
   return {
     ok: true as const,
-    valeurs: { disciplineId, salleId, intervenantId, type, recurrence, jourSemaine, dateDebut, dateFin, heureDebut, dureeMinutes, ageMin, ageMax, niveau, capaciteMax },
+    valeurs: {
+      disciplineId,
+      salleId,
+      intervenantId,
+      type,
+      recurrence,
+      jourSemaine,
+      dateDebut,
+      dateFin,
+      heureDebut,
+      dureeMinutes,
+      ageMin,
+      ageMax,
+      niveau,
+      capaciteMax,
+    },
     dates: ponctuel ? [...new Set(saisie.dates)].sort() : [],
   };
 }
@@ -211,7 +250,8 @@ export async function creerCours(tx: Tx, saisonId: string, saisie: SaisieCours):
 
 async function remplacerDates(tx: Tx, coursId: string, dates: string[]) {
   await tx.delete(coursDate).where(eq(coursDate.coursId, coursId));
-  if (dates.length > 0) await tx.insert(coursDate).values(dates.map((date) => ({ ecoleId: ECOLE_COURANTE, coursId, date })));
+  if (dates.length > 0)
+    await tx.insert(coursDate).values(dates.map((date) => ({ ecoleId: ECOLE_COURANTE, coursId, date })));
 }
 
 export async function modifierCours(tx: Tx, id: string, saisie: SaisieCours): Promise<Resultat> {
@@ -245,7 +285,8 @@ export async function supprimerCours(tx: Tx, id: string): Promise<Resultat> {
     .select({ n: sql<number>`count(DISTINCT ${inscriptionCours.inscriptionId})::int` })
     .from(inscriptionCours)
     .where(eq(inscriptionCours.coursId, id));
-  if (n > 0) return { ok: false, message: `Ce cours a ${n} inscription${n > 1 ? "s" : ""} : il ne peut pas être supprimé.` };
+  if (n > 0)
+    return { ok: false, message: `Ce cours a ${n} inscription${n > 1 ? "s" : ""} : il ne peut pas être supprimé.` };
   const [appel] = await tx
     .select({ seanceId: presence.seanceId })
     .from(presence)
@@ -265,21 +306,25 @@ export const creneauValide = z.object({
 });
 
 export type ResultatDeplacement =
-  | { statut: "ok"; id: string }
-  | { statut: "confirmer"; inscrits: number }
-  | { statut: "refus"; message: string };
+  { statut: "ok"; id: string } | { statut: "confirmer"; inscrits: number } | { statut: "refus"; message: string };
 
 /**
  * Déplace (jour, heure) ou étire (durée) un cours depuis la vue agenda. Si des
  * élèves y sont inscrits (actifs ou à l'essai), il faut d'abord confirmer.
  * Les séances à venir sont recalculées par l'appelant (synchroniserSeances).
  */
-export async function deplacerCours(tx: Tx, id: string, creneau: z.input<typeof creneauValide>, confirme: boolean): Promise<ResultatDeplacement> {
+export async function deplacerCours(
+  tx: Tx,
+  id: string,
+  creneau: z.input<typeof creneauValide>,
+  confirme: boolean,
+): Promise<ResultatDeplacement> {
   const c = creneauValide.safeParse(creneau);
   if (!c.success) return { statut: "refus", message: c.error.issues[0].message };
   const existant = await lireCours(tx, id);
   if (!existant) return { statut: "refus", message: "Ce cours n’existe plus." };
-  if (existant.recurrence === "dates") return { statut: "refus", message: "Un cours à dates précises se modifie depuis sa fiche." };
+  if (existant.recurrence === "dates")
+    return { statut: "refus", message: "Un cours à dates précises se modifie depuis sa fiche." };
   if (versMinutesFin(c.data) > 24 * 60) return { statut: "refus", message: "Le cours finirait après minuit." };
   if (!confirme) {
     const [{ n }] = await tx

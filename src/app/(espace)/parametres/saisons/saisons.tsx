@@ -23,7 +23,9 @@ function suivante(saisons: LigneSaison[]) {
 export function Saisons({ saisons }: { saisons: LigneSaison[] }) {
   const [v, setV] = useState(suivante(saisons));
   const [reprendre, setReprendre] = useState(saisons[0]?.id ?? "");
-  const [edition, setEdition] = useState<{ id: string; libelle: string; dateDebut: string; dateFin: string } | null>(null);
+  const [edition, setEdition] = useState<{ id: string; libelle: string; dateDebut: string; dateFin: string } | null>(
+    null,
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [enCours, demarrer] = useTransition();
   const agir = (action: () => Promise<{ message: string | null }>, apres?: () => void) =>
@@ -58,19 +60,36 @@ export function Saisons({ saisons }: { saisons: LigneSaison[] }) {
                       <label className="sr-only" htmlFor="edition-libelle">
                         Libellé
                       </label>
-                      <input id="edition-libelle" className="champ w-32" value={edition.libelle} onChange={(e) => setEdition({ ...edition, libelle: e.target.value })} />
+                      <input
+                        id="edition-libelle"
+                        className="champ w-32"
+                        value={edition.libelle}
+                        onChange={(e) => setEdition({ ...edition, libelle: e.target.value })}
+                      />
                     </td>
                     <td>
                       <label className="sr-only" htmlFor="edition-debut">
                         Début
                       </label>
-                      <input id="edition-debut" type="date" className="champ" value={edition.dateDebut} onChange={(e) => setEdition({ ...edition, dateDebut: e.target.value })} />
+                      <input
+                        id="edition-debut"
+                        type="date"
+                        className="champ"
+                        value={edition.dateDebut}
+                        onChange={(e) => setEdition({ ...edition, dateDebut: e.target.value })}
+                      />
                     </td>
                     <td>
                       <label className="sr-only" htmlFor="edition-fin">
                         Fin
                       </label>
-                      <input id="edition-fin" type="date" className="champ" value={edition.dateFin} onChange={(e) => setEdition({ ...edition, dateFin: e.target.value })} />
+                      <input
+                        id="edition-fin"
+                        type="date"
+                        className="champ"
+                        value={edition.dateFin}
+                        onChange={(e) => setEdition({ ...edition, dateFin: e.target.value })}
+                      />
                     </td>
                     <td className="text-right tabular-nums">{s.cours}</td>
                     <td className="text-right tabular-nums">{s.tarifs}</td>
@@ -79,7 +98,17 @@ export function Saisons({ saisons }: { saisons: LigneSaison[] }) {
                         type="button"
                         className="lien text-sm"
                         disabled={enCours}
-                        onClick={() => agir(() => changerSaison(s.id, { libelle: edition.libelle, dateDebut: edition.dateDebut, dateFin: edition.dateFin }), () => setEdition(null))}
+                        onClick={() =>
+                          agir(
+                            () =>
+                              changerSaison(s.id, {
+                                libelle: edition.libelle,
+                                dateDebut: edition.dateDebut,
+                                dateFin: edition.dateFin,
+                              }),
+                            () => setEdition(null),
+                          )
+                        }
                       >
                         Enregistrer
                       </button>{" "}
@@ -112,7 +141,10 @@ export function Saisons({ saisons }: { saisons: LigneSaison[] }) {
         className="panneau grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4 lg:items-end"
         onSubmit={(e) => {
           e.preventDefault();
-          agir(() => nouvelleSaison(v, reprendre || null), () => setV({ libelle: "", dateDebut: "", dateFin: "" }));
+          agir(
+            () => nouvelleSaison(v, reprendre || null),
+            () => setV({ libelle: "", dateDebut: "", dateFin: "" }),
+          );
         }}
       >
         <p className="text-sm font-semibold sm:col-span-2 lg:col-span-4">Nouvelle saison</p>
@@ -120,19 +152,37 @@ export function Saisons({ saisons }: { saisons: LigneSaison[] }) {
           <label htmlFor="libelle" className="text-sm font-medium">
             Libellé
           </label>
-          <input id="libelle" className="champ" placeholder="2027-2028" value={v.libelle} onChange={(e) => setV({ ...v, libelle: e.target.value })} />
+          <input
+            id="libelle"
+            className="champ"
+            placeholder="2027-2028"
+            value={v.libelle}
+            onChange={(e) => setV({ ...v, libelle: e.target.value })}
+          />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="debut" className="text-sm font-medium">
             Du
           </label>
-          <input id="debut" type="date" className="champ" value={v.dateDebut} onChange={(e) => setV({ ...v, dateDebut: e.target.value })} />
+          <input
+            id="debut"
+            type="date"
+            className="champ"
+            value={v.dateDebut}
+            onChange={(e) => setV({ ...v, dateDebut: e.target.value })}
+          />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="fin" className="text-sm font-medium">
             Au
           </label>
-          <input id="fin" type="date" className="champ" value={v.dateFin} onChange={(e) => setV({ ...v, dateFin: e.target.value })} />
+          <input
+            id="fin"
+            type="date"
+            className="champ"
+            value={v.dateFin}
+            onChange={(e) => setV({ ...v, dateFin: e.target.value })}
+          />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="reprendre" className="text-sm font-medium">
@@ -147,7 +197,11 @@ export function Saisons({ saisons }: { saisons: LigneSaison[] }) {
             ))}
           </select>
         </div>
-        <button type="submit" className="bouton-principal sm:col-span-2 sm:justify-self-start lg:col-span-4" disabled={enCours}>
+        <button
+          type="submit"
+          className="bouton-principal sm:col-span-2 sm:justify-self-start lg:col-span-4"
+          disabled={enCours}
+        >
           Créer la saison
         </button>
       </form>

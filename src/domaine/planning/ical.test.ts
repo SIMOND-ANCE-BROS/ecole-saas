@@ -25,7 +25,12 @@ describe("agendaIcs", () => {
     expect(ics.endsWith("END:VCALENDAR\r\n")).toBe(true);
     expect(ics.includes("\n") && !ics.replace(/\r\n/g, "").includes("\n")).toBe(true);
     const l = lignes(ics);
-    expect(l.slice(0, 4)).toEqual(["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//ecole-saas//agenda//FR", "CALSCALE:GREGORIAN"]);
+    expect(l.slice(0, 4)).toEqual([
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//ecole-saas//agenda//FR",
+      "CALSCALE:GREGORIAN",
+    ]);
     expect(l).toContain("BEGIN:VTIMEZONE");
     expect(l).toContain("TZID:Europe/Paris");
     expect(l).toContain("X-WR-CALNAME:Cours de Camille\\, École de démonstration");
@@ -39,7 +44,9 @@ describe("agendaIcs", () => {
     expect(l).toContain("DTEND;TZID=Europe/Paris:20261104T144500");
     expect(l).toContain("SUMMARY:Éveil");
     expect(l).toContain("STATUS:CONFIRMED");
-    expect(l.find((x) => x.startsWith("LOCATION:"))).toBe("LOCATION:Petite salle\\, Site Centre\\, 3 place de la Mairie");
+    expect(l.find((x) => x.startsWith("LOCATION:"))).toBe(
+      "LOCATION:Petite salle\\, Site Centre\\, 3 place de la Mairie",
+    );
   });
 
   it("marque une séance annulée, et passe minuit sans erreur", () => {
@@ -59,7 +66,10 @@ describe("agendaIcs", () => {
     const titre = "é".repeat(60); // 120 octets en UTF-8
     const l = lignes(agendaIcs({ ...base, seances: [{ ...base.seances[0], titre }] }));
     const debut = l.findIndex((x) => x.startsWith("SUMMARY:"));
-    const repliees = [l[debut], ...l.slice(debut + 1).filter((_, i, t) => t.slice(0, i + 1).every((x) => x.startsWith(" ")))];
+    const repliees = [
+      l[debut],
+      ...l.slice(debut + 1).filter((_, i, t) => t.slice(0, i + 1).every((x) => x.startsWith(" "))),
+    ];
     expect(repliees.length).toBeGreaterThan(1);
     expect(repliees.every((x) => new TextEncoder().encode(x).length <= 75)).toBe(true);
     expect(repliees.map((x, i) => (i === 0 ? x : x.slice(1))).join("")).toBe(`SUMMARY:${titre}`);

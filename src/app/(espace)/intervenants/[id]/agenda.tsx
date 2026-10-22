@@ -4,7 +4,13 @@ import { useState, useTransition } from "react";
 import { creerLienAgenda, deconnecterAgenda, revoquerLienAgenda, synchroniserMaintenant } from "../actions";
 
 const dateCourte = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" });
-const dateHeure = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
+const dateHeure = new Intl.DateTimeFormat("fr-FR", {
+  day: "numeric",
+  month: "long",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Europe/Paris",
+});
 
 /**
  * Lien d'abonnement à l'agenda de l'intervenant. L'adresse n'est montrée qu'à
@@ -45,8 +51,8 @@ export function AbonnementAgenda({
           Agenda de {prenom}
         </h2>
         <p className="text-doux">
-          Une page privée pour {prenom} : s’abonner à ses séances (Google, Apple, Outlook) et connecter son agenda pour que ses
-          indisponibilités remontent ici. Aucun nom d’élève n’en sort ; seules ses plages occupées y entrent.
+          Une page privée pour {prenom} : s’abonner à ses séances (Google, Apple, Outlook) et connecter son agenda pour
+          que ses indisponibilités remontent ici. Aucun nom d’élève n’en sort ; seules ses plages occupées y entrent.
         </p>
       </div>
 
@@ -56,7 +62,13 @@ export function AbonnementAgenda({
             Page à transmettre à {prenom} (affichée une seule fois)
           </label>
           <div className="flex gap-2">
-            <input id="lien-agenda" readOnly className="champ min-w-0 flex-1 font-mono text-xs" value={url.page} onFocus={(e) => e.currentTarget.select()} />
+            <input
+              id="lien-agenda"
+              readOnly
+              className="champ min-w-0 flex-1 font-mono text-xs"
+              value={url.page}
+              onFocus={(e) => e.currentTarget.select()}
+            />
             <button
               type="button"
               className="bouton-secondaire shrink-0"
@@ -69,12 +81,14 @@ export function AbonnementAgenda({
             </button>
           </div>
           <p className="text-doux">
-            Abonnement direct, sans la page :{" "}
-            <span className="font-mono text-xs break-all">{url.url}</span>
+            Abonnement direct, sans la page : <span className="font-mono text-xs break-all">{url.url}</span>
           </p>
           <ul className="list-disc pl-5 text-doux">
             <li>Google Agenda (ordinateur) : « Autres agendas », « + », « À partir de l’URL », puis coller le lien.</li>
-            <li>iPhone : Réglages, Calendrier, Comptes, « Ajouter un compte », « Autre », « Ajouter un calendrier avec abonnement ».</li>
+            <li>
+              iPhone : Réglages, Calendrier, Comptes, « Ajouter un compte », « Autre », « Ajouter un calendrier avec
+              abonnement ».
+            </li>
             <li>Outlook : « Ajouter un calendrier », « S’abonner à partir du web ».</li>
           </ul>
           <p className="text-doux">Les agendas se mettent à jour toutes les quelques heures (selon l’application).</p>
@@ -96,13 +110,27 @@ export function AbonnementAgenda({
           {connexion.erreur ? (
             <p className="text-alerte-texte">{connexion.erreur}</p>
           ) : (
-            connexion.derniereSynchro && <p className="text-doux">Dernière mise à jour : {dateHeure.format(new Date(connexion.derniereSynchro))}.</p>
+            connexion.derniereSynchro && (
+              <p className="text-doux">
+                Dernière mise à jour : {dateHeure.format(new Date(connexion.derniereSynchro))}.
+              </p>
+            )
           )}
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="bouton-secondaire" disabled={enCours} onClick={() => demarrer(async () => setMessage((await synchroniserMaintenant(intervenantId)).message))}>
+            <button
+              type="button"
+              className="bouton-secondaire"
+              disabled={enCours}
+              onClick={() => demarrer(async () => setMessage((await synchroniserMaintenant(intervenantId)).message))}
+            >
               Synchroniser maintenant
             </button>
-            <button type="button" className="bouton-secondaire" disabled={enCours} onClick={() => demarrer(async () => setMessage((await deconnecterAgenda(intervenantId)).message))}>
+            <button
+              type="button"
+              className="bouton-secondaire"
+              disabled={enCours}
+              onClick={() => demarrer(async () => setMessage((await deconnecterAgenda(intervenantId)).message))}
+            >
               Déconnecter
             </button>
           </div>
@@ -138,7 +166,9 @@ export function AbonnementAgenda({
           </button>
         )}
       </div>
-      {(actifDepuis || url) && <p className="text-xs text-doux">Remplacer ou révoquer le lien coupe aussitôt l’ancien abonnement.</p>}
+      {(actifDepuis || url) && (
+        <p className="text-xs text-doux">Remplacer ou révoquer le lien coupe aussitôt l’ancien abonnement.</p>
+      )}
     </section>
   );
 }

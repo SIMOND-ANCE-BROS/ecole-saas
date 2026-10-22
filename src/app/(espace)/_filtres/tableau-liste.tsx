@@ -3,9 +3,23 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useId, useRef, useState, useTransition } from "react";
-import { ecrireFiltreColonne, type FiltreColonne, lireFiltreColonne, resumeFiltreColonne } from "@/domaine/filtres/colonne";
+import {
+  ecrireFiltreColonne,
+  type FiltreColonne,
+  lireFiltreColonne,
+  resumeFiltreColonne,
+} from "@/domaine/filtres/colonne";
 import type { Liste } from "@/domaine/filtres/colonnes";
-import { basculer, type Disposition, deplacer, dispositionParDefaut, ecrireDisposition, lireDisposition, placer, redimensionner } from "@/domaine/filtres/disposition";
+import {
+  basculer,
+  type Disposition,
+  deplacer,
+  dispositionParDefaut,
+  ecrireDisposition,
+  lireDisposition,
+  placer,
+  redimensionner,
+} from "@/domaine/filtres/disposition";
 import { type DefColonne, libelleCondition, lireTri, type Tri, VIDE } from "@/domaine/filtres/filtres";
 import { enregistrerColonnes } from "./actions";
 import { type FiltreAdresse, useFiltreAdresse } from "./filtre-adresse";
@@ -55,7 +69,19 @@ const CASES_SANS_RECHERCHE = 8;
  * réordonne (mémorisé pour le membre). Filtres et tri vont dans l'adresse ;
  * la page relit et interroge le serveur.
  */
-export function TableauListe({ liste, quoi, legende, colonnes, disposition, lignes, lien, vide, mobile, choix = {}, actionVide }: Props) {
+export function TableauListe({
+  liste,
+  quoi,
+  legende,
+  colonnes,
+  disposition,
+  lignes,
+  lien,
+  vide,
+  mobile,
+  choix = {},
+  actionVide,
+}: Props) {
   const f = useFiltreAdresse(colonnes);
   const router = useRouter();
   const chemin = usePathname();
@@ -89,7 +115,8 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
 
   /** Clic sur une ligne : ouvre la fiche, sauf sur un lien ou un bouton, ou pendant une sélection de texte. */
   function ouvrir(e: React.MouseEvent<HTMLTableRowElement>, href: string | undefined) {
-    if (!href || (e.target as HTMLElement).closest("a, button, input, select") || window.getSelection()?.toString()) return;
+    if (!href || (e.target as HTMLElement).closest("a, button, input, select") || window.getSelection()?.toString())
+      return;
     if (e.ctrlKey || e.metaKey) window.open(href, "_blank");
     else router.push(href);
   }
@@ -138,7 +165,12 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
       ...(resume ? [{ cle: d.id, texte: resume, retirer: () => garder(fc.autres) }] : []),
       ...fc.autres
         .filter((c) => f.complete(c))
-        .map((c, i) => ({ cle: `${d.id}-${i}`, texte: libelleCondition(c, colonnes), retirer: () => f.changer(ecrireFiltreColonne(f.filtre, d, { ...fc, autres: fc.autres.filter((x) => x !== c) })) })),
+        .map((c, i) => ({
+          cle: `${d.id}-${i}`,
+          texte: libelleCondition(c, colonnes),
+          retirer: () =>
+            f.changer(ecrireFiltreColonne(f.filtre, d, { ...fc, autres: fc.autres.filter((x) => x !== c) })),
+        })),
     ];
   });
   const filtre = pastilles.length > 0;
@@ -151,9 +183,17 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
           <>
             <ul className="flex flex-wrap gap-1.5" aria-label="Filtres actifs">
               {pastilles.map((p) => (
-                <li key={p.cle} className="flex items-center gap-1 rounded-full border border-accent bg-accent-doux py-0.5 pr-1 pl-2.5">
+                <li
+                  key={p.cle}
+                  className="flex items-center gap-1 rounded-full border border-accent bg-accent-doux py-0.5 pr-1 pl-2.5"
+                >
                   {p.texte}
-                  <button type="button" className="rounded-full px-1.5 hover:bg-surface" aria-label={`Retirer le filtre ${p.texte}`} onClick={p.retirer}>
+                  <button
+                    type="button"
+                    className="rounded-full px-1.5 hover:bg-surface"
+                    aria-label={`Retirer le filtre ${p.texte}`}
+                    onClick={p.retirer}
+                  >
                     ×
                   </button>
                 </li>
@@ -164,11 +204,19 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
             </button>
           </>
         ) : (
-          <span className={`text-doux ${mobile ? "hidden sm:inline" : ""}`}>Cliquez sur le titre d’une colonne pour trier ou filtrer.</span>
+          <span className={`text-doux ${mobile ? "hidden sm:inline" : ""}`}>
+            Cliquez sur le titre d’une colonne pour trier ou filtrer.
+          </span>
         )}
         <span className="flex items-center gap-2 sm:ml-auto">
           <span className="text-xs text-doux" role="status">
-            {f.enCours || triEnCours ? "Mise à jour…" : enregistrement ? "Enregistrement des colonnes…" : echec ? "Disposition non enregistrée : réessayez." : ""}
+            {f.enCours || triEnCours
+              ? "Mise à jour…"
+              : enregistrement
+                ? "Enregistrement des colonnes…"
+                : echec
+                  ? "Disposition non enregistrée : réessayez."
+                  : ""}
           </span>
           {/* Sur téléphone, des cartes : pas de colonnes à régler. */}
           <span className={mobile ? "hidden sm:inline" : ""}>
@@ -178,7 +226,12 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
               classeBouton="bouton-secondaire"
               largeur="w-[22rem]"
             >
-              <MenuColonnes colonnes={defs} dispo={dispo} changer={changerDispo} parDefaut={() => changerDispo(dispositionParDefaut(colonnes))} />
+              <MenuColonnes
+                colonnes={defs}
+                dispo={dispo}
+                changer={changerDispo}
+                parDefaut={() => changerDispo(dispositionParDefaut(colonnes))}
+              />
             </Bulle>
           </span>
         </span>
@@ -243,7 +296,12 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
                 </th>
               ))}
               <th scope="col" className="w-8 px-1 text-right">
-                <Bulle titre="Ajouter une colonne" libelleBouton="Ajouter une colonne" bouton="+" classeBouton="rounded px-2 py-0.5 text-base leading-none text-accent hover:bg-accent-doux">
+                <Bulle
+                  titre="Ajouter une colonne"
+                  libelleBouton="Ajouter une colonne"
+                  bouton="+"
+                  classeBouton="rounded px-2 py-0.5 text-base leading-none text-accent hover:bg-accent-doux"
+                >
                   <p className="mb-2 font-medium">Ajouter une colonne</p>
                   {masquees.length === 0 ? (
                     <p className="text-doux">Toutes les colonnes sont affichées.</p>
@@ -251,14 +309,20 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
                     <ul className="flex flex-col gap-1">
                       {masquees.map((c) => (
                         <li key={c.id}>
-                          <button type="button" className="lien" onClick={() => changerDispo(placer(basculer(dispo, c.id), c.id, null))}>
+                          <button
+                            type="button"
+                            className="lien"
+                            onClick={() => changerDispo(placer(basculer(dispo, c.id), c.id, null))}
+                          >
                             {c.libelle}
                           </button>
                         </li>
                       ))}
                     </ul>
                   )}
-                  <p className="mt-2 text-xs text-doux">Pour retirer une colonne : cliquez sur son titre, puis « Masquer la colonne ».</p>
+                  <p className="mt-2 text-xs text-doux">
+                    Pour retirer une colonne : cliquez sur son titre, puis « Masquer la colonne ».
+                  </p>
                 </Bulle>
               </th>
             </tr>
@@ -281,9 +345,17 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
               </tr>
             ) : (
               lignes.map((l) => (
-                <tr key={l.id} className={`${l.attenue ? "text-doux" : ""} ${l.href ? "cursor-pointer" : ""}`} onClick={(e) => ouvrir(e, l.href)}>
+                <tr
+                  key={l.id}
+                  className={`${l.attenue ? "text-doux" : ""} ${l.href ? "cursor-pointer" : ""}`}
+                  onClick={(e) => ouvrir(e, l.href)}
+                >
                   {visibles.map((d) => (
-                    <td key={d.id} style={style(d.id)} className={`${d.droite ? "text-right tabular-nums" : ""} ${largeurDe(d.id) ? "break-words" : ""}`}>
+                    <td
+                      key={d.id}
+                      style={style(d.id)}
+                      className={`${d.droite ? "text-right tabular-nums" : ""} ${largeurDe(d.id) ? "break-words" : ""}`}
+                    >
                       {d.id === lien ? (
                         <>
                           {l.href ? (
@@ -293,7 +365,11 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
                           ) : (
                             <span className="font-medium">{texte(l.cellules[d.id])}</span>
                           )}
-                          {l.marque && <span className="ml-2 rounded border border-bordure px-1.5 text-xs font-normal text-doux">{l.marque}</span>}
+                          {l.marque && (
+                            <span className="ml-2 rounded border border-bordure px-1.5 text-xs font-normal text-doux">
+                              {l.marque}
+                            </span>
+                          )}
                         </>
                       ) : (
                         <Cellule def={d} valeur={l.cellules[d.id]} />
@@ -362,7 +438,8 @@ function Bulle({
     const p = bulle.current;
     if (!b || !p) return;
     const gauche = Math.max(8, Math.min(b.left, window.innerWidth - p.offsetWidth - 8));
-    const haut = b.bottom + 4 + p.offsetHeight > window.innerHeight - 8 ? Math.max(8, b.top - 4 - p.offsetHeight) : b.bottom + 4;
+    const haut =
+      b.bottom + 4 + p.offsetHeight > window.innerHeight - 8 ? Math.max(8, b.top - 4 - p.offsetHeight) : b.bottom + 4;
     p.style.left = `${gauche}px`;
     p.style.top = `${haut}px`;
   }
@@ -427,8 +504,14 @@ function MenuTitre({
   const filtree = resumeFiltreColonne(def, fc) !== null || fc.autres.length > 0;
   const triable = def.triable !== false;
   const filtrable = def.filtrable !== false;
-  const changer = (maj: Partial<FiltreColonne>, differe = false) => f.changer(ecrireFiltreColonne(f.filtre, def, { ...fc, ...maj }), differe);
-  const etat = [tri === "asc" ? "trié, sens croissant" : tri === "desc" ? "trié, sens décroissant" : "", filtree ? "filtré" : ""].filter(Boolean).join(", ");
+  const changer = (maj: Partial<FiltreColonne>, differe = false) =>
+    f.changer(ecrireFiltreColonne(f.filtre, def, { ...fc, ...maj }), differe);
+  const etat = [
+    tri === "asc" ? "trié, sens croissant" : tri === "desc" ? "trié, sens décroissant" : "",
+    filtree ? "filtré" : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <Bulle
@@ -478,7 +561,9 @@ function MenuTitre({
           <div className={`flex flex-col gap-2 ${triable ? "border-t border-bordure pt-3" : ""}`}>
             <p className="font-medium">Filtrer</p>
             <FiltreDuTitre def={def} choix={choix} fc={fc} changer={changer} />
-            {fc.autres.length > 0 && <p className="text-xs text-doux">Aussi : {fc.autres.map((c) => libelleCondition(c, [def])).join(", ")}</p>}
+            {fc.autres.length > 0 && (
+              <p className="text-xs text-doux">Aussi : {fc.autres.map((c) => libelleCondition(c, [def])).join(", ")}</p>
+            )}
           </div>
         )}
         <div className="flex flex-wrap justify-between gap-2 border-t border-bordure pt-2 text-xs">
@@ -517,15 +602,25 @@ function FiltreDuTitre({
 
   if (def.type === "texte" && choix) {
     const cochees = fc.choix ?? [];
-    const basculerChoix = (v: string) => changer({ choix: cochees.includes(v) ? cochees.filter((x) => x !== v) : [...cochees, v] });
+    const basculerChoix = (v: string) =>
+      changer({ choix: cochees.includes(v) ? cochees.filter((x) => x !== v) : [...cochees, v] });
     const libelle = (v: string) => (v === VIDE ? `(${def.siVide ?? "vide"})` : v);
     // « (aucune) » seulement pour une colonne qui peut être vide (`siVide`).
     const toutes = def.siVide ? [...choix, VIDE] : [...choix];
-    const visibles = recherche ? toutes.filter((v) => libelle(v).toLowerCase().includes(recherche.toLowerCase())) : toutes;
+    const visibles = recherche
+      ? toutes.filter((v) => libelle(v).toLowerCase().includes(recherche.toLowerCase()))
+      : toutes;
     return (
       <>
         {choix.length > CASES_SANS_RECHERCHE && (
-          <input type="search" className="champ" placeholder="Chercher…" aria-label={`Chercher dans « ${def.libelle} »`} value={recherche} onChange={(e) => setRecherche(e.target.value)} />
+          <input
+            type="search"
+            className="champ"
+            placeholder="Chercher…"
+            aria-label={`Chercher dans « ${def.libelle} »`}
+            value={recherche}
+            onChange={(e) => setRecherche(e.target.value)}
+          />
         )}
         <ul className="flex max-h-60 flex-col gap-0.5 overflow-y-auto">
           {visibles.map((v) => (
@@ -537,7 +632,9 @@ function FiltreDuTitre({
             </li>
           ))}
         </ul>
-        <p className="text-xs text-doux">{cochees.length ? "Seules les valeurs cochées restent affichées." : "Cochez les valeurs à garder."}</p>
+        <p className="text-xs text-doux">
+          {cochees.length ? "Seules les valeurs cochées restent affichées." : "Cochez les valeurs à garder."}
+        </p>
       </>
     );
   }
@@ -609,7 +706,12 @@ function MenuColonnes({
           return (
             <li key={d.id} className="flex items-center gap-1 py-1.5">
               <label className="flex flex-1 items-center gap-2">
-                <input type="checkbox" checked={d.visible} disabled={(d.visible && derniere) || def.obligatoire} onChange={() => changer(basculer(dispo, d.id))} />
+                <input
+                  type="checkbox"
+                  checked={d.visible}
+                  disabled={(d.visible && derniere) || def.obligatoire}
+                  onChange={() => changer(basculer(dispo, d.id))}
+                />
                 {def.libelle}
               </label>
               <button

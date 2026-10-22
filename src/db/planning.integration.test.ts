@@ -22,7 +22,8 @@ async function creerCours(ecoleId: string, saisonId: string, discipline: string,
   const [s] = site
     ? [site]
     : await admin`INSERT INTO site (ecole_id, nom, adresse) VALUES (${ecoleId}, 'Site Centre', '1 rue Test') RETURNING id`;
-  const [salle] = await admin`INSERT INTO salle (ecole_id, site_id, nom) VALUES (${ecoleId}, ${s.id}, ${`Salle ${discipline}`}) RETURNING id`;
+  const [salle] =
+    await admin`INSERT INTO salle (ecole_id, site_id, nom) VALUES (${ecoleId}, ${s.id}, ${`Salle ${discipline}`}) RETURNING id`;
   const [prof] = await admin`
     INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
     VALUES (${ecoleId}, 'Prof', ${discipline}, 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`;
@@ -48,7 +49,18 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const t of ["inscription_cours", "inscription", "lien", "personne", "cours", "intervenant", "salle", "site", "discipline", "saison"]) {
+  for (const t of [
+    "inscription_cours",
+    "inscription",
+    "lien",
+    "personne",
+    "cours",
+    "intervenant",
+    "salle",
+    "site",
+    "discipline",
+    "saison",
+  ]) {
     await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
   }
   await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
@@ -98,23 +110,41 @@ describe("coursDuPlanning et inscritsDuCours", () => {
   it("lit un cours et ses danseurs actifs, à l’essai ou en attente, sans les abandons", async () => {
     const [jazz] = await admin`SELECT c.id FROM cours c JOIN discipline d ON d.id = c.discipline_id
       WHERE c.ecole_id = ${ecole} AND d.nom = 'Jazz'`;
-    const [p] = await admin`INSERT INTO personne (ecole_id, nom, prenom, telephone) VALUES (${ecole}, 'Bernard', 'Émilie', '07 11 22 33 44') RETURNING id`;
+    const [p] =
+      await admin`INSERT INTO personne (ecole_id, nom, prenom, telephone) VALUES (${ecole}, 'Bernard', 'Émilie', '07 11 22 33 44') RETURNING id`;
     const danseurs: Record<string, string> = {};
     for (const prenom of ["Louis", "Alice", "Jules", "Zoé"]) {
       [{ id: danseurs[prenom] }] = await admin`
         INSERT INTO personne (ecole_id, nom, prenom, date_naissance) VALUES (${ecole}, 'Bernard', ${prenom}, '2016-01-15') RETURNING id`;
     }
-    for (const [prenom, statut] of [["Louis", "active"], ["Alice", "essai"], ["Jules", "liste_attente"], ["Zoé", "abandon"]]) {
+    for (const [prenom, statut] of [
+      ["Louis", "active"],
+      ["Alice", "essai"],
+      ["Jules", "liste_attente"],
+      ["Zoé", "abandon"],
+    ]) {
       const [i] = await admin`
         INSERT INTO inscription (ecole_id, saison_id, payeur_id, public, periodicite, prix_brut_centimes, statut)
         VALUES (${ecole}, ${saison2026}, ${p.id}, 'enfant', 'trimestre', 10000, ${statut}) RETURNING id`;
       await admin`INSERT INTO inscription_cours (ecole_id, inscription_id, danseur_id, cours_id) VALUES (${ecole}, ${i.id}, ${danseurs[prenom]}, ${jazz.id})`;
     }
 
-    expect(await avecEcole(ecole, (tx) => coursDuPlanning(tx, jazz.id))).toMatchObject({ discipline: "Jazz", inscrits: 1 });
+    expect(await avecEcole(ecole, (tx) => coursDuPlanning(tx, jazz.id))).toMatchObject({
+      discipline: "Jazz",
+      inscrits: 1,
+    });
     const inscrits = await avecEcole(ecole, (tx) => inscritsDuCours(tx, jazz.id));
-    expect(inscrits.map((i) => `${i.prenom} ${i.statut}`)).toEqual(["Alice essai", "Jules liste_attente", "Louis active"]);
-    expect(inscrits[0]).toMatchObject({ payeur: "Émilie Bernard", telephone: "07 11 22 33 44", payeurId: p.id, dateNaissance: "2016-01-15" });
+    expect(inscrits.map((i) => `${i.prenom} ${i.statut}`)).toEqual([
+      "Alice essai",
+      "Jules liste_attente",
+      "Louis active",
+    ]);
+    expect(inscrits[0]).toMatchObject({
+      payeur: "Émilie Bernard",
+      telephone: "07 11 22 33 44",
+      payeurId: p.id,
+      dateNaissance: "2016-01-15",
+    });
   });
 
   it("ne lit pas le cours d’une autre école, ni ses inscrits", async () => {

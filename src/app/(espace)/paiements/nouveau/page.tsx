@@ -16,10 +16,13 @@ export default async function PageEncaisser({ searchParams }: PageProps<"/paieme
   const { ecoleId } = await exigerRole("direction", "accueil");
   const { payeur } = await searchParams;
   const aujourdhui = aujourdhuiAParis();
-  const donnees = typeof payeur === "string" ? await avecEcole(ecoleId, async (tx) => {
-    const p = await lirePersonne(tx, payeur);
-    return p ? { p, eleve: await estEleve(tx, p.id), solde: await soldeDe(tx, p.id, aujourdhui) } : null;
-  }) : null;
+  const donnees =
+    typeof payeur === "string"
+      ? await avecEcole(ecoleId, async (tx) => {
+          const p = await lirePersonne(tx, payeur);
+          return p ? { p, eleve: await estEleve(tx, p.id), solde: await soldeDe(tx, p.id, aujourdhui) } : null;
+        })
+      : null;
   if (!donnees) notFound();
   const { p, eleve, solde } = donnees;
   const retour = `/${eleve ? "eleves" : "contacts"}/${p.id}`;
@@ -33,7 +36,13 @@ export default async function PageEncaisser({ searchParams }: PageProps<"/paieme
         <span className="text-doux"> / Encaisser</span>
       </nav>
       <h1 className="titre-page">Encaisser</h1>
-      <FormulaireEncaissement payeurId={p.id} payeur={nomAffiche(p)} reste={solde?.reste ?? null} aujourdhui={aujourdhui} retour={retour} />
+      <FormulaireEncaissement
+        payeurId={p.id}
+        payeur={nomAffiche(p)}
+        reste={solde?.reste ?? null}
+        aujourdhui={aujourdhui}
+        retour={retour}
+      />
     </section>
   );
 }

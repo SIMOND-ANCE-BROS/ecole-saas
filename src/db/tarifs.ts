@@ -55,7 +55,13 @@ export async function grilleSaison(tx: Tx, saisonId: string): Promise<LigneGrill
   for (const c of cases) {
     const combinaison = [...c.combinaison].sort((a, b) => a - b);
     const cle = `${c.public}|${combinaison.join("+")}|${c.disciplineId ?? ""}`;
-    const ligne = lignes.get(cle) ?? { public: c.public, combinaison, disciplineId: c.disciplineId, discipline: c.discipline, prix: {} };
+    const ligne = lignes.get(cle) ?? {
+      public: c.public,
+      combinaison,
+      disciplineId: c.disciplineId,
+      discipline: c.discipline,
+      prix: {},
+    };
     ligne.prix[c.periodicite] = { id: c.id, centimes: c.prixCentimes, utilise: c.utilise };
     lignes.set(cle, ligne);
   }
@@ -103,12 +109,20 @@ export async function enregistrerPrix(tx: Tx, saisonId: string, saisie: z.input<
     const [d] = await tx.select({ id: discipline.id }).from(discipline).where(eq(discipline.id, c.data.disciplineId));
     if (!d) return { ok: false, message: "Discipline introuvable." };
   }
-  const [existante] = await tx.select({ id: tarif.id }).from(tarif).where(memeCase(saisonId, c.data, combinaison));
+  const [existante] = await tx
+    .select({ id: tarif.id })
+    .from(tarif)
+    .where(memeCase(saisonId, c.data, combinaison));
 
   if (c.data.prixCentimes === null) {
     if (!existante) return { ok: true, id: "" };
-    const [utilisee] = await tx.select({ id: inscription.id }).from(inscription).where(eq(inscription.tarifId, existante.id)).limit(1);
-    if (utilisee) return { ok: false, message: "Ce prix sert déjà à des inscriptions : modifiez-le plutôt que de le retirer." };
+    const [utilisee] = await tx
+      .select({ id: inscription.id })
+      .from(inscription)
+      .where(eq(inscription.tarifId, existante.id))
+      .limit(1);
+    if (utilisee)
+      return { ok: false, message: "Ce prix sert déjà à des inscriptions : modifiez-le plutôt que de le retirer." };
     await tx.delete(tarif).where(eq(tarif.id, existante.id));
     return { ok: true, id: existante.id };
   }
@@ -166,10 +180,17 @@ export const fratrieValide = z
     publics: z.array(z.enum(PUBLICS)),
     cumulableMultiDisciplines: z.boolean(),
   })
-  .refine((f) => (f.tauxPointsBase === null) !== (f.montantCentimes === null), "Indiquez un pourcentage ou un montant, pas les deux.");
+  .refine(
+    (f) => (f.tauxPointsBase === null) !== (f.montantCentimes === null),
+    "Indiquez un pourcentage ou un montant, pas les deux.",
+  );
 
 /** Règle de la réduction fratrie de la saison ; null la supprime. */
-export async function enregistrerFratrie(tx: Tx, saisonId: string, saisie: z.input<typeof fratrieValide> | null): Promise<Resultat> {
+export async function enregistrerFratrie(
+  tx: Tx,
+  saisonId: string,
+  saisie: z.input<typeof fratrieValide> | null,
+): Promise<Resultat> {
   if (!estUuid(saisonId)) return { ok: false, message: "Saison introuvable." };
   if (saisie === null) {
     await tx.delete(reduction).where(and(eq(reduction.saisonId, saisonId), eq(reduction.code, "fratrie")));
@@ -193,7 +214,12 @@ export type LigneCarnet = { id: string; nbSeances: number; personnesMax: number;
 export function listerCarnets(tx: Tx, saisonId: string): Promise<LigneCarnet[]> {
   if (!estUuid(saisonId)) return Promise.resolve([]);
   return tx
-    .select({ id: tarifCarnet.id, nbSeances: tarifCarnet.nbSeances, personnesMax: tarifCarnet.personnesMax, prixCentimes: tarifCarnet.prixCentimes })
+    .select({
+      id: tarifCarnet.id,
+      nbSeances: tarifCarnet.nbSeances,
+      personnesMax: tarifCarnet.personnesMax,
+      prixCentimes: tarifCarnet.prixCentimes,
+    })
     .from(tarifCarnet)
     .where(eq(tarifCarnet.saisonId, saisonId))
     .orderBy(asc(tarifCarnet.personnesMax), asc(tarifCarnet.nbSeances));
@@ -206,14 +232,21 @@ export const carnetValide = z.object({
 });
 
 /** Crée ou met à jour le prix d'un carnet (séances, personnes). */
-export async function enregistrerCarnet(tx: Tx, saisonId: string, saisie: z.input<typeof carnetValide>): Promise<Resultat> {
+export async function enregistrerCarnet(
+  tx: Tx,
+  saisonId: string,
+  saisie: z.input<typeof carnetValide>,
+): Promise<Resultat> {
   const c = carnetValide.safeParse(saisie);
   if (!c.success) return { ok: false, message: c.error.issues[0].message };
   if (!estUuid(saisonId)) return { ok: false, message: "Saison introuvable." };
   const [{ id }] = await tx
     .insert(tarifCarnet)
     .values({ ...c.data, saisonId, ecoleId: ECOLE_COURANTE })
-    .onConflictDoUpdate({ target: [tarifCarnet.saisonId, tarifCarnet.nbSeances, tarifCarnet.personnesMax], set: { prixCentimes: c.data.prixCentimes } })
+    .onConflictDoUpdate({
+      target: [tarifCarnet.saisonId, tarifCarnet.nbSeances, tarifCarnet.personnesMax],
+      set: { prixCentimes: c.data.prixCentimes },
+    })
     .returning({ id: tarifCarnet.id });
   return { ok: true, id };
 }

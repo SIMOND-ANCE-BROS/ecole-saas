@@ -58,33 +58,66 @@ async function lier(personneId: string, lieAId: string, type: string, paiePour =
 beforeAll(async () => {
   [{ id: ecole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École A', ${`pa-${suffixe}`}) RETURNING id`;
   [{ id: autreEcole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École B', ${`pb-${suffixe}`}) RETURNING id`;
-  helene = await inserer(ecole, { nom: "Lefèvre", prenom: "Hélène", telephone: "06 12 34 56 78", email: "helene@exemple.test" });
+  helene = await inserer(ecole, {
+    nom: "Lefèvre",
+    prenom: "Hélène",
+    telephone: "06 12 34 56 78",
+    email: "helene@exemple.test",
+  });
   zoe = await inserer(ecole, { nom: "Lefèvre", prenom: "Zoé", date_naissance: "2015-03-10", notes: "Asthme" });
   noe = await inserer(ecole, { nom: "Lefèvre", prenom: "Noé", date_naissance: "2017-11-02" });
-  alex = await inserer(ecole, { nom: "Rivière", prenom: "Alex", date_naissance: "1996-04-05", telephone: "07 11 22 33 44" });
+  alex = await inserer(ecole, {
+    nom: "Rivière",
+    prenom: "Alex",
+    date_naissance: "1996-04-05",
+    telephone: "07 11 22 33 44",
+  });
   await admin`UPDATE personne SET eleve = true WHERE id = ${alex}`;
-  cse = await inserer(ecole, { type: "professionnel", nom: "CSE Ateliers", raison_sociale: "CSE Ateliers", siren: "123456789" });
+  cse = await inserer(ecole, {
+    type: "professionnel",
+    nom: "CSE Ateliers",
+    raison_sociale: "CSE Ateliers",
+    siren: "123456789",
+  });
   etrangere = await inserer(autreEcole, { nom: "Lefèvre", prenom: "Inconnue", telephone: "0612345678" });
   await lier(helene, zoe, "representant_legal", true, true);
   await lier(helene, noe, "representant_legal", true);
   await lier(cse, alex, "autre", true);
 
-  const [saison] = await admin`INSERT INTO saison (ecole_id, libelle, date_debut, date_fin) VALUES (${ecole}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
+  const [saison] =
+    await admin`INSERT INTO saison (ecole_id, libelle, date_debut, date_fin) VALUES (${ecole}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   const [d] = await admin`INSERT INTO discipline (ecole_id, nom) VALUES (${ecole}, 'Jazz') RETURNING id`;
-  const [s] = await admin`INSERT INTO site (ecole_id, nom, adresse) VALUES (${ecole}, 'Centre', '1 rue Test') RETURNING id`;
-  const [salle] = await admin`INSERT INTO salle (ecole_id, site_id, nom) VALUES (${ecole}, ${s.id}, 'Studio') RETURNING id`;
-  const [prof] = await admin`INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
+  const [s] =
+    await admin`INSERT INTO site (ecole_id, nom, adresse) VALUES (${ecole}, 'Centre', '1 rue Test') RETURNING id`;
+  const [salle] =
+    await admin`INSERT INTO salle (ecole_id, site_id, nom) VALUES (${ecole}, ${s.id}, 'Studio') RETURNING id`;
+  const [prof] =
+    await admin`INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
     VALUES (${ecole}, 'Roux', 'Mathis', 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`;
-  [{ id: jazz }] = await admin`INSERT INTO cours (ecole_id, saison_id, discipline_id, salle_id, intervenant_id, jour_semaine, heure_debut, duree_minutes)
+  [{ id: jazz }] =
+    await admin`INSERT INTO cours (ecole_id, saison_id, discipline_id, salle_id, intervenant_id, jour_semaine, heure_debut, duree_minutes)
     VALUES (${ecole}, ${saison.id}, ${d.id}, ${salle.id}, ${prof.id}, 3, '17:00', 60) RETURNING id`;
-  const [i] = await admin`INSERT INTO inscription (ecole_id, saison_id, payeur_id, public, periodicite, prix_brut_centimes)
+  const [i] =
+    await admin`INSERT INTO inscription (ecole_id, saison_id, payeur_id, public, periodicite, prix_brut_centimes)
     VALUES (${ecole}, ${saison.id}, ${helene}, 'enfant', 'trimestre', 10000) RETURNING id`;
   await admin`INSERT INTO inscription_cours (ecole_id, inscription_id, danseur_id, cours_id) VALUES (${ecole}, ${i.id}, ${zoe}, ${jazz})`;
   await admin`INSERT INTO document_danseur (ecole_id, danseur_id, type, valide_jusqu) VALUES (${ecole}, ${zoe}, 'certificat_medical', '2027-09-30')`;
 });
 
 afterAll(async () => {
-  for (const t of ["document_danseur", "inscription_cours", "inscription", "cours", "intervenant", "salle", "site", "discipline", "saison", "lien", "personne"]) {
+  for (const t of [
+    "document_danseur",
+    "inscription_cours",
+    "inscription",
+    "cours",
+    "intervenant",
+    "salle",
+    "site",
+    "discipline",
+    "saison",
+    "lien",
+    "personne",
+  ]) {
     await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
   }
   await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
@@ -128,7 +161,18 @@ describe("lirePersonne", () => {
       },
     ]);
     expect(z?.cours).toEqual([
-      { id: jazz, saison: "2026-2027", discipline: "Jazz", niveau: null, jourSemaine: 3, heureDebut: "17:00", statut: "active", payeurId: helene, presents: 0, absents: 0 },
+      {
+        id: jazz,
+        saison: "2026-2027",
+        discipline: "Jazz",
+        niveau: null,
+        jourSemaine: 3,
+        heureDebut: "17:00",
+        statut: "active",
+        payeurId: helene,
+        presents: 0,
+        absents: 0,
+      },
     ]);
     expect(z?.documents).toEqual([{ type: "certificat_medical", accorde: true, valideJusqu: "2027-09-30" }]);
 
@@ -146,7 +190,11 @@ describe("danseursPayables et payeursDe", () => {
   it("un parent inscrit ceux pour qui il paie, et lui-même seulement s’il est élève", async () => {
     expect((await avecEcole(ecole, (tx) => danseursPayables(tx, helene))).map((d) => d.prenom)).toEqual(["Noé", "Zoé"]);
     await admin`UPDATE personne SET eleve = true WHERE id = ${helene}`;
-    expect((await avecEcole(ecole, (tx) => danseursPayables(tx, helene))).map((d) => d.prenom)).toEqual(["Hélène", "Noé", "Zoé"]);
+    expect((await avecEcole(ecole, (tx) => danseursPayables(tx, helene))).map((d) => d.prenom)).toEqual([
+      "Hélène",
+      "Noé",
+      "Zoé",
+    ]);
     await admin`UPDATE personne SET eleve = false WHERE id = ${helene}`;
   });
 
@@ -164,15 +212,26 @@ describe("danseursPayables et payeursDe", () => {
 describe("creerPersonne et modifierPersonne", () => {
   it("crée un danseur seul, puis le modifie", async () => {
     const r = await avecEcole(ecole, (tx) =>
-      creerPersonne(tx, { ...vide, nom: "Martin", prenom: "Léa", dateNaissance: "1990-06-21", telephone: "06 98 76 54 32" }, false),
+      creerPersonne(
+        tx,
+        { ...vide, nom: "Martin", prenom: "Léa", dateNaissance: "1990-06-21", telephone: "06 98 76 54 32" },
+        false,
+      ),
     );
     expect(r.statut).toBe("ok");
     const id = r.statut === "ok" ? r.id : "";
-    expect(await avecEcole(ecole, (tx) => modifierPersonne(tx, id, { ...vide, nom: "Martin", prenom: "Léa", adresse: "3 rue des Lilas" }))).toEqual({
+    expect(
+      await avecEcole(ecole, (tx) =>
+        modifierPersonne(tx, id, { ...vide, nom: "Martin", prenom: "Léa", adresse: "3 rue des Lilas" }),
+      ),
+    ).toEqual({
       ok: true,
       id,
     });
-    expect(await avecEcole(ecole, (tx) => lirePersonne(tx, id))).toMatchObject({ adresse: "3 rue des Lilas", dateNaissance: null });
+    expect(await avecEcole(ecole, (tx) => lirePersonne(tx, id))).toMatchObject({
+      adresse: "3 rue des Lilas",
+      dateNaissance: null,
+    });
   });
 
   it("signale un doublon probable (téléphone sans espaces), puis crée si l’on confirme", async () => {
@@ -196,12 +255,26 @@ describe("creerPersonne et modifierPersonne", () => {
     );
     const id = r.statut === "ok" ? r.id : "";
     expect((await avecEcole(ecole, (tx) => danseursPayables(tx, helene))).map((d) => d.prenom)).toContain("Lou");
-    expect((await avecEcole(ecole, (tx) => lirePersonne(tx, id)))?.liens[0]).toMatchObject({ sens: "vers", contactUrgence: true });
+    expect((await avecEcole(ecole, (tx) => lirePersonne(tx, id)))?.liens[0]).toMatchObject({
+      sens: "vers",
+      contactUrgence: true,
+    });
   });
 
   it("enregistre un professionnel sous sa raison sociale, sans prénom ni naissance", async () => {
     const r = await avecEcole(ecole, (tx) =>
-      creerPersonne(tx, { ...vide, type: "professionnel", prenom: "X", dateNaissance: "2000-01-01", raisonSociale: "Mairie", siren: "987654321" }, false),
+      creerPersonne(
+        tx,
+        {
+          ...vide,
+          type: "professionnel",
+          prenom: "X",
+          dateNaissance: "2000-01-01",
+          raisonSociale: "Mairie",
+          siren: "987654321",
+        },
+        false,
+      ),
     );
     const id = r.statut === "ok" ? r.id : "";
     expect(await avecEcole(ecole, (tx) => lirePersonne(tx, id))).toMatchObject({
@@ -229,16 +302,31 @@ describe("liens", () => {
 
   it("refuse un lien vers une personne d’une autre école", async () => {
     expect(
-      await avecEcole(ecole, (tx) => ajouterLien(tx, { personneId: helene, lieAId: etrangere, type: "conjoint", contactUrgence: false, paiePour: false })),
+      await avecEcole(ecole, (tx) =>
+        ajouterLien(tx, {
+          personneId: helene,
+          lieAId: etrangere,
+          type: "conjoint",
+          contactUrgence: false,
+          paiePour: false,
+        }),
+      ),
     ).toEqual({ ok: false, message: "Personne introuvable." });
   });
 
   it("ajoute, modifie puis supprime un lien", async () => {
-    const r = await avecEcole(ecole, (tx) => ajouterLien(tx, { personneId: alex, lieAId: noe, type: "autre", contactUrgence: true, paiePour: false }));
+    const r = await avecEcole(ecole, (tx) =>
+      ajouterLien(tx, { personneId: alex, lieAId: noe, type: "autre", contactUrgence: true, paiePour: false }),
+    );
     const id = r.ok ? r.id : "";
-    expect(await avecEcole(ecole, (tx) => modifierLien(tx, id, { type: "autre", contactUrgence: false, paiePour: true }))).toEqual({ ok: true, id });
+    expect(
+      await avecEcole(ecole, (tx) => modifierLien(tx, id, { type: "autre", contactUrgence: false, paiePour: true })),
+    ).toEqual({ ok: true, id });
     expect((await avecEcole(ecole, (tx) => payeursDe(tx, noe))).map((p) => p.id).sort()).toEqual([alex, helene].sort());
     expect(await avecEcole(ecole, (tx) => supprimerLien(tx, id))).toEqual({ ok: true, id });
-    expect(await avecEcole(ecole, (tx) => supprimerLien(tx, id))).toEqual({ ok: false, message: "Ce lien n’existe plus." });
+    expect(await avecEcole(ecole, (tx) => supprimerLien(tx, id))).toEqual({
+      ok: false,
+      message: "Ce lien n’existe plus.",
+    });
   });
 });

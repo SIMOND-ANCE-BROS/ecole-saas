@@ -43,11 +43,7 @@ export const typeDocument = pgEnum("type_document", [
   "droit_image",
   "autre",
 ]);
-export const statutIntervenant = pgEnum("statut_intervenant", [
-  "micro_entreprise",
-  "societe",
-  "salarie",
-]);
+export const statutIntervenant = pgEnum("statut_intervenant", ["micro_entreprise", "societe", "salarie"]);
 export const regimeTva = pgEnum("regime_tva", ["franchise_293b", "assujetti", "non_applicable"]);
 export const modeRemuneration = pgEnum("mode_remuneration", ["heure", "cours", "forfait_mensuel"]);
 export const typeCours = pgEnum("type_cours", ["collectif", "particulier", "competition", "stage"]);
@@ -65,13 +61,7 @@ export const statutInscription = pgEnum("statut_inscription", [
   "abandon",
   "terminee",
 ]);
-export const statutFacture = pgEnum("statut_facture", [
-  "a_envoyer",
-  "brouillon_outil",
-  "emise",
-  "rejetee",
-  "annulee",
-]);
+export const statutFacture = pgEnum("statut_facture", ["a_envoyer", "brouillon_outil", "emise", "rejetee", "annulee"]);
 export const outilFacturation = pgEnum("outil_facturation", ["pennylane", "abby", "shine"]);
 export const moyenPaiement = pgEnum("moyen_paiement", [
   "cheque",
@@ -83,13 +73,7 @@ export const moyenPaiement = pgEnum("moyen_paiement", [
   "pass_sport",
   "autre",
 ]);
-export const statutEcheance = pgEnum("statut_echeance", [
-  "a_venir",
-  "payee",
-  "partielle",
-  "en_retard",
-  "annulee",
-]);
+export const statutEcheance = pgEnum("statut_echeance", ["a_venir", "payee", "partielle", "en_retard", "annulee"]);
 export const statutReleve = pgEnum("statut_releve", ["a_controler", "conforme", "ecart", "paye"]);
 export const roleMembre = pgEnum("role_membre", ["direction", "accueil", "professeur"]);
 
@@ -165,11 +149,7 @@ export const membre = pgTable(
     intervenantId: uuid("intervenant_id"),
     actif: boolean("actif").notNull().default(true),
   },
-  (t) => [
-    unique().on(t.ecoleId, t.userId),
-    cibleMemeEcole(t),
-    memeEcole(t, t.intervenantId, intervenant),
-  ],
+  (t) => [unique().on(t.ecoleId, t.userId), cibleMemeEcole(t), memeEcole(t, t.intervenantId, intervenant)],
 );
 
 /** Lien envoyé à une personne : rejoindre l'équipe, ou choisir un nouveau mot de passe (#104). */
@@ -197,7 +177,10 @@ export const invitation = pgTable(
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check("invitation_contenu", sql`(${t.type} = 'invitation' AND ${t.role} IS NOT NULL) OR (${t.type} = 'reinitialisation' AND ${t.userId} IS NOT NULL)`),
+    check(
+      "invitation_contenu",
+      sql`(${t.type} = 'invitation' AND ${t.role} IS NOT NULL) OR (${t.type} = 'reinitialisation' AND ${t.userId} IS NOT NULL)`,
+    ),
     memeEcole(t, t.creePar, membre),
   ],
 );
@@ -447,10 +430,7 @@ export const discipline = pgTable(
     ecoleId: ecoleId(),
     nom: text("nom").notNull(),
   },
-  (t) => [
-    unique().on(t.ecoleId, t.nom),
-    cibleMemeEcole(t),
-  ],
+  (t) => [unique().on(t.ecoleId, t.nom), cibleMemeEcole(t)],
 );
 
 export const cours = pgTable(
@@ -579,20 +559,23 @@ export const reduction = pgTable(
     code: text("code").notNull(), // type de réduction connu du moteur de tarif : 'fratrie'
     tauxPointsBase: integer("taux_points_base"), // 1000 = 10 %
     montantCentimes: integer("montant_centimes"),
-    nonCumulableAvec: text("non_cumulable_avec").array().notNull().default(sql`'{}'::text[]`),
+    nonCumulableAvec: text("non_cumulable_avec")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     // Nombre minimal de danseurs éligibles du même payeur (fratrie : 2).
     seuilDanseurs: smallint("seuil_danseurs").notNull().default(1),
     // Publics éligibles ; vide = tous.
-    publics: publicTarif("publics").array().notNull().default(sql`'{}'::public_tarif[]`),
+    publics: publicTarif("publics")
+      .array()
+      .notNull()
+      .default(sql`'{}'::public_tarif[]`),
     // false : écartée sur un forfait dont les cours relèvent d'au moins 2 disciplines.
     cumulableMultiDisciplines: boolean("cumulable_multi_disciplines").notNull().default(true),
   },
   (t) => [
     unique().on(t.saisonId, t.code),
-    check(
-      "reduction_valeur",
-      sql`${t.tauxPointsBase} IS NOT NULL OR ${t.montantCentimes} IS NOT NULL`,
-    ),
+    check("reduction_valeur", sql`${t.tauxPointsBase} IS NOT NULL OR ${t.montantCentimes} IS NOT NULL`),
     memeEcole(t, t.saisonId, saison),
   ],
 );
@@ -614,10 +597,7 @@ export const tarifCarnet = pgTable(
   },
   (t) => [
     unique("tarif_carnet_case_unique").on(t.saisonId, t.nbSeances, t.personnesMax),
-    check(
-      "tarif_carnet_valeurs",
-      sql`${t.nbSeances} >= 1 AND ${t.personnesMax} >= 1 AND ${t.prixCentimes} >= 0`,
-    ),
+    check("tarif_carnet_valeurs", sql`${t.nbSeances} >= 1 AND ${t.personnesMax} >= 1 AND ${t.prixCentimes} >= 0`),
     memeEcole(t, t.saisonId, saison),
   ],
 );
@@ -642,10 +622,11 @@ export const inscription = pgTable(
     dateInscription: date("date_inscription").notNull().defaultNow(),
     prixBrutCentimes: integer("prix_brut_centimes").notNull(),
     remiseCentimes: integer("remise_centimes").notNull().default(0),
-    prixNetCentimes: integer("prix_net_centimes").generatedAlwaysAs(
-      sql`prix_brut_centimes - remise_centimes`,
-    ),
-    reductions: text("reductions").array().notNull().default(sql`'{}'::text[]`),
+    prixNetCentimes: integer("prix_net_centimes").generatedAlwaysAs(sql`prix_brut_centimes - remise_centimes`),
+    reductions: text("reductions")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -835,7 +816,12 @@ export const remisePaiement = pgTable(
     remiseId: uuid("remise_id").notNull(),
     paiementId: uuid("paiement_id").notNull(),
   },
-  (t) => [primaryKey({ columns: [t.paiementId] }), index().on(t.remiseId), memeEcole(t, t.remiseId, remise).onDelete("cascade"), memeEcole(t, t.paiementId, paiement)],
+  (t) => [
+    primaryKey({ columns: [t.paiementId] }),
+    index().on(t.remiseId),
+    memeEcole(t, t.remiseId, remise).onDelete("cascade"),
+    memeEcole(t, t.paiementId, paiement),
+  ],
 );
 
 export const affectationPaiement = pgTable(

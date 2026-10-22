@@ -22,14 +22,23 @@ export function Disciplines({ disciplines }: { disciplines: LigneDiscipline[] })
         className="flex flex-wrap items-end gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          agir(() => nouvelleDiscipline(nom), () => setNom(""));
+          agir(
+            () => nouvelleDiscipline(nom),
+            () => setNom(""),
+          );
         }}
       >
         <div className="flex flex-col gap-1">
           <label htmlFor="nouvelle-discipline" className="text-sm font-medium">
             Nouvelle discipline
           </label>
-          <input id="nouvelle-discipline" className="champ" placeholder="Hip-hop" value={nom} onChange={(e) => setNom(e.target.value)} />
+          <input
+            id="nouvelle-discipline"
+            className="champ"
+            placeholder="Hip-hop"
+            value={nom}
+            onChange={(e) => setNom(e.target.value)}
+          />
         </div>
         <button type="submit" className="bouton-principal" disabled={enCours || !nom.trim()}>
           Ajouter
@@ -51,13 +60,22 @@ export function Disciplines({ disciplines }: { disciplines: LigneDiscipline[] })
                   className="flex flex-wrap items-center gap-2"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    agir(() => renommer(d.id, edition.nom), () => setEdition(null));
+                    agir(
+                      () => renommer(d.id, edition.nom),
+                      () => setEdition(null),
+                    );
                   }}
                 >
                   <label className="sr-only" htmlFor={`nom-${d.id}`}>
                     Nom
                   </label>
-                  <input id={`nom-${d.id}`} className="champ" autoFocus value={edition.nom} onChange={(e) => setEdition({ ...edition, nom: e.target.value })} />
+                  <input
+                    id={`nom-${d.id}`}
+                    className="champ"
+                    autoFocus
+                    value={edition.nom}
+                    onChange={(e) => setEdition({ ...edition, nom: e.target.value })}
+                  />
                   <button type="submit" className="lien" disabled={enCours}>
                     Enregistrer
                   </button>
@@ -69,7 +87,8 @@ export function Disciplines({ disciplines }: { disciplines: LigneDiscipline[] })
                 <span className="font-medium">{d.nom}</span>
               )}
               <span className="text-doux">
-                {d.cours} cours{d.tarifs > 0 && `, ${d.tarifs} tarif${d.tarifs > 1 ? "s" : ""} dédié${d.tarifs > 1 ? "s" : ""}`}
+                {d.cours} cours
+                {d.tarifs > 0 && `, ${d.tarifs} tarif${d.tarifs > 1 ? "s" : ""} dédié${d.tarifs > 1 ? "s" : ""}`}
               </span>
               {edition?.id !== d.id && (
                 <span className="ml-auto flex gap-3">
@@ -77,7 +96,12 @@ export function Disciplines({ disciplines }: { disciplines: LigneDiscipline[] })
                     Renommer
                   </button>
                   {d.cours === 0 && d.tarifs === 0 && (
-                    <button type="button" className="lien text-doux" disabled={enCours} onClick={() => agir(() => retirerDiscipline(d.id))}>
+                    <button
+                      type="button"
+                      className="lien text-doux"
+                      disabled={enCours}
+                      onClick={() => agir(() => retirerDiscipline(d.id))}
+                    >
                       Retirer
                     </button>
                   )}

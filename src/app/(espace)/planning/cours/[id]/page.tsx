@@ -18,7 +18,12 @@ const STATUT = {
   liste_attente: { libelle: "en attente", classe: "bg-alerte-fond text-alerte-texte" },
 } as const;
 
-const dateSeance = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+const dateSeance = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+});
 const dateCourte = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
 
 export default async function PageCours({ params, searchParams }: PageProps<"/planning/cours/[id]">) {
@@ -101,7 +106,11 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
             <span className="tabular-nums">
               {actifs}
               {cours.capaciteMax !== null && ` / ${cours.capaciteMax}`} inscrit{actifs > 1 ? "s" : ""}
-              {complet && <span className="ml-2 rounded bg-alerte-fond px-1.5 text-xs font-medium text-alerte-texte">Complet</span>}
+              {complet && (
+                <span className="ml-2 rounded bg-alerte-fond px-1.5 text-xs font-medium text-alerte-texte">
+                  Complet
+                </span>
+              )}
             </span>
             {cours.capaciteMax !== null && (
               <span className="h-1.5 overflow-hidden rounded-full bg-accent-doux" aria-hidden>
@@ -137,7 +146,10 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
           </p>
         ) : (
           <ul className="flex flex-wrap gap-1.5 text-sm">
-            {[...seances.filter((s) => s.date < aujourdhui).slice(-4), ...seances.filter((s) => s.date >= aujourdhui).slice(0, 4)].map((s) => (
+            {[
+              ...seances.filter((s) => s.date < aujourdhui).slice(-4),
+              ...seances.filter((s) => s.date >= aujourdhui).slice(0, 4),
+            ].map((s) => (
               <li key={s.id}>
                 <Link
                   href={`/planning/seances/${s.id}`}
@@ -148,12 +160,12 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
                     {enConflit.has(s.id)
                       ? "prof indisponible"
                       : s.statut === "annulee"
-                      ? "annulée"
-                      : s.statut === "effectuee"
-                        ? `${s.presents} présent${s.presents > 1 ? "s" : ""}${s.absents ? `, ${s.absents} abs.` : ""}`
-                        : s.date <= aujourdhui
-                          ? "appel à faire"
-                          : "prévue"}
+                        ? "annulée"
+                        : s.statut === "effectuee"
+                          ? `${s.presents} présent${s.presents > 1 ? "s" : ""}${s.absents ? `, ${s.absents} abs.` : ""}`
+                          : s.date <= aujourdhui
+                            ? "appel à faire"
+                            : "prévue"}
                   </span>
                 </Link>
               </li>
@@ -168,7 +180,8 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
         </h2>
         {inscrits.length === 0 ? (
           <p className="text-sm text-doux">
-            Personne n’est encore inscrit. Les inscriptions se font depuis la fiche du danseur ou de la personne qui paie.
+            Personne n’est encore inscrit. Les inscriptions se font depuis la fiche du danseur ou de la personne qui
+            paie.
           </p>
         ) : (
           <div className="panneau overflow-x-auto">
@@ -187,16 +200,24 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
                   const statut = STATUT[i.statut];
                   const age = i.dateNaissance ? ageAu(i.dateNaissance, aujourdhui) : null;
                   const horsTranche =
-                    age !== null && ((cours.ageMin !== null && age < cours.ageMin) || (cours.ageMax !== null && age > cours.ageMax));
+                    age !== null &&
+                    ((cours.ageMin !== null && age < cours.ageMin) || (cours.ageMax !== null && age > cours.ageMax));
                   return (
                     <tr key={i.danseurId}>
                       <td className="font-medium">
                         <Link href={`/eleves/${i.danseurId}`} className="lien">
                           {i.prenom} {i.nom}
                         </Link>
-                        {statut && <span className={`ml-2 rounded px-1.5 text-xs font-normal ${statut.classe}`}>{statut.libelle}</span>}
+                        {statut && (
+                          <span className={`ml-2 rounded px-1.5 text-xs font-normal ${statut.classe}`}>
+                            {statut.libelle}
+                          </span>
+                        )}
                       </td>
-                      <td className={`text-right tabular-nums ${horsTranche ? "font-medium text-alerte-texte" : ""}`} title={horsTranche ? "Hors tranche d’âge du cours" : undefined}>
+                      <td
+                        className={`text-right tabular-nums ${horsTranche ? "font-medium text-alerte-texte" : ""}`}
+                        title={horsTranche ? "Hors tranche d’âge du cours" : undefined}
+                      >
                         {age ?? "—"}
                         {horsTranche && <span className="sr-only"> (hors tranche d’âge)</span>}
                       </td>
@@ -214,7 +235,9 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
                           "—"
                         )}
                       </td>
-                      <td className="hidden text-doux sm:table-cell print:hidden">{dateCourte.format(new Date(i.dateInscription))}</td>
+                      <td className="hidden text-doux sm:table-cell print:hidden">
+                        {dateCourte.format(new Date(i.dateInscription))}
+                      </td>
                     </tr>
                   );
                 })}

@@ -13,7 +13,13 @@ export const COLONNES_ELEVES: DefColonne[] = [
   { id: "responsables", libelle: "Responsables", type: "texte" },
   { id: "facture", libelle: "Facturé à", type: "texte", siVide: "l’élève" },
   // Filtrées par cases à cocher (#107) : statuts connus ; les cours viennent du planning de la saison.
-  { id: "inscription", libelle: "Inscription", type: "texte", siVide: "aucune", choix: Object.values(LIBELLES_STATUT_INSCRIPTION) },
+  {
+    id: "inscription",
+    libelle: "Inscription",
+    type: "texte",
+    siVide: "aucune",
+    choix: Object.values(LIBELLES_STATUT_INSCRIPTION),
+  },
   { id: "cours", libelle: "Cours suivis", type: "texte", siVide: "aucun" },
   { id: "telephone", libelle: "Téléphone", type: "telephone" },
   // Proposées dans « Colonnes », masquées par défaut (#89).
@@ -39,5 +45,9 @@ export const COLONNES_INTERVENANTS: DefColonne[] = [
 ];
 
 /** Listes dont la disposition des colonnes est mémorisée par membre (#89). */
-export const LISTES = { eleves: COLONNES_ELEVES, contacts: COLONNES_CONTACTS, intervenants: COLONNES_INTERVENANTS } as const;
+export const LISTES = {
+  eleves: COLONNES_ELEVES,
+  contacts: COLONNES_CONTACTS,
+  intervenants: COLONNES_INTERVENANTS,
+} as const;
 export type Liste = keyof typeof LISTES;

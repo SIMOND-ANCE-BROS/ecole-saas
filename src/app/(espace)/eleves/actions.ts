@@ -34,11 +34,15 @@ export async function creerEleveGuide(saisie: unknown, confirme: boolean): Promi
     if (e instanceof RefusCreation) return { message: e.message, erreurs: {} };
     throw e;
   }
-  if (r.statut === "doublons") return { message: "Certaines personnes existent peut-être déjà.", erreurs: {}, doublons: r.doublons };
+  if (r.statut === "doublons")
+    return { message: "Certaines personnes existent peut-être déjà.", erreurs: {}, doublons: r.doublons };
   redirect(`/eleves/${r.id}?enregistre=cree`);
 }
 
-export async function facturer(eleveId: string, cible: { type: "eleve" } | { type: "personne"; id: string }): Promise<Retour> {
+export async function facturer(
+  eleveId: string,
+  cible: { type: "eleve" } | { type: "personne"; id: string },
+): Promise<Retour> {
   const { ecoleId } = await exigerRole("direction", "accueil");
   const r = await avecEcole(ecoleId, (tx) => definirFacturation(tx, eleveId, cible));
   revalidatePath(`/eleves/${eleveId}`);

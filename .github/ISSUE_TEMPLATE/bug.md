@@ -1,9 +1,9 @@
 ---
 name: Bug
 about: An existing behaviour is wrong
-title: 'AREA: observed symptom'
+title: "AREA: observed symptom"
 type: Bug
-assignees: ''
+assignees: ""
 ---
 
 <!-- Conventions: docs/guides/issues.md — type, Priority and Effort fields, area labels, milestone, parent epic. No real personal data. -->

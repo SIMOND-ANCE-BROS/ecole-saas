@@ -19,9 +19,15 @@ describe("refusChangement", () => {
 
   it("refuse de retirer la dernière personne active de la direction", () => {
     const seule: MembreEquipe[] = [EQUIPE[0], { ...EQUIPE[1], actif: false }, EQUIPE[2]];
-    expect(refusChangement(seule, "accueil", "diana", { role: "accueil", actif: true })).toBe("Il faut au moins une personne active à la direction.");
-    expect(refusChangement(seule, "accueil", "diana", { role: "direction", actif: false })).toBe("Il faut au moins une personne active à la direction.");
-    expect(refusChangement(EQUIPE, "diana", "inconnu", { role: "accueil", actif: true })).toBe("Ce membre n’existe plus.");
+    expect(refusChangement(seule, "accueil", "diana", { role: "accueil", actif: true })).toBe(
+      "Il faut au moins une personne active à la direction.",
+    );
+    expect(refusChangement(seule, "accueil", "diana", { role: "direction", actif: false })).toBe(
+      "Il faut au moins une personne active à la direction.",
+    );
+    expect(refusChangement(EQUIPE, "diana", "inconnu", { role: "accueil", actif: true })).toBe(
+      "Ce membre n’existe plus.",
+    );
   });
 });
 

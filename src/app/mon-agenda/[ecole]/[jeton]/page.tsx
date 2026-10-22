@@ -15,7 +15,13 @@ const BANDEAUX: Record<string, { texte: string; erreur: boolean }> = {
   refuse: { texte: "Connexion annulée : rien n’a été transmis.", erreur: true },
   erreur: { texte: "La connexion n’a pas abouti. Réessayez dans quelques minutes.", erreur: true },
 };
-const dateHeure = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
+const dateHeure = new Intl.DateTimeFormat("fr-FR", {
+  day: "numeric",
+  month: "long",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Europe/Paris",
+});
 
 /**
  * Page personnelle d'un intervenant, ouverte par son lien privé (sans compte) :
@@ -43,7 +49,10 @@ export default async function PageMonAgenda({ params, searchParams }: PageProps<
       </header>
 
       {bandeau && (
-        <p role={bandeau.erreur ? "alert" : "status"} className={`rounded-md px-3 py-2 text-sm ${bandeau.erreur ? "bg-alerte-fond text-alerte-texte" : "border border-accent bg-accent-doux"}`}>
+        <p
+          role={bandeau.erreur ? "alert" : "status"}
+          className={`rounded-md px-3 py-2 text-sm ${bandeau.erreur ? "bg-alerte-fond text-alerte-texte" : "border border-accent bg-accent-doux"}`}
+        >
           {bandeau.texte}
         </p>
       )}
@@ -52,7 +61,9 @@ export default async function PageMonAgenda({ params, searchParams }: PageProps<
         <h2 id="seances" className="text-base font-semibold">
           Mes séances dans mon agenda
         </h2>
-        <p>Ajoutez une fois ce lien à votre agenda : cours, remplacements et annulations s’y mettent à jour d’eux-mêmes.</p>
+        <p>
+          Ajoutez une fois ce lien à votre agenda : cours, remplacements et annulations s’y mettent à jour d’eux-mêmes.
+        </p>
         <a href={ics.replace(/^https?:/, "webcal:")} className="bouton-principal self-start">
           S’abonner à mes séances
         </a>
@@ -67,8 +78,8 @@ export default async function PageMonAgenda({ params, searchParams }: PageProps<
           Mes indisponibilités
         </h2>
         <p>
-          Connectez votre agenda pour que l’école voie quand vous n’êtes pas disponible, sans rien d’autre : ni titre, ni lieu, ni participant.
-          Cela évite qu’on vous propose un cours ou un remplacement à ces moments-là.
+          Connectez votre agenda pour que l’école voie quand vous n’êtes pas disponible, sans rien d’autre : ni titre,
+          ni lieu, ni participant. Cela évite qu’on vous propose un cours ou un remplacement à ces moments-là.
         </p>
         {connexion ? (
           <>
@@ -79,12 +90,16 @@ export default async function PageMonAgenda({ params, searchParams }: PageProps<
             {connexion.erreur ? (
               <p className="text-alerte-texte">{connexion.erreur}</p>
             ) : (
-              connexion.derniereSynchro && <p className="text-doux">Dernière mise à jour le {dateHeure.format(connexion.derniereSynchro)}.</p>
+              connexion.derniereSynchro && (
+                <p className="text-doux">Dernière mise à jour le {dateHeure.format(connexion.derniereSynchro)}.</p>
+              )
             )}
             <BoutonDeconnecter ecoleId={ecole} jeton={jeton} />
           </>
         ) : disponibles.length === 0 ? (
-          <p className="text-doux">La connexion des agendas n’est pas encore ouverte. Prévenez l’école de vos absences.</p>
+          <p className="text-doux">
+            La connexion des agendas n’est pas encore ouverte. Prévenez l’école de vos absences.
+          </p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {disponibles.map((f) => (

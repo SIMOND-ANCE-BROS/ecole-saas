@@ -3,10 +3,21 @@
 import { useState, useTransition } from "react";
 import { ajouterIndispo, retirerIndispo } from "../actions";
 
-export type IndispoAffichee = { id: string; debut: string; fin: string; origine: "saisie" | "google" | "microsoft"; libelle: string | null };
+export type IndispoAffichee = {
+  id: string;
+  debut: string;
+  fin: string;
+  origine: "saisie" | "google" | "microsoft";
+  libelle: string | null;
+};
 
 const ORIGINE = { saisie: null, google: "Google Agenda", microsoft: "Microsoft" } as const;
-const jour = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/Paris" });
+const jour = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  timeZone: "Europe/Paris",
+});
 const heure = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
 
 /** « mer. 4 nov., 16:30 à 19:00 », ou « mer. 4 nov. au ven. 6 nov. » pour des journées entières. */
@@ -16,7 +27,9 @@ function plage(debutIso: string, finIso: string): string {
   const minuit = (d: Date) => heure.format(d) === "00:00";
   if (minuit(debut) && minuit(fin)) {
     const dernier = new Date(fin.getTime() - 1);
-    return jour.format(debut) === jour.format(dernier) ? `${jour.format(debut)}, journée` : `${jour.format(debut)} au ${jour.format(dernier)}`;
+    return jour.format(debut) === jour.format(dernier)
+      ? `${jour.format(debut)}, journée`
+      : `${jour.format(debut)} au ${jour.format(dernier)}`;
   }
   return jour.format(debut) === jour.format(fin)
     ? `${jour.format(debut)}, ${heure.format(debut)} à ${heure.format(fin)}`
@@ -24,7 +37,15 @@ function plage(debutIso: string, finIso: string): string {
 }
 
 /** Indisponibilités à venir d'un intervenant ; celles d'un agenda connecté ne se retirent pas ici. */
-export function Indisponibilites({ intervenantId, prenom, indispos }: { intervenantId: string; prenom: string; indispos: IndispoAffichee[] }) {
+export function Indisponibilites({
+  intervenantId,
+  prenom,
+  indispos,
+}: {
+  intervenantId: string;
+  prenom: string;
+  indispos: IndispoAffichee[];
+}) {
   const [v, setV] = useState({ du: "", au: "", de: "", a: "", libelle: "" });
   const [message, setMessage] = useState<string | null>(null);
   const [enCours, demarrer] = useTransition();
@@ -36,7 +57,9 @@ export function Indisponibilites({ intervenantId, prenom, indispos }: { interven
         <h2 id="indisponibilites" className="text-base font-semibold">
           Indisponibilités de {prenom}
         </h2>
-        <p className="text-doux">Elles signalent les séances en conflit et écartent {prenom} des remplaçants proposés.</p>
+        <p className="text-doux">
+          Elles signalent les séances en conflit et écartent {prenom} des remplaçants proposés.
+        </p>
       </div>
 
       {indispos.length === 0 ? (
@@ -103,7 +126,13 @@ export function Indisponibilites({ intervenantId, prenom, indispos }: { interven
           <label htmlFor="indispo-libelle" className="font-medium">
             Motif (facultatif)
           </label>
-          <input id="indispo-libelle" className="champ" placeholder="Stage, congé, rendez-vous…" value={v.libelle} onChange={maj("libelle")} />
+          <input
+            id="indispo-libelle"
+            className="champ"
+            placeholder="Stage, congé, rendez-vous…"
+            value={v.libelle}
+            onChange={maj("libelle")}
+          />
         </div>
         <button type="submit" className="bouton-secondaire self-end" disabled={enCours}>
           Ajouter

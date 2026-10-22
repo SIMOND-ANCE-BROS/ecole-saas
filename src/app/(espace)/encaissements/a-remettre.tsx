@@ -13,7 +13,15 @@ const jour = (iso: string) => iso.split("-").reverse().join("/");
  * Paiements d'un moyen à remettre (#98) : tous cochés par défaut ; la remise
  * prend la date choisie (aujourd'hui par défaut) et ouvre son bordereau.
  */
-export function ARemettre({ moyen, paiements, aujourdhui }: { moyen: MoyenRemise; paiements: LigneJournal[]; aujourdhui: string }) {
+export function ARemettre({
+  moyen,
+  paiements,
+  aujourdhui,
+}: {
+  moyen: MoyenRemise;
+  paiements: LigneJournal[];
+  aujourdhui: string;
+}) {
   const [choisis, setChoisis] = useState(() => new Set(paiements.map((p) => p.id)));
   const [date, setDate] = useState(aujourdhui);
   const [message, setMessage] = useState<string | null>(null);
@@ -58,16 +66,27 @@ export function ARemettre({ moyen, paiements, aujourdhui }: { moyen: MoyenRemise
             {paiements.map((p) => (
               <tr key={p.id}>
                 <td>
-                  <input type="checkbox" aria-label={`Remettre le paiement de ${p.payeur}, ${formaterEuros(p.montantCentimes)}`} checked={choisis.has(p.id)} onChange={() => basculer(p.id)} />
+                  <input
+                    type="checkbox"
+                    aria-label={`Remettre le paiement de ${p.payeur}, ${formaterEuros(p.montantCentimes)}`}
+                    checked={choisis.has(p.id)}
+                    onChange={() => basculer(p.id)}
+                  />
                 </td>
                 <td>{p.payeur}</td>
                 {moyen !== "especes" && <td>{p.reference ?? "—"}</td>}
                 {moyen === "cheque" && <td>{p.emetteur ?? "—"}</td>}
                 <td className="whitespace-nowrap">{jour(p.date)}</td>
-                {moyen === "cheque" && <td className="whitespace-nowrap">{p.encaissementPrevu ? jour(p.encaissementPrevu) : "—"}</td>}
+                {moyen === "cheque" && (
+                  <td className="whitespace-nowrap">{p.encaissementPrevu ? jour(p.encaissementPrevu) : "—"}</td>
+                )}
                 <td className="text-right tabular-nums whitespace-nowrap">
                   {formaterEuros(p.montantCentimes)}
-                  {p.corrigeCentimes > 0 && <span className="block text-xs text-alerte-texte">dont {formaterEuros(p.corrigeCentimes)} corrigés</span>}
+                  {p.corrigeCentimes > 0 && (
+                    <span className="block text-xs text-alerte-texte">
+                      dont {formaterEuros(p.corrigeCentimes)} corrigés
+                    </span>
+                  )}
                 </td>
               </tr>
             ))}
@@ -79,17 +98,28 @@ export function ARemettre({ moyen, paiements, aujourdhui }: { moyen: MoyenRemise
         onSubmit={(e) => {
           e.preventDefault();
           setMessage(null);
-          demarrer(async () => setMessage((await remettre({ date, moyen, paiementIds: selection.map((p) => p.id) })).message));
+          demarrer(async () =>
+            setMessage((await remettre({ date, moyen, paiementIds: selection.map((p) => p.id) })).message),
+          );
         }}
       >
         <div className="flex flex-col gap-1">
           <label htmlFor={`date-remise-${moyen}`} className="text-xs text-doux">
             Date de la remise
           </label>
-          <input id={`date-remise-${moyen}`} type="date" className="champ" value={date} onChange={(e) => setDate(e.target.value)} required />
+          <input
+            id={`date-remise-${moyen}`}
+            type="date"
+            className="champ"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            required
+          />
         </div>
         <button type="submit" className="bouton-principal" disabled={envoi || selection.length === 0}>
-          {envoi ? "Création…" : `Créer la remise : ${selection.length} × ${titre.toLowerCase()}, ${formaterEuros(total)}`}
+          {envoi
+            ? "Création…"
+            : `Créer la remise : ${selection.length} × ${titre.toLowerCase()}, ${formaterEuros(total)}`}
         </button>
         {message && (
           <p role="alert" className="text-sm text-erreur">

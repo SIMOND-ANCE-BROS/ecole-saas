@@ -41,7 +41,8 @@ export function lireFiltreColonne(filtre: Filtre, def: DefColonne): FiltreColonn
  */
 export function ecrireFiltreColonne(filtre: Filtre, def: DefColonne, fc: Partial<FiltreColonne>): Filtre {
   const conditions = filtre.conditions.filter((c) => c.colonne !== def.id);
-  const ajouter = (operateur: Condition["operateur"], valeur: string) => conditions.push({ colonne: def.id, operateur, valeur });
+  const ajouter = (operateur: Condition["operateur"], valeur: string) =>
+    conditions.push({ colonne: def.id, operateur, valeur });
   if (fc.choix && fc.choix.length > 0) ajouter("parmi", fc.choix.join(SEPARATEUR));
   if (fc.texte?.trim()) ajouter("contient", fc.texte);
   if (fc.min?.trim()) ajouter("sup_egal", fc.min.trim());
@@ -59,7 +60,8 @@ const date = (v: string) => v.split("-").reverse().join("/");
  */
 export function resumeFiltreColonne(def: DefColonne, fc: FiltreColonne): string | null {
   const parties: string[] = [];
-  if (fc.choix && fc.choix.length > 0) parties.push(fc.choix.map((v) => (v === VIDE ? (def.siVide ?? "vide") : v)).join(", "));
+  if (fc.choix && fc.choix.length > 0)
+    parties.push(fc.choix.map((v) => (v === VIDE ? (def.siVide ?? "vide") : v)).join(", "));
   if (fc.texte.trim()) parties.push(`contient « ${fc.texte.trim()} »`);
   const [min, max] = def.type === "date" ? [date(fc.min.trim()), date(fc.max.trim())] : [fc.min.trim(), fc.max.trim()];
   if (min && max) parties.push(def.type === "date" ? `du ${min} au ${max}` : `de ${min} à ${max}`);

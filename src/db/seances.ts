@@ -2,7 +2,20 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { datesDuCours, type Recurrence } from "../domaine/planning/seances";
 import type { Tx } from "./index";
-import { cours, coursDate, discipline, fermeture, inscription, inscriptionCours, intervenant, personne, presence, saison, salle, seance } from "./schema";
+import {
+  cours,
+  coursDate,
+  discipline,
+  fermeture,
+  inscription,
+  inscriptionCours,
+  intervenant,
+  personne,
+  presence,
+  saison,
+  salle,
+  seance,
+} from "./schema";
 
 /**
  * Séances (occurrences datées des cours), fermetures et appel. Toujours avec
@@ -36,7 +49,11 @@ export function listerFermetures(tx: Tx, saisonId: string): Promise<Fermeture[]>
     .orderBy(asc(fermeture.debut));
 }
 
-export async function ajouterFermeture(tx: Tx, saisonId: string, saisie: z.input<typeof saisieFermetureValide>): Promise<Resultat> {
+export async function ajouterFermeture(
+  tx: Tx,
+  saisonId: string,
+  saisie: z.input<typeof saisieFermetureValide>,
+): Promise<Resultat> {
   const f = saisieFermetureValide.safeParse(saisie);
   if (!f.success) return { ok: false, message: f.error.issues[0].message };
   if (f.data.fin < f.data.debut) return { ok: false, message: "La fin précède le début." };
@@ -79,7 +96,10 @@ export async function synchroniserSeances(
   aujourdhui: string,
   depuis?: string,
 ): Promise<{ ajoutees: number; retirees: number }> {
-  const [s] = await tx.select({ debut: saison.dateDebut, fin: saison.dateFin }).from(saison).where(eq(saison.id, saisonId));
+  const [s] = await tx
+    .select({ debut: saison.dateDebut, fin: saison.dateFin })
+    .from(saison)
+    .where(eq(saison.id, saisonId));
   if (!s) return { ajoutees: 0, retirees: 0 };
   const debut = [s.debut, aujourdhui, depuis ?? ""].reduce((a, b) => (b > a ? b : a));
   const fermetures = await listerFermetures(tx, saisonId);
@@ -112,7 +132,13 @@ export async function synchroniserSeances(
   });
   const repere = sql<string>`coalesce(${seance.datePrevue}, ${seance.date})::text`;
   const existantes = await tx
-    .select({ id: seance.id, coursId: seance.coursId, repere, statut: seance.statut, appel: sql<boolean>`${avecAppel}` })
+    .select({
+      id: seance.id,
+      coursId: seance.coursId,
+      repere,
+      statut: seance.statut,
+      appel: sql<boolean>`${avecAppel}`,
+    })
     .from(seance)
     .innerJoin(cours, eq(cours.id, seance.coursId))
     .where(eq(cours.saisonId, saisonId));
@@ -208,7 +234,11 @@ export async function seancesDuJour(tx: Tx, date: string): Promise<SeanceDuJour[
     .innerJoin(intervenant, eq(intervenant.id, seance.intervenantId))
     .where(eq(seance.date, date))
     .orderBy(heureEffective, asc(discipline.nom));
-  return lignes.map(({ prenom, nom, heureDebut, ...l }) => ({ ...l, heureDebut: heureDebut.slice(0, 5), intervenant: `${prenom} ${nom}` }));
+  return lignes.map(({ prenom, nom, heureDebut, ...l }) => ({
+    ...l,
+    heureDebut: heureDebut.slice(0, 5),
+    intervenant: `${prenom} ${nom}`,
+  }));
 }
 
 export type Appel = {
@@ -290,14 +320,19 @@ export async function lireAppel(tx: Tx, seanceId: string): Promise<Appel | null>
 export const appelValide = z.array(z.object({ danseurId: z.uuid(), present: z.boolean() })).max(200);
 
 /** Enregistre ou corrige l'appel ; la séance passe « effectuée ». */
-export async function enregistrerAppel(tx: Tx, seanceId: string, saisie: z.input<typeof appelValide>): Promise<Resultat> {
+export async function enregistrerAppel(
+  tx: Tx,
+  seanceId: string,
+  saisie: z.input<typeof appelValide>,
+): Promise<Resultat> {
   const lignes = appelValide.safeParse(saisie);
   if (!lignes.success) return { ok: false, message: "Saisie invalide." };
   const appel = await lireAppel(tx, seanceId);
   if (!appel) return { ok: false, message: "Cette séance n’existe plus." };
   if (appel.statut === "annulee") return { ok: false, message: "Cette séance est annulée." };
   const attendus = new Set(appel.danseurs.map((d) => d.id));
-  if (!lignes.data.every((l) => attendus.has(l.danseurId))) return { ok: false, message: "Un des danseurs ne suit pas ce cours." };
+  if (!lignes.data.every((l) => attendus.has(l.danseurId)))
+    return { ok: false, message: "Un des danseurs ne suit pas ce cours." };
 
   if (lignes.data.length > 0) {
     await tx
@@ -317,7 +352,11 @@ export async function changerIntervenant(tx: Tx, seanceId: string, intervenantId
     .from(intervenant)
     .where(and(eq(intervenant.id, intervenantId), eq(intervenant.actif, true)));
   if (!i) return { ok: false, message: "Intervenant introuvable ou inactif." };
-  const lignes = await tx.update(seance).set({ intervenantId }).where(eq(seance.id, seanceId)).returning({ id: seance.id });
+  const lignes = await tx
+    .update(seance)
+    .set({ intervenantId })
+    .where(eq(seance.id, seanceId))
+    .returning({ id: seance.id });
   return lignes.length === 1 ? { ok: true, id: seanceId } : { ok: false, message: "Cette séance n’existe plus." };
 }
 
@@ -325,7 +364,8 @@ export async function changerIntervenant(tx: Tx, seanceId: string, intervenantId
 export async function annulerSeance(tx: Tx, seanceId: string): Promise<Resultat> {
   const appel = await lireAppel(tx, seanceId);
   if (!appel) return { ok: false, message: "Cette séance n’existe plus." };
-  if (appel.danseurs.some((d) => d.present !== null)) return { ok: false, message: "L’appel de cette séance est déjà fait." };
+  if (appel.danseurs.some((d) => d.present !== null))
+    return { ok: false, message: "L’appel de cette séance est déjà fait." };
   await tx.update(seance).set({ statut: "annulee" }).where(eq(seance.id, seanceId));
   return { ok: true, id: seanceId };
 }
@@ -412,7 +452,11 @@ export async function seancesDeLaSemaine(tx: Tx, lundi: string): Promise<SeanceP
 }
 
 /** Fermetures (toutes saisons) qui touchent la période. */
-export function fermeturesEntre(tx: Tx, debut: string, fin: string): Promise<{ libelle: string; debut: string; fin: string }[]> {
+export function fermeturesEntre(
+  tx: Tx,
+  debut: string,
+  fin: string,
+): Promise<{ libelle: string; debut: string; fin: string }[]> {
   return tx
     .select({ libelle: fermeture.libelle, debut: fermeture.debut, fin: fermeture.fin })
     .from(fermeture)
@@ -426,10 +470,12 @@ export const creneauSeanceValide = z.object({
   dureeMinutes: z.int().min(5).max(600),
 });
 
-export type ResultatSeance = { statut: "ok"; saisonId: string; depuis: string | null } | { statut: "refus"; message: string };
+export type ResultatSeance =
+  { statut: "ok"; saisonId: string; depuis: string | null } | { statut: "refus"; message: string };
 
 const jourIso = (iso: string) => ((new Date(`${iso}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
-const decaler = (iso: string, jours: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + jours * 86_400_000).toISOString().slice(0, 10);
+const decaler = (iso: string, jours: number) =>
+  new Date(Date.parse(`${iso}T00:00:00Z`) + jours * 86_400_000).toISOString().slice(0, 10);
 
 /**
  * Déplace une séance (#90). « seance » : elle seule change (le cours reste) ;
@@ -471,13 +517,18 @@ export async function deplacerSeance(
     .innerJoin(saison, eq(saison.id, cours.saisonId))
     .where(eq(seance.id, id));
   if (!s) return { statut: "refus", message: "Cette séance n’existe plus." };
-  if (s.statut !== "prevue" || s.appel) return { statut: "refus", message: "Cette séance est annulée ou son appel est fait : elle ne se déplace plus." };
-  if (date < s.saisonDebut || date > s.saisonFin) return { statut: "refus", message: "Cette date est en dehors de la saison." };
+  if (s.statut !== "prevue" || s.appel)
+    return { statut: "refus", message: "Cette séance est annulée ou son appel est fait : elle ne se déplace plus." };
+  if (date < s.saisonDebut || date > s.saisonFin)
+    return { statut: "refus", message: "Cette date est en dehors de la saison." };
   const repere = s.datePrevue ?? s.date;
 
   if (portee === "seance") {
     if (date !== s.date) {
-      const [autre] = await tx.select({ id: seance.id }).from(seance).where(and(eq(seance.coursId, s.coursId), eq(seance.date, date)));
+      const [autre] = await tx
+        .select({ id: seance.id })
+        .from(seance)
+        .where(and(eq(seance.coursId, s.coursId), eq(seance.date, date)));
       if (autre) return { statut: "refus", message: "Ce cours a déjà une séance ce jour-là." };
     }
     const memeCreneau = heureDebut === s.heureCours && dureeMinutes === s.dureeCours;
@@ -506,12 +557,16 @@ export async function deplacerSeance(
     return { statut: "ok", saisonId: s.saisonId, depuis: null };
   }
 
-  if (s.recurrence === "dates") return { statut: "refus", message: "Un cours à dates précises se déplace séance par séance." };
+  if (s.recurrence === "dates")
+    return { statut: "refus", message: "Un cours à dates précises se déplace séance par séance." };
   const nouveauJour = jourIso(date);
   // 1. Les séances d'avant gardent l'ancien créneau.
   await tx
     .update(seance)
-    .set({ heureDebut: sql`coalesce(${seance.heureDebut}, ${s.heureCours}::time)`, dureeMinutes: sql`coalesce(${seance.dureeMinutes}, ${s.dureeCours})` })
+    .set({
+      heureDebut: sql`coalesce(${seance.heureDebut}, ${s.heureCours}::time)`,
+      dureeMinutes: sql`coalesce(${seance.dureeMinutes}, ${s.dureeCours})`,
+    })
     .where(and(eq(seance.coursId, s.coursId), sql`coalesce(${seance.datePrevue}, ${seance.date}) < ${repere}::date`));
   // 2. Le cours prend le nouveau créneau.
   await tx.update(cours).set({ jourSemaine: nouveauJour, heureDebut, dureeMinutes }).where(eq(cours.id, s.coursId));
@@ -520,12 +575,22 @@ export async function deplacerSeance(
     .select({ id: seance.id, repere: sql<string>`coalesce(${seance.datePrevue}, ${seance.date})::text` })
     .from(seance)
     .where(
-      and(eq(seance.coursId, s.coursId), eq(seance.statut, "prevue"), sql`coalesce(${seance.datePrevue}, ${seance.date}) >= ${repere}::date`, sql`NOT ${avecAppel}`),
+      and(
+        eq(seance.coursId, s.coursId),
+        eq(seance.statut, "prevue"),
+        sql`coalesce(${seance.datePrevue}, ${seance.date}) >= ${repere}::date`,
+        sql`NOT ${avecAppel}`,
+      ),
     );
   for (const x of suivantes) {
     await tx
       .update(seance)
-      .set({ date: decaler(x.repere, nouveauJour - jourIso(x.repere)), datePrevue: null, heureDebut: null, dureeMinutes: null })
+      .set({
+        date: decaler(x.repere, nouveauJour - jourIso(x.repere)),
+        datePrevue: null,
+        heureDebut: null,
+        dureeMinutes: null,
+      })
       .where(eq(seance.id, x.id));
   }
   return { statut: "ok", saisonId: s.saisonId, depuis: decaler(repere, 1 - jourIso(repere)) };

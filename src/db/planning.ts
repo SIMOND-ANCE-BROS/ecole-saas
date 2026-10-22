@@ -152,7 +152,9 @@ export async function inscritsDuCours(tx: Tx, coursId: string): Promise<Inscrit[
     .innerJoin(inscription, eq(inscription.id, inscriptionCours.inscriptionId))
     .innerJoin(danseur, eq(danseur.id, inscriptionCours.danseurId))
     .innerJoin(payeur, eq(payeur.id, inscription.payeurId))
-    .where(and(eq(inscriptionCours.coursId, coursId), inArray(inscription.statut, ["active", "essai", "liste_attente"])))
+    .where(
+      and(eq(inscriptionCours.coursId, coursId), inArray(inscription.statut, ["active", "essai", "liste_attente"])),
+    )
     .orderBy(asc(danseur.nom), asc(danseur.prenom), asc(danseur.id), sql`${inscription.statut} = 'active' DESC`);
   return lignes.map(({ payeurNom, payeurPrenom, raisonSociale, prenom, ...l }) => ({
     ...l,

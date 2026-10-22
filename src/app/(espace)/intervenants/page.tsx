@@ -6,7 +6,14 @@ import { listerIntervenants, MODES_REMUNERATION, STATUTS } from "@/db/intervenan
 import { lirePreference } from "@/db/preferences";
 import { saisonCourante } from "@/db/planning";
 import { COLONNES_INTERVENANTS } from "@/domaine/filtres/colonnes";
-import { appliquerFiltre, type Cellule, lireFiltre, lireTri, normaliserTexte, trierLignes } from "@/domaine/filtres/filtres";
+import {
+  appliquerFiltre,
+  type Cellule,
+  lireFiltre,
+  lireTri,
+  normaliserTexte,
+  trierLignes,
+} from "@/domaine/filtres/filtres";
 import { aujourdhuiAParis } from "@/domaine/personnes/age";
 import { formaterEuros } from "@/lib/montant";
 import { exigerRole } from "@/lib/session";
@@ -20,7 +27,11 @@ export default async function PageIntervenants({ searchParams }: PageProps<"/int
   const saisie = typeof q === "string" ? normaliserTexte(q) : "";
   const { saison, intervenants, disposition } = await avecEcole(ecoleId, async (tx) => {
     const s = await saisonCourante(tx, aujourdhuiAParis());
-    return { saison: s, intervenants: s ? await listerIntervenants(tx, s.id) : [], disposition: await lirePreference(tx, userId, "intervenants") };
+    return {
+      saison: s,
+      intervenants: s ? await listerIntervenants(tx, s.id) : [],
+      disposition: await lirePreference(tx, userId, "intervenants"),
+    };
   });
   const direction = role === "direction";
   // Le tarif des intervenants n'est montré qu'à la direction.
@@ -51,7 +62,8 @@ export default async function PageIntervenants({ searchParams }: PageProps<"/int
         <div>
           <h1 className="titre-page">Intervenants</h1>
           <p className="text-sm text-doux">
-            {intervenants.filter((i) => i.actif).length} actif{intervenants.filter((i) => i.actif).length > 1 ? "s" : ""}
+            {intervenants.filter((i) => i.actif).length} actif
+            {intervenants.filter((i) => i.actif).length > 1 ? "s" : ""}
             {saison && `, cours de la saison ${saison.libelle}`}
           </p>
         </div>
@@ -81,7 +93,11 @@ export default async function PageIntervenants({ searchParams }: PageProps<"/int
             colonnes={colonnes}
             disposition={disposition}
             lien="nom"
-            vide={saisie ? "Aucun intervenant ne correspond à cette recherche." : "Aucun intervenant ne correspond à ces filtres."}
+            vide={
+              saisie
+                ? "Aucun intervenant ne correspond à cette recherche."
+                : "Aucun intervenant ne correspond à ces filtres."
+            }
             choix={{ statut: Object.values(STATUTS) }}
             lignes={visibles.map((i) => ({
               id: i.id,
@@ -93,7 +109,9 @@ export default async function PageIntervenants({ searchParams }: PageProps<"/int
                 statut: STATUTS[i.statut],
                 cours: i.coursSaison,
                 // Jamais envoyé au navigateur de l'accueil : masquer la colonne ne suffit pas.
-                ...(direction ? { tarif: `${formaterEuros(i.tarifCentimes)} ${MODES_REMUNERATION[i.modeRemuneration]}` } : {}),
+                ...(direction
+                  ? { tarif: `${formaterEuros(i.tarifCentimes)} ${MODES_REMUNERATION[i.modeRemuneration]}` }
+                  : {}),
                 email: i.email,
               },
             }))}

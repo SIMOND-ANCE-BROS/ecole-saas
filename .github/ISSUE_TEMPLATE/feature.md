@@ -1,9 +1,9 @@
 ---
 name: Feature
 about: A new capability for the school (front desk, management, teachers)
-title: 'AREA: expected outcome'
+title: "AREA: expected outcome"
 type: Feature
-assignees: ''
+assignees: ""
 ---
 
 <!-- Conventions: docs/guides/issues.md — type, Priority and Effort fields (or icebox label), area labels, milestone, parent epic. -->

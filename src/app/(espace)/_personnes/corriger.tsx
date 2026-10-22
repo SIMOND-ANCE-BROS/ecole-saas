@@ -9,7 +9,15 @@ import { corriger } from "../paiements/actions";
  * Correction d'un paiement (direction) : un paiement ne se modifie pas, on
  * saisit un paiement négatif, au plus du montant encore non corrigé.
  */
-export function CorrigerPaiement({ paiementId, restant, retour }: { paiementId: string; restant: number; retour: string }) {
+export function CorrigerPaiement({
+  paiementId,
+  restant,
+  retour,
+}: {
+  paiementId: string;
+  restant: number;
+  retour: string;
+}) {
   const router = useRouter();
   const [ouvert, setOuvert] = useState(false);
   const [montant, setMontant] = useState((restant / 100).toFixed(2).replace(".", ","));
@@ -40,7 +48,14 @@ export function CorrigerPaiement({ paiementId, restant, retour }: { paiementId: 
       }}
     >
       <label htmlFor={`correction-${paiementId}`}>Annuler</label>
-      <input id={`correction-${paiementId}`} inputMode="decimal" className="champ w-24 text-right" value={montant} onChange={(e) => setMontant(e.target.value)} autoFocus />
+      <input
+        id={`correction-${paiementId}`}
+        inputMode="decimal"
+        className="champ w-24 text-right"
+        value={montant}
+        onChange={(e) => setMontant(e.target.value)}
+        autoFocus
+      />
       <span className="text-doux">€ sur {formaterEuros(restant)}</span>
       <button type="submit" className="bouton-secondaire" disabled={envoi || !centimes || centimes > restant}>
         Enregistrer la correction

@@ -5,7 +5,8 @@
 
 export const MOYENS_REMISE = ["cheque", "especes", "cheque_vacances"] as const;
 export type MoyenRemise = (typeof MOYENS_REMISE)[number];
-export const estRemisable = (moyen: string): moyen is MoyenRemise => (MOYENS_REMISE as readonly string[]).includes(moyen);
+export const estRemisable = (moyen: string): moyen is MoyenRemise =>
+  (MOYENS_REMISE as readonly string[]).includes(moyen);
 
 export type PaiementRemisable = {
   id: string;
@@ -34,7 +35,9 @@ export function aRemettre<T extends PaiementRemisable>(paiements: T[], aujourdhu
 }
 
 /** Total général et par moyen. */
-export function totaux<T extends { moyen: string; montantCentimes: number }>(lignes: T[]): { total: number; parMoyen: Record<string, number> } {
+export function totaux<T extends { moyen: string; montantCentimes: number }>(
+  lignes: T[],
+): { total: number; parMoyen: Record<string, number> } {
   const parMoyen: Record<string, number> = {};
   let total = 0;
   for (const l of lignes) {
@@ -55,7 +58,8 @@ export type LigneExport = {
   remise: string | null;
 };
 
-const montant = (c: number) => `${c < 0 ? "-" : ""}${Math.floor(Math.abs(c) / 100)},${String(Math.abs(c) % 100).padStart(2, "0")}`;
+const montant = (c: number) =>
+  `${c < 0 ? "-" : ""}${Math.floor(Math.abs(c) / 100)},${String(Math.abs(c) % 100).padStart(2, "0")}`;
 const dateFr = (iso: string | null) => (iso ? iso.split("-").reverse().join("/") : "");
 /** Cellule texte : guillemets si besoin, et jamais interprétée comme formule par un tableur. */
 function texte(v: string | null): string {
@@ -68,7 +72,16 @@ function texte(v: string | null): string {
 export function versCsv(lignes: LigneExport[]): string {
   const entete = ["Date", "Payeur", "Moyen", "Montant", "Référence", "Émetteur", "Encaissement prévu", "Remise"];
   const corps = lignes.map((l) =>
-    [dateFr(l.date), texte(l.payeur), texte(l.moyen), montant(l.montantCentimes), texte(l.reference), texte(l.emetteur), dateFr(l.encaissementPrevu), dateFr(l.remise)].join(";"),
+    [
+      dateFr(l.date),
+      texte(l.payeur),
+      texte(l.moyen),
+      montant(l.montantCentimes),
+      texte(l.reference),
+      texte(l.emetteur),
+      dateFr(l.encaissementPrevu),
+      dateFr(l.remise),
+    ].join(";"),
   );
   return `﻿${[entete.join(";"), ...corps].join("\r\n")}\r\n`;
 }

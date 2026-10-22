@@ -27,9 +27,23 @@ function versValeurs(i: Intervenant | null): Record<string, string> {
 
 export function FormulaireIntervenant({ intervenant }: { intervenant: Intervenant | null }) {
   const action = enregistrerIntervenant.bind(null, intervenant?.id ?? null);
-  const [etat, envoyer, enCours] = useActionState<EtatFormulaire, FormData>(action, { essai: 0, erreurs: {}, valeurs: null });
+  const [etat, envoyer, enCours] = useActionState<EtatFormulaire, FormData>(action, {
+    essai: 0,
+    erreurs: {},
+    valeurs: null,
+  });
   // Remonté après chaque refus pour reprendre la saisie renvoyée par le serveur.
-  return <Champs key={etat.essai} etat={etat} envoyer={envoyer} enCours={enCours} retour={intervenant ? `/intervenants/${intervenant.id}` : "/intervenants"} edition={intervenant !== null} initial={versValeurs(intervenant)} />;
+  return (
+    <Champs
+      key={etat.essai}
+      etat={etat}
+      envoyer={envoyer}
+      enCours={enCours}
+      retour={intervenant ? `/intervenants/${intervenant.id}` : "/intervenants"}
+      edition={intervenant !== null}
+      initial={versValeurs(intervenant)}
+    />
+  );
 }
 
 type PropsChamps = {
@@ -87,7 +101,9 @@ function Champs({ etat, envoyer, enCours, edition, initial, retour }: PropsChamp
         <legend className="px-1 text-sm font-semibold">Identité</legend>
         {champ("prenom", "Prénom", { autoComplete: "off", autoFocus: !edition && etat.essai === 0, required: true })}
         {champ("nom", "Nom", { autoComplete: "off", required: true })}
-        <div className="sm:col-span-2">{champ("email", "E-mail (facultatif, pour l’agenda et les relevés)", { type: "email", autoComplete: "off" })}</div>
+        <div className="sm:col-span-2">
+          {champ("email", "E-mail (facultatif, pour l’agenda et les relevés)", { type: "email", autoComplete: "off" })}
+        </div>
       </fieldset>
 
       <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
@@ -96,7 +112,13 @@ function Champs({ etat, envoyer, enCours, edition, initial, retour }: PropsChamp
           <label htmlFor="statut" className="text-sm font-medium">
             Statut
           </label>
-          <select id="statut" name="statut" className="champ" defaultValue={v.statut} onChange={(x) => setStatut(x.target.value)}>
+          <select
+            id="statut"
+            name="statut"
+            className="champ"
+            defaultValue={v.statut}
+            onChange={(x) => setStatut(x.target.value)}
+          >
             {Object.entries(STATUTS).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
@@ -104,7 +126,11 @@ function Champs({ etat, envoyer, enCours, edition, initial, retour }: PropsChamp
             ))}
           </select>
         </div>
-        {statut !== "salarie" ? champ("siren", "SIREN (facultatif)", { inputMode: "numeric", autoComplete: "off", placeholder: "9 chiffres" }) : <input type="hidden" name="siren" value="" />}
+        {statut !== "salarie" ? (
+          champ("siren", "SIREN (facultatif)", { inputMode: "numeric", autoComplete: "off", placeholder: "9 chiffres" })
+        ) : (
+          <input type="hidden" name="siren" value="" />
+        )}
         <div className="flex flex-col gap-1">
           <label htmlFor="regimeTva" className="text-sm font-medium">
             TVA
@@ -143,7 +169,11 @@ function Champs({ etat, envoyer, enCours, edition, initial, retour }: PropsChamp
             ))}
           </select>
         </div>
-        {champ("tarif", `Tarif (€ / ${UNITES_REMUNERATION[mode]})`, { inputMode: "decimal", autoComplete: "off", required: true })}
+        {champ("tarif", `Tarif (€ / ${UNITES_REMUNERATION[mode]})`, {
+          inputMode: "decimal",
+          autoComplete: "off",
+          required: true,
+        })}
       </fieldset>
 
       {edition && (
@@ -151,7 +181,9 @@ function Champs({ etat, envoyer, enCours, edition, initial, retour }: PropsChamp
           <input type="checkbox" name="actif" defaultChecked={v.actif === "on"} className="mt-0.5" />
           <span>
             Actif
-            <span className="block text-xs text-doux">Décocher quand l’intervenant quitte l’école : son historique est conservé.</span>
+            <span className="block text-xs text-doux">
+              Décocher quand l’intervenant quitte l’école : son historique est conservé.
+            </span>
           </span>
         </label>
       )}

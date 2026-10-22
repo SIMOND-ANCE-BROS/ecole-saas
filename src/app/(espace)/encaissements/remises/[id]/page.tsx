@@ -46,7 +46,8 @@ export default async function PageRemise({ params, searchParams }: PageProps<"/e
             Bordereau de remise de {DE_QUOI[r.moyen]} du {jour(r.date)}
           </h1>
           <p className="text-sm">
-            {r.nombre} {r.nombre > 1 ? "paiements" : "paiement"}, total <strong className="tabular-nums">{formaterEuros(r.totalCentimes)}</strong>
+            {r.nombre} {r.nombre > 1 ? "paiements" : "paiement"}, total{" "}
+            <strong className="tabular-nums">{formaterEuros(r.totalCentimes)}</strong>
           </p>
         </div>
         <div className="flex flex-col items-end gap-2 print:hidden">
@@ -78,7 +79,10 @@ export default async function PageRemise({ params, searchParams }: PageProps<"/e
         </tbody>
         <tfoot>
           <tr>
-            <td colSpan={r.moyen === "cheque" ? 4 : r.moyen === "especes" ? 2 : 3} className="px-3 py-2 text-right font-semibold">
+            <td
+              colSpan={r.moyen === "cheque" ? 4 : r.moyen === "especes" ? 2 : 3}
+              className="px-3 py-2 text-right font-semibold"
+            >
               Total
             </td>
             <td className="px-3 py-2 text-right font-semibold tabular-nums">{formaterEuros(r.totalCentimes)}</td>

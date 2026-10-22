@@ -20,7 +20,14 @@ const compte = (requete: SQL) => sql<number>`(${requete})::int`;
 // Saisons
 // ---------------------------------------------------------------------------
 
-export type LigneSaison = { id: string; libelle: string; dateDebut: string; dateFin: string; cours: number; tarifs: number };
+export type LigneSaison = {
+  id: string;
+  libelle: string;
+  dateDebut: string;
+  dateFin: string;
+  cours: number;
+  tarifs: number;
+};
 
 export function listerSaisons(tx: Tx): Promise<LigneSaison[]> {
   const id = sql`${saison}.${sql.identifier("id")}`;
@@ -47,7 +54,10 @@ export const saisieSaisonValide = z
 
 async function controlerSaison(tx: Tx, s: z.output<typeof saisieSaisonValide>, sauf?: string): Promise<string | null> {
   const autre = sauf ? ne(saison.id, sauf) : undefined;
-  const [doublon] = await tx.select({ id: saison.id }).from(saison).where(and(eq(saison.libelle, s.libelle), autre));
+  const [doublon] = await tx
+    .select({ id: saison.id })
+    .from(saison)
+    .where(and(eq(saison.libelle, s.libelle), autre));
   if (doublon) return "Une saison porte déjà ce libellé.";
   const [chevauche] = await tx
     .select({ libelle: saison.libelle })
@@ -60,17 +70,26 @@ async function controlerSaison(tx: Tx, s: z.output<typeof saisieSaisonValide>, s
  * Crée une saison ; avec `reprendreDe`, recopie la grille tarifaire, les
  * réductions et les carnets de cette saison (les prix restent à revoir).
  */
-export async function creerSaison(tx: Tx, saisie: z.input<typeof saisieSaisonValide>, reprendreDe: string | null): Promise<Resultat> {
+export async function creerSaison(
+  tx: Tx,
+  saisie: z.input<typeof saisieSaisonValide>,
+  reprendreDe: string | null,
+): Promise<Resultat> {
   const s = saisieSaisonValide.safeParse(saisie);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   const refus = await controlerSaison(tx, s.data);
   if (refus) return { ok: false, message: refus };
   if (reprendreDe) {
-    const [ref] = estUuid(reprendreDe) ? await tx.select({ id: saison.id }).from(saison).where(eq(saison.id, reprendreDe)) : [];
+    const [ref] = estUuid(reprendreDe)
+      ? await tx.select({ id: saison.id }).from(saison).where(eq(saison.id, reprendreDe))
+      : [];
     if (!ref) return { ok: false, message: "Saison de référence introuvable." };
   }
 
-  const [{ id }] = await tx.insert(saison).values({ ...s.data, ecoleId: ECOLE_COURANTE }).returning({ id: saison.id });
+  const [{ id }] = await tx
+    .insert(saison)
+    .values({ ...s.data, ecoleId: ECOLE_COURANTE })
+    .returning({ id: saison.id });
   if (reprendreDe) {
     await tx.execute(sql`
       INSERT INTO tarif (ecole_id, saison_id, public, periodicite, combinaison, discipline_id, prix_centimes)
@@ -86,7 +105,11 @@ export async function creerSaison(tx: Tx, saisie: z.input<typeof saisieSaisonVal
   return { ok: true, id };
 }
 
-export async function modifierSaison(tx: Tx, id: string, saisie: z.input<typeof saisieSaisonValide>): Promise<Resultat> {
+export async function modifierSaison(
+  tx: Tx,
+  id: string,
+  saisie: z.input<typeof saisieSaisonValide>,
+): Promise<Resultat> {
   const s = saisieSaisonValide.safeParse(saisie);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   if (!estUuid(id)) return { ok: false, message: "Cette saison n’existe plus." };
@@ -127,7 +150,10 @@ export async function creerDiscipline(tx: Tx, nom: string): Promise<Resultat> {
   const n = nomValide.safeParse(nom);
   if (!n.success) return { ok: false, message: n.error.issues[0].message };
   if (await nomDisciplinePris(tx, n.data)) return { ok: false, message: "Cette discipline existe déjà." };
-  const [{ id }] = await tx.insert(discipline).values({ nom: n.data, ecoleId: ECOLE_COURANTE }).returning({ id: discipline.id });
+  const [{ id }] = await tx
+    .insert(discipline)
+    .values({ nom: n.data, ecoleId: ECOLE_COURANTE })
+    .returning({ id: discipline.id });
   return { ok: true, id };
 }
 
@@ -136,7 +162,11 @@ export async function renommerDiscipline(tx: Tx, id: string, nom: string): Promi
   if (!n.success) return { ok: false, message: n.error.issues[0].message };
   if (!estUuid(id)) return { ok: false, message: "Cette discipline n’existe plus." };
   if (await nomDisciplinePris(tx, n.data, id)) return { ok: false, message: "Cette discipline existe déjà." };
-  const lignes = await tx.update(discipline).set({ nom: n.data }).where(eq(discipline.id, id)).returning({ id: discipline.id });
+  const lignes = await tx
+    .update(discipline)
+    .set({ nom: n.data })
+    .where(eq(discipline.id, id))
+    .returning({ id: discipline.id });
   return lignes.length === 1 ? { ok: true, id } : { ok: false, message: "Cette discipline n’existe plus." };
 }
 
@@ -146,7 +176,10 @@ export async function supprimerDiscipline(tx: Tx, id: string): Promise<Resultat>
   const d = (await listerDisciplines(tx)).find((x) => x.id === id);
   if (!d) return { ok: false, message: "Cette discipline n’existe plus." };
   if (d.cours > 0 || d.tarifs > 0) {
-    return { ok: false, message: `${d.nom} est utilisée (${d.cours} cours, ${d.tarifs} tarif${d.tarifs > 1 ? "s" : ""}) : retirez-les d’abord.` };
+    return {
+      ok: false,
+      message: `${d.nom} est utilisée (${d.cours} cours, ${d.tarifs} tarif${d.tarifs > 1 ? "s" : ""}) : retirez-les d’abord.`,
+    };
   }
   await tx.delete(discipline).where(eq(discipline.id, id));
   return { ok: true, id };
@@ -157,7 +190,14 @@ export async function supprimerDiscipline(tx: Tx, id: string): Promise<Resultat>
 // ---------------------------------------------------------------------------
 
 export type LigneSalle = { id: string; nom: string; capacite: number | null; cours: number };
-export type LigneSite = { id: string; nom: string; adresse: string; permanence: boolean; salles: LigneSalle[]; horaires: Horaire[] };
+export type LigneSite = {
+  id: string;
+  nom: string;
+  adresse: string;
+  permanence: boolean;
+  salles: LigneSalle[];
+  horaires: Horaire[];
+};
 
 export async function listerLieux(tx: Tx): Promise<LigneSite[]> {
   const sites = await tx
@@ -179,7 +219,9 @@ export async function listerLieux(tx: Tx): Promise<LigneSite[]> {
   return sites.map((s) => ({
     ...s,
     horaires: horaires[s.id] ?? [],
-    salles: salles.filter((x) => x.siteId === s.id).map((x) => ({ id: x.id, nom: x.nom, capacite: x.capacite, cours: x.cours })),
+    salles: salles
+      .filter((x) => x.siteId === s.id)
+      .map((x) => ({ id: x.id, nom: x.nom, capacite: x.capacite, cours: x.cours })),
   }));
 }
 
@@ -192,7 +234,10 @@ export const saisieSiteValide = z.object({
 export async function creerSite(tx: Tx, saisie: z.input<typeof saisieSiteValide>): Promise<Resultat> {
   const s = saisieSiteValide.safeParse(saisie);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
-  const [{ id }] = await tx.insert(site).values({ ...s.data, ecoleId: ECOLE_COURANTE }).returning({ id: site.id });
+  const [{ id }] = await tx
+    .insert(site)
+    .values({ ...s.data, ecoleId: ECOLE_COURANTE })
+    .returning({ id: site.id });
   return { ok: true, id };
 }
 
@@ -218,11 +263,21 @@ export async function supprimerSite(tx: Tx, id: string): Promise<Resultat> {
 /** Horaires de chaque site, par identifiant de site (jours dans l'ordre). */
 export async function horairesParSite(tx: Tx): Promise<Record<string, Horaire[]>> {
   const lignes = await tx
-    .select({ siteId: horaireSite.siteId, jourSemaine: horaireSite.jourSemaine, ouverture: horaireSite.ouverture, fermeture: horaireSite.fermeture })
+    .select({
+      siteId: horaireSite.siteId,
+      jourSemaine: horaireSite.jourSemaine,
+      ouverture: horaireSite.ouverture,
+      fermeture: horaireSite.fermeture,
+    })
     .from(horaireSite)
     .orderBy(asc(horaireSite.jourSemaine));
   const r: Record<string, Horaire[]> = {};
-  for (const l of lignes) (r[l.siteId] ??= []).push({ jourSemaine: l.jourSemaine, ouverture: l.ouverture.slice(0, 5), fermeture: l.fermeture.slice(0, 5) });
+  for (const l of lignes)
+    (r[l.siteId] ??= []).push({
+      jourSemaine: l.jourSemaine,
+      ouverture: l.ouverture.slice(0, 5),
+      fermeture: l.fermeture.slice(0, 5),
+    });
   return r;
 }
 
@@ -234,14 +289,19 @@ export const horairesValides = z
   .refine((h) => h.every((x) => x.fermeture > x.ouverture), "L’heure de fermeture doit suivre l’ouverture.");
 
 /** Remplace les horaires d'un site ; une liste vide retire toute contrainte d'horaires. */
-export async function enregistrerHoraires(tx: Tx, siteId: string, saisie: z.input<typeof horairesValides>): Promise<Resultat> {
+export async function enregistrerHoraires(
+  tx: Tx,
+  siteId: string,
+  saisie: z.input<typeof horairesValides>,
+): Promise<Resultat> {
   const h = horairesValides.safeParse(saisie);
   if (!h.success) return { ok: false, message: h.error.issues[0].message };
   if (!estUuid(siteId)) return { ok: false, message: "Ce site n’existe plus." };
   const [s] = await tx.select({ id: site.id }).from(site).where(eq(site.id, siteId));
   if (!s) return { ok: false, message: "Ce site n’existe plus." };
   await tx.delete(horaireSite).where(eq(horaireSite.siteId, siteId));
-  if (h.data.length > 0) await tx.insert(horaireSite).values(h.data.map((x) => ({ ...x, siteId, ecoleId: ECOLE_COURANTE })));
+  if (h.data.length > 0)
+    await tx.insert(horaireSite).values(h.data.map((x) => ({ ...x, siteId, ecoleId: ECOLE_COURANTE })));
   return { ok: true, id: siteId };
 }
 
@@ -256,7 +316,10 @@ export async function creerSalle(tx: Tx, saisie: z.input<typeof saisieSalleValid
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   const [x] = await tx.select({ id: site.id }).from(site).where(eq(site.id, s.data.siteId));
   if (!x) return { ok: false, message: "Site introuvable." };
-  const [{ id }] = await tx.insert(salle).values({ ...s.data, ecoleId: ECOLE_COURANTE }).returning({ id: salle.id });
+  const [{ id }] = await tx
+    .insert(salle)
+    .values({ ...s.data, ecoleId: ECOLE_COURANTE })
+    .returning({ id: salle.id });
   return { ok: true, id };
 }
 

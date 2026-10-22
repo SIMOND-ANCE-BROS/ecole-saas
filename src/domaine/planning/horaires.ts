@@ -30,15 +30,26 @@ export function plagesOuvertes(horaires: Horaire[], jour: number): { debut: numb
  * ceux où un cours existe déjà), plage de la plus tôt ouverture à la plus
  * tardive fermeture, élargie aux cours qui en sortent, en heures pleines.
  */
-export function cadreAgenda(horaires: Horaire[], cours: CoursAgenda[]): { jours: number[]; debut: number; fin: number } {
+export function cadreAgenda(
+  horaires: Horaire[],
+  cours: CoursAgenda[],
+): { jours: number[]; debut: number; fin: number } {
   const hebdo = cours.filter((c) => c.jourSemaine !== null);
   if (horaires.length === 0) {
     const { debut, fin } = bornesJournee(cours);
     return { jours: [1, 2, 3, 4, 5, 6, ...(hebdo.some((c) => c.jourSemaine === 7) ? [7] : [])], debut, fin };
   }
-  const jours = [...new Set([...horaires.map((h) => h.jourSemaine), ...hebdo.map((c) => c.jourSemaine as number)])].sort((a, b) => a - b);
-  const debut = Math.min(...horaires.map((h) => versMinutes(h.ouverture)), ...hebdo.map((c) => versMinutes(c.heureDebut)));
-  const fin = Math.max(...horaires.map((h) => versMinutes(h.fermeture)), ...hebdo.map((c) => versMinutes(c.heureDebut) + c.dureeMinutes));
+  const jours = [
+    ...new Set([...horaires.map((h) => h.jourSemaine), ...hebdo.map((c) => c.jourSemaine as number)]),
+  ].sort((a, b) => a - b);
+  const debut = Math.min(
+    ...horaires.map((h) => versMinutes(h.ouverture)),
+    ...hebdo.map((c) => versMinutes(c.heureDebut)),
+  );
+  const fin = Math.max(
+    ...horaires.map((h) => versMinutes(h.fermeture)),
+    ...hebdo.map((c) => versMinutes(c.heureDebut) + c.dureeMinutes),
+  );
   return { jours, debut: Math.floor(debut / 60) * 60, fin: Math.ceil(fin / 60) * 60 };
 }
 
@@ -46,7 +57,10 @@ export function cadreAgenda(horaires: Horaire[], cours: CoursAgenda[]): { jours:
  * Message si un créneau hebdomadaire sort des horaires de son site ; null s'il
  * y entre, ou si le site n'a pas d'horaires (rien à vérifier).
  */
-export function horsHoraires(creneau: { jourSemaine: number; heureDebut: string; dureeMinutes: number }, horaires: Horaire[]): string | null {
+export function horsHoraires(
+  creneau: { jourSemaine: number; heureDebut: string; dureeMinutes: number },
+  horaires: Horaire[],
+): string | null {
   if (horaires.length === 0) return null;
   const plages = plagesOuvertes(horaires, creneau.jourSemaine);
   if (plages.length === 0) return `Le site est fermé le ${NOMS_JOURS[creneau.jourSemaine]}.`;

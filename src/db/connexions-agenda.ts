@@ -9,7 +9,12 @@ import { connexionAgenda, indisponibilite, intervenant } from "./schema";
 const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uuid`;
 const estUuid = (v: string) => z.uuid().safeParse(v).success;
 
-export type EtatConnexion = { fournisseur: Fournisseur; compte: string | null; derniereSynchro: Date | null; erreur: string | null };
+export type EtatConnexion = {
+  fournisseur: Fournisseur;
+  compte: string | null;
+  derniereSynchro: Date | null;
+  erreur: string | null;
+};
 
 /**
  * Enregistre (ou remplace) l'agenda connecté d'un intervenant actif ; le jeton
@@ -71,7 +76,11 @@ export async function intervenantsConnectes(tx: Tx): Promise<string[]> {
 }
 
 /** Résultat d'une synchronisation ; un jeton renouvelé par le fournisseur remplace l'ancien. */
-export async function noterSynchro(tx: Tx, intervenantId: string, r: { erreur: string | null; jetonChiffre?: string }): Promise<void> {
+export async function noterSynchro(
+  tx: Tx,
+  intervenantId: string,
+  r: { erreur: string | null; jetonChiffre?: string },
+): Promise<void> {
   await tx
     .update(connexionAgenda)
     .set({
@@ -85,9 +94,18 @@ export async function noterSynchro(tx: Tx, intervenantId: string, r: { erreur: s
 /** Déconnecte l'agenda et retire les plages à venir qui en venaient (les saisies restent). */
 export async function supprimerConnexion(tx: Tx, intervenantId: string): Promise<boolean> {
   if (!estUuid(intervenantId)) return false;
-  const lignes = await tx.delete(connexionAgenda).where(eq(connexionAgenda.intervenantId, intervenantId)).returning({ id: connexionAgenda.id });
+  const lignes = await tx
+    .delete(connexionAgenda)
+    .where(eq(connexionAgenda.intervenantId, intervenantId))
+    .returning({ id: connexionAgenda.id });
   await tx
     .delete(indisponibilite)
-    .where(and(eq(indisponibilite.intervenantId, intervenantId), ne(indisponibilite.origine, "saisie"), gt(indisponibilite.fin, sql`now()`)));
+    .where(
+      and(
+        eq(indisponibilite.intervenantId, intervenantId),
+        ne(indisponibilite.origine, "saisie"),
+        gt(indisponibilite.fin, sql`now()`),
+      ),
+    );
   return lignes.length === 1;
 }

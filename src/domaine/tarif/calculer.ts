@@ -26,9 +26,7 @@ import type {
 export function calculerTarif(demande: DemandeTarif): ResultatTarif {
   demande.reductions.forEach(verifierRegle);
 
-  const inscriptions = demande.inscriptions.map((inscription) =>
-    tarifer(inscription, demande),
-  );
+  const inscriptions = demande.inscriptions.map((inscription) => tarifer(inscription, demande));
   const tarifees = inscriptions.filter((r) => r.statut === "ok");
   const somme = (cle: "prixBrutCentimes" | "remiseCentimes" | "prixNetCentimes") =>
     tarifees.reduce((total, r) => total + r[cle], 0);

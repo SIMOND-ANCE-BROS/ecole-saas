@@ -23,7 +23,12 @@ export type Solde = {
   horsCalcul: Partial<Record<StatutInscription, number>>;
 };
 
-export function soldePayeur(inscriptions: InscriptionDue[], carnets: { prixCentimes: number }[], paiements: PaiementSolde[], aujourdhui: string): Solde {
+export function soldePayeur(
+  inscriptions: InscriptionDue[],
+  carnets: { prixCentimes: number }[],
+  paiements: PaiementSolde[],
+  aujourdhui: string,
+): Solde {
   let du = carnets.reduce((s, c) => s + c.prixCentimes, 0);
   const horsCalcul: Solde["horsCalcul"] = {};
   for (const i of inscriptions) {
@@ -31,6 +36,8 @@ export function soldePayeur(inscriptions: InscriptionDue[], carnets: { prixCenti
     else horsCalcul[i.statut] = (horsCalcul[i.statut] ?? 0) + i.prixNetCentimes;
   }
   const paye = paiements.reduce((s, p) => s + p.montantCentimes, 0);
-  const aEncaisser = paiements.filter((p) => p.montantCentimes > 0 && p.encaissementPrevu !== null && p.encaissementPrevu > aujourdhui).reduce((s, p) => s + p.montantCentimes, 0);
+  const aEncaisser = paiements
+    .filter((p) => p.montantCentimes > 0 && p.encaissementPrevu !== null && p.encaissementPrevu > aujourdhui)
+    .reduce((s, p) => s + p.montantCentimes, 0);
   return { du, paye, reste: du - paye, aEncaisser, horsCalcul };
 }

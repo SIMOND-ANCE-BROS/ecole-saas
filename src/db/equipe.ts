@@ -52,7 +52,8 @@ async function compteAilleurs(tx: Tx, userId: string): Promise<boolean> {
   await tx.execute(sql`select set_config('app.user_id', '', true)`);
   return n > 0;
 }
-export const PARTAGE = "Ce compte sert aussi dans une autre école : la personne doit changer elle-même son mot de passe.";
+export const PARTAGE =
+  "Ce compte sert aussi dans une autre école : la personne doit changer elle-même son mot de passe.";
 
 /** Compte (global) d'un membre de l'école, ou null. */
 export async function compteDuMembre(tx: Tx, membreId: string): Promise<string | null> {
@@ -66,7 +67,14 @@ export type MembreListe = { id: string; userId: string; nom: string; email: stri
 /** Membres de l'école, actifs d'abord, par nom. */
 export function listerMembres(tx: Tx): Promise<MembreListe[]> {
   return tx
-    .select({ id: membre.id, userId: membre.userId, nom: user.name, email: user.email, role: membre.role, actif: membre.actif })
+    .select({
+      id: membre.id,
+      userId: membre.userId,
+      nom: user.name,
+      email: user.email,
+      role: membre.role,
+      actif: membre.actif,
+    })
     .from(membre)
     .innerJoin(user, eq(user.id, membre.userId))
     .orderBy(sql`${membre.actif} DESC`, asc(user.name));
@@ -77,7 +85,13 @@ export type InvitationEnCours = { id: string; email: string; nom: string | null;
 /** Invitations ni utilisées ni expirées. */
 export function invitationsEnCours(tx: Tx, maintenant: Date): Promise<InvitationEnCours[]> {
   return tx
-    .select({ id: invitation.id, email: invitation.email, nom: invitation.nom, role: invitation.role, expireLe: invitation.expireLe })
+    .select({
+      id: invitation.id,
+      email: invitation.email,
+      nom: invitation.nom,
+      role: invitation.role,
+      expireLe: invitation.expireLe,
+    })
     .from(invitation)
     .where(and(eq(invitation.type, "invitation"), isNull(invitation.utiliseLe), gt(invitation.expireLe, maintenant)))
     .orderBy(asc(invitation.creeLe));
@@ -90,7 +104,12 @@ export const invitationValide = z.object({
 });
 
 /** Invite une personne ; une invitation encore ouverte pour le même e-mail est remplacée. */
-export async function inviter(tx: Tx, userId: string, saisie: z.input<typeof invitationValide>, maintenant: Date): Promise<ResultatLien> {
+export async function inviter(
+  tx: Tx,
+  userId: string,
+  saisie: z.input<typeof invitationValide>,
+  maintenant: Date,
+): Promise<ResultatLien> {
   const s = invitationValide.safeParse(saisie);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   const qui = await membreDe(tx, userId);
@@ -101,11 +120,20 @@ export async function inviter(tx: Tx, userId: string, saisie: z.input<typeof inv
     .innerJoin(user, eq(user.id, membre.userId))
     .where(eq(user.email, s.data.email));
   if (deja?.actif) return { ok: false, message: "Cette personne fait déjà partie de l’équipe." };
-  await tx.delete(invitation).where(and(eq(invitation.type, "invitation"), eq(invitation.email, s.data.email), isNull(invitation.utiliseLe)));
+  await tx
+    .delete(invitation)
+    .where(and(eq(invitation.type, "invitation"), eq(invitation.email, s.data.email), isNull(invitation.utiliseLe)));
   const jeton = nouveauJeton();
   const [{ id }] = await tx
     .insert(invitation)
-    .values({ ...s.data, ecoleId: ECOLE_COURANTE, type: "invitation", jetonHash: empreinte(jeton), expireLe: new Date(maintenant.getTime() + DUREE_INVITATION), creePar: qui })
+    .values({
+      ...s.data,
+      ecoleId: ECOLE_COURANTE,
+      type: "invitation",
+      jetonHash: empreinte(jeton),
+      expireLe: new Date(maintenant.getTime() + DUREE_INVITATION),
+      creePar: qui,
+    })
     .returning({ id: invitation.id });
   return { ok: true, id, jeton };
 }
@@ -113,12 +141,20 @@ export async function inviter(tx: Tx, userId: string, saisie: z.input<typeof inv
 /** Révoque une invitation pas encore utilisée : le lien cesse aussitôt de fonctionner. */
 export async function revoquerInvitation(tx: Tx, id: string): Promise<Resultat> {
   if (!estUuid(id)) return { ok: false, message: "Cette invitation n’existe plus." };
-  const lignes = await tx.delete(invitation).where(and(eq(invitation.id, id), isNull(invitation.utiliseLe))).returning({ id: invitation.id });
+  const lignes = await tx
+    .delete(invitation)
+    .where(and(eq(invitation.id, id), isNull(invitation.utiliseLe)))
+    .returning({ id: invitation.id });
   return lignes.length === 1 ? { ok: true, id } : { ok: false, message: "Cette invitation n’existe plus." };
 }
 
 /** Change le rôle ou l'activité d'un membre (direction), avec les garde-fous de l'équipe ; trace dans le journal. */
-export async function modifierMembre(tx: Tx, userId: string, membreId: string, apres: { role: Role; actif: boolean }): Promise<Resultat> {
+export async function modifierMembre(
+  tx: Tx,
+  userId: string,
+  membreId: string,
+  apres: { role: Role; actif: boolean },
+): Promise<Resultat> {
   if (!estUuid(membreId) || !(apres.role in ROLES)) return { ok: false, message: "Ce membre n’existe plus." };
   const qui = await membreDe(tx, userId);
   if (!qui) return { ok: false, message: "Accès refusé." };
@@ -144,14 +180,25 @@ export async function modifierMembre(tx: Tx, userId: string, membreId: string, a
  * refusé si le compte appartient aussi à une autre école (revérifié quand le
  * lien est utilisé).
  */
-export async function lienReinitialisation(tx: Tx, userId: string, membreId: string, maintenant: Date): Promise<ResultatLien> {
+export async function lienReinitialisation(
+  tx: Tx,
+  userId: string,
+  membreId: string,
+  maintenant: Date,
+): Promise<ResultatLien> {
   if (!estUuid(membreId)) return { ok: false, message: "Ce membre n’existe plus." };
   const qui = await membreDe(tx, userId);
   if (!qui) return { ok: false, message: "Accès refusé." };
-  const [m] = await tx.select({ userId: membre.userId, email: user.email, nom: user.name }).from(membre).innerJoin(user, eq(user.id, membre.userId)).where(eq(membre.id, membreId));
+  const [m] = await tx
+    .select({ userId: membre.userId, email: user.email, nom: user.name })
+    .from(membre)
+    .innerJoin(user, eq(user.id, membre.userId))
+    .where(eq(membre.id, membreId));
   if (!m) return { ok: false, message: "Ce membre n’existe plus." };
   if (await compteAilleurs(tx, m.userId)) return { ok: false, message: PARTAGE };
-  await tx.delete(invitation).where(and(eq(invitation.type, "reinitialisation"), eq(invitation.userId, m.userId), isNull(invitation.utiliseLe)));
+  await tx
+    .delete(invitation)
+    .where(and(eq(invitation.type, "reinitialisation"), eq(invitation.userId, m.userId), isNull(invitation.utiliseLe)));
   const jeton = nouveauJeton();
   const [{ id }] = await tx
     .insert(invitation)
@@ -194,7 +241,13 @@ export async function lireLien(tx: Tx, jeton: string, maintenant: Date): Promise
     })
     .from(invitation)
     .innerJoin(ecole, eq(ecole.id, invitation.ecoleId))
-    .where(and(eq(invitation.jetonHash, empreinte(jeton)), isNull(invitation.utiliseLe), gt(invitation.expireLe, maintenant)));
+    .where(
+      and(
+        eq(invitation.jetonHash, empreinte(jeton)),
+        isNull(invitation.utiliseLe),
+        gt(invitation.expireLe, maintenant),
+      ),
+    );
   return l ?? null;
 }
 

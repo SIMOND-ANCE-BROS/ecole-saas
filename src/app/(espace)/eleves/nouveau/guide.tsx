@@ -13,7 +13,13 @@ type Facturation = "eleve" | "responsable" | "autre";
  * Nouvel élève en une seule saisie : identité ; s'il est mineur, son
  * responsable (connu ou nouveau) et s'il faut le prévenir ; puis à qui facturer.
  */
-export function GuideNouvelEleve({ aujourdhui, responsableInitial }: { aujourdhui: string; responsableInitial?: { id: string; nom: string } }) {
+export function GuideNouvelEleve({
+  aujourdhui,
+  responsableInitial,
+}: {
+  aujourdhui: string;
+  responsableInitial?: { id: string; nom: string };
+}) {
   const [e, setE] = useState({ prenom: "", nom: "", dateNaissance: "", telephone: "", email: "", notes: "" });
   const [avecResponsable, setAvecResponsable] = useState<boolean | null>(responsableInitial ? true : null);
   const [responsable, setResponsable] = useState<Choix | null>(responsableInitial ?? null);
@@ -33,12 +39,20 @@ export function GuideNouvelEleve({ aujourdhui, responsableInitial }: { aujourdhu
   const responsableAffiche = avecResponsable ?? mineur;
   const factureChoisie: Facturation = facturation ?? (responsableAffiche ? "responsable" : "eleve");
   const prenom = e.prenom.trim() || "l’élève";
-  const nomResponsable = responsable ? ("id" in responsable ? responsable.nom : [responsable.nouveau.prenom, responsable.nouveau.nom].filter(Boolean).join(" ") || "le responsable") : "le responsable";
+  const nomResponsable = responsable
+    ? "id" in responsable
+      ? responsable.nom
+      : [responsable.nouveau.prenom, responsable.nouveau.nom].filter(Boolean).join(" ") || "le responsable"
+    : "le responsable";
 
   const maj = (champ: keyof typeof e) => (x: { target: { value: string } }) => setE({ ...e, [champ]: x.target.value });
   const erreur = (cle: string) => refus?.erreurs[cle];
   const sous = (prefixe: string) =>
-    Object.fromEntries(Object.entries(refus?.erreurs ?? {}).flatMap(([k, v]) => (k.startsWith(prefixe) ? [[k.slice(prefixe.length), v]] : [])));
+    Object.fromEntries(
+      Object.entries(refus?.erreurs ?? {}).flatMap(([k, v]) =>
+        k.startsWith(prefixe) ? [[k.slice(prefixe.length), v]] : [],
+      ),
+    );
 
   const envoyer = (confirme: boolean) =>
     demarrer(async () =>
@@ -49,7 +63,9 @@ export function GuideNouvelEleve({ aujourdhui, responsableInitial }: { aujourdhu
             responsable: responsableAffiche && responsable ? versSaisie(responsable) : null,
             aPrevenir,
             facturation:
-              factureChoisie === "autre" ? { type: "autre", payeur: payeur ? versSaisie(payeur) : null } : { type: factureChoisie },
+              factureChoisie === "autre"
+                ? { type: "autre", payeur: payeur ? versSaisie(payeur) : null }
+                : { type: factureChoisie },
           },
           confirme,
         ),
@@ -112,12 +128,17 @@ export function GuideNouvelEleve({ aujourdhui, responsableInitial }: { aujourdhu
               valeur={responsable}
               onChange={(c) => {
                 // Nouvelle personne : même nom de famille proposé.
-                setResponsable(c && "nouveau" in c && !c.nouveau.nom && !c.nouveau.prenom ? { nouveau: { ...c.nouveau, nom: e.nom } } : c);
+                setResponsable(
+                  c && "nouveau" in c && !c.nouveau.nom && !c.nouveau.prenom
+                    ? { nouveau: { ...c.nouveau, nom: e.nom } }
+                    : c,
+                );
               }}
               erreurs={sous("responsable.nouveau.")}
             />
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={aPrevenir} onChange={(x) => setAPrevenir(x.target.checked)} />À prévenir en cas d’urgence
+              <input type="checkbox" checked={aPrevenir} onChange={(x) => setAPrevenir(x.target.checked)} />À prévenir
+              en cas d’urgence
             </label>
             {!mineur && (
               <button type="button" className="lien self-start text-sm" onClick={() => setAvecResponsable(false)}>
@@ -147,12 +168,24 @@ export function GuideNouvelEleve({ aujourdhui, responsableInitial }: { aujourdhu
           .filter(([, , visible]) => visible)
           .map(([valeur, libelle]) => (
             <label key={valeur} className="flex items-center gap-2">
-              <input type="radio" name="facturation" checked={factureChoisie === valeur} onChange={() => setFacturation(valeur)} />
+              <input
+                type="radio"
+                name="facturation"
+                checked={factureChoisie === valeur}
+                onChange={() => setFacturation(valeur)}
+              />
               {libelle}
             </label>
           ))}
         {factureChoisie === "autre" && (
-          <ChoixPersonne id="payeur" libelle="Quel payeur ?" valeur={payeur} onChange={setPayeur} organisme erreurs={sous("facturation.payeur.nouveau.")} />
+          <ChoixPersonne
+            id="payeur"
+            libelle="Quel payeur ?"
+            valeur={payeur}
+            onChange={setPayeur}
+            organisme
+            erreurs={sous("facturation.payeur.nouveau.")}
+          />
         )}
         {erreur("facturation") && <p className="text-xs text-erreur">{erreur("facturation")}</p>}
         <p className="text-xs text-doux">
@@ -161,7 +194,11 @@ export function GuideNouvelEleve({ aujourdhui, responsableInitial }: { aujourdhu
       </fieldset>
 
       {refus?.doublons ? (
-        <div tabIndex={-1} role="alert" className="flex flex-col gap-2 rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
+        <div
+          tabIndex={-1}
+          role="alert"
+          className="flex flex-col gap-2 rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte"
+        >
           <p className="font-medium">{refus.message} Vérifiez avant de créer un doublon :</p>
           <ul className="flex flex-col gap-0.5">
             {refus.doublons.map((d) => (

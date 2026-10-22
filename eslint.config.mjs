@@ -23,7 +23,10 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-unsafe-member-access": "error",
       "@typescript-eslint/no-unsafe-return": "error",
       "@typescript-eslint/prefer-nullish-coalescing": "warn",
-      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" }],
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
       "no-console": ["warn", { allow: ["warn", "error"] }],
       "prefer-const": "error",
       "no-var": "error",

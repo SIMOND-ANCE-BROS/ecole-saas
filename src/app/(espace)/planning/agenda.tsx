@@ -68,13 +68,28 @@ type Props = {
  * un créneau vide propose un cours d'une heure. Au clavier, chaque bloc ouvre
  * sa fiche.
  */
-export function Agenda({ elements, colonnes: jours, debut: ouverture, fin: fermeture, horaires, modifiable, misEnAvant, deplacer, creer }: Props) {
+export function Agenda({
+  elements,
+  colonnes: jours,
+  debut: ouverture,
+  fin: fermeture,
+  horaires,
+  modifiable,
+  misEnAvant,
+  deplacer,
+  creer,
+}: Props) {
   const router = useRouter();
   const [enCours, demarrer] = useTransition();
   /** Créneau affiché pendant un geste, puis jusqu'au rechargement des données. */
   const [apercu, setApercu] = useState<({ id: string } & Creneau) | null>(null);
   const [selection, setSelection] = useState<{ jour: number; debut: number; duree: number } | null>(null);
-  const [aConfirmer, setAConfirmer] = useState<{ id: string; creneau: Creneau; question: string; choix: { valeur: string; libelle: string }[] } | null>(null);
+  const [aConfirmer, setAConfirmer] = useState<{
+    id: string;
+    creneau: Creneau;
+    question: string;
+    choix: { valeur: string; libelle: string }[];
+  } | null>(null);
   const [message, setMessage] = useState<{ type: "ok" | "refus"; texte: string; alertes: string[] } | null>(null);
   const colonnes = useRef(new Map<number, HTMLDivElement>());
   const vientDeGlisser = useRef(false);
@@ -158,7 +173,14 @@ export function Agenda({ elements, colonnes: jours, debut: ouverture, fin: ferme
     if (!modifiable || !c.deplacable || e.button !== 0 || enCours || aConfirmer) return;
     e.stopPropagation();
     vientDeGlisser.current = false;
-    commencer({ type, id: c.id, x: e.clientX, y: e.clientY, bouge: false, depart: { jourSemaine: c.jourSemaine, heureDebut: c.heureDebut, dureeMinutes: c.dureeMinutes } });
+    commencer({
+      type,
+      id: c.id,
+      x: e.clientX,
+      y: e.clientY,
+      bouge: false,
+      depart: { jourSemaine: c.jourSemaine, heureDebut: c.heureDebut, dureeMinutes: c.dureeMinutes },
+    });
   }
 
   // Glisser sur un créneau vide (souris) : choisir début et durée d'un nouveau cours.
@@ -183,10 +205,22 @@ export function Agenda({ elements, colonnes: jours, debut: ouverture, fin: ferme
     const decalage = aimanter((e.clientY - g.y) / PX);
     if (g.type === "etirer") {
       const debut = versMinutes(depart.heureDebut);
-      g.apercu = { id: g.id, ...depart, dureeMinutes: Math.min(fermeture - debut, Math.max(15, depart.dureeMinutes + decalage)) };
+      g.apercu = {
+        id: g.id,
+        ...depart,
+        dureeMinutes: Math.min(fermeture - debut, Math.max(15, depart.dureeMinutes + decalage)),
+      };
     } else {
-      const debut = Math.min(fermeture - depart.dureeMinutes, Math.max(ouverture, versMinutes(depart.heureDebut) + decalage));
-      g.apercu = { id: g.id, ...depart, jourSemaine: jourA(e.clientX) ?? depart.jourSemaine, heureDebut: versHeure(debut) };
+      const debut = Math.min(
+        fermeture - depart.dureeMinutes,
+        Math.max(ouverture, versMinutes(depart.heureDebut) + decalage),
+      );
+      g.apercu = {
+        id: g.id,
+        ...depart,
+        jourSemaine: jourA(e.clientX) ?? depart.jourSemaine,
+        heureDebut: versHeure(debut),
+      };
     }
     setApercu(g.apercu);
   }
@@ -205,7 +239,12 @@ export function Agenda({ elements, colonnes: jours, debut: ouverture, fin: ferme
     if (!g.bouge) return; // simple clic : le lien ouvre la fiche
     vientDeGlisser.current = true;
     const a = g.apercu;
-    if (!a || (a.jourSemaine === g.depart.jourSemaine && a.heureDebut === g.depart.heureDebut && a.dureeMinutes === g.depart.dureeMinutes)) {
+    if (
+      !a ||
+      (a.jourSemaine === g.depart.jourSemaine &&
+        a.heureDebut === g.depart.heureDebut &&
+        a.dureeMinutes === g.depart.dureeMinutes)
+    ) {
       setApercu(null);
       return;
     }
@@ -247,7 +286,11 @@ export function Agenda({ elements, colonnes: jours, debut: ouverture, fin: ferme
   return (
     <div className="flex flex-col gap-3">
       {aConfirmer && (
-        <div role="alertdialog" aria-labelledby="confirmer-deplacement" className="panneau flex flex-wrap items-center gap-3 border-accent p-3 text-sm">
+        <div
+          role="alertdialog"
+          aria-labelledby="confirmer-deplacement"
+          className="panneau flex flex-wrap items-center gap-3 border-accent p-3 text-sm"
+        >
           <p id="confirmer-deplacement" className="flex-1">
             {aConfirmer.question}
           </p>
@@ -289,12 +332,16 @@ export function Agenda({ elements, colonnes: jours, debut: ouverture, fin: ferme
       </div>
       {modifiable && (
         <p className="text-xs text-doux">
-          Glissez un bloc pour le déplacer, tirez son bord bas pour changer sa durée, cliquez ou glissez sur un créneau libre pour créer un cours.
+          Glissez un bloc pour le déplacer, tirez son bord bas pour changer sa durée, cliquez ou glissez sur un créneau
+          libre pour créer un cours.
         </p>
       )}
 
       <div className="panneau overflow-x-auto">
-        <div className="grid min-w-[44rem] select-none" style={{ gridTemplateColumns: `3rem repeat(${jours.length}, minmax(6.5rem, 1fr))` }}>
+        <div
+          className="grid min-w-[44rem] select-none"
+          style={{ gridTemplateColumns: `3rem repeat(${jours.length}, minmax(6.5rem, 1fr))` }}
+        >
           <div className="sticky left-0 z-20 border-b border-bordure bg-surface" />
           {jours.map((c) => (
             <h2 key={c.jour} className="border-b border-l border-bordure px-2 py-1.5 text-sm font-semibold">
@@ -305,7 +352,11 @@ export function Agenda({ elements, colonnes: jours, debut: ouverture, fin: ferme
 
           <div className="sticky left-0 z-20 bg-surface" style={{ height: hauteur }} aria-hidden>
             {heures.map((h) => (
-              <span key={h} className="absolute right-1.5 -translate-y-1/2 text-xs tabular-nums text-doux" style={{ top: (h - ouverture) * PX }}>
+              <span
+                key={h}
+                className="absolute right-1.5 -translate-y-1/2 text-xs tabular-nums text-doux"
+                style={{ top: (h - ouverture) * PX }}
+              >
                 {h < fermeture && h > ouverture ? `${h / 60} h` : ""}
               </span>
             ))}
@@ -385,7 +436,9 @@ export function Agenda({ elements, colonnes: jours, debut: ouverture, fin: ferme
                         <span className={`block font-semibold ${c.barre ? "line-through" : ""}`}>
                           {c.titre}
                           {c.alerte && <span className="font-normal text-alerte-texte"> · {c.alerte}</span>}
-                          {c.etiquette && <span className="ml-1 rounded bg-surface px-1 font-normal text-doux">{c.etiquette}</span>}
+                          {c.etiquette && (
+                            <span className="ml-1 rounded bg-surface px-1 font-normal text-doux">{c.etiquette}</span>
+                          )}
                         </span>
                         <span className="block tabular-nums">
                           {c.heureDebut}–{fin(c.heureDebut, c.dureeMinutes)}
@@ -410,7 +463,6 @@ export function Agenda({ elements, colonnes: jours, debut: ouverture, fin: ferme
           ))}
         </div>
       </div>
-
     </div>
   );
 }

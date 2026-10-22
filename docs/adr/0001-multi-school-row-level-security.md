@@ -5,14 +5,16 @@
 - Issue: #111
 
 ## Context
+
 The product is a SaaS shared by several dance schools. Their data (minors,
 health notes, payments) must never leak from one school to another, and the
 code is written by a single developer helped by AI agents: a forgotten
 `WHERE ecole_id = …` must not be enough to cause a leak.
 
 ## Decision
+
 - Every business table carries `ecole_id` and has `ENABLE` + `FORCE ROW LEVEL
-  SECURITY` with the policy `isolation_ecole`, comparing `ecole_id` with the
+SECURITY` with the policy `isolation_ecole`, comparing `ecole_id` with the
   transaction setting `app.ecole_id` (`migrations/0001_rls.sql`, then one SQL
   migration per new table).
 - The application connects as `app_user` (no BYPASSRLS). Every business query
@@ -28,11 +30,13 @@ code is written by a single developer helped by AI agents: a forgotten
   `src/db/droits.integration.test.ts`.
 
 ## Alternatives considered
+
 - **Application-level filtering only**: one forgotten condition leaks data; rejected.
 - **One database or schema per school**: strongest isolation, but migrations,
   connections and backups multiply for a single developer; rejected for V1.
 
 ## Consequences
+
 - Tests about isolation run against a real PostgreSQL, never mocks.
 - Every new table needs its RLS migration; the guard test fails otherwise.
 - Changing `0001_rls.sql`, `avecEcole()` or the policy is flagged explicitly in

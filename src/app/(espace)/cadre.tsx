@@ -35,11 +35,7 @@ export function Cadre({ volet, entete, children }: Props) {
         id="volet"
         className={`${ouvert ? "fixed inset-0 z-40 flex overflow-y-auto" : "hidden"} shrink-0 flex-col gap-6 border-bordure bg-surface p-3 print:hidden md:sticky md:top-0 md:flex md:h-screen md:w-52 md:border-r`}
       >
-        <button
-          type="button"
-          className="bouton-secondaire self-end md:hidden"
-          onClick={() => setOuvert(false)}
-        >
+        <button type="button" className="bouton-secondaire self-end md:hidden" onClick={() => setOuvert(false)}>
           Fermer
         </button>
         {volet}
@@ -60,7 +56,9 @@ export function Cadre({ volet, entete, children }: Props) {
           </button>
           {entete}
         </header>
-        <main id="contenu" tabIndex={-1} className="w-full min-w-0 flex-1 p-3 sm:p-4 md:p-6">{children}</main>
+        <main id="contenu" tabIndex={-1} className="w-full min-w-0 flex-1 p-3 sm:p-4 md:p-6">
+          {children}
+        </main>
       </div>
     </div>
   );

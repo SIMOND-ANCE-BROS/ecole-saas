@@ -27,8 +27,8 @@ export default async function PageFermetures() {
       <div>
         <h1 className="titre-page">Fermetures {saison?.libelle}</h1>
         <p className="text-sm text-doux">
-          Vacances, jours fériés, gala : aucun cours n’a lieu ces jours-là. Les séances à venir se mettent à jour aussitôt ; une
-          séance dont l’appel est fait n’est jamais retirée.
+          Vacances, jours fériés, gala : aucun cours n’a lieu ces jours-là. Les séances à venir se mettent à jour
+          aussitôt ; une séance dont l’appel est fait n’est jamais retirée.
         </p>
       </div>
       {saison ? (

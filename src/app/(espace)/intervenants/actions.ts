@@ -25,10 +25,17 @@ export type EtatFormulaire = {
 const texte = (f: FormData, nom: string) => String(f.get(nom) ?? "");
 
 /** Crée (id null) ou modifie un intervenant ; réservé à la direction. */
-export async function enregistrerIntervenant(id: string | null, etat: EtatFormulaire, f: FormData): Promise<EtatFormulaire> {
+export async function enregistrerIntervenant(
+  id: string | null,
+  etat: EtatFormulaire,
+  f: FormData,
+): Promise<EtatFormulaire> {
   const { ecoleId } = await exigerRole("direction");
   const valeurs = Object.fromEntries(
-    ["prenom", "nom", "email", "statut", "siren", "regimeTva", "modeRemuneration", "tarif"].map((n) => [n, texte(f, n)]),
+    ["prenom", "nom", "email", "statut", "siren", "regimeTva", "modeRemuneration", "tarif"].map((n) => [
+      n,
+      texte(f, n),
+    ]),
   );
   const tarifCentimes = lireEuros(valeurs.tarif);
   const donnees = saisieIntervenantValide.safeParse({
@@ -65,7 +72,9 @@ async function origine(): Promise<string> {
 }
 
 /** Crée ou remplace le lien d'abonnement à l'agenda ; l'adresse n'est montrée qu'une fois. */
-export async function creerLienAgenda(intervenantId: string): Promise<{ url: string; page: string } | { message: string }> {
+export async function creerLienAgenda(
+  intervenantId: string,
+): Promise<{ url: string; page: string } | { message: string }> {
   const { ecoleId } = await exigerRole("direction");
   const jeton = await avecEcole(ecoleId, (tx) => creerJetonAgenda(tx, intervenantId));
   if (!jeton) return { message: "Cet intervenant n’existe plus." };
@@ -116,7 +125,11 @@ export async function synchroniserMaintenant(intervenantId: string): Promise<{ m
   const { ecoleId } = await exigerRole("direction");
   const r = await synchroniserAgenda(ecoleId, intervenantId);
   revalidatePath(`/intervenants/${intervenantId}`);
-  return { message: r.ok ? `Agenda mis à jour : ${r.plages} plage${r.plages > 1 ? "s" : ""} occupée${r.plages > 1 ? "s" : ""}.` : r.message };
+  return {
+    message: r.ok
+      ? `Agenda mis à jour : ${r.plages} plage${r.plages > 1 ? "s" : ""} occupée${r.plages > 1 ? "s" : ""}.`
+      : r.message,
+  };
 }
 
 export async function deconnecterAgenda(intervenantId: string): Promise<{ message: string }> {

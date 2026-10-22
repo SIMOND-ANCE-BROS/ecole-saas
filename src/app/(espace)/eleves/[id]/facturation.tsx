@@ -82,7 +82,13 @@ export function Facturation({ eleveId, prenom, mineur, factureA, proches, fratri
           <legend className="sr-only">Facturer à</legend>
           {!mineur && (
             <label className="flex items-center gap-2">
-              <input type="radio" name="facturer" checked={factureA.type === "eleve"} disabled={enCours} onChange={() => choisir(() => facturer(eleveId, { type: "eleve" }))} />
+              <input
+                type="radio"
+                name="facturer"
+                checked={factureA.type === "eleve"}
+                disabled={enCours}
+                onChange={() => choisir(() => facturer(eleveId, { type: "eleve" }))}
+              />
               {prenom}
             </label>
           )}
@@ -96,7 +102,9 @@ export function Facturation({ eleveId, prenom, mineur, factureA, proches, fratri
                 onChange={() => choisir(() => facturer(eleveId, { type: "personne", id: p.id }))}
               />
               {p.nom}
-              <span className="text-xs text-doux">{p.relation === "responsable" ? "responsable" : p.relation === "conjoint" ? "conjoint" : "proche"}</span>
+              <span className="text-xs text-doux">
+                {p.relation === "responsable" ? "responsable" : p.relation === "conjoint" ? "conjoint" : "proche"}
+              </span>
             </label>
           ))}
           <label className="flex items-center gap-2">
@@ -105,7 +113,14 @@ export function Facturation({ eleveId, prenom, mineur, factureA, proches, fratri
           </label>
           {voirAutre && (
             <div className="flex flex-col gap-2 pl-6">
-              <ChoixPersonne id="autre-payeur" libelle="Quel payeur ?" valeur={autre} onChange={setAutre} exclure={[eleveId]} organisme />
+              <ChoixPersonne
+                id="autre-payeur"
+                libelle="Quel payeur ?"
+                valeur={autre}
+                onChange={setAutre}
+                exclure={[eleveId]}
+                organisme
+              />
               <button
                 type="button"
                 className="bouton-principal self-start"

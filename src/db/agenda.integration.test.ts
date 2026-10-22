@@ -19,10 +19,13 @@ let ines: string;
 beforeAll(async () => {
   [{ id: ecole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École A', ${`ga-${suffixe}`}) RETURNING id`;
   [{ id: autreEcole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École B', ${`gb-${suffixe}`}) RETURNING id`;
-  const [saison] = await admin`INSERT INTO saison (ecole_id, libelle, date_debut, date_fin) VALUES (${ecole}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
+  const [saison] =
+    await admin`INSERT INTO saison (ecole_id, libelle, date_debut, date_fin) VALUES (${ecole}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   const [d] = await admin`INSERT INTO discipline (ecole_id, nom) VALUES (${ecole}, 'Jazz') RETURNING id`;
-  const [s] = await admin`INSERT INTO site (ecole_id, nom, adresse) VALUES (${ecole}, 'Centre', '1 rue Test') RETURNING id`;
-  const [salle] = await admin`INSERT INTO salle (ecole_id, site_id, nom) VALUES (${ecole}, ${s.id}, 'Studio') RETURNING id`;
+  const [s] =
+    await admin`INSERT INTO site (ecole_id, nom, adresse) VALUES (${ecole}, 'Centre', '1 rue Test') RETURNING id`;
+  const [salle] =
+    await admin`INSERT INTO salle (ecole_id, site_id, nom) VALUES (${ecole}, ${s.id}, 'Studio') RETURNING id`;
   const prof = async (prenom: string) =>
     (
       await admin`INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
@@ -30,7 +33,8 @@ beforeAll(async () => {
     )[0].id as string;
   camille = await prof("Camille");
   ines = await prof("Inès");
-  const [c] = await admin`INSERT INTO cours (ecole_id, saison_id, discipline_id, salle_id, intervenant_id, jour_semaine, heure_debut, duree_minutes, niveau)
+  const [c] =
+    await admin`INSERT INTO cours (ecole_id, saison_id, discipline_id, salle_id, intervenant_id, jour_semaine, heure_debut, duree_minutes, niveau)
     VALUES (${ecole}, ${saison.id}, ${d.id}, ${salle.id}, ${camille}, 3, '17:00', 60, 'Débutant') RETURNING id`;
   await admin`INSERT INTO seance (ecole_id, cours_id, date, intervenant_id, statut) VALUES
     (${ecole}, ${c.id}, '2026-10-14', ${camille}, 'effectuee'),
@@ -62,12 +66,18 @@ describe("abonnement iCal", () => {
       "2026-11-04 Jazz Débutant false",
       "2026-11-25 Jazz Débutant true",
     ]);
-    expect(agenda?.seances[0]).toMatchObject({ heureDebut: "17:00", dureeMinutes: 60, lieu: "Studio, Centre, 1 rue Test" });
+    expect(agenda?.seances[0]).toMatchObject({
+      heureDebut: "17:00",
+      dureeMinutes: 60,
+      lieu: "Studio, Centre, 1 rue Test",
+    });
   });
 
   it("donne au remplaçant la séance qu’il assure", async () => {
     const jeton = await avecEcole(ecole, (tx) => creerJetonAgenda(tx, ines));
-    expect((await avecEcole(ecole, (tx) => lireAgenda(tx, jeton as string, "2026-10-20")))?.seances.map((s) => s.date)).toEqual(["2026-11-18"]);
+    expect(
+      (await avecEcole(ecole, (tx) => lireAgenda(tx, jeton as string, "2026-10-20")))?.seances.map((s) => s.date),
+    ).toEqual(["2026-11-18"]);
   });
 
   it("refuse un jeton d’une autre école, un jeton inconnu, et un jeton remplacé ou révoqué", async () => {

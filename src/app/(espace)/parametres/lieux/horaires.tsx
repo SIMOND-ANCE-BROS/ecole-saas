@@ -31,14 +31,18 @@ export function HorairesSite({ siteId, nom, horaires }: { siteId: string; nom: s
       <summary className="cursor-pointer px-3 py-2 font-medium">
         Horaires d’ouverture{" "}
         <span className="font-normal text-doux">
-          {horaires.length === 0 ? "— non renseignés (le planning reste libre)" : `— ${horaires.length} jour${horaires.length > 1 ? "s" : ""}`}
+          {horaires.length === 0
+            ? "— non renseignés (le planning reste libre)"
+            : `— ${horaires.length} jour${horaires.length > 1 ? "s" : ""}`}
         </span>
       </summary>
       <form
         className="flex flex-col gap-2 px-3 pb-3"
         onSubmit={(e) => {
           e.preventDefault();
-          const saisie = [1, 2, 3, 4, 5, 6, 7].filter((j) => jours[j].ouvert).map((j) => ({ jourSemaine: j, ouverture: jours[j].ouverture, fermeture: jours[j].fermeture }));
+          const saisie = [1, 2, 3, 4, 5, 6, 7]
+            .filter((j) => jours[j].ouvert)
+            .map((j) => ({ jourSemaine: j, ouverture: jours[j].ouverture, fermeture: jours[j].fermeture }));
           demarrer(async () => {
             const r = await changerHoraires(siteId, saisie);
             setMessage(r.message ? { ok: false, texte: r.message } : { ok: true, texte: "Horaires enregistrés." });
@@ -52,7 +56,11 @@ export function HorairesSite({ siteId, nom, horaires }: { siteId: string; nom: s
               <tr key={j}>
                 <td className="py-1 pr-3">
                   <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={jours[j].ouvert} onChange={(e) => maj(j, { ouvert: e.target.checked })} />
+                    <input
+                      type="checkbox"
+                      checked={jours[j].ouvert}
+                      onChange={(e) => maj(j, { ouvert: e.target.checked })}
+                    />
                     {JOURS[j]}
                   </label>
                 </td>
@@ -62,12 +70,26 @@ export function HorairesSite({ siteId, nom, horaires }: { siteId: string; nom: s
                       <label className="sr-only" htmlFor={`ouv-${siteId}-${j}`}>
                         Ouverture le {JOURS[j].toLowerCase()}
                       </label>
-                      <input id={`ouv-${siteId}-${j}`} type="time" step={900} className="champ" value={jours[j].ouverture} onChange={(e) => maj(j, { ouverture: e.target.value })} />
+                      <input
+                        id={`ouv-${siteId}-${j}`}
+                        type="time"
+                        step={900}
+                        className="champ"
+                        value={jours[j].ouverture}
+                        onChange={(e) => maj(j, { ouverture: e.target.value })}
+                      />
                       <span aria-hidden>–</span>
                       <label className="sr-only" htmlFor={`ferm-${siteId}-${j}`}>
                         Fermeture le {JOURS[j].toLowerCase()}
                       </label>
-                      <input id={`ferm-${siteId}-${j}`} type="time" step={900} className="champ" value={jours[j].fermeture} onChange={(e) => maj(j, { fermeture: e.target.value })} />
+                      <input
+                        id={`ferm-${siteId}-${j}`}
+                        type="time"
+                        step={900}
+                        className="champ"
+                        value={jours[j].fermeture}
+                        onChange={(e) => maj(j, { fermeture: e.target.value })}
+                      />
                     </span>
                   ) : (
                     <span className="text-doux">fermé</span>
@@ -88,7 +110,11 @@ export function HorairesSite({ siteId, nom, horaires }: { siteId: string; nom: s
               onClick={() => {
                 const premier = [1, 2, 3, 4, 5, 6, 7].find((j) => jours[j].ouvert)!;
                 const { ouverture, fermeture } = jours[premier];
-                setJours(Object.fromEntries(Object.entries(jours).map(([k, v]) => [k, v.ouvert ? { ...v, ouverture, fermeture } : v])) as Record<number, Jour>);
+                setJours(
+                  Object.fromEntries(
+                    Object.entries(jours).map(([k, v]) => [k, v.ouvert ? { ...v, ouverture, fermeture } : v]),
+                  ) as Record<number, Jour>,
+                );
               }}
             >
               Mêmes heures pour tous les jours ouverts

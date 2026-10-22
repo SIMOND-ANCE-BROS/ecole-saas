@@ -22,7 +22,8 @@ export default async function PageInscription({ params }: PageProps<"/eleves/[id
   const donnees = await avecEcole(ecoleId, async (tx) => {
     const eleve = await lireEleve(tx, id, aujourdhui);
     if (!eleve) return null;
-    const payeurId = eleve.factureA.type === "personne" ? eleve.factureA.id : eleve.factureA.type === "eleve" ? eleve.id : null;
+    const payeurId =
+      eleve.factureA.type === "personne" ? eleve.factureA.id : eleve.factureA.type === "eleve" ? eleve.id : null;
     const saison = await saisonCourante(tx, aujourdhui);
     return {
       eleve,
@@ -51,7 +52,11 @@ export default async function PageInscription({ params }: PageProps<"/eleves/[id
       </nav>
       <div>
         <h1 className="titre-page">Nouvelle inscription{saison && ` ${saison.libelle}`}</h1>
-        {payeurId && <p className="text-sm text-doux">Facturée à {payeur}. Pour changer, modifiez « Facturé à » sur la fiche de l’élève.</p>}
+        {payeurId && (
+          <p className="text-sm text-doux">
+            Facturée à {payeur}. Pour changer, modifiez « Facturé à » sur la fiche de l’élève.
+          </p>
+        )}
       </div>
       {!saison ? (
         <p className="text-sm">Aucune saison n’est paramétrée.</p>
@@ -66,7 +71,11 @@ export default async function PageInscription({ params }: PageProps<"/eleves/[id
       ) : (
         <FormulaireInscription
           payeurId={payeurId}
-          danseurs={danseurs.map((d) => ({ id: d.id, prenom: d.prenom, age: d.dateNaissance ? ageAu(d.dateNaissance, aujourdhui) : null }))}
+          danseurs={danseurs.map((d) => ({
+            id: d.id,
+            prenom: d.prenom,
+            age: d.dateNaissance ? ageAu(d.dateNaissance, aujourdhui) : null,
+          }))}
           cours={cours}
           danseurInitial={eleve.id}
         />

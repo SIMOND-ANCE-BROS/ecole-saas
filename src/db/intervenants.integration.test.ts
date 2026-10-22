@@ -1,7 +1,13 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { avecEcole } from "./index";
-import { creerIntervenant, lireIntervenant, listerIntervenants, modifierIntervenant, type SaisieIntervenant } from "./intervenants";
+import {
+  creerIntervenant,
+  lireIntervenant,
+  listerIntervenants,
+  modifierIntervenant,
+  type SaisieIntervenant,
+} from "./intervenants";
 
 /** Intervenants, lus et écrits comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
 
@@ -64,7 +70,10 @@ describe("modifierIntervenant", () => {
     const id = await avecEcole(ecole, (tx) => creerIntervenant(tx, { ...camille, prenom: "Inès", nom: "Garnier" }));
     const modifie = { ...camille, prenom: "Inès", nom: "Garnier", tarifCentimes: 4500, actif: false };
     expect(await avecEcole(ecole, (tx) => modifierIntervenant(tx, id, modifie))).toBe(true);
-    expect(await avecEcole(ecole, (tx) => lireIntervenant(tx, id))).toMatchObject({ tarifCentimes: 4500, actif: false });
+    expect(await avecEcole(ecole, (tx) => lireIntervenant(tx, id))).toMatchObject({
+      tarifCentimes: 4500,
+      actif: false,
+    });
   });
 
   it("ne modifie pas un intervenant d’une autre école", async () => {
@@ -80,8 +89,10 @@ describe("listerIntervenants", () => {
       INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
       VALUES (${ecole}, 'Faure', 'Lucas', 'societe', 'assujetti', 'cours', 3500) RETURNING id`;
     const [d] = await admin`INSERT INTO discipline (ecole_id, nom) VALUES (${ecole}, 'Jazz') RETURNING id`;
-    const [s] = await admin`INSERT INTO site (ecole_id, nom, adresse) VALUES (${ecole}, 'Centre', '1 rue Test') RETURNING id`;
-    const [salle] = await admin`INSERT INTO salle (ecole_id, site_id, nom) VALUES (${ecole}, ${s.id}, 'Studio') RETURNING id`;
+    const [s] =
+      await admin`INSERT INTO site (ecole_id, nom, adresse) VALUES (${ecole}, 'Centre', '1 rue Test') RETURNING id`;
+    const [salle] =
+      await admin`INSERT INTO salle (ecole_id, site_id, nom) VALUES (${ecole}, ${s.id}, 'Studio') RETURNING id`;
     await admin`
       INSERT INTO cours (ecole_id, saison_id, discipline_id, salle_id, intervenant_id, jour_semaine, heure_debut, duree_minutes)
       VALUES (${ecole}, ${saison}, ${d.id}, ${salle.id}, ${lucas}, 1, '18:00', 60), (${ecole}, ${saison}, ${d.id}, ${salle.id}, ${lucas}, 3, '18:00', 90)`;

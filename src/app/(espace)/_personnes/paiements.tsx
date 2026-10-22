@@ -4,7 +4,12 @@ import type { Solde } from "@/domaine/encaissement/solde";
 import { formaterEuros } from "@/lib/montant";
 import { CorrigerPaiement } from "./corriger";
 
-const dateCourte = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const dateCourte = new Intl.DateTimeFormat("fr-FR", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
 const jour = (iso: string) => dateCourte.format(new Date(`${iso}T00:00:00Z`));
 const HORS_CALCUL = { abandon: "abandonnées", essai: "à l’essai", liste_attente: "en liste d’attente" } as const;
 
@@ -43,12 +48,19 @@ export function SectionPaiements({ payeurId, solde, paiements, retour, direction
           </div>
           <div>
             <dt className="text-xs text-doux">{solde.reste < 0 ? "Trop-perçu" : "Reste à payer"}</dt>
-            <dd className={`font-semibold tabular-nums ${solde.reste > 0 ? "text-alerte-texte" : ""}`}>{formaterEuros(Math.abs(solde.reste))}</dd>
+            <dd className={`font-semibold tabular-nums ${solde.reste > 0 ? "text-alerte-texte" : ""}`}>
+              {formaterEuros(Math.abs(solde.reste))}
+            </dd>
           </div>
-          {solde.aEncaisser > 0 && <p className="col-span-3 text-xs text-doux">Dont {formaterEuros(solde.aEncaisser)} en chèques à encaisser plus tard.</p>}
+          {solde.aEncaisser > 0 && (
+            <p className="col-span-3 text-xs text-doux">
+              Dont {formaterEuros(solde.aEncaisser)} en chèques à encaisser plus tard.
+            </p>
+          )}
           {Object.entries(solde.horsCalcul).map(([statut, montant]) => (
             <p key={statut} className="col-span-3 text-xs text-doux">
-              Inscriptions {HORS_CALCUL[statut as keyof typeof HORS_CALCUL] ?? statut} : {formaterEuros(montant ?? 0)}, non comptées dans le dû.
+              Inscriptions {HORS_CALCUL[statut as keyof typeof HORS_CALCUL] ?? statut} : {formaterEuros(montant ?? 0)},
+              non comptées dans le dû.
             </p>
           ))}
         </dl>
@@ -79,10 +91,20 @@ export function SectionPaiements({ payeurId, solde, paiements, retour, direction
                     <td>{[p.reference, p.emetteur].filter(Boolean).join(", ") || "—"}</td>
                     <td className="text-right tabular-nums whitespace-nowrap">{formaterEuros(p.montantCentimes)}</td>
                     <td className="whitespace-nowrap">
-                      {p.montantCentimes < 0 ? "correction" : p.encaissementPrevu && p.encaissementPrevu > aujourdhui ? `le ${jour(p.encaissementPrevu)}` : "encaissé"}
+                      {p.montantCentimes < 0
+                        ? "correction"
+                        : p.encaissementPrevu && p.encaissementPrevu > aujourdhui
+                          ? `le ${jour(p.encaissementPrevu)}`
+                          : "encaissé"}
                     </td>
                     {direction && (
-                      <td>{p.montantCentimes > 0 && restant > 0 ? <CorrigerPaiement paiementId={p.id} restant={restant} retour={retour} /> : p.corrigeCentimes > 0 ? <span className="text-xs text-doux">corrigé</span> : null}</td>
+                      <td>
+                        {p.montantCentimes > 0 && restant > 0 ? (
+                          <CorrigerPaiement paiementId={p.id} restant={restant} retour={retour} />
+                        ) : p.corrigeCentimes > 0 ? (
+                          <span className="text-xs text-doux">corrigé</span>
+                        ) : null}
+                      </td>
                     )}
                   </tr>
                 );

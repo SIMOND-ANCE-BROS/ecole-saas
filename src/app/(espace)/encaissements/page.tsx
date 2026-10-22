@@ -44,7 +44,12 @@ export default async function PageEncaissements({ searchParams }: PageProps<"/en
       )}
       <nav aria-label="Vues" className="flex overflow-hidden self-start rounded-md border border-bordure text-sm">
         {(Object.keys(VUES) as Vue[]).map((v) => (
-          <Link key={v} href={`/encaissements?vue=${v}`} aria-current={vue === v ? "page" : undefined} className={`px-3 py-1.5 ${vue === v ? "bg-accent text-sur-accent" : "hover:bg-accent-doux"}`}>
+          <Link
+            key={v}
+            href={`/encaissements?vue=${v}`}
+            aria-current={vue === v ? "page" : undefined}
+            className={`px-3 py-1.5 ${vue === v ? "bg-accent text-sur-accent" : "hover:bg-accent-doux"}`}
+          >
             {VUES[v]}
           </Link>
         ))}
@@ -103,7 +108,9 @@ export default async function PageEncaissements({ searchParams }: PageProps<"/en
           ) : (
             <div className="panneau overflow-x-auto">
               <table className="tableau">
-                <caption className="sr-only">Encaissements du {jour(du)} au {jour(au)}</caption>
+                <caption className="sr-only">
+                  Encaissements du {jour(du)} au {jour(au)}
+                </caption>
                 <thead>
                   <tr>
                     <th>Reçu le</th>
@@ -127,7 +134,11 @@ export default async function PageEncaissements({ searchParams }: PageProps<"/en
                       <td>{MOYENS[l.moyen]}</td>
                       <td>{[l.reference, l.emetteur].filter(Boolean).join(", ") || "—"}</td>
                       <td className="text-right tabular-nums whitespace-nowrap">{formaterEuros(l.montantCentimes)}</td>
-                      <td className="whitespace-nowrap">{l.encaissementPrevu && l.encaissementPrevu > aujourdhui ? `le ${jour(l.encaissementPrevu)}` : "—"}</td>
+                      <td className="whitespace-nowrap">
+                        {l.encaissementPrevu && l.encaissementPrevu > aujourdhui
+                          ? `le ${jour(l.encaissementPrevu)}`
+                          : "—"}
+                      </td>
                       <td className="whitespace-nowrap">
                         {l.remiseId ? (
                           <Link href={`/encaissements/remises/${l.remiseId}`} className="lien">
@@ -148,8 +159,12 @@ export default async function PageEncaissements({ searchParams }: PageProps<"/en
 
       {vue === "remettre" && donnees.aRemettre && (
         <>
-          <p className="text-sm text-doux">Chèques dont la date d’encaissement est arrivée, espèces et chèques vacances pas encore déposés.</p>
-          {MOYENS_REMISE.every((m) => donnees.aRemettre![m].length === 0) && <p className="text-sm">Rien à remettre pour l’instant.</p>}
+          <p className="text-sm text-doux">
+            Chèques dont la date d’encaissement est arrivée, espèces et chèques vacances pas encore déposés.
+          </p>
+          {MOYENS_REMISE.every((m) => donnees.aRemettre![m].length === 0) && (
+            <p className="text-sm">Rien à remettre pour l’instant.</p>
+          )}
           {MOYENS_REMISE.filter((m) => donnees.aRemettre![m].length > 0).map((m) => (
             <ARemettre key={m} moyen={m} paiements={donnees.aRemettre![m]} aujourdhui={aujourdhui} />
           ))}

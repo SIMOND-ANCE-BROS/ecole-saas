@@ -18,14 +18,11 @@ const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uu
 /** Minuscules sans accents, côté base (sans extension) et côté saisie. */
 const ACCENTS = "àâäáãéèêëíìîïóòôöõúùûüçñ";
 const SANS_ACCENTS = "aaaaaeeeeiiiiooooouuuucn";
-const normaliserColonne = (colonne: AnyColumn) => sql`translate(lower(coalesce(${colonne}, '')), ${ACCENTS}, ${SANS_ACCENTS})`;
+const normaliserColonne = (colonne: AnyColumn) =>
+  sql`translate(lower(coalesce(${colonne}, '')), ${ACCENTS}, ${SANS_ACCENTS})`;
 
 function normaliser(saisie: string): string {
-  return saisie
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .trim();
+  return saisie.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
 
 /** Échappe les jokers de LIKE (%, _, \) d'une saisie. */
@@ -91,7 +88,8 @@ export function conditionRecherche(saisie: string, alias = "personne"): SQL | nu
   const texte = normaliser(saisie);
   if (texte.length < LONGUEUR_MINIMALE) return null;
   const motif = contient(texte);
-  const col = (c: string) => sql`translate(lower(coalesce(${sql.identifier(alias)}.${sql.identifier(c)}, '')), ${ACCENTS}, ${SANS_ACCENTS})`;
+  const col = (c: string) =>
+    sql`translate(lower(coalesce(${sql.identifier(alias)}.${sql.identifier(c)}, '')), ${ACCENTS}, ${SANS_ACCENTS})`;
   const conditions: SQL[] = [
     sql`${col("nom")} LIKE ${motif}`,
     sql`${col("prenom")} LIKE ${motif}`,
@@ -101,7 +99,9 @@ export function conditionRecherche(saisie: string, alias = "personne"): SQL | nu
     sql`lower(coalesce(${sql.identifier(alias)}.email, '')) LIKE ${motif}`,
   ];
   if (chiffres(texte).length >= 4) {
-    conditions.push(sql`regexp_replace(coalesce(${sql.identifier(alias)}.telephone, ''), '[^0-9]', '', 'g') LIKE ${contient(chiffres(texte))}`);
+    conditions.push(
+      sql`regexp_replace(coalesce(${sql.identifier(alias)}.telephone, ''), '[^0-9]', '', 'g') LIKE ${contient(chiffres(texte))}`,
+    );
   }
   return or(...conditions) ?? null;
 }
@@ -110,7 +110,12 @@ export function conditionRecherche(saisie: string, alias = "personne"): SQL | nu
 export async function rechercherPersonnes(tx: Tx, saisie: string): Promise<ResultatPersonne[]> {
   const condition = conditionRecherche(saisie);
   if (!condition) return [];
-  return tx.select(colonnesResultat).from(personne).where(condition).orderBy(asc(personne.nom), asc(personne.prenom)).limit(RESULTATS_MAX);
+  return tx
+    .select(colonnesResultat)
+    .from(personne)
+    .where(condition)
+    .orderBy(asc(personne.nom), asc(personne.prenom))
+    .limit(RESULTATS_MAX);
 }
 
 /** Toutes les personnes de l'école, par nom (sans recherche saisie). */
@@ -208,7 +213,10 @@ export async function lirePersonne(tx: Tx, id: string): Promise<FichePersonne | 
       email: autre.email,
     })
     .from(lien)
-    .innerJoin(autre, sql`${autre.id} = CASE WHEN ${lien.personneId} = ${id} THEN ${lien.lieAId} ELSE ${lien.personneId} END`)
+    .innerJoin(
+      autre,
+      sql`${autre.id} = CASE WHEN ${lien.personneId} = ${id} THEN ${lien.lieAId} ELSE ${lien.personneId} END`,
+    )
     .where(or(eq(lien.personneId, id), eq(lien.lieAId, id)))
     .orderBy(asc(autre.prenom), asc(autre.nom));
 
@@ -349,16 +357,24 @@ const valeursPersonne = (f: SaisiePersonne) => ({
 /** Personnes déjà connues avec le même téléphone, le même e-mail, les mêmes nom et prénom ou la même raison sociale. */
 export async function doublonsProbables(tx: Tx, f: SaisiePersonne): Promise<Doublon[]> {
   const conditions: SQL[] = [];
-  if (f.telephone && chiffres(f.telephone).length >= 6) conditions.push(sql`${telephoneEnChiffres} = ${chiffres(f.telephone)}`);
+  if (f.telephone && chiffres(f.telephone).length >= 6)
+    conditions.push(sql`${telephoneEnChiffres} = ${chiffres(f.telephone)}`);
   if (f.email) conditions.push(sql`lower(${personne.email}) = lower(${f.email})`);
   if (f.type === "particulier" && f.prenom)
     conditions.push(
       sql`${normaliserColonne(personne.nom)} = ${normaliser(f.nom)} AND ${normaliserColonne(personne.prenom)} = ${normaliser(f.prenom)}`,
     );
-  if (f.raisonSociale) conditions.push(sql`${normaliserColonne(personne.raisonSociale)} = ${normaliser(f.raisonSociale)}`);
+  if (f.raisonSociale)
+    conditions.push(sql`${normaliserColonne(personne.raisonSociale)} = ${normaliser(f.raisonSociale)}`);
   if (conditions.length === 0) return [];
   const lignes = await tx
-    .select({ id: personne.id, nom: personne.nom, prenom: personne.prenom, raisonSociale: personne.raisonSociale, telephone: personne.telephone })
+    .select({
+      id: personne.id,
+      nom: personne.nom,
+      prenom: personne.prenom,
+      raisonSociale: personne.raisonSociale,
+      telephone: personne.telephone,
+    })
     .from(personne)
     .where(or(...conditions))
     .orderBy(asc(personne.nom))
@@ -392,7 +408,10 @@ export async function creerPersonne(
     .returning({ id: personne.id });
   if (lienAvec) {
     const { autreId, de, ...l } = lienAvec;
-    const r = await ajouterLien(tx, de === "nouvelle" ? { ...l, personneId: id, lieAId: autreId } : { ...l, personneId: autreId, lieAId: id });
+    const r = await ajouterLien(
+      tx,
+      de === "nouvelle" ? { ...l, personneId: id, lieAId: autreId } : { ...l, personneId: autreId, lieAId: id },
+    );
     if (!r.ok) throw new RefusLien(r.message);
   }
   return { statut: "ok", id };
@@ -401,7 +420,11 @@ export async function creerPersonne(
 export async function modifierPersonne(tx: Tx, id: string, saisie: SaisiePersonne): Promise<Resultat> {
   const refus = { ok: false as const, message: "Cette personne n’existe plus." };
   if (!z.uuid().safeParse(id).success) return refus;
-  const lignes = await tx.update(personne).set(valeursPersonne(saisie)).where(eq(personne.id, id)).returning({ id: personne.id });
+  const lignes = await tx
+    .update(personne)
+    .set(valeursPersonne(saisie))
+    .where(eq(personne.id, id))
+    .returning({ id: personne.id });
   return lignes.length === 1 ? { ok: true, id } : refus;
 }
 
@@ -419,16 +442,25 @@ export async function ajouterLien(tx: Tx, saisie: z.input<typeof lienValide>): P
   if (!l.success) return { ok: false, message: "Lien invalide." };
   const { personneId, lieAId } = l.data;
   if (personneId === lieAId) return { ok: false, message: "Une personne ne peut pas être liée à elle-même." };
-  const presentes = await tx.select({ id: personne.id }).from(personne).where(or(eq(personne.id, personneId), eq(personne.id, lieAId)));
+  const presentes = await tx
+    .select({ id: personne.id })
+    .from(personne)
+    .where(or(eq(personne.id, personneId), eq(personne.id, lieAId)));
   if (presentes.length !== 2) return { ok: false, message: "Personne introuvable." };
   const [existant] = await tx
     .select({ id: lien.id })
     .from(lien)
     .where(
-      or(and(eq(lien.personneId, personneId), eq(lien.lieAId, lieAId)), and(eq(lien.personneId, lieAId), eq(lien.lieAId, personneId))),
+      or(
+        and(eq(lien.personneId, personneId), eq(lien.lieAId, lieAId)),
+        and(eq(lien.personneId, lieAId), eq(lien.lieAId, personneId)),
+      ),
     );
   if (existant) return { ok: false, message: "Ces deux personnes sont déjà liées." };
-  const [{ id }] = await tx.insert(lien).values({ ...l.data, ecoleId: ECOLE_COURANTE }).returning({ id: lien.id });
+  const [{ id }] = await tx
+    .insert(lien)
+    .values({ ...l.data, ecoleId: ECOLE_COURANTE })
+    .returning({ id: lien.id });
   return { ok: true, id };
 }
 

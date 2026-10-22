@@ -8,11 +8,19 @@ export type Role = "direction" | "accueil" | "professeur";
 export type MembreEquipe = { id: string; role: Role; actif: boolean };
 
 /** Message de refus d'un changement de rôle ou d'activité, ou null s'il est permis. */
-export function refusChangement(membres: MembreEquipe[], auteurId: string, cibleId: string, apres: { role: Role; actif: boolean }): string | null {
+export function refusChangement(
+  membres: MembreEquipe[],
+  auteurId: string,
+  cibleId: string,
+  apres: { role: Role; actif: boolean },
+): string | null {
   const cible = membres.find((m) => m.id === cibleId);
   if (!cible) return "Ce membre n’existe plus.";
-  if (cibleId === auteurId) return "Vous ne pouvez pas modifier votre propre accès : demandez à une autre personne de la direction.";
-  const directions = membres.filter((m) => (m.id === cibleId ? apres.role === "direction" && apres.actif : m.role === "direction" && m.actif)).length;
+  if (cibleId === auteurId)
+    return "Vous ne pouvez pas modifier votre propre accès : demandez à une autre personne de la direction.";
+  const directions = membres.filter((m) =>
+    m.id === cibleId ? apres.role === "direction" && apres.actif : m.role === "direction" && m.actif,
+  ).length;
   if (directions === 0) return "Il faut au moins une personne active à la direction.";
   return null;
 }

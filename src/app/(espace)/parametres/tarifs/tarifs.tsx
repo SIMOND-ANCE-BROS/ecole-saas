@@ -52,7 +52,13 @@ function CellulePrix({
       return;
     }
     demarrer(async () => {
-      const r = await prixCase(saisonId, { public: ligne.public, combinaison: ligne.combinaison, disciplineId: ligne.disciplineId, periodicite, prixCentimes: centimes });
+      const r = await prixCase(saisonId, {
+        public: ligne.public,
+        combinaison: ligne.combinaison,
+        disciplineId: ligne.disciplineId,
+        periodicite,
+        prixCentimes: centimes,
+      });
       setEtat(r.message ? "erreur" : "enregistre");
       setMessage(r.message);
       if (r.message) setValeur(initial);
@@ -90,23 +96,43 @@ function CellulePrix({
   );
 }
 
-export function Grille({ saisonId, grille, disciplines }: { saisonId: string; grille: LigneGrille[]; disciplines: { id: string; nom: string }[] }) {
+export function Grille({
+  saisonId,
+  grille,
+  disciplines,
+}: {
+  saisonId: string;
+  grille: LigneGrille[];
+  disciplines: { id: string; nom: string }[];
+}) {
   const [publicChoisi, setPublic] = useState<Public>("enfant");
   const [combinaison, setCombinaison] = useState<number[]>([]);
   const [disciplineId, setDisciplineId] = useState("");
   const [duree, setDuree] = useState("60");
-  const [nouveauxPrix, setNouveauxPrix] = useState<Record<Periodicite, string>>({ trimestre: "", annee: "", unite: "" });
+  const [nouveauxPrix, setNouveauxPrix] = useState<Record<Periodicite, string>>({
+    trimestre: "",
+    annee: "",
+    unite: "",
+  });
   const [message, setMessage] = useState<string | null>(null);
   const [enCours, demarrer] = useTransition();
   const lignes = grille.filter((l) => l.public === publicChoisi);
 
   const ajouterLigne = () =>
     demarrer(async () => {
-      const prix = PERIODICITES.flatMap(([p]) => (nouveauxPrix[p].trim() ? [[p, lireEuros(nouveauxPrix[p])] as const] : []));
+      const prix = PERIODICITES.flatMap(([p]) =>
+        nouveauxPrix[p].trim() ? [[p, lireEuros(nouveauxPrix[p])] as const] : [],
+      );
       if (prix.length === 0) return setMessage("Indiquez au moins un prix.");
       if (prix.some(([, c]) => c === null)) return setMessage("Montant en euros, par exemple 110 ou 112,50.");
       for (const [periodicite, centimes] of prix) {
-        const r = await prixCase(saisonId, { public: publicChoisi, combinaison, disciplineId: disciplineId || null, periodicite, prixCentimes: centimes });
+        const r = await prixCase(saisonId, {
+          public: publicChoisi,
+          combinaison,
+          disciplineId: disciplineId || null,
+          periodicite,
+          prixCentimes: centimes,
+        });
         if (r.message) return setMessage(r.message);
       }
       setMessage(null);
@@ -118,7 +144,13 @@ export function Grille({ saisonId, grille, disciplines }: { saisonId: string; gr
     demarrer(async () => {
       for (const [periodicite] of PERIODICITES) {
         if (!l.prix[periodicite]) continue;
-        const r = await prixCase(saisonId, { public: l.public, combinaison: l.combinaison, disciplineId: l.disciplineId, periodicite, prixCentimes: null });
+        const r = await prixCase(saisonId, {
+          public: l.public,
+          combinaison: l.combinaison,
+          disciplineId: l.disciplineId,
+          periodicite,
+          prixCentimes: null,
+        });
         if (r.message) return setMessage(r.message);
       }
       setMessage(null);
@@ -175,16 +207,29 @@ export function Grille({ saisonId, grille, disciplines }: { saisonId: string; gr
                 <tr key={cle}>
                   <td>
                     <span className="font-medium">{libelle}</span>
-                    {l.discipline && <span className="ml-2 rounded bg-accent-doux px-1.5 text-xs">{l.discipline} seulement</span>}
+                    {l.discipline && (
+                      <span className="ml-2 rounded bg-accent-doux px-1.5 text-xs">{l.discipline} seulement</span>
+                    )}
                   </td>
                   {PERIODICITES.map(([p, libellePeriode]) => (
                     <td key={`${cle}-${p}-${l.prix[p]?.centimes ?? "vide"}`}>
-                      <CellulePrix saisonId={saisonId} ligne={l} periodicite={p} libelle={`${libelle}, ${libellePeriode}`} />
+                      <CellulePrix
+                        saisonId={saisonId}
+                        ligne={l}
+                        periodicite={p}
+                        libelle={`${libelle}, ${libellePeriode}`}
+                      />
                     </td>
                   ))}
                   <td className="text-right">
                     {!utilisee && (
-                      <button type="button" className="lien text-xs text-doux" disabled={enCours} onClick={() => retirerLigne(l)} aria-label={`Retirer la ligne ${libelle}`}>
+                      <button
+                        type="button"
+                        className="lien text-xs text-doux"
+                        disabled={enCours}
+                        onClick={() => retirerLigne(l)}
+                        aria-label={`Retirer la ligne ${libelle}`}
+                      >
                         Retirer
                       </button>
                     )}
@@ -209,7 +254,11 @@ export function Grille({ saisonId, grille, disciplines }: { saisonId: string; gr
               ))}
             </select>
           </div>
-          <button type="button" className="bouton-secondaire" onClick={() => setCombinaison([...combinaison, Number(duree)].sort((a, b) => a - b))}>
+          <button
+            type="button"
+            className="bouton-secondaire"
+            onClick={() => setCombinaison([...combinaison, Number(duree)].sort((a, b) => a - b))}
+          >
             Ajouter ce cours
           </button>
           <span className="pb-2" aria-live="polite">
@@ -228,7 +277,12 @@ export function Grille({ saisonId, grille, disciplines }: { saisonId: string; gr
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
             <label htmlFor="discipline-ligne">Discipline</label>
-            <select id="discipline-ligne" className="champ" value={disciplineId} onChange={(e) => setDisciplineId(e.target.value)}>
+            <select
+              id="discipline-ligne"
+              className="champ"
+              value={disciplineId}
+              onChange={(e) => setDisciplineId(e.target.value)}
+            >
               <option value="">Toutes</option>
               {disciplines.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -249,7 +303,12 @@ export function Grille({ saisonId, grille, disciplines }: { saisonId: string; gr
               />
             </div>
           ))}
-          <button type="button" className="bouton-principal" disabled={enCours || combinaison.length === 0} onClick={ajouterLigne}>
+          <button
+            type="button"
+            className="bouton-principal"
+            disabled={enCours || combinaison.length === 0}
+            onClick={ajouterLigne}
+          >
             Ajouter la ligne
           </button>
         </div>
@@ -267,7 +326,11 @@ export function Fratrie({ saisonId, fratrie }: { saisonId: string; fratrie: Regl
   const [v, setV] = useState({
     active: fratrie !== null,
     mode: fratrie?.montantCentimes ? "montant" : "taux",
-    valeur: fratrie?.montantCentimes ? enEuros(fratrie.montantCentimes) : fratrie?.tauxPointsBase ? enEuros(fratrie.tauxPointsBase) : "10",
+    valeur: fratrie?.montantCentimes
+      ? enEuros(fratrie.montantCentimes)
+      : fratrie?.tauxPointsBase
+        ? enEuros(fratrie.tauxPointsBase)
+        : "10",
     seuil: String(fratrie?.seuilDanseurs ?? 2),
     publics: fratrie?.publics ?? (["enfant"] as Public[]),
     cumulable: fratrie?.cumulableMultiDisciplines ?? false,
@@ -309,18 +372,34 @@ export function Fratrie({ saisonId, fratrie }: { saisonId: string; fratrie: Regl
           <div className="flex flex-wrap items-end gap-2">
             <div className="flex flex-col gap-1">
               <label htmlFor="fratrie-valeur">Réduction</label>
-              <input id="fratrie-valeur" inputMode="decimal" className="champ w-24 text-right" value={v.valeur} onChange={(e) => setV({ ...v, valeur: e.target.value })} />
+              <input
+                id="fratrie-valeur"
+                inputMode="decimal"
+                className="champ w-24 text-right"
+                value={v.valeur}
+                onChange={(e) => setV({ ...v, valeur: e.target.value })}
+              />
             </div>
             <label className="sr-only" htmlFor="fratrie-mode">
               Unité
             </label>
-            <select id="fratrie-mode" className="champ" value={v.mode} onChange={(e) => setV({ ...v, mode: e.target.value })}>
+            <select
+              id="fratrie-mode"
+              className="champ"
+              value={v.mode}
+              onChange={(e) => setV({ ...v, mode: e.target.value })}
+            >
               <option value="taux">% par élève</option>
               <option value="montant">€ par élève</option>
             </select>
             <div className="flex flex-col gap-1">
               <label htmlFor="fratrie-seuil">À partir de</label>
-              <select id="fratrie-seuil" className="champ" value={v.seuil} onChange={(e) => setV({ ...v, seuil: e.target.value })}>
+              <select
+                id="fratrie-seuil"
+                className="champ"
+                value={v.seuil}
+                onChange={(e) => setV({ ...v, seuil: e.target.value })}
+              >
                 {[2, 3, 4].map((n) => (
                   <option key={n} value={n}>
                     {n} élèves
@@ -336,14 +415,20 @@ export function Fratrie({ saisonId, fratrie }: { saisonId: string; fratrie: Regl
                 <input
                   type="checkbox"
                   checked={v.publics.includes(p)}
-                  onChange={(e) => setV({ ...v, publics: e.target.checked ? [...v.publics, p] : v.publics.filter((x) => x !== p) })}
+                  onChange={(e) =>
+                    setV({ ...v, publics: e.target.checked ? [...v.publics, p] : v.publics.filter((x) => x !== p) })
+                  }
                 />
                 {libelle}
               </label>
             ))}
           </fieldset>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={v.cumulable} onChange={(e) => setV({ ...v, cumulable: e.target.checked })} />
+            <input
+              type="checkbox"
+              checked={v.cumulable}
+              onChange={(e) => setV({ ...v, cumulable: e.target.checked })}
+            />
             Cumulable avec un forfait de plusieurs disciplines
           </label>
         </>
@@ -389,7 +474,12 @@ export function Carnets({ saisonId, carnets }: { saisonId: string; carnets: Lign
                 {c.personnesMax === 1 ? "1 personne" : `jusqu’à ${c.personnesMax} personnes`}
               </span>
               <span className="tabular-nums">{formaterEuros(c.prixCentimes)}</span>
-              <button type="button" className="lien ml-auto text-xs text-doux" disabled={enCours} onClick={() => agir(() => retirerCarnet(c.id))}>
+              <button
+                type="button"
+                className="lien ml-auto text-xs text-doux"
+                disabled={enCours}
+                onClick={() => agir(() => retirerCarnet(c.id))}
+              >
                 Retirer
               </button>
             </li>
@@ -402,20 +492,48 @@ export function Carnets({ saisonId, carnets }: { saisonId: string; carnets: Lign
           e.preventDefault();
           const prix = lireEuros(v.prix);
           if (prix === null) return setMessage("Montant en euros, par exemple 250.");
-          agir(() => carnet(saisonId, { nbSeances: Number(v.nbSeances), personnesMax: Number(v.personnesMax), prixCentimes: prix }), () => setV({ ...v, prix: "" }));
+          agir(
+            () =>
+              carnet(saisonId, {
+                nbSeances: Number(v.nbSeances),
+                personnesMax: Number(v.personnesMax),
+                prixCentimes: prix,
+              }),
+            () => setV({ ...v, prix: "" }),
+          );
         }}
       >
         <div className="flex flex-col gap-1">
           <label htmlFor="carnet-seances">Séances</label>
-          <input id="carnet-seances" type="number" min={1} className="champ w-20" value={v.nbSeances} onChange={(e) => setV({ ...v, nbSeances: e.target.value })} />
+          <input
+            id="carnet-seances"
+            type="number"
+            min={1}
+            className="champ w-20"
+            value={v.nbSeances}
+            onChange={(e) => setV({ ...v, nbSeances: e.target.value })}
+          />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="carnet-personnes">Personnes (max)</label>
-          <input id="carnet-personnes" type="number" min={1} className="champ w-20" value={v.personnesMax} onChange={(e) => setV({ ...v, personnesMax: e.target.value })} />
+          <input
+            id="carnet-personnes"
+            type="number"
+            min={1}
+            className="champ w-20"
+            value={v.personnesMax}
+            onChange={(e) => setV({ ...v, personnesMax: e.target.value })}
+          />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="carnet-prix">Prix (€)</label>
-          <input id="carnet-prix" inputMode="decimal" className="champ w-28 text-right" value={v.prix} onChange={(e) => setV({ ...v, prix: e.target.value })} />
+          <input
+            id="carnet-prix"
+            inputMode="decimal"
+            className="champ w-28 text-right"
+            value={v.prix}
+            onChange={(e) => setV({ ...v, prix: e.target.value })}
+          />
         </div>
         <button type="submit" className="bouton-secondaire" disabled={enCours}>
           Enregistrer le carnet
