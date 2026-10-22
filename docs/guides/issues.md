@@ -151,7 +151,7 @@ An epic is closed when all its sub-issues are closed.
 ## 8. Branches, PRs and the « École de danse — Roadmap » Project
 
 **Branches.** Never push directly to `main`. A branch starts from `main` with
-an allowed prefix, checked in CI (`.github/workflows/pr-branche.yml`):
+an allowed prefix, checked in CI (`.github/workflows/pr-conventions.yml`, which also checks that the PR title is a conventional commit):
 
 | Prefix | For |
 | --- | --- |

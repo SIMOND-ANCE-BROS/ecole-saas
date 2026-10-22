@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Déplace des issues dans la colonne Status du Project « École de danse — Roadmap ».
+# Moves issues in the Status column of the « École de danse — Roadmap » Project.
 #
-# Usage : project-status.sh <status> <n° d'issue>...
-#   status : Todo, In Progress, In Review ou Done. Une issue absente du Project y est ajoutée.
+# Usage: project-status.sh <status> <issue number>...
+#   status: Todo, In Progress, In Review or Done. An issue missing from the Project is added.
 #
-# Env : GH_TOKEN (Projects de l'organisation en écriture + issues du dépôt en lecture),
-#       GITHUB_REPOSITORY, PROJECT_OWNER, PROJECT_NUMBER.
-# Cycle de vie : docs/guides/issues.md §8.
+# Env: GH_TOKEN (write access to the organisation Projects + read access to the repo issues),
+#      GITHUB_REPOSITORY, PROJECT_OWNER, PROJECT_NUMBER.
+# Lifecycle: docs/guides/issues.md §8.
 set -euo pipefail
 
-STATUS="${1:?status attendu}"
+STATUS="${1:?status expected}"
 shift
-[ "$#" -gt 0 ] || { echo "Aucune issue à déplacer."; exit 0; }
+[ "$#" -gt 0 ] || { echo "No issue to move."; exit 0; }
 
 OWNER="${PROJECT_OWNER:?}"
 NUMBER="${PROJECT_NUMBER:?}"
@@ -37,7 +37,7 @@ OPTION_ID=$(jq -r --arg s "$STATUS" \
   '.data.organization.projectV2.field.options[] | select(.name == $s) | .id' <<<"$project")
 
 if [ -z "$OPTION_ID" ]; then
-  echo "::error::Statut « $STATUS » introuvable dans le Project."
+  echo "::error::Status \"$STATUS\" not found in the Project."
   exit 1
 fi
 
@@ -49,11 +49,11 @@ for issue in "$@"; do
     }' --jq '.data.repository.issue.id' 2>/dev/null || true)
 
   if [ -z "$node" ] || [ "$node" = "null" ]; then
-    echo "#$issue n'est pas une issue de ce dépôt : ignorée."
+    echo "#$issue is not an issue of this repository: skipped."
     continue
   fi
 
-  # Idempotent : renvoie la carte existante si l'issue est déjà dans le Project.
+  # Idempotent: returns the existing card if the issue is already in the Project.
   # shellcheck disable=SC2016
   item=$(gh api graphql -f project="$PROJECT_ID" -f content="$node" -f query='
     mutation($project: ID!, $content: ID!) {

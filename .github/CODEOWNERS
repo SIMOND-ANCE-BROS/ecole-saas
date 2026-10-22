@@ -1,0 +1,14 @@
+# Review required from the owner on sensitive paths only (not global): tenant
+# isolation, schema and migrations, session and auth, secrets handling,
+# invoicing connectors and CI. See ADR 0001 and CLAUDE.md §8.
+/migrations/                 @GabinSMD
+/src/db/                     @GabinSMD
+/src/lib/session.ts          @GabinSMD
+/src/lib/auth.ts             @GabinSMD
+/src/lib/chiffrement.ts      @GabinSMD
+/src/lib/invitations.ts      @GabinSMD
+/src/connecteurs/            @GabinSMD
+/src/proxy.ts                @GabinSMD
+/.github/workflows/          @GabinSMD
+/.github/CODEOWNERS          @GabinSMD
+/docker/                     @GabinSMD

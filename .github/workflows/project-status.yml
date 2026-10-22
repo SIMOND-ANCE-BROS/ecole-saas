@@ -1,18 +1,18 @@
-name: Statut du Project
+name: Project status
 
-# Fait suivre au Project « École de danse — Roadmap » l'avancement du travail
-# (docs/guides/issues.md §8) :
+# Keeps the « École de danse — Roadmap » Project in step with the work
+# (docs/guides/issues.md §8):
 #
-#   issue ouverte / rouverte          → Todo
-#   PR brouillon qui référence #N     → In Progress
-#   PR prête à relire                 → In Review
-#   PR mergée, `Closes/Fixes #N`      → Done (GitHub ferme l'issue)
-#   PR mergée, `Refs #N`              → In Progress (l'issue attend d'autres PR)
-#   PR fermée sans merge              → Todo
-#   issue fermée                      → Done
+#   issue opened / reopened           → Todo
+#   draft PR referencing #N           → In Progress
+#   PR ready for review               → In Review
+#   PR merged, `Closes/Fixes #N`      → Done (GitHub closes the issue)
+#   PR merged, `Refs #N`              → In Progress (the issue awaits other PRs)
+#   PR closed without merge           → Todo
+#   issue closed                      → Done
 #
-# Écrire dans un Project d'organisation demande un jeton dédié (secret
-# PROJECT_TOKEN) : GITHUB_TOKEN ne le peut pas. Sans le secret, rien n'est fait.
+# Writing to an organisation Project needs a dedicated token (secret
+# PROJECT_TOKEN): GITHUB_TOKEN cannot. Without the secret, nothing happens.
 
 on:
   issues:
@@ -34,7 +34,7 @@ env:
 
 jobs:
   synchroniser:
-    name: Synchroniser le Project
+    name: Sync the Project
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: >-
@@ -42,12 +42,12 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           sparse-checkout: .github/scripts
           persist-credentials: false
 
-      - name: Déplacer les cartes
+      - name: Move the cards
         env:
           GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           EVENT: ${{ github.event_name }}
@@ -58,7 +58,7 @@ jobs:
           PR_MERGED: ${{ github.event.pull_request.merged }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
-            echo "::warning::Secret PROJECT_TOKEN absent : Project non mis à jour."
+            echo "::warning::PROJECT_TOKEN secret missing: Project not updated."
             exit 0
           fi
           move() { bash .github/scripts/project-status.sh "$@"; }
@@ -71,14 +71,14 @@ jobs:
             exit 0
           fi
 
-          # Issues citées dans la description de la PR (lue depuis l'environnement, jamais interpolée).
+          # Issues cited in the PR description (read from the environment, never interpolated).
           closing=$(grep -oiE '\b(close[sd]?|fix(e[sd])?|resolve[sd]?) +#[0-9]+' <<<"$PR_BODY" \
             | grep -oE '[0-9]+' | sort -u || true)
           refs=$(grep -oiE '\brefs? +#[0-9]+' <<<"$PR_BODY" | grep -oE '[0-9]+' | sort -u || true)
           all=$(printf '%s\n%s\n' "$closing" "$refs" | grep -E '^[0-9]+$' | sort -u || true)
 
           if [ -z "$all" ]; then
-            echo "::warning::La PR ne référence aucune issue (Closes #N / Refs #N) : voir docs/guides/issues.md."
+            echo "::warning::The PR references no issue (Closes #N / Refs #N): see docs/guides/issues.md."
             exit 0
           fi
 
