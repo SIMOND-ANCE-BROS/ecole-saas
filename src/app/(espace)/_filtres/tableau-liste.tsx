@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useId, useRef, useState, useTransition } from "react";
+import { ecrireFiltreColonne, type FiltreColonne, lireFiltreColonne, resumeFiltreColonne } from "@/domaine/filtres/colonne";
 import type { Liste } from "@/domaine/filtres/colonnes";
 import { basculer, type Disposition, deplacer, dispositionParDefaut, ecrireDisposition, lireDisposition, placer, redimensionner } from "@/domaine/filtres/disposition";
-import { type Condition, CONDITIONS_MAX, type DefColonne, libelleCondition, libelleOperateur, type Mode, OPERATEURS, sansValeur } from "@/domaine/filtres/filtres";
+import { type DefColonne, libelleCondition, lireTri, type Tri, VIDE } from "@/domaine/filtres/filtres";
 import { enregistrerColonnes } from "./actions";
 import { type FiltreAdresse, useFiltreAdresse } from "./filtre-adresse";
 
@@ -33,18 +35,33 @@ type Props = {
   lien: string;
   /** Message quand aucune ligne ne s'affiche. */
   vide: string;
-  /** Affichage propre au téléphone (le tableau y est masqué) ; les filtres restent dans « Colonnes ». */
+  /** Affichage propre au téléphone (le tableau y est masqué). */
   mobile?: ReactNode;
+  /** Valeurs à cocher fournies par la page, par colonne (cours de la saison, statuts…). */
+  choix?: Record<string, readonly string[]>;
+  /** Action proposée quand la liste est vide sans filtre (« Nouvel élève »). */
+  actionVide?: ReactNode;
 };
 
+/** Au-delà, la liste des cases à cocher a son propre champ de recherche. */
+const CASES_SANS_RECHERCHE = 8;
+
 /**
- * Liste en tableau (#89) : un bouton de filtre dans chaque en-tête, un menu
- * « Colonnes » pour afficher, masquer et réordonner (mémorisé pour le membre)
- * et filtrer aussi les colonnes masquées. Les filtres vont dans l'adresse ;
- * la page filtre côté serveur et renvoie les lignes.
+ * Liste en tableau (#89, #107), pensée pour l'accueil et proche d'Excel :
+ * chaque titre de colonne ouvre un menu pour trier et filtrer (cases à
+ * cocher, « de … à … », « contient »). Le sens du tri et les colonnes filtrées
+ * se voient sur les titres ; les filtres actifs sont rappelés en pastilles.
+ * Toute la ligne ouvre la fiche. Le menu « Colonnes » affiche, masque et
+ * réordonne (mémorisé pour le membre). Filtres et tri vont dans l'adresse ;
+ * la page relit et interroge le serveur.
  */
-export function TableauListe({ liste, quoi, legende, colonnes, disposition, lignes, lien, vide, mobile }: Props) {
+export function TableauListe({ liste, quoi, legende, colonnes, disposition, lignes, lien, vide, mobile, choix = {}, actionVide }: Props) {
   const f = useFiltreAdresse(colonnes);
+  const router = useRouter();
+  const chemin = usePathname();
+  const params = useSearchParams();
+  const [triEnCours, demarrerTri] = useTransition();
+  const tri = lireTri(params.get("sort"), params.get("order"), colonnes);
   const [dispo, setDispo] = useState<Disposition>(() => lireDisposition(colonnes, disposition));
   const [enregistrement, demarrer] = useTransition();
   const [echec, setEchec] = useState(false);
@@ -56,6 +73,26 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
     const l = largeurDe(id);
     return l ? { width: l, minWidth: l, maxWidth: l } : undefined;
   };
+  const choixDe = (d: DefColonne) => choix[d.id] ?? d.choix;
+
+  function fixerTri(suivant: Tri | null) {
+    const p = new URLSearchParams(params.toString());
+    p.delete("sort");
+    p.delete("order");
+    if (suivant) {
+      p.set("sort", suivant.colonne);
+      p.set("order", suivant.sens);
+    }
+    const texte = p.toString();
+    demarrerTri(() => router.replace(texte ? `${chemin}?${texte}` : chemin, { scroll: false }));
+  }
+
+  /** Clic sur une ligne : ouvre la fiche, sauf sur un lien ou un bouton, ou pendant une sélection de texte. */
+  function ouvrir(e: React.MouseEvent<HTMLTableRowElement>, href: string | undefined) {
+    if (!href || (e.target as HTMLElement).closest("a, button, input, select") || window.getSelection()?.toString()) return;
+    if (e.ctrlKey || e.metaKey) window.open(href, "_blank");
+    else router.push(href);
+  }
 
   function changerDispo(d: Disposition) {
     setDispo(d);
@@ -92,40 +129,58 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
     window.addEventListener("pointerup", lacher);
   }
 
-  const completes = f.filtre.conditions.flatMap((c, i) => (f.complete(c) ? [{ c, i }] : []));
-  const mode = (m: Mode) => f.changer({ ...f.filtre, mode: m });
-  const choixMode = f.filtre.conditions.length > 1 && <ChoixMode mode={f.filtre.mode} changer={mode} />;
+  // Pastilles des filtres actifs, colonnes masquées comprises.
+  const pastilles = colonnes.flatMap((d) => {
+    const fc = lireFiltreColonne(f.filtre, d);
+    const resume = resumeFiltreColonne(d, fc);
+    const garder = (autres: FiltreColonne["autres"]) => f.changer(ecrireFiltreColonne(f.filtre, d, { autres }));
+    return [
+      ...(resume ? [{ cle: d.id, texte: resume, retirer: () => garder(fc.autres) }] : []),
+      ...fc.autres
+        .filter((c) => f.complete(c))
+        .map((c, i) => ({ cle: `${d.id}-${i}`, texte: libelleCondition(c, colonnes), retirer: () => f.changer(ecrireFiltreColonne(f.filtre, d, { ...fc, autres: fc.autres.filter((x) => x !== c) })) })),
+    ];
+  });
+  const filtre = pastilles.length > 0;
+  const toutEffacer = () => f.changer({ mode: "et", conditions: [] });
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <Bulle
-          titre={`Colonnes et filtres de ${quoi}`}
-          bouton={masquees.length ? `Colonnes (${masquees.length} disponible${masquees.length > 1 ? "s" : ""})` : "Colonnes"}
-          classeBouton="bouton-secondaire"
-          largeur="w-[22rem]"
-        >
-          <MenuColonnes colonnes={defs} dispo={dispo} changer={changerDispo} f={f} parDefaut={() => changerDispo(dispositionParDefaut(colonnes))} />
-        </Bulle>
-        {choixMode}
-        <ul className="flex flex-wrap gap-1.5" aria-label="Filtres actifs">
-          {completes.map(({ c, i }, k) => (
-            <li key={i} className="flex items-center gap-1 rounded-full border border-accent bg-accent-doux py-0.5 pr-1 pl-2.5">
-              {k > 0 && <span className="text-xs text-doux">{f.filtre.mode === "et" ? "et" : "ou"}</span>}
-              {libelleCondition(c, colonnes)}
-              <button type="button" className="rounded-full px-1.5 hover:bg-surface" aria-label={`Retirer le filtre ${libelleCondition(c, colonnes)}`} onClick={() => f.retirer(i)}>
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-        {completes.length > 0 && (
-          <button type="button" className="lien" onClick={() => f.changer({ mode: "et", conditions: [] })}>
-            Effacer les filtres
-          </button>
+      <div className="flex min-h-9 flex-wrap items-center gap-2 text-sm">
+        {filtre ? (
+          <>
+            <ul className="flex flex-wrap gap-1.5" aria-label="Filtres actifs">
+              {pastilles.map((p) => (
+                <li key={p.cle} className="flex items-center gap-1 rounded-full border border-accent bg-accent-doux py-0.5 pr-1 pl-2.5">
+                  {p.texte}
+                  <button type="button" className="rounded-full px-1.5 hover:bg-surface" aria-label={`Retirer le filtre ${p.texte}`} onClick={p.retirer}>
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="lien" onClick={toutEffacer}>
+              Effacer les filtres
+            </button>
+          </>
+        ) : (
+          <span className={`text-doux ${mobile ? "hidden sm:inline" : ""}`}>Cliquez sur le titre d’une colonne pour trier ou filtrer.</span>
         )}
-        <span className="text-xs text-doux" role="status">
-          {f.enCours ? "Filtrage…" : enregistrement ? "Enregistrement des colonnes…" : echec ? "Disposition non enregistrée : réessayez." : ""}
+        <span className="flex items-center gap-2 sm:ml-auto">
+          <span className="text-xs text-doux" role="status">
+            {f.enCours || triEnCours ? "Mise à jour…" : enregistrement ? "Enregistrement des colonnes…" : echec ? "Disposition non enregistrée : réessayez." : ""}
+          </span>
+          {/* Sur téléphone, des cartes : pas de colonnes à régler. */}
+          <span className={mobile ? "hidden sm:inline" : ""}>
+            <Bulle
+              titre={`Colonnes de ${quoi}`}
+              bouton={masquees.length ? `Colonnes (${masquees.length} de plus)` : "Colonnes"}
+              classeBouton="bouton-secondaire"
+              largeur="w-[22rem]"
+            >
+              <MenuColonnes colonnes={defs} dispo={dispo} changer={changerDispo} parDefaut={() => changerDispo(dispositionParDefaut(colonnes))} />
+            </Bulle>
+          </span>
         </span>
       </div>
 
@@ -139,14 +194,14 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
                 <th
                   key={d.id}
                   scope="col"
+                  aria-sort={tri?.colonne === d.id ? (tri.sens === "asc" ? "ascending" : "descending") : undefined}
                   draggable
                   onMouseDown={(e) => {
                     // Une poignée de largeur saisie : pas de glisser-déposer natif.
                     if ((e.target as HTMLElement).dataset.poignee) e.preventDefault();
                   }}
                   style={style(d.id)}
-                  className={`relative cursor-grab select-none ${glissee === d.id ? "opacity-50" : ""} ${survolee === d.id && glissee !== d.id ? "shadow-[inset_3px_0_0_var(--accent)]" : ""}`}
-                  title="Glissez pour déplacer la colonne"
+                  className={`relative select-none ${glissee === d.id ? "opacity-50" : ""} ${survolee === d.id && glissee !== d.id ? "shadow-[inset_3px_0_0_var(--accent)]" : ""}`}
                   onDragStart={(e) => {
                     if (enRedimension.current) return e.preventDefault();
                     setGlissee(d.id);
@@ -169,13 +224,14 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
                     setSurvolee(null);
                   }}
                 >
-                  {/* Entonnoir toujours à droite du titre, même pour une colonne de nombres. */}
-                  <span className={`flex items-center gap-1 ${d.droite ? "justify-end" : ""}`}>
-                    <span className="truncate">{d.libelle}</span>
-                    {d.filtrable !== false && (
-                      <BulleFiltre def={d} f={f} choixMode={choixMode} masquer={visibles.length > 1 ? () => changerDispo(basculer(dispo, d.id)) : null} />
-                    )}
-                  </span>
+                  <MenuTitre
+                    def={d}
+                    choix={choixDe(d)}
+                    f={f}
+                    tri={tri?.colonne === d.id ? tri.sens : null}
+                    trier={(sens) => fixerTri(sens ? { colonne: d.id, sens } : null)}
+                    masquer={visibles.length > 1 && !d.obligatoire ? () => changerDispo(basculer(dispo, d.id)) : null}
+                  />
                   <span
                     aria-hidden
                     data-poignee="1"
@@ -202,7 +258,7 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
                       ))}
                     </ul>
                   )}
-                  <p className="mt-2 text-xs text-doux">Pour retirer une colonne : son entonnoir, puis « Masquer la colonne ». Tout l’ordre : bouton « Colonnes ».</p>
+                  <p className="mt-2 text-xs text-doux">Pour retirer une colonne : cliquez sur son titre, puis « Masquer la colonne ».</p>
                 </Bulle>
               </th>
             </tr>
@@ -210,13 +266,22 @@ export function TableauListe({ liste, quoi, legende, colonnes, disposition, lign
           <tbody>
             {lignes.length === 0 ? (
               <tr>
-                <td colSpan={visibles.length + 1} className="py-3 text-doux">
-                  {vide}
+                <td colSpan={visibles.length + 1} className="py-6 text-center">
+                  <p className="text-doux">{vide}</p>
+                  <div className="mt-3 flex justify-center gap-3">
+                    {filtre ? (
+                      <button type="button" className="bouton-secondaire" onClick={toutEffacer}>
+                        Effacer les filtres
+                      </button>
+                    ) : (
+                      actionVide
+                    )}
+                  </div>
                 </td>
               </tr>
             ) : (
               lignes.map((l) => (
-                <tr key={l.id} className={l.attenue ? "text-doux" : ""}>
+                <tr key={l.id} className={`${l.attenue ? "text-doux" : ""} ${l.href ? "cursor-pointer" : ""}`} onClick={(e) => ouvrir(e, l.href)}>
                   {visibles.map((d) => (
                     <td key={d.id} style={style(d.id)} className={`${d.droite ? "text-right tabular-nums" : ""} ${largeurDe(d.id) ? "break-words" : ""}`}>
                       {d.id === lien ? (
@@ -279,8 +344,6 @@ function Bulle({
   classeBouton,
   libelleBouton,
   largeur = "w-80",
-  surOuverture,
-  surFermeture,
   children,
 }: {
   titre: string;
@@ -288,8 +351,6 @@ function Bulle({
   classeBouton: string;
   libelleBouton?: string;
   largeur?: string;
-  surOuverture?: () => void;
-  surFermeture?: () => void;
   children: ReactNode;
 }) {
   const id = useId();
@@ -319,14 +380,12 @@ function Bulle({
         aria-label={titre}
         className={`panneau fixed m-0 max-h-[70vh] max-w-[calc(100vw-1rem)] overflow-y-auto p-3 text-sm font-normal text-texte shadow-lg [inset:auto] ${largeur}`}
         onToggle={(e) => {
-          if (e.newState === "open") {
-            surOuverture?.();
+          if (e.newState !== "open") return;
+          placer();
+          requestAnimationFrame(() => {
             placer();
-            requestAnimationFrame(() => {
-              placer();
-              bulle.current?.querySelector<HTMLElement>("select, input, button")?.focus();
-            });
-          } else surFermeture?.();
+            bulle.current?.querySelector<HTMLElement>("input, button")?.focus();
+          });
         }}
       >
         {children}
@@ -335,135 +394,208 @@ function Bulle({
   );
 }
 
-/** Bouton de filtre d'un en-tête : indique combien de conditions portent sur la colonne. */
-function BulleFiltre({ def, f, choixMode, masquer }: { def: DefColonne; f: FiltreAdresse; choixMode: ReactNode; masquer: (() => void) | null }) {
-  const n = f.filtre.conditions.filter((c) => c.colonne === def.id && f.complete(c)).length;
+/** Libellés des deux sens de tri, selon la nature de la colonne. */
+const SENS: Record<DefColonne["type"], [string, string]> = {
+  texte: ["De A à Z", "De Z à A"],
+  telephone: ["Croissant", "Décroissant"],
+  nombre: ["Du plus petit au plus grand", "Du plus grand au plus petit"],
+  date: ["Du plus ancien au plus récent", "Du plus récent au plus ancien"],
+};
+
+/**
+ * Titre d'une colonne et son menu, comme un filtre automatique d'Excel :
+ * trier dans un sens ou l'autre, puis filtrer selon la nature de la colonne.
+ * Le titre montre le sens du tri (▲ ▼) et un entonnoir plein si la colonne
+ * est filtrée ; la flèche ▾ signale qu'on peut cliquer.
+ */
+function MenuTitre({
+  def,
+  choix,
+  f,
+  tri,
+  trier,
+  masquer,
+}: {
+  def: DefColonne;
+  choix: readonly string[] | undefined;
+  f: FiltreAdresse;
+  tri: "asc" | "desc" | null;
+  trier: (sens: "asc" | "desc" | null) => void;
+  masquer: (() => void) | null;
+}) {
+  const fc = lireFiltreColonne(f.filtre, def);
+  const filtree = resumeFiltreColonne(def, fc) !== null || fc.autres.length > 0;
+  const triable = def.triable !== false;
+  const filtrable = def.filtrable !== false;
+  const changer = (maj: Partial<FiltreColonne>, differe = false) => f.changer(ecrireFiltreColonne(f.filtre, def, { ...fc, ...maj }), differe);
+  const etat = [tri === "asc" ? "trié, sens croissant" : tri === "desc" ? "trié, sens décroissant" : "", filtree ? "filtré" : ""].filter(Boolean).join(", ");
+
   return (
     <Bulle
-      titre={`Filtrer « ${def.libelle} »`}
-      libelleBouton={`Filtrer « ${def.libelle} »${n ? ` (${n} condition${n > 1 ? "s" : ""})` : ""}`}
+      titre={`Trier ou filtrer « ${def.libelle} »`}
+      libelleBouton={`${def.libelle} : trier ou filtrer${etat ? ` (${etat})` : ""}`}
+      classeBouton={`-mx-1 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-1 rounded px-1 py-0.5 hover:bg-accent-doux ${def.droite ? "justify-end" : ""} ${tri || filtree ? "text-accent" : ""}`}
+      largeur="w-72"
       bouton={
-        <svg aria-hidden viewBox="0 0 16 16" className="size-3.5" fill={n ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5">
-          <path d="M2 3h12l-4.5 5.5V13l-3 1.5V8.5z" strokeLinejoin="round" />
-        </svg>
+        <>
+          <span className="truncate">{def.libelle}</span>
+          {tri && (
+            <span aria-hidden className="text-xs">
+              {tri === "asc" ? "▲" : "▼"}
+            </span>
+          )}
+          {filtree && (
+            <svg aria-hidden viewBox="0 0 16 16" className="size-3.5 shrink-0" fill="currentColor">
+              <path d="M2 3h12l-4.5 5.5V13l-3 1.5V8.5z" />
+            </svg>
+          )}
+          <span aria-hidden className="text-xs text-doux">
+            ▾
+          </span>
+        </>
       }
-      classeBouton={`rounded p-1 hover:bg-accent-doux ${n ? "text-accent" : "text-doux"}`}
-      surOuverture={() => {
-        if (!f.filtre.conditions.some((c) => c.colonne === def.id)) f.ajouter(def.id);
-      }}
-      surFermeture={() => f.nettoyer(def.id)}
     >
-      <p className="mb-2 font-medium">{def.libelle}</p>
-      <ConditionsColonne def={def} f={f} />
-      {choixMode && <div className="mt-3 border-t border-bordure pt-2">{choixMode}</div>}
-      {masquer && (
-        <button type="button" className="lien mt-3 block text-xs text-doux" onClick={masquer}>
-          Masquer la colonne
-        </button>
-      )}
+      <div className="flex flex-col gap-3">
+        {triable && (
+          <div role="group" aria-label="Trier" className="flex flex-col gap-1">
+            {(["asc", "desc"] as const).map((sens, i) => (
+              <button
+                key={sens}
+                type="button"
+                aria-pressed={tri === sens}
+                className={`flex items-center gap-2 rounded px-2 py-1 text-left hover:bg-accent-doux ${tri === sens ? "bg-accent-doux font-medium text-accent" : ""}`}
+                onClick={() => trier(tri === sens ? null : sens)}
+              >
+                <span aria-hidden className="w-3 text-xs">
+                  {sens === "asc" ? "▲" : "▼"}
+                </span>
+                {SENS[def.type][i]}
+              </button>
+            ))}
+          </div>
+        )}
+        {filtrable && (
+          <div className={`flex flex-col gap-2 ${triable ? "border-t border-bordure pt-3" : ""}`}>
+            <p className="font-medium">Filtrer</p>
+            <FiltreDuTitre def={def} choix={choix} fc={fc} changer={changer} />
+            {fc.autres.length > 0 && <p className="text-xs text-doux">Aussi : {fc.autres.map((c) => libelleCondition(c, [def])).join(", ")}</p>}
+          </div>
+        )}
+        <div className="flex flex-wrap justify-between gap-2 border-t border-bordure pt-2 text-xs">
+          {filtree ? (
+            <button type="button" className="lien" onClick={() => f.changer(ecrireFiltreColonne(f.filtre, def, {}))}>
+              Effacer ce filtre
+            </button>
+          ) : (
+            <span />
+          )}
+          {masquer && (
+            <button type="button" className="lien text-doux" onClick={masquer}>
+              Masquer la colonne
+            </button>
+          )}
+        </div>
+      </div>
     </Bulle>
   );
 }
 
-/** ET / OU : toutes les conditions de tous les filtres, ou au moins une. */
-function ChoixMode({ mode, changer }: { mode: Mode; changer: (m: Mode) => void }) {
-  return (
-    <div role="group" aria-label="Combinaison des filtres" className="flex flex-wrap items-center gap-2 text-sm">
-      <span className="text-doux">Garder les lignes qui remplissent</span>
-      <span className="inline-flex overflow-hidden rounded-md border border-bordure">
-        {(["et", "ou"] as Mode[]).map((m) => (
-          <button
-            key={m}
-            type="button"
-            aria-pressed={mode === m}
-            className={`px-2.5 py-1 ${mode === m ? "bg-accent text-sur-accent" : "hover:bg-accent-doux"}`}
-            onClick={() => changer(m)}
-          >
-            {m === "et" ? "toutes les conditions (ET)" : "au moins une (OU)"}
-          </button>
-        ))}
-      </span>
-    </div>
-  );
-}
-
-/** Conditions portant sur une colonne : opérateur, valeur, retrait ; ajout d'une autre. */
-function ConditionsColonne({ def, f }: { def: DefColonne; f: FiltreAdresse }) {
-  const lignes = f.filtre.conditions.flatMap((c, i) => (c.colonne === def.id ? [{ c, i }] : []));
-  return (
-    <div className="flex flex-col gap-2">
-      {lignes.map(({ c, i }, k) => (
-        <LigneCondition key={i} def={def} c={c} rang={k + 1} f={f} i={i} />
-      ))}
-      <button type="button" className="lien self-start text-sm" disabled={f.filtre.conditions.length >= CONDITIONS_MAX} onClick={() => f.ajouter(def.id)}>
-        {lignes.length === 0 ? "Ajouter une condition" : "Ajouter une autre condition"}
-      </button>
-    </div>
-  );
-}
-
-function LigneCondition({ def, c, rang, f, i }: { def: DefColonne; c: Condition; rang: number; f: FiltreAdresse; i: number }) {
+/** Le filtre d'une colonne selon sa nature : cases à cocher, bornes, ou texte contenu. */
+function FiltreDuTitre({
+  def,
+  choix,
+  fc,
+  changer,
+}: {
+  def: DefColonne;
+  choix: readonly string[] | undefined;
+  fc: FiltreColonne;
+  changer: (maj: Partial<FiltreColonne>, differe?: boolean) => void;
+}) {
   const id = useId();
-  const incomplete = !sansValeur(c.operateur) && c.valeur.trim() !== "" && !f.complete(c);
+  const [recherche, setRecherche] = useState("");
+
+  if (def.type === "texte" && choix) {
+    const cochees = fc.choix ?? [];
+    const basculerChoix = (v: string) => changer({ choix: cochees.includes(v) ? cochees.filter((x) => x !== v) : [...cochees, v] });
+    const libelle = (v: string) => (v === VIDE ? `(${def.siVide ?? "vide"})` : v);
+    // « (aucune) » seulement pour une colonne qui peut être vide (`siVide`).
+    const toutes = def.siVide ? [...choix, VIDE] : [...choix];
+    const visibles = recherche ? toutes.filter((v) => libelle(v).toLowerCase().includes(recherche.toLowerCase())) : toutes;
+    return (
+      <>
+        {choix.length > CASES_SANS_RECHERCHE && (
+          <input type="search" className="champ" placeholder="Chercher…" aria-label={`Chercher dans « ${def.libelle} »`} value={recherche} onChange={(e) => setRecherche(e.target.value)} />
+        )}
+        <ul className="flex max-h-60 flex-col gap-0.5 overflow-y-auto">
+          {visibles.map((v) => (
+            <li key={v}>
+              <label className="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-accent-doux">
+                <input type="checkbox" checked={cochees.includes(v)} onChange={() => basculerChoix(v)} />
+                <span className={v === VIDE ? "text-doux" : ""}>{libelle(v)}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs text-doux">{cochees.length ? "Seules les valeurs cochées restent affichées." : "Cochez les valeurs à garder."}</p>
+      </>
+    );
+  }
+
+  if (def.type === "nombre" || def.type === "date") {
+    const date = def.type === "date";
+    return (
+      <div className="flex items-center gap-2">
+        <label htmlFor={`${id}-min`}>{date ? "Du" : "De"}</label>
+        <input
+          id={`${id}-min`}
+          className="champ w-full min-w-0"
+          type={date ? "date" : "text"}
+          inputMode={date ? undefined : "numeric"}
+          value={fc.min}
+          onChange={(e) => changer({ min: e.target.value }, true)}
+        />
+        <label htmlFor={`${id}-max`}>{date ? "au" : "à"}</label>
+        <input
+          id={`${id}-max`}
+          className="champ w-full min-w-0"
+          type={date ? "date" : "text"}
+          inputMode={date ? undefined : "numeric"}
+          value={fc.max}
+          onChange={(e) => changer({ max: e.target.value }, true)}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label className="sr-only" htmlFor={`${id}-op`}>
-        Condition {rang} sur {def.libelle}
+    <>
+      <label htmlFor={`${id}-texte`} className="sr-only">
+        {def.libelle} contient
       </label>
-      <select id={`${id}-op`} className="champ" value={c.operateur} onChange={(e) => f.modifier(i, { operateur: e.target.value as Condition["operateur"] })}>
-        {OPERATEURS[def.type].map((o) => (
-          <option key={o} value={o}>
-            {libelleOperateur(o, def.type)}
-          </option>
-        ))}
-      </select>
-      {!sansValeur(c.operateur) && (
-        <>
-          <label className="sr-only" htmlFor={`${id}-valeur`}>
-            Valeur de la condition {rang} sur {def.libelle}
-          </label>
-          <input
-            id={`${id}-valeur`}
-            className="champ w-36"
-            type={def.type === "date" ? "date" : "text"}
-            inputMode={def.type === "nombre" ? "decimal" : def.type === "telephone" ? "tel" : "text"}
-            value={c.valeur}
-            aria-invalid={incomplete || undefined}
-            aria-describedby={incomplete ? `${id}-aide` : undefined}
-            onChange={(e) => f.modifier(i, { valeur: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                f.appliquer();
-              }
-            }}
-          />
-        </>
-      )}
-      <button type="button" className="bouton-secondaire px-2" aria-label={`Retirer la condition ${rang} sur ${def.libelle}`} onClick={() => f.retirer(i)}>
-        ×
-      </button>
-      {incomplete && (
-        <span id={`${id}-aide`} className="w-full text-xs text-erreur">
-          {def.type === "nombre" ? "Saisissez un nombre." : "Saisissez des chiffres."}
-        </span>
-      )}
-    </div>
+      <input
+        id={`${id}-texte`}
+        type="search"
+        className="champ"
+        placeholder="Contient…"
+        inputMode={def.type === "telephone" ? "tel" : undefined}
+        value={fc.texte}
+        onChange={(e) => changer({ texte: e.target.value }, true)}
+      />
+    </>
   );
 }
 
-/** Menu « Colonnes » : afficher, masquer, déplacer, et filtrer chaque colonne (y compris masquée). */
+/** Menu « Colonnes » : afficher, masquer et déplacer les colonnes. */
 function MenuColonnes({
   colonnes,
   dispo,
   changer,
-  f,
   parDefaut,
 }: {
   colonnes: Map<string, DefColonne>;
   dispo: Disposition;
   changer: (d: Disposition) => void;
-  f: FiltreAdresse;
   parDefaut: () => void;
 }) {
   const derniere = dispo.filter((d) => d.visible).length === 1;
@@ -474,41 +606,30 @@ function MenuColonnes({
         {dispo.map((d, k) => {
           const def = colonnes.get(d.id);
           if (!def) return null;
-          const n = f.filtre.conditions.filter((c) => c.colonne === d.id && f.complete(c)).length;
           return (
-            <li key={d.id} className="py-1.5">
-              <div className="flex items-center gap-1">
-                <label className="flex flex-1 items-center gap-2">
-                  <input type="checkbox" checked={d.visible} disabled={d.visible && derniere} onChange={() => changer(basculer(dispo, d.id))} />
-                  {def.libelle}
-                </label>
-                <button
-                  type="button"
-                  className="rounded px-1.5 hover:bg-accent-doux disabled:opacity-30"
-                  disabled={k === 0}
-                  aria-label={`Monter « ${def.libelle} »`}
-                  onClick={() => changer(deplacer(dispo, d.id, -1))}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  className="rounded px-1.5 hover:bg-accent-doux disabled:opacity-30"
-                  disabled={k === dispo.length - 1}
-                  aria-label={`Descendre « ${def.libelle} »`}
-                  onClick={() => changer(deplacer(dispo, d.id, 1))}
-                >
-                  ↓
-                </button>
-              </div>
-              {def.filtrable !== false && (
-                <details className="mt-1 pl-6" open={n > 0 || undefined}>
-                  <summary className="cursor-pointer text-xs text-doux">Filtrer{n ? ` (${n})` : ""}</summary>
-                  <div className="mt-1.5">
-                    <ConditionsColonne def={def} f={f} />
-                  </div>
-                </details>
-              )}
+            <li key={d.id} className="flex items-center gap-1 py-1.5">
+              <label className="flex flex-1 items-center gap-2">
+                <input type="checkbox" checked={d.visible} disabled={(d.visible && derniere) || def.obligatoire} onChange={() => changer(basculer(dispo, d.id))} />
+                {def.libelle}
+              </label>
+              <button
+                type="button"
+                className="rounded px-1.5 hover:bg-accent-doux disabled:opacity-30"
+                disabled={k === 0}
+                aria-label={`Monter « ${def.libelle} »`}
+                onClick={() => changer(deplacer(dispo, d.id, -1))}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className="rounded px-1.5 hover:bg-accent-doux disabled:opacity-30"
+                disabled={k === dispo.length - 1}
+                aria-label={`Descendre « ${def.libelle} »`}
+                onClick={() => changer(deplacer(dispo, d.id, 1))}
+              >
+                ↓
+              </button>
             </li>
           );
         })}

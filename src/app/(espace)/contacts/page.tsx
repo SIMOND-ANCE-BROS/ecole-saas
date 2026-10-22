@@ -6,7 +6,7 @@ import { listerContacts } from "@/db/eleves";
 import { lirePreference } from "@/db/preferences";
 import { nomAffiche } from "@/db/personnes";
 import { COLONNES_CONTACTS } from "@/domaine/filtres/colonnes";
-import { lireFiltre, versParametres } from "@/domaine/filtres/filtres";
+import { lireFiltre, lireTri } from "@/domaine/filtres/filtres";
 import { exigerRole } from "@/lib/session";
 import { TableauListe } from "../_filtres/tableau-liste";
 import { ResultatsNavigables } from "../_personnes/resultats";
@@ -16,11 +16,11 @@ export const metadata: Metadata = { title: "Contacts" };
 /** Parents, payeurs et organismes (CSE, entreprises). */
 export default async function PageContacts({ searchParams }: PageProps<"/contacts">) {
   const { ecoleId, userId } = await exigerRole("direction", "accueil");
-  const { q, f, mode } = await searchParams;
+  const { q, f, mode, sort, order } = await searchParams;
   const saisie = typeof q === "string" ? q.trim() : "";
   const filtre = lireFiltre(f, mode, COLONNES_CONTACTS);
   const { contacts, disposition } = await avecEcole(ecoleId, async (tx) => ({
-    contacts: await listerContacts(tx, saisie, { filtre }),
+    contacts: await listerContacts(tx, saisie, { filtre, tri: lireTri(sort, order, COLONNES_CONTACTS) }),
     disposition: await lirePreference(tx, userId, "contacts"),
   }));
 
@@ -35,19 +35,6 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
           Nouveau contact
         </Link>
       </div>
-      <form className="flex max-w-md gap-2" role="search">
-        <label htmlFor="q" className="sr-only">
-          Rechercher un contact
-        </label>
-        <input id="q" name="q" type="search" className="champ w-full" placeholder="Nom, téléphone, e-mail…" defaultValue={saisie} />
-        {/* Une nouvelle recherche garde les filtres en cours. */}
-        {versParametres(filtre).map(([cle, valeur], i) => (
-          <input key={i} type="hidden" name={cle} value={valeur} />
-        ))}
-        <button type="submit" className="bouton-secondaire">
-          Rechercher
-        </button>
-      </form>
       <ResultatsNavigables>
         <Suspense>
           <TableauListe
@@ -57,7 +44,12 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
             colonnes={COLONNES_CONTACTS}
             disposition={disposition}
             lien="nom"
-            vide={filtre.conditions.length > 0 ? "Aucun contact ne correspond à ces filtres." : saisie ? "Aucun contact ne correspond." : "Aucun contact pour l’instant."}
+            vide={filtre.conditions.length > 0 ? "Aucun contact ne correspond à ces filtres." : saisie ? `Aucun contact ne correspond à « ${saisie} ».` : "Aucun contact pour l’instant."}
+            actionVide={
+              <Link href="/contacts/nouveau" className="bouton-principal">
+                Nouveau contact
+              </Link>
+            }
             lignes={contacts.map((c) => ({
               id: c.id,
               href: `/contacts/${c.id}`,

@@ -1,11 +1,11 @@
 import { and, asc, eq, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { COLONNES_CONTACTS, COLONNES_ELEVES } from "../domaine/filtres/colonnes";
-import { FILTRE_VIDE, type Filtre } from "../domaine/filtres/filtres";
+import { FILTRE_VIDE, type Filtre, type Tri } from "../domaine/filtres/filtres";
 import { LIBELLES_STATUT_INSCRIPTION, PRIORITE_STATUT } from "../domaine/inscription/statuts";
 import { JOURS_COURTS } from "../domaine/planning/jours";
 import { aujourdhuiAParis } from "../domaine/personnes/age";
-import { conditionFiltre } from "./filtres";
+import { conditionFiltre, ordreColonne } from "./filtres";
 import type { Tx } from "./index";
 import {
   ajouterLien,
@@ -29,7 +29,8 @@ import { lien, personne } from "./schema";
  * Toujours avec la transaction d'`avecEcole()` (RLS).
  */
 
-const RESULTATS_MAX = 200;
+/** Lignes au plus dans une liste : au-delà, l'accueil affine la recherche ou filtre. */
+export const RESULTATS_MAX = 200;
 const estUuid = (v: string) => z.uuid().safeParse(v).success;
 const idCourant = sql`${personne}.${sql.identifier("id")}`;
 const nomSql = (alias: string) =>
@@ -63,7 +64,7 @@ export type LigneEleve = {
  * Filtres par colonne (#87) ; `aujourdhui` (Paris) sert au calcul de l'âge,
  * `saisonId` aux colonnes « Cours suivis » et « Inscription » (#89).
  */
-export type OptionsListe = { filtre?: Filtre; aujourdhui?: string; saisonId?: string | null };
+export type OptionsListe = { filtre?: Filtre; tri?: Tri | null; aujourdhui?: string; saisonId?: string | null };
 
 // Colonnes calculées des listes : les mêmes expressions servent à l'affichage et aux filtres.
 const telephoneEleve = sql<string | null>`coalesce(${personne.telephone}, (
@@ -94,18 +95,32 @@ const libelles = (valeur: SQL, table: Record<string | number, string>) =>
   )} END`;
 
 /** Cours suivis cette saison (inscriptions actives ou à l'essai), triés par jour et heure. */
+/** Libellé court d'un cours `c` de discipline `d` : « Jazz lun. 17:00 ». */
+const libelleCours = () =>
+  sql`concat_ws(' ', d.nom, ${libelles(sql`c.jour_semaine::text`, Object.fromEntries(JOURS_COURTS.map((j, i) => [i, j]).slice(1)))}, to_char(c.heure_debut, 'HH24:MI'))`;
+
 function coursEleve(saisonId: string | null): SQL<string[]> {
   if (!saisonId) return sql<string[]>`'{}'::text[]`;
-  const jour = libelles(sql`c.jour_semaine::text`, Object.fromEntries(JOURS_COURTS.map((j, i) => [i, j]).slice(1)));
   return sql<string[]>`coalesce((
     SELECT array_agg(x.libelle ORDER BY x.jour NULLS LAST, x.heure) FROM (
-      SELECT DISTINCT concat_ws(' ', d.nom, ${jour}, to_char(c.heure_debut, 'HH24:MI')) AS libelle, c.jour_semaine AS jour, c.heure_debut AS heure
+      SELECT DISTINCT ${libelleCours()} AS libelle, c.jour_semaine AS jour, c.heure_debut AS heure
       FROM inscription_cours ic
       JOIN inscription i ON i.id = ic.inscription_id
       JOIN cours c ON c.id = ic.cours_id
       JOIN discipline d ON d.id = c.discipline_id
       WHERE ic.danseur_id = ${idCourant} AND i.saison_id = ${saisonId} AND i.statut IN ('active', 'essai')
     ) x), '{}')`;
+}
+
+/** Libellés des cours de la saison, par jour et heure : les choix du bouton « Cours » de la liste (#107). */
+export async function libellesCoursSaison(tx: Tx, saisonId: string): Promise<string[]> {
+  const lignes = await tx.execute<{ libelle: string }>(sql`
+    SELECT x.libelle FROM (
+      SELECT DISTINCT ${libelleCours()} AS libelle, c.jour_semaine AS jour, c.heure_debut AS heure
+      FROM cours c JOIN discipline d ON d.id = c.discipline_id
+      WHERE c.saison_id = ${saisonId}
+    ) x ORDER BY x.jour NULLS LAST, x.heure, x.libelle`);
+  return lignes.map((l) => l.libelle);
 }
 
 /** Statut d'inscription de la saison ; le plus favorable si l'élève en a plusieurs. */
@@ -126,7 +141,7 @@ function inscriptionEleve(saisonId: string | null): SQL<string | null> {
 export async function listerEleves(
   tx: Tx,
   saisie = "",
-  { filtre = FILTRE_VIDE, aujourdhui = aujourdhuiAParis(), saisonId = null }: OptionsListe = {},
+  { filtre = FILTRE_VIDE, tri = null, aujourdhui = aujourdhuiAParis(), saisonId = null }: OptionsListe = {},
 ): Promise<LigneEleve[]> {
   const surEleve = conditionRecherche(saisie);
   const surProche = conditionRecherche(saisie, "r");
@@ -134,7 +149,7 @@ export async function listerEleves(
   const valideSaison = saisonId && estUuid(saisonId) ? saisonId : null;
   const coursSaison = coursEleve(valideSaison);
   const statutSaison = inscriptionEleve(valideSaison);
-  const surColonnes = conditionFiltre(filtre, COLONNES_ELEVES, {
+  const expressions = {
     nom: { sql: nomSql("personne") },
     age: { sql: sql`date_part('year', age(${aujourdhui}::date, ${personne.dateNaissance}))` },
     responsables: { sql: responsablesEleve, liste: true },
@@ -145,7 +160,9 @@ export async function listerEleves(
     cours: { sql: coursSaison, liste: true },
     inscription: { sql: statutSaison },
     prevenir: { sql: prevenirEleve, liste: true },
-  });
+  };
+  const surColonnes = conditionFiltre(filtre, COLONNES_ELEVES, expressions);
+  const ordre = ordreColonne(tri, COLONNES_ELEVES, expressions);
   return tx
     .select({
       id: personne.id,
@@ -170,7 +187,7 @@ export async function listerEleves(
         surColonnes,
       ),
     )
-    .orderBy(asc(personne.nom), asc(personne.prenom))
+    .orderBy(...(ordre ? [ordre] : []), asc(personne.nom), asc(personne.prenom))
     .limit(RESULTATS_MAX);
 }
 
@@ -187,15 +204,17 @@ export type LigneContact = {
 };
 
 /** Contacts : qui n'est pas élève, ou qui est responsable ou payeur d'un élève. */
-export async function listerContacts(tx: Tx, saisie = "", { filtre = FILTRE_VIDE }: OptionsListe = {}): Promise<LigneContact[]> {
+export async function listerContacts(tx: Tx, saisie = "", { filtre = FILTRE_VIDE, tri = null }: OptionsListe = {}): Promise<LigneContact[]> {
   const condition = conditionRecherche(saisie);
   if (saisie.trim() && !condition) return [];
-  const surColonnes = conditionFiltre(filtre, COLONNES_CONTACTS, {
+  const expressions = {
     nom: { sql: nomSql("personne") },
     eleves: { sql: elevesDuContact, liste: true },
     telephone: { sql: sql`${personne.telephone}` },
     email: { sql: sql`${personne.email}` },
-  });
+  };
+  const surColonnes = conditionFiltre(filtre, COLONNES_CONTACTS, expressions);
+  const ordre = ordreColonne(tri, COLONNES_CONTACTS, expressions);
   return tx
     .select({
       id: personne.id,
@@ -218,7 +237,7 @@ export async function listerContacts(tx: Tx, saisie = "", { filtre = FILTRE_VIDE
         surColonnes,
       ),
     )
-    .orderBy(asc(personne.nom), asc(personne.prenom))
+    .orderBy(...(ordre ? [ordre] : []), asc(personne.nom), asc(personne.prenom))
     .limit(RESULTATS_MAX);
 }
 

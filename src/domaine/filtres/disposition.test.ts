@@ -23,6 +23,11 @@ describe("lireDisposition", () => {
     expect(vue(lireDisposition(COLONNES, ["age", "nom"]))).toBe("age nom telephone -naissance");
   });
 
+  it("une colonne obligatoire (le nom) reste affichée, même masquée par une ancienne préférence", () => {
+    const avecNom = COLONNES.map((c) => (c.id === "nom" ? { ...c, obligatoire: true } : c));
+    expect(vue(lireDisposition(avecNom, ["-nom@120", "age"]))).toBe("nom@120 age telephone -naissance");
+  });
+
   it("au moins une colonne visible", () => {
     expect(vue(lireDisposition(COLONNES, ["-nom", "-age", "-telephone", "-naissance"]))).toBe("nom -age -telephone -naissance");
   });
@@ -49,12 +54,12 @@ describe("largeurs et glisser-déposer (#102)", () => {
     expect(d).toEqual([
       { id: "nom", visible: true, largeur: 180 },
       { id: "age", visible: false, largeur: 60 },
-      { id: "telephone", visible: true, largeur: 800 },
+      { id: "telephone", visible: true, largeur: 1200 },
       { id: "naissance", visible: true },
     ]);
-    expect(vue(d)).toBe("nom@180 -age@60 telephone@800 naissance");
-    expect(vue(redimensionner(d, "nom", null))).toBe("nom -age@60 telephone@800 naissance");
-    expect(vue(redimensionner(d, "naissance", 123.6))).toBe("nom@180 -age@60 telephone@800 naissance@124");
+    expect(vue(d)).toBe("nom@180 -age@60 telephone@1200 naissance");
+    expect(vue(redimensionner(d, "nom", null))).toBe("nom -age@60 telephone@1200 naissance");
+    expect(vue(redimensionner(d, "naissance", 123.6))).toBe("nom@180 -age@60 telephone@1200 naissance@124");
   });
 
   it("place une colonne devant une autre, ou à la fin", () => {

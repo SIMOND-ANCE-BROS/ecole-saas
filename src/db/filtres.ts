@@ -5,6 +5,9 @@ import {
   type DefColonne,
   type Filtre,
   SANS_ACCENTS,
+  SEPARATEUR,
+  VIDE,
+  type Tri,
   valeurNormalisee,
 } from "../domaine/filtres/filtres";
 
@@ -57,6 +60,10 @@ function condition(c: Condition, def: DefColonne, e: ExpressionColonne): SQL | u
         return sql`${d} IS NOT NULL`;
       case "egal":
         return sql`${d} = ${v}::date`;
+      case "inf_egal":
+        return sql`${d} <= ${v}::date`;
+      case "sup_egal":
+        return sql`${d} >= ${v}::date`;
       case "inf":
         return sql`${d} < ${v}::date`;
       case "sup":
@@ -86,6 +93,17 @@ function condition(c: Condition, def: DefColonne, e: ExpressionColonne): SQL | u
       return e.liste ? unElement : sql`${t} = ${v}`;
     case "n_est_pas":
       return e.liste ? sql`NOT ${unElement}` : sql`${t} <> ${v}`;
+    case "parmi": {
+      const toutes = String(v).split(SEPARATEUR);
+      const vs = toutes.filter((x) => x !== VIDE);
+      const liste = sql.join(
+        vs.map((x) => sql`${x}`),
+        sql`, `,
+      );
+      const parmi = vs.length === 0 ? undefined : e.liste ? sql`EXISTS (SELECT 1 FROM unnest(${e.sql}) AS element WHERE ${normaliser(sql`element`)} IN (${liste}))` : sql`${t} IN (${liste})`;
+      const vide = toutes.includes(VIDE) ? sql`${t} = ''` : undefined;
+      return parmi && vide ? sql`(${parmi} OR ${vide})` : (parmi ?? vide);
+    }
     default:
       return undefined;
   }
@@ -101,4 +119,22 @@ export function conditionFiltre(filtre: Filtre, colonnes: DefColonne[], expressi
   });
   if (parties.length === 0) return undefined;
   return filtre.mode === "ou" ? or(...parties) : and(...parties);
+}
+
+/**
+ * Clé ORDER BY d'une colonne triée (#107), avec les règles de `trierLignes` :
+ * accents et majuscules ignorés, nombres et dates dans leur ordre, vides en
+ * dernier. undefined sans tri (l'appelant garde son ordre par défaut).
+ */
+export function ordreColonne(tri: Tri | null, colonnes: DefColonne[], expressions: Record<string, ExpressionColonne>): SQL | undefined {
+  const def = tri && colonnes.find((d) => d.id === tri.colonne);
+  const e = tri && expressions[tri.colonne];
+  if (!tri || !def || !e || def.triable === false) return undefined;
+  const cle =
+    def.type === "nombre"
+      ? sql`(${e.sql})::numeric`
+      : def.type === "date"
+        ? sql`(${e.sql})::date`
+        : sql`nullif(${normaliser(e.liste ? sql`array_to_string(${e.sql}, ', ')` : sql`(${e.sql})::text`)}, '')`;
+  return tri.sens === "desc" ? sql`${cle} DESC NULLS LAST` : sql`${cle} ASC NULLS LAST`;
 }

@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { avecEcole } from "@/db";
-import { listerContacts, listerEleves } from "@/db/eleves";
+import { libellesCoursSaison, listerContacts, listerEleves, RESULTATS_MAX } from "@/db/eleves";
 import { saisonCourante } from "@/db/planning";
 import { lirePreference } from "@/db/preferences";
 import { nomAffiche } from "@/db/personnes";
 import { COLONNES_ELEVES } from "@/domaine/filtres/colonnes";
-import { lireFiltre } from "@/domaine/filtres/filtres";
+import { lireFiltre, lireTri } from "@/domaine/filtres/filtres";
 import { ageAu, aujourdhuiAParis } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
 import { TableauListe } from "../_filtres/tableau-liste";
@@ -19,20 +19,29 @@ export const metadata: Metadata = { title: "Élèves" };
 /** Élèves de l'école ; une recherche montre aussi les contacts qui correspondent (parent, payeur). */
 export default async function PageEleves({ searchParams }: PageProps<"/eleves">) {
   const { ecoleId, userId } = await exigerRole("direction", "accueil");
-  const { q, f, mode } = await searchParams;
+  const { q, f, mode, sort, order } = await searchParams;
   const saisie = typeof q === "string" ? q.trim() : "";
   const filtre = lireFiltre(f, mode, COLONNES_ELEVES);
+  const tri = lireTri(sort, order, COLONNES_ELEVES);
   const filtrage = filtre.conditions.length > 0;
   const aujourdhui = aujourdhuiAParis();
-  const { eleves, contacts, disposition } = await avecEcole(ecoleId, async (tx) => {
+  const { eleves, contacts, disposition, cours } = await avecEcole(ecoleId, async (tx) => {
     const saison = await saisonCourante(tx, aujourdhui);
     return {
-      eleves: await listerEleves(tx, saisie, { filtre, aujourdhui, saisonId: saison?.id }),
+      eleves: await listerEleves(tx, saisie, { filtre, tri, aujourdhui, saisonId: saison?.id }),
+      cours: saison ? await libellesCoursSaison(tx, saison.id) : [],
       contacts: saisie ? await listerContacts(tx, saisie) : [],
       disposition: await lirePreference(tx, userId, "eleves"),
     };
   });
-  const messageVide = saisie.length === 1 ? "Tapez au moins deux caractères." : filtrage ? "Aucun élève ne correspond à ces filtres." : "Aucun élève ne correspond.";
+  const messageVide =
+    saisie.length === 1
+      ? "Tapez au moins deux caractères."
+      : filtrage
+        ? "Aucun élève ne correspond à ces filtres."
+        : saisie
+          ? `Aucun élève ne correspond à « ${saisie} ».`
+          : "Aucun élève pour l’instant.";
   const pluriel = (n: number, mot: string) => `${n} ${mot}${n > 1 ? "s" : ""}`;
 
   return (
@@ -43,6 +52,7 @@ export default async function PageEleves({ searchParams }: PageProps<"/eleves">)
           <p className="text-sm text-doux" aria-live="polite">
             {saisie ? `${pluriel(eleves.length, "élève")} pour « ${saisie} »` : pluriel(eleves.length, "élève")}
             {filtrage && " avec ces filtres"}
+            {eleves.length >= RESULTATS_MAX && ` : seuls les ${RESULTATS_MAX} premiers sont affichés, précisez la recherche ou filtrez`}
             {!saisie && !filtrage && <span className="hidden sm:inline">. Recherche par nom, téléphone, ou nom d’un parent (Ctrl K).</span>}
           </p>
         </div>
@@ -62,6 +72,14 @@ export default async function PageEleves({ searchParams }: PageProps<"/eleves">)
             disposition={disposition}
             lien="nom"
             vide={messageVide}
+            choix={{ cours }}
+            actionVide={
+              !saisie && (
+                <Link href="/eleves/nouveau" className="bouton-principal">
+                  Nouvel élève
+                </Link>
+              )
+            }
             lignes={eleves.map((e) => ({
               id: e.id,
               href: `/eleves/${e.id}`,

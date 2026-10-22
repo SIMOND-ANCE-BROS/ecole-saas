@@ -1,9 +1,10 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ecrireFiltreColonne } from "../domaine/filtres/colonne";
 import { COLONNES_CONTACTS, COLONNES_ELEVES } from "../domaine/filtres/colonnes";
-import { appliquerFiltre, lireFiltre } from "../domaine/filtres/filtres";
+import { appliquerFiltre, FILTRE_VIDE, lireFiltre, lireTri, VIDE, versParametres } from "../domaine/filtres/filtres";
 import { ageAu } from "../domaine/personnes/age";
-import { type LigneEleve, listerContacts, listerEleves } from "./eleves";
+import { type LigneEleve, libellesCoursSaison, listerContacts, listerEleves } from "./eleves";
 import { avecEcole } from "./index";
 
 /** Filtres par colonne traduits en SQL (#87), comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
@@ -71,6 +72,32 @@ const eleves = async (f: string[], mode?: string) =>
   );
 const contacts = async (f: string[]) =>
   (await avecEcole(ecole, (tx) => listerContacts(tx, "", { filtre: lireFiltre(f, null, COLONNES_CONTACTS) }))).map((c) => c.raisonSociale ?? c.prenom);
+
+const tries = async (sort: string, order: string) =>
+  (await avecEcole(ecole, (tx) => listerEleves(tx, "", { tri: lireTri(sort, order, COLONNES_ELEVES), aujourdhui: AUJOURDHUI, saisonId: saison }))).map((e) => e.prenom);
+
+describe("tri et boutons de filtre (#107)", () => {
+  it("trie par une colonne, les vides en dernier dans les deux sens", async () => {
+    expect(await tries("age", "asc")).toEqual(["Léa", "Hugo", "Inès"]);
+    expect(await tries("age", "desc")).toEqual(["Hugo", "Léa", "Inès"]);
+    expect(await tries("nom", "desc")).toEqual(["Léa", "Inès", "Hugo"]);
+    expect(await tries("responsables", "asc")).toEqual(["Inès", "Léa", "Hugo"]);
+  });
+
+  it("cases à cocher (statut, cours, « vide ») et bornes, comme en mémoire", async () => {
+    const def = (id: string) => COLONNES_ELEVES.find((c) => c.id === id)!;
+    const par = (id: string, fc: Parameters<typeof ecrireFiltreColonne>[2]) =>
+      eleves(versParametres(ecrireFiltreColonne(FILTRE_VIDE, def(id), fc)).map(([, v]) => v));
+    expect(await par("inscription", { choix: ["Inscrit"] })).toEqual(["Léa"]);
+    expect(await par("inscription", { choix: ["En attente", VIDE] })).toEqual(["Hugo", "Inès"]);
+    const libelles = await avecEcole(ecole, (tx) => libellesCoursSaison(tx, saison));
+    expect(libelles).toEqual(["Jazz lun. 17:00"]);
+    expect(await par("cours", { choix: libelles })).toEqual(["Léa"]);
+    expect(await par("cours", { choix: [VIDE] })).toEqual(["Hugo", "Inès"]);
+    expect(await par("age", { min: "8", max: "12" })).toEqual(["Hugo", "Léa"]);
+    expect(await par("naissance", { min: "2018-03-01" })).toEqual(["Léa"]);
+  });
+});
 
 describe("élèves", () => {
   it("nom, accents ignorés, sans voir l'autre école", async () => {

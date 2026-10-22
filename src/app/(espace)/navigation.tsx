@@ -36,18 +36,28 @@ export function Navigation({ role }: { role: "direction" | "accueil" | "professe
   );
 }
 
+/** Listes où la recherche du haut cherche sur place, avec le texte d’aide du champ. */
+const LISTES: Record<string, { libelle: string; exemple: string }> = {
+  "/eleves": { libelle: "Rechercher un élève ou un parent", exemple: "Élève, parent, téléphone…" },
+  "/contacts": { libelle: "Rechercher un contact", exemple: "Contact, téléphone, e-mail…" },
+  "/intervenants": { libelle: "Rechercher un intervenant", exemple: "Nom ou e-mail de l’intervenant…" },
+};
+
 /**
- * Recherche d’élèves (et des contacts liés) accessible partout. Ctrl K (ou Cmd K) y place le
- * curseur ; sur la page Élèves, la liste se met à jour pendant la frappe ;
- * flèche bas pour descendre dans les résultats.
+ * La seule recherche de l’application (#107), accessible partout ; Ctrl K (ou
+ * Cmd K) y place le curseur. Sur une liste (élèves, contacts, intervenants),
+ * elle filtre cette liste pendant la frappe, en gardant filtres de colonnes
+ * et tri ; ailleurs, Entrée mène aux élèves (et aux contacts liés). Flèche bas
+ * pour descendre dans les résultats.
  */
 export function RechercheGlobale() {
   const champ = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const chemin = usePathname();
   const parametres = useSearchParams();
-  const surEleves = chemin === "/eleves";
-  const recherche = surEleves ? (parametres.get("q") ?? "") : "";
+  const liste = LISTES[chemin];
+  const surListe = liste !== undefined;
+  const recherche = surListe ? (parametres.get("q") ?? "") : "";
   const [enCours, naviguer] = useTransition();
 
   // L’URL redevient la référence une fois la navigation terminée, y compris
@@ -69,7 +79,13 @@ export function RechercheGlobale() {
   }, []);
 
   const aller = (q: string, remplacer: boolean) => {
-    const cible = q.trim() ? `/eleves?q=${encodeURIComponent(q.trim())}` : "/eleves";
+    let cible = q.trim() ? `/eleves?q=${encodeURIComponent(q.trim())}` : "/eleves";
+    if (surListe) {
+      const p = new URLSearchParams(parametres.toString());
+      if (q.trim()) p.set("q", q.trim());
+      else p.delete("q");
+      cible = p.size ? `${chemin}?${p}` : chemin;
+    }
     naviguer(() => {
       if (remplacer) router.replace(cible, { scroll: false });
       else router.push(cible);
@@ -82,24 +98,24 @@ export function RechercheGlobale() {
       className="flex w-full max-w-xl items-center gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        aller(champ.current?.value ?? "", surEleves);
+        aller(champ.current?.value ?? "", surListe);
       }}
     >
       <label htmlFor="recherche-globale" className="sr-only">
-        Rechercher un élève ou un parent
+        {liste?.libelle ?? "Rechercher un élève ou un parent"}
       </label>
       <input
         ref={champ}
         id="recherche-globale"
         type="search"
         autoComplete="off"
-        placeholder="Élève, parent, téléphone…"
+        placeholder={liste?.exemple ?? "Élève, parent, téléphone…"}
         className="champ w-full"
         defaultValue={recherche}
         aria-describedby="etat-recherche"
-        autoFocus={surEleves}
+        autoFocus={surListe}
         onChange={(e) => {
-          if (surEleves) aller(e.target.value, true);
+          if (surListe) aller(e.target.value, true);
         }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" && !enCours) {

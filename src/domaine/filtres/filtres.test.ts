@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appliquerFiltre, type DefColonne, libelleCondition, lireFiltre, normaliserTexte, versParametres } from "./filtres";
+import { appliquerFiltre, type DefColonne, libelleCondition, lireFiltre, lireTri, normaliserTexte, trierLignes, versParametres } from "./filtres";
 
 const COLONNES: DefColonne[] = [
   { id: "nom", libelle: "Élève", type: "texte" },
@@ -111,4 +111,27 @@ it("libelleCondition", () => {
   expect(libelleCondition({ colonne: "age", operateur: "sup", valeur: "10" }, COLONNES)).toBe("Âge > 10");
   expect(libelleCondition({ colonne: "nom", operateur: "contient", valeur: "Martin" }, COLONNES)).toBe("Élève contient « Martin »");
   expect(libelleCondition({ colonne: "telephone", operateur: "vide", valeur: "" }, COLONNES)).toBe("Téléphone est vide");
+});
+
+describe("tri (#107)", () => {
+  const COLS: DefColonne[] = [
+    { id: "nom", libelle: "Nom", type: "texte" },
+    { id: "age", libelle: "Âge", type: "nombre" },
+    { id: "tarif", libelle: "Tarif", type: "texte", triable: false },
+  ];
+
+  it("lit le tri de l'adresse, ignore une colonne inconnue ou non triable", () => {
+    expect(lireTri("age", "desc", COLS)).toEqual({ colonne: "age", sens: "desc" });
+    expect(lireTri(["nom"], undefined, COLS)).toEqual({ colonne: "nom", sens: "asc" });
+    expect(lireTri("tarif", "asc", COLS)).toBeNull();
+    expect(lireTri("inconnue", "asc", COLS)).toBeNull();
+  });
+
+  it("trie sans tenir compte des accents, les nombres en ordre numérique, les vides en dernier", () => {
+    const lignes = [{ nom: "Émile", age: 10 }, { nom: "eva", age: null }, { nom: "Zoé", age: 9 }, { nom: "", age: 30 }];
+    const v = (l: (typeof lignes)[number], c: string) => l[c as "nom" | "age"];
+    expect(trierLignes(lignes, { colonne: "nom", sens: "asc" }, v).map((l) => l.nom)).toEqual(["Émile", "eva", "Zoé", ""]);
+    expect(trierLignes(lignes, { colonne: "age", sens: "desc" }, v).map((l) => l.age)).toEqual([30, 10, 9, null]);
+    expect(trierLignes(lignes, null, v)).toBe(lignes);
+  });
 });

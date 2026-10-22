@@ -20,6 +20,12 @@ export type DefColonne = {
   droite?: boolean;
   /** false : colonne affichée mais sans filtre (montant mis en forme…). */
   filtrable?: boolean;
+  /** Valeurs possibles : la colonne se filtre par cases à cocher (#107). La page peut en fournir (cours de la saison). */
+  choix?: readonly string[];
+  /** Colonne qui identifie la ligne (le nom) : toujours affichée, jamais masquable (#107). */
+  obligatoire?: boolean;
+  /** false : un clic sur le titre ne trie pas. */
+  triable?: boolean;
   /** Adresse e-mail : affichée en lien `mailto:`. */
   courriel?: boolean;
   /** Texte d'une cellule vide (« l’élève » pour « Facturé à »), sinon un tiret. */
@@ -39,7 +45,8 @@ export type Operateur =
   | "inf"
   | "inf_egal"
   | "vide"
-  | "non_vide";
+  | "non_vide"
+  | "parmi";
 
 export type Condition = { colonne: string; operateur: Operateur; valeur: string };
 export type Mode = "et" | "ou";
@@ -49,12 +56,12 @@ export const FILTRE_VIDE: Filtre = { mode: "et", conditions: [] };
 /** Au-delà, la barre devient illisible et la requête inutilement lourde. */
 export const CONDITIONS_MAX = 8;
 
-const TEXTE: Operateur[] = ["contient", "ne_contient_pas", "est", "n_est_pas", "commence", "vide", "non_vide"];
+const TEXTE: Operateur[] = ["contient", "ne_contient_pas", "est", "n_est_pas", "commence", "vide", "non_vide", "parmi"];
 export const OPERATEURS: Record<TypeColonne, Operateur[]> = {
   texte: TEXTE,
   telephone: ["contient", "commence", "vide", "non_vide"],
   nombre: ["egal", "different", "sup", "sup_egal", "inf", "inf_egal", "vide", "non_vide"],
-  date: ["egal", "inf", "sup", "vide", "non_vide"],
+  date: ["egal", "inf", "sup", "inf_egal", "sup_egal", "vide", "non_vide"],
 };
 
 export const LIBELLES_OPERATEURS: Record<Operateur, string> = {
@@ -71,9 +78,18 @@ export const LIBELLES_OPERATEURS: Record<Operateur, string> = {
   inf_egal: "≤",
   vide: "est vide",
   non_vide: "n’est pas vide",
+  parmi: "est parmi",
 };
 
-const LIBELLES_DATE: Partial<Record<Operateur, string>> = { egal: "le", inf: "avant le", sup: "après le" };
+/**
+ * « parmi » (cases à cocher d'une colonne, #107) : valeurs séparées par `|`,
+ * `(vide)` pour les lignes sans valeur. `Inscrit|(vide)` : inscrits ou sans inscription.
+ */
+export const VIDE = "(vide)";
+export const SEPARATEUR = "|";
+export const valeursParmi = (valeur: string) => valeur.split(SEPARATEUR).filter((v) => v.trim() !== "");
+
+const LIBELLES_DATE: Partial<Record<Operateur, string>> = { egal: "le", inf: "avant le", sup: "après le", inf_egal: "jusqu’au", sup_egal: "depuis le" };
 
 /** Libellé d'un opérateur selon le type de la colonne (« avant le » pour une date). */
 export const libelleOperateur = (o: Operateur, type: TypeColonne) => (type === "date" && LIBELLES_DATE[o]) || LIBELLES_OPERATEURS[o];
@@ -109,6 +125,10 @@ export function valeurNormalisee(c: Condition, type: TypeColonne): string | numb
   if (sansValeur(c.operateur)) return "";
   if (type === "nombre") return lireNombre(c.valeur);
   if (type === "date") return DATE.test(c.valeur.trim()) ? c.valeur.trim() : null;
+  if (c.operateur === "parmi") {
+    const vs = valeursParmi(c.valeur).map((x) => (x === VIDE ? VIDE : normaliserTexte(x)));
+    return vs.length ? vs.join(SEPARATEUR) : null;
+  }
   const v = type === "telephone" ? chiffres(c.valeur) : normaliserTexte(c.valeur);
   return v === "" ? null : v;
 }
@@ -173,7 +193,20 @@ function evaluer(cellule: Cellule, c: Condition, type: TypeColonne): boolean {
     if (c.operateur === "vide") return d === null;
     if (c.operateur === "non_vide") return d !== null;
     if (d === null || typeof v !== "string") return false;
-    return c.operateur === "egal" ? d === v : c.operateur === "inf" ? d < v : c.operateur === "sup" ? d > v : false;
+    switch (c.operateur) {
+      case "egal":
+        return d === v;
+      case "inf":
+        return d < v;
+      case "sup":
+        return d > v;
+      case "inf_egal":
+        return d <= v;
+      case "sup_egal":
+        return d >= v;
+      default:
+        return false;
+    }
   }
   const brut = Array.isArray(cellule) ? cellule.join(", ") : cellule == null ? "" : String(cellule);
   const t = type === "telephone" ? chiffres(brut) : normaliserTexte(brut);
@@ -194,6 +227,11 @@ function evaluer(cellule: Cellule, c: Condition, type: TypeColonne): boolean {
       return Array.isArray(cellule) ? !cellule.some((e) => normaliserTexte(e) === cible) : t !== cible;
     case "commence":
       return t.startsWith(cible);
+    case "parmi": {
+      const vs = cible.split(SEPARATEUR);
+      if (t === "") return vs.includes(VIDE);
+      return Array.isArray(cellule) ? cellule.some((e) => vs.includes(normaliserTexte(e))) : vs.includes(t);
+    }
     default:
       return false;
   }
@@ -220,4 +258,31 @@ export function libelleCondition(c: Condition, colonnes: DefColonne[]): string {
   if (sansValeur(c.operateur)) return `${nom} ${op}`;
   if (def?.type === "date") return `${nom} ${op} ${c.valeur.split("-").reverse().join("/")}`;
   return def?.type === "nombre" ? `${nom} ${op} ${c.valeur}` : `${nom} ${op} « ${c.valeur} »`;
+}
+
+/** Tri d'une liste par une colonne (#107), dans l'adresse : `?sort=age&order=desc`. */
+export type Tri = { colonne: string; sens: "asc" | "desc" };
+
+/** Tri de l'adresse s'il porte sur une colonne connue et triable ; sinon null (ordre par défaut). */
+export function lireTri(sort: string | string[] | undefined | null, order: string | string[] | undefined | null, colonnes: DefColonne[]): Tri | null {
+  const colonne = Array.isArray(sort) ? sort[0] : sort;
+  const def = colonnes.find((c) => c.id === colonne);
+  if (!def || def.triable === false) return null;
+  return { colonne: def.id, sens: (Array.isArray(order) ? order[0] : order) === "desc" ? "desc" : "asc" };
+}
+
+/** Tri en mémoire, avec les règles du tri SQL : accents ignorés, nombres en ordre numérique, vides en dernier. */
+export function trierLignes<L>(lignes: L[], tri: Tri | null, valeur: (l: L, colonne: string) => Cellule): L[] {
+  if (!tri) return lignes;
+  const cle = (v: Cellule) => (Array.isArray(v) ? v.join(", ") : v);
+  const sens = tri.sens === "asc" ? 1 : -1;
+  return [...lignes].sort((a, b) => {
+    const x = cle(valeur(a, tri.colonne));
+    const y = cle(valeur(b, tri.colonne));
+    const xVide = x == null || x === "";
+    const yVide = y == null || y === "";
+    if (xVide || yVide) return xVide === yVide ? 0 : xVide ? 1 : -1;
+    if (typeof x === "number" && typeof y === "number") return (x - y) * sens;
+    return normaliserTexte(String(x)).localeCompare(normaliserTexte(String(y)), "fr", { numeric: true }) * sens;
+  });
 }
