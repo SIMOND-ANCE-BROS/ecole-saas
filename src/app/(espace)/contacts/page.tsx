@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: "Contacts" };
 
 /** Parents, payers and organisations (CSE, companies). */
 export default async function PageContacts({ searchParams }: PageProps<"/contacts">) {
-  const { schoolId: schoolId, userId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId, userId } = await requireRole("director", "front_desk");
   const { q, f, mode, sort, order } = await searchParams;
   const entry = typeof q === "string" ? q.trim() : "";
   const filter = readFilter(f, mode, CONTACT_COLUMNS);

@@ -24,7 +24,7 @@ const collected = (n: unknown) => {
 };
 
 export default async function PageContact({ params, searchParams }: PageProps<"/contacts/[id]">) {
-  const { schoolId: schoolId, role } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
   const [{ id }, { enregistre, encaisse }] = await Promise.all([params, searchParams]);
   const today = todayInParis();
   const donnees = await withSchool(schoolId, async (tx) => {
@@ -130,7 +130,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
             balance={balance}
             payments={payments}
             back={`/contacts/${c.id}`}
-            direction={role === "direction"}
+            isDirector={role === "director"}
             today={today}
           />
         </div>

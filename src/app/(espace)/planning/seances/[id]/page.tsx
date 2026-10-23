@@ -20,7 +20,7 @@ const longDate = new Intl.DateTimeFormat("fr-FR", {
 });
 
 export default async function AttendancePage({ params }: PageProps<"/planning/seances/[id]">) {
-  const { schoolId: schoolId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const { id } = await params;
   const donnees = await withSchool(schoolId, async (tx) => {
     const attendance = await readAttendance(tx, id);

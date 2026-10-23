@@ -5,7 +5,7 @@ import { requireRole } from "@/lib/session";
 
 /** A person's old URL: redirects to their student or contact record. */
 export default async function OldPerson({ params }: PageProps<"/personnes/[id]">) {
-  const { schoolId: schoolId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const { id } = await params;
   const student = await withSchool(schoolId, (tx) => isStudent(tx, id));
   if (student === null) notFound();

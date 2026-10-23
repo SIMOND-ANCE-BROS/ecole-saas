@@ -38,8 +38,8 @@ beforeAll(async () => {
   schoolB = await createSchool("ecole-b");
   schoolC = await createSchool("ecole-c");
   userId = await createAccount({ email, name: "Accueil Test", password });
-  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${schoolA}, ${userId}, 'accueil')`;
-  await admin`INSERT INTO member (school_id, user_id, role, active) VALUES (${schoolC}, ${userId}, 'direction', false)`;
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${schoolA}, ${userId}, 'front_desk')`;
+  await admin`INSERT INTO member (school_id, user_id, role, active) VALUES (${schoolC}, ${userId}, 'director', false)`;
 });
 
 afterAll(async () => {
@@ -75,7 +75,7 @@ describe("Choix de l’école", () => {
     expect(await chooseSchool(session.id, userId, schoolA)).toBe(true);
     const [after] = await admin`SELECT selected_school_id FROM session WHERE id = ${session.id}`;
     expect(after.selected_school_id).toBe(schoolA);
-    expect(await contextFromSession(userId, schoolA)).toEqual({ userId, schoolId: schoolA, role: "accueil" });
+    expect(await contextFromSession(userId, schoolA)).toEqual({ userId, schoolId: schoolA, role: "front_desk" });
   });
 
   it("refuse une école dont on n’est pas membre", async () => {

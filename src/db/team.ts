@@ -22,8 +22,8 @@ export const INVITATION_DURATION = 7 * DAY;
 export const RESET_DURATION = DAY;
 
 /** Roles that can be given today; teacher accounts will come later (#22). */
-export const INVITABLE_ROLES = { direction: "Direction", accueil: "Accueil" } as const;
-export const ROLES = { ...INVITABLE_ROLES, professeur: "Professeur" } as const;
+export const INVITABLE_ROLES = { director: "Direction", front_desk: "Accueil" } as const;
+export const ROLES = { ...INVITABLE_ROLES, teacher: "Professeur" } as const;
 
 export type Result = { ok: true; id: string } | { ok: false; message: string };
 export type RelationshipResult = { ok: true; id: string; token: string } | { ok: false; message: string };
@@ -33,7 +33,7 @@ async function memberOf(tx: Tx, userId: string) {
   const [m] = await tx
     .select({ id: member.id })
     .from(member)
-    .where(and(eq(member.userId, userId), eq(member.active, true), eq(member.role, "direction")));
+    .where(and(eq(member.userId, userId), eq(member.active, true), eq(member.role, "director")));
   return m?.id ?? null;
 }
 

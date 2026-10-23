@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Nouvel élève" };
 
 /** `?responsable=<id>`: from a contact's record (« Ajouter un enfant »), the guardian is already chosen. */
 export default async function NewStudentPage({ searchParams }: PageProps<"/eleves/nouveau">) {
-  const { schoolId: schoolId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const { responsable } = await searchParams;
   const r = typeof responsable === "string" ? await withSchool(schoolId, (tx) => readPerson(tx, responsable)) : null;
   return (

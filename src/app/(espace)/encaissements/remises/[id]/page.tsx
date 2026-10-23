@@ -16,7 +16,7 @@ const DEPOSIT_KIND = { cheque: "chèques", especes: "espèces", cheque_vacances:
 
 /** Deposit slip of a bank deposit (#98), to print and enclose with the deposit. */
 export default async function DepositPage({ params, searchParams }: PageProps<"/encaissements/remises/[id]">) {
-  const { schoolId: schoolId, role } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
   const [{ id }, { cree }] = await Promise.all([params, searchParams]);
   const donnees = await withSchool(schoolId, async (tx) => {
     const r = await readDeposit(tx, id);
@@ -52,7 +52,7 @@ export default async function DepositPage({ params, searchParams }: PageProps<"/
         </div>
         <div className="flex flex-col items-end gap-2 print:hidden">
           <Print />
-          {role === "direction" && <CancelDeposit id={r.id} />}
+          {role === "director" && <CancelDeposit id={r.id} />}
         </div>
       </header>
       <table className="tableau">

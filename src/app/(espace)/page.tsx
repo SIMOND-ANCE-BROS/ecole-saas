@@ -49,7 +49,7 @@ export default async function FrontDesk() {
           <p className="text-sm text-doux">Saison {season.label}</p>
         </div>
         <div className="flex gap-2">
-          {role !== "professeur" && (
+          {role !== "teacher" && (
             <Link href="/eleves/nouveau" className="bouton-principal">
               Nouvel élève
             </Link>
@@ -60,7 +60,7 @@ export default async function FrontDesk() {
         </div>
       </div>
 
-      <dl className={`panneau grid divide-x divide-bordure ${role === "direction" ? "grid-cols-3" : "grid-cols-2"}`}>
+      <dl className={`panneau grid divide-x divide-bordure ${role === "director" ? "grid-cols-3" : "grid-cols-2"}`}>
         <div className="px-3 py-3 sm:px-4">
           <dt className="text-xs text-doux">Inscriptions</dt>
           <dd className="text-lg font-semibold tabular-nums sm:text-2xl">{digits.enrollments}</dd>
@@ -69,7 +69,7 @@ export default async function FrontDesk() {
           <dt className="text-xs text-doux">Danseurs inscrits</dt>
           <dd className="text-lg font-semibold tabular-nums sm:text-2xl">{digits.students}</dd>
         </div>
-        {role === "direction" && (
+        {role === "director" && (
           <div className="px-3 py-3 sm:px-4">
             <dt className="text-xs text-doux">Montant inscrit</dt>
             <dd className="text-lg font-semibold tabular-nums sm:text-2xl">{formatEuros(digits.netTotalCents)}</dd>

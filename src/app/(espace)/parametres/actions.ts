@@ -26,7 +26,7 @@ async function act(
   page: string,
   action: (tx: Tx) => Promise<{ ok: true } | { ok: false; message: string }>,
 ): Promise<Back> {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const r = await withSchool(schoolId, action);
   revalidatePath(`/parametres/${page}`);
   return { message: r.ok ? null : r.message };

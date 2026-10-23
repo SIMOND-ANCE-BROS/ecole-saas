@@ -10,7 +10,7 @@ import { ClosuresManagement } from "./closures";
 export const metadata: Metadata = { title: "Fermetures" };
 
 export default async function ClosuresPage() {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const { season: season, closures: closures } = await withSchool(schoolId, async (tx) => {
     const s = await currentSeason(tx, todayInParis());
     return { season: s, closures: s ? await listClosures(tx, s.id) : [] };

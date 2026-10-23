@@ -8,7 +8,7 @@ import { Seasons } from "./seasons";
 export const metadata: Metadata = { title: "Saisons" };
 
 export default async function SeasonsPage() {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const seasons = await withSchool(schoolId, (tx) => listSeasons(tx));
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">

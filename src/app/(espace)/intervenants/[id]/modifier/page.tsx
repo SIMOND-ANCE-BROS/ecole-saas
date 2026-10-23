@@ -9,7 +9,7 @@ import { InstructorForm } from "../../instructor-form";
 export const metadata: Metadata = { title: "Modifier un intervenant" };
 
 export default async function UpdateInstructor({ params }: PageProps<"/intervenants/[id]/modifier">) {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const { id } = await params;
   const instructor = await withSchool(schoolId, (tx) => readInstructor(tx, id));
   if (!instructor) notFound();

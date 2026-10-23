@@ -13,7 +13,7 @@ const safeReturnPath = (r: unknown) =>
 
 /** Records one or more payments (front desk and management), then returns to the payer's record. */
 export async function collectPayments(payerId: string, entry: unknown, back: unknown): Promise<{ message: string }> {
-  const { schoolId: schoolId, userId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId, userId } = await requireRole("director", "front_desk");
   const r = await withSchool(schoolId, (tx) => collect(tx, userId, payerId, entry as never));
   if (!r.ok) return { message: r.message };
   revalidatePath("/encaissements");
@@ -26,7 +26,7 @@ export async function correct(
   amountCents: number,
   back: unknown,
 ): Promise<{ message: string | null }> {
-  const { schoolId: schoolId, userId } = await requireRole("direction");
+  const { schoolId: schoolId, userId } = await requireRole("director");
   const r = await withSchool(schoolId, (tx) => correctPayment(tx, userId, paymentId, amountCents, todayInParis()));
   if (!r.ok) return { message: r.message };
   const path = safeReturnPath(back);

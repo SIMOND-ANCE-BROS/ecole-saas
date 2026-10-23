@@ -15,7 +15,7 @@ import { Unavailabilities } from "./unavailabilities";
 export const metadata: Metadata = { title: "Intervenant" };
 
 export default async function InstructorPage({ params }: PageProps<"/intervenants/[id]">) {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const { id } = await params;
   const donnees = await withSchool(schoolId, async (tx) => {
     const i = await readInstructor(tx, id);

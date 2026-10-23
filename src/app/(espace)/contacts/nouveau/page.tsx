@@ -6,7 +6,7 @@ import { PersonForm } from "../../_people/person-form";
 export const metadata: Metadata = { title: "Nouveau contact" };
 
 export default async function NewContactPage() {
-  await requireRole("direction", "accueil");
+  await requireRole("director", "front_desk");
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">

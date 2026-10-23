@@ -4,7 +4,9 @@
  * management, the only role able to manage the team.
  */
 
-export type Role = "direction" | "accueil" | "professeur";
+/** Member roles, in the order of the `member_role` database enum. */
+export const ROLE_VALUES = ["director", "front_desk", "teacher"] as const;
+export type Role = (typeof ROLE_VALUES)[number];
 export type TeamMember = { id: string; role: Role; active: boolean };
 
 /** Refusal message for a change of role or active status, or null if it is allowed. */
@@ -19,7 +21,7 @@ export function changeRefusal(
   if (targetId === authorId)
     return "Vous ne pouvez pas modifier votre propre accès : demandez à une autre personne de la direction.";
   const directions = members.filter((m) =>
-    m.id === targetId ? after.role === "direction" && after.active : m.role === "direction" && m.active,
+    m.id === targetId ? after.role === "director" && after.active : m.role === "director" && m.active,
   ).length;
   if (directions === 0) return "Il faut au moins une personne active à la direction.";
   return null;

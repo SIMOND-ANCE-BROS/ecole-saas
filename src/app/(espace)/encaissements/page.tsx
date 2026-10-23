@@ -18,7 +18,7 @@ const day = (iso: string) => iso.split("-").reverse().join("/");
 
 /** Payments (#98): log by period, payments to deposit at the bank, bank deposits and deposit slips. */
 export default async function PaymentsPage({ searchParams }: PageProps<"/encaissements">) {
-  const { schoolId: schoolId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const p = await searchParams;
   const view: View = typeof p.vue === "string" && p.vue in VIEWS ? (p.vue as View) : "journal";
   const today = todayInParis();

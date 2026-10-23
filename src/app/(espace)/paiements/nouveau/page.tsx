@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Encaisser" };
 
 /** Payment for a payer (`?payeur=`), also opened as a side panel from their record. */
 export default async function CollectPaymentPage({ searchParams }: PageProps<"/paiements/nouveau">) {
-  const { schoolId: schoolId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const { payeur } = await searchParams;
   const today = todayInParis();
   const donnees =

@@ -20,21 +20,21 @@ const back = (r: { ok: true } | { ok: false; message: string }): Back => ({ mess
 
 /** Attendance of a lesson: front desk and management. */
 export async function doAttendance(lessonId: string, attendances: unknown): Promise<Back> {
-  const { schoolId: schoolId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const r = await withSchool(schoolId, (tx) => saveAttendance(tx, lessonId, attendances as never));
   revalidatePath(`/planning/seances/${lessonId}`);
   return back(r);
 }
 
 export async function replace(lessonId: string, instructorId: string): Promise<Back> {
-  const { schoolId: schoolId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const r = await withSchool(schoolId, (tx) => changeInstructor(tx, lessonId, instructorId));
   revalidatePath(`/planning/seances/${lessonId}`);
   return back(r);
 }
 
 export async function cancel(lessonId: string, annulee: boolean): Promise<Back> {
-  const { schoolId: schoolId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const r = await withSchool(schoolId, (tx) => (annulee ? cancelLesson(tx, lessonId) : restoreLesson(tx, lessonId)));
   revalidatePath(`/planning/seances/${lessonId}`);
   return back(r);
@@ -42,7 +42,7 @@ export async function cancel(lessonId: string, annulee: boolean): Promise<Back> 
 
 /** Closures of the current season: management; upcoming lessons follow at once. */
 async function withCurrentSeason(action: (seasonId: string) => Parameters<typeof withSchool>[1]): Promise<Back> {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const today = todayInParis();
   const r = await withSchool(schoolId, async (tx) => {
     const season = await currentSeason(tx, today);

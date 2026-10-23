@@ -6,7 +6,7 @@ import { InstructorForm } from "../instructor-form";
 export const metadata: Metadata = { title: "Nouvel intervenant" };
 
 export default async function NewInstructorPage() {
-  await requireRole("direction");
+  await requireRole("director");
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">

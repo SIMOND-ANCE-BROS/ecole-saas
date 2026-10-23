@@ -9,7 +9,7 @@ import { requireRole } from "@/lib/session";
 
 /** Creates a bank deposit (front desk and management) then opens its deposit slip. */
 export async function deposit(entry: unknown): Promise<{ message: string }> {
-  const { schoolId: schoolId, userId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId, userId } = await requireRole("director", "front_desk");
   const r = await withSchool(schoolId, (tx) => createDeposit(tx, userId, entry as never, todayInParis()));
   if (!r.ok) return { message: r.message };
   revalidatePath("/encaissements");
@@ -18,7 +18,7 @@ export async function deposit(entry: unknown): Promise<{ message: string }> {
 
 /** Cancels a bank deposit made by mistake: management only. */
 export async function cancel(id: string): Promise<{ message: string }> {
-  const { schoolId: schoolId, userId } = await requireRole("direction");
+  const { schoolId: schoolId, userId } = await requireRole("director");
   const r = await withSchool(schoolId, (tx) => cancelDeposit(tx, userId, id));
   if (!r.ok) return { message: r.message };
   revalidatePath("/encaissements");

@@ -8,7 +8,7 @@ import { requireRole } from "@/lib/session";
 
 /** CSV export of the payment log (`?du=&au=&moyen=`), for the accounts (#98). */
 export async function GET(query: Request) {
-  const { schoolId: schoolId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const p = new URL(query.url).searchParams;
   const today = todayInParis();
   const du = validDate(p.get("du")) ?? today;

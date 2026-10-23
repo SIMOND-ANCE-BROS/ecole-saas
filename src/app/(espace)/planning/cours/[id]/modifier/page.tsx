@@ -10,7 +10,7 @@ import { CourseForm } from "../../course-form";
 export const metadata: Metadata = { title: "Modifier un cours" };
 
 export default async function EditCoursePage({ params }: PageProps<"/planning/cours/[id]/modifier">) {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const { id } = await params;
   const donnees = await withSchool(schoolId, async (tx) => {
     const course = await readCourse(tx, id);

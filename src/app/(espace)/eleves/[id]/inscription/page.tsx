@@ -16,7 +16,7 @@ export const metadata: Metadata = { title: "Nouvelle inscription" };
  * Their siblings, invoiced to the same person, can be enrolled right after.
  */
 export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]/inscription">) {
-  const { schoolId: schoolId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const { id } = await params;
   const today = todayInParis();
   const donnees = await withSchool(schoolId, async (tx) => {

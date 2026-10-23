@@ -16,7 +16,7 @@ if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en
 const admin = postgres(url, { max: 1, onnotice: () => {} });
 
 const suffix = Math.random().toString(36).slice(2, 8);
-const direction = `rem-direction-${suffix}`;
+const director = `rem-direction-${suffix}`;
 const TODAY = "2026-10-21";
 let school: string;
 let otherSchool: string;
@@ -26,12 +26,12 @@ beforeAll(async () => {
   [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`ra-${suffix}`}) RETURNING id`;
   [{ id: otherSchool }] =
     await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`rb-${suffix}`}) RETURNING id`;
-  await admin`INSERT INTO "user" (id, name, email) VALUES (${direction}, 'Direction Test', ${`${direction}@exemple.test`})`;
-  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${direction}, 'direction'), (${otherSchool}, ${direction}, 'direction')`;
+  await admin`INSERT INTO "user" (id, name, email) VALUES (${director}, 'Direction Test', ${`${director}@exemple.test`})`;
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${director}, 'director'), (${otherSchool}, ${director}, 'director')`;
   const [p] =
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Martin', 'Sophie') RETURNING id`;
   const r = await withSchool(school, (tx) =>
-    collect(tx, direction, p.id, [
+    collect(tx, director, p.id, [
       {
         method: "cheque",
         amountCents: 10000,
@@ -76,7 +76,7 @@ beforeAll(async () => {
   );
   if (!r.ok) throw new Error(r.message);
   [ids.cheque, ids.differe, ids.especes, ids.carte, ids.annule] = r.ids;
-  await withSchool(school, (tx) => correctPayment(tx, direction, ids.annule, 5000, TODAY));
+  await withSchool(school, (tx) => correctPayment(tx, director, ids.annule, 5000, TODAY));
 });
 
 afterAll(async () => {
@@ -92,7 +92,7 @@ afterAll(async () => {
   });
   for (const t of ["person", "member"])
     await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [school, otherSchool]);
-  await admin`DELETE FROM "user" WHERE id = ${direction}`;
+  await admin`DELETE FROM "user" WHERE id = ${director}`;
   await admin`DELETE FROM school WHERE id IN (${school}, ${otherSchool})`;
   await admin.end();
 });
@@ -111,7 +111,7 @@ describe("remises en banque", () => {
 
   it("crée une remise de chèques ; refuse un chèque déjà remis, un autre moyen, un chèque pas encore à encaisser", async () => {
     const r = await withSchool(school, (tx) =>
-      createDeposit(tx, direction, { date: TODAY, method: "cheque", paymentIds: [ids.cheque] }, TODAY),
+      createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [ids.cheque] }, TODAY),
     );
     if (!r.ok) throw new Error(r.message);
     chequesDeposit = r.id;
@@ -122,24 +122,24 @@ describe("remises en banque", () => {
     };
     expect(
       await withSchool(school, (tx) =>
-        createDeposit(tx, direction, { date: TODAY, method: "cheque", paymentIds: [ids.cheque] }, TODAY),
+        createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [ids.cheque] }, TODAY),
       ),
     ).toEqual(refusal);
     expect(
       await withSchool(school, (tx) =>
-        createDeposit(tx, direction, { date: TODAY, method: "cheque", paymentIds: [ids.especes] }, TODAY),
+        createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [ids.especes] }, TODAY),
       ),
     ).toEqual(refusal);
     expect(
       await withSchool(school, (tx) =>
-        createDeposit(tx, direction, { date: TODAY, method: "cheque", paymentIds: [ids.differe] }, TODAY),
+        createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [ids.differe] }, TODAY),
       ),
     ).toEqual(refusal);
     // A deposit dated on the planned cashing day accepts the post-dated cheque.
     expect(
       (
         await withSchool(school, (tx) =>
-          createDeposit(tx, direction, { date: "2027-01-05", method: "cheque", paymentIds: [ids.differe] }, TODAY),
+          createDeposit(tx, director, { date: "2027-01-05", method: "cheque", paymentIds: [ids.differe] }, TODAY),
         )
       ).ok,
     ).toBe(true);
@@ -175,7 +175,7 @@ describe("remises en banque", () => {
   });
 
   it("annuler une remise rend ses chèques à remettre et laisse une trace", async () => {
-    expect((await withSchool(school, (tx) => cancelDeposit(tx, direction, chequesDeposit))).ok).toBe(true);
+    expect((await withSchool(school, (tx) => cancelDeposit(tx, director, chequesDeposit))).ok).toBe(true);
     expect((await toDeposit()).cheque.map((p) => p.id)).toEqual([ids.cheque]);
     const [t] = await admin`SELECT action FROM audit_log WHERE row_id = ${chequesDeposit} AND action = 'delete'`;
     expect(t?.action).toBe("delete");
@@ -187,7 +187,7 @@ describe("remises en banque", () => {
     expect(
       (
         await withSchool(otherSchool, (tx) =>
-          createDeposit(tx, direction, { date: TODAY, method: "cheque", paymentIds: [ids.cheque] }, TODAY),
+          createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [ids.cheque] }, TODAY),
         )
       ).ok,
     ).toBe(false);

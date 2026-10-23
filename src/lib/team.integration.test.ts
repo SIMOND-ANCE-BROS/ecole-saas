@@ -38,10 +38,10 @@ beforeAll(async () => {
     await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`eb-${suffix}`}) RETURNING id`;
   diana = await createAccount({ email: emailDiana, name: "Diana Test", password: PASSWORD });
   [{ id: dianaMember }] =
-    await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${diana}, 'direction') RETURNING id`;
+    await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${diana}, 'director') RETURNING id`;
   // An account already a member of another school.
   teacher = await createAccount({ email: teacherEmail, name: "Prof Ailleurs", password: PASSWORD });
-  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${otherSchool}, ${teacher}, 'direction')`;
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${otherSchool}, ${teacher}, 'director')`;
 });
 
 afterAll(async () => {
@@ -73,10 +73,10 @@ describe("invitation", () => {
 
   it("invite : le lien s'ouvre, une seule invitation par e-mail, jeton jamais stocké en clair", async () => {
     const r1 = await withSchool(school, (tx) =>
-      invite(tx, diana, { email: newMemberEmail, name: "Accueil", role: "accueil" }, new Date()),
+      invite(tx, diana, { email: newMemberEmail, name: "Accueil", role: "front_desk" }, new Date()),
     );
     const r2 = await withSchool(school, (tx) =>
-      invite(tx, diana, { email: newMemberEmail.toUpperCase(), name: "Accueil", role: "accueil" }, new Date()),
+      invite(tx, diana, { email: newMemberEmail.toUpperCase(), name: "Accueil", role: "front_desk" }, new Date()),
     );
     if (!r1.ok || !r2.ok) throw new Error("invitation refusée");
     token = r2.token;
@@ -84,7 +84,7 @@ describe("invitation", () => {
     expect(await openLink(school, token)).toMatchObject({
       type: "invitation",
       email: newMemberEmail,
-      role: "accueil",
+      role: "front_desk",
       school: "École A",
       existingAccount: false,
     });
@@ -107,12 +107,12 @@ describe("invitation", () => {
     });
     expect(await acceptLink(school, token, entry(PASSWORD))).toMatchObject({ ok: false });
     await expect(connect(newMemberEmail, PASSWORD)).resolves.toBeTruthy();
-    expect(await member(newMemberEmail)).toMatchObject({ role: "accueil", active: true, name: "Accueil Nouvelle" });
+    expect(await member(newMemberEmail)).toMatchObject({ role: "front_desk", active: true, name: "Accueil Nouvelle" });
   });
 
   it("un compte existant confirme son mot de passe actuel pour rejoindre l'école", async () => {
     const r = await withSchool(school, (tx) =>
-      invite(tx, diana, { email: teacherEmail, name: "Prof", role: "direction" }, new Date()),
+      invite(tx, diana, { email: teacherEmail, name: "Prof", role: "director" }, new Date()),
     );
     if (!r.ok) throw new Error(r.message);
     expect(await openLink(school, r.token)).toMatchObject({ existingAccount: true });
@@ -121,26 +121,26 @@ describe("invitation", () => {
       message: "Mot de passe actuel incorrect.",
     });
     expect((await acceptLink(school, r.token, entry("", { currentPassword: PASSWORD }))).ok).toBe(true);
-    expect(await member(teacherEmail)).toMatchObject({ role: "direction", active: true });
+    expect(await member(teacherEmail)).toMatchObject({ role: "director", active: true });
   });
 
   it("refuse d'inviter une personne déjà dans l'équipe ; une invitation révoquée ou expirée ne s'ouvre plus", async () => {
     expect(
       await withSchool(school, (tx) =>
-        invite(tx, diana, { email: emailDiana, name: "Diana", role: "accueil" }, new Date()),
+        invite(tx, diana, { email: emailDiana, name: "Diana", role: "front_desk" }, new Date()),
       ),
     ).toEqual({
       ok: false,
       message: "Cette personne fait déjà partie de l’équipe.",
     });
     const r = await withSchool(school, (tx) =>
-      invite(tx, diana, { email: `x-${suffix}@exemple.test`, name: "X", role: "accueil" }, new Date()),
+      invite(tx, diana, { email: `x-${suffix}@exemple.test`, name: "X", role: "front_desk" }, new Date()),
     );
     if (!r.ok) throw new Error(r.message);
     expect((await withSchool(school, (tx) => revokeInvitation(tx, r.id))).ok).toBe(true);
     expect(await openLink(school, r.token)).toBeNull();
     const old = await withSchool(school, (tx) =>
-      invite(tx, diana, { email: `y-${suffix}@exemple.test`, name: "Y", role: "accueil" }, new Date("2020-01-01")),
+      invite(tx, diana, { email: `y-${suffix}@exemple.test`, name: "Y", role: "front_desk" }, new Date("2020-01-01")),
     );
     if (!old.ok) throw new Error(old.message);
     expect(await openLink(school, old.token)).toBeNull();
@@ -149,15 +149,16 @@ describe("invitation", () => {
 
 describe("rôles et accès", () => {
   it("change l'accès d'un autre membre, refuse de toucher à son propre accès, trace dans le journal", async () => {
-    const accueil = await member(newMemberEmail);
+    const frontDesk = await member(newMemberEmail);
     expect(
-      (await withSchool(school, (tx) => updateMember(tx, diana, accueil.id, { role: "accueil", active: false }))).ok,
+      (await withSchool(school, (tx) => updateMember(tx, diana, frontDesk.id, { role: "front_desk", active: false })))
+        .ok,
     ).toBe(true);
     expect(
-      (await withSchool(school, (tx) => updateMember(tx, diana, dianaMember, { role: "accueil", active: true }))).ok,
+      (await withSchool(school, (tx) => updateMember(tx, diana, dianaMember, { role: "front_desk", active: true }))).ok,
     ).toBe(false);
     const [t] =
-      await admin`SELECT before->>'active' AS before, after->>'active' AS after FROM audit_log WHERE row_id = ${accueil.id}`;
+      await admin`SELECT before->>'active' AS before, after->>'active' AS after FROM audit_log WHERE row_id = ${frontDesk.id}`;
     expect(t).toEqual({ before: "true", after: "false" });
   });
 
@@ -165,22 +166,22 @@ describe("rôles et accès", () => {
     const p = await member(teacherEmail);
     // Diana moves the teacher to the front desk: she stays in management, that is allowed.
     expect(
-      (await withSchool(school, (tx) => updateMember(tx, diana, p.id, { role: "accueil", active: true }))).ok,
+      (await withSchool(school, (tx) => updateMember(tx, diana, p.id, { role: "front_desk", active: true }))).ok,
     ).toBe(true);
     // At the front desk, they can no longer touch the team nor invite.
     expect(
-      await withSchool(school, (tx) => updateMember(tx, teacher, dianaMember, { role: "accueil", active: true })),
+      await withSchool(school, (tx) => updateMember(tx, teacher, dianaMember, { role: "front_desk", active: true })),
     ).toEqual({ ok: false, message: "Accès refusé." });
     expect(
       await withSchool(school, (tx) =>
-        invite(tx, teacher, { email: `z-${suffix}@exemple.test`, name: "Z", role: "direction" }, new Date()),
+        invite(tx, teacher, { email: `z-${suffix}@exemple.test`, name: "Z", role: "director" }, new Date()),
       ),
     ).toEqual({
       ok: false,
       message: "Accès refusé.",
     });
     expect(
-      (await withSchool(school, (tx) => updateMember(tx, diana, p.id, { role: "direction", active: true }))).ok,
+      (await withSchool(school, (tx) => updateMember(tx, diana, p.id, { role: "director", active: true }))).ok,
     ).toBe(true);
   });
 });
@@ -221,7 +222,7 @@ describe("réinitialisation du mot de passe", () => {
     const n = await member(newMemberEmail);
     const r = await createResetLink(school, diana, n.id);
     if (!r.ok) throw new Error(r.message);
-    await admin`INSERT INTO member (school_id, user_id, role, active) VALUES (${otherSchool}, ${n.userId}, 'accueil', false)`;
+    await admin`INSERT INTO member (school_id, user_id, role, active) VALUES (${otherSchool}, ${n.userId}, 'front_desk', false)`;
     expect(await acceptLink(school, r.token, entry("encore un autre mot de passe"))).toEqual({
       ok: false,
       message: "Ce compte sert aussi dans une autre école : la personne doit changer elle-même son mot de passe.",

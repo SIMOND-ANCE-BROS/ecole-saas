@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Tarifs et réductions" };
 
 /** `?saison=<id>`: the displayed season, the current season by default. */
 export default async function TariffsPage({ searchParams }: PageProps<"/parametres/tarifs">) {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const { saison: chosen } = await searchParams;
   const donnees = await withSchool(schoolId, async (tx) => {
     const seasons = await listSeasons(tx);

@@ -18,7 +18,7 @@ export const metadata: Metadata = { title: "Élèves" };
 
 /** The school's students; a search also shows the matching contacts (parent, payer). */
 export default async function StudentsPage({ searchParams }: PageProps<"/eleves">) {
-  const { schoolId: schoolId, userId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId, userId } = await requireRole("director", "front_desk");
   const { q, f, mode, sort, order } = await searchParams;
   const entry = typeof q === "string" ? q.trim() : "";
   const filter = readFilter(f, mode, STUDENT_COLUMNS);

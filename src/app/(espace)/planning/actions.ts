@@ -23,7 +23,7 @@ export async function moveOneLesson(
   slot: { date: string; startTime: string; durationMinutes: number },
   scope: "seance" | "suivantes",
 ): Promise<CalendarResponse> {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const today = todayInParis();
   const r = await withSchool(schoolId, async (tx): Promise<CalendarResponse> => {
     const d = await moveLesson(tx, lessonId, slot, scope);
