@@ -11,7 +11,7 @@ import { CourseForm } from "../course-form";
 export const metadata: Metadata = { title: "Nouveau cours" };
 
 export default async function NewCoursePage({ searchParams }: PageProps<"/planning/cours/nouveau">) {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const { jour, heure, duree, date } = await searchParams;
   const {
     season: season,

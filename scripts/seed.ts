@@ -12,8 +12,8 @@ import { createAccount } from "../src/lib/accounts";
 
 const PASSWORD = process.env.SEED_MOT_DE_PASSE ?? "demo-ecole-de-danse";
 const ACCOUNTS = [
-  { email: "accueil@demo.test", name: "Accueil Démo", role: "accueil" },
-  { email: "direction@demo.test", name: "Direction Démo", role: "direction" },
+  { email: "accueil@demo.test", name: "Accueil Démo", role: "front_desk" },
+  { email: "direction@demo.test", name: "Direction Démo", role: "director" },
 ] as const;
 
 /** A payer and the students whose courses they pay for. */

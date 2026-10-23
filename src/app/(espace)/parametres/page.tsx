@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Paramètres" };
 
 /** Whatever is specific to the school is entered here: never in the code. */
 export default async function SettingsPage() {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const {
     seasons: seasons,
     disciplines,

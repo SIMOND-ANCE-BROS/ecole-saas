@@ -9,7 +9,7 @@ import { PersonForm } from "../../../_people/person-form";
 export const metadata: Metadata = { title: "Modifier un contact" };
 
 export default async function EditContactPage({ params }: PageProps<"/contacts/[id]/modifier">) {
-  const { schoolId: schoolId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const { id } = await params;
   const record = await withSchool(schoolId, (tx) => readPerson(tx, id));
   if (!record) notFound();

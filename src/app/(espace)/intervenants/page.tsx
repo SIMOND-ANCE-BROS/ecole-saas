@@ -15,7 +15,7 @@ import { ListTable } from "../_filters/list-table";
 export const metadata: Metadata = { title: "Intervenants" };
 
 export default async function InstructorsPage({ searchParams }: PageProps<"/intervenants">) {
-  const { schoolId: schoolId, role, userId } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId, role, userId } = await requireRole("director", "front_desk");
   const { enregistre, f, mode, sort, order, q } = await searchParams;
   const entry = typeof q === "string" ? normalizeText(q) : "";
   const {
@@ -30,9 +30,9 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
       layout: await readPreference(tx, userId, "intervenants"),
     };
   });
-  const direction = role === "direction";
+  const isDirector = role === "director";
   // The instructors' rate is shown to management only.
-  const columns = direction ? INSTRUCTOR_COLUMNS : INSTRUCTOR_COLUMNS.filter((c) => c.id !== "tarif");
+  const columns = isDirector ? INSTRUCTOR_COLUMNS : INSTRUCTOR_COLUMNS.filter((c) => c.id !== "tarif");
   // Full list already loaded (a few instructors): in-memory filtering, same rules as in SQL.
   const filter = readFilter(f, mode, INSTRUCTOR_COLUMNS);
   const values: Record<string, (i: (typeof instructors)[number]) => Cell> = {
@@ -64,7 +64,7 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
             {season && `, cours de la saison ${season.label}`}
           </p>
         </div>
-        {direction && (
+        {isDirector && (
           <Link href="/intervenants/nouveau" className="bouton-principal">
             Ajouter un intervenant
           </Link>
@@ -79,7 +79,7 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
 
       {instructors.length === 0 ? (
         <p className="text-sm text-doux">
-          Aucun intervenant pour l’instant.{direction && " Ajoutez les professeurs avant de construire le planning."}
+          Aucun intervenant pour l’instant.{isDirector && " Ajoutez les professeurs avant de construire le planning."}
         </p>
       ) : (
         <Suspense>
@@ -98,7 +98,7 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
             choice={{ statut: Object.values(STATUSES) }}
             rows={visible.map((i) => ({
               id: i.id,
-              href: direction ? `/intervenants/${i.id}` : undefined,
+              href: isDirector ? `/intervenants/${i.id}` : undefined,
               dimmed: !i.active,
               badge: i.active ? undefined : "inactif",
               cells: {
@@ -106,7 +106,7 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
                 statut: STATUSES[i.status],
                 cours: i.seasonCourses,
                 // Never sent to the front desk's browser: hiding the column is not enough.
-                ...(direction ? { tarif: `${formatEuros(i.rateCents)} ${PAY_MODES[i.payMode]}` } : {}),
+                ...(isDirector ? { tarif: `${formatEuros(i.rateCents)} ${PAY_MODES[i.payMode]}` } : {}),
                 email: i.email,
               },
             }))}

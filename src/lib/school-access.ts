@@ -2,8 +2,9 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, schoolsOf } from "../db";
 import { session } from "../db/schema";
+import type { Role } from "../domain/team/rules";
 
-export type MemberRole = "direction" | "accueil" | "professeur";
+export type MemberRole = Role;
 
 /** What a business query needs: who, in which school, with which role. */
 export type SchoolContext = { userId: string; schoolId: string; role: MemberRole };

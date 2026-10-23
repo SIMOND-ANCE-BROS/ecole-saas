@@ -24,7 +24,7 @@ type Props = {
   /** Record to return to after a payment. */
   back: string;
   /** Management: may correct a payment. */
-  direction: boolean;
+  isDirector: boolean;
   today: string;
 };
 
@@ -34,7 +34,7 @@ export function PaymentsSection({
   balance: balance,
   payments: payments,
   back: back,
-  direction,
+  isDirector,
   today: today,
 }: Props) {
   return (
@@ -89,7 +89,7 @@ export function PaymentsSection({
                 <th>Référence</th>
                 <th className="text-right">Montant</th>
                 <th>Encaissement</th>
-                {direction && <th>Correction</th>}
+                {isDirector && <th>Correction</th>}
               </tr>
             </thead>
             <tbody>
@@ -108,7 +108,7 @@ export function PaymentsSection({
                           ? `le ${day(p.plannedPayment)}`
                           : "encaissé"}
                     </td>
-                    {direction && (
+                    {isDirector && (
                       <td>
                         {p.amountCents > 0 && remaining > 0 ? (
                           <CorrectPayment paymentId={p.id} remaining={remaining} back={back} />

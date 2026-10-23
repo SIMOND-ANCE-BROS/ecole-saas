@@ -14,7 +14,7 @@ if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en
 const admin = postgres(url, { max: 1, onnotice: () => {} });
 
 const suffix = Math.random().toString(36).slice(2, 8);
-const accueil = `pai-accueil-${suffix}`;
+const frontDesk = `pai-accueil-${suffix}`;
 const TODAY = "2026-10-21";
 let school: string;
 let otherSchool: string;
@@ -25,8 +25,8 @@ beforeAll(async () => {
   [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`pa-${suffix}`}) RETURNING id`;
   [{ id: otherSchool }] =
     await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`pb-${suffix}`}) RETURNING id`;
-  await admin`INSERT INTO "user" (id, name, email) VALUES (${accueil}, 'Accueil Test', ${`${accueil}@exemple.test`})`;
-  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${accueil}, 'accueil')`;
+  await admin`INSERT INTO "user" (id, name, email) VALUES (${frontDesk}, 'Accueil Test', ${`${frontDesk}@exemple.test`})`;
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${frontDesk}, 'front_desk')`;
   [{ id: payer }] =
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Martin', 'Sophie') RETURNING id`;
   [{ id: foreign }] =
@@ -49,7 +49,7 @@ afterAll(async () => {
   });
   for (const t of ["enrollment", "season", "person", "member"])
     await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [school, otherSchool]);
-  await admin`DELETE FROM "user" WHERE id = ${accueil}`;
+  await admin`DELETE FROM "user" WHERE id = ${frontDesk}`;
   await admin`DELETE FROM school WHERE id IN (${school}, ${otherSchool})`;
   await admin.end();
 });
@@ -68,7 +68,7 @@ describe("encaisser", () => {
 
   it("trois chèques datés : solde à jour, chèques à encaisser, journal tenu", async () => {
     const r = await withSchool(school, (tx) =>
-      collect(tx, accueil, payer, [
+      collect(tx, frontDesk, payer, [
         cheque(10000, null, "0001"),
         cheque(10000, "2027-01-05", "0002"),
         cheque(10000, "2027-04-05", "0003"),
@@ -92,13 +92,13 @@ describe("encaisser", () => {
   it("refuse des espèces « à encaisser plus tard », un payeur d'une autre école, un compte non membre", async () => {
     expect(
       await withSchool(school, (tx) =>
-        collect(tx, accueil, payer, [{ ...cheque(5000, "2027-01-05", ""), method: "especes" }]),
+        collect(tx, frontDesk, payer, [{ ...cheque(5000, "2027-01-05", ""), method: "especes" }]),
       ),
     ).toEqual({
       ok: false,
       message: "Seul un chèque s’encaisse plus tard",
     });
-    expect(await withSchool(school, (tx) => collect(tx, accueil, foreign, [cheque(5000, null, "x")]))).toEqual({
+    expect(await withSchool(school, (tx) => collect(tx, frontDesk, foreign, [cheque(5000, null, "x")]))).toEqual({
       ok: false,
       message: "Payeur introuvable.",
     });
@@ -116,8 +116,8 @@ describe("encaisser", () => {
     await expect(admin`UPDATE payment SET tool_synced = false, amount_cents = 1 WHERE id = ${ids[0]}`).rejects.toThrow(
       /cannot be modified/,
     );
-    expect((await withSchool(school, (tx) => correctPayment(tx, accueil, ids[0], 4000, TODAY))).ok).toBe(true);
-    expect(await withSchool(school, (tx) => correctPayment(tx, accueil, ids[0], 7000, TODAY))).toEqual({
+    expect((await withSchool(school, (tx) => correctPayment(tx, frontDesk, ids[0], 4000, TODAY))).ok).toBe(true);
+    expect(await withSchool(school, (tx) => correctPayment(tx, frontDesk, ids[0], 7000, TODAY))).toEqual({
       ok: false,
       message: "La correction dépasse le montant encore non corrigé.",
     });
@@ -125,7 +125,7 @@ describe("encaisser", () => {
     const correction = rows.find((l) => l.correctedId === ids[0]);
     expect(correction).toMatchObject({ amountCents: -4000, method: "cheque", enteredBy: "Accueil Test" });
     expect(rows.find((l) => l.id === ids[0])?.correctedCents).toBe(4000);
-    expect(await withSchool(school, (tx) => correctPayment(tx, accueil, correction!.id, 100, TODAY))).toEqual({
+    expect(await withSchool(school, (tx) => correctPayment(tx, frontDesk, correction!.id, 100, TODAY))).toEqual({
       ok: false,
       message: "Ce paiement ne peut pas être corrigé.",
     });
@@ -135,7 +135,7 @@ describe("encaisser", () => {
   it("une autre école ne voit ni les paiements ni le solde", async () => {
     expect(await withSchool(otherSchool, (tx) => paymentsOf(tx, payer))).toEqual([]);
     expect(await withSchool(otherSchool, (tx) => balanceOf(tx, payer, TODAY))).toBeNull();
-    expect(await withSchool(otherSchool, (tx) => correctPayment(tx, accueil, ids[1], 100, TODAY))).toEqual({
+    expect(await withSchool(otherSchool, (tx) => correctPayment(tx, frontDesk, ids[1], 100, TODAY))).toEqual({
       ok: false,
       message: "Ce paiement ne peut pas être corrigé.",
     });

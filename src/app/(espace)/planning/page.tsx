@@ -36,7 +36,7 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
   if (!season) {
     return <p className="text-sm text-doux">Aucune saison n’est encore paramétrée.</p>;
   }
-  const direction = role === "direction";
+  const isDirector = role === "director";
   const savedId = typeof enregistre === "string" ? enregistre : undefined;
   const confirmed = cours.find((c) => c.id === savedId);
 
@@ -44,7 +44,7 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
     <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="titre-page">Planning {season.label}</h1>
-        {direction && (
+        {isDirector && (
           <div className="flex gap-2">
             <Link href="/planning/fermetures" className="bouton-secondaire">
               Fermetures
@@ -67,12 +67,12 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
       )}
       {cours.length === 0 ? (
         <p className="text-sm text-doux">
-          Aucun cours pour cette saison.{direction && " Créez le premier avec « Nouveau cours »."}
+          Aucun cours pour cette saison.{isDirector && " Créez le premier avec « Nouveau cours »."}
         </p>
       ) : (
         <ScheduleGrid
           courses={cours}
-          editable={direction}
+          editable={isDirector}
           highlighted={confirmed?.id}
           view={vue === "liste" ? "liste" : vue === "type" ? "type" : "datee"}
           hours={hours}

@@ -8,7 +8,7 @@ import { signOut } from "./actions";
 import { Frame } from "./frame";
 import { Navigation, GlobalSearch } from "./navigation";
 
-const ROLE_LABEL = { direction: "Direction", accueil: "Accueil", professeur: "Professeur" } as const;
+const ROLE_LABEL = { director: "Direction", front_desk: "Accueil", teacher: "Professeur" } as const;
 
 /**
  * Frame of the signed-in workspace: sidebar (school, navigation, account) and
@@ -27,7 +27,7 @@ export default async function WorkspaceLayout({ children, modal }: LayoutProps<"
     <Frame
       header={
         // useSearchParams requires a Suspense boundary.
-        <Suspense>{role !== "professeur" && <GlobalSearch />}</Suspense>
+        <Suspense>{role !== "teacher" && <GlobalSearch />}</Suspense>
       }
       pane={
         <>

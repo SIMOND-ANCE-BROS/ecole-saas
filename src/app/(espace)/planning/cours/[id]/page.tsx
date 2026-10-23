@@ -27,7 +27,7 @@ const lessonDate = new Intl.DateTimeFormat("fr-FR", {
 const shortDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
 
 export default async function CoursePage({ params, searchParams }: PageProps<"/planning/cours/[id]">) {
-  const { schoolId: schoolId, role } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
   const [{ id }, { modifie }] = await Promise.all([params, searchParams]);
   const donnees = await withSchool(schoolId, async (tx) => {
     const course = await scheduleCourse(tx, id);
@@ -77,7 +77,7 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
         </div>
         <div className="flex gap-2 print:hidden">
           <PrintButton />
-          {role === "direction" && (
+          {role === "director" && (
             <Link href={`/planning/cours/${cours.id}/modifier`} className="bouton-principal">
               Modifier le cours
             </Link>
@@ -134,7 +134,7 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
           <h2 id="seances" className="text-base font-semibold">
             Séances
           </h2>
-          {role === "direction" && (
+          {role === "director" && (
             <Link href="/planning/fermetures" className="lien text-sm">
               Fermetures
             </Link>
@@ -142,7 +142,7 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
         </div>
         {lessons.length === 0 ? (
           <p className="text-sm text-doux">
-            Aucune séance générée.{role === "direction" && " Utilisez « Mettre à jour les séances » dans Fermetures."}
+            Aucune séance générée.{role === "director" && " Utilisez « Mettre à jour les séances » dans Fermetures."}
           </p>
         ) : (
           <ul className="flex flex-wrap gap-1.5 text-sm">

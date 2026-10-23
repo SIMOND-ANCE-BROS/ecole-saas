@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useTransition } from "react";
+import type { Role } from "@/domain/team/rules";
 
 const LIENS = [
   { href: "/", label: "Accueil" },
@@ -15,15 +16,15 @@ const LIENS = [
 ];
 
 /** Sidebar links; the current page is flagged (aria-current). */
-export function Navigation({ role }: { role: "direction" | "accueil" | "professeur" }) {
+export function Navigation({ role }: { role: Role }) {
   const path = usePathname();
   const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
   return (
     <nav aria-label="Navigation principale" className="flex flex-col gap-0.5">
       {LIENS.filter(
         (l) =>
-          (l.href !== "/parametres" || role === "direction") &&
-          (role !== "professeur" || !["/intervenants", "/eleves", "/contacts", "/encaissements"].includes(l.href)),
+          (l.href !== "/parametres" || role === "director") &&
+          (role !== "teacher" || !["/intervenants", "/eleves", "/contacts", "/encaissements"].includes(l.href)),
       ).map((l) => (
         <Link
           key={l.href}

@@ -18,7 +18,7 @@ export type Refusal = { message: string; errors: Partial<Record<string, string>>
 
 /** Creates (null id) or updates a course of the current season; management only. */
 export async function saveCourse(id: string | null, entry: unknown): Promise<Refusal> {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const donnees = validCourseInput.safeParse(entry);
   if (!donnees.success) {
     const errors: Refusal["errors"] = {};
@@ -43,7 +43,7 @@ export async function saveCourse(id: string | null, entry: unknown): Promise<Ref
 }
 
 export async function remove(id: string): Promise<Refusal> {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const result = await withSchool(schoolId, (tx) => deleteCourse(tx, id));
   if (!result.ok) return { message: result.message, errors: {} };
   redirect("/planning?supprime=1");
@@ -54,7 +54,7 @@ export async function checkSlot(
   courseId: string | null,
   slot: { instructorId: string; weekday: number; startTime: string; durationMinutes: number },
 ): Promise<string[]> {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const today = todayInParis();
   return withSchool(schoolId, async (tx) => {
     const seasonId = courseId ? (await readCourse(tx, courseId))?.seasonId : (await currentSeason(tx, today))?.id;
@@ -75,7 +75,7 @@ const shortDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "sho
  * instructor's unavailabilities for this slot.
  */
 export async function move(courseId: string, slot: unknown, confirmed: boolean): Promise<MoveResponse> {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const today = todayInParis();
   const r = await withSchool(schoolId, async (tx) => {
     const d = await moveCourse(tx, courseId, slot as Parameters<typeof moveCourse>[2], confirmed);

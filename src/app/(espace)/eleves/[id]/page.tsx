@@ -29,7 +29,7 @@ const collected = (n: unknown) => {
 };
 
 export default async function StudentPage({ params, searchParams }: PageProps<"/eleves/[id]">) {
-  const { schoolId: schoolId, role } = await requireRole("direction", "accueil");
+  const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
   const [{ id }, { enregistre, inscription, encaisse }] = await Promise.all([params, searchParams]);
   const today = todayInParis();
   const donnees = await withSchool(schoolId, async (tx) => {
@@ -154,7 +154,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
               balance={balance}
               payments={payments}
               back={`/eleves/${e.id}`}
-              direction={role === "direction"}
+              isDirector={role === "director"}
               today={today}
             />
           )}

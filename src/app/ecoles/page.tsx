@@ -6,7 +6,7 @@ import { chooseSchoolAction } from "./actions";
 
 export const metadata: Metadata = { title: "Choisir une école" };
 
-const ROLE_LABEL = { direction: "Direction", accueil: "Accueil", professeur: "Professeur" } as const;
+const ROLE_LABEL = { director: "Direction", front_desk: "Accueil", teacher: "Professeur" } as const;
 
 export default async function SchoolsPage() {
   const { user } = await currentSession();

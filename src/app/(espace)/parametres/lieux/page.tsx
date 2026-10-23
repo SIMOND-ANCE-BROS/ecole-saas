@@ -8,7 +8,7 @@ import { Places } from "./sites-and-rooms";
 export const metadata: Metadata = { title: "Sites et salles" };
 
 export default async function PlacesPage() {
-  const { schoolId: schoolId } = await requireRole("direction");
+  const { schoolId: schoolId } = await requireRole("director");
   const seats = await withSchool(schoolId, (tx) => listPlaces(tx));
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">

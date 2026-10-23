@@ -31,6 +31,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { ROLE_VALUES } from "../domain/team/rules";
 
 // ---------------------------------------------------------------------------
 // Enumerated types
@@ -81,7 +82,7 @@ export const installmentStatus = pgEnum("installment_status", [
   "annulee",
 ]);
 export const statementStatus = pgEnum("statement_status", ["a_controler", "conforme", "ecart", "paye"]);
-export const memberRole = pgEnum("member_role", ["direction", "accueil", "professeur"]);
+export const memberRole = pgEnum("member_role", ROLE_VALUES);
 
 // ---------------------------------------------------------------------------
 // Tenant: the school
