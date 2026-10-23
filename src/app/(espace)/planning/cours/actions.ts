@@ -28,7 +28,11 @@ export async function enregistrerCours(id: string | null, saisie: unknown): Prom
   const aujourdhui = aujourdhuiAParis();
   const resultat = await avecEcole(ecoleId, async (tx) => {
     const saisonId = id !== null ? (await lireCours(tx, id))?.saisonId : (await saisonCourante(tx, aujourdhui))?.id;
-    if (!saisonId) return { ok: false as const, message: id !== null ? "Ce cours n’existe plus." : "Aucune saison n’est paramétrée." };
+    if (!saisonId)
+      return {
+        ok: false as const,
+        message: id !== null ? "Ce cours n’existe plus." : "Aucune saison n’est paramétrée.",
+      };
     const r = id !== null ? await modifierCours(tx, id, donnees.data) : await creerCours(tx, saisonId, donnees.data);
     // Séances à venir recalculées dans la même transaction (jour changé, nouveau cours…).
     if (r.ok) await synchroniserSeances(tx, saisonId, aujourdhui);
@@ -86,21 +90,37 @@ export async function deplacer(coursId: string, creneau: unknown, confirme: bool
           const autre = planning.find((p) => p.id === x.id)!;
           const quand = `${autre.discipline}, ${JOURS_COURTS[autre.jourSemaine ?? 0]} ${autre.heureDebut}`;
           if (x.salle && x.intervenant) return `${autre.salle} et ${autre.intervenant} déjà pris (${quand})`;
-          return x.salle ? `${autre.salle} déjà occupée (${quand})` : `${autre.intervenant} donne déjà un cours (${quand})`;
+          return x.salle
+            ? `${autre.salle} déjà occupée (${quand})`
+            : `${autre.intervenant} donne déjà un cours (${quand})`;
         })
       : [];
     if (moi && c.jourSemaine) {
-      const hors = horsHoraires({ jourSemaine: c.jourSemaine, heureDebut: c.heureDebut, dureeMinutes: c.dureeMinutes }, (await horairesParSite(tx))[moi.siteId] ?? []);
+      const hors = horsHoraires(
+        { jourSemaine: c.jourSemaine, heureDebut: c.heureDebut, dureeMinutes: c.dureeMinutes },
+        (await horairesParSite(tx))[moi.siteId] ?? [],
+      );
       if (hors) alertes.push(hors);
     }
     if (c.jourSemaine) {
       const dates = await conflitsCreneau(
         tx,
-        { saisonId: c.saisonId, intervenantId: c.intervenantId, jourSemaine: c.jourSemaine, heureDebut: c.heureDebut, dureeMinutes: c.dureeMinutes },
+        {
+          saisonId: c.saisonId,
+          intervenantId: c.intervenantId,
+          jourSemaine: c.jourSemaine,
+          heureDebut: c.heureDebut,
+          dureeMinutes: c.dureeMinutes,
+        },
         aujourdhui,
       );
       if (dates.length > 0) {
-        alertes.push(`Intervenant indisponible le ${dates.slice(0, 4).map((x) => dateCourte.format(new Date(`${x}T00:00:00Z`))).join(", ")}${dates.length > 4 ? "…" : ""}`);
+        alertes.push(
+          `Intervenant indisponible le ${dates
+            .slice(0, 4)
+            .map((x) => dateCourte.format(new Date(`${x}T00:00:00Z`)))
+            .join(", ")}${dates.length > 4 ? "…" : ""}`,
+        );
       }
     }
     return { statut: "ok" as const, alertes };

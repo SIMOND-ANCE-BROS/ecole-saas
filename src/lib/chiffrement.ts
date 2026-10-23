@@ -16,7 +16,12 @@ export function chiffrer(texte: string): string {
   const iv = randomBytes(12);
   const chiffreur = createCipheriv("aes-256-gcm", cle(), iv);
   const donnees = Buffer.concat([chiffreur.update(texte, "utf8"), chiffreur.final()]);
-  return ["v1", iv.toString("base64url"), chiffreur.getAuthTag().toString("base64url"), donnees.toString("base64url")].join(".");
+  return [
+    "v1",
+    iv.toString("base64url"),
+    chiffreur.getAuthTag().toString("base64url"),
+    donnees.toString("base64url"),
+  ].join(".");
 }
 
 export function dechiffrer(chiffre: string): string {

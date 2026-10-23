@@ -21,7 +21,8 @@ import {
 /** Expression SQL d'une colonne ; `liste` : un tableau de textes (responsables…). */
 export type ExpressionColonne = { sql: SQL; liste?: boolean };
 
-const normaliser = (x: SQL) => sql`regexp_replace(btrim(translate(lower(${x}), ${ACCENTS}, ${SANS_ACCENTS})), '\\s+', ' ', 'g')`;
+const normaliser = (x: SQL) =>
+  sql`regexp_replace(btrim(translate(lower(${x}), ${ACCENTS}, ${SANS_ACCENTS})), '\\s+', ' ', 'g')`;
 
 function condition(c: Condition, def: DefColonne, e: ExpressionColonne): SQL | undefined {
   const v = valeurNormalisee(c, def.type);
@@ -75,7 +76,9 @@ function condition(c: Condition, def: DefColonne, e: ExpressionColonne): SQL | u
 
   const brut = e.liste ? sql`array_to_string(${e.sql}, ', ')` : sql`(${e.sql})::text`;
   const t =
-    def.type === "telephone" ? sql`regexp_replace(coalesce(${brut}, ''), '[^0-9]', '', 'g')` : normaliser(sql`coalesce(${brut}, '')`);
+    def.type === "telephone"
+      ? sql`regexp_replace(coalesce(${brut}, ''), '[^0-9]', '', 'g')`
+      : normaliser(sql`coalesce(${brut}, '')`);
   // Une liste « est » X si l'un de ses éléments vaut X.
   const unElement = sql`EXISTS (SELECT 1 FROM unnest(${e.sql}) AS element WHERE ${normaliser(sql`element`)} = ${v})`;
   switch (c.operateur) {
@@ -100,7 +103,12 @@ function condition(c: Condition, def: DefColonne, e: ExpressionColonne): SQL | u
         vs.map((x) => sql`${x}`),
         sql`, `,
       );
-      const parmi = vs.length === 0 ? undefined : e.liste ? sql`EXISTS (SELECT 1 FROM unnest(${e.sql}) AS element WHERE ${normaliser(sql`element`)} IN (${liste}))` : sql`${t} IN (${liste})`;
+      const parmi =
+        vs.length === 0
+          ? undefined
+          : e.liste
+            ? sql`EXISTS (SELECT 1 FROM unnest(${e.sql}) AS element WHERE ${normaliser(sql`element`)} IN (${liste}))`
+            : sql`${t} IN (${liste})`;
       const vide = toutes.includes(VIDE) ? sql`${t} = ''` : undefined;
       return parmi && vide ? sql`(${parmi} OR ${vide})` : (parmi ?? vide);
     }
@@ -110,7 +118,11 @@ function condition(c: Condition, def: DefColonne, e: ExpressionColonne): SQL | u
 }
 
 /** Condition WHERE d'un filtre ; undefined s'il n'y a rien à filtrer. */
-export function conditionFiltre(filtre: Filtre, colonnes: DefColonne[], expressions: Record<string, ExpressionColonne>): SQL | undefined {
+export function conditionFiltre(
+  filtre: Filtre,
+  colonnes: DefColonne[],
+  expressions: Record<string, ExpressionColonne>,
+): SQL | undefined {
   const parties = filtre.conditions.flatMap((c) => {
     const def = colonnes.find((d) => d.id === c.colonne);
     const e = expressions[c.colonne];
@@ -126,7 +138,11 @@ export function conditionFiltre(filtre: Filtre, colonnes: DefColonne[], expressi
  * accents et majuscules ignorés, nombres et dates dans leur ordre, vides en
  * dernier. undefined sans tri (l'appelant garde son ordre par défaut).
  */
-export function ordreColonne(tri: Tri | null, colonnes: DefColonne[], expressions: Record<string, ExpressionColonne>): SQL | undefined {
+export function ordreColonne(
+  tri: Tri | null,
+  colonnes: DefColonne[],
+  expressions: Record<string, ExpressionColonne>,
+): SQL | undefined {
   const def = tri && colonnes.find((d) => d.id === tri.colonne);
   const e = tri && expressions[tri.colonne];
   if (!tri || !def || !e || def.triable === false) return undefined;

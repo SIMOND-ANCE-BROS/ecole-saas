@@ -10,7 +10,15 @@ import { saisonCourante } from "@/db/planning";
 import { ageAu, aujourdhuiAParis } from "@/domaine/personnes/age";
 import { exigerRole } from "@/lib/session";
 import { SectionPaiements } from "../../_personnes/paiements";
-import { Bandeau, CoursSuivis, Documents, InscriptionsFacturees, jourDe, Notes, Telephone } from "../../_personnes/sections";
+import {
+  Bandeau,
+  CoursSuivis,
+  Documents,
+  InscriptionsFacturees,
+  jourDe,
+  Notes,
+  Telephone,
+} from "../../_personnes/sections";
 import { Facturation } from "./facturation";
 import { Proches } from "./proches";
 
@@ -53,7 +61,9 @@ export default async function PageEleve({ params, searchParams }: PageProps<"/el
   const prenom = e.prenom ?? nom;
   const age = e.dateNaissance ? ageAu(e.dateNaissance, aujourdhui) : null;
   const mineur = age !== null && age < 18;
-  const urgences = e.responsables.filter((r) => r.aPrevenir).concat(e.autres.filter((a) => a.aPrevenir && a.sens === "vers"));
+  const urgences = e.responsables
+    .filter((r) => r.aPrevenir)
+    .concat(e.autres.filter((a) => a.aPrevenir && a.sens === "vers"));
   const bandeau = BANDEAUX[String(inscription ?? enregistre)];
 
   return (
@@ -87,7 +97,10 @@ export default async function PageEleve({ params, searchParams }: PageProps<"/el
       <Notes notes={e.notes} />
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <aside aria-label="Contact et facturation" className="order-first flex flex-col gap-4 lg:sticky lg:top-20 lg:order-last">
+        <aside
+          aria-label="Contact et facturation"
+          className="order-first flex flex-col gap-4 lg:sticky lg:top-20 lg:order-last"
+        >
           <section aria-labelledby="urgence" className="panneau flex flex-col gap-1 p-4 text-sm">
             <h2 id="urgence" className="text-sm font-semibold">
               En cas d’urgence
@@ -98,7 +111,11 @@ export default async function PageEleve({ params, searchParams }: PageProps<"/el
               urgences.map((u) => (
                 <span key={u.lienId} className="flex flex-wrap gap-x-2">
                   <span className="font-medium">{u.nom}</span>
-                  {u.telephone ? <Telephone numero={u.telephone} /> : <span className="text-erreur">sans téléphone</span>}
+                  {u.telephone ? (
+                    <Telephone numero={u.telephone} />
+                  ) : (
+                    <span className="text-erreur">sans téléphone</span>
+                  )}
                 </span>
               ))
             )}
@@ -140,7 +157,14 @@ export default async function PageEleve({ params, searchParams }: PageProps<"/el
               , qui paie pour {prenom}.
             </p>
           ) : (
-            <SectionPaiements payeurId={e.id} solde={solde} paiements={paiements} retour={`/eleves/${e.id}`} direction={role === "direction"} aujourdhui={aujourdhui} />
+            <SectionPaiements
+              payeurId={e.id}
+              solde={solde}
+              paiements={paiements}
+              retour={`/eleves/${e.id}`}
+              direction={role === "direction"}
+              aujourdhui={aujourdhui}
+            />
           )}
           <Documents documents={e.documents} aujourdhui={aujourdhui} />
         </div>

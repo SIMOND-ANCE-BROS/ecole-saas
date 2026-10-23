@@ -49,18 +49,18 @@ export default async function Accueil() {
           <p className="text-sm text-doux">Saison {saison.libelle}</p>
         </div>
         <div className="flex gap-2">
-          {role !== "professeur" && <Link href="/eleves/nouveau" className="bouton-principal">
-            Nouvel élève
-          </Link>}
+          {role !== "professeur" && (
+            <Link href="/eleves/nouveau" className="bouton-principal">
+              Nouvel élève
+            </Link>
+          )}
           <Link href="/planning" className="bouton-secondaire">
             Voir le planning
           </Link>
         </div>
       </div>
 
-      <dl
-        className={`panneau grid divide-x divide-bordure ${role === "direction" ? "grid-cols-3" : "grid-cols-2"}`}
-      >
+      <dl className={`panneau grid divide-x divide-bordure ${role === "direction" ? "grid-cols-3" : "grid-cols-2"}`}>
         <div className="px-3 py-3 sm:px-4">
           <dt className="text-xs text-doux">Inscriptions</dt>
           <dd className="text-lg font-semibold tabular-nums sm:text-2xl">{chiffres.inscriptions}</dd>
@@ -72,7 +72,9 @@ export default async function Accueil() {
         {role === "direction" && (
           <div className="px-3 py-3 sm:px-4">
             <dt className="text-xs text-doux">Montant inscrit</dt>
-            <dd className="text-lg font-semibold tabular-nums sm:text-2xl">{formaterEuros(chiffres.totalNetCentimes)}</dd>
+            <dd className="text-lg font-semibold tabular-nums sm:text-2xl">
+              {formaterEuros(chiffres.totalNetCentimes)}
+            </dd>
           </div>
         )}
       </dl>
@@ -81,15 +83,22 @@ export default async function Accueil() {
         <h2 id="jour" className="text-base font-semibold">
           Séances du jour
         </h2>
-        {duJour.length > 0 && <p className="text-sm text-doux">
-          {duJour.filter((s) => s.statut !== "annulee" && !s.appelFait).length} appel(s) à faire · {duJour.filter((s) => s.statut !== "annulee" && s.appelFait).length} fait(s) · {duJour.filter((s) => s.statut === "annulee").length} séance(s) annulée(s)
-        </p>}
+        {duJour.length > 0 && (
+          <p className="text-sm text-doux">
+            {duJour.filter((s) => s.statut !== "annulee" && !s.appelFait).length} appel(s) à faire ·{" "}
+            {duJour.filter((s) => s.statut !== "annulee" && s.appelFait).length} fait(s) ·{" "}
+            {duJour.filter((s) => s.statut === "annulee").length} séance(s) annulée(s)
+          </p>
+        )}
         {duJour.length === 0 ? (
           <p className="text-sm text-doux">Pas de cours aujourd’hui.</p>
         ) : (
           <ul className="panneau divide-y divide-bordure text-sm">
             {duJour.map((s) => (
-              <li key={s.id} className={`flex flex-wrap items-baseline gap-x-3 px-3 py-2 ${s.statut === "annulee" ? "text-doux" : ""}`}>
+              <li
+                key={s.id}
+                className={`flex flex-wrap items-baseline gap-x-3 px-3 py-2 ${s.statut === "annulee" ? "text-doux" : ""}`}
+              >
                 <span className="w-12 tabular-nums">{s.heureDebut}</span>
                 <span className={`font-medium ${s.statut === "annulee" ? "line-through" : ""}`}>
                   {s.discipline}
@@ -98,7 +107,10 @@ export default async function Accueil() {
                 <span className="text-doux">
                   {s.salle}, {s.intervenant}
                 </span>
-                <Link href={`/planning/seances/${s.id}`} className={`ml-auto ${s.appelFait || s.statut === "annulee" ? "lien text-doux" : "bouton-secondaire"}`}>
+                <Link
+                  href={`/planning/seances/${s.id}`}
+                  className={`ml-auto ${s.appelFait || s.statut === "annulee" ? "lien text-doux" : "bouton-secondaire"}`}
+                >
                   {s.statut === "annulee" ? "Annulée" : s.appelFait ? "Appel fait" : "Faire l’appel"}
                 </Link>
               </li>
@@ -113,7 +125,9 @@ export default async function Accueil() {
             Dernières inscriptions
           </h2>
           {dernieres.length === 0 ? (
-            <p className="text-sm text-doux">Aucune inscription pour l’instant. Recherchez une personne pour commencer.</p>
+            <p className="text-sm text-doux">
+              Aucune inscription pour l’instant. Recherchez une personne pour commencer.
+            </p>
           ) : (
             <div className="panneau overflow-x-auto">
               <table className="tableau">
@@ -161,13 +175,21 @@ export default async function Accueil() {
                 <tbody>
                   {presqueComplets.map((c) => (
                     <tr key={c.id}>
-                      <td><Link className="lien" href={`/planning/cours/${c.id}`}>{c.discipline}</Link></td>
+                      <td>
+                        <Link className="lien" href={`/planning/cours/${c.id}`}>
+                          {c.discipline}
+                        </Link>
+                      </td>
                       <td>
                         {c.jourSemaine ? JOURS[c.jourSemaine] : "stage"} {c.heureDebut}
                       </td>
                       <td className="text-right tabular-nums">
                         {c.inscrits} / {c.capaciteMax}
-                        <span className="block text-xs text-doux">{c.inscrits >= (c.capaciteMax ?? 0) ? "Complet" : `${(c.capaciteMax ?? 0) - c.inscrits} place(s) restante(s)`}</span>
+                        <span className="block text-xs text-doux">
+                          {c.inscrits >= (c.capaciteMax ?? 0)
+                            ? "Complet"
+                            : `${(c.capaciteMax ?? 0) - c.inscrits} place(s) restante(s)`}
+                        </span>
                       </td>
                     </tr>
                   ))}

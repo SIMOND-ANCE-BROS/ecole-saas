@@ -87,7 +87,9 @@ describe("forfait réservé à une discipline", () => {
   const zumba = (duree: number) => ({ disciplineId: ZUMBA, dureeMinutes: duree });
 
   it("prend la ligne Zumba quand tous les cours sont de la Zumba", () => {
-    const [r] = ribas(inscription({ public: "adulte", periodicite: "annee", cours: [zumba(60), zumba(60)] })).inscriptions;
+    const [r] = ribas(
+      inscription({ public: "adulte", periodicite: "annee", cours: [zumba(60), zumba(60)] }),
+    ).inscriptions;
     expect(ok(r).prixBrutCentimes).toBe(43000);
   });
 
@@ -210,7 +212,12 @@ describe("réduction fratrie (Ribas : -10 % dès 2 enfants, non cumulable avec 2
 
   it("l’applique à deux cours de la même discipline", () => {
     const [deuxCoursJazz] = ribas(
-      inscription({ cours: [{ disciplineId: JAZZ, dureeMinutes: 60 }, { disciplineId: JAZZ, dureeMinutes: 60 }] }),
+      inscription({
+        cours: [
+          { disciplineId: JAZZ, dureeMinutes: 60 },
+          { disciplineId: JAZZ, dureeMinutes: 60 },
+        ],
+      }),
       inscription({}),
     ).inscriptions;
     expect(fratrie(deuxCoursJazz)?.statut).toBe("appliquee");

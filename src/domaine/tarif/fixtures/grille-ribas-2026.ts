@@ -17,7 +17,14 @@ function ligne(
   disciplineId: string | null = null,
 ): LigneTarif {
   compteur += 1;
-  return { id: `ribas-${compteur}`, public: publicTarif, periodicite, combinaison, disciplineId, prixCentimes: euros * 100 };
+  return {
+    id: `ribas-${compteur}`,
+    public: publicTarif,
+    periodicite,
+    combinaison,
+    disciplineId,
+    prixCentimes: euros * 100,
+  };
 }
 
 const adultes: LigneTarif[] = [

@@ -30,12 +30,44 @@ type FamilleDemo = {
 };
 
 const FAMILLES: FamilleDemo[] = [
-  { nom: "Lefèvre", prenom: "Hélène", email: "helene.lefevre@demo.test", telephone: "06 12 34 56 78", adresse: "12 rue des Lilas, 69100 Villeurbanne", danseurs: [["Zoé", "2015-03-10"], ["Noé", "2017-11-02"]] },
-  { nom: "Martin", prenom: "Paul", email: "paul.martin@demo.test", telephone: "06 98 76 54 32", danseurs: [["Léa", "2014-06-21"]] },
-  { nom: "Bernard", prenom: "Émilie", telephone: "07 11 22 33 44", danseurs: [["Alice", "2016-01-15"], ["Louis", "2016-01-15"], ["Jules", "2019-09-30"]] },
+  {
+    nom: "Lefèvre",
+    prenom: "Hélène",
+    email: "helene.lefevre@demo.test",
+    telephone: "06 12 34 56 78",
+    adresse: "12 rue des Lilas, 69100 Villeurbanne",
+    danseurs: [
+      ["Zoé", "2015-03-10"],
+      ["Noé", "2017-11-02"],
+    ],
+  },
+  {
+    nom: "Martin",
+    prenom: "Paul",
+    email: "paul.martin@demo.test",
+    telephone: "06 98 76 54 32",
+    danseurs: [["Léa", "2014-06-21"]],
+  },
+  {
+    nom: "Bernard",
+    prenom: "Émilie",
+    telephone: "07 11 22 33 44",
+    danseurs: [
+      ["Alice", "2016-01-15"],
+      ["Louis", "2016-01-15"],
+      ["Jules", "2019-09-30"],
+    ],
+  },
   { nom: "Rivière", prenom: "Alex", email: "alex.riviere@demo.test", danseurs: [["Alex", "1996-04-05"]] },
   { nom: "Petit", prenom: "Sarah", telephone: "06 55 44 33 22", danseurs: [["Chloé", "2013-12-24"]] },
-  { nom: "Ateliers Démo", type: "professionnel", raisonSociale: "CSE des Ateliers Démo", siren: "000000000", email: "cse@demo.test", danseurs: [] },
+  {
+    nom: "Ateliers Démo",
+    type: "professionnel",
+    raisonSociale: "CSE des Ateliers Démo",
+    siren: "000000000",
+    email: "cse@demo.test",
+    danseurs: [],
+  },
 ];
 
 if (process.env.NODE_ENV === "production") throw new Error("Données de démonstration refusées en production");
@@ -96,7 +128,8 @@ async function principal() {
       ["Site Centre", "3 place de la Mairie, 69100 Villeurbanne", true],
       ["Site Nord", "40 avenue des Arts, 69100 Villeurbanne", false],
     ] as const) {
-      const [s] = await admin`INSERT INTO site (ecole_id, nom, adresse, permanence) VALUES (${ecole.id}, ${nom}, ${adresse}, ${permanence}) RETURNING id`;
+      const [s] =
+        await admin`INSERT INTO site (ecole_id, nom, adresse, permanence) VALUES (${ecole.id}, ${nom}, ${adresse}, ${permanence}) RETURNING id`;
       sites[nom] = s.id;
     }
     const salles: Record<string, string> = {};
@@ -105,7 +138,8 @@ async function principal() {
       ["Petite salle", "Site Centre", 15],
       ["Studio", "Site Nord", 20],
     ] as const) {
-      const [s] = await admin`INSERT INTO salle (ecole_id, site_id, nom, capacite) VALUES (${ecole.id}, ${sites[site]}, ${nom}, ${capacite}) RETURNING id`;
+      const [s] =
+        await admin`INSERT INTO salle (ecole_id, site_id, nom, capacite) VALUES (${ecole.id}, ${sites[site]}, ${nom}, ${capacite}) RETURNING id`;
       salles[nom] = s.id;
     }
     const disciplines: Record<string, string> = {};
@@ -179,7 +213,10 @@ async function principal() {
       ["etudiant", [90], 155, 400],
     ];
     for (const [publicTarif, combinaison, trimestre, annee] of GRILLE) {
-      for (const [periodicite, euros] of [["trimestre", trimestre], ["annee", annee]] as const) {
+      for (const [periodicite, euros] of [
+        ["trimestre", trimestre],
+        ["annee", annee],
+      ] as const) {
         await admin`
           INSERT INTO tarif (ecole_id, saison_id, public, periodicite, combinaison, prix_centimes)
           VALUES (${ecole.id}, ${saison.id}, ${publicTarif}, ${periodicite}, ${`{${combinaison.join(",")}}`}::smallint[], ${euros * 100})`;
@@ -191,7 +228,8 @@ async function principal() {
   }
 
   // Fermetures de démonstration (dates fictives) puis séances à venir, comme l'application les crée.
-  const [{ nbFermetures }] = await admin`SELECT count(*)::int AS "nbFermetures" FROM fermeture WHERE saison_id = ${saison.id}`;
+  const [{ nbFermetures }] =
+    await admin`SELECT count(*)::int AS "nbFermetures" FROM fermeture WHERE saison_id = ${saison.id}`;
   if (nbFermetures === 0) {
     for (const [libelle, debut, fin] of [
       ["Vacances d’automne", "2026-10-17", "2026-11-01"],
@@ -208,6 +246,13 @@ async function principal() {
   console.log(`Mot de passe : ${process.env.SEED_MOT_DE_PASSE ? "(SEED_MOT_DE_PASSE)" : MOT_DE_PASSE}`);
 }
 
-principal()
-  .finally(() => admin.end())
-  .then(() => process.exit(0));
+// The application pool (src/db) keeps the process alive: exit explicitly.
+void principal()
+  .catch((e: unknown) => {
+    console.error(e);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await admin.end();
+    process.exit(process.exitCode ?? 0);
+  });

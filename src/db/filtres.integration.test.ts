@@ -22,7 +22,12 @@ let saison: string;
 beforeAll(async () => {
   [{ id: ecole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École A', ${`fa-${suffixe}`}) RETURNING id`;
   [{ id: autreEcole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École B', ${`fb-${suffixe}`}) RETURNING id`;
-  const personne = async (e: string, nom: string, prenom: string | null, champs: { naissance?: string; telephone?: string; eleve?: boolean; societe?: string; email?: string } = {}) =>
+  const personne = async (
+    e: string,
+    nom: string,
+    prenom: string | null,
+    champs: { naissance?: string; telephone?: string; eleve?: boolean; societe?: string; email?: string } = {},
+  ) =>
     (
       await admin`INSERT INTO personne (ecole_id, nom, prenom, date_naissance, telephone, eleve, type, raison_sociale, siren, email)
         VALUES (${e}, ${nom}, ${prenom}, ${champs.naissance ?? null}, ${champs.telephone ?? null}, ${champs.eleve ?? false},
@@ -33,26 +38,42 @@ beforeAll(async () => {
 
   // Léa, 8 ans : sa mère est responsable, paie et se prévient (son téléphone s'affiche pour Léa).
   const lea = await personne(ecole, "Martin", "Léa", { naissance: "2018-03-01", eleve: true });
-  const sophie = await personne(ecole, "Martin", "Sophie", { telephone: "06 12 34 56 78", email: "sophie@exemple.test" });
+  const sophie = await personne(ecole, "Martin", "Sophie", {
+    telephone: "06 12 34 56 78",
+    email: "sophie@exemple.test",
+  });
   await lien(sophie, lea, "representant_legal", true, true);
   // Hugo, 12 ans : ni responsable ni payeur.
-  const hugo = await personne(ecole, "Bernard", "Hugo", { naissance: "2014-01-10", telephone: "07 11 22 33 44", eleve: true });
+  const hugo = await personne(ecole, "Bernard", "Hugo", {
+    naissance: "2014-01-10",
+    telephone: "07 11 22 33 44",
+    eleve: true,
+  });
   // Inès, sans date de naissance : deux responsables, payée par un CSE.
   const ines = await personne(ecole, "Moreau", "Inès", { eleve: true });
   await lien(await personne(ecole, "Moreau", "Paul"), ines, "representant_legal");
   await lien(await personne(ecole, "Petit", "Anne"), ines, "representant_legal");
   await lien(await personne(ecole, "CSE", null, { societe: "CSE Ateliers" }), ines, "autre", true);
   // Saison : Léa inscrite au jazz du lundi 17:00, Hugo en liste d'attente sur le même cours, Inès sans inscription.
-  [{ id: saison }] = await admin`INSERT INTO saison (ecole_id, libelle, date_debut, date_fin) VALUES (${ecole}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
+  [{ id: saison }] =
+    await admin`INSERT INTO saison (ecole_id, libelle, date_debut, date_fin) VALUES (${ecole}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   const [d] = await admin`INSERT INTO discipline (ecole_id, nom) VALUES (${ecole}, 'Jazz') RETURNING id`;
-  const [site] = await admin`INSERT INTO site (ecole_id, nom, adresse) VALUES (${ecole}, 'Centre', '1 rue Test') RETURNING id`;
-  const [salle] = await admin`INSERT INTO salle (ecole_id, site_id, nom) VALUES (${ecole}, ${site.id}, 'Studio') RETURNING id`;
-  const [prof] = await admin`INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
+  const [site] =
+    await admin`INSERT INTO site (ecole_id, nom, adresse) VALUES (${ecole}, 'Centre', '1 rue Test') RETURNING id`;
+  const [salle] =
+    await admin`INSERT INTO salle (ecole_id, site_id, nom) VALUES (${ecole}, ${site.id}, 'Studio') RETURNING id`;
+  const [prof] =
+    await admin`INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
     VALUES (${ecole}, 'Prof', 'Lucas', 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`;
-  const [jazz] = await admin`INSERT INTO cours (ecole_id, saison_id, discipline_id, salle_id, intervenant_id, jour_semaine, heure_debut, duree_minutes)
+  const [jazz] =
+    await admin`INSERT INTO cours (ecole_id, saison_id, discipline_id, salle_id, intervenant_id, jour_semaine, heure_debut, duree_minutes)
     VALUES (${ecole}, ${saison}, ${d.id}, ${salle.id}, ${prof.id}, 1, '17:00', 60) RETURNING id`;
-  for (const [danseur, payeur, statut] of [[lea, sophie, "active"], [hugo, hugo, "liste_attente"]]) {
-    const [i] = await admin`INSERT INTO inscription (ecole_id, saison_id, payeur_id, public, periodicite, prix_brut_centimes, statut)
+  for (const [danseur, payeur, statut] of [
+    [lea, sophie, "active"],
+    [hugo, hugo, "liste_attente"],
+  ]) {
+    const [i] =
+      await admin`INSERT INTO inscription (ecole_id, saison_id, payeur_id, public, periodicite, prix_brut_centimes, statut)
       VALUES (${ecole}, ${saison}, ${payeur}, 'enfant', 'trimestre', 10000, ${statut}) RETURNING id`;
     await admin`INSERT INTO inscription_cours (ecole_id, inscription_id, danseur_id, cours_id) VALUES (${ecole}, ${i.id}, ${danseur}, ${jazz.id})`;
   }
@@ -61,20 +82,40 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const t of ["inscription_cours", "inscription", "cours", "intervenant", "salle", "site", "discipline", "saison", "lien", "personne"]) await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
+  for (const t of [
+    "inscription_cours",
+    "inscription",
+    "cours",
+    "intervenant",
+    "salle",
+    "site",
+    "discipline",
+    "saison",
+    "lien",
+    "personne",
+  ])
+    await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
   await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
   await admin.end();
 });
 
 const eleves = async (f: string[], mode?: string) =>
-  (await avecEcole(ecole, (tx) => listerEleves(tx, "", { filtre: lireFiltre(f, mode, COLONNES_ELEVES), aujourdhui: AUJOURDHUI, saisonId: saison }))).map(
-    (e) => e.prenom,
-  );
+  (
+    await avecEcole(ecole, (tx) =>
+      listerEleves(tx, "", { filtre: lireFiltre(f, mode, COLONNES_ELEVES), aujourdhui: AUJOURDHUI, saisonId: saison }),
+    )
+  ).map((e) => e.prenom);
 const contacts = async (f: string[]) =>
-  (await avecEcole(ecole, (tx) => listerContacts(tx, "", { filtre: lireFiltre(f, null, COLONNES_CONTACTS) }))).map((c) => c.raisonSociale ?? c.prenom);
+  (await avecEcole(ecole, (tx) => listerContacts(tx, "", { filtre: lireFiltre(f, null, COLONNES_CONTACTS) }))).map(
+    (c) => c.raisonSociale ?? c.prenom,
+  );
 
 const tries = async (sort: string, order: string) =>
-  (await avecEcole(ecole, (tx) => listerEleves(tx, "", { tri: lireTri(sort, order, COLONNES_ELEVES), aujourdhui: AUJOURDHUI, saisonId: saison }))).map((e) => e.prenom);
+  (
+    await avecEcole(ecole, (tx) =>
+      listerEleves(tx, "", { tri: lireTri(sort, order, COLONNES_ELEVES), aujourdhui: AUJOURDHUI, saisonId: saison }),
+    )
+  ).map((e) => e.prenom);
 
 describe("tri et boutons de filtre (#107)", () => {
   it("trie par une colonne, les vides en dernier dans les deux sens", async () => {
@@ -145,7 +186,12 @@ describe("élèves", () => {
           telephone: e.telephone,
         })[c.id],
     }));
-    for (const f of [["nom.ne_contient_pas.martin"], ["age.inf_egal.8"], ["responsables.contient.moreau"], ["facture.non_vide", "telephone.commence.06"]]) {
+    for (const f of [
+      ["nom.ne_contient_pas.martin"],
+      ["age.inf_egal.8"],
+      ["responsables.contient.moreau"],
+      ["facture.non_vide", "telephone.commence.06"],
+    ]) {
       const enMemoire = appliquerFiltre(toutes, lireFiltre(f, null, COLONNES_ELEVES), colonnes).map((e) => e.prenom);
       expect(await eleves(f), f.join(" ")).toEqual(enMemoire);
     }
@@ -156,7 +202,12 @@ describe("colonnes ajoutées (#89)", () => {
   it("valeurs : e-mail du responsable, cours de la saison, statut, personnes à prévenir", async () => {
     const lignes = await avecEcole(ecole, (tx) => listerEleves(tx, "", { aujourdhui: AUJOURDHUI, saisonId: saison }));
     const lea = lignes.find((e) => e.prenom === "Léa");
-    expect(lea).toMatchObject({ email: "sophie@exemple.test", cours: ["Jazz lun. 17:00"], inscription: "Inscrit", prevenir: ["Sophie Martin, 06 12 34 56 78"] });
+    expect(lea).toMatchObject({
+      email: "sophie@exemple.test",
+      cours: ["Jazz lun. 17:00"],
+      inscription: "Inscrit",
+      prevenir: ["Sophie Martin, 06 12 34 56 78"],
+    });
     // La liste d'attente n'est pas un cours suivi.
     expect(lignes.find((e) => e.prenom === "Hugo")).toMatchObject({ cours: [], inscription: "En attente" });
     expect(lignes.find((e) => e.prenom === "Inès")).toMatchObject({ cours: [], inscription: null, email: null });

@@ -56,6 +56,12 @@ describe("soldePayeur", () => {
       [{ montantCentimes: 1_000, encaissementPrevu: null }],
       AUJOURDHUI,
     );
-    expect(s).toEqual({ du: 0, paye: 1_000, reste: -1_000, aEncaisser: 0, horsCalcul: { abandon: 20_000, essai: 1_500, liste_attente: 9_000 } });
+    expect(s).toEqual({
+      du: 0,
+      paye: 1_000,
+      reste: -1_000,
+      aEncaisser: 0,
+      horsCalcul: { abandon: 20_000, essai: 1_500, liste_attente: 9_000 },
+    });
   });
 });

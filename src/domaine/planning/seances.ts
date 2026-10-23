@@ -20,7 +20,7 @@ export function datesDesSeances({
   const depart = versJour(debut);
   const jourIso = ((new Date(depart).getUTCDay() + 6) % 7) + 1;
   const dates: string[] = [];
-  for (let t = depart + (((jourSemaine - jourIso + 7) % 7) * UN_JOUR); t <= versJour(fin); t += 7 * UN_JOUR) {
+  for (let t = depart + ((jourSemaine - jourIso + 7) % 7) * UN_JOUR; t <= versJour(fin); t += 7 * UN_JOUR) {
     const date = versIso(t);
     if (!fermetures.some((f) => f.debut <= date && date <= f.fin)) dates.push(date);
   }

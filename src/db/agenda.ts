@@ -40,12 +40,18 @@ export async function revoquerJetonAgenda(tx: Tx, intervenantId: string): Promis
 /** Date de création du lien en cours, ou null s'il n'y en a pas. */
 export async function etatAgenda(tx: Tx, intervenantId: string): Promise<Date | null> {
   if (!z.uuid().safeParse(intervenantId).success) return null;
-  const [i] = await tx.select({ creeLe: intervenant.jetonAgendaCreeLe }).from(intervenant).where(eq(intervenant.id, intervenantId));
+  const [i] = await tx
+    .select({ creeLe: intervenant.jetonAgendaCreeLe })
+    .from(intervenant)
+    .where(eq(intervenant.id, intervenantId));
   return i?.creeLe ?? null;
 }
 
 /** Intervenant actif au jeton donné (page personnelle de l'intervenant) ; null sinon. */
-export async function intervenantDuJeton(tx: Tx, jeton: string): Promise<{ id: string; prenom: string; ecole: string } | null> {
+export async function intervenantDuJeton(
+  tx: Tx,
+  jeton: string,
+): Promise<{ id: string; prenom: string; ecole: string } | null> {
   if (!/^[A-Za-z0-9_-]{43}$/.test(jeton)) return null;
   const [i] = await tx
     .select({ id: intervenant.id, prenom: intervenant.prenom, ecole: ecole.nom })
@@ -61,7 +67,11 @@ export async function intervenantDuJeton(tx: Tx, jeton: string): Promise<{ id: s
  * remplacements ; null si le jeton est inconnu ou révoqué. Aucune donnée
  * d'élève : titre du cours et lieu seulement.
  */
-export async function lireAgenda(tx: Tx, jeton: string, depuis: string): Promise<{ nom: string; seances: SeanceAgenda[] } | null> {
+export async function lireAgenda(
+  tx: Tx,
+  jeton: string,
+  depuis: string,
+): Promise<{ nom: string; seances: SeanceAgenda[] } | null> {
   const i = await intervenantDuJeton(tx, jeton);
   if (!i) return null;
 

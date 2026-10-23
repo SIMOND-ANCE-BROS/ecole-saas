@@ -16,10 +16,26 @@ export default async function PageParametres() {
   }));
   const salles = lieux.reduce((n, s) => n + s.salles.length, 0);
   const rubriques = [
-    { href: "/parametres/saisons", titre: "Saisons", detail: `${saisons.length} saison${saisons.length > 1 ? "s" : ""}, dates et reprise de la grille` },
-    { href: "/parametres/tarifs", titre: "Tarifs et réductions", detail: "Grille des forfaits, réduction fratrie, carnets de cours particuliers" },
-    { href: "/parametres/disciplines", titre: "Disciplines", detail: `${disciplines.length} discipline${disciplines.length > 1 ? "s" : ""} proposée${disciplines.length > 1 ? "s" : ""}` },
-    { href: "/parametres/lieux", titre: "Sites et salles", detail: `${lieux.length} site${lieux.length > 1 ? "s" : ""}, ${salles} salle${salles > 1 ? "s" : ""}` },
+    {
+      href: "/parametres/saisons",
+      titre: "Saisons",
+      detail: `${saisons.length} saison${saisons.length > 1 ? "s" : ""}, dates et reprise de la grille`,
+    },
+    {
+      href: "/parametres/tarifs",
+      titre: "Tarifs et réductions",
+      detail: "Grille des forfaits, réduction fratrie, carnets de cours particuliers",
+    },
+    {
+      href: "/parametres/disciplines",
+      titre: "Disciplines",
+      detail: `${disciplines.length} discipline${disciplines.length > 1 ? "s" : ""} proposée${disciplines.length > 1 ? "s" : ""}`,
+    },
+    {
+      href: "/parametres/lieux",
+      titre: "Sites et salles",
+      detail: `${lieux.length} site${lieux.length > 1 ? "s" : ""}, ${salles} salle${salles > 1 ? "s" : ""}`,
+    },
     { href: "/planning/fermetures", titre: "Fermetures", detail: "Vacances, jours fériés, gala" },
     { href: "/intervenants", titre: "Intervenants", detail: "Professeurs, statut et rémunération" },
   ];
@@ -27,7 +43,9 @@ export default async function PageParametres() {
     <section className="flex w-full min-w-0 flex-col gap-4">
       <div>
         <h1 className="titre-page">Paramètres</h1>
-        <p className="text-sm text-doux">Tout ce qui est propre à l’école : ses saisons, ses disciplines, ses lieux et ses tarifs.</p>
+        <p className="text-sm text-doux">
+          Tout ce qui est propre à l’école : ses saisons, ses disciplines, ses lieux et ses tarifs.
+        </p>
       </div>
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {rubriques.map((r) => (

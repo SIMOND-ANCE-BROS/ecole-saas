@@ -1,0 +1,10 @@
+# Fictitious values flagged by gitleaks, pinned to the commit that introduced
+# them (#113). Never ignore a real secret: remove it and revoke it instead.
+
+# Fake OAuth tokens returned by a mocked fetch in the calendar sync test.
+d1e6b2e926459974547cea2924468f5afea8e9ec:src/lib/synchro-agenda.integration.test.ts:generic-api-key:59
+d1e6b2e926459974547cea2924468f5afea8e9ec:src/lib/synchro-agenda.integration.test.ts:generic-api-key:60
+de143779772f4f26884eac6710af82e48cc671cf:src/lib/synchro-agenda.integration.test.ts:generic-api-key:60
+de143779772f4f26884eac6710af82e48cc671cf:src/lib/synchro-agenda.integration.test.ts:generic-api-key:61
+# BETTER_AUTH_SECRET reserved for CI tests, documented as such in ci.yml.
+4940cfb7068e354e064f133e6f29504ce1bc605f:.github/workflows/ci.yml:generic-api-key:25

@@ -64,7 +64,11 @@ export default async function PagePlanning({ searchParams }: PageProps<"/plannin
           Aucun cours pour cette saison.{direction && " Créez le premier avec « Nouveau cours »."}
         </p>
       ) : (
-        <GrillePlanning cours={cours} modifiable={direction} misEnAvant={confirme?.id} vue={vue === "liste" ? "liste" : vue === "type" ? "type" : "datee"}
+        <GrillePlanning
+          cours={cours}
+          modifiable={direction}
+          misEnAvant={confirme?.id}
+          vue={vue === "liste" ? "liste" : vue === "type" ? "type" : "datee"}
           horaires={horaires}
           lundi={lundi}
           aujourdhui={aujourdhui}

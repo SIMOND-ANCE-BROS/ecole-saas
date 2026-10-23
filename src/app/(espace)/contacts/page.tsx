@@ -44,7 +44,13 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
             colonnes={COLONNES_CONTACTS}
             disposition={disposition}
             lien="nom"
-            vide={filtre.conditions.length > 0 ? "Aucun contact ne correspond à ces filtres." : saisie ? `Aucun contact ne correspond à « ${saisie} ».` : "Aucun contact pour l’instant."}
+            vide={
+              filtre.conditions.length > 0
+                ? "Aucun contact ne correspond à ces filtres."
+                : saisie
+                  ? `Aucun contact ne correspond à « ${saisie} ».`
+                  : "Aucun contact pour l’instant."
+            }
             actionVide={
               <Link href="/contacts/nouveau" className="bouton-principal">
                 Nouveau contact

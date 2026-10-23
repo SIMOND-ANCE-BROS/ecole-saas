@@ -5,7 +5,10 @@ afterEach(() => vi.useRealTimers());
 const promesse = <T>() => {
   let resoudre!: (valeur: T) => void;
   let rejeter!: (erreur: Error) => void;
-  const attente = new Promise<T>((resolve, reject) => { resoudre = resolve; rejeter = reject; });
+  const attente = new Promise<T>((resolve, reject) => {
+    resoudre = resolve;
+    rejeter = reject;
+  });
   return { attente, resoudre, rejeter };
 };
 
@@ -39,7 +42,13 @@ describe("aperçu différé lié à la saisie courante", () => {
   it("signale un échec pour proposer une nouvelle tentative", async () => {
     vi.useFakeTimers();
     const erreur = vi.fn();
-    requeteDifferee(async () => { throw new Error("indisponible"); }, vi.fn(), erreur);
+    requeteDifferee(
+      async () => {
+        throw new Error("indisponible");
+      },
+      vi.fn(),
+      erreur,
+    );
     await vi.runAllTimersAsync();
     expect(erreur).toHaveBeenCalledOnce();
   });

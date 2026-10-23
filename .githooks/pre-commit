@@ -1,0 +1,12 @@
+#!/bin/sh
+# Versioned pre-commit hook (#113): secret scan of the staged changes, then
+# lint and format of the staged files.
+. "$(dirname "$0")/_lib.sh"
+require_deps node_modules/.bin/lint-staged node_modules/.bin/prettier node_modules/.bin/eslint
+set -e
+
+# Reads the index only; runs first so a leaked key fails fast. Blocked? Remove
+# the secret, revoke it, and never bypass the hook.
+sh scripts/gitleaks.sh git --pre-commit --staged --redact --verbose --no-banner --log-level warn
+
+lint-staged

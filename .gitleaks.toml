@@ -1,0 +1,8 @@
+# Secret scan configuration (#113), used by the pre-commit hook and the CI
+# job through scripts/gitleaks.sh. Default gitleaks rules, no allowlist: a
+# false positive is silenced by its fingerprint in .gitleaksignore, pinned to
+# the commit that introduced it, never by a path or regex allowlist.
+title = "ecole-saas"
+
+[extend]
+useDefault = true

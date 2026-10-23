@@ -26,7 +26,12 @@ export function AnnulerRemise({ id }: { id: string }) {
   return (
     <span className="flex flex-wrap items-center gap-2 text-sm">
       Annuler cette remise ? Ses paiements redeviendront à remettre.
-      <button type="button" className="bouton-secondaire" disabled={envoi} onClick={() => demarrer(async () => setMessage((await annuler(id)).message))}>
+      <button
+        type="button"
+        className="bouton-secondaire"
+        disabled={envoi}
+        onClick={() => demarrer(async () => setMessage((await annuler(id)).message))}
+      >
         Oui, annuler
       </button>
       <button type="button" className="lien" onClick={() => setConfirmer(false)}>

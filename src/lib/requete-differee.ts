@@ -8,13 +8,15 @@ export function requeteDifferee<T>(
   signalerErreur: () => void,
 ): () => void {
   let active = true;
-  const minuteur = setTimeout(async () => {
-    try {
-      const resultat = await charger();
-      if (active) publier(resultat);
-    } catch {
-      if (active) signalerErreur();
-    }
+  const minuteur = setTimeout(() => {
+    charger().then(
+      (resultat) => {
+        if (active) publier(resultat);
+      },
+      () => {
+        if (active) signalerErreur();
+      },
+    );
   }, 150);
   return () => {
     active = false;

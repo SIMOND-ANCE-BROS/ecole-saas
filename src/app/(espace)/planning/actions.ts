@@ -34,21 +34,35 @@ export async function deplacerUneSeance(
     const jour = semaine
       .filter((s) => s.date === creneau.date && s.statut !== "annulee")
       .map((s) => ({ ...s, jourSemaine: jourSemaineDe(s.date) }));
-    const moi = jour.find((s) => s.coursId === semaine.find((x) => x.id === seanceId)?.coursId && s.heureDebut === creneau.heureDebut);
+    const moi = jour.find(
+      (s) => s.coursId === semaine.find((x) => x.id === seanceId)?.coursId && s.heureDebut === creneau.heureDebut,
+    );
     const alertes: string[] = [];
     if (moi) {
       for (const x of conflits(moi, jour)) {
         const autre = jour.find((s) => s.id === x.id)!;
         const quand = `${autre.discipline} à ${autre.heureDebut}`;
-        alertes.push(x.salle && x.intervenant ? `${autre.salle} et ${autre.intervenant} déjà pris (${quand})` : x.salle ? `${autre.salle} déjà occupée (${quand})` : `${autre.intervenant} donne déjà un cours (${quand})`);
+        alertes.push(
+          x.salle && x.intervenant
+            ? `${autre.salle} et ${autre.intervenant} déjà pris (${quand})`
+            : x.salle
+              ? `${autre.salle} déjà occupée (${quand})`
+              : `${autre.intervenant} donne déjà un cours (${quand})`,
+        );
       }
-      const hors = horsHoraires({ jourSemaine: moi.jourSemaine, heureDebut: moi.heureDebut, dureeMinutes: moi.dureeMinutes }, (await horairesParSite(tx))[moi.siteId] ?? []);
+      const hors = horsHoraires(
+        { jourSemaine: moi.jourSemaine, heureDebut: moi.heureDebut, dureeMinutes: moi.dureeMinutes },
+        (await horairesParSite(tx))[moi.siteId] ?? [],
+      );
       if (hors) alertes.push(hors);
     }
     const quand = `${dateCourte(creneau.date, true)} ${creneau.heureDebut}–${fin(creneau.heureDebut, creneau.dureeMinutes)}`;
     return {
       statut: "ok",
-      texte: portee === "seance" ? `Séance déplacée au ${quand}.` : `Cours déplacé à partir du ${quand} : les séances suivantes suivent.`,
+      texte:
+        portee === "seance"
+          ? `Séance déplacée au ${quand}.`
+          : `Cours déplacé à partir du ${quand} : les séances suivantes suivent.`,
       alertes,
     };
   });

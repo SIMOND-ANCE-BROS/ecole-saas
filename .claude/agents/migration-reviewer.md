@@ -22,7 +22,7 @@ You review database changes of the dance-school SaaS (PostgreSQL 16, Drizzle
 4. **Immutability**: payments and the audit log keep their triggers; a rename
    recreates triggers and functions consistently.
 5. **Renames** (English rename #114): `ALTER TABLE … RENAME`, `ALTER TYPE …
-   RENAME VALUE`, constraints, indexes, sequences, policies, triggers and
+RENAME VALUE`, constraints, indexes, sequences, policies, triggers and
    functions renamed too; no data loss (never drop + create); default
    privileges for `app_user` still apply; the Drizzle schema, the generated
    snapshot and the SQL agree.

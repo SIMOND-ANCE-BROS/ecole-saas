@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { conflits, seChevauchent } from "./chevauchement";
 
-const creneau = (jourSemaine: number | null, heureDebut: string, dureeMinutes: number) => ({ jourSemaine, heureDebut, dureeMinutes });
+const creneau = (jourSemaine: number | null, heureDebut: string, dureeMinutes: number) => ({
+  jourSemaine,
+  heureDebut,
+  dureeMinutes,
+});
 
 describe("seChevauchent", () => {
   it("détecte deux créneaux qui se recouvrent le même jour", () => {
@@ -32,6 +36,8 @@ describe("conflits", () => {
   });
 
   it("ne signale rien sans recouvrement", () => {
-    expect(conflits({ id: null, ...creneau(1, "17:00", 60), salleId: "studio", intervenantId: "camille" }, existants)).toEqual([]);
+    expect(
+      conflits({ id: null, ...creneau(1, "17:00", 60), salleId: "studio", intervenantId: "camille" }, existants),
+    ).toEqual([]);
   });
 });

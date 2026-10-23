@@ -5,6 +5,7 @@
 - Issues: #107, #115
 
 ## Context
+
 Screens were built with hand-made Tailwind classes (`.champ`,
 `.bouton-principal`, native popovers…). Rich controls (date pickers, menus,
 notifications, accessible selects) were costly to build and inconsistent. The
@@ -13,6 +14,7 @@ office, built with Mantine. Mantine 8.3.18 was installed in #107 (Mantine 9
 was too recent for the 14-day rule).
 
 ## Decision
+
 - Every control (inputs, selects, buttons, menus, popovers, tables, modals,
   drawers, notifications, dates) is a Mantine component, themed in
   `src/app/theme.ts`.
@@ -26,12 +28,14 @@ was too recent for the 14-day rule).
   targets non-technical users (front desk), its screens must stay simpler.
 
 ## Alternatives considered
+
 - **shadcn/ui** (previously planned): components copied into the repo, more
   code to own and maintain; rejected.
 - **Keep hand-made classes**: no rich controls, inconsistent behaviour; rejected.
 - **Mixed (Mantine for rich controls only)**: two styles to maintain; rejected.
 
 ## Consequences
+
 - Dependencies: `@mantine/core`, `@mantine/hooks`, `@mantine/dates`,
   `@mantine/notifications`, `dayjs`, pinned.
 - Mantine components need client components; server pages pass data, not

@@ -27,6 +27,13 @@ async function principal() {
   console.log(`Agendas synchronisés : ${reussies} ; en échec : ${echouees} (écoles : ${ecoles.length}).`);
 }
 
-principal()
-  .finally(() => admin.end())
-  .then(() => process.exit(0));
+// The application pool (src/db) keeps the process alive: exit explicitly.
+void principal()
+  .catch((e: unknown) => {
+    console.error(e);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await admin.end();
+    process.exit(process.exitCode ?? 0);
+  });

@@ -16,7 +16,12 @@ const DOCUMENT = {
 const PERIODICITE = { trimestre: "trimestre", annee: "année", unite: "unité" } as const;
 const PUBLIC = { enfant: "Enfant", adulte: "Adulte", couple: "Couple", etudiant: "Étudiant" } as const;
 
-const dateLongue = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+const dateLongue = new Intl.DateTimeFormat("fr-FR", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
 export const jourDe = (iso: string) => dateLongue.format(new Date(`${iso}T00:00:00Z`));
 
 export const Telephone = ({ numero }: { numero: string }) => (
@@ -37,7 +42,10 @@ export function Bandeau({ texte }: { texte?: string }) {
 export function Notes({ notes }: { notes: string | null }) {
   if (!notes) return null;
   return (
-    <section aria-label="Santé et consignes" className="rounded-md border border-alerte-texte/40 bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
+    <section
+      aria-label="Santé et consignes"
+      className="rounded-md border border-alerte-texte/40 bg-alerte-fond px-3 py-2 text-sm text-alerte-texte"
+    >
       <p className="whitespace-pre-line">{notes}</p>
     </section>
   );
@@ -71,7 +79,11 @@ export function CoursSuivis({ cours }: { cours: FichePersonne["cours"] }) {
                     présent {c.presents} fois sur {c.presents + c.absents}
                   </span>
                 )}
-                <span className={`ml-auto text-xs ${c.statut === "active" ? "text-doux" : "font-medium text-alerte-texte"}`}>{STATUT[c.statut]}</span>
+                <span
+                  className={`ml-auto text-xs ${c.statut === "active" ? "text-doux" : "font-medium text-alerte-texte"}`}
+                >
+                  {STATUT[c.statut]}
+                </span>
               </li>
             ))}
           </ul>
@@ -112,7 +124,11 @@ export function Documents({ documents, aujourdhui }: { documents: FichePersonne[
               <li key={i} className="flex flex-wrap items-baseline gap-x-3 px-3 py-2">
                 <span className="font-medium">{DOCUMENT[d.type]}</span>
                 <span className={expire || !d.accorde ? "text-alerte-texte" : "text-doux"}>
-                  {!d.accorde ? "refusé" : d.valideJusqu ? `${expire ? "expiré le" : "valable jusqu’au"} ${jourDe(d.valideJusqu)}` : "fourni"}
+                  {!d.accorde
+                    ? "refusé"
+                    : d.valideJusqu
+                      ? `${expire ? "expiré le" : "valable jusqu’au"} ${jourDe(d.valideJusqu)}`
+                      : "fourni"}
                 </span>
               </li>
             );

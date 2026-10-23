@@ -27,14 +27,15 @@ export default async function LayoutEspace({ children, modal }: LayoutProps<"/">
     <Cadre
       entete={
         // useSearchParams exige une frontière Suspense.
-        <Suspense>
-          {role !== "professeur" && <RechercheGlobale />}
-        </Suspense>
+        <Suspense>{role !== "professeur" && <RechercheGlobale />}</Suspense>
       }
       volet={
         <>
           <div className="flex items-center gap-2 px-1">
-            <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-md bg-accent text-sm font-semibold text-sur-accent">
+            <span
+              aria-hidden
+              className="grid size-8 shrink-0 place-items-center rounded-md bg-accent text-sm font-semibold text-sur-accent"
+            >
               {nom.charAt(0)}
             </span>
             <span className="text-sm leading-tight font-semibold">{nom}</span>

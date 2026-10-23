@@ -12,7 +12,12 @@ import { Annuler } from "@/app/(espace)/_panneau/panneau";
 const JOURS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const DUREES = [45, 60, 90, 120];
 const NOUVELLE = "nouvelle";
-const dateCourte = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+const dateCourte = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+});
 
 type Props = {
   cours: CoursEdite | null;
@@ -93,7 +98,14 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
   };
 
   const recouvrements = conflits(
-    { id: cours?.id ?? null, jourSemaine: saisie.jourSemaine, heureDebut: v.heureDebut, dureeMinutes: saisie.dureeMinutes || 0, salleId: v.salleId, intervenantId: v.intervenantId },
+    {
+      id: cours?.id ?? null,
+      jourSemaine: saisie.jourSemaine,
+      heureDebut: v.heureDebut,
+      dureeMinutes: saisie.dureeMinutes || 0,
+      salleId: v.salleId,
+      intervenantId: v.intervenantId,
+    },
     planning,
   ).map((c) => {
     const autre = planning.find((p) => p.id === c.id)!;
@@ -106,7 +118,10 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
   const siteDeLaSalle = r.salles.find((s) => s.id === v.salleId)?.siteId;
   const horsOuverture =
     !ponctuel && siteDeLaSalle && saisie.jourSemaine && saisie.dureeMinutes > 0
-      ? horsHoraires({ jourSemaine: saisie.jourSemaine, heureDebut: v.heureDebut, dureeMinutes: saisie.dureeMinutes }, r.horaires[siteDeLaSalle] ?? [])
+      ? horsHoraires(
+          { jourSemaine: saisie.jourSemaine, heureDebut: v.heureDebut, dureeMinutes: saisie.dureeMinutes },
+          r.horaires[siteDeLaSalle] ?? [],
+        )
       : null;
 
   // Indisponibilités de l'intervenant sur les dates à venir du créneau, vérifiées côté serveur après une pause.
@@ -115,8 +130,14 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
   useEffect(() => {
     if (!cle) return;
     const [intervenantId, jour, heure, duree] = cle.split("|");
-    const minuteur = setTimeout(async () => {
-      setDatesIndispo(await verifierCreneau(cours?.id ?? null, { intervenantId, jourSemaine: Number(jour), heureDebut: heure, dureeMinutes: Number(duree) }));
+    const minuteur = setTimeout(() => {
+      // A failed check shows no warning rather than an unhandled error.
+      verifierCreneau(cours?.id ?? null, {
+        intervenantId,
+        jourSemaine: Number(jour),
+        heureDebut: heure,
+        dureeMinutes: Number(duree),
+      }).then(setDatesIndispo, () => setDatesIndispo([]));
     }, 300);
     return () => clearTimeout(minuteur);
   }, [cle, cours?.id]);
@@ -174,11 +195,24 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
         </div>
         <div className="flex flex-col gap-1">
           {libelle("niveau", "Niveau (facultatif)")}
-          <input id="niveau" className="champ" autoComplete="off" placeholder="Débutant, Adultes…" value={v.niveau} onChange={maj("niveau")} />
+          <input
+            id="niveau"
+            className="champ"
+            autoComplete="off"
+            placeholder="Débutant, Adultes…"
+            value={v.niveau}
+            onChange={maj("niveau")}
+          />
         </div>
         <div className="flex flex-col gap-1">
           {libelle("intervenant", "Intervenant")}
-          <select id="intervenant" className="champ" value={v.intervenantId} onChange={maj("intervenantId")} {...invalide("intervenantId")}>
+          <select
+            id="intervenant"
+            className="champ"
+            value={v.intervenantId}
+            onChange={maj("intervenantId")}
+            {...invalide("intervenantId")}
+          >
             {r.intervenants.map((i) => (
               <option key={i.id} value={i.id}>
                 {i.prenom} {i.nom}
@@ -249,7 +283,12 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
                     {...(i === 0 ? invalide("dates") : {})}
                   />
                   {dates.length > 1 && (
-                    <button type="button" className="bouton-secondaire px-2" aria-label={`Retirer la date ${i + 1}`} onClick={() => setDates(dates.filter((_, j) => j !== i))}>
+                    <button
+                      type="button"
+                      className="bouton-secondaire px-2"
+                      aria-label={`Retirer la date ${i + 1}`}
+                      onClick={() => setDates(dates.filter((_, j) => j !== i))}
+                    >
                       ×
                     </button>
                   )}
@@ -260,7 +299,9 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
               Ajouter une date
             </button>
             {erreur("dates")}
-            <p className="text-xs text-doux">Les dates précises ne tiennent pas compte des fermetures (un stage peut avoir lieu pendant les vacances).</p>
+            <p className="text-xs text-doux">
+              Les dates précises ne tiennent pas compte des fermetures (un stage peut avoir lieu pendant les vacances).
+            </p>
           </div>
         ) : (
           <div className="flex flex-col gap-1">
@@ -276,12 +317,29 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
         )}
         <div className="flex flex-col gap-1">
           {libelle("heure", "Début")}
-          <input id="heure" type="time" step={300} className="champ" value={v.heureDebut} onChange={maj("heureDebut")} {...invalide("heureDebut")} />
+          <input
+            id="heure"
+            type="time"
+            step={300}
+            className="champ"
+            value={v.heureDebut}
+            onChange={maj("heureDebut")}
+            {...invalide("heureDebut")}
+          />
           {erreur("heureDebut")}
         </div>
         <div className="flex flex-col gap-1">
           {libelle("duree", "Durée (minutes)")}
-          <input id="duree" type="number" min={5} step={5} className="champ" value={v.dureeMinutes} onChange={maj("dureeMinutes")} {...invalide("dureeMinutes")} />
+          <input
+            id="duree"
+            type="number"
+            min={5}
+            step={5}
+            className="champ"
+            value={v.dureeMinutes}
+            onChange={maj("dureeMinutes")}
+            {...invalide("dureeMinutes")}
+          />
           <div className="flex gap-1" role="group" aria-label="Durées courantes">
             {DUREES.map((d) => (
               <button
@@ -307,7 +365,14 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
             </div>
             <div className="flex flex-col gap-1">
               {libelle("date-fin", "Au")}
-              <input id="date-fin" type="date" className="champ" value={v.dateFin} onChange={maj("dateFin")} {...invalide("dateFin")} />
+              <input
+                id="date-fin"
+                type="date"
+                className="champ"
+                value={v.dateFin}
+                onChange={maj("dateFin")}
+                {...invalide("dateFin")}
+              />
             </div>
             {erreur("dateFin")}
           </fieldset>
@@ -333,11 +398,24 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
           <>
             <div className="flex flex-col gap-1">
               {libelle("nouvelle-salle", "Nom de la salle")}
-              <input id="nouvelle-salle" className="champ" autoComplete="off" value={v.nouvelleSalle} onChange={maj("nouvelleSalle")} />
+              <input
+                id="nouvelle-salle"
+                className="champ"
+                autoComplete="off"
+                value={v.nouvelleSalle}
+                onChange={maj("nouvelleSalle")}
+              />
             </div>
             <div className="flex flex-col gap-1">
               {libelle("capacite-salle", "Capacité de la salle (facultatif)")}
-              <input id="capacite-salle" type="number" min={1} className="champ" value={v.capaciteSalle} onChange={maj("capaciteSalle")} />
+              <input
+                id="capacite-salle"
+                type="number"
+                min={1}
+                className="champ"
+                value={v.capaciteSalle}
+                onChange={maj("capaciteSalle")}
+              />
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
               {libelle("site", "Site")}
@@ -354,11 +432,23 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
               <>
                 <div className="flex flex-col gap-1">
                   {libelle("nouveau-site", "Nom du site")}
-                  <input id="nouveau-site" className="champ" autoComplete="off" value={v.nouveauSite} onChange={maj("nouveauSite")} />
+                  <input
+                    id="nouveau-site"
+                    className="champ"
+                    autoComplete="off"
+                    value={v.nouveauSite}
+                    onChange={maj("nouveauSite")}
+                  />
                 </div>
                 <div className="flex flex-col gap-1">
                   {libelle("adresse-site", "Adresse du site")}
-                  <input id="adresse-site" className="champ" autoComplete="off" value={v.adresseSite} onChange={maj("adresseSite")} />
+                  <input
+                    id="adresse-site"
+                    className="champ"
+                    autoComplete="off"
+                    value={v.adresseSite}
+                    onChange={maj("adresseSite")}
+                  />
                 </div>
               </>
             )}
@@ -374,7 +464,15 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
         </div>
         <div className="flex flex-col gap-1">
           {libelle("age-max", "Âge maximum")}
-          <input id="age-max" type="number" min={0} className="champ" value={v.ageMax} onChange={maj("ageMax")} {...invalide("ageMax")} />
+          <input
+            id="age-max"
+            type="number"
+            min={0}
+            className="champ"
+            value={v.ageMax}
+            onChange={maj("ageMax")}
+            {...invalide("ageMax")}
+          />
           {erreur("ageMax")}
         </div>
         <div className="flex flex-col gap-1">
@@ -394,10 +492,14 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
       {indispoAffichees.length > 0 && (
         <div role="status" className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
           <p className="font-medium">
-            {intervenantChoisi?.prenom} est indisponible {indispoAffichees.length > 1 ? `${indispoAffichees.length} fois` : "une fois"} sur ce créneau :
+            {intervenantChoisi?.prenom} est indisponible{" "}
+            {indispoAffichees.length > 1 ? `${indispoAffichees.length} fois` : "une fois"} sur ce créneau :
           </p>
           <p>
-            {indispoAffichees.slice(0, 6).map((d) => dateCourte.format(new Date(`${d}T00:00:00Z`))).join(", ")}
+            {indispoAffichees
+              .slice(0, 6)
+              .map((d) => dateCourte.format(new Date(`${d}T00:00:00Z`)))
+              .join(", ")}
             {indispoAffichees.length > 6 && "…"}
           </p>
         </div>

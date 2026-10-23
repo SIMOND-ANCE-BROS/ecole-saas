@@ -9,10 +9,19 @@ export function DevenirEleve({ id, prenom }: { id: string; prenom: string }) {
   const [enCours, demarrer] = useTransition();
   return (
     <>
-      <button type="button" className="bouton-secondaire" disabled={enCours} onClick={() => demarrer(async () => setMessage((await devenirEleve(id)).message))}>
+      <button
+        type="button"
+        className="bouton-secondaire"
+        disabled={enCours}
+        onClick={() => demarrer(async () => setMessage((await devenirEleve(id)).message))}
+      >
         {prenom} prend aussi des cours
       </button>
-      {message && <p role="alert" className="text-sm text-erreur">{message}</p>}
+      {message && (
+        <p role="alert" className="text-sm text-erreur">
+          {message}
+        </p>
+      )}
     </>
   );
 }

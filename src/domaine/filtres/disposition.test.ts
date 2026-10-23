@@ -16,7 +16,9 @@ describe("lireDisposition", () => {
   });
 
   it("garde l'ordre et la visibilité choisis ; ignore inconnus et doublons", () => {
-    expect(vue(lireDisposition(COLONNES, ["telephone", "inconnue", "-age", "telephone", "naissance", "nom"]))).toBe("telephone -age naissance nom");
+    expect(vue(lireDisposition(COLONNES, ["telephone", "inconnue", "-age", "telephone", "naissance", "nom"]))).toBe(
+      "telephone -age naissance nom",
+    );
   });
 
   it("une colonne ajoutée depuis prend sa visibilité par défaut, à la fin", () => {
@@ -29,7 +31,9 @@ describe("lireDisposition", () => {
   });
 
   it("au moins une colonne visible", () => {
-    expect(vue(lireDisposition(COLONNES, ["-nom", "-age", "-telephone", "-naissance"]))).toBe("nom -age -telephone -naissance");
+    expect(vue(lireDisposition(COLONNES, ["-nom", "-age", "-telephone", "-naissance"]))).toBe(
+      "nom -age -telephone -naissance",
+    );
   });
 });
 

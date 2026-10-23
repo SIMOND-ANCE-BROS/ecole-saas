@@ -53,11 +53,13 @@ let helene: string;
 beforeAll(async () => {
   [{ id: ecole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École A', ${`ea-${suffixe}`}) RETURNING id`;
   [{ id: autreEcole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École B', ${`eb-${suffixe}`}) RETURNING id`;
-  [{ id: etranger }] = await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${autreEcole}, 'Ailleurs', 'Inconnue') RETURNING id`;
+  [{ id: etranger }] =
+    await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${autreEcole}, 'Ailleurs', 'Inconnue') RETURNING id`;
 });
 
 afterAll(async () => {
-  for (const t of ["lien", "personne"]) await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
+  for (const t of ["lien", "personne"])
+    await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
   await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
   await admin.end();
 });
@@ -74,7 +76,9 @@ describe("création guidée", () => {
     );
     const z = await fiche(zoe);
     expect(z).toMatchObject({ eleve: true, prenom: "Zoé" });
-    expect(z?.responsables).toMatchObject([{ nom: "Hélène Lefèvre", aPrevenir: true, paie: true, telephone: "06 12 34 56 78" }]);
+    expect(z?.responsables).toMatchObject([
+      { nom: "Hélène Lefèvre", aPrevenir: true, paie: true, telephone: "06 12 34 56 78" },
+    ]);
     helene = z?.responsables[0].id as string;
     expect(z?.factureA).toEqual({ type: "personne", id: helene, nom: "Hélène Lefèvre" });
 
@@ -97,11 +101,21 @@ describe("création guidée", () => {
 
   it("crée un adulte seul, qui paie lui-même, et signale un mineur sans payeur", async () => {
     const ines = idDe(
-      await creer({ eleve: personne({ nom: "Moreau", prenom: "Inès", dateNaissance: "1992-07-14" }), responsable: null, aPrevenir: false, facturation: { type: "eleve" } }),
+      await creer({
+        eleve: personne({ nom: "Moreau", prenom: "Inès", dateNaissance: "1992-07-14" }),
+        responsable: null,
+        aPrevenir: false,
+        facturation: { type: "eleve" },
+      }),
     );
     expect((await fiche(ines))?.factureA).toEqual({ type: "eleve" });
     const lou = idDe(
-      await creer({ eleve: personne({ nom: "Petit", prenom: "Lou", dateNaissance: "2020-01-01" }), responsable: null, aPrevenir: false, facturation: { type: "eleve" } }),
+      await creer({
+        eleve: personne({ nom: "Petit", prenom: "Lou", dateNaissance: "2020-01-01" }),
+        responsable: null,
+        aPrevenir: false,
+        facturation: { type: "eleve" },
+      }),
     );
     expect((await fiche(lou))?.factureA).toEqual({ type: "aucun" });
   });
@@ -112,7 +126,10 @@ describe("création guidée", () => {
         eleve: personne({ nom: "Durand", prenom: "Paul", dateNaissance: "1980-01-01" }),
         responsable: null,
         aPrevenir: false,
-        facturation: { type: "autre", payeur: { nouveau: personne({ type: "professionnel", raisonSociale: "CSE Ateliers", siren: "123456789" }) } },
+        facturation: {
+          type: "autre",
+          payeur: { nouveau: personne({ type: "professionnel", raisonSociale: "CSE Ateliers", siren: "123456789" }) },
+        },
       }),
     );
     expect((await fiche(paul))?.factureA).toMatchObject({ type: "personne", nom: "CSE Ateliers" });
@@ -123,7 +140,12 @@ describe("création guidée", () => {
     const [{ avant }] = await admin`SELECT count(*)::int AS avant FROM personne WHERE ecole_id = ${ecole}`;
     await expect(
       creer(
-        { eleve: personne({ nom: "Seul", prenom: "Max", dateNaissance: "2016-01-01" }), responsable: { id: etranger }, aPrevenir: true, facturation: { type: "responsable" } },
+        {
+          eleve: personne({ nom: "Seul", prenom: "Max", dateNaissance: "2016-01-01" }),
+          responsable: { id: etranger },
+          aPrevenir: true,
+          facturation: { type: "responsable" },
+        },
         true,
       ),
     ).rejects.toBeInstanceOf(RefusCreation);
@@ -136,8 +158,15 @@ describe("listes", () => {
   it("liste les élèves avec responsables et payeur, et retrouve un enfant par le téléphone de sa mère", async () => {
     const eleves = await avecEcole(ecole, (tx) => listerEleves(tx));
     expect(eleves.map((e) => e.prenom)).toEqual(["Paul", "Noé", "Zoé", "Inès", "Lou"]);
-    expect(eleves.find((e) => e.prenom === "Zoé")).toMatchObject({ responsables: ["Hélène Lefèvre"], factureA: "Hélène Lefèvre", telephone: "06 12 34 56 78" });
-    expect((await avecEcole(ecole, (tx) => listerEleves(tx, "0612345678"))).map((e) => e.prenom)).toEqual(["Noé", "Zoé"]);
+    expect(eleves.find((e) => e.prenom === "Zoé")).toMatchObject({
+      responsables: ["Hélène Lefèvre"],
+      factureA: "Hélène Lefèvre",
+      telephone: "06 12 34 56 78",
+    });
+    expect((await avecEcole(ecole, (tx) => listerEleves(tx, "0612345678"))).map((e) => e.prenom)).toEqual([
+      "Noé",
+      "Zoé",
+    ]);
     expect(await avecEcole(ecole, (tx) => listerEleves(tx, "x"))).toEqual([]);
   });
 
@@ -150,14 +179,18 @@ describe("listes", () => {
 
 describe("modifications depuis la fiche", () => {
   it("change le payeur : l’élève elle-même, puis à nouveau sa mère", async () => {
-    expect(await avecEcole(ecole, (tx) => definirFacturation(tx, zoe, { type: "eleve" }))).toEqual({ ok: true, id: zoe });
+    expect(await avecEcole(ecole, (tx) => definirFacturation(tx, zoe, { type: "eleve" }))).toEqual({
+      ok: true,
+      id: zoe,
+    });
     expect((await fiche(zoe))?.factureA).toEqual({ type: "aucun" }); // mineure sans payeur : signalé
     await avecEcole(ecole, (tx) => definirFacturation(tx, zoe, { type: "personne", id: helene }));
     expect((await fiche(zoe))?.factureA).toMatchObject({ type: "personne", id: helene });
   });
 
   it("retourne un lien saisi dans l’autre sens pour en faire le payeur", async () => {
-    const [{ id: conjoint }] = await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${ecole}, 'Moreau', 'Sam') RETURNING id`;
+    const [{ id: conjoint }] =
+      await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${ecole}, 'Moreau', 'Sam') RETURNING id`;
     const [{ id: ines }] = await admin`SELECT id FROM personne WHERE ecole_id = ${ecole} AND prenom = 'Inès'`;
     await admin`INSERT INTO lien (ecole_id, personne_id, lie_a_id, type) VALUES (${ecole}, ${ines}, ${conjoint}, 'conjoint')`;
     await avecEcole(ecole, (tx) => definirFacturation(tx, ines, { type: "personne", id: conjoint }));
@@ -170,7 +203,10 @@ describe("modifications depuis la fiche", () => {
     const [{ id: lou }] = await admin`SELECT id FROM personne WHERE ecole_id = ${ecole} AND prenom = 'Lou'`;
     expect((await avecEcole(ecole, (tx) => ajouterResponsable(tx, lou, { id: helene }, true))).ok).toBe(true);
     expect((await fiche(lou))?.responsables).toMatchObject([{ id: helene, aPrevenir: true, paie: false }]);
-    expect(await avecEcole(ecole, (tx) => ajouterResponsable(tx, lou, { id: etranger }, true))).toEqual({ ok: false, message: "Responsable introuvable." });
+    expect(await avecEcole(ecole, (tx) => ajouterResponsable(tx, lou, { id: etranger }, true))).toEqual({
+      ok: false,
+      message: "Responsable introuvable.",
+    });
   });
 
   it("ne lit pas un élève d’une autre école", async () => {

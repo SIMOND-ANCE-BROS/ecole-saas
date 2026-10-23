@@ -23,7 +23,6 @@ const encaisses = (n: unknown) => {
   return Number.isInteger(k) && k > 0 ? `${k} règlement${k > 1 ? "s" : ""} encaissé${k > 1 ? "s" : ""}.` : undefined;
 };
 
-
 export default async function PageContact({ params, searchParams }: PageProps<"/contacts/[id]">) {
   const { ecoleId, role } = await exigerRole("direction", "accueil");
   const [{ id }, { enregistre, encaisse }] = await Promise.all([params, searchParams]);
@@ -45,7 +44,8 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
   const nom = nomAffiche(c);
   const prenom = c.prenom ?? nom;
   const roles = (e: (typeof c.eleves)[number]) =>
-    [e.responsable && "responsable", e.paie && "facturé", e.aPrevenir && "à prévenir"].filter(Boolean).join(", ") || "proche";
+    [e.responsable && "responsable", e.paie && "facturé", e.aPrevenir && "à prévenir"].filter(Boolean).join(", ") ||
+    "proche";
 
   return (
     <article className="flex w-full min-w-0 flex-col gap-5">
@@ -60,7 +60,9 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="titre-page">{nom}</h1>
-          <p className="text-sm text-doux">{c.type === "professionnel" ? `Organisme${c.siren ? `, SIREN ${c.siren}` : ""}` : "Particulier"}</p>
+          <p className="text-sm text-doux">
+            {c.type === "professionnel" ? `Organisme${c.siren ? `, SIREN ${c.siren}` : ""}` : "Particulier"}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href={`/contacts/${c.id}/modifier`} className="bouton-secondaire">
@@ -123,7 +125,14 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
             )}
           </section>
           {saison && <InscriptionsFacturees inscriptions={facturees} saison={saison.libelle} />}
-          <SectionPaiements payeurId={c.id} solde={solde} paiements={paiements} retour={`/contacts/${c.id}`} direction={role === "direction"} aujourdhui={aujourdhui} />
+          <SectionPaiements
+            payeurId={c.id}
+            solde={solde}
+            paiements={paiements}
+            retour={`/contacts/${c.id}`}
+            direction={role === "direction"}
+            aujourdhui={aujourdhui}
+          />
         </div>
       </div>
     </article>

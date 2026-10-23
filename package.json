@@ -14,7 +14,11 @@
     "db:migrate": "drizzle-kit migrate",
     "db:up": "docker compose up -d db",
     "db:seed": "tsx --env-file=.env scripts/seed.ts",
-    "agendas:synchroniser": "tsx --env-file=.env scripts/synchroniser-agendas.ts"
+    "agendas:synchroniser": "tsx --env-file=.env scripts/synchroniser-agendas.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "preflight": "sh scripts/preflight.sh",
+    "prepare": "sh scripts/install-git-hooks.sh"
   },
   "dependencies": {
     "@mantine/core": "8.3.18",
@@ -38,8 +42,11 @@
     "drizzle-kit": "0.31.11",
     "eslint": "9.39.5",
     "eslint-config-next": "16.4.2",
+    "lint-staged": "17.6.0",
+    "prettier": "3.9.9",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
+    "typescript-eslint": "8.71.1",
     "vitest": "4.1.11"
   }
 }

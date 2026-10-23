@@ -38,7 +38,9 @@ export function FicheAppel({ appel, intervenants }: Props) {
       () =>
         faireAppel(
           appel.id,
-          appel.danseurs.filter((d) => presences[d.id] !== null).map((d) => ({ danseurId: d.id, present: presences[d.id] as boolean })),
+          appel.danseurs
+            .filter((d) => presences[d.id] !== null)
+            .map((d) => ({ danseurId: d.id, present: presences[d.id] as boolean })),
         ),
       "Appel enregistré.",
     );
@@ -72,7 +74,9 @@ export function FicheAppel({ appel, intervenants }: Props) {
                 {presents} présent{presents > 1 ? "s" : ""} sur {appel.danseurs.length}
                 {nonMarques > 0 && `, ${nonMarques} à marquer`}
               </span>
-              <span className="ml-auto hidden text-xs text-doux sm:inline">P présent, A absent, flèches pour se déplacer</span>
+              <span className="ml-auto hidden text-xs text-doux sm:inline">
+                P présent, A absent, flèches pour se déplacer
+              </span>
             </div>
             <ul className="panneau divide-y divide-bordure" aria-label="Danseurs">
               {appel.danseurs.map((d, i) => {
@@ -103,7 +107,9 @@ export function FicheAppel({ appel, intervenants }: Props) {
                         {d.prenom} {d.nom}
                       </Link>
                       {d.age !== null && <span className="text-doux"> ({d.age} ans)</span>}
-                      {d.statut === "essai" && <span className="ml-2 rounded bg-accent-doux px-1.5 text-xs">à l’essai</span>}
+                      {d.statut === "essai" && (
+                        <span className="ml-2 rounded bg-accent-doux px-1.5 text-xs">à l’essai</span>
+                      )}
                       {d.notes && <span className="block text-xs text-alerte-texte">{d.notes}</span>}
                     </span>
                     <span className="flex gap-1" role="group" aria-label={`Présence de ${d.prenom}`}>
@@ -164,7 +170,9 @@ export function FicheAppel({ appel, intervenants }: Props) {
               </option>
             ))}
           </select>
-          {appel.intervenantId !== appel.titulaireId && <p className="text-xs text-doux">Remplacement pour cette séance seulement.</p>}
+          {appel.intervenantId !== appel.titulaireId && (
+            <p className="text-xs text-doux">Remplacement pour cette séance seulement.</p>
+          )}
         </div>
         <button
           type="button"

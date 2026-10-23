@@ -57,9 +57,7 @@ describe("Connexion", () => {
   });
 
   it("refuse un mauvais mot de passe", async () => {
-    await expect(
-      auth.api.signInEmail({ body: { email, password: "pas-le-bon-mot-de-passe" } }),
-    ).rejects.toThrow();
+    await expect(auth.api.signInEmail({ body: { email, password: "pas-le-bon-mot-de-passe" } })).rejects.toThrow();
   });
 
   it("refuse l’inscription libre", async () => {

@@ -26,7 +26,11 @@ async function tentatives(adresse: string, depuis: string | null, n: number) {
 
 afterAll(async () => {
   const cles = [
-    ...adresses.flatMap((a) => [cleDeTentative("email", a), ...ips.map((i) => cleDeTentative("paire", `${a}|${i}`)), cleDeTentative("paire", `${a}|`)]),
+    ...adresses.flatMap((a) => [
+      cleDeTentative("email", a),
+      ...ips.map((i) => cleDeTentative("paire", `${a}|${i}`)),
+      cleDeTentative("paire", `${a}|`),
+    ]),
     ...ips.map((i) => cleDeTentative("ip", i)),
   ];
   await admin`DELETE FROM tentative_connexion WHERE cle IN ${admin(cles)}`;
@@ -45,7 +49,8 @@ describe("Limitation des tentatives de connexion", () => {
 
   it("borne malgré tout le nombre total d’essais sur une même adresse", async () => {
     let autorisees = 0;
-    for (let i = 0; i < LIMITES.parEmail + 5; i++) autorisees += await tentatives(email("globale"), ip(100 + (i % 50)), 1);
+    for (let i = 0; i < LIMITES.parEmail + 5; i++)
+      autorisees += await tentatives(email("globale"), ip(100 + (i % 50)), 1);
     expect(autorisees).toBe(LIMITES.parEmail);
   });
 
@@ -58,9 +63,7 @@ describe("Limitation des tentatives de connexion", () => {
   it("résiste aux tentatives simultanées", async () => {
     adresses.push(email("course"));
     ips.push(ip(4));
-    const resultats = await Promise.all(
-      Array.from({ length: 10 }, () => enregistrerTentative(email("course"), ip(4))),
-    );
+    const resultats = await Promise.all(Array.from({ length: 10 }, () => enregistrerTentative(email("course"), ip(4))));
     expect(resultats.filter(Boolean).length).toBeLessThanOrEqual(LIMITES.parPaire);
   });
 
@@ -92,7 +95,8 @@ describe("Limitation des tentatives de connexion", () => {
   });
 
   it("ne stocke ni l’adresse e-mail ni l’IP en clair", async () => {
-    const lignes = await admin`SELECT cle FROM tentative_connexion WHERE cle = ${cleDeTentative("email", email("cible"))}`;
+    const lignes =
+      await admin`SELECT cle FROM tentative_connexion WHERE cle = ${cleDeTentative("email", email("cible"))}`;
     expect(lignes.length).toBeGreaterThan(0);
     expect(lignes[0].cle).not.toContain("@");
   });

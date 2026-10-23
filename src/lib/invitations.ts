@@ -14,10 +14,14 @@ import { creerCompte } from "./comptes";
 export type SaisieLien = { nom: string; motDePasse: string; confirmation: string; motDePasseActuel: string };
 export type ResultatLien = { ok: true; type: LienOuvert["type"]; email: string } | { ok: false; message: string };
 
-const EXPIRE = "Ce lien n’est plus valable (déjà utilisé, révoqué ou expiré). Demandez-en un nouveau à la direction de l’école.";
+const EXPIRE =
+  "Ce lien n’est plus valable (déjà utilisé, révoqué ou expiré). Demandez-en un nouveau à la direction de l’école.";
 
 /** Le lien, et si un compte existe déjà pour son e-mail (qui doit alors confirmer son mot de passe actuel). */
-export async function ouvrirLien(ecoleId: string, jeton: string): Promise<(LienOuvert & { compteExistant: boolean }) | null> {
+export async function ouvrirLien(
+  ecoleId: string,
+  jeton: string,
+): Promise<(LienOuvert & { compteExistant: boolean }) | null> {
   const lien = await avecEcole(ecoleId, (tx) => lireLien(tx, jeton, new Date()));
   if (!lien) return null;
   const ctx = await auth.$context;
@@ -41,7 +45,9 @@ export async function accepterLien(ecoleId: string, jeton: string, saisie: Saisi
     if (existant) {
       // Déjà un compte (dans une autre école) : il prouve qu'il en est le titulaire.
       const credentiel = await ctx.internalAdapter.findCredentialAccount(existant.user.id);
-      const bon = credentiel?.password ? await ctx.password.verify({ password: saisie.motDePasseActuel, hash: credentiel.password }) : false;
+      const bon = credentiel?.password
+        ? await ctx.password.verify({ password: saisie.motDePasseActuel, hash: credentiel.password })
+        : false;
       if (!bon) return { ok: false, message: "Mot de passe actuel incorrect." };
       userId = existant.user.id;
     } else {

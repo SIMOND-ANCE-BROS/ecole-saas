@@ -13,11 +13,17 @@ describe("datesDesSeances", () => {
   });
 
   it("commence au premier jour voulu après le début", () => {
-    expect(datesDesSeances({ debut: "2026-09-01", fin: "2026-09-14", jourSemaine: 1, fermetures: [] })).toEqual(["2026-09-07", "2026-09-14"]);
+    expect(datesDesSeances({ debut: "2026-09-01", fin: "2026-09-14", jourSemaine: 1, fermetures: [] })).toEqual([
+      "2026-09-07",
+      "2026-09-14",
+    ]);
   });
 
   it("gère le dimanche (7)", () => {
-    expect(datesDesSeances({ debut: "2026-09-01", fin: "2026-09-13", jourSemaine: 7, fermetures: [] })).toEqual(["2026-09-06", "2026-09-13"]);
+    expect(datesDesSeances({ debut: "2026-09-01", fin: "2026-09-13", jourSemaine: 7, fermetures: [] })).toEqual([
+      "2026-09-06",
+      "2026-09-13",
+    ]);
   });
 
   it("saute les fermetures, bornes comprises", () => {
@@ -53,11 +59,17 @@ describe("datesDuCours (#90)", () => {
     ({ type: "hebdomadaire", jourSemaine, dateDebut, dateFin }) as const;
 
   it("chaque semaine : comme avant, hors fermetures", () => {
-    expect(datesDuCours(hebdo(1), SAISON, TOUSSAINT)).toEqual(datesDesSeances({ ...SAISON, jourSemaine: 1, fermetures: TOUSSAINT }));
+    expect(datesDuCours(hebdo(1), SAISON, TOUSSAINT)).toEqual(
+      datesDesSeances({ ...SAISON, jourSemaine: 1, fermetures: TOUSSAINT }),
+    );
   });
 
   it("période limitée : seulement entre les deux dates, et dans la saison", () => {
-    expect(datesDuCours(hebdo(3, "2026-09-20", "2026-10-07"), SAISON, [])).toEqual(["2026-09-23", "2026-09-30", "2026-10-07"]);
+    expect(datesDuCours(hebdo(3, "2026-09-20", "2026-10-07"), SAISON, [])).toEqual([
+      "2026-09-23",
+      "2026-09-30",
+      "2026-10-07",
+    ]);
     expect(datesDuCours(hebdo(3, "2026-08-01", null), SAISON, [])[0]).toBe("2026-09-02");
     expect(datesDuCours(hebdo(3, "2026-10-10", "2026-10-01"), SAISON, [])).toEqual([]);
   });
@@ -68,13 +80,21 @@ describe("datesDuCours (#90)", () => {
     expect(datesDuCours(quinzaine, SAISON, [])).toEqual(["2026-09-07", "2026-09-21", "2026-10-05", "2026-10-19"]);
     // Fermeture du 19 octobre : la séance saute, les autres gardent leur semaine.
     expect(datesDuCours(quinzaine, SAISON, TOUSSAINT)).toEqual(["2026-09-07", "2026-09-21", "2026-10-05"]);
-    expect(datesDuCours({ ...quinzaine, dateDebut: "2026-09-14" }, SAISON, [])).toEqual(["2026-09-14", "2026-09-28", "2026-10-12", "2026-10-26"]);
+    expect(datesDuCours({ ...quinzaine, dateDebut: "2026-09-14" }, SAISON, [])).toEqual([
+      "2026-09-14",
+      "2026-09-28",
+      "2026-10-12",
+      "2026-10-26",
+    ]);
   });
 
   it("dates précises : triées, sans doublon, dans la saison, même pendant une fermeture", () => {
-    expect(datesDuCours({ type: "dates", dates: ["2026-10-24", "2026-09-12", "2026-10-24", "2027-01-05"] }, SAISON, TOUSSAINT)).toEqual([
-      "2026-09-12",
-      "2026-10-24",
-    ]);
+    expect(
+      datesDuCours(
+        { type: "dates", dates: ["2026-10-24", "2026-09-12", "2026-10-24", "2027-01-05"] },
+        SAISON,
+        TOUSSAINT,
+      ),
+    ).toEqual(["2026-09-12", "2026-10-24"]);
   });
 });

@@ -1,9 +1,9 @@
 ---
 name: Task
 about: Technical work without visible effect (CI, dependencies, debt, tooling, docs)
-title: 'AREA: expected outcome'
+title: "AREA: expected outcome"
 type: Task
-assignees: ''
+assignees: ""
 ---
 
 <!-- Conventions: docs/guides/issues.md — type, Priority and Effort fields, area labels, milestone. -->

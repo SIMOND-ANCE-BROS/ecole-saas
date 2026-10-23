@@ -7,7 +7,8 @@
 export type CoursAgenda = { id: string; jourSemaine: number | null; heureDebut: string; dureeMinutes: number };
 
 export const versMinutes = (heure: string) => Number(heure.slice(0, 2)) * 60 + Number(heure.slice(3, 5));
-export const versHeure = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+export const versHeure = (minutes: number) =>
+  `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 
 /** Arrondi au pas le plus proche (quart d'heure par défaut). */
 export const aimanter = (minutes: number, pas = 15) => Math.round(minutes / pas) * pas;
@@ -29,10 +30,13 @@ export function bornesJournee(cours: CoursAgenda[]): { debut: number; fin: numbe
 export function disposer(cours: CoursAgenda[]): Map<string, { colonne: number; colonnes: number }> {
   const resultat = new Map<string, { colonne: number; colonnes: number }>();
   const parJour = new Map<number, CoursAgenda[]>();
-  for (const c of cours) if (c.jourSemaine !== null) parJour.set(c.jourSemaine, [...(parJour.get(c.jourSemaine) ?? []), c]);
+  for (const c of cours)
+    if (c.jourSemaine !== null) parJour.set(c.jourSemaine, [...(parJour.get(c.jourSemaine) ?? []), c]);
 
   for (const duJour of parJour.values()) {
-    const tries = [...duJour].sort((a, b) => versMinutes(a.heureDebut) - versMinutes(b.heureDebut) || b.dureeMinutes - a.dureeMinutes);
+    const tries = [...duJour].sort(
+      (a, b) => versMinutes(a.heureDebut) - versMinutes(b.heureDebut) || b.dureeMinutes - a.dureeMinutes,
+    );
     let groupe: { id: string; colonne: number }[] = [];
     let finsColonnes: number[] = [];
     let finGroupe = -1;

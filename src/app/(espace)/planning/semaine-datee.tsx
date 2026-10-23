@@ -40,8 +40,14 @@ export function SemaineDatee({ seances, lundi, aujourdhui, fermetures, horaires,
     heureDebut: s.heureDebut,
     dureeMinutes: s.dureeMinutes,
     titre: s.discipline,
-    lignes: [`${s.salle} · ${s.intervenant}`, `${s.inscrits}${s.capaciteMax ? ` / ${s.capaciteMax}` : ""} inscrit${s.inscrits > 1 ? "s" : ""}`],
-    etiquette: [s.deplacee && "déplacée", s.recurrence === "dates" && "ponctuel", s.recurrence === "quinzaine" && "1 sem. sur 2"].filter(Boolean).join(", ") || null,
+    lignes: [
+      `${s.salle} · ${s.intervenant}`,
+      `${s.inscrits}${s.capaciteMax ? ` / ${s.capaciteMax}` : ""} inscrit${s.inscrits > 1 ? "s" : ""}`,
+    ],
+    etiquette:
+      [s.deplacee && "déplacée", s.recurrence === "dates" && "ponctuel", s.recurrence === "quinzaine" && "1 sem. sur 2"]
+        .filter(Boolean)
+        .join(", ") || null,
     alerte: s.statut === "annulee" ? "annulée" : s.remplacement ? "remplacement" : null,
     barre: s.statut === "annulee",
     href: `/planning/seances/${s.id}`,
@@ -65,7 +71,11 @@ export function SemaineDatee({ seances, lundi, aujourdhui, fermetures, horaires,
         ],
       };
     }
-    return deplacerUneSeance(id, { date, heureDebut: creneau.heureDebut, dureeMinutes: creneau.dureeMinutes }, choix === "suivantes" ? "suivantes" : "seance");
+    return deplacerUneSeance(
+      id,
+      { date, heureDebut: creneau.heureDebut, dureeMinutes: creneau.dureeMinutes },
+      choix === "suivantes" ? "suivantes" : "seance",
+    );
   }
 
   return (
@@ -85,19 +95,32 @@ export function SemaineDatee({ seances, lundi, aujourdhui, fermetures, horaires,
         </h2>
         <label className="ml-auto flex items-center gap-2">
           <span className="text-doux">Aller au</span>
-          <input type="date" className="champ" defaultValue={lundi} onChange={(e) => e.target.value && router.push(lienSemaine(e.target.value))} />
+          <input
+            type="date"
+            className="champ"
+            defaultValue={lundi}
+            onChange={(e) => e.target.value && router.push(lienSemaine(e.target.value))}
+          />
         </label>
       </nav>
       {seances.length === 0 && <p className="text-sm text-doux">Aucune séance cette semaine.</p>}
       <Agenda
         elements={elements}
-        colonnes={jours.map((j) => ({ jour: j, titre: majuscule(dateCourte(dates[j - 1], true)), ferme: fermeLe(dates[j - 1]) }))}
+        colonnes={jours.map((j) => ({
+          jour: j,
+          titre: majuscule(dateCourte(dates[j - 1], true)),
+          ferme: fermeLe(dates[j - 1]),
+        }))}
         debut={debut}
         fin={finJournee}
         horaires={horaires}
         modifiable={modifiable}
         deplacer={deplacerSeance}
-        creer={(jour, d, duree) => router.push(`/planning/cours/nouveau?jour=${jour}&heure=${versHeure(d)}&duree=${duree}&date=${dates[jour - 1]}`)}
+        creer={(jour, d, duree) =>
+          router.push(
+            `/planning/cours/nouveau?jour=${jour}&heure=${versHeure(d)}&duree=${duree}&date=${dates[jour - 1]}`,
+          )
+        }
       />
     </div>
   );

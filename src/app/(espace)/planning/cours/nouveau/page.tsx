@@ -15,7 +15,11 @@ export default async function PageNouveauCours({ searchParams }: PageProps<"/pla
   const { jour, heure, duree, date } = await searchParams;
   const { saison, referentiel, planning } = await avecEcole(ecoleId, async (tx) => {
     const s = await saisonCourante(tx, aujourdhuiAParis());
-    return { saison: s, referentiel: await referentielPlanning(tx), planning: s ? await coursDeLaSaison(tx, s.id) : [] };
+    return {
+      saison: s,
+      referentiel: await referentielPlanning(tx),
+      planning: s ? await coursDeLaSaison(tx, s.id) : [],
+    };
   });
   if (!saison) return <p className="text-sm text-doux">Aucune saison n’est encore paramétrée.</p>;
   const jourPropose = Number(jour);
@@ -37,7 +41,9 @@ export default async function PageNouveauCours({ searchParams }: PageProps<"/pla
         jour={Number.isInteger(jourPropose) && jourPropose >= 1 && jourPropose <= 7 ? jourPropose : undefined}
         heure={typeof heure === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(heure) ? heure : undefined}
         date={dateValide(date) ?? undefined}
-        duree={Number.isInteger(dureeProposee) && dureeProposee >= 5 && dureeProposee <= 600 ? dureeProposee : undefined}
+        duree={
+          Number.isInteger(dureeProposee) && dureeProposee >= 5 && dureeProposee <= 600 ? dureeProposee : undefined
+        }
       />
     </section>
   );

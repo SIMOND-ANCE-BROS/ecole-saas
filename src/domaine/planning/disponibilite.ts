@@ -45,10 +45,15 @@ export function intervalleSeance(s: Pick<SeanceDatee, "date" | "heureDebut" | "d
 const chevauche = ([a1, a2]: [number, number], [b1, b2]: [number, number]) => a1 < b2 && b1 < a2;
 
 /** Séances dont l'intervenant est indisponible pendant tout ou partie du créneau. */
-export function conflits(seances: SeanceDatee[], indispos: Indisponibilite[]): { seanceId: string; indisponibilite: Indisponibilite }[] {
+export function conflits(
+  seances: SeanceDatee[],
+  indispos: Indisponibilite[],
+): { seanceId: string; indisponibilite: Indisponibilite }[] {
   return seances.flatMap((s) => {
     const creneau = intervalleSeance(s);
-    const i = indispos.find((x) => x.intervenantId === s.intervenantId && chevauche(creneau, [x.debut.getTime(), x.fin.getTime()]));
+    const i = indispos.find(
+      (x) => x.intervenantId === s.intervenantId && chevauche(creneau, [x.debut.getTime(), x.fin.getTime()]),
+    );
     return i ? [{ seanceId: s.id, indisponibilite: i }] : [];
   });
 }
@@ -68,8 +73,12 @@ export function remplacantsLibres(
   return intervenants
     .filter((i) => i.id !== cible.intervenantId)
     .map((i, rang) => {
-      const indisponible = indispos.some((x) => x.intervenantId === i.id && chevauche(creneau, [x.debut.getTime(), x.fin.getTime()]));
-      const occupe = autresSeances.some((s) => s.id !== cible.id && s.intervenantId === i.id && chevauche(creneau, intervalleSeance(s)));
+      const indisponible = indispos.some(
+        (x) => x.intervenantId === i.id && chevauche(creneau, [x.debut.getTime(), x.fin.getTime()]),
+      );
+      const occupe = autresSeances.some(
+        (s) => s.id !== cible.id && s.intervenantId === i.id && chevauche(creneau, intervalleSeance(s)),
+      );
       const motif = indisponible ? ("indisponible" as const) : occupe ? ("autre séance" as const) : null;
       return { id: i.id, libre: motif === null, motif, enseigne: i.disciplines.includes(cible.discipline), rang };
     })

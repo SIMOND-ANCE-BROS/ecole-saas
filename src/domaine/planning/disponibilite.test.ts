@@ -29,7 +29,11 @@ const seance = (id: string, date: string, heureDebut: string, intervenantId: str
   dureeMinutes,
   intervenantId,
 });
-const indispo = (intervenantId: string, debut: string, fin: string) => ({ intervenantId, debut: new Date(debut), fin: new Date(fin) });
+const indispo = (intervenantId: string, debut: string, fin: string) => ({
+  intervenantId,
+  debut: new Date(debut),
+  fin: new Date(fin),
+});
 
 describe("conflits", () => {
   it("trouve les séances d’un intervenant qui chevauchent ses indisponibilités, bornes exclues", () => {

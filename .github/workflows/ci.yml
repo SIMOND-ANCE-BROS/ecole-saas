@@ -48,8 +48,10 @@ jobs:
         run: PGPASSWORD=proprio psql -h localhost -U proprio -d ecole -f docker/init.sql
       - name: Migrations
         run: npm run db:migrate
-      - run: npm run lint
+      - run: npm run format:check
+      # typecheck first: it generates the Next route types that type-aware lint rules need.
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
       - name: Integration tests (real database)
         run: npm run test:integration
@@ -69,12 +71,34 @@ jobs:
       - name: npm audit (high and critical, runtime dependencies)
         run: npm audit --omit=dev --audit-level=high
 
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Same pinned, checksum-verified binary and rules as the pre-commit hook.
+      - name: gitleaks on the pushed commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            range="$HEAD"
+          else
+            range="$BASE..$HEAD"
+          fi
+          sh scripts/gitleaks.sh git --redact --no-banner --log-level warn --log-opts="$range"
+
   # Single check to require on main: fails if any job above failed or was skipped.
   ci-success:
     name: ci-success
     runs-on: ubuntu-24.04
     timeout-minutes: 2
-    needs: [verify, audit]
+    needs: [verify, audit, secret-scan]
     if: always()
     steps:
       - name: All required jobs passed

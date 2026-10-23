@@ -52,8 +52,11 @@ export default async function PageEleves({ searchParams }: PageProps<"/eleves">)
           <p className="text-sm text-doux" aria-live="polite">
             {saisie ? `${pluriel(eleves.length, "élève")} pour « ${saisie} »` : pluriel(eleves.length, "élève")}
             {filtrage && " avec ces filtres"}
-            {eleves.length >= RESULTATS_MAX && ` : seuls les ${RESULTATS_MAX} premiers sont affichés, précisez la recherche ou filtrez`}
-            {!saisie && !filtrage && <span className="hidden sm:inline">. Recherche par nom, téléphone, ou nom d’un parent (Ctrl K).</span>}
+            {eleves.length >= RESULTATS_MAX &&
+              ` : seuls les ${RESULTATS_MAX} premiers sont affichés, précisez la recherche ou filtrez`}
+            {!saisie && !filtrage && (
+              <span className="hidden sm:inline">. Recherche par nom, téléphone, ou nom d’un parent (Ctrl K).</span>
+            )}
           </p>
         </div>
         <Link href="/eleves/nouveau" className="bouton-principal">
@@ -107,9 +110,15 @@ export default async function PageEleves({ searchParams }: PageProps<"/eleves">)
                         <Link href={`/eleves/${e.id}`} className="lien text-base font-medium">
                           {[e.prenom, e.nom].filter(Boolean).join(" ")}
                         </Link>
-                        {e.dateNaissance && <span className="shrink-0 tabular-nums text-doux">{ageAu(e.dateNaissance, aujourdhui)} ans</span>}
+                        {e.dateNaissance && (
+                          <span className="shrink-0 tabular-nums text-doux">
+                            {ageAu(e.dateNaissance, aujourdhui)} ans
+                          </span>
+                        )}
                       </span>
-                      {e.responsables.length > 0 && <span className="text-doux">Responsable : {e.responsables.join(", ")}</span>}
+                      {e.responsables.length > 0 && (
+                        <span className="text-doux">Responsable : {e.responsables.join(", ")}</span>
+                      )}
                       {e.telephone && (
                         <span className="self-start py-1">
                           <Telephone numero={e.telephone} />

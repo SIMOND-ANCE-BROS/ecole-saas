@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { z } from "zod";
 import { echangerCode, FOURNISSEURS, type Fournisseur, identifiants, verifierEtat } from "@/connecteurs/agenda/oauth";
 import { avecEcole } from "@/db";
 import { enregistrerConnexion } from "@/db/connexions-agenda";
@@ -11,13 +12,16 @@ import { synchroniserAgenda } from "@/lib/synchro-agenda";
  * échange le code (PKCE), chiffre l'accès durable, synchronise une première
  * fois, puis renvoie l'intervenant sur sa page personnelle.
  */
+const cookieOAuth = z.object({ verificateur: z.string(), nonce: z.string(), retour: z.string() });
+
 export async function GET(req: NextRequest, ctx: RouteContext<"/api/agenda/retour/[fournisseur]">) {
   const { fournisseur } = await ctx.params;
   const parametres = req.nextUrl.searchParams;
   const brut = req.cookies.get(COOKIE_OAUTH)?.value;
-  let cookie: { verificateur: string; nonce: string; retour: string } | null = null;
+  let cookie: z.infer<typeof cookieOAuth> | null = null;
   try {
-    cookie = brut ? JSON.parse(Buffer.from(brut, "base64url").toString("utf8")) : null;
+    // The cookie comes from the browser: its shape is checked, never trusted.
+    cookie = brut ? cookieOAuth.parse(JSON.parse(Buffer.from(brut, "base64url").toString("utf8"))) : null;
   } catch {
     cookie = null;
   }
@@ -37,10 +41,18 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/agenda/retou
   if (!etat || etat.fournisseur !== f || etat.nonce !== cookie.nonce || !code || !id) return retour("erreur");
 
   try {
-    const { jetonRafraichissement, compte } = await echangerCode(f, id, { code, verificateur: cookie.verificateur, redirection: redirectionOAuth(f) });
+    const { jetonRafraichissement, compte } = await echangerCode(f, id, {
+      code,
+      verificateur: cookie.verificateur,
+      redirection: redirectionOAuth(f),
+    });
     // L'intervenant a pu être désactivé entre le départ et le retour : rien n'est alors enregistré.
     const enregistre = await avecEcole(etat.ecoleId, (tx) =>
-      enregistrerConnexion(tx, etat.intervenantId, { fournisseur: f, compte, jetonChiffre: chiffrer(jetonRafraichissement) }),
+      enregistrerConnexion(tx, etat.intervenantId, {
+        fournisseur: f,
+        compte,
+        jetonChiffre: chiffrer(jetonRafraichissement),
+      }),
     );
     if (!enregistre) return retour("erreur");
   } catch {

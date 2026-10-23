@@ -36,14 +36,18 @@ export function SemaineType({ cours, tous, modifiable, misEnAvant, horaires }: P
     heureDebut: c.heureDebut,
     dureeMinutes: c.dureeMinutes,
     titre: c.discipline,
-    lignes: [`${c.salle} · ${c.intervenant}`, `${c.inscrits}${c.capaciteMax ? ` / ${c.capaciteMax}` : ""} inscrit${c.inscrits > 1 ? "s" : ""}`],
+    lignes: [
+      `${c.salle} · ${c.intervenant}`,
+      `${c.inscrits}${c.capaciteMax ? ` / ${c.capaciteMax}` : ""} inscrit${c.inscrits > 1 ? "s" : ""}`,
+    ],
     etiquette: marqueRecurrence(c),
     alerte: c.capaciteMax !== null && c.inscrits >= c.capaciteMax ? "complet" : null,
     href: `/planning/cours/${c.id}`,
     deplacable: true,
   }));
 
-  const quand = (c: Creneau) => `${JOURS[c.jourSemaine].toLowerCase()} ${c.heureDebut}–${fin(c.heureDebut, c.dureeMinutes)}`;
+  const quand = (c: Creneau) =>
+    `${JOURS[c.jourSemaine].toLowerCase()} ${c.heureDebut}–${fin(c.heureDebut, c.dureeMinutes)}`;
   async function deplacerCours(id: string, creneau: Creneau, choix: string | null): Promise<RetourAgenda> {
     const c = cours.find((x) => x.id === id);
     const r = await deplacer(id, creneau, choix === "oui");
@@ -55,7 +59,11 @@ export function SemaineType({ cours, tous, modifiable, misEnAvant, horaires }: P
       };
     }
     if (r.statut === "refus") return r;
-    return { statut: "ok", texte: `Cours déplacé — ${c?.discipline ?? "Cours"} : ${quand(creneau)}.`, alertes: r.alertes };
+    return {
+      statut: "ok",
+      texte: `Cours déplacé — ${c?.discipline ?? "Cours"} : ${quand(creneau)}.`,
+      alertes: r.alertes,
+    };
   }
 
   return (
@@ -69,7 +77,9 @@ export function SemaineType({ cours, tous, modifiable, misEnAvant, horaires }: P
         modifiable={modifiable}
         misEnAvant={misEnAvant}
         deplacer={deplacerCours}
-        creer={(jour, d, duree) => router.push(`/planning/cours/nouveau?jour=${jour}&heure=${versHeure(d)}&duree=${duree}`)}
+        creer={(jour, d, duree) =>
+          router.push(`/planning/cours/nouveau?jour=${jour}&heure=${versHeure(d)}&duree=${duree}`)
+        }
       />
       {ponctuels.length > 0 && (
         <section aria-labelledby="agenda-ponctuels" className="flex flex-col gap-1">

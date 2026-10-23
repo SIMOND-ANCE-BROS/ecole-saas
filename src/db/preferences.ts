@@ -22,12 +22,20 @@ export async function lirePreference(tx: Tx, userId: string, liste: string): Pro
 }
 
 /** Enregistre (ou remplace) la disposition ; false si le compte n'est pas membre de l'école courante. */
-export async function enregistrerPreference(tx: Tx, userId: string, liste: string, colonnes: string[]): Promise<boolean> {
+export async function enregistrerPreference(
+  tx: Tx,
+  userId: string,
+  liste: string,
+  colonnes: string[],
+): Promise<boolean> {
   const [m] = await tx.select({ id: membre.id }).from(membre).where(eq(membre.userId, userId));
   if (!m) return false;
   await tx
     .insert(preferenceListe)
     .values({ ecoleId: ECOLE_COURANTE, membreId: m.id, liste, colonnes })
-    .onConflictDoUpdate({ target: [preferenceListe.membreId, preferenceListe.liste], set: { colonnes, modifieLe: sql`now()` } });
+    .onConflictDoUpdate({
+      target: [preferenceListe.membreId, preferenceListe.liste],
+      set: { colonnes, modifieLe: sql`now()` },
+    });
   return true;
 }

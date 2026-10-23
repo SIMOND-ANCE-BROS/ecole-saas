@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { cadreAgenda, type Horaire, horsHoraires, plagesOuvertes } from "./horaires";
 
-const ROLLET: Horaire[] = [1, 2, 3, 4, 5].map((j) => ({ jourSemaine: j, ouverture: "16:30", fermeture: "22:00" })).concat({ jourSemaine: 6, ouverture: "09:00", fermeture: "13:00" });
+const ROLLET: Horaire[] = [1, 2, 3, 4, 5]
+  .map((j) => ({ jourSemaine: j, ouverture: "16:30", fermeture: "22:00" }))
+  .concat({ jourSemaine: 6, ouverture: "09:00", fermeture: "13:00" });
 const AMIS: Horaire[] = [{ jourSemaine: 3, ouverture: "10:00", fermeture: "18:00" }];
-const cours = (jourSemaine: number | null, heureDebut: string, dureeMinutes = 60) => ({ id: `${jourSemaine}-${heureDebut}`, jourSemaine, heureDebut, dureeMinutes });
+const cours = (jourSemaine: number | null, heureDebut: string, dureeMinutes = 60) => ({
+  id: `${jourSemaine}-${heureDebut}`,
+  jourSemaine,
+  heureDebut,
+  dureeMinutes,
+});
 
 describe("cadreAgenda", () => {
   it("sans horaires : du lundi au samedi, plage d'après les cours (comportement d'avant)", () => {
@@ -15,7 +22,11 @@ describe("cadreAgenda", () => {
   });
 
   it("élargi à un cours existant hors horaires (jour ou heure), arrondi à l'heure", () => {
-    expect(cadreAgenda(AMIS, [cours(7, "08:15", 30), cours(3, "18:00", 75)])).toEqual({ jours: [3, 7], debut: 8 * 60, fin: 20 * 60 });
+    expect(cadreAgenda(AMIS, [cours(7, "08:15", 30), cours(3, "18:00", 75)])).toEqual({
+      jours: [3, 7],
+      debut: 8 * 60,
+      fin: 20 * 60,
+    });
   });
 });
 
@@ -33,8 +44,14 @@ describe("horsHoraires", () => {
   });
 
   it("jour fermé, ou créneau qui dépasse", () => {
-    expect(horsHoraires({ jourSemaine: 7, heureDebut: "10:00", dureeMinutes: 60 }, ROLLET)).toBe("Le site est fermé le dimanche.");
-    expect(horsHoraires({ jourSemaine: 1, heureDebut: "21:30", dureeMinutes: 60 }, ROLLET)).toBe("En dehors des horaires du site le lundi (16:30–22:00).");
-    expect(horsHoraires({ jourSemaine: 6, heureDebut: "08:45", dureeMinutes: 60 }, ROLLET)).toBe("En dehors des horaires du site le samedi (09:00–13:00).");
+    expect(horsHoraires({ jourSemaine: 7, heureDebut: "10:00", dureeMinutes: 60 }, ROLLET)).toBe(
+      "Le site est fermé le dimanche.",
+    );
+    expect(horsHoraires({ jourSemaine: 1, heureDebut: "21:30", dureeMinutes: 60 }, ROLLET)).toBe(
+      "En dehors des horaires du site le lundi (16:30–22:00).",
+    );
+    expect(horsHoraires({ jourSemaine: 6, heureDebut: "08:45", dureeMinutes: 60 }, ROLLET)).toBe(
+      "En dehors des horaires du site le samedi (09:00–13:00).",
+    );
   });
 });

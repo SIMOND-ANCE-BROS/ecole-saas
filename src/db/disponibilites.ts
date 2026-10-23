@@ -51,7 +51,13 @@ export async function ajouterIndisponibilite(
   if (!i) return { ok: false, message: "Intervenant introuvable." };
   const [{ id }] = await tx
     .insert(indisponibilite)
-    .values({ ...saisie, libelle: saisie.libelle?.trim() || null, intervenantId, origine: "saisie", ecoleId: ECOLE_COURANTE })
+    .values({
+      ...saisie,
+      libelle: saisie.libelle?.trim() || null,
+      intervenantId,
+      origine: "saisie",
+      ecoleId: ECOLE_COURANTE,
+    })
     .returning({ id: indisponibilite.id });
   return { ok: true, id };
 }
@@ -90,7 +96,9 @@ export async function remplacerIndisponibilitesAgenda(
     );
   const valides = plages.filter((p) => p.fin > p.debut);
   if (valides.length > 0) {
-    await tx.insert(indisponibilite).values(valides.map((p) => ({ ...p, intervenantId, origine, ecoleId: ECOLE_COURANTE })));
+    await tx
+      .insert(indisponibilite)
+      .values(valides.map((p) => ({ ...p, intervenantId, origine, ecoleId: ECOLE_COURANTE })));
   }
   return valides.length;
 }
@@ -129,14 +137,31 @@ export async function conflitsCreneau(
   if (!estUuid(saisie.saisonId) || !estUuid(saisie.intervenantId)) return [];
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(saisie.heureDebut) || !(saisie.dureeMinutes > 0)) return [];
   if (!Number.isInteger(saisie.jourSemaine) || saisie.jourSemaine < 1 || saisie.jourSemaine > 7) return [];
-  const [s] = await tx.select({ debut: saison.dateDebut, fin: saison.dateFin }).from(saison).where(eq(saison.id, saisie.saisonId));
+  const [s] = await tx
+    .select({ debut: saison.dateDebut, fin: saison.dateFin })
+    .from(saison)
+    .where(eq(saison.id, saisie.saisonId));
   if (!s) return [];
-  const fermetures = await tx.select({ debut: fermeture.debut, fin: fermeture.fin }).from(fermeture).where(eq(fermeture.saisonId, saisie.saisonId));
-  const dates = datesDesSeances({ debut: s.debut > aujourdhui ? s.debut : aujourdhui, fin: s.fin, jourSemaine: saisie.jourSemaine, fermetures });
+  const fermetures = await tx
+    .select({ debut: fermeture.debut, fin: fermeture.fin })
+    .from(fermeture)
+    .where(eq(fermeture.saisonId, saisie.saisonId));
+  const dates = datesDesSeances({
+    debut: s.debut > aujourdhui ? s.debut : aujourdhui,
+    fin: s.fin,
+    jourSemaine: saisie.jourSemaine,
+    fermetures,
+  });
   if (dates.length === 0) return [];
   const { debut, fin } = periode(dates);
   const indispos = await indisposEntre(tx, debut, fin, [saisie.intervenantId]);
-  const seances = dates.map((date) => ({ id: date, date, heureDebut: saisie.heureDebut, dureeMinutes: saisie.dureeMinutes, intervenantId: saisie.intervenantId }));
+  const seances = dates.map((date) => ({
+    id: date,
+    date,
+    heureDebut: saisie.heureDebut,
+    dureeMinutes: saisie.dureeMinutes,
+    intervenantId: saisie.intervenantId,
+  }));
   return conflits(seances, indispos).map((c) => c.seanceId);
 }
 
@@ -174,7 +199,10 @@ export type Remplacant = {
  * Pour une séance : son intervenant est-il indisponible, et quels intervenants
  * actifs pourraient la reprendre (libres d'abord, la discipline en tête).
  */
-export async function disponibilitesSeance(tx: Tx, seanceId: string): Promise<{ indisponible: boolean; remplacants: Remplacant[] } | null> {
+export async function disponibilitesSeance(
+  tx: Tx,
+  seanceId: string,
+): Promise<{ indisponible: boolean; remplacants: Remplacant[] } | null> {
   if (!estUuid(seanceId)) return null;
   const [s] = await tx
     .select({
@@ -209,7 +237,13 @@ export async function disponibilitesSeance(tx: Tx, seanceId: string): Promise<{ 
     .orderBy(asc(intervenant.prenom), asc(intervenant.nom));
 
   const memeJour = await tx
-    .select({ id: seance.id, date: seance.date, heureDebut: heureEffective, dureeMinutes: dureeEffective, intervenantId: seance.intervenantId })
+    .select({
+      id: seance.id,
+      date: seance.date,
+      heureDebut: heureEffective,
+      dureeMinutes: dureeEffective,
+      intervenantId: seance.intervenantId,
+    })
     .from(seance)
     .innerJoin(cours, eq(cours.id, seance.coursId))
     .where(and(eq(seance.date, s.date), ne(seance.statut, "annulee")));

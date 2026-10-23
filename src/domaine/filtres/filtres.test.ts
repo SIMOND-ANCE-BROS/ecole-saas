@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { appliquerFiltre, type DefColonne, libelleCondition, lireFiltre, lireTri, normaliserTexte, trierLignes, versParametres } from "./filtres";
+import {
+  appliquerFiltre,
+  type DefColonne,
+  libelleCondition,
+  lireFiltre,
+  lireTri,
+  normaliserTexte,
+  trierLignes,
+  versParametres,
+} from "./filtres";
 
 const COLONNES: DefColonne[] = [
   { id: "nom", libelle: "Élève", type: "texte" },
@@ -15,7 +24,8 @@ const LIGNES: Ligne[] = [
   { nom: "Inès Moreau", age: null, responsables: ["Paul Moreau", "Anne Petit"], telephone: "07 00 00 00 01" },
 ];
 const AVEC_VALEURS = COLONNES.map((c) => ({ ...c, valeur: (l: Ligne) => l[c.id as keyof Ligne] }));
-const filtrer = (f: string[], mode?: string) => appliquerFiltre(LIGNES, lireFiltre(f, mode, COLONNES), AVEC_VALEURS).map((l) => l.nom);
+const filtrer = (f: string[], mode?: string) =>
+  appliquerFiltre(LIGNES, lireFiltre(f, mode, COLONNES), AVEC_VALEURS).map((l) => l.nom);
 
 describe("lireFiltre", () => {
   it("lit colonne, opérateur et valeur ; la valeur garde ses points", () => {
@@ -29,7 +39,10 @@ describe("lireFiltre", () => {
   });
 
   it("ignore une colonne inconnue, un opérateur inadapté, une valeur vide ou non numérique", () => {
-    expect(lireFiltre(["inconnue.contient.a", "age.contient.3", "nom.contient.", "age.sup.dix", "nom"], undefined, COLONNES).conditions).toEqual([]);
+    expect(
+      lireFiltre(["inconnue.contient.a", "age.contient.3", "nom.contient.", "age.sup.dix", "nom"], undefined, COLONNES)
+        .conditions,
+    ).toEqual([]);
   });
 
   it("ignore une colonne non filtrable", () => {
@@ -38,7 +51,11 @@ describe("lireFiltre", () => {
   });
 
   it("ne garde que 8 conditions et revient au mode ET par défaut", () => {
-    const f = lireFiltre(Array.from({ length: 12 }, () => "nom.non_vide"), "nimporte", COLONNES);
+    const f = lireFiltre(
+      Array.from({ length: 12 }, () => "nom.non_vide"),
+      "nimporte",
+      COLONNES,
+    );
     expect(f.conditions).toHaveLength(8);
     expect(f.mode).toBe("et");
   });
@@ -94,7 +111,10 @@ describe("appliquerFiltre", () => {
 describe("dates", () => {
   const COL: DefColonne[] = [{ id: "naissance", libelle: "Naissance", type: "date" }];
   const L = [{ n: "2018-03-01" }, { n: "2014-01-10" }, { n: null }];
-  const f = (x: string[]) => appliquerFiltre(L, lireFiltre(x, null, COL), [{ ...COL[0], valeur: (l: { n: string | null }) => l.n }]).map((l) => l.n);
+  const f = (x: string[]) =>
+    appliquerFiltre(L, lireFiltre(x, null, COL), [{ ...COL[0], valeur: (l: { n: string | null }) => l.n }]).map(
+      (l) => l.n,
+    );
   it("avant, après, le ; vide ; une valeur qui n'est pas une date est ignorée", () => {
     expect(f(["naissance.inf.2015-01-01"])).toEqual(["2014-01-10"]);
     expect(f(["naissance.sup.2015-01-01"])).toEqual(["2018-03-01"]);
@@ -103,14 +123,20 @@ describe("dates", () => {
     expect(lireFiltre(["naissance.inf.01/01/2015", "naissance.contient.2015"], null, COL).conditions).toEqual([]);
   });
   it("libellé lisible", () => {
-    expect(libelleCondition({ colonne: "naissance", operateur: "inf", valeur: "2015-01-01" }, COL)).toBe("Naissance avant le 01/01/2015");
+    expect(libelleCondition({ colonne: "naissance", operateur: "inf", valeur: "2015-01-01" }, COL)).toBe(
+      "Naissance avant le 01/01/2015",
+    );
   });
 });
 
 it("libelleCondition", () => {
   expect(libelleCondition({ colonne: "age", operateur: "sup", valeur: "10" }, COLONNES)).toBe("Âge > 10");
-  expect(libelleCondition({ colonne: "nom", operateur: "contient", valeur: "Martin" }, COLONNES)).toBe("Élève contient « Martin »");
-  expect(libelleCondition({ colonne: "telephone", operateur: "vide", valeur: "" }, COLONNES)).toBe("Téléphone est vide");
+  expect(libelleCondition({ colonne: "nom", operateur: "contient", valeur: "Martin" }, COLONNES)).toBe(
+    "Élève contient « Martin »",
+  );
+  expect(libelleCondition({ colonne: "telephone", operateur: "vide", valeur: "" }, COLONNES)).toBe(
+    "Téléphone est vide",
+  );
 });
 
 describe("tri (#107)", () => {
@@ -128,9 +154,19 @@ describe("tri (#107)", () => {
   });
 
   it("trie sans tenir compte des accents, les nombres en ordre numérique, les vides en dernier", () => {
-    const lignes = [{ nom: "Émile", age: 10 }, { nom: "eva", age: null }, { nom: "Zoé", age: 9 }, { nom: "", age: 30 }];
+    const lignes = [
+      { nom: "Émile", age: 10 },
+      { nom: "eva", age: null },
+      { nom: "Zoé", age: 9 },
+      { nom: "", age: 30 },
+    ];
     const v = (l: (typeof lignes)[number], c: string) => l[c as "nom" | "age"];
-    expect(trierLignes(lignes, { colonne: "nom", sens: "asc" }, v).map((l) => l.nom)).toEqual(["Émile", "eva", "Zoé", ""]);
+    expect(trierLignes(lignes, { colonne: "nom", sens: "asc" }, v).map((l) => l.nom)).toEqual([
+      "Émile",
+      "eva",
+      "Zoé",
+      "",
+    ]);
     expect(trierLignes(lignes, { colonne: "age", sens: "desc" }, v).map((l) => l.age)).toEqual([30, 10, 9, null]);
     expect(trierLignes(lignes, null, v)).toBe(lignes);
   });

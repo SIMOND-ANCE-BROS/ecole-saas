@@ -1,0 +1,3 @@
+# Formatting-only commits, skipped by `git blame` (blame.ignoreRevsFile, set by npm install).
+# chore(format): apply Prettier to the whole repository (#113)
+0e68c34b01e613e27a06c190ab2714396b39b876

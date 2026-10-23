@@ -39,7 +39,8 @@ const VTIMEZONE = [
   "END:VTIMEZONE",
 ];
 
-const echapper = (texte: string) => texte.replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+const echapper = (texte: string) =>
+  texte.replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 
 /** Replie une ligne en morceaux de 75 octets au plus, sans couper un caractère. */
 function replier(ligne: string): string[] {
@@ -71,9 +72,21 @@ function local(date: string, heure: string, minutesEnPlus = 0): string {
   return `${jour.getUTCFullYear()}${deux(jour.getUTCMonth() + 1)}${deux(jour.getUTCDate())}T${deux(Math.floor(reste / 60))}${deux(reste % 60)}00`;
 }
 
-const utc = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+const utc = (d: Date) =>
+  d
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}/, "");
 
-export function agendaIcs({ nom, genereLe, seances }: { nom: string; genereLe: Date; seances: SeanceAgenda[] }): string {
+export function agendaIcs({
+  nom,
+  genereLe,
+  seances,
+}: {
+  nom: string;
+  genereLe: Date;
+  seances: SeanceAgenda[];
+}): string {
   const lignes = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",

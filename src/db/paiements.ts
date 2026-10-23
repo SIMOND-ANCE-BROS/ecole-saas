@@ -43,8 +43,14 @@ export const reglementValide = z
     emetteur: texteCourt(100),
     encaissementPrevu: z.iso.date("Date invalide").nullable(),
   })
-  .refine((r) => r.encaissementPrevu === null || r.moyen === "cheque", { path: ["encaissementPrevu"], message: "Seul un chèque s’encaisse plus tard" })
-  .refine((r) => r.encaissementPrevu === null || r.encaissementPrevu >= r.date, { path: ["encaissementPrevu"], message: "L’encaissement suit la réception" });
+  .refine((r) => r.encaissementPrevu === null || r.moyen === "cheque", {
+    path: ["encaissementPrevu"],
+    message: "Seul un chèque s’encaisse plus tard",
+  })
+  .refine((r) => r.encaissementPrevu === null || r.encaissementPrevu >= r.date, {
+    path: ["encaissementPrevu"],
+    message: "L’encaissement suit la réception",
+  });
 export const reglementsValides = z.array(reglementValide).min(1, "Aucun règlement").max(24);
 
 export type Resultat = { ok: true; ids: string[] } | { ok: false; message: string };
@@ -58,16 +64,26 @@ export const dejaCorrige = sql<number>`coalesce((SELECT -sum(c.montant_centimes)
 
 /** Membre de l'école courante qui saisit (pour `saisi_par` et le journal). */
 async function membreDe(tx: Tx, userId: string): Promise<string | null> {
-  const [m] = await tx.select({ id: membre.id }).from(membre).where(and(eq(membre.userId, userId), eq(membre.actif, true)));
+  const [m] = await tx
+    .select({ id: membre.id })
+    .from(membre)
+    .where(and(eq(membre.userId, userId), eq(membre.actif, true)));
   return m?.id ?? null;
 }
 
 async function tracer(tx: Tx, qui: string, id: string, apres: Record<string, unknown>) {
-  await tx.insert(journal).values({ ecoleId: ECOLE_COURANTE, qui, tableCible: "paiement", ligneId: id, action: "insert", apres });
+  await tx
+    .insert(journal)
+    .values({ ecoleId: ECOLE_COURANTE, qui, tableCible: "paiement", ligneId: id, action: "insert", apres });
 }
 
 /** Enregistre un ou plusieurs règlements d'un payeur (trois chèques datés, chèque + espèces…). */
-export async function encaisser(tx: Tx, userId: string, payeurId: string, saisie: z.input<typeof reglementsValides>): Promise<Resultat> {
+export async function encaisser(
+  tx: Tx,
+  userId: string,
+  payeurId: string,
+  saisie: z.input<typeof reglementsValides>,
+): Promise<Resultat> {
   const r = reglementsValides.safeParse(saisie);
   if (!r.success) return { ok: false, message: r.error.issues[0].message };
   if (!estUuid(payeurId)) return { ok: false, message: "Payeur introuvable." };
@@ -81,7 +97,12 @@ export async function encaisser(tx: Tx, userId: string, payeurId: string, saisie
       .insert(paiement)
       .values({ ...x, ecoleId: ECOLE_COURANTE, payeurId, saisiPar: qui })
       .returning({ id: paiement.id });
-    await tracer(tx, qui, id, { montant_centimes: x.montantCentimes, moyen: x.moyen, date: x.date, encaissement_prevu: x.encaissementPrevu });
+    await tracer(tx, qui, id, {
+      montant_centimes: x.montantCentimes,
+      moyen: x.moyen,
+      date: x.date,
+      encaissement_prevu: x.encaissementPrevu,
+    });
     ids.push(id);
   }
   return { ok: true, ids };
@@ -91,7 +112,13 @@ export async function encaisser(tx: Tx, userId: string, payeurId: string, saisie
  * Annule tout ou partie d'un paiement (direction) : paiement négatif du même
  * moyen, lié à l'original, dans la limite de ce qui n'est pas déjà corrigé.
  */
-export async function corrigerPaiement(tx: Tx, userId: string, paiementId: string, montantCentimes: number, date: string): Promise<Resultat> {
+export async function corrigerPaiement(
+  tx: Tx,
+  userId: string,
+  paiementId: string,
+  montantCentimes: number,
+  date: string,
+): Promise<Resultat> {
   if (!estUuid(paiementId)) return { ok: false, message: "Ce paiement n’existe plus." };
   if (!Number.isInteger(montantCentimes) || montantCentimes <= 0) return { ok: false, message: "Montant invalide" };
   if (!z.iso.date().safeParse(date).success) return { ok: false, message: "Date invalide" };
@@ -106,12 +133,22 @@ export async function corrigerPaiement(tx: Tx, userId: string, paiementId: strin
     .from(paiement)
     .where(eq(paiement.id, paiementId));
   if (!o || o.montant < 0 || o.corrigeId) return { ok: false, message: "Ce paiement ne peut pas être corrigé." };
-  if (montantCentimes > o.montant - o.dejaCorrige) return { ok: false, message: "La correction dépasse le montant encore non corrigé." };
+  if (montantCentimes > o.montant - o.dejaCorrige)
+    return { ok: false, message: "La correction dépasse le montant encore non corrigé." };
   const qui = await membreDe(tx, userId);
   if (!qui) return { ok: false, message: "Accès refusé." };
   const [{ id }] = await tx
     .insert(paiement)
-    .values({ ecoleId: ECOLE_COURANTE, payeurId: o.payeurId, date, montantCentimes: -montantCentimes, moyen: o.moyen, reference: "Correction", corrigeId: paiementId, saisiPar: qui })
+    .values({
+      ecoleId: ECOLE_COURANTE,
+      payeurId: o.payeurId,
+      date,
+      montantCentimes: -montantCentimes,
+      moyen: o.moyen,
+      reference: "Correction",
+      corrigeId: paiementId,
+      saisiPar: qui,
+    })
     .returning({ id: paiement.id });
   await tracer(tx, qui, id, { montant_centimes: -montantCentimes, moyen: o.moyen, date, corrige_id: paiementId });
   return { ok: true, ids: [id] };
@@ -162,7 +199,10 @@ export async function soldeDe(tx: Tx, payeurId: string, aujourdhui: string): Pro
     .from(inscription)
     .where(eq(inscription.payeurId, payeurId))
     .orderBy(asc(inscription.creeLe));
-  const carnets = await tx.select({ prixCentimes: carnet.prixCentimes }).from(carnet).where(eq(carnet.payeurId, payeurId));
+  const carnets = await tx
+    .select({ prixCentimes: carnet.prixCentimes })
+    .from(carnet)
+    .where(eq(carnet.payeurId, payeurId));
   const reglements = await tx
     .select({ montantCentimes: paiement.montantCentimes, encaissementPrevu: paiement.encaissementPrevu })
     .from(paiement)

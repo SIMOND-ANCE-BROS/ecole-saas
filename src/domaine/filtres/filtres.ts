@@ -89,10 +89,17 @@ export const VIDE = "(vide)";
 export const SEPARATEUR = "|";
 export const valeursParmi = (valeur: string) => valeur.split(SEPARATEUR).filter((v) => v.trim() !== "");
 
-const LIBELLES_DATE: Partial<Record<Operateur, string>> = { egal: "le", inf: "avant le", sup: "après le", inf_egal: "jusqu’au", sup_egal: "depuis le" };
+const LIBELLES_DATE: Partial<Record<Operateur, string>> = {
+  egal: "le",
+  inf: "avant le",
+  sup: "après le",
+  inf_egal: "jusqu’au",
+  sup_egal: "depuis le",
+};
 
 /** Libellé d'un opérateur selon le type de la colonne (« avant le » pour une date). */
-export const libelleOperateur = (o: Operateur, type: TypeColonne) => (type === "date" && LIBELLES_DATE[o]) || LIBELLES_OPERATEURS[o];
+export const libelleOperateur = (o: Operateur, type: TypeColonne) =>
+  (type === "date" && LIBELLES_DATE[o]) || LIBELLES_OPERATEURS[o];
 
 export const sansValeur = (o: Operateur) => o === "vide" || o === "non_vide";
 
@@ -134,7 +141,11 @@ export function valeurNormalisee(c: Condition, type: TypeColonne): string | numb
 }
 
 /** Conditions valides de l'adresse : colonne connue, opérateur adapté, valeur exploitable. */
-export function lireFiltre(f: string | string[] | undefined | null, mode: string | string[] | undefined | null, colonnes: DefColonne[]): Filtre {
+export function lireFiltre(
+  f: string | string[] | undefined | null,
+  mode: string | string[] | undefined | null,
+  colonnes: DefColonne[],
+): Filtre {
   const brutes = (Array.isArray(f) ? f : f ? [f] : []).slice(0, CONDITIONS_MAX);
   const conditions: Condition[] = [];
   for (const b of brutes) {
@@ -238,7 +249,11 @@ function evaluer(cellule: Cellule, c: Condition, type: TypeColonne): boolean {
 }
 
 /** Lignes qui satisfont toutes (ET) ou au moins une (OU) des conditions. */
-export function appliquerFiltre<T>(lignes: T[], filtre: Filtre, colonnes: (DefColonne & { valeur: (l: T) => Cellule })[]): T[] {
+export function appliquerFiltre<T>(
+  lignes: T[],
+  filtre: Filtre,
+  colonnes: (DefColonne & { valeur: (l: T) => Cellule })[],
+): T[] {
   const actives = filtre.conditions.flatMap((c) => {
     const def = colonnes.find((d) => d.id === c.colonne);
     return def ? [{ c, def }] : [];
@@ -264,7 +279,11 @@ export function libelleCondition(c: Condition, colonnes: DefColonne[]): string {
 export type Tri = { colonne: string; sens: "asc" | "desc" };
 
 /** Tri de l'adresse s'il porte sur une colonne connue et triable ; sinon null (ordre par défaut). */
-export function lireTri(sort: string | string[] | undefined | null, order: string | string[] | undefined | null, colonnes: DefColonne[]): Tri | null {
+export function lireTri(
+  sort: string | string[] | undefined | null,
+  order: string | string[] | undefined | null,
+  colonnes: DefColonne[],
+): Tri | null {
   const colonne = Array.isArray(sort) ? sort[0] : sort;
   const def = colonnes.find((c) => c.id === colonne);
   if (!def || def.triable === false) return null;

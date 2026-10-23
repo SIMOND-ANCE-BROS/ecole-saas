@@ -2,7 +2,13 @@
 
 import { redirect } from "next/navigation";
 import { avecEcole } from "@/db";
-import { creerPersonne, type Doublon, modifierPersonne, rechercherPersonnes, saisiePersonneValide } from "@/db/personnes";
+import {
+  creerPersonne,
+  type Doublon,
+  modifierPersonne,
+  rechercherPersonnes,
+  saisiePersonneValide,
+} from "@/db/personnes";
 import { erreursDe } from "@/lib/erreurs-saisie";
 import { exigerRole } from "@/lib/session";
 
@@ -14,7 +20,8 @@ export async function creerContact(saisie: unknown, confirme: boolean): Promise<
   const p = saisiePersonneValide.safeParse(saisie);
   if (!p.success) return { message: "Vérifiez les champs signalés.", erreurs: erreursDe(p.error.issues) };
   const r = await avecEcole(ecoleId, (tx) => creerPersonne(tx, p.data, confirme));
-  if (r.statut === "doublons") return { message: "Cette personne existe peut-être déjà.", erreurs: {}, doublons: r.doublons };
+  if (r.statut === "doublons")
+    return { message: "Cette personne existe peut-être déjà.", erreurs: {}, doublons: r.doublons };
   redirect(`/contacts/${r.id}?enregistre=cree`);
 }
 

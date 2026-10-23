@@ -40,7 +40,18 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const t of ["horaire_site", "tarif_carnet", "reduction", "tarif", "cours", "intervenant", "salle", "site", "discipline", "saison"]) {
+  for (const t of [
+    "horaire_site",
+    "tarif_carnet",
+    "reduction",
+    "tarif",
+    "cours",
+    "intervenant",
+    "salle",
+    "site",
+    "discipline",
+    "saison",
+  ]) {
     await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
   }
   await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
@@ -49,18 +60,32 @@ afterAll(async () => {
 
 describe("saisons", () => {
   it("crée une saison, refuse un libellé pris, des dates inversées ou qui chevauchent", async () => {
-    const r = await avecEcole(ecole, (tx) => creerSaison(tx, { libelle: "2026-2027", dateDebut: "2026-09-01", dateFin: "2027-06-30" }, null));
+    const r = await avecEcole(ecole, (tx) =>
+      creerSaison(tx, { libelle: "2026-2027", dateDebut: "2026-09-01", dateFin: "2027-06-30" }, null),
+    );
     expect(r.ok).toBe(true);
     saison2026 = r.ok ? r.id : "";
-    expect(await avecEcole(ecole, (tx) => creerSaison(tx, { libelle: "2026-2027", dateDebut: "2027-09-01", dateFin: "2028-06-30" }, null))).toEqual({
+    expect(
+      await avecEcole(ecole, (tx) =>
+        creerSaison(tx, { libelle: "2026-2027", dateDebut: "2027-09-01", dateFin: "2028-06-30" }, null),
+      ),
+    ).toEqual({
       ok: false,
       message: "Une saison porte déjà ce libellé.",
     });
-    expect(await avecEcole(ecole, (tx) => creerSaison(tx, { libelle: "X", dateDebut: "2028-06-30", dateFin: "2028-01-01" }, null))).toEqual({
+    expect(
+      await avecEcole(ecole, (tx) =>
+        creerSaison(tx, { libelle: "X", dateDebut: "2028-06-30", dateFin: "2028-01-01" }, null),
+      ),
+    ).toEqual({
       ok: false,
       message: "La fin doit suivre le début.",
     });
-    expect(await avecEcole(ecole, (tx) => creerSaison(tx, { libelle: "Été", dateDebut: "2027-06-01", dateFin: "2027-08-31" }, null))).toEqual({
+    expect(
+      await avecEcole(ecole, (tx) =>
+        creerSaison(tx, { libelle: "Été", dateDebut: "2027-06-01", dateFin: "2027-08-31" }, null),
+      ),
+    ).toEqual({
       ok: false,
       message: "Ces dates chevauchent la saison 2026-2027.",
     });
@@ -72,19 +97,27 @@ describe("saisons", () => {
     await admin`INSERT INTO reduction (ecole_id, saison_id, code, taux_points_base, seuil_danseurs, publics, cumulable_multi_disciplines)
       VALUES (${ecole}, ${saison2026}, 'fratrie', 1000, 2, '{enfant}', false)`;
     await admin`INSERT INTO tarif_carnet (ecole_id, saison_id, nb_seances, personnes_max, prix_centimes) VALUES (${ecole}, ${saison2026}, 5, 1, 25000)`;
-    const r = await avecEcole(ecole, (tx) => creerSaison(tx, { libelle: "2027-2028", dateDebut: "2027-09-01", dateFin: "2028-06-30" }, saison2026));
+    const r = await avecEcole(ecole, (tx) =>
+      creerSaison(tx, { libelle: "2027-2028", dateDebut: "2027-09-01", dateFin: "2028-06-30" }, saison2026),
+    );
     const id = r.ok ? r.id : "";
     const [{ tarifs }] = await admin`SELECT count(*)::int AS tarifs FROM tarif WHERE saison_id = ${id}`;
-    const [{ fratrie }] = await admin`SELECT taux_points_base AS fratrie FROM reduction WHERE saison_id = ${id} AND code = 'fratrie'`;
+    const [{ fratrie }] =
+      await admin`SELECT taux_points_base AS fratrie FROM reduction WHERE saison_id = ${id} AND code = 'fratrie'`;
     const [{ carnets }] = await admin`SELECT count(*)::int AS carnets FROM tarif_carnet WHERE saison_id = ${id}`;
     expect({ tarifs, fratrie, carnets }).toEqual({ tarifs: 2, fratrie: 1000, carnets: 1 });
-    expect((await avecEcole(ecole, (tx) => listerSaisons(tx))).map((s) => `${s.libelle} ${s.tarifs}`)).toEqual(["2027-2028 2", "2026-2027 2"]);
+    expect((await avecEcole(ecole, (tx) => listerSaisons(tx))).map((s) => `${s.libelle} ${s.tarifs}`)).toEqual([
+      "2027-2028 2",
+      "2026-2027 2",
+    ]);
   });
 
   it("modifie les dates d’une saison, sans chevaucher l’autre", async () => {
     const saisie = { libelle: "2026-2027", dateDebut: "2026-08-25", dateFin: "2027-07-05" };
     expect((await avecEcole(ecole, (tx) => modifierSaison(tx, saison2026, saisie))).ok).toBe(true);
-    expect(await avecEcole(ecole, (tx) => modifierSaison(tx, saison2026, { ...saisie, dateFin: "2027-09-15" }))).toEqual({
+    expect(
+      await avecEcole(ecole, (tx) => modifierSaison(tx, saison2026, { ...saisie, dateFin: "2027-09-15" })),
+    ).toEqual({
       ok: false,
       message: "Ces dates chevauchent la saison 2027-2028.",
     });
@@ -95,12 +128,21 @@ describe("disciplines", () => {
   it("crée, refuse un doublon sans tenir compte de la casse, renomme", async () => {
     const r = await avecEcole(ecole, (tx) => creerDiscipline(tx, "Jazz"));
     jazz = r.ok ? r.id : "";
-    expect(await avecEcole(ecole, (tx) => creerDiscipline(tx, " jazz "))).toEqual({ ok: false, message: "Cette discipline existe déjà." });
+    expect(await avecEcole(ecole, (tx) => creerDiscipline(tx, " jazz "))).toEqual({
+      ok: false,
+      message: "Cette discipline existe déjà.",
+    });
     expect((await avecEcole(ecole, (tx) => creerDiscipline(tx, "Hip-hop"))).ok).toBe(true);
-    expect(await avecEcole(ecole, (tx) => renommerDiscipline(tx, jazz, "Hip-hop"))).toEqual({ ok: false, message: "Cette discipline existe déjà." });
+    expect(await avecEcole(ecole, (tx) => renommerDiscipline(tx, jazz, "Hip-hop"))).toEqual({
+      ok: false,
+      message: "Cette discipline existe déjà.",
+    });
     expect((await avecEcole(ecole, (tx) => renommerDiscipline(tx, jazz, "Modern’jazz"))).ok).toBe(true);
     // La discipline « Jazz » de l'autre école n'est ni vue ni gênante.
-    expect((await avecEcole(ecole, (tx) => listerDisciplines(tx))).map((d) => d.nom)).toEqual(["Hip-hop", "Modern’jazz"]);
+    expect((await avecEcole(ecole, (tx) => listerDisciplines(tx))).map((d) => d.nom)).toEqual([
+      "Hip-hop",
+      "Modern’jazz",
+    ]);
   });
 });
 
@@ -111,14 +153,24 @@ describe("sites et salles", () => {
     const r = await avecEcole(ecole, (tx) => creerSalle(tx, { siteId: centre, nom: "Studio", capacite: 20 }));
     studio = r.ok ? r.id : "";
     await avecEcole(ecole, (tx) => creerSalle(tx, { siteId: centre, nom: "Annexe", capacite: null }));
-    expect(await avecEcole(ecole, (tx) => modifierSalle(tx, studio, { siteId: centre, nom: "Grand studio", capacite: 25 }))).toEqual({ ok: true, id: studio });
+    expect(
+      await avecEcole(ecole, (tx) => modifierSalle(tx, studio, { siteId: centre, nom: "Grand studio", capacite: 25 })),
+    ).toEqual({ ok: true, id: studio });
     expect(await avecEcole(ecole, (tx) => listerLieux(tx))).toMatchObject([
-      { nom: "Centre", permanence: true, salles: [{ nom: "Annexe", capacite: null }, { nom: "Grand studio", capacite: 25, cours: 0 }] },
+      {
+        nom: "Centre",
+        permanence: true,
+        salles: [
+          { nom: "Annexe", capacite: null },
+          { nom: "Grand studio", capacite: 25, cours: 0 },
+        ],
+      },
     ]);
   });
 
   it("refuse de retirer une salle qui a des cours, un site qui a des salles, une discipline utilisée", async () => {
-    const [p] = await admin`INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
+    const [p] =
+      await admin`INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
       VALUES (${ecole}, 'Prof', 'Camille', 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`;
     await admin`INSERT INTO cours (ecole_id, saison_id, discipline_id, salle_id, intervenant_id, jour_semaine, heure_debut, duree_minutes)
       VALUES (${ecole}, ${saison2026}, ${jazz}, ${studio}, ${p.id}, 3, '17:00', 60)`;
@@ -126,7 +178,10 @@ describe("sites et salles", () => {
       ok: false,
       message: "Des cours ont lieu dans Grand studio : déplacez-les d’abord.",
     });
-    expect(await avecEcole(ecole, (tx) => supprimerSite(tx, centre))).toEqual({ ok: false, message: "Centre a encore des salles : retirez-les d’abord." });
+    expect(await avecEcole(ecole, (tx) => supprimerSite(tx, centre))).toEqual({
+      ok: false,
+      message: "Centre a encore des salles : retirez-les d’abord.",
+    });
     expect(await avecEcole(ecole, (tx) => supprimerDiscipline(tx, jazz))).toEqual({
       ok: false,
       message: "Modern’jazz est utilisée (1 cours, 0 tarif) : retirez-les d’abord.",
@@ -134,10 +189,16 @@ describe("sites et salles", () => {
   });
 
   it("retire une salle inutilisée, refuse une salle ou un site d’une autre école", async () => {
-    const annexe = (await avecEcole(ecole, (tx) => listerLieux(tx)))[0].salles.find((s) => s.nom === "Annexe")?.id as string;
+    const annexe = (await avecEcole(ecole, (tx) => listerLieux(tx)))[0].salles.find((s) => s.nom === "Annexe")
+      ?.id as string;
     expect(await avecEcole(ecole, (tx) => supprimerSalle(tx, annexe))).toEqual({ ok: true, id: annexe });
-    expect(await avecEcole(autreEcole, (tx) => supprimerSalle(tx, studio))).toEqual({ ok: false, message: "Cette salle n’existe plus." });
-    expect(await avecEcole(autreEcole, (tx) => creerSalle(tx, { siteId: centre, nom: "Intrus", capacite: null }))).toEqual({
+    expect(await avecEcole(autreEcole, (tx) => supprimerSalle(tx, studio))).toEqual({
+      ok: false,
+      message: "Cette salle n’existe plus.",
+    });
+    expect(
+      await avecEcole(autreEcole, (tx) => creerSalle(tx, { siteId: centre, nom: "Intrus", capacite: null })),
+    ).toEqual({
       ok: false,
       message: "Site introuvable.",
     });
@@ -148,8 +209,12 @@ describe("horaires des sites (#90)", () => {
   it("enregistre, remplace et relit les horaires d'un site", async () => {
     const semaine = [1, 2, 3, 4, 5].map((j) => ({ jourSemaine: j, ouverture: "16:30", fermeture: "22:00" }));
     expect(await avecEcole(ecole, (tx) => enregistrerHoraires(tx, centre, semaine))).toEqual({ ok: true, id: centre });
-    await avecEcole(ecole, (tx) => enregistrerHoraires(tx, centre, [{ jourSemaine: 6, ouverture: "09:00", fermeture: "13:00" }]));
-    expect((await avecEcole(ecole, (tx) => horairesParSite(tx)))[centre]).toEqual([{ jourSemaine: 6, ouverture: "09:00", fermeture: "13:00" }]);
+    await avecEcole(ecole, (tx) =>
+      enregistrerHoraires(tx, centre, [{ jourSemaine: 6, ouverture: "09:00", fermeture: "13:00" }]),
+    );
+    expect((await avecEcole(ecole, (tx) => horairesParSite(tx)))[centre]).toEqual([
+      { jourSemaine: 6, ouverture: "09:00", fermeture: "13:00" },
+    ]);
     expect((await avecEcole(ecole, (tx) => listerLieux(tx))).find((l) => l.id === centre)?.horaires).toHaveLength(1);
   });
 
@@ -162,11 +227,18 @@ describe("horaires des sites (#90)", () => {
         ]),
       ),
     ).toEqual({ ok: false, message: "Un même jour est saisi deux fois." });
-    expect(await avecEcole(ecole, (tx) => enregistrerHoraires(tx, centre, [{ jourSemaine: 2, ouverture: "18:00", fermeture: "09:00" }]))).toEqual({
+    expect(
+      await avecEcole(ecole, (tx) =>
+        enregistrerHoraires(tx, centre, [{ jourSemaine: 2, ouverture: "18:00", fermeture: "09:00" }]),
+      ),
+    ).toEqual({
       ok: false,
       message: "L’heure de fermeture doit suivre l’ouverture.",
     });
-    expect(await avecEcole(autreEcole, (tx) => enregistrerHoraires(tx, centre, []))).toEqual({ ok: false, message: "Ce site n’existe plus." });
+    expect(await avecEcole(autreEcole, (tx) => enregistrerHoraires(tx, centre, []))).toEqual({
+      ok: false,
+      message: "Ce site n’existe plus.",
+    });
     expect(await avecEcole(autreEcole, (tx) => horairesParSite(tx))).toEqual({});
   });
 });

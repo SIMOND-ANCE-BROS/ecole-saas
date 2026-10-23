@@ -22,7 +22,10 @@ export default async function PageNouvelEleve({ searchParams }: PageProps<"/elev
         <span className="text-doux"> / Nouvel élève</span>
       </nav>
       <h1 className="titre-page">Nouvel élève</h1>
-      <GuideNouvelEleve aujourdhui={aujourdhuiAParis()} responsableInitial={r ? { id: r.id, nom: nomAffiche(r) } : undefined} />
+      <GuideNouvelEleve
+        aujourdhui={aujourdhuiAParis()}
+        responsableInitial={r ? { id: r.id, nom: nomAffiche(r) } : undefined}
+      />
     </section>
   );
 }

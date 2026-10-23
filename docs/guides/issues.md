@@ -14,13 +14,13 @@ section « Pour l’accueil et la direction » is in French, for the school.
 
 ## 1. Everything is attached to an issue
 
-| Situation | Rule |
-| --- | --- |
-| A PR | References at least one issue: `Closes #N`, or `Refs #N` if the issue still needs other PRs (§8). |
-| No issue yet | Create it **before** opening the PR, after searching for duplicates. |
+| Situation                                                             | Rule                                                                                                                                                                                          |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A PR                                                                  | References at least one issue: `Closes #N`, or `Refs #N` if the issue still needs other PRs (§8).                                                                                             |
+| No issue yet                                                          | Create it **before** opening the PR, after searching for duplicates.                                                                                                                          |
 | Discovery on the way (bug, debt, security gap, flaky test, stale doc) | Never fix silently nor leave it in the conversation: open an issue (or comment on the existing one) with evidence. Fix it in the current PR only if small and on topic, still referencing it. |
-| Pending business question | In the relevant issue ("Open questions" section), with the `blocked` label while it blocks. |
-| Trivial chore (typo, lockfile) | May reference the closest issue. |
+| Pending business question                                             | In the relevant issue ("Open questions" section), with the `blocked` label while it blocks.                                                                                                   |
+| Trivial chore (typo, lockfile)                                        | May reference the closest issue.                                                                                                                                                              |
 
 ## 2. Title
 
@@ -49,25 +49,32 @@ Sections in this order, deleting those that do not apply:
 
 ```markdown
 ## Context
+
 Why we talk about it, in one or two sentences; related epic.
 
-## Observed          ← bug / discovery
+## Observed ← bug / discovery
+
 What happens, with evidence: `file:line`, command output.
 For a bug: steps, expected / actual.
 
-## Expected          ← feature / task
+## Expected ← feature / task
+
 The target behaviour, nominal case and limits.
 
 ## Acceptance criteria
+
 - [ ] Verifiable, one per line (tests to write included)
 
-## Open questions    ← business rule to confirm with the school
+## Open questions ← business rule to confirm with the school
+
 1. …
 
 ## Out of scope
+
 What is deliberately not covered.
 
 ## Links
+
 Parent epic, blocking issues, PRs, docs.
 ```
 
@@ -78,12 +85,12 @@ When an issue ages, its history is not rewritten: add a
 
 The organisation **issue type** is mandatory:
 
-| Type | For |
-| --- | --- |
-| `Bug` | An existing behaviour is wrong (or certainly will be). |
-| `Feature` | A new capability for the school (front desk, management, teachers). |
-| `Task` | Technical work without visible effect: CI, dependencies, debt, tooling, docs. |
-| `Epic` | A theme grouping several issues (sub-issues). No direct code. |
+| Type      | For                                                                           |
+| --------- | ----------------------------------------------------------------------------- |
+| `Bug`     | An existing behaviour is wrong (or certainly will be).                        |
+| `Feature` | A new capability for the school (front desk, management, teachers).           |
+| `Task`    | Technical work without visible effect: CI, dependencies, debt, tooling, docs. |
+| `Epic`    | A theme grouping several issues (sub-issues). No direct code.                 |
 
 ## 5. Priority, effort and labels
 
@@ -94,12 +101,12 @@ not labels. Set them in the issue side panel or through the GraphQL API
 **Priority**: one on every open issue, except `icebox` and except an `Epic`
 (its urgency shows on its sub-issues).
 
-| `Priority` | Meaning |
-| --- | --- |
-| `Urgent` | Blocking, security, leak between schools, exposed personal data, wrong amount: now. |
-| `High` | Needed for the next milestone and on the critical path. |
-| `Medium` | Needed before going live. |
-| `Low` | Improvement, may slip. |
+| `Priority` | Meaning                                                                             |
+| ---------- | ----------------------------------------------------------------------------------- |
+| `Urgent`   | Blocking, security, leak between schools, exposed personal data, wrong amount: now. |
+| `High`     | Needed for the next milestone and on the critical path.                             |
+| `Medium`   | Needed before going live.                                                           |
+| `Low`      | Improvement, may slip.                                                              |
 
 **Effort**: `Low` (less than half a day), `Medium` (one to three days),
 `High` (several days or several PRs, or an external dependency).
@@ -125,6 +132,7 @@ A milestone description always follows this format:
 🎯 Goal: what is true for the school when the milestone is closed.
 
 ✅ Exit criteria:
+
 - verifiable condition;
 - no Urgent or High issue open in this milestone.
 
@@ -139,12 +147,12 @@ Update it when the scope changes.
 
 ## 7. Relations
 
-| Relation | GitHub tool | Rule |
-| --- | --- | --- |
-| Belongs to a theme | **Sub-issue** of the epic | A single parent. |
-| Depends on another issue | **Blocked by** | + `blocked` label while the blocker is open. |
-| Duplicate | Close as `duplicate` | Comment "Merged into #X". |
-| Mentions without depending | `#N` in the text | — |
+| Relation                   | GitHub tool               | Rule                                         |
+| -------------------------- | ------------------------- | -------------------------------------------- |
+| Belongs to a theme         | **Sub-issue** of the epic | A single parent.                             |
+| Depends on another issue   | **Blocked by**            | + `blocked` label while the blocker is open. |
+| Duplicate                  | Close as `duplicate`      | Comment "Merged into #X".                    |
+| Mentions without depending | `#N` in the text          | —                                            |
 
 An epic is closed when all its sub-issues are closed.
 
@@ -153,16 +161,16 @@ An epic is closed when all its sub-issues are closed.
 **Branches.** Never push directly to `main`. A branch starts from `main` with
 an allowed prefix, checked in CI (`.github/workflows/pr-conventions.yml`, which also checks that the PR title is a conventional commit):
 
-| Prefix | For |
-| --- | --- |
-| `feature/` | Feature (`feature/11-tariff-engine`) |
-| `fix/` | Bug fix |
-| `refactor/` | Restructuring without behaviour change |
-| `test/` | Tests only |
-| `docs/` | Documentation |
-| `chore/` | CI, dependencies, tooling (not `ci/`) |
-| `hotfix/` | Urgent fix |
-| `claude/`, `dependabot/` | Branches created by tools |
+| Prefix                   | For                                    |
+| ------------------------ | -------------------------------------- |
+| `feature/`               | Feature (`feature/11-tariff-engine`)   |
+| `fix/`                   | Bug fix                                |
+| `refactor/`              | Restructuring without behaviour change |
+| `test/`                  | Tests only                             |
+| `docs/`                  | Documentation                          |
+| `chore/`                 | CI, dependencies, tooling (not `ci/`)  |
+| `hotfix/`                | Urgent fix                             |
+| `claude/`, `dependabot/` | Branches created by tools              |
 
 Suggested name: `<prefix>/<issue number>-<a-few-words>`.
 
@@ -186,12 +194,12 @@ A squash merge copies the commit messages: no `Closes` in a commit of a `Refs` P
 **Project.** Every open issue is in the organisation Project. Its `Status`
 column moves by itself (`.github/workflows/project-status.yml`):
 
-| `Status` | When | Trigger |
-| --- | --- | --- |
-| `Todo` | Triaged, not started | issue opened or reopened, PR closed without merge |
-| `In Progress` | Branch or draft PR | **draft** PR referencing the issue, `Refs` PR merged |
-| `In Review` | PR ready for review | PR "Ready for review" |
-| `Done` | Merged, issue closed | issue closed |
+| `Status`      | When                 | Trigger                                              |
+| ------------- | -------------------- | ---------------------------------------------------- |
+| `Todo`        | Triaged, not started | issue opened or reopened, PR closed without merge    |
+| `In Progress` | Branch or draft PR   | **draft** PR referencing the issue, `Refs` PR merged |
+| `In Review`   | PR ready for review  | PR "Ready for review"                                |
+| `Done`        | Merged, issue closed | issue closed                                         |
 
 The workflow needs the `PROJECT_TOKEN` secret (token with write access to the
 organisation Projects); without it, it warns and does nothing.

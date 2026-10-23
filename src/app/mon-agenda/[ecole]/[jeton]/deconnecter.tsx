@@ -16,7 +16,11 @@ export function BoutonDeconnecter({ ecoleId, jeton }: { ecoleId: string; jeton: 
       >
         Déconnecter mon agenda
       </button>
-      {message && <p role="alert" className="text-erreur">{message}</p>}
+      {message && (
+        <p role="alert" className="text-erreur">
+          {message}
+        </p>
+      )}
     </>
   );
 }

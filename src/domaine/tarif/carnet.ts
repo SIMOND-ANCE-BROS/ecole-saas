@@ -12,9 +12,7 @@ export function tarifierCarnet(grille: readonly LigneTarifCarnet[], demande: Dem
     if (!Number.isInteger(valeur) || valeur < 1) throw new TypeError(`${nom} invalide : ${valeur}`);
   }
 
-  const tranches = grille
-    .filter((l) => l.nbSeances === nbSeances)
-    .sort((a, b) => a.personnesMax - b.personnesMax);
+  const tranches = grille.filter((l) => l.nbSeances === nbSeances).sort((a, b) => a.personnesMax - b.personnesMax);
   const index = tranches.findIndex((l) => l.personnesMax >= nbPersonnes);
   if (index === -1) {
     return {
@@ -28,8 +26,7 @@ export function tarifierCarnet(grille: readonly LigneTarifCarnet[], demande: Dem
 
   const ligne = tranches[index];
   const minimum = index === 0 ? 1 : tranches[index - 1].personnesMax + 1;
-  const tranche =
-    minimum === ligne.personnesMax ? personnes(minimum) : `${minimum} à ${personnes(ligne.personnesMax)}`;
+  const tranche = minimum === ligne.personnesMax ? personnes(minimum) : `${minimum} à ${personnes(ligne.personnesMax)}`;
   return {
     statut: "ok",
     ligneTarifCarnetId: ligne.id,

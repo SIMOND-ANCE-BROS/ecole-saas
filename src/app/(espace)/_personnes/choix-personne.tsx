@@ -95,7 +95,8 @@ export function ChoixPersonne({ id, libelle, valeur, onChange, exclure = [], org
 
   if (valeur && "nouveau" in valeur) {
     const n = valeur.nouveau;
-    const maj = (champ: keyof typeof n) => (e: { target: { value: string } }) => onChange({ nouveau: { ...n, [champ]: e.target.value } });
+    const maj = (champ: keyof typeof n) => (e: { target: { value: string } }) =>
+      onChange({ nouveau: { ...n, [champ]: e.target.value } });
     const champ = (cle: keyof typeof n, texte: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
       <div className="flex flex-col gap-1">
         <label htmlFor={`${id}-${cle}`} className="text-sm">
@@ -116,7 +117,9 @@ export function ChoixPersonne({ id, libelle, valeur, onChange, exclure = [], org
     return (
       <div className="flex flex-col gap-2 rounded-md border border-bordure p-3">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-medium">{n.type === "professionnel" ? "Nouvel organisme" : "Nouvelle personne"}</span>
+          <span className="text-sm font-medium">
+            {n.type === "professionnel" ? "Nouvel organisme" : "Nouvelle personne"}
+          </span>
           <button type="button" className="lien text-sm" onClick={() => onChange(null)}>
             Chercher plutôt une personne connue
           </button>
@@ -158,7 +161,14 @@ export function ChoixPersonne({ id, libelle, valeur, onChange, exclure = [], org
         }}
       />
       <div role="status" className="text-xs text-doux">
-        {active && (erreur ? "Recherche indisponible, réessayez." : resultats === null ? "Recherche…" : resultats.length === 0 ? "Personne de connu à ce nom." : "")}
+        {active &&
+          (erreur
+            ? "Recherche indisponible, réessayez."
+            : resultats === null
+              ? "Recherche…"
+              : resultats.length === 0
+                ? "Personne de connu à ce nom."
+                : "")}
       </div>
       {active && resultats && resultats.length > 0 && (
         <ul className="panneau max-h-56 divide-y divide-bordure overflow-y-auto text-sm">

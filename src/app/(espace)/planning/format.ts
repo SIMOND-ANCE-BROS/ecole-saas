@@ -17,7 +17,12 @@ export function ages(min: number | null, max: number | null): string | null {
 }
 
 const jourMois = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
-const jourCourt = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+const jourCourt = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+});
 const date = (iso: string) => new Date(`${iso}T00:00:00Z`);
 
 /** Date courte : « 26 oct. » (avec le jour : « lun. 26 oct. »). */
@@ -47,6 +52,11 @@ export function recurrenceTexte(c: AvecRecurrence): string {
 
 /** Étiquette courte d'un bloc de l'agenda : rien pour un cours de chaque semaine, toute la saison. */
 export function marqueRecurrence(c: AvecRecurrence): string | null {
-  const parts = [c.recurrence === "quinzaine" ? "1 sem. sur 2" : null, c.dateDebut || c.dateFin ? `${c.dateDebut ? dateCourte(c.dateDebut) : "…"} → ${c.dateFin ? dateCourte(c.dateFin) : "…"}` : null];
+  const parts = [
+    c.recurrence === "quinzaine" ? "1 sem. sur 2" : null,
+    c.dateDebut || c.dateFin
+      ? `${c.dateDebut ? dateCourte(c.dateDebut) : "…"} → ${c.dateFin ? dateCourte(c.dateFin) : "…"}`
+      : null,
+  ];
   return parts.filter(Boolean).join(", ") || null;
 }

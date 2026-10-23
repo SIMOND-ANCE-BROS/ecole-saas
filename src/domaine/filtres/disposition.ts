@@ -19,7 +19,8 @@ const borner = (l: number) => Math.round(Math.min(LARGEUR_MAX, Math.max(LARGEUR_
 const visibleParDefaut = (c: DefColonne) => c.parDefaut !== false;
 
 /** Disposition par défaut : ordre des définitions, colonnes `parDefaut: false` masquées. */
-export const dispositionParDefaut = (colonnes: DefColonne[]): Disposition => colonnes.map((c) => ({ id: c.id, visible: visibleParDefaut(c) }));
+export const dispositionParDefaut = (colonnes: DefColonne[]): Disposition =>
+  colonnes.map((c) => ({ id: c.id, visible: visibleParDefaut(c) }));
 
 /**
  * Disposition d'un membre : identifiants inconnus et doublons ignorés,
@@ -45,7 +46,8 @@ export function lireDisposition(colonnes: DefColonne[], enregistree: string[] | 
   return d;
 }
 
-export const ecrireDisposition = (d: Disposition): string[] => d.map((c) => `${c.visible ? "" : "-"}${c.id}${c.largeur ? `@${c.largeur}` : ""}`);
+export const ecrireDisposition = (d: Disposition): string[] =>
+  d.map((c) => `${c.visible ? "" : "-"}${c.id}${c.largeur ? `@${c.largeur}` : ""}`);
 
 /** Place la colonne `id` juste avant `avant` (glisser-déposer d'un en-tête) ; `avant` null : à la fin. */
 export function placer(d: Disposition, id: string, avant: string | null): Disposition {

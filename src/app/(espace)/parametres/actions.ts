@@ -22,7 +22,10 @@ import { exigerRole } from "@/lib/session";
 type Retour = { message: string | null };
 
 /** Paramètres : direction seulement ; chaque action recharge la page concernée. */
-async function agir(page: string, action: (tx: Tx) => Promise<{ ok: true } | { ok: false; message: string }>): Promise<Retour> {
+async function agir(
+  page: string,
+  action: (tx: Tx) => Promise<{ ok: true } | { ok: false; message: string }>,
+): Promise<Retour> {
   const { ecoleId } = await exigerRole("direction");
   const r = await avecEcole(ecoleId, action);
   revalidatePath(`/parametres/${page}`);

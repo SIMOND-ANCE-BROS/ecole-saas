@@ -19,17 +19,23 @@ let ecole: string;
 let camille: string;
 const MAINTENANT = new Date("2026-11-01T08:00:00Z");
 
-const reponse = (status: number, json: unknown) => new Response(JSON.stringify(json), { status, headers: { "Content-Type": "application/json" } });
+const reponse = (status: number, json: unknown) =>
+  new Response(JSON.stringify(json), { status, headers: { "Content-Type": "application/json" } });
 
 beforeAll(async () => {
   process.env.CLE_CHIFFREMENT = randomBytes(32).toString("base64");
   process.env.MICROSOFT_CLIENT_ID = "client-test";
   process.env.MICROSOFT_CLIENT_SECRET = "secret-test";
   [{ id: ecole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École A', ${`sy-${suffixe}`}) RETURNING id`;
-  [{ id: camille }] = await admin`INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
+  [{ id: camille }] =
+    await admin`INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
     VALUES (${ecole}, 'Durand', 'Camille', 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`;
   await avecEcole(ecole, (tx) =>
-    enregistrerConnexion(tx, camille, { fournisseur: "microsoft", compte: "camille@exemple.test", jetonChiffre: chiffrer("rafraichissement-1") }),
+    enregistrerConnexion(tx, camille, {
+      fournisseur: "microsoft",
+      compte: "camille@exemple.test",
+      jetonChiffre: chiffrer("rafraichissement-1"),
+    }),
   );
   await admin`INSERT INTO indisponibilite (ecole_id, intervenant_id, debut, fin, origine, libelle)
     VALUES (${ecole}, ${camille}, '2099-11-10T09:00:00Z', '2099-11-10T10:00:00Z', 'saisie', 'Rendez-vous')`;
@@ -47,7 +53,8 @@ const plagesDe = () => avecEcole(ecole, (tx) => listerIndisponibilites(tx, camil
 
 describe("synchroniserAgenda", () => {
   it("garde le jeton chiffré en base, jamais en clair", async () => {
-    const [{ jeton_chiffre }] = await admin`SELECT jeton_chiffre FROM connexion_agenda WHERE intervenant_id = ${camille}`;
+    const [{ jeton_chiffre }] =
+      await admin`SELECT jeton_chiffre FROM connexion_agenda WHERE intervenant_id = ${camille}`;
     expect(jeton_chiffre).not.toContain("rafraichissement-1");
     expect(dechiffrer(jeton_chiffre)).toBe("rafraichissement-1");
   });
@@ -61,7 +68,9 @@ describe("synchroniserAgenda", () => {
         return reponse(200, { access_token: "acces", refresh_token: "rafraichissement-2" });
       }
       return reponse(200, {
-        value: [{ start: { dateTime: "2026-11-04T15:00:00" }, end: { dateTime: "2026-11-04T17:00:00" }, showAs: "busy" }],
+        value: [
+          { start: { dateTime: "2026-11-04T15:00:00" }, end: { dateTime: "2026-11-04T17:00:00" }, showAs: "busy" },
+        ],
       });
     };
     expect(await synchroniserAgenda(ecole, camille, fauxFetch, MAINTENANT)).toEqual({ ok: true, plages: 1 });
@@ -69,16 +78,27 @@ describe("synchroniserAgenda", () => {
       "microsoft 2026-11-04T15:00:00.000Z",
       "saisie 2099-11-10T09:00:00.000Z",
     ]);
-    const [{ jeton_chiffre }] = await admin`SELECT jeton_chiffre FROM connexion_agenda WHERE intervenant_id = ${camille}`;
+    const [{ jeton_chiffre }] =
+      await admin`SELECT jeton_chiffre FROM connexion_agenda WHERE intervenant_id = ${camille}`;
     expect(dechiffrer(jeton_chiffre)).toBe("rafraichissement-2");
-    expect(await avecEcole(ecole, (tx) => etatConnexion(tx, camille))).toMatchObject({ compte: "camille@exemple.test", erreur: null });
+    expect(await avecEcole(ecole, (tx) => etatConnexion(tx, camille))).toMatchObject({
+      compte: "camille@exemple.test",
+      erreur: null,
+    });
     expect(appels).toHaveLength(2);
   });
 
   it("note un accès retiré sans perdre les plages déjà lues", async () => {
-    const r = await synchroniserAgenda(ecole, camille, async () => reponse(400, { error: "invalid_grant" }), MAINTENANT);
+    const r = await synchroniserAgenda(
+      ecole,
+      camille,
+      async () => reponse(400, { error: "invalid_grant" }),
+      MAINTENANT,
+    );
     expect(r).toEqual({ ok: false, message: "Accès à l’agenda retiré ou expiré : reconnecter l’agenda." });
-    expect((await avecEcole(ecole, (tx) => etatConnexion(tx, camille)))?.erreur).toBe("Accès à l’agenda retiré ou expiré : reconnecter l’agenda.");
+    expect((await avecEcole(ecole, (tx) => etatConnexion(tx, camille)))?.erreur).toBe(
+      "Accès à l’agenda retiré ou expiré : reconnecter l’agenda.",
+    );
     expect(await plagesDe()).toHaveLength(2);
   });
 
@@ -95,20 +115,32 @@ describe("synchroniserAgenda", () => {
   it("déconnecte l’agenda ; la saisie reste", async () => {
     expect(await avecEcole(ecole, (tx) => supprimerConnexion(tx, camille))).toBe(true);
     expect((await plagesDe()).some((i) => i.origine === "saisie")).toBe(true);
-    expect(await synchroniserAgenda(ecole, camille, fetch, MAINTENANT)).toEqual({ ok: false, message: "Aucun agenda connecté." });
+    expect(await synchroniserAgenda(ecole, camille, fetch, MAINTENANT)).toEqual({
+      ok: false,
+      message: "Aucun agenda connecté.",
+    });
   });
 
   it("n’enregistre ni ne synchronise l’agenda d’un intervenant désactivé, et efface sa connexion", async () => {
-    await avecEcole(ecole, (tx) => enregistrerConnexion(tx, camille, { fournisseur: "microsoft", compte: null, jetonChiffre: chiffrer("r") }));
+    await avecEcole(ecole, (tx) =>
+      enregistrerConnexion(tx, camille, { fournisseur: "microsoft", compte: null, jetonChiffre: chiffrer("r") }),
+    );
     const fiche = await avecEcole(ecole, (tx) => lireIntervenant(tx, camille));
     if (!fiche) throw new Error("intervenant introuvable");
     const { id, ...saisie } = fiche;
     expect(id).toBe(camille);
     await avecEcole(ecole, (tx) => modifierIntervenant(tx, camille, { ...saisie, actif: false }));
     expect(await avecEcole(ecole, (tx) => etatConnexion(tx, camille))).toBeNull();
-    expect(await avecEcole(ecole, (tx) => enregistrerConnexion(tx, camille, { fournisseur: "microsoft", compte: null, jetonChiffre: chiffrer("r") }))).toBe(false);
+    expect(
+      await avecEcole(ecole, (tx) =>
+        enregistrerConnexion(tx, camille, { fournisseur: "microsoft", compte: null, jetonChiffre: chiffrer("r") }),
+      ),
+    ).toBe(false);
     // Même une ligne restée en base (restauration) est ignorée.
     await admin`INSERT INTO connexion_agenda (ecole_id, intervenant_id, fournisseur, jeton_chiffre) VALUES (${ecole}, ${camille}, 'microsoft', ${chiffrer("r")})`;
-    expect(await synchroniserAgenda(ecole, camille, fetch, MAINTENANT)).toEqual({ ok: false, message: "Aucun agenda connecté." });
+    expect(await synchroniserAgenda(ecole, camille, fetch, MAINTENANT)).toEqual({
+      ok: false,
+      message: "Aucun agenda connecté.",
+    });
   });
 });

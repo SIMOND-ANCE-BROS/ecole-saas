@@ -10,7 +10,12 @@ import { ajouterUnResponsable, prevenir, retirerProche } from "../actions";
 type Props = { eleveId: string; prenom: string; responsables: ProcheEleve[]; autres: ProcheEleve[] };
 
 function nature(p: ProcheEleve, prenom: string): string {
-  if (p.sens === "de") return p.relation === "responsable" ? `${prenom} en est responsable` : p.relation === "conjoint" ? "Conjoint" : "Proche";
+  if (p.sens === "de")
+    return p.relation === "responsable"
+      ? `${prenom} en est responsable`
+      : p.relation === "conjoint"
+        ? "Conjoint"
+        : "Proche";
   return p.relation === "responsable" ? "Responsable légal" : p.relation === "conjoint" ? "Conjoint" : "Proche";
 }
 
@@ -47,8 +52,13 @@ export function Proches({ eleveId, prenom, responsables, autres }: Props) {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         {p.sens === "vers" && (
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={p.aPrevenir} disabled={enCours} onChange={(e) => agir(() => prevenir(eleveId, p.lienId, e.target.checked))} />À prévenir en cas
-            d’urgence
+            <input
+              type="checkbox"
+              checked={p.aPrevenir}
+              disabled={enCours}
+              onChange={(e) => agir(() => prevenir(eleveId, p.lienId, e.target.checked))}
+            />
+            À prévenir en cas d’urgence
           </label>
         )}
         {aRetirer === p.lienId ? (
@@ -57,7 +67,12 @@ export function Proches({ eleveId, prenom, responsables, autres }: Props) {
               type="button"
               className="rounded-md border border-erreur px-2 py-0.5 text-xs text-erreur hover:bg-erreur/10"
               disabled={enCours}
-              onClick={() => agir(() => retirerProche(eleveId, p.lienId), () => setARetirer(null))}
+              onClick={() =>
+                agir(
+                  () => retirerProche(eleveId, p.lienId),
+                  () => setARetirer(null),
+                )
+              }
             >
               Retirer {p.nom} de la fiche
             </button>
@@ -91,9 +106,16 @@ export function Proches({ eleveId, prenom, responsables, autres }: Props) {
         {responsables.length > 0 && <ul className="panneau divide-y divide-bordure">{responsables.map(ligne)}</ul>}
         {ajout && (
           <div className="panneau flex flex-col gap-3 p-3 text-sm">
-            <ChoixPersonne id="nouveau-responsable" libelle={`Responsable légal de ${prenom} (parent, tuteur)`} valeur={choix} onChange={setChoix} exclure={[eleveId]} />
+            <ChoixPersonne
+              id="nouveau-responsable"
+              libelle={`Responsable légal de ${prenom} (parent, tuteur)`}
+              valeur={choix}
+              onChange={setChoix}
+              exclure={[eleveId]}
+            />
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={aPrevenir} onChange={(e) => setAPrevenir(e.target.checked)} />À prévenir en cas d’urgence
+              <input type="checkbox" checked={aPrevenir} onChange={(e) => setAPrevenir(e.target.checked)} />À prévenir
+              en cas d’urgence
             </label>
             <div className="flex gap-2">
               <button

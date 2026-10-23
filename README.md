@@ -19,16 +19,16 @@ npm run dev
 
 ## Scripts
 
-| Script | Rôle |
-| --- | --- |
-| `npm run dev` | serveur de développement |
-| `npm test` | tests unitaires (Vitest) |
-| `npm run test:integration` | tests d’intégration contre la base locale (dont le garde-fou RLS) |
-| `npm run typecheck` | vérification TypeScript |
-| `npm run lint` | ESLint |
-| `npm run db:generate` | génère une migration après modification de `src/db/schema.ts` |
-| `npm run db:migrate` | applique les migrations |
-| `npm run db:seed` | données de démonstration locales (école fictive, comptes accueil et direction) |
+| Script                     | Rôle                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------ |
+| `npm run dev`              | serveur de développement                                                       |
+| `npm test`                 | tests unitaires (Vitest)                                                       |
+| `npm run test:integration` | tests d’intégration contre la base locale (dont le garde-fou RLS)              |
+| `npm run typecheck`        | vérification TypeScript                                                        |
+| `npm run lint`             | ESLint                                                                         |
+| `npm run db:generate`      | génère une migration après modification de `src/db/schema.ts`                  |
+| `npm run db:migrate`       | applique les migrations                                                        |
+| `npm run db:seed`          | données de démonstration locales (école fictive, comptes accueil et direction) |
 
 ## Architecture
 

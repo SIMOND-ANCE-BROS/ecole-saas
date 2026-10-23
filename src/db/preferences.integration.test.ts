@@ -18,7 +18,8 @@ let autreEcole: string;
 beforeAll(async () => {
   [{ id: ecole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École A', ${`pa-${suffixe}`}) RETURNING id`;
   [{ id: autreEcole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École B', ${`pb-${suffixe}`}) RETURNING id`;
-  for (const id of [accueil, direction]) await admin`INSERT INTO "user" (id, name, email) VALUES (${id}, 'Test', ${`${id}@exemple.test`})`;
+  for (const id of [accueil, direction])
+    await admin`INSERT INTO "user" (id, name, email) VALUES (${id}, 'Test', ${`${id}@exemple.test`})`;
   await admin`INSERT INTO membre (ecole_id, user_id, role) VALUES (${ecole}, ${accueil}, 'accueil'), (${ecole}, ${direction}, 'direction'), (${autreEcole}, ${accueil}, 'direction')`;
 });
 

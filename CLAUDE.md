@@ -14,13 +14,13 @@ Reference for every agent working on this project. Read it in full before coding
 
 ## 2. Languages
 
-| What | Language |
-| --- | --- |
-| Identifiers, files, database (tables, columns, enums), comments, tests | **English** |
-| Commits, PR titles and descriptions, issues, ADRs, developer docs | **English** |
+| What                                                                   | Language                                              |
+| ---------------------------------------------------------------------- | ----------------------------------------------------- |
+| Identifiers, files, database (tables, columns, enums), comments, tests | **English**                                           |
+| Commits, PR titles and descriptions, issues, ADRs, developer docs      | **English**                                           |
 | Everything an end user sees: screens, messages, e-mails, PDFs, exports | **French**, typographic apostrophe (’) and « » quotes |
-| PR section « Pour l’accueil et la direction » | **French**, written for the school |
-| URLs (Next route folders such as `src/app/(espace)/eleves`) | **French**: they are user-visible |
+| PR section « Pour l’accueil et la direction »                          | **French**, written for the school                    |
+| URLs (Next route folders such as `src/app/(espace)/eleves`)            | **French**: they are user-visible                     |
 
 Code written before this rule is still in French; it is renamed module by module (#114). New code is written in English, using the lexicon below, even next to French code.
 
@@ -28,44 +28,44 @@ Code written before this rule is still in French; it is renamed module by module
 
 Use these names in code and database. User-facing text keeps the French word.
 
-| French (UI) | English (code) | Meaning |
-| --- | --- | --- |
-| école | `school` | The tenant. All data belongs to it. |
-| membre (direction, accueil, professeur) | `member` (`director`, `front_desk`, `teacher`) | A user account inside a school, with a role. |
-| personne | `person` | Anyone: student, guardian, payer, organisation. |
-| élève / danseur | `student` (`person.is_student`) | Takes classes. Often a minor. |
-| payeur | `payer` | Receives the invoice: parent, company, works council (CSE). Distinct from the student. |
-| lien (représentant légal, conjoint, autre) | `relationship` (`legal_guardian`, `partner`, `other`) | Link between two people; flags `pays_for`, `emergency_contact`. |
-| fratrie | `siblings` | Students of the same payer. |
-| site, salle | `site`, `room` | Premises and rooms. |
-| saison | `season` | A school year. |
-| fermeture | `closure` | Holidays and days off. |
-| intervenant | `instructor` | Teacher. Invoices the school (sole trader, company) or is an employee. |
-| discipline | `discipline` | Jazz, classical… |
-| cours | `course` | Recurring slot (day, time, length, room, instructor, recurrence). `class` is a reserved word. |
-| séance | `lesson` | Dated occurrence of a course: attendance, lesson packs, instructor pay. Moved alone, it keeps its original date (`planned_date`) and may have its own time. |
-| présence | `attendance` | |
-| inscription | `enrollment` | A package subscribed by a payer for a season; one or two students (couple rate). |
-| statut d’inscription (inscrit, à l’essai, en attente, abandon, terminé) | `active`, `trial`, `waitlist`, `dropped`, `ended` | |
-| forfait | `package` | Price set by the **cumulative weekly duration** of the chosen courses, not per course. |
-| tarif | `tariff` | A price rule (audience, period, weekly duration). |
-| réduction | `discount` | Siblings, two disciplines… |
-| carnet | `lesson_pack` | Pack of private lessons (1, 5 or 10 lessons, 1 to 4 people). |
-| facture, ligne de facture | `invoice`, `invoice_line` | |
-| avoir | `credit_note` | Negative invoice cancelling all or part of an issued invoice. |
-| échéance | `installment` | Part of an invoice payable on a date. |
-| paiement, encaissement | `payment` | Immutable. |
-| moyen de paiement (chèque, espèces, carte, virement, prélèvement, chèques vacances, Pass’Sport) | `cheque`, `cash`, `card`, `transfer`, `direct_debit`, `holiday_voucher`, `pass_sport` | |
-| remise en banque, bordereau | `bank_deposit`, `deposit_slip` | |
-| affectation d’un paiement | `payment_allocation` | |
-| relevé (de l’intervenant) | `instructor_statement` | Monthly amount owed to an instructor from the lessons taught. |
-| journal | `audit_log` | Immutable. |
-| outil de facturation | `invoicing_tool` (`pennylane`, `abby`, `shine`) | Issues and numbers invoices, does e-reporting. |
-| connecteur de facturation | `invoicing_connector` | |
-| régime de TVA (franchise 293 B, assujetti, non applicable) | `vat_regime` (`franchise_293b`, `vat_registered`, `not_applicable`) | |
-| montant en centimes, taux en points de base | `*_cents`, `*_bps` | |
-| indisponibilité, connexion agenda | `unavailability`, `calendar_connection` | |
-| préférence de liste | `list_preference` | |
+| French (UI)                                                                                     | English (code)                                                                        | Meaning                                                                                                                                                     |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| école                                                                                           | `school`                                                                              | The tenant. All data belongs to it.                                                                                                                         |
+| membre (direction, accueil, professeur)                                                         | `member` (`director`, `front_desk`, `teacher`)                                        | A user account inside a school, with a role.                                                                                                                |
+| personne                                                                                        | `person`                                                                              | Anyone: student, guardian, payer, organisation.                                                                                                             |
+| élève / danseur                                                                                 | `student` (`person.is_student`)                                                       | Takes classes. Often a minor.                                                                                                                               |
+| payeur                                                                                          | `payer`                                                                               | Receives the invoice: parent, company, works council (CSE). Distinct from the student.                                                                      |
+| lien (représentant légal, conjoint, autre)                                                      | `relationship` (`legal_guardian`, `partner`, `other`)                                 | Link between two people; flags `pays_for`, `emergency_contact`.                                                                                             |
+| fratrie                                                                                         | `siblings`                                                                            | Students of the same payer.                                                                                                                                 |
+| site, salle                                                                                     | `site`, `room`                                                                        | Premises and rooms.                                                                                                                                         |
+| saison                                                                                          | `season`                                                                              | A school year.                                                                                                                                              |
+| fermeture                                                                                       | `closure`                                                                             | Holidays and days off.                                                                                                                                      |
+| intervenant                                                                                     | `instructor`                                                                          | Teacher. Invoices the school (sole trader, company) or is an employee.                                                                                      |
+| discipline                                                                                      | `discipline`                                                                          | Jazz, classical…                                                                                                                                            |
+| cours                                                                                           | `course`                                                                              | Recurring slot (day, time, length, room, instructor, recurrence). `class` is a reserved word.                                                               |
+| séance                                                                                          | `lesson`                                                                              | Dated occurrence of a course: attendance, lesson packs, instructor pay. Moved alone, it keeps its original date (`planned_date`) and may have its own time. |
+| présence                                                                                        | `attendance`                                                                          |                                                                                                                                                             |
+| inscription                                                                                     | `enrollment`                                                                          | A package subscribed by a payer for a season; one or two students (couple rate).                                                                            |
+| statut d’inscription (inscrit, à l’essai, en attente, abandon, terminé)                         | `active`, `trial`, `waitlist`, `dropped`, `ended`                                     |                                                                                                                                                             |
+| forfait                                                                                         | `package`                                                                             | Price set by the **cumulative weekly duration** of the chosen courses, not per course.                                                                      |
+| tarif                                                                                           | `tariff`                                                                              | A price rule (audience, period, weekly duration).                                                                                                           |
+| réduction                                                                                       | `discount`                                                                            | Siblings, two disciplines…                                                                                                                                  |
+| carnet                                                                                          | `lesson_pack`                                                                         | Pack of private lessons (1, 5 or 10 lessons, 1 to 4 people).                                                                                                |
+| facture, ligne de facture                                                                       | `invoice`, `invoice_line`                                                             |                                                                                                                                                             |
+| avoir                                                                                           | `credit_note`                                                                         | Negative invoice cancelling all or part of an issued invoice.                                                                                               |
+| échéance                                                                                        | `installment`                                                                         | Part of an invoice payable on a date.                                                                                                                       |
+| paiement, encaissement                                                                          | `payment`                                                                             | Immutable.                                                                                                                                                  |
+| moyen de paiement (chèque, espèces, carte, virement, prélèvement, chèques vacances, Pass’Sport) | `cheque`, `cash`, `card`, `transfer`, `direct_debit`, `holiday_voucher`, `pass_sport` |                                                                                                                                                             |
+| remise en banque, bordereau                                                                     | `bank_deposit`, `deposit_slip`                                                        |                                                                                                                                                             |
+| affectation d’un paiement                                                                       | `payment_allocation`                                                                  |                                                                                                                                                             |
+| relevé (de l’intervenant)                                                                       | `instructor_statement`                                                                | Monthly amount owed to an instructor from the lessons taught.                                                                                               |
+| journal                                                                                         | `audit_log`                                                                           | Immutable.                                                                                                                                                  |
+| outil de facturation                                                                            | `invoicing_tool` (`pennylane`, `abby`, `shine`)                                       | Issues and numbers invoices, does e-reporting.                                                                                                              |
+| connecteur de facturation                                                                       | `invoicing_connector`                                                                 |                                                                                                                                                             |
+| régime de TVA (franchise 293 B, assujetti, non applicable)                                      | `vat_regime` (`franchise_293b`, `vat_registered`, `not_applicable`)                   |                                                                                                                                                             |
+| montant en centimes, taux en points de base                                                     | `*_cents`, `*_bps`                                                                    |                                                                                                                                                             |
+| indisponibilité, connexion agenda                                                               | `unavailability`, `calendar_connection`                                               |                                                                                                                                                             |
+| préférence de liste                                                                             | `list_preference`                                                                     |                                                                                                                                                             |
 
 Core helpers after the rename: `avecEcole()` → `withSchool()`, `ecolesDe()` → `schoolsOf()`, `contexteEcole()` → `schoolContext()`, `exigerRole()` → `requireRole()`, `memeEcole()` → `sameSchool()`, RLS policy `isolation_ecole` → `school_isolation`, `src/lib/montant.ts` → `src/lib/money.ts`, `src/domaine/` → `src/domain/`.
 
@@ -107,7 +107,11 @@ npm run db:up             # local PostgreSQL (Docker, port 5433)
 npm run db:generate       # new migration after a schema change
 npm run db:migrate        # apply migrations
 npm run db:seed           # local demo data
+npm run format            # Prettier (format:check in CI)
+npm run preflight         # exactly what CI blocks on, PASS/FAIL per step
 ```
+
+Git hooks are versioned in `.githooks/` and enabled by `npm install` (`prepare` → `core.hooksPath`): pre-commit runs gitleaks on the staged changes then lint-staged (ESLint + Prettier); pre-push runs the typecheck and the unit tests related to the changes (`PRE_PUSH_FULL=1` for all). A false positive of gitleaks goes into `.gitleaksignore` by fingerprint, never as an allowlist.
 
 ## 7. Code organisation
 
@@ -132,6 +136,7 @@ DESIGN.md                    interface rules
 ## 8. Mandatory rules
 
 **Multi-school and security** (ADR 0001)
+
 - Every business query goes through `avecEcole(ecoleId, tx => …)`. Never use `db` directly for business data.
 - Every new business table carries `ecole_id` **and** gets, in a SQL migration, `ENABLE` + `FORCE ROW LEVEL SECURITY` and the `isolation_ecole` policy (model in `migrations/0001_rls.sql`, which only covers tables existing when it was written).
 - `app_user` privileges on new tables and sequences are granted automatically (default privileges, `migrations/0006_droits_par_defaut.sql`, guard `src/db/droits.integration.test.ts`); RLS still has to be added every time.
@@ -141,30 +146,36 @@ DESIGN.md                    interface rules
 - Every protected page and server action calls `contexteEcole()` or `exigerRole()` (`src/lib/session.ts`), then `avecEcole(ecoleId, …)`. Never access control in a layout (not re-run on navigation) nor in `proxy.ts` (optimistic redirect only).
 
 **Money and dates**
+
 - Amounts in **integer cents** (`*_centimes`, `*_cents` after the rename), rates in **basis points** (1000 = 10 %). Use `src/lib/montant.ts`. No floating-point number for money, no `parseFloat` on an amount.
 - Dates without time (`date`) are `YYYY-MM-DD` strings; `Europe/Paris` time zone for any day computation.
 
 **Data**
+
 - Payments and the audit log are **immutable** (database triggers): an error is fixed by a reverse entry.
 - Never edit an applied migration: create a new one. Renaming a table or column is a new migration too.
 - Validate every external input (forms, API, webhooks) with Zod.
 - Server actions return `{ ok: true, … } | { ok: false, message }`, `message` being French text for the user; never throw an error message at the user.
 
 **Personal data (minors)**
+
 - Never write personal data to logs (names, phone numbers, health); log technical ids only.
 - Invoicing tool credentials are stored encrypted (`connecteur_facturation.identifiants_chiffres`), never in clear, never in the repository.
 - No secret in code: environment variables, and `.env.example` kept up to date.
 - Issues and PRs are public to the organisation: fictitious data only, no secret names.
 
 **External services** (invoicing tools, calendars)
+
 - Every call has a timeout, a bounded number of retries and a structured error; webhooks are idempotent.
 
 **TypeScript**
+
 - `strict` mode plus `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noFallthroughCasesInSwitch`; no `any` (ESLint error), no non-null assertion without a comment saying why it holds.
 
 **CI** (`.github/workflows/`)
+
 - Read-only token by default, actions pinned by commit SHA, `persist-credentials: false`, a timeout on every job, stale runs cancelled.
-- `ci-success` aggregates the required jobs (tests, typecheck, lint, integration, `npm audit` on runtime dependencies); `PR conventions` checks the branch prefix and the conventional-commit PR title.
+- `ci-success` aggregates the required jobs (format, lint, typecheck, tests, integration, `npm audit` on runtime dependencies, gitleaks secret scan); `PR conventions` checks the branch prefix and the conventional-commit PR title.
 - Dependabot proposes updates after a 14-day cooldown; `CODEOWNERS` covers sensitive paths only.
 
 ## 9. Tests
@@ -185,6 +196,7 @@ DESIGN.md                    interface rules
 - When an architecture decision changes, update this file and add an ADR (`docs/adr/`) in the same PR.
 
 **Definition of done** (before asking for a merge)
+
 1. `npm run lint`, `npm run typecheck`, `npm test` pass, and `npm run test:integration` when the database is involved.
 2. A user-visible change is checked in the browser on desktop, phone width and dark mode, with a screenshot in the PR.
 3. `test-verifier`, then `code-reviewer` (and `security-reviewer`, `migration-reviewer`, `billing-reviewer`, `ux-reviewer` when their area is touched) report no blocking finding.
@@ -193,6 +205,7 @@ DESIGN.md                    interface rules
 ## 11. Interface
 
 Rules in `DESIGN.md`. In short:
+
 - Built for the front-desk PC first: keyboard-friendly forms, instant person search, few clicks for an enrollment.
 - Mantine components everywhere (ADR 0003); Tailwind only for layout. Custom control classes (`.champ`, `.bouton-principal`…) are being removed (#115).
 - Lists work like Excel autofilters: each column header sorts and filters; one search bar at the top (Ctrl K).
@@ -218,18 +231,18 @@ Rules in `DESIGN.md`. In short:
 
 Delegate with the Agent tool: each agent carries its area's rules and keeps noise out of the main context. Reviewers and the architect are read-only.
 
-| Request looks like… | Delegate to |
-| --- | --- |
-| Run the tests / verify this change | `test-verifier` |
-| Review my diff before push | `code-reviewer` |
-| Diff touches auth, session, RLS, personal data, secrets, workflows | `security-reviewer` |
-| Diff touches `src/db/schema.ts` or `migrations/` | `migration-reviewer` |
-| Diff touches amounts, tariffs, discounts, invoices, payments, statements | `billing-reviewer` |
-| Diff changes a screen | `ux-reviewer` |
-| A business rule is unclear, or a feature depends on one | `business-rules` |
-| Structural choice, "should we…" | `architect` |
-| What to build, scoping, user stories | `product-owner` |
-| Backlog, status report, GitHub issues and Project | `project-manager` |
+| Request looks like…                                                      | Delegate to          |
+| ------------------------------------------------------------------------ | -------------------- |
+| Run the tests / verify this change                                       | `test-verifier`      |
+| Review my diff before push                                               | `code-reviewer`      |
+| Diff touches auth, session, RLS, personal data, secrets, workflows       | `security-reviewer`  |
+| Diff touches `src/db/schema.ts` or `migrations/`                         | `migration-reviewer` |
+| Diff touches amounts, tariffs, discounts, invoices, payments, statements | `billing-reviewer`   |
+| Diff changes a screen                                                    | `ux-reviewer`        |
+| A business rule is unclear, or a feature depends on one                  | `business-rules`     |
+| Structural choice, "should we…"                                          | `architect`          |
+| What to build, scoping, user stories                                     | `product-owner`      |
+| Backlog, status report, GitHub issues and Project                        | `project-manager`    |
 
 Default pipeline for a substantial change: implement → `test-verifier` → `code-reviewer` + the matching specialised reviewers in parallel → push → PR.
 

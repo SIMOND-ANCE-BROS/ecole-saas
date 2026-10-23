@@ -53,16 +53,29 @@ function lignes(tx: Tx) {
 }
 
 /** Paiements reçus entre deux dates (incluses), éventuellement d'un seul moyen, du plus ancien au plus récent. */
-export async function journalEncaissements(tx: Tx, du: string, au: string, moyen: Moyen | null): Promise<LigneJournal[]> {
+export async function journalEncaissements(
+  tx: Tx,
+  du: string,
+  au: string,
+  moyen: Moyen | null,
+): Promise<LigneJournal[]> {
   return lignes(tx)
-    .where(and(sql`${paiement.date} BETWEEN ${du}::date AND ${au}::date`, moyen ? eq(paiement.moyen, moyen) : undefined))
+    .where(
+      and(sql`${paiement.date} BETWEEN ${du}::date AND ${au}::date`, moyen ? eq(paiement.moyen, moyen) : undefined),
+    )
     .orderBy(asc(paiement.date), asc(paiement.creeLe));
 }
 
 /** Chèques arrivés à échéance, espèces et chèques vacances pas encore remis, par moyen. */
 export async function paiementsARemettre(tx: Tx, aujourdhui: string): Promise<Record<MoyenRemise, LigneJournal[]>> {
   const candidats = await lignes(tx)
-    .where(and(inArray(paiement.moyen, [...MOYENS_REMISE]), sql`${paiement.montantCentimes} > 0`, sql`${remisePaiement.remiseId} IS NULL`))
+    .where(
+      and(
+        inArray(paiement.moyen, [...MOYENS_REMISE]),
+        sql`${paiement.montantCentimes} > 0`,
+        sql`${remisePaiement.remiseId} IS NULL`,
+      ),
+    )
     .orderBy(asc(sql`coalesce(${paiement.encaissementPrevu}, ${paiement.date})`), asc(paiement.creeLe));
   return aRemettre(candidats, aujourdhui);
 }
@@ -76,12 +89,20 @@ export const remiseValide = z.object({
 export type Resultat = { ok: true; id: string } | { ok: false; message: string };
 
 async function membreDe(tx: Tx, userId: string) {
-  const [m] = await tx.select({ id: membre.id }).from(membre).where(and(eq(membre.userId, userId), eq(membre.actif, true)));
+  const [m] = await tx
+    .select({ id: membre.id })
+    .from(membre)
+    .where(and(eq(membre.userId, userId), eq(membre.actif, true)));
   return m?.id ?? null;
 }
 
 /** Crée une remise : chaque paiement doit être à remettre, du moyen de la remise, à la date de la remise. */
-export async function creerRemise(tx: Tx, userId: string, saisie: z.input<typeof remiseValide>, aujourdhui: string): Promise<Resultat> {
+export async function creerRemise(
+  tx: Tx,
+  userId: string,
+  saisie: z.input<typeof remiseValide>,
+  aujourdhui: string,
+): Promise<Resultat> {
   const r = remiseValide.safeParse(saisie);
   if (!r.success) return { ok: false, message: r.error.issues[0].message };
   const { date, moyen, paiementIds } = r.data;
@@ -89,13 +110,29 @@ export async function creerRemise(tx: Tx, userId: string, saisie: z.input<typeof
   const choisis = await lignes(tx).where(inArray(paiement.id, ids));
   const eligibles = new Set(aRemettre(choisis, date > aujourdhui ? date : aujourdhui)[moyen].map((p) => p.id));
   if (choisis.length !== ids.length || !ids.every((id) => eligibles.has(id))) {
-    return { ok: false, message: "Un des paiements choisis n’est plus à remettre (déjà remis, corrigé, pas encore à encaisser ou d’un autre moyen)." };
+    return {
+      ok: false,
+      message:
+        "Un des paiements choisis n’est plus à remettre (déjà remis, corrigé, pas encore à encaisser ou d’un autre moyen).",
+    };
   }
   const qui = await membreDe(tx, userId);
   if (!qui) return { ok: false, message: "Accès refusé." };
-  const [{ id }] = await tx.insert(remise).values({ ecoleId: ECOLE_COURANTE, date, moyen, creePar: qui }).returning({ id: remise.id });
-  await tx.insert(remisePaiement).values(ids.map((paiementId) => ({ ecoleId: ECOLE_COURANTE, remiseId: id, paiementId })));
-  await tx.insert(journal).values({ ecoleId: ECOLE_COURANTE, qui, tableCible: "remise", ligneId: id, action: "insert", apres: { date, moyen, paiements: ids.length } });
+  const [{ id }] = await tx
+    .insert(remise)
+    .values({ ecoleId: ECOLE_COURANTE, date, moyen, creePar: qui })
+    .returning({ id: remise.id });
+  await tx
+    .insert(remisePaiement)
+    .values(ids.map((paiementId) => ({ ecoleId: ECOLE_COURANTE, remiseId: id, paiementId })));
+  await tx.insert(journal).values({
+    ecoleId: ECOLE_COURANTE,
+    qui,
+    tableCible: "remise",
+    ligneId: id,
+    action: "insert",
+    apres: { date, moyen, paiements: ids.length },
+  });
   return { ok: true, id };
 }
 
@@ -107,7 +144,14 @@ export async function annulerRemise(tx: Tx, userId: string, id: string): Promise
   const qui = await membreDe(tx, userId);
   if (!qui) return { ok: false, message: "Accès refusé." };
   await tx.delete(remise).where(eq(remise.id, id));
-  await tx.insert(journal).values({ ecoleId: ECOLE_COURANTE, qui, tableCible: "remise", ligneId: id, action: "delete", avant: { date: x.date, moyen: x.moyen } });
+  await tx.insert(journal).values({
+    ecoleId: ECOLE_COURANTE,
+    qui,
+    tableCible: "remise",
+    ligneId: id,
+    action: "delete",
+    avant: { date: x.date, moyen: x.moyen },
+  });
   return { ok: true, id };
 }
 
@@ -133,8 +177,18 @@ export function listerRemises(tx: Tx): Promise<LigneRemise[]> {
 /** Une remise et ses paiements (bordereau), ou null. */
 export async function lireRemise(tx: Tx, id: string): Promise<(LigneRemise & { paiements: LigneJournal[] }) | null> {
   if (!estUuid(id)) return null;
-  const [x] = await tx.select({ id: remise.id, date: remise.date, moyen: remise.moyen }).from(remise).where(eq(remise.id, id));
+  const [x] = await tx
+    .select({ id: remise.id, date: remise.date, moyen: remise.moyen })
+    .from(remise)
+    .where(eq(remise.id, id));
   if (!x) return null;
-  const paiements = await lignes(tx).where(eq(remisePaiement.remiseId, id)).orderBy(asc(personne.nom), asc(paiement.reference));
-  return { ...x, paiements, nombre: paiements.length, totalCentimes: paiements.reduce((s, p) => s + p.montantCentimes, 0) };
+  const paiements = await lignes(tx)
+    .where(eq(remisePaiement.remiseId, id))
+    .orderBy(asc(personne.nom), asc(paiement.reference));
+  return {
+    ...x,
+    paiements,
+    nombre: paiements.length,
+    totalCentimes: paiements.reduce((s, p) => s + p.montantCentimes, 0),
+  };
 }

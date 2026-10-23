@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { aimanter, bornesJournee, disposer, versHeure, versMinutes } from "./agenda";
 
-const c = (id: string, jourSemaine: number | null, heureDebut: string, dureeMinutes: number) => ({ id, jourSemaine, heureDebut, dureeMinutes });
+const c = (id: string, jourSemaine: number | null, heureDebut: string, dureeMinutes: number) => ({
+  id,
+  jourSemaine,
+  heureDebut,
+  dureeMinutes,
+});
 
 describe("heures", () => {
   it("convertit HH:MM en minutes et l’inverse", () => {

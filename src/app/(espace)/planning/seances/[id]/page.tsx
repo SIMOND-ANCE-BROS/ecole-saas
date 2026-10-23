@@ -12,7 +12,12 @@ import { FicheAppel } from "./fiche";
 
 export const metadata: Metadata = { title: "Appel" };
 
-const dateLongue = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+const dateLongue = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: "UTC",
+});
 
 export default async function PageAppel({ params }: PageProps<"/planning/seances/[id]">) {
   const { ecoleId } = await exigerRole("direction", "accueil");
@@ -28,11 +33,20 @@ export default async function PageAppel({ params }: PageProps<"/planning/seances
       .map((i) => {
         const r = classement.get(i.id);
         const etat = i.id === appel.intervenantId ? "" : r?.libre ? " (libre)" : r?.motif ? ` (${r.motif})` : "";
-        return { id: i.id, nom: `${i.prenom} ${i.nom}${etat}`, rang: i.id === appel.intervenantId ? -1 : (r?.rang ?? 999) };
+        return {
+          id: i.id,
+          nom: `${i.prenom} ${i.nom}${etat}`,
+          rang: i.id === appel.intervenantId ? -1 : (r?.rang ?? 999),
+        };
       })
       .sort((a, b) => a.rang - b.rang)
       .map((o) => ({ id: o.id, nom: o.nom }));
-    return { appel, intervenants: options, indisponible: dispo?.indisponible ?? false, libres: dispo?.remplacants.filter((r) => r.libre).length ?? 0 };
+    return {
+      appel,
+      intervenants: options,
+      indisponible: dispo?.indisponible ?? false,
+      libres: dispo?.remplacants.filter((r) => r.libre).length ?? 0,
+    };
   });
   if (!donnees) notFound();
   const { appel, intervenants, indisponible, libres } = donnees;
@@ -62,13 +76,18 @@ export default async function PageAppel({ params }: PageProps<"/planning/seances
       {indisponible && appel.statut !== "annulee" && (
         <p role="alert" className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
           L’intervenant de cette séance est indisponible.{" "}
-          {libres > 0 ? `${libres} remplaçant${libres > 1 ? "s" : ""} libre${libres > 1 ? "s" : ""} en tête de la liste « Intervenant de la séance ».` : "Aucun autre intervenant n’est libre à cette heure."}
+          {libres > 0
+            ? `${libres} remplaçant${libres > 1 ? "s" : ""} libre${libres > 1 ? "s" : ""} en tête de la liste « Intervenant de la séance ».`
+            : "Aucun autre intervenant n’est libre à cette heure."}
         </p>
       )}
       <FicheAppel
         appel={{
           ...appel,
-          danseurs: appel.danseurs.map((d) => ({ ...d, age: d.dateNaissance ? ageAu(d.dateNaissance, appel.date) : null })),
+          danseurs: appel.danseurs.map((d) => ({
+            ...d,
+            age: d.dateNaissance ? ageAu(d.dateNaissance, appel.date) : null,
+          })),
         }}
         intervenants={intervenants}
       />

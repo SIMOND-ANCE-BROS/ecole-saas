@@ -18,7 +18,12 @@ type Props = {
 export function FormulairePersonne({ personne, pour, nomPropose }: Props) {
   const [v, setV] = useState({
     type: personne?.type ?? "particulier",
-    nom: personne?.type === "professionnel" ? (personne.nom === personne.raisonSociale ? "" : personne.nom) : (personne?.nom ?? nomPropose ?? ""),
+    nom:
+      personne?.type === "professionnel"
+        ? personne.nom === personne.raisonSociale
+          ? ""
+          : personne.nom
+        : (personne?.nom ?? nomPropose ?? ""),
     prenom: personne?.prenom ?? "",
     raisonSociale: personne?.raisonSociale ?? "",
     siren: personne?.siren ?? "",
@@ -45,7 +50,9 @@ export function FormulairePersonne({ personne, pour, nomPropose }: Props) {
   };
   const eleve = pour === "eleves";
   const envoyer = (confirme: boolean) =>
-    demarrer(async () => setRefus(personne ? await modifierIdentite(personne.id, saisie, pour) : await creerContact(saisie, confirme)));
+    demarrer(async () =>
+      setRefus(personne ? await modifierIdentite(personne.id, saisie, pour) : await creerContact(saisie, confirme)),
+    );
 
   const champ = (nom: keyof typeof v, libelle: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
     <div className="flex flex-col gap-1">
@@ -80,37 +87,43 @@ export function FormulairePersonne({ personne, pour, nomPropose }: Props) {
         envoyer(false);
       }}
     >
-      {!eleve && <fieldset className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        <legend className="px-1 text-sm font-semibold">Contact</legend>
-        {(
-          [
-            ["particulier", "Particulier"],
-            ["professionnel", "Professionnel (entreprise, CSE, association)"],
-          ] as const
-        ).map(([valeur, libelle]) => (
-          <label key={valeur} className="flex items-center gap-2">
-            <input type="radio" name="type" checked={v.type === valeur} onChange={() => setV({ ...v, type: valeur })} />
-            {libelle}
-          </label>
-        ))}
-      </fieldset>}
+      {!eleve && (
+        <fieldset className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          <legend className="px-1 text-sm font-semibold">Contact</legend>
+          {(
+            [
+              ["particulier", "Particulier"],
+              ["professionnel", "Professionnel (entreprise, CSE, association)"],
+            ] as const
+          ).map(([valeur, libelle]) => (
+            <label key={valeur} className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="type"
+                checked={v.type === valeur}
+                onChange={() => setV({ ...v, type: valeur })}
+              />
+              {libelle}
+            </label>
+          ))}
+        </fieldset>
+      )}
 
       <fieldset className="panneau p-4">
         <legend className="px-1 text-sm font-semibold">Identité</legend>
-      {pro ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {champ("raisonSociale", "Raison sociale", { autoFocus: !personne })}
-          {champ("siren", "SIREN", { inputMode: "numeric", placeholder: "9 chiffres" })}
-          <div className="sm:col-span-2">{champ("nom", "Contact (facultatif)")}</div>
-        </div>
-      ) : (
-        <div className={`grid gap-3 ${eleve ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
-          {champ("prenom", "Prénom", { autoFocus: !personne })}
-          {champ("nom", "Nom")}
-          {eleve && champ("dateNaissance", "Date de naissance", { type: "date" })}
-        </div>
-      )}
-
+        {pro ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {champ("raisonSociale", "Raison sociale", { autoFocus: !personne })}
+            {champ("siren", "SIREN", { inputMode: "numeric", placeholder: "9 chiffres" })}
+            <div className="sm:col-span-2">{champ("nom", "Contact (facultatif)")}</div>
+          </div>
+        ) : (
+          <div className={`grid gap-3 ${eleve ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+            {champ("prenom", "Prénom", { autoFocus: !personne })}
+            {champ("nom", "Nom")}
+            {eleve && champ("dateNaissance", "Date de naissance", { type: "date" })}
+          </div>
+        )}
       </fieldset>
       <fieldset className="panneau grid gap-3 p-4 sm:grid-cols-2">
         <legend className="px-1 text-sm font-semibold">Coordonnées (facultatives)</legend>
@@ -125,12 +138,18 @@ export function FormulairePersonne({ personne, pour, nomPropose }: Props) {
             Notes (santé, allergies, consignes)
           </label>
           <textarea id="notes" rows={2} className="champ" value={v.notes} onChange={maj("notes")} />
-          <p className="text-xs text-doux">Visibles par l’accueil et la direction. N’y notez que ce qui est utile en cours.</p>
+          <p className="text-xs text-doux">
+            Visibles par l’accueil et la direction. N’y notez que ce qui est utile en cours.
+          </p>
         </div>
       )}
 
       {refus?.doublons ? (
-        <div tabIndex={-1} role="alert" className="flex flex-col gap-2 rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
+        <div
+          tabIndex={-1}
+          role="alert"
+          className="flex flex-col gap-2 rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte"
+        >
           <p className="font-medium">{refus.message} Vérifiez avant de créer un doublon :</p>
           <ul className="flex flex-col gap-0.5">
             {refus.doublons.map((d) => (

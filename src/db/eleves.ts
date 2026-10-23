@@ -94,11 +94,11 @@ const libelles = (valeur: SQL, table: Record<string | number, string>) =>
     sql` `,
   )} END`;
 
-/** Cours suivis cette saison (inscriptions actives ou à l'essai), triés par jour et heure. */
 /** Libellé court d'un cours `c` de discipline `d` : « Jazz lun. 17:00 ». */
 const libelleCours = () =>
-  sql`concat_ws(' ', d.nom, ${libelles(sql`c.jour_semaine::text`, Object.fromEntries(JOURS_COURTS.map((j, i) => [i, j]).slice(1)))}, to_char(c.heure_debut, 'HH24:MI'))`;
+  sql`concat_ws(' ', d.nom, ${libelles(sql`c.jour_semaine::text`, Object.fromEntries(JOURS_COURTS.map((j, i) => [i, j] as const).slice(1)))}, to_char(c.heure_debut, 'HH24:MI'))`;
 
+/** Cours suivis cette saison (inscriptions actives ou à l'essai), triés par jour et heure. */
 function coursEleve(saisonId: string | null): SQL<string[]> {
   if (!saisonId) return sql<string[]>`'{}'::text[]`;
   return sql<string[]>`coalesce((
@@ -130,7 +130,10 @@ function inscriptionEleve(saisonId: string | null): SQL<string | null> {
     SELECT ${libelles(sql`i.statut::text`, LIBELLES_STATUT_INSCRIPTION)}
     FROM inscription i JOIN inscription_cours ic ON ic.inscription_id = i.id
     WHERE ic.danseur_id = ${idCourant} AND i.saison_id = ${saisonId}
-    ORDER BY array_position(${sql`ARRAY[${sql.join(PRIORITE_STATUT.map((st) => sql`${st}`), sql`, `)}]::text[]`}, i.statut::text) LIMIT 1)`;
+    ORDER BY array_position(${sql`ARRAY[${sql.join(
+      PRIORITE_STATUT.map((st) => sql`${st}`),
+      sql`, `,
+    )}]::text[]`}, i.statut::text) LIMIT 1)`;
 }
 
 /**
@@ -182,7 +185,10 @@ export async function listerEleves(
       and(
         eq(personne.eleve, true),
         surEleve
-          ? or(surEleve, sql`EXISTS (SELECT 1 FROM lien l JOIN personne r ON r.id = l.personne_id WHERE l.lie_a_id = ${idCourant} AND ${surProche})`)
+          ? or(
+              surEleve,
+              sql`EXISTS (SELECT 1 FROM lien l JOIN personne r ON r.id = l.personne_id WHERE l.lie_a_id = ${idCourant} AND ${surProche})`,
+            )
           : undefined,
         surColonnes,
       ),
@@ -204,7 +210,11 @@ export type LigneContact = {
 };
 
 /** Contacts : qui n'est pas élève, ou qui est responsable ou payeur d'un élève. */
-export async function listerContacts(tx: Tx, saisie = "", { filtre = FILTRE_VIDE, tri = null }: OptionsListe = {}): Promise<LigneContact[]> {
+export async function listerContacts(
+  tx: Tx,
+  saisie = "",
+  { filtre = FILTRE_VIDE, tri = null }: OptionsListe = {},
+): Promise<LigneContact[]> {
   const condition = conditionRecherche(saisie);
   if (saisie.trim() && !condition) return [];
   const expressions = {
@@ -392,8 +402,10 @@ export async function creerEleve(
 ): Promise<{ statut: "ok"; id: string } | { statut: "doublons"; doublons: DoublonRole[] }> {
   if (!confirme) {
     const nouvelles: [DoublonRole["role"], SaisiePersonne][] = [["élève", saisie.eleve]];
-    if (saisie.responsable && "nouveau" in saisie.responsable) nouvelles.push(["responsable", saisie.responsable.nouveau]);
-    if (saisie.facturation.type === "autre" && "nouveau" in saisie.facturation.payeur) nouvelles.push(["payeur", saisie.facturation.payeur.nouveau]);
+    if (saisie.responsable && "nouveau" in saisie.responsable)
+      nouvelles.push(["responsable", saisie.responsable.nouveau]);
+    if (saisie.facturation.type === "autre" && "nouveau" in saisie.facturation.payeur)
+      nouvelles.push(["payeur", saisie.facturation.payeur.nouveau]);
     const doublons: DoublonRole[] = [];
     for (const [role, s] of nouvelles) doublons.push(...(await doublonsProbables(tx, s)).map((d) => ({ ...d, role })));
     if (doublons.length > 0) return { statut: "doublons", doublons };
@@ -433,7 +445,11 @@ export async function creerEleve(
  * « Facturé à » : l'élève lui-même, ou une personne (responsable, proche,
  * organisme). Un seul payeur à la fois ; le lien est créé au besoin.
  */
-export async function definirFacturation(tx: Tx, eleveId: string, cible: { type: "eleve" } | { type: "personne"; id: string }): Promise<Resultat> {
+export async function definirFacturation(
+  tx: Tx,
+  eleveId: string,
+  cible: { type: "eleve" } | { type: "personne"; id: string },
+): Promise<Resultat> {
   if (!estUuid(eleveId) || (cible.type === "personne" && (!estUuid(cible.id) || cible.id === eleveId))) {
     return { ok: false, message: "Choix de facturation invalide." };
   }
@@ -442,18 +458,33 @@ export async function definirFacturation(tx: Tx, eleveId: string, cible: { type:
   await tx.update(lien).set({ paiePour: false }).where(eq(lien.lieAId, eleveId));
   if (cible.type === "eleve") return { ok: true, id: eleveId };
 
-  const [direct] = await tx.select({ id: lien.id }).from(lien).where(and(eq(lien.personneId, cible.id), eq(lien.lieAId, eleveId)));
+  const [direct] = await tx
+    .select({ id: lien.id })
+    .from(lien)
+    .where(and(eq(lien.personneId, cible.id), eq(lien.lieAId, eleveId)));
   if (direct) {
     await tx.update(lien).set({ paiePour: true }).where(eq(lien.id, direct.id));
     return { ok: true, id: eleveId };
   }
   // Lien enregistré dans l'autre sens (conjoint saisi depuis la fiche de l'élève) : il est retourné.
-  const [inverse] = await tx.select({ id: lien.id }).from(lien).where(and(eq(lien.personneId, eleveId), eq(lien.lieAId, cible.id)));
+  const [inverse] = await tx
+    .select({ id: lien.id })
+    .from(lien)
+    .where(and(eq(lien.personneId, eleveId), eq(lien.lieAId, cible.id)));
   if (inverse) {
-    await tx.update(lien).set({ personneId: cible.id, lieAId: eleveId, paiePour: true, contactUrgence: false }).where(eq(lien.id, inverse.id));
+    await tx
+      .update(lien)
+      .set({ personneId: cible.id, lieAId: eleveId, paiePour: true, contactUrgence: false })
+      .where(eq(lien.id, inverse.id));
     return { ok: true, id: eleveId };
   }
-  const r = await ajouterLien(tx, { personneId: cible.id, lieAId: eleveId, type: "autre", contactUrgence: false, paiePour: true });
+  const r = await ajouterLien(tx, {
+    personneId: cible.id,
+    lieAId: eleveId,
+    type: "autre",
+    contactUrgence: false,
+    paiePour: true,
+  });
   return r.ok ? { ok: true, id: eleveId } : r;
 }
 
@@ -470,12 +501,24 @@ export async function ajouterResponsable(
   if (!e) return { ok: false, message: "Cet élève n’existe plus." };
   const responsableId = await resoudre(tx, r.data);
   if (!responsableId || responsableId === eleveId) return { ok: false, message: "Responsable introuvable." };
-  const [existant] = await tx.select({ id: lien.id }).from(lien).where(and(eq(lien.personneId, responsableId), eq(lien.lieAId, eleveId)));
+  const [existant] = await tx
+    .select({ id: lien.id })
+    .from(lien)
+    .where(and(eq(lien.personneId, responsableId), eq(lien.lieAId, eleveId)));
   if (existant) {
-    await tx.update(lien).set({ type: "representant_legal", contactUrgence: aPrevenir }).where(eq(lien.id, existant.id));
+    await tx
+      .update(lien)
+      .set({ type: "representant_legal", contactUrgence: aPrevenir })
+      .where(eq(lien.id, existant.id));
     return { ok: true, id: existant.id };
   }
-  return ajouterLien(tx, { personneId: responsableId, lieAId: eleveId, type: "representant_legal", contactUrgence: aPrevenir, paiePour: false });
+  return ajouterLien(tx, {
+    personneId: responsableId,
+    lieAId: eleveId,
+    type: "representant_legal",
+    contactUrgence: aPrevenir,
+    paiePour: false,
+  });
 }
 
 /** Un contact devient élève (ou cesse de l'être). */
@@ -488,7 +531,11 @@ export async function marquerEleve(tx: Tx, id: string, eleve: boolean): Promise<
 /** « À prévenir en cas d'urgence » pour un proche de l'élève. */
 export async function changerPrevenir(tx: Tx, lienId: string, aPrevenir: boolean): Promise<Resultat> {
   if (!estUuid(lienId)) return { ok: false, message: "Ce lien n’existe plus." };
-  const lignes = await tx.update(lien).set({ contactUrgence: aPrevenir }).where(eq(lien.id, lienId)).returning({ id: lien.id });
+  const lignes = await tx
+    .update(lien)
+    .set({ contactUrgence: aPrevenir })
+    .where(eq(lien.id, lienId))
+    .returning({ id: lien.id });
   return lignes.length === 1 ? { ok: true, id: lienId } : { ok: false, message: "Ce lien n’existe plus." };
 }
 
@@ -500,7 +547,11 @@ export async function estEleve(tx: Tx, id: string): Promise<boolean | null> {
 }
 
 /** Facturer une personne connue ou créée à l'instant (organisme, autre proche). */
-export async function facturerA(tx: Tx, eleveId: string, payeur: z.input<typeof autrePersonneValide>): Promise<Resultat> {
+export async function facturerA(
+  tx: Tx,
+  eleveId: string,
+  payeur: z.input<typeof autrePersonneValide>,
+): Promise<Resultat> {
   const p = autrePersonneValide.safeParse(payeur);
   if (!p.success) return { ok: false, message: "Vérifiez les informations du payeur." };
   const id = await resoudre(tx, p.data);
