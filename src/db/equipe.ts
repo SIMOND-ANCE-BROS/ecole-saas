@@ -127,7 +127,9 @@ export async function inviter(
   const [{ id }] = await tx
     .insert(invitation)
     .values({
-      ...s.data,
+      email: s.data.email,
+      name: s.data.nom,
+      role: s.data.role,
       schoolId: ECOLE_COURANTE,
       type: "invitation",
       tokenHash: empreinte(jeton),

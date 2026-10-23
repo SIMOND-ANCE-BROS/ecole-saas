@@ -90,6 +90,10 @@ describe("invitation", () => {
       compteExistant: false,
     });
     expect(await ouvrirLien(autreEcole, jeton)).toBeNull();
+    // The invited name is kept (it was silently dropped once by a stale payload key).
+    expect(await avecEcole(ecole, (tx) => invitationsEnCours(tx, new Date()))).toMatchObject([
+      { email: emailNouvelle, nom: "Accueil" },
+    ]);
     const [{ token_hash: jeton_hash }] = await admin`SELECT token_hash FROM invitation WHERE id = ${r2.id}`;
     expect(jeton_hash).not.toContain(jeton);
     expect(await avecEcole(ecole, (tx) => invitationsEnCours(tx, new Date()))).toHaveLength(1);
