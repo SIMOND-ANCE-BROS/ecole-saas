@@ -19,6 +19,8 @@ type Props = { titre: string; children: ReactNode };
  * not intercept (redirect after saving, link): the panel hides itself once the
  * pathname differs from the one it opened on. No catch-all slot page, which
  * strict route matching would apply to pages outside `(espace)` (#135).
+ * Relies on `cacheComponents` being off: with it, a hidden segment stays mounted
+ * in `<Activity>` and an open modal dialog would keep the page inert.
  */
 export function Panneau(props: Props) {
   const chemin = usePathname();
