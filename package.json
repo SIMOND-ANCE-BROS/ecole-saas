@@ -27,7 +27,7 @@
     "@mantine/notifications": "8.3.18",
     "better-auth": "1.7.7",
     "dayjs": "1.11.23",
-    "drizzle-orm": "0.45.3",
+    "drizzle-orm": "0.45.4",
     "next": "16.4.2",
     "postgres": "3.4.9",
     "react": "19.2.8",
