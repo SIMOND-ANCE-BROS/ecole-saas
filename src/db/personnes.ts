@@ -3,7 +3,16 @@ import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { nomAffiche } from "../domaine/personnes/nom";
 import type { Tx } from "./index";
-import { cours, discipline, documentDanseur, inscription, inscriptionCours, lien, personne, saison } from "./schema";
+import {
+  course,
+  discipline,
+  studentDocument,
+  enrollment,
+  enrollmentCourse,
+  relationship,
+  person,
+  season,
+} from "./schema";
 
 /**
  * Personnes (danseurs, parents, conjoints, payeurs professionnels) et liens
@@ -31,7 +40,7 @@ function contient(texte: string): string {
 }
 
 const chiffres = (v: string) => v.replace(/\D/g, "");
-const telephoneEnChiffres = sql`regexp_replace(coalesce(${personne.telephone}, ''), '[^0-9]', '', 'g')`;
+const telephoneEnChiffres = sql`regexp_replace(coalesce(${person.phone}, ''), '[^0-9]', '', 'g')`;
 
 export { nomAffiche };
 
@@ -43,7 +52,7 @@ export { nomAffiche };
  * Personnes liées, dans les deux sens, écrites avec les noms de tables : dans
  * un `select`, Drizzle n'écrit pas le nom de table devant `personne.id`.
  */
-const idCourant = sql`${personne}.${sql.identifier("id")}`;
+const idCourant = sql`${person}.${sql.identifier("id")}`;
 const liees = sql<string[]>`coalesce((
   SELECT array_agg(coalesce(a.company_name, concat_ws(' ', a.first_name, a.last_name)) ORDER BY a.first_name, a.last_name)
   FROM relationship l JOIN person a ON a.id = CASE WHEN l.person_id = ${idCourant} THEN l.related_person_id ELSE l.person_id END
@@ -51,14 +60,14 @@ const liees = sql<string[]>`coalesce((
 ), '{}')`;
 
 const colonnesResultat = {
-  id: personne.id,
-  type: personne.type,
-  nom: personne.nom,
-  prenom: personne.prenom,
-  raisonSociale: personne.raisonSociale,
-  dateNaissance: personne.dateNaissance,
-  email: personne.email,
-  telephone: personne.telephone,
+  id: person.id,
+  type: person.type,
+  nom: person.lastName,
+  prenom: person.firstName,
+  raisonSociale: person.companyName,
+  dateNaissance: person.birthDate,
+  email: person.email,
+  telephone: person.phone,
   liees,
 };
 
@@ -112,15 +121,15 @@ export async function rechercherPersonnes(tx: Tx, saisie: string): Promise<Resul
   if (!condition) return [];
   return tx
     .select(colonnesResultat)
-    .from(personne)
+    .from(person)
     .where(condition)
-    .orderBy(asc(personne.nom), asc(personne.prenom))
+    .orderBy(asc(person.lastName), asc(person.firstName))
     .limit(RESULTATS_MAX);
 }
 
 /** Toutes les personnes de l'école, par nom (sans recherche saisie). */
 export function listerPersonnes(tx: Tx, limite = 200): Promise<ResultatPersonne[]> {
-  return tx.select(colonnesResultat).from(personne).orderBy(asc(personne.nom), asc(personne.prenom)).limit(limite);
+  return tx.select(colonnesResultat).from(person).orderBy(asc(person.lastName), asc(person.firstName)).limit(limite);
 }
 
 // ---------------------------------------------------------------------------
@@ -162,90 +171,90 @@ export type FichePersonne = {
     niveau: string | null;
     jourSemaine: number | null;
     heureDebut: string;
-    statut: (typeof inscription.statut.enumValues)[number];
+    statut: (typeof enrollment.status.enumValues)[number];
     payeurId: string;
     /** Appels faits pour ce danseur dans ce cours. */
     presents: number;
     absents: number;
   }[];
-  documents: { type: (typeof documentDanseur.type.enumValues)[number]; accorde: boolean; valideJusqu: string | null }[];
+  documents: { type: (typeof studentDocument.type.enumValues)[number]; accorde: boolean; valideJusqu: string | null }[];
 };
 
 /** Présences ou absences d'un danseur aux séances du cours de la ligne. */
 const presences = (danseurId: string, present: boolean) => sql<number>`(
   SELECT count(*)::int FROM attendance p JOIN lesson s ON s.id = p.lesson_id
-  WHERE s.course_id = ${cours}.${sql.identifier("id")} AND p.student_id = ${danseurId} AND p.present = ${present}
+  WHERE s.course_id = ${course}.${sql.identifier("id")} AND p.student_id = ${danseurId} AND p.present = ${present}
 )`;
 
 export async function lirePersonne(tx: Tx, id: string): Promise<FichePersonne | null> {
   if (!z.uuid().safeParse(id).success) return null;
   const [p] = await tx
     .select({
-      id: personne.id,
-      type: personne.type,
-      nom: personne.nom,
-      prenom: personne.prenom,
-      raisonSociale: personne.raisonSociale,
-      siren: personne.siren,
-      dateNaissance: personne.dateNaissance,
-      email: personne.email,
-      telephone: personne.telephone,
-      adresse: personne.adresse,
-      notes: personne.notes,
+      id: person.id,
+      type: person.type,
+      nom: person.lastName,
+      prenom: person.firstName,
+      raisonSociale: person.companyName,
+      siren: person.siren,
+      dateNaissance: person.birthDate,
+      email: person.email,
+      telephone: person.phone,
+      adresse: person.address,
+      notes: person.notes,
     })
-    .from(personne)
-    .where(eq(personne.id, id));
+    .from(person)
+    .where(eq(person.id, id));
   if (!p) return null;
 
-  const autre = alias(personne, "autre");
+  const autre = alias(person, "autre");
   const liens = await tx
     .select({
-      id: lien.id,
-      personneId: lien.personneId,
-      type: lien.type,
-      contactUrgence: lien.contactUrgence,
-      paiePour: lien.paiePour,
+      id: relationship.id,
+      personneId: relationship.personId,
+      type: relationship.type,
+      contactUrgence: relationship.emergencyContact,
+      paiePour: relationship.paysFor,
       autreId: autre.id,
-      nom: autre.nom,
-      prenom: autre.prenom,
-      raisonSociale: autre.raisonSociale,
-      telephone: autre.telephone,
+      nom: autre.lastName,
+      prenom: autre.firstName,
+      raisonSociale: autre.companyName,
+      telephone: autre.phone,
       email: autre.email,
     })
-    .from(lien)
+    .from(relationship)
     .innerJoin(
       autre,
-      sql`${autre.id} = CASE WHEN ${lien.personneId} = ${id} THEN ${lien.lieAId} ELSE ${lien.personneId} END`,
+      sql`${autre.id} = CASE WHEN ${relationship.personId} = ${id} THEN ${relationship.relatedPersonId} ELSE ${relationship.personId} END`,
     )
-    .where(or(eq(lien.personneId, id), eq(lien.lieAId, id)))
-    .orderBy(asc(autre.prenom), asc(autre.nom));
+    .where(or(eq(relationship.personId, id), eq(relationship.relatedPersonId, id)))
+    .orderBy(asc(autre.firstName), asc(autre.lastName));
 
   const suivis = await tx
     .select({
-      id: cours.id,
-      saison: saison.libelle,
-      discipline: discipline.nom,
-      niveau: cours.niveau,
-      jourSemaine: cours.jourSemaine,
-      heureDebut: cours.heureDebut,
-      statut: inscription.statut,
-      payeurId: inscription.payeurId,
+      id: course.id,
+      saison: season.label,
+      discipline: discipline.name,
+      niveau: course.level,
+      jourSemaine: course.weekday,
+      heureDebut: course.startTime,
+      statut: enrollment.status,
+      payeurId: enrollment.payerId,
       presents: presences(id, true),
       absents: presences(id, false),
     })
-    .from(inscriptionCours)
-    .innerJoin(inscription, eq(inscription.id, inscriptionCours.inscriptionId))
-    .innerJoin(cours, eq(cours.id, inscriptionCours.coursId))
-    .innerJoin(discipline, eq(discipline.id, cours.disciplineId))
-    .innerJoin(saison, eq(saison.id, cours.saisonId))
-    .where(eq(inscriptionCours.danseurId, id))
-    .orderBy(desc(saison.dateDebut), sql`${cours.jourSemaine} NULLS LAST`, asc(cours.heureDebut));
+    .from(enrollmentCourse)
+    .innerJoin(enrollment, eq(enrollment.id, enrollmentCourse.enrollmentId))
+    .innerJoin(course, eq(course.id, enrollmentCourse.courseId))
+    .innerJoin(discipline, eq(discipline.id, course.disciplineId))
+    .innerJoin(season, eq(season.id, course.seasonId))
+    .where(eq(enrollmentCourse.studentId, id))
+    .orderBy(desc(season.startDate), sql`${course.weekday} NULLS LAST`, asc(course.startTime));
 
   const documents = await tx
-    .select({ type: documentDanseur.type, accorde: documentDanseur.accorde, valideJusqu: documentDanseur.valideJusqu })
-    .from(documentDanseur)
-    .where(eq(documentDanseur.danseurId, id))
-    .orderBy(asc(documentDanseur.type));
+    .select({ type: studentDocument.type, accorde: studentDocument.granted, valideJusqu: studentDocument.validUntil })
+    .from(studentDocument)
+    .where(eq(studentDocument.studentId, id))
+    .orderBy(asc(studentDocument.type));
 
   return {
     ...p,
@@ -272,16 +281,16 @@ export async function danseursPayables(
 ): Promise<{ id: string; prenom: string; nom: string; dateNaissance: string | null }[]> {
   if (!z.uuid().safeParse(payeurId).success) return [];
   const lignes = await tx
-    .select({ id: personne.id, prenom: personne.prenom, nom: personne.nom, dateNaissance: personne.dateNaissance })
-    .from(personne)
+    .select({ id: person.id, prenom: person.firstName, nom: person.lastName, dateNaissance: person.birthDate })
+    .from(person)
     .where(
       or(
         // Le payeur lui-même seulement s'il est élève : un parent qui paie n'est pas proposé à l'inscription.
-        and(eq(personne.id, payeurId), eq(personne.eleve, true)),
+        and(eq(person.id, payeurId), eq(person.isStudent, true)),
         sql`EXISTS (SELECT 1 FROM relationship l WHERE l.person_id = ${payeurId} AND l.related_person_id = ${idCourant} AND l.pays_for)`,
       ),
     )
-    .orderBy(asc(personne.prenom), asc(personne.nom));
+    .orderBy(asc(person.firstName), asc(person.lastName));
   return lignes.map((l) => ({ ...l, prenom: l.prenom ?? l.nom }));
 }
 
@@ -289,11 +298,11 @@ export async function danseursPayables(
 export async function payeursDe(tx: Tx, danseurId: string): Promise<{ id: string; nom: string }[]> {
   if (!z.uuid().safeParse(danseurId).success) return [];
   const payeurs = await tx
-    .select({ id: personne.id, nom: personne.nom, prenom: personne.prenom, raisonSociale: personne.raisonSociale })
-    .from(lien)
-    .innerJoin(personne, eq(personne.id, lien.personneId))
-    .where(and(eq(lien.lieAId, danseurId), eq(lien.paiePour, true)))
-    .orderBy(asc(personne.nom));
+    .select({ id: person.id, nom: person.lastName, prenom: person.firstName, raisonSociale: person.companyName })
+    .from(relationship)
+    .innerJoin(person, eq(person.id, relationship.personId))
+    .where(and(eq(relationship.relatedPersonId, danseurId), eq(relationship.paysFor, true)))
+    .orderBy(asc(person.lastName));
   return payeurs.map((p) => ({ id: p.id, nom: nomAffiche(p) }));
 }
 
@@ -346,12 +355,16 @@ export type Resultat = { ok: true; id: string } | { ok: false; message: string }
 
 /** Un professionnel sans contact nommé prend sa raison sociale comme nom ; pas de naissance pour lui. */
 const valeursPersonne = (f: SaisiePersonne) => ({
-  ...f,
-  nom: f.nom || f.raisonSociale || "",
-  prenom: f.type === "particulier" ? f.prenom : null,
-  raisonSociale: f.type === "professionnel" ? f.raisonSociale : null,
+  type: f.type,
+  lastName: f.nom || f.raisonSociale || "",
+  firstName: f.type === "particulier" ? f.prenom : null,
+  companyName: f.type === "professionnel" ? f.raisonSociale : null,
   siren: f.type === "professionnel" ? f.siren : null,
-  dateNaissance: f.type === "particulier" ? f.dateNaissance : null,
+  birthDate: f.type === "particulier" ? f.dateNaissance : null,
+  email: f.email,
+  phone: f.telephone,
+  address: f.adresse,
+  notes: f.notes,
 });
 
 /** Personnes déjà connues avec le même téléphone, le même e-mail, les mêmes nom et prénom ou la même raison sociale. */
@@ -359,25 +372,24 @@ export async function doublonsProbables(tx: Tx, f: SaisiePersonne): Promise<Doub
   const conditions: SQL[] = [];
   if (f.telephone && chiffres(f.telephone).length >= 6)
     conditions.push(sql`${telephoneEnChiffres} = ${chiffres(f.telephone)}`);
-  if (f.email) conditions.push(sql`lower(${personne.email}) = lower(${f.email})`);
+  if (f.email) conditions.push(sql`lower(${person.email}) = lower(${f.email})`);
   if (f.type === "particulier" && f.prenom)
     conditions.push(
-      sql`${normaliserColonne(personne.nom)} = ${normaliser(f.nom)} AND ${normaliserColonne(personne.prenom)} = ${normaliser(f.prenom)}`,
+      sql`${normaliserColonne(person.lastName)} = ${normaliser(f.nom)} AND ${normaliserColonne(person.firstName)} = ${normaliser(f.prenom)}`,
     );
-  if (f.raisonSociale)
-    conditions.push(sql`${normaliserColonne(personne.raisonSociale)} = ${normaliser(f.raisonSociale)}`);
+  if (f.raisonSociale) conditions.push(sql`${normaliserColonne(person.companyName)} = ${normaliser(f.raisonSociale)}`);
   if (conditions.length === 0) return [];
   const lignes = await tx
     .select({
-      id: personne.id,
-      nom: personne.nom,
-      prenom: personne.prenom,
-      raisonSociale: personne.raisonSociale,
-      telephone: personne.telephone,
+      id: person.id,
+      nom: person.lastName,
+      prenom: person.firstName,
+      raisonSociale: person.companyName,
+      telephone: person.phone,
     })
-    .from(personne)
+    .from(person)
     .where(or(...conditions))
-    .orderBy(asc(personne.nom))
+    .orderBy(asc(person.lastName))
     .limit(5);
   return lignes.map((l) => ({ id: l.id, nom: nomAffiche(l), telephone: l.telephone }));
 }
@@ -403,9 +415,9 @@ export async function creerPersonne(
     if (doublons.length > 0) return { statut: "doublons", doublons };
   }
   const [{ id }] = await tx
-    .insert(personne)
-    .values({ ...valeursPersonne(saisie), ecoleId: ECOLE_COURANTE })
-    .returning({ id: personne.id });
+    .insert(person)
+    .values({ ...valeursPersonne(saisie), schoolId: ECOLE_COURANTE })
+    .returning({ id: person.id });
   if (lienAvec) {
     const { autreId, de, ...l } = lienAvec;
     const r = await ajouterLien(
@@ -421,10 +433,10 @@ export async function modifierPersonne(tx: Tx, id: string, saisie: SaisiePersonn
   const refus = { ok: false as const, message: "Cette personne n’existe plus." };
   if (!z.uuid().safeParse(id).success) return refus;
   const lignes = await tx
-    .update(personne)
+    .update(person)
     .set(valeursPersonne(saisie))
-    .where(eq(personne.id, id))
-    .returning({ id: personne.id });
+    .where(eq(person.id, id))
+    .returning({ id: person.id });
   return lignes.length === 1 ? { ok: true, id } : refus;
 }
 
@@ -443,24 +455,31 @@ export async function ajouterLien(tx: Tx, saisie: z.input<typeof lienValide>): P
   const { personneId, lieAId } = l.data;
   if (personneId === lieAId) return { ok: false, message: "Une personne ne peut pas être liée à elle-même." };
   const presentes = await tx
-    .select({ id: personne.id })
-    .from(personne)
-    .where(or(eq(personne.id, personneId), eq(personne.id, lieAId)));
+    .select({ id: person.id })
+    .from(person)
+    .where(or(eq(person.id, personneId), eq(person.id, lieAId)));
   if (presentes.length !== 2) return { ok: false, message: "Personne introuvable." };
   const [existant] = await tx
-    .select({ id: lien.id })
-    .from(lien)
+    .select({ id: relationship.id })
+    .from(relationship)
     .where(
       or(
-        and(eq(lien.personneId, personneId), eq(lien.lieAId, lieAId)),
-        and(eq(lien.personneId, lieAId), eq(lien.lieAId, personneId)),
+        and(eq(relationship.personId, personneId), eq(relationship.relatedPersonId, lieAId)),
+        and(eq(relationship.personId, lieAId), eq(relationship.relatedPersonId, personneId)),
       ),
     );
   if (existant) return { ok: false, message: "Ces deux personnes sont déjà liées." };
   const [{ id }] = await tx
-    .insert(lien)
-    .values({ ...l.data, ecoleId: ECOLE_COURANTE })
-    .returning({ id: lien.id });
+    .insert(relationship)
+    .values({
+      personId: l.data.personneId,
+      relatedPersonId: l.data.lieAId,
+      type: l.data.type,
+      emergencyContact: l.data.contactUrgence,
+      paysFor: l.data.paiePour,
+      schoolId: ECOLE_COURANTE,
+    })
+    .returning({ id: relationship.id });
   return { ok: true, id };
 }
 
@@ -468,13 +487,17 @@ export async function ajouterLien(tx: Tx, saisie: z.input<typeof lienValide>): P
 export async function modifierLien(tx: Tx, id: string, saisie: NouveauLien): Promise<Resultat> {
   const refus = { ok: false as const, message: "Ce lien n’existe plus." };
   if (!z.uuid().safeParse(id).success) return refus;
-  const lignes = await tx.update(lien).set(saisie).where(eq(lien.id, id)).returning({ id: lien.id });
+  const lignes = await tx
+    .update(relationship)
+    .set({ type: saisie.type, emergencyContact: saisie.contactUrgence, paysFor: saisie.paiePour })
+    .where(eq(relationship.id, id))
+    .returning({ id: relationship.id });
   return lignes.length === 1 ? { ok: true, id } : refus;
 }
 
 export async function supprimerLien(tx: Tx, id: string): Promise<Resultat> {
   const refus = { ok: false as const, message: "Ce lien n’existe plus." };
   if (!z.uuid().safeParse(id).success) return refus;
-  const lignes = await tx.delete(lien).where(eq(lien.id, id)).returning({ id: lien.id });
+  const lignes = await tx.delete(relationship).where(eq(relationship.id, id)).returning({ id: relationship.id });
   return lignes.length === 1 ? { ok: true, id } : refus;
 }

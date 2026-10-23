@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { and, count, gt, inArray, lt, sql } from "drizzle-orm";
 import { db } from "../db";
-import { tentativeConnexion } from "../db/schema";
+import { loginAttempt } from "../db/schema";
 
 /**
  * Limitation des essais de mots de passe, sur une fenêtre glissante :
@@ -51,29 +51,29 @@ function cles(email: string, ip: string | null) {
 export async function enregistrerTentative(email: string, ip: string | null): Promise<boolean> {
   const limites = cles(email, ip);
   const inserees = await db
-    .insert(tentativeConnexion)
-    .values(limites.map(({ cle }) => ({ cle })))
-    .returning({ id: tentativeConnexion.id });
+    .insert(loginAttempt)
+    .values(limites.map(({ cle }) => ({ key: cle })))
+    .returning({ id: loginAttempt.id });
   const comptes = await db
-    .select({ cle: tentativeConnexion.cle, n: count() })
-    .from(tentativeConnexion)
+    .select({ cle: loginAttempt.key, n: count() })
+    .from(loginAttempt)
     .where(
       and(
         inArray(
-          tentativeConnexion.cle,
+          loginAttempt.key,
           limites.map((l) => l.cle),
         ),
-        gt(tentativeConnexion.quand, sql`now() - make_interval(mins => ${LIMITES.fenetreMinutes})`),
+        gt(loginAttempt.at, sql`now() - make_interval(mins => ${LIMITES.fenetreMinutes})`),
       ),
     )
-    .groupBy(tentativeConnexion.cle);
+    .groupBy(loginAttempt.key);
   // Purge au fil de l'eau : rien n'est gardé au-delà d'une journée.
-  await db.delete(tentativeConnexion).where(lt(tentativeConnexion.quand, sql`now() - interval '1 day'`));
+  await db.delete(loginAttempt).where(lt(loginAttempt.at, sql`now() - interval '1 day'`));
   const autorisee = limites.every(({ cle, max }) => (comptes.find((c) => c.cle === cle)?.n ?? 0) <= max);
   if (!autorisee) {
-    await db.delete(tentativeConnexion).where(
+    await db.delete(loginAttempt).where(
       inArray(
-        tentativeConnexion.id,
+        loginAttempt.id,
         inserees.map((l) => l.id),
       ),
     );
@@ -84,5 +84,5 @@ export async function enregistrerTentative(email: string, ip: string | null): Pr
 /** Après une connexion réussie : l'adresse et la paire repartent de zéro (pas l'IP). */
 export async function effacerTentatives(email: string, ip: string | null): Promise<void> {
   const [paire, adresse] = cles(email, ip);
-  await db.delete(tentativeConnexion).where(inArray(tentativeConnexion.cle, [paire.cle, adresse.cle]));
+  await db.delete(loginAttempt).where(inArray(loginAttempt.key, [paire.cle, adresse.cle]));
 }

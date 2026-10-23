@@ -2,7 +2,7 @@ import { and, asc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Tx } from "./index";
 import { horairesParSite } from "./parametres";
-import { cours, coursDate, discipline, inscriptionCours, intervenant, presence, salle, seance, site } from "./schema";
+import { course, courseDate, discipline, enrollmentCourse, instructor, attendance, room, lesson, site } from "./schema";
 
 /** Édition du planning (cours, disciplines, salles), toujours avec la transaction d'`avecEcole()` (RLS). */
 
@@ -102,52 +102,52 @@ export type CoursEdite = {
 
 /** Dates d'un cours ponctuel, triées (texte `YYYY-MM-DD`). */
 export const datesDuCoursSql = sql<string[]>`coalesce((
-  SELECT array_agg(cd.date::text ORDER BY cd.date) FROM course_date cd WHERE cd.course_id = ${cours}.${sql.identifier("id")}), '{}')`;
+  SELECT array_agg(cd.date::text ORDER BY cd.date) FROM course_date cd WHERE cd.course_id = ${course}.${sql.identifier("id")}), '{}')`;
 
 export async function lireCours(tx: Tx, id: string): Promise<CoursEdite | null> {
   if (!z.uuid().safeParse(id).success) return null;
   const [c] = await tx
     .select({
-      id: cours.id,
-      saisonId: cours.saisonId,
-      disciplineId: cours.disciplineId,
-      discipline: discipline.nom,
-      salleId: cours.salleId,
-      intervenantId: cours.intervenantId,
-      type: cours.type,
-      recurrence: cours.recurrence,
-      jourSemaine: cours.jourSemaine,
-      dateDebut: cours.dateDebut,
-      dateFin: cours.dateFin,
+      id: course.id,
+      saisonId: course.seasonId,
+      disciplineId: course.disciplineId,
+      discipline: discipline.name,
+      salleId: course.roomId,
+      intervenantId: course.instructorId,
+      type: course.type,
+      recurrence: course.recurrence,
+      jourSemaine: course.weekday,
+      dateDebut: course.startDate,
+      dateFin: course.endDate,
       dates: datesDuCoursSql,
-      heureDebut: cours.heureDebut,
-      dureeMinutes: cours.dureeMinutes,
-      ageMin: cours.ageMin,
-      ageMax: cours.ageMax,
-      niveau: cours.niveau,
-      capaciteMax: cours.capaciteMax,
+      heureDebut: course.startTime,
+      dureeMinutes: course.durationMinutes,
+      ageMin: course.ageMin,
+      ageMax: course.ageMax,
+      niveau: course.level,
+      capaciteMax: course.maxCapacity,
     })
-    .from(cours)
-    .innerJoin(discipline, eq(discipline.id, cours.disciplineId))
-    .where(eq(cours.id, id));
+    .from(course)
+    .innerJoin(discipline, eq(discipline.id, course.disciplineId))
+    .where(eq(course.id, id));
   return c ? { ...c, heureDebut: c.heureDebut.slice(0, 5) } : null;
 }
 
 /** Choix proposés dans le formulaire de cours. `inclure` : intervenant à garder même inactif. */
 export async function referentielPlanning(tx: Tx, inclure?: string) {
   const [disciplines, salles, sites, intervenants] = [
-    await tx.select({ id: discipline.id, nom: discipline.nom }).from(discipline).orderBy(asc(discipline.nom)),
+    await tx.select({ id: discipline.id, nom: discipline.name }).from(discipline).orderBy(asc(discipline.name)),
     await tx
-      .select({ id: salle.id, nom: salle.nom, site: site.nom, siteId: site.id, capacite: salle.capacite })
-      .from(salle)
-      .innerJoin(site, eq(site.id, salle.siteId))
-      .orderBy(asc(site.nom), asc(salle.nom)),
-    await tx.select({ id: site.id, nom: site.nom }).from(site).orderBy(asc(site.nom)),
+      .select({ id: room.id, nom: room.name, site: site.name, siteId: site.id, capacite: room.capacity })
+      .from(room)
+      .innerJoin(site, eq(site.id, room.siteId))
+      .orderBy(asc(site.name), asc(room.name)),
+    await tx.select({ id: site.id, nom: site.name }).from(site).orderBy(asc(site.name)),
     await tx
-      .select({ id: intervenant.id, prenom: intervenant.prenom, nom: intervenant.nom, actif: intervenant.actif })
-      .from(intervenant)
-      .where(inclure ? or(eq(intervenant.actif, true), eq(intervenant.id, inclure)) : eq(intervenant.actif, true))
-      .orderBy(asc(intervenant.prenom), asc(intervenant.nom)),
+      .select({ id: instructor.id, prenom: instructor.firstName, nom: instructor.lastName, actif: instructor.active })
+      .from(instructor)
+      .where(inclure ? or(eq(instructor.active, true), eq(instructor.id, inclure)) : eq(instructor.active, true))
+      .orderBy(asc(instructor.firstName), asc(instructor.lastName)),
   ];
   // Horaires d'ouverture par site (#90) : le formulaire prévient d'un créneau qui en sort.
   return { disciplines, salles, sites, intervenants, horaires: await horairesParSite(tx) };
@@ -164,16 +164,19 @@ async function resoudreDiscipline(tx: Tx, d: SaisieCours["discipline"]): Promise
   const [x] = await tx
     .select({ id: discipline.id })
     .from(discipline)
-    .where(sql`lower(${discipline.nom}) = lower(${nom})`);
+    .where(sql`lower(${discipline.name}) = lower(${nom})`);
   if (x) return x.id;
-  const [n] = await tx.insert(discipline).values({ ecoleId: ECOLE_COURANTE, nom }).returning({ id: discipline.id });
+  const [n] = await tx
+    .insert(discipline)
+    .values({ schoolId: ECOLE_COURANTE, name: nom })
+    .returning({ id: discipline.id });
   return n.id;
 }
 
 /** Salle choisie, ou créée avec son site (existant ou nouveau). */
 async function resoudreSalle(tx: Tx, s: SaisieCours["salle"]): Promise<string | null> {
   if ("id" in s) {
-    const [x] = await tx.select({ id: salle.id }).from(salle).where(eq(salle.id, s.id));
+    const [x] = await tx.select({ id: room.id }).from(room).where(eq(room.id, s.id));
     return x?.id ?? null;
   }
   let siteId: string;
@@ -184,25 +187,25 @@ async function resoudreSalle(tx: Tx, s: SaisieCours["salle"]): Promise<string | 
   } else {
     [{ id: siteId }] = await tx
       .insert(site)
-      .values({ ecoleId: ECOLE_COURANTE, nom: s.site.nom, adresse: s.site.adresse })
+      .values({ schoolId: ECOLE_COURANTE, name: s.site.nom, address: s.site.adresse })
       .returning({ id: site.id });
   }
   const [n] = await tx
-    .insert(salle)
-    .values({ ecoleId: ECOLE_COURANTE, siteId, nom: s.nom, capacite: s.capacite })
-    .returning({ id: salle.id });
+    .insert(room)
+    .values({ schoolId: ECOLE_COURANTE, siteId, name: s.nom, capacity: s.capacite })
+    .returning({ id: room.id });
   return n.id;
 }
 
 /** Résout discipline, salle et intervenant ; un intervenant inactif n'est accepté que s'il est `garde`. */
 async function valeurs(tx: Tx, saisie: SaisieCours, garde?: string) {
   const [i] = await tx
-    .select({ id: intervenant.id })
-    .from(intervenant)
+    .select({ id: instructor.id })
+    .from(instructor)
     .where(
       and(
-        eq(intervenant.id, saisie.intervenantId),
-        garde ? or(eq(intervenant.actif, true), eq(intervenant.id, garde)) : eq(intervenant.actif, true),
+        eq(instructor.id, saisie.intervenantId),
+        garde ? or(eq(instructor.active, true), eq(instructor.id, garde)) : eq(instructor.active, true),
       ),
     );
   if (!i) return { ok: false as const, message: "Intervenant introuvable ou inactif." };
@@ -217,21 +220,22 @@ async function valeurs(tx: Tx, saisie: SaisieCours, garde?: string) {
   const [dateDebut, dateFin] = ponctuel ? [null, null] : [saisie.dateDebut, saisie.dateFin];
   return {
     ok: true as const,
+    // Course columns, ready for insert/update.
     valeurs: {
       disciplineId,
-      salleId,
-      intervenantId,
+      roomId: salleId,
+      instructorId: intervenantId,
       type,
       recurrence,
-      jourSemaine,
-      dateDebut,
-      dateFin,
-      heureDebut,
-      dureeMinutes,
+      weekday: jourSemaine,
+      startDate: dateDebut,
+      endDate: dateFin,
+      startTime: heureDebut,
+      durationMinutes: dureeMinutes,
       ageMin,
       ageMax,
-      niveau,
-      capaciteMax,
+      level: niveau,
+      maxCapacity: capaciteMax,
     },
     dates: ponctuel ? [...new Set(saisie.dates)].sort() : [],
   };
@@ -241,17 +245,17 @@ export async function creerCours(tx: Tx, saisonId: string, saisie: SaisieCours):
   const r = await valeurs(tx, saisie);
   if (!r.ok) return r;
   const [{ id }] = await tx
-    .insert(cours)
-    .values({ ...r.valeurs, ecoleId: ECOLE_COURANTE, saisonId })
-    .returning({ id: cours.id });
+    .insert(course)
+    .values({ ...r.valeurs, schoolId: ECOLE_COURANTE, seasonId: saisonId })
+    .returning({ id: course.id });
   await remplacerDates(tx, id, r.dates);
   return { ok: true, id };
 }
 
 async function remplacerDates(tx: Tx, coursId: string, dates: string[]) {
-  await tx.delete(coursDate).where(eq(coursDate.coursId, coursId));
+  await tx.delete(courseDate).where(eq(courseDate.courseId, coursId));
   if (dates.length > 0)
-    await tx.insert(coursDate).values(dates.map((date) => ({ ecoleId: ECOLE_COURANTE, coursId, date })));
+    await tx.insert(courseDate).values(dates.map((date) => ({ schoolId: ECOLE_COURANTE, courseId: coursId, date })));
 }
 
 export async function modifierCours(tx: Tx, id: string, saisie: SaisieCours): Promise<Resultat> {
@@ -259,19 +263,19 @@ export async function modifierCours(tx: Tx, id: string, saisie: SaisieCours): Pr
   if (!existant) return { ok: false, message: "Ce cours n’existe plus." };
   const r = await valeurs(tx, saisie, existant.intervenantId);
   if (!r.ok) return r;
-  await tx.update(cours).set(r.valeurs).where(eq(cours.id, id));
+  await tx.update(course).set(r.valeurs).where(eq(course.id, id));
   await remplacerDates(tx, id, r.dates);
   // Nouveau titulaire : il reprend les séances à venir de l'ancien, pas celles d'un remplaçant.
-  if (r.valeurs.intervenantId !== existant.intervenantId) {
+  if (r.valeurs.instructorId !== existant.intervenantId) {
     await tx
-      .update(seance)
-      .set({ intervenantId: r.valeurs.intervenantId })
+      .update(lesson)
+      .set({ instructorId: r.valeurs.instructorId })
       .where(
         and(
-          eq(seance.coursId, id),
-          eq(seance.intervenantId, existant.intervenantId),
-          eq(seance.statut, "prevue"),
-          sql`${seance.date} >= (now() AT TIME ZONE 'Europe/Paris')::date`,
+          eq(lesson.courseId, id),
+          eq(lesson.instructorId, existant.intervenantId),
+          eq(lesson.status, "prevue"),
+          sql`${lesson.date} >= (now() AT TIME ZONE 'Europe/Paris')::date`,
         ),
       );
   }
@@ -282,20 +286,20 @@ export async function modifierCours(tx: Tx, id: string, saisie: SaisieCours): Pr
 export async function supprimerCours(tx: Tx, id: string): Promise<Resultat> {
   if (!(await lireCours(tx, id))) return { ok: false, message: "Ce cours n’existe plus." };
   const [{ n }] = await tx
-    .select({ n: sql<number>`count(DISTINCT ${inscriptionCours.inscriptionId})::int` })
-    .from(inscriptionCours)
-    .where(eq(inscriptionCours.coursId, id));
+    .select({ n: sql<number>`count(DISTINCT ${enrollmentCourse.enrollmentId})::int` })
+    .from(enrollmentCourse)
+    .where(eq(enrollmentCourse.courseId, id));
   if (n > 0)
     return { ok: false, message: `Ce cours a ${n} inscription${n > 1 ? "s" : ""} : il ne peut pas être supprimé.` };
   const [appel] = await tx
-    .select({ seanceId: presence.seanceId })
-    .from(presence)
-    .innerJoin(seance, eq(seance.id, presence.seanceId))
-    .where(eq(seance.coursId, id))
+    .select({ seanceId: attendance.lessonId })
+    .from(attendance)
+    .innerJoin(lesson, eq(lesson.id, attendance.lessonId))
+    .where(eq(lesson.courseId, id))
     .limit(1);
   if (appel) return { ok: false, message: "Des appels ont été faits pour ce cours : il ne peut pas être supprimé." };
-  await tx.delete(seance).where(eq(seance.coursId, id));
-  await tx.delete(cours).where(eq(cours.id, id));
+  await tx.delete(lesson).where(eq(lesson.courseId, id));
+  await tx.delete(course).where(eq(course.id, id));
   return { ok: true, id };
 }
 
@@ -328,13 +332,16 @@ export async function deplacerCours(
   if (versMinutesFin(c.data) > 24 * 60) return { statut: "refus", message: "Le cours finirait après minuit." };
   if (!confirme) {
     const [{ n }] = await tx
-      .select({ n: sql<number>`count(DISTINCT ${inscriptionCours.danseurId})::int` })
-      .from(inscriptionCours)
-      .innerJoin(sql`enrollment i`, sql`i.id = ${inscriptionCours.inscriptionId} AND i.status IN ('active', 'essai')`)
-      .where(eq(inscriptionCours.coursId, id));
+      .select({ n: sql<number>`count(DISTINCT ${enrollmentCourse.studentId})::int` })
+      .from(enrollmentCourse)
+      .innerJoin(sql`enrollment i`, sql`i.id = ${enrollmentCourse.enrollmentId} AND i.status IN ('active', 'essai')`)
+      .where(eq(enrollmentCourse.courseId, id));
     if (n > 0) return { statut: "confirmer", inscrits: n };
   }
-  await tx.update(cours).set(c.data).where(eq(cours.id, id));
+  await tx
+    .update(course)
+    .set({ weekday: c.data.jourSemaine, startTime: c.data.heureDebut, durationMinutes: c.data.dureeMinutes })
+    .where(eq(course.id, id));
   return { statut: "ok", id };
 }
 

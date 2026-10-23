@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { Tx } from "./index";
-import { membre, preferenceListe } from "./schema";
+import { member, listPreference } from "./schema";
 
 /**
  * Disposition des colonnes des listes, propre à chaque membre (#89). Le
@@ -14,10 +14,10 @@ const ECOLE_COURANTE = sql`nullif(current_setting('app.school_id', true), '')::u
 /** Colonnes enregistrées par ce compte pour cette liste, ou null (disposition par défaut). */
 export async function lirePreference(tx: Tx, userId: string, liste: string): Promise<string[] | null> {
   const [p] = await tx
-    .select({ colonnes: preferenceListe.colonnes })
-    .from(preferenceListe)
-    .innerJoin(membre, eq(membre.id, preferenceListe.membreId))
-    .where(and(eq(membre.userId, userId), eq(preferenceListe.liste, liste)));
+    .select({ colonnes: listPreference.columns })
+    .from(listPreference)
+    .innerJoin(member, eq(member.id, listPreference.memberId))
+    .where(and(eq(member.userId, userId), eq(listPreference.list, liste)));
   return p?.colonnes ?? null;
 }
 
@@ -28,14 +28,14 @@ export async function enregistrerPreference(
   liste: string,
   colonnes: string[],
 ): Promise<boolean> {
-  const [m] = await tx.select({ id: membre.id }).from(membre).where(eq(membre.userId, userId));
+  const [m] = await tx.select({ id: member.id }).from(member).where(eq(member.userId, userId));
   if (!m) return false;
   await tx
-    .insert(preferenceListe)
-    .values({ ecoleId: ECOLE_COURANTE, membreId: m.id, liste, colonnes })
+    .insert(listPreference)
+    .values({ schoolId: ECOLE_COURANTE, memberId: m.id, list: liste, columns: colonnes })
     .onConflictDoUpdate({
-      target: [preferenceListe.membreId, preferenceListe.liste],
-      set: { colonnes, modifieLe: sql`now()` },
+      target: [listPreference.memberId, listPreference.list],
+      set: { columns: colonnes, updatedAt: sql`now()` },
     });
   return true;
 }

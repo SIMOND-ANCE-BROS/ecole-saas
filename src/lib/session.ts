@@ -23,7 +23,7 @@ export const sessionCourante = cache(async () => {
  */
 export const contexteEcole = cache(async (): Promise<ContexteEcole> => {
   const { session, user } = await sessionCourante();
-  const contexte = await contexteDepuisSession(user.id, session.ecoleChoisie);
+  const contexte = await contexteDepuisSession(user.id, session.selectedSchoolId);
   if (!contexte) redirect("/ecoles");
   return contexte;
 });

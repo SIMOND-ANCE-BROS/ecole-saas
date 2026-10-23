@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { eq } from "drizzle-orm";
 import { avecEcole } from "@/db";
-import { ecole } from "@/db/schema";
+import { school } from "@/db/schema";
 import { contexteEcole, sessionCourante } from "@/lib/session";
 import { deconnexion } from "./actions";
 import { Cadre } from "./cadre";
@@ -20,7 +20,7 @@ const LIBELLE_ROLE = { direction: "Direction", accueil: "Accueil", professeur: "
 export default async function LayoutEspace({ children, modal }: LayoutProps<"/">) {
   const [{ ecoleId, role }, { user }] = await Promise.all([contexteEcole(), sessionCourante()]);
   const [{ nom }] = await avecEcole(ecoleId, (tx) =>
-    tx.select({ nom: ecole.nom }).from(ecole).where(eq(ecole.id, ecoleId)),
+    tx.select({ nom: school.name }).from(school).where(eq(school.id, ecoleId)),
   );
 
   return (

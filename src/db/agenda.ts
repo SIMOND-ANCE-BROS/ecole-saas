@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { SeanceAgenda } from "../domaine/planning/ical";
 import type { Tx } from "./index";
 import { dureeEffective, heureEffective } from "./seances";
-import { cours, discipline, ecole, intervenant, salle, seance, site } from "./schema";
+import { course, discipline, school, instructor, room, lesson, site } from "./schema";
 
 /**
  * Abonnement d'un intervenant à ses séances (iCal). Le jeton n'est montré
@@ -20,20 +20,20 @@ export async function creerJetonAgenda(tx: Tx, intervenantId: string): Promise<s
   if (!z.uuid().safeParse(intervenantId).success) return null;
   const jeton = randomBytes(32).toString("base64url");
   const lignes = await tx
-    .update(intervenant)
-    .set({ jetonAgendaHash: empreinte(jeton), jetonAgendaCreeLe: sql`now()` })
-    .where(eq(intervenant.id, intervenantId))
-    .returning({ id: intervenant.id });
+    .update(instructor)
+    .set({ calendarTokenHash: empreinte(jeton), calendarTokenCreatedAt: sql`now()` })
+    .where(eq(instructor.id, intervenantId))
+    .returning({ id: instructor.id });
   return lignes.length === 1 ? jeton : null;
 }
 
 export async function revoquerJetonAgenda(tx: Tx, intervenantId: string): Promise<boolean> {
   if (!z.uuid().safeParse(intervenantId).success) return false;
   const lignes = await tx
-    .update(intervenant)
-    .set({ jetonAgendaHash: null, jetonAgendaCreeLe: null })
-    .where(eq(intervenant.id, intervenantId))
-    .returning({ id: intervenant.id });
+    .update(instructor)
+    .set({ calendarTokenHash: null, calendarTokenCreatedAt: null })
+    .where(eq(instructor.id, intervenantId))
+    .returning({ id: instructor.id });
   return lignes.length === 1;
 }
 
@@ -41,9 +41,9 @@ export async function revoquerJetonAgenda(tx: Tx, intervenantId: string): Promis
 export async function etatAgenda(tx: Tx, intervenantId: string): Promise<Date | null> {
   if (!z.uuid().safeParse(intervenantId).success) return null;
   const [i] = await tx
-    .select({ creeLe: intervenant.jetonAgendaCreeLe })
-    .from(intervenant)
-    .where(eq(intervenant.id, intervenantId));
+    .select({ creeLe: instructor.calendarTokenCreatedAt })
+    .from(instructor)
+    .where(eq(instructor.id, intervenantId));
   return i?.creeLe ?? null;
 }
 
@@ -54,11 +54,11 @@ export async function intervenantDuJeton(
 ): Promise<{ id: string; prenom: string; ecole: string } | null> {
   if (!/^[A-Za-z0-9_-]{43}$/.test(jeton)) return null;
   const [i] = await tx
-    .select({ id: intervenant.id, prenom: intervenant.prenom, ecole: ecole.nom })
-    .from(intervenant)
-    .innerJoin(ecole, eq(ecole.id, intervenant.ecoleId))
+    .select({ id: instructor.id, prenom: instructor.firstName, ecole: school.name })
+    .from(instructor)
+    .innerJoin(school, eq(school.id, instructor.schoolId))
     // Un intervenant parti (inactif) ne reçoit plus rien, même avec un ancien lien.
-    .where(and(eq(intervenant.jetonAgendaHash, empreinte(jeton)), eq(intervenant.actif, true)));
+    .where(and(eq(instructor.calendarTokenHash, empreinte(jeton)), eq(instructor.active, true)));
   return i ?? null;
 }
 
@@ -77,24 +77,24 @@ export async function lireAgenda(
 
   const lignes = await tx
     .select({
-      id: seance.id,
-      date: seance.date,
-      statut: seance.statut,
+      id: lesson.id,
+      date: lesson.date,
+      statut: lesson.status,
       heureDebut: heureEffective,
       dureeMinutes: dureeEffective,
-      discipline: discipline.nom,
-      niveau: cours.niveau,
-      salle: salle.nom,
-      site: site.nom,
-      adresse: site.adresse,
+      discipline: discipline.name,
+      niveau: course.level,
+      salle: room.name,
+      site: site.name,
+      adresse: site.address,
     })
-    .from(seance)
-    .innerJoin(cours, eq(cours.id, seance.coursId))
-    .innerJoin(discipline, eq(discipline.id, cours.disciplineId))
-    .innerJoin(salle, eq(salle.id, cours.salleId))
-    .innerJoin(site, eq(site.id, salle.siteId))
-    .where(and(eq(seance.intervenantId, i.id), gte(seance.date, depuis)))
-    .orderBy(asc(seance.date), heureEffective);
+    .from(lesson)
+    .innerJoin(course, eq(course.id, lesson.courseId))
+    .innerJoin(discipline, eq(discipline.id, course.disciplineId))
+    .innerJoin(room, eq(room.id, course.roomId))
+    .innerJoin(site, eq(site.id, room.siteId))
+    .where(and(eq(lesson.instructorId, i.id), gte(lesson.date, depuis)))
+    .orderBy(asc(lesson.date), heureEffective);
 
   return {
     nom: `Cours de ${i.prenom}, ${i.ecole}`,

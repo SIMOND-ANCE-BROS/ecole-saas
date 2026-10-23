@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { Tx } from "./index";
 import { nomAffiche } from "./personnes";
-import { inscription, personne } from "./schema";
+import { enrollment, person } from "./schema";
 
 /** Lectures du tableau de bord, toujours avec la transaction d'`avecEcole()` (RLS). */
 
@@ -12,15 +12,15 @@ export async function chiffresSaison(tx: Tx, saisonId: string): Promise<Chiffres
   const [ligne] = await tx
     .select({
       inscriptions: sql<number>`count(*)::int`,
-      totalNetCentimes: sql<number>`coalesce(sum(${inscription.prixNetCentimes}), 0)::int`,
+      totalNetCentimes: sql<number>`coalesce(sum(${enrollment.netPriceCents}), 0)::int`,
       danseurs: sql<number>`(
         SELECT count(DISTINCT ic.student_id)::int FROM enrollment_course ic
         JOIN enrollment i ON i.id = ic.enrollment_id
         WHERE i.season_id = ${saisonId} AND i.status = 'active'
       )`,
     })
-    .from(inscription)
-    .where(and(eq(inscription.saisonId, saisonId), eq(inscription.statut, "active")));
+    .from(enrollment)
+    .where(and(eq(enrollment.seasonId, saisonId), eq(enrollment.status, "active")));
   return ligne;
 }
 
@@ -37,22 +37,22 @@ export type DerniereInscription = {
 export async function dernieresInscriptions(tx: Tx, saisonId: string, nombre = 8): Promise<DerniereInscription[]> {
   const lignes = await tx
     .select({
-      id: inscription.id,
-      payeurId: inscription.payeurId,
-      nom: personne.nom,
-      prenom: personne.prenom,
-      raisonSociale: personne.raisonSociale,
-      prixNetCentimes: inscription.prixNetCentimes,
+      id: enrollment.id,
+      payeurId: enrollment.payerId,
+      nom: person.lastName,
+      prenom: person.firstName,
+      raisonSociale: person.companyName,
+      prixNetCentimes: enrollment.netPriceCents,
       danseurs: sql<string | null>`(
         SELECT string_agg(DISTINCT coalesce(d.first_name, d.last_name), ' et ') FROM enrollment_course ic
         JOIN person d ON d.id = ic.student_id
-        WHERE ic.enrollment_id = ${inscription}.${sql.identifier("id")}
+        WHERE ic.enrollment_id = ${enrollment}.${sql.identifier("id")}
       )`,
     })
-    .from(inscription)
-    .innerJoin(personne, eq(personne.id, inscription.payeurId))
-    .where(and(eq(inscription.saisonId, saisonId), eq(inscription.statut, "active")))
-    .orderBy(desc(inscription.creeLe))
+    .from(enrollment)
+    .innerJoin(person, eq(person.id, enrollment.payerId))
+    .where(and(eq(enrollment.seasonId, saisonId), eq(enrollment.status, "active")))
+    .orderBy(desc(enrollment.createdAt))
     .limit(nombre);
 
   return lignes.map((l) => ({

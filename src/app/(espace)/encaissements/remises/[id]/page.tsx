@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { avecEcole } from "@/db";
 import { lireRemise } from "@/db/remises";
-import { ecole } from "@/db/schema";
+import { school } from "@/db/schema";
 import { formaterEuros } from "@/lib/montant";
 import { exigerRole } from "@/lib/session";
 import { AnnulerRemise, Imprimer } from "./boutons";
@@ -20,7 +20,7 @@ export default async function PageRemise({ params, searchParams }: PageProps<"/e
   const [{ id }, { cree }] = await Promise.all([params, searchParams]);
   const donnees = await avecEcole(ecoleId, async (tx) => {
     const r = await lireRemise(tx, id);
-    const [e] = await tx.select({ nom: ecole.nom }).from(ecole).where(eq(ecole.id, ecoleId));
+    const [e] = await tx.select({ nom: school.name }).from(school).where(eq(school.id, ecoleId));
     return r ? { r, ecole: e?.nom ?? "" } : null;
   });
   if (!donnees) notFound();

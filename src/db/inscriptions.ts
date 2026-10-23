@@ -12,7 +12,7 @@ import type {
 } from "../domaine/tarif/types";
 import type { Tx } from "./index";
 import { danseursPayables } from "./personnes";
-import { cours, discipline, inscription, inscriptionCours, personne, reduction, tarif } from "./schema";
+import { course, discipline, enrollment, enrollmentCourse, person, discount, tariff } from "./schema";
 
 /**
  * Inscriptions : chargement des données de l'école, validation de la saisie,
@@ -33,29 +33,29 @@ const uuid = z.uuid();
 export async function chargerGrille(tx: Tx, saisonId: string): Promise<LigneTarif[]> {
   return tx
     .select({
-      id: tarif.id,
-      public: tarif.public,
-      periodicite: tarif.periodicite,
-      combinaison: tarif.combinaison,
-      disciplineId: tarif.disciplineId,
-      prixCentimes: tarif.prixCentimes,
+      id: tariff.id,
+      public: tariff.audience,
+      periodicite: tariff.period,
+      combinaison: tariff.combination,
+      disciplineId: tariff.disciplineId,
+      prixCentimes: tariff.priceCents,
     })
-    .from(tarif)
-    .where(eq(tarif.saisonId, saisonId));
+    .from(tariff)
+    .where(eq(tariff.seasonId, saisonId));
 }
 
 export async function chargerReductions(tx: Tx, saisonId: string): Promise<RegleReduction[]> {
   return tx
     .select({
-      code: reduction.code,
-      tauxPointsBase: reduction.tauxPointsBase,
-      montantCentimes: reduction.montantCentimes,
-      seuilDanseurs: reduction.seuilDanseurs,
-      publics: reduction.publics,
-      cumulableMultiDisciplines: reduction.cumulableMultiDisciplines,
+      code: discount.code,
+      tauxPointsBase: discount.rateBps,
+      montantCentimes: discount.amountCents,
+      seuilDanseurs: discount.minStudents,
+      publics: discount.audiences,
+      cumulableMultiDisciplines: discount.combinableWithMultiDiscipline,
     })
-    .from(reduction)
-    .where(eq(reduction.saisonId, saisonId));
+    .from(discount)
+    .where(eq(discount.seasonId, saisonId));
 }
 
 type Existante = DemandeInscription & { remiseEnregistree: number };
@@ -64,30 +64,28 @@ type Existante = DemandeInscription & { remiseEnregistree: number };
 async function inscriptionsExistantes(tx: Tx, payeurId: string, saisonId: string): Promise<Existante[]> {
   const lignes = await tx
     .select({
-      id: inscription.id,
-      public: inscription.public,
-      periodicite: inscription.periodicite,
-      remise: inscription.remiseCentimes,
+      id: enrollment.id,
+      public: enrollment.audience,
+      periodicite: enrollment.period,
+      remise: enrollment.discountCents,
     })
-    .from(inscription)
-    .where(
-      and(eq(inscription.payeurId, payeurId), eq(inscription.saisonId, saisonId), eq(inscription.statut, "active")),
-    );
+    .from(enrollment)
+    .where(and(eq(enrollment.payerId, payeurId), eq(enrollment.seasonId, saisonId), eq(enrollment.status, "active")));
   if (lignes.length === 0) return [];
 
   const liens = await tx
     .select({
-      inscriptionId: inscriptionCours.inscriptionId,
-      danseurId: inscriptionCours.danseurId,
-      coursId: inscriptionCours.coursId,
-      disciplineId: cours.disciplineId,
-      dureeMinutes: cours.dureeMinutes,
+      inscriptionId: enrollmentCourse.enrollmentId,
+      danseurId: enrollmentCourse.studentId,
+      coursId: enrollmentCourse.courseId,
+      disciplineId: course.disciplineId,
+      dureeMinutes: course.durationMinutes,
     })
-    .from(inscriptionCours)
-    .innerJoin(cours, eq(cours.id, inscriptionCours.coursId))
+    .from(enrollmentCourse)
+    .innerJoin(course, eq(course.id, enrollmentCourse.courseId))
     .where(
       inArray(
-        inscriptionCours.inscriptionId,
+        enrollmentCourse.enrollmentId,
         lignes.map((l) => l.id),
       ),
     );
@@ -128,9 +126,9 @@ async function valider(
 
   if (coursIds.length === 0) return [];
   const choisis = await tx
-    .select({ disciplineId: cours.disciplineId, dureeMinutes: cours.dureeMinutes })
-    .from(cours)
-    .where(and(inArray(cours.id, coursIds), eq(cours.saisonId, saisonId)));
+    .select({ disciplineId: course.disciplineId, dureeMinutes: course.durationMinutes })
+    .from(course)
+    .where(and(inArray(course.id, coursIds), eq(course.seasonId, saisonId)));
   if (choisis.length !== coursIds.length) return "Un des cours ne fait pas partie de la saison.";
   return choisis;
 }
@@ -199,30 +197,30 @@ export async function enregistrerInscription(
   if (r.statut === "erreur") return { ok: false, message: r.erreur.message };
 
   const [{ id }] = await tx
-    .insert(inscription)
+    .insert(enrollment)
     .values({
-      ecoleId: sql`nullif(current_setting('app.school_id', true), '')::uuid`,
-      payeurId,
-      saisonId,
-      tarifId: r.ligneTarifId,
-      public: saisie.public,
-      periodicite: saisie.periodicite,
-      prixBrutCentimes: r.prixBrutCentimes,
-      remiseCentimes: r.remiseCentimes,
-      reductions: r.reductions.filter((d) => d.statut === "appliquee").map((d) => d.code),
+      schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid`,
+      payerId: payeurId,
+      seasonId: saisonId,
+      tariffId: r.ligneTarifId,
+      audience: saisie.public,
+      period: saisie.periodicite,
+      grossPriceCents: r.prixBrutCentimes,
+      discountCents: r.remiseCentimes,
+      discounts: r.reductions.filter((d) => d.statut === "appliquee").map((d) => d.code),
     })
-    .returning({ id: inscription.id });
+    .returning({ id: enrollment.id });
 
   const danseurIds = [...new Set(saisie.danseurIds)];
   const coursIds = [...new Set(saisie.coursIds)];
   if (coursIds.length > 0) {
-    await tx.insert(inscriptionCours).values(
+    await tx.insert(enrollmentCourse).values(
       danseurIds.flatMap((danseurId) =>
         coursIds.map((coursId) => ({
-          ecoleId: sql`nullif(current_setting('app.school_id', true), '')::uuid`,
-          inscriptionId: id,
-          danseurId,
-          coursId,
+          schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid`,
+          enrollmentId: id,
+          studentId: danseurId,
+          courseId: coursId,
         })),
       ),
     );
@@ -243,36 +241,34 @@ export type InscriptionPayee = {
 export async function inscriptionsPayeesPar(tx: Tx, payeurId: string, saisonId: string): Promise<InscriptionPayee[]> {
   const lignes = await tx
     .select({
-      id: inscription.id,
-      public: inscription.public,
-      periodicite: inscription.periodicite,
-      prixNetCentimes: inscription.prixNetCentimes,
+      id: enrollment.id,
+      public: enrollment.audience,
+      periodicite: enrollment.period,
+      prixNetCentimes: enrollment.netPriceCents,
     })
-    .from(inscription)
-    .where(
-      and(eq(inscription.payeurId, payeurId), eq(inscription.saisonId, saisonId), eq(inscription.statut, "active")),
-    );
+    .from(enrollment)
+    .where(and(eq(enrollment.payerId, payeurId), eq(enrollment.seasonId, saisonId), eq(enrollment.status, "active")));
   if (lignes.length === 0) return [];
 
   const liens = await tx
     .select({
-      inscriptionId: inscriptionCours.inscriptionId,
-      prenom: sql<string>`coalesce(${personne.prenom}, ${personne.nom})`,
-      discipline: discipline.nom,
-      jour: cours.jourSemaine,
-      heure: cours.heureDebut,
+      inscriptionId: enrollmentCourse.enrollmentId,
+      prenom: sql<string>`coalesce(${person.firstName}, ${person.lastName})`,
+      discipline: discipline.name,
+      jour: course.weekday,
+      heure: course.startTime,
     })
-    .from(inscriptionCours)
-    .innerJoin(personne, eq(personne.id, inscriptionCours.danseurId))
-    .innerJoin(cours, eq(cours.id, inscriptionCours.coursId))
-    .innerJoin(discipline, eq(discipline.id, cours.disciplineId))
+    .from(enrollmentCourse)
+    .innerJoin(person, eq(person.id, enrollmentCourse.studentId))
+    .innerJoin(course, eq(course.id, enrollmentCourse.courseId))
+    .innerJoin(discipline, eq(discipline.id, course.disciplineId))
     .where(
       inArray(
-        inscriptionCours.inscriptionId,
+        enrollmentCourse.enrollmentId,
         lignes.map((l) => l.id),
       ),
     )
-    .orderBy(asc(cours.jourSemaine), asc(cours.heureDebut));
+    .orderBy(asc(course.weekday), asc(course.startTime));
 
   const JOURS = ["", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."];
   return lignes
