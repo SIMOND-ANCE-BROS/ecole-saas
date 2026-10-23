@@ -19,7 +19,7 @@ import {
 
 /**
  * Séances (occurrences datées des cours), fermetures et appel. Toujours avec
- * la transaction d'`avecEcole()` (RLS).
+ * la transaction d'`withSchool()` (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;

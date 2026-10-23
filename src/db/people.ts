@@ -16,7 +16,7 @@ import {
 
 /**
  * Personnes (danseurs, parents, conjoints, payeurs professionnels) et liens
- * entre elles. Toujours avec la transaction de `avecEcole()` : la RLS limite
+ * entre elles. Toujours avec la transaction de `withSchool()` : la RLS limite
  * lectures et écritures à l'école courante.
  */
 

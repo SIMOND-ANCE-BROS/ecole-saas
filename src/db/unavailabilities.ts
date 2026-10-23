@@ -8,7 +8,7 @@ import { course, discipline, closure, unavailability, instructor, season, lesson
 
 /**
  * Indisponibilités des intervenants, conflits avec les séances et remplaçants
- * libres. Toujours avec la transaction d'`avecEcole()` (RLS).
+ * libres. Toujours avec la transaction d'`withSchool()` (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;

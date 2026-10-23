@@ -13,7 +13,7 @@ const uuid = z.uuid();
 /**
  * Enregistre l'école choisie sur la session, seulement si l'utilisateur en est
  * membre actif et que la session lui appartient. L'identifiant proposé par le
- * navigateur n'est jamais utilisé tel quel : il doit figurer dans `ecolesDe`.
+ * navigateur n'est jamais utilisé tel quel : il doit figurer dans `schoolsOf`.
  */
 export async function chooseSchool(sessionId: string, userId: string, schoolId: string): Promise<boolean> {
   if (!(await membership(userId, schoolId))) return false;

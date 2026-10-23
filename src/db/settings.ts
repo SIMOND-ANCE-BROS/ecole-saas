@@ -7,7 +7,7 @@ import { course, discipline, siteHours, season, room, site } from "./schema";
 /**
  * Paramètres de l'école (#80) : saisons, disciplines, sites et salles. Tout ce
  * qui est propre à une école se saisit ici, jamais dans le code. Toujours avec
- * la transaction d'`avecEcole()` (RLS).
+ * la transaction d'`withSchool()` (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;

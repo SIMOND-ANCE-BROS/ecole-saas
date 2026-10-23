@@ -10,7 +10,7 @@ import {
   authorizationUrl,
 } from "@/connectors/calendar/oauth";
 import { withSchool } from "@/db";
-import { tokenInstructor } from "@/db/calendar";
+import { tokenInstructor } from "@/db/calendar-feed";
 import { COOKIE_OAUTH, personalPage, redirectionOAuth } from "@/lib/public-calendar";
 
 /**

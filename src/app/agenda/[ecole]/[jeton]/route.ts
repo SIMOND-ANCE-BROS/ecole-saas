@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { withSchool } from "@/db";
-import { readCalendar } from "@/db/calendar";
+import { readCalendar } from "@/db/calendar-feed";
 import { icsCalendar } from "@/domain/schedule/ical";
 
 /** Historique gardé dans l'agenda de l'intervenant. */

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { z } from "zod";
 import { PROVIDERS, credentials, PROVIDER_NAME } from "@/connectors/calendar/oauth";
 import { withSchool } from "@/db";
-import { tokenInstructor } from "@/db/calendar";
+import { tokenInstructor } from "@/db/calendar-feed";
 import { connectionState } from "@/db/calendar-connections";
 import { publicAddress } from "@/lib/public-calendar";
 import { DisconnectButton } from "./disconnect-button";

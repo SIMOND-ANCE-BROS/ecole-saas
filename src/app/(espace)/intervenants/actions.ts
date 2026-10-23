@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { withSchool } from "@/db";
-import { createCalendarToken, revokeCalendarToken } from "@/db/calendar";
+import { createCalendarToken, revokeCalendarToken } from "@/db/calendar-feed";
 import { deleteConnection } from "@/db/calendar-connections";
 import { addUnavailability, deleteUnavailability } from "@/db/unavailabilities";
 import { createInstructor, updateInstructor, validInstructorInput } from "@/db/instructors";

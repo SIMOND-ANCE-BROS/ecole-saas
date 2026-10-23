@@ -1,6 +1,6 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createCalendarToken, calendarState, readCalendar, revokeCalendarToken } from "./calendar";
+import { createCalendarToken, calendarState, readCalendar, revokeCalendarToken } from "./calendar-feed";
 import { readInstructor, updateInstructor } from "./instructors";
 import { withSchool } from "./index";
 

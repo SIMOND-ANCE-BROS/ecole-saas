@@ -22,7 +22,7 @@ Reference for every agent working on this project. Read it in full before coding
 | PR section « Pour l’accueil et la direction »                          | **French**, written for the school                    |
 | URLs (Next route folders such as `src/app/(espace)/eleves`)            | **French**: they are user-visible                     |
 
-The database (`0027_english_names`), TypeScript identifiers and file names are in English (#114). Still being translated (#114): code comments and database enum values. Some keys stay French on purpose because they are data, not code: list column ids, URL parameters and their values (`?enregistre=cree`), route folders. Never translate one of them on one side only. New code is written in English, using the lexicon below.
+The database (`0027_english_names`), file names and nearly all TypeScript identifiers are in English (#114). Still being translated (#114): code comments, database enum values and a few leftover identifiers (`MOYENS`, `LISTES`, `Cellule`, `Bandeau`…): rename any you touch. Some keys stay French on purpose because they are data, not code: list column ids, URL parameters and their values (`?enregistre=cree`), route folders. Never translate one of them on one side only. New code is written in English, using the lexicon below.
 
 ## 3. Domain lexicon (French → English)
 
@@ -122,7 +122,7 @@ src/
   db/index.ts                connection + withSchool() / schoolsOf()
   domain/<module>/           PURE business logic + tests
   connectors/                one folder per external service (calendar; invoicing to come): common interface + one implementation per tool
-  jobs/                      background jobs (invoicing sync, lesson generation)
+  jobs/                      background jobs, to come with pg-boss (invoicing sync, lesson generation)
   lib/                       cross-cutting utilities (money.ts…)
 migrations/                  drizzle-kit migrations + custom SQL migrations (RLS)
 docs/adr/                    architecture decision records
@@ -142,7 +142,7 @@ DESIGN.md                    interface rules
 - `app_user` privileges on new tables and sequences are granted automatically (default privileges, `migrations/0006_droits_par_defaut.sql`, guard `src/db/privileges.integration.test.ts`); RLS still has to be added every time.
 - Every reference between two business tables is a composite foreign key `(school_id, x_id)`: `sameSchool(t, column, target)` in `src/db/schema.ts`, the target declaring `sameSchoolTarget(t)`. Never a plain `.references()` between business tables: foreign-key checks ignore RLS. Guard: `src/db/foreign-keys.integration.test.ts`.
 - The `app_admin` role (BYPASSRLS) is for administration scripts only, never application code.
-- `ecoleId` always comes from the server-side session, never from a browser parameter.
+- `schoolId` always comes from the server-side session, never from a browser parameter.
 - Every protected page and server action calls `schoolContext()` or `requireRole()` (`src/lib/session.ts`), then `withSchool(schoolId, …)`. Never access control in a layout (not re-run on navigation) nor in `proxy.ts` (optimistic redirect only).
 
 **Money and dates**
@@ -215,7 +215,7 @@ Rules in `DESIGN.md`. In short:
 ## 12. What not to do
 
 - Don't query business data with `db` outside `withSchool()`; don't use `app_admin` in application code.
-- Don't take `ecoleId` (or any tenant id) from the browser.
+- Don't take `schoolId` (or any tenant id) from the browser.
 - Don't put access control in a layout or in `proxy.ts`.
 - Don't hard-code a price, discount, VAT mention or anything school-specific.
 - Don't generate an invoice number; don't update an issued invoice, a payment or the audit log.

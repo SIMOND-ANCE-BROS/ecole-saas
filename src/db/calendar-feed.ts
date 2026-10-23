@@ -9,7 +9,7 @@ import { course, discipline, school, instructor, room, lesson, site } from "./sc
 /**
  * Abonnement d'un intervenant à ses séances (iCal). Le jeton n'est montré
  * qu'une fois, à sa création ; seule son empreinte est gardée. Toujours avec la
- * transaction d'`avecEcole()` : l'école vient de l'adresse d'abonnement, le
+ * transaction d'`withSchool()` : l'école vient de l'adresse d'abonnement, le
  * jeton en est le secret.
  */
 

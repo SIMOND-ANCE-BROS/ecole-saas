@@ -6,7 +6,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { nomAffiche } from "./people";
 import { course, discipline, enrollment, enrollmentCourse, instructor, person, season, room, site } from "./schema";
 
-/** Lectures du planning, toujours avec la transaction d'`avecEcole()` (RLS). */
+/** Lectures du planning, toujours avec la transaction d'`withSchool()` (RLS). */
 
 export type Season = { id: string; label: string; startDate: string; endDate: string };
 

@@ -8,7 +8,7 @@ import { lessonPack, enrollment, auditLog, member, payment, person, user } from 
  * Encaissements (#97) : paiements enregistrés sur le payeur, inaltérables
  * (trigger) ; une erreur se corrige par un paiement négatif lié au paiement
  * d'origine. Chaque écriture laisse une trace dans le journal. Toujours avec
- * la transaction d'`avecEcole()` (RLS).
+ * la transaction d'`withSchool()` (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;

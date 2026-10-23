@@ -9,7 +9,7 @@ import { school, invitation, auditLog, member, user } from "./schema";
  * Équipe d'une école (#104) : membres, invitations et liens de
  * réinitialisation. Le jeton d'un lien n'est rendu qu'une fois, à sa
  * création ; seule son empreinte est gardée. Toujours avec la transaction
- * d'`avecEcole()` (RLS).
+ * d'`withSchool()` (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;

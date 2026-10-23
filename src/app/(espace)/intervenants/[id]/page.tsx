@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
-import { calendarState } from "@/db/calendar";
+import { calendarState } from "@/db/calendar-feed";
 import { PROVIDER_NAME } from "@/connectors/calendar/oauth";
 import { connectionState } from "@/db/calendar-connections";
 import { listUnavailabilities } from "@/db/unavailabilities";

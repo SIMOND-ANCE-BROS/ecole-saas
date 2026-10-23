@@ -8,7 +8,7 @@ import { auditLog, member, payment, person, bankDeposit, bankDepositPayment } fr
 /**
  * Journal des encaissements et remises en banque (#98). Une remise relie des
  * paiements par une table à part : le paiement, inaltérable, n'est jamais
- * modifié. Toujours avec la transaction d'`avecEcole()` (RLS).
+ * modifié. Toujours avec la transaction d'`withSchool()` (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;

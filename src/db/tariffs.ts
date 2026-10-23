@@ -6,7 +6,7 @@ import { discipline, enrollment, discount, tariff, lessonPackTariff } from "./sc
 /**
  * Grille tarifaire, réductions et carnets d'une saison (#80). Ce sont des
  * données de l'école : le moteur de tarif les reçoit telles quelles. Toujours
- * avec la transaction d'`avecEcole()` (RLS).
+ * avec la transaction d'`withSchool()` (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;

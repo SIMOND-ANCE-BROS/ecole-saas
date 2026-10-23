@@ -22,7 +22,7 @@ import {
 } from "@/domain/filters/layout";
 import { type ColumnDef, conditionLabel, readSort, type Sort, EMPTY } from "@/domain/filters/filters";
 import { saveColumns } from "./actions";
-import { type AddressFilter, useAddressFilter } from "./url-filter";
+import { type AddressFilter, useAddressFilter } from "./address-filter";
 
 export type CellValue = string | number | string[] | null;
 export type TableRow = {

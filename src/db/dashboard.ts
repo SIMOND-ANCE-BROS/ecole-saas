@@ -3,7 +3,7 @@ import type { Tx } from "./index";
 import { nomAffiche } from "./people";
 import { enrollment, person } from "./schema";
 
-/** Lectures du tableau de bord, toujours avec la transaction d'`avecEcole()` (RLS). */
+/** Lectures du tableau de bord, toujours avec la transaction d'`withSchool()` (RLS). */
 
 export type SeasonFigures = { enrollments: number; students: number; netTotalCents: number };
 

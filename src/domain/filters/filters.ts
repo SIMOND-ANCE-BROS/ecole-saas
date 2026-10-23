@@ -1,7 +1,7 @@
 /**
  * Filtres par colonne des listes (élèves, contacts, intervenants) : lecture
  * et écriture dans l'adresse, et évaluation en mémoire. La traduction SQL
- * (`src/db/filtres.ts`) applique exactement les mêmes règles.
+ * (`src/db/filters.ts`) applique exactement les mêmes règles.
  *
  * Adresse : `?f=colonne.operateur.valeur` (répété) et `mode=ou` ; la valeur
  * peut contenir des points, seuls les deux premiers séparent.

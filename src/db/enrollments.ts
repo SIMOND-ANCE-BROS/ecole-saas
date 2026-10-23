@@ -17,7 +17,7 @@ import { course, discipline, enrollment, enrollmentCourse, person, discount, tar
 /**
  * Inscriptions : chargement des données de l'école, validation de la saisie,
  * calcul par le moteur de tarif (pur) et enregistrement. Toujours avec la
- * transaction d'`avecEcole()` : la RLS limite tout à l'école courante.
+ * transaction d'`withSchool()` : la RLS limite tout à l'école courante.
  */
 
 export type EnrollmentInput = {

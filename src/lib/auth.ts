@@ -18,7 +18,7 @@ export const auth = betterAuth({
     .map((o) => o.trim())
     .filter(Boolean),
   // Porte d'entrée unique : la connexion passe par la server action, qui limite
-  // les tentatives (limite-connexion.ts). La route HTTP publique est fermée.
+  // les tentatives (sign-in-limit.ts). La route HTTP publique est fermée.
   disabledPaths: ["/sign-in/email"],
   session: {
     additionalFields: {

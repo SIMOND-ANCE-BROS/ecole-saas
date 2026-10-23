@@ -4,7 +4,7 @@ import type { Tx } from "./index";
 import { hoursBySite } from "./settings";
 import { course, courseDate, discipline, enrollmentCourse, instructor, attendance, room, lesson, site } from "./schema";
 
-/** Édition du planning (cours, disciplines, salles), toujours avec la transaction d'`avecEcole()` (RLS). */
+/** Édition du planning (cours, disciplines, salles), toujours avec la transaction d'`withSchool()` (RLS). */
 
 export const COURSE_TYPES = {
   collectif: "Collectif",

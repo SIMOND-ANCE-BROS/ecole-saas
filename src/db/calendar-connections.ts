@@ -4,7 +4,7 @@ import type { Provider } from "../connectors/calendar/oauth";
 import type { Tx } from "./index";
 import { calendarConnection, unavailability, instructor } from "./schema";
 
-/** Agendas connectés des intervenants, toujours avec la transaction d'`avecEcole()` (RLS). */
+/** Agendas connectés des intervenants, toujours avec la transaction d'`withSchool()` (RLS). */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const isUuid = (v: string) => z.uuid().safeParse(v).success;

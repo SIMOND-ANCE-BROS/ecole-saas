@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 /**
  * Garde-fou : une clé étrangère entre deux tables portant `school_id` doit
- * associer school_id à school_id (clé composite, voir `memeEcole` dans
+ * associer school_id à school_id (clé composite, voir `sameSchool` dans
  * src/db/schema.ts). La vérification d'une clé étrangère ignore la Row Level
  * Security : une clé simple laisserait une ligne viser celle d'une autre école.
  */

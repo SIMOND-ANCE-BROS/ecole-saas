@@ -4,7 +4,7 @@ import { deleteConnection } from "./calendar-connections";
 import type { Tx } from "./index";
 import { instructor } from "./schema";
 
-/** Intervenants (professeurs), toujours avec la transaction d'`avecEcole()` (RLS). */
+/** Intervenants (professeurs), toujours avec la transaction d'`withSchool()` (RLS). */
 
 export const STATUSES = { micro_entreprise: "Micro-entreprise", societe: "Société", salarie: "Salarié" } as const;
 export const VAT_REGIMES = {

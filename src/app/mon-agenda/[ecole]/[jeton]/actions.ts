@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { withSchool } from "@/db";
-import { tokenInstructor } from "@/db/calendar";
+import { tokenInstructor } from "@/db/calendar-feed";
 import { deleteConnection } from "@/db/calendar-connections";
 import { personalPage } from "@/lib/public-calendar";
 

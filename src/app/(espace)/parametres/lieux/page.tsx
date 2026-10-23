@@ -3,7 +3,7 @@ import { withSchool } from "@/db";
 import { listPlaces } from "@/db/settings";
 import { requireRole } from "@/lib/session";
 import { SettingsHeader } from "../settings-header";
-import { Places } from "./places";
+import { Places } from "./sites-and-rooms";
 
 export const metadata: Metadata = { title: "Sites et salles" };
 

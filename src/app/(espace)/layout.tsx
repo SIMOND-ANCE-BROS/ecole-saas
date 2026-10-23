@@ -13,7 +13,7 @@ const ROLE_LABEL = { direction: "Direction", accueil: "Accueil", professeur: "Pr
 /**
  * Cadre de l'espace connecté : barre latérale (école, navigation, compte) et
  * recherche globale. Il n'affiche que des informations : chaque page et chaque
- * action refait sa propre vérification (contexteEcole), un layout n'étant pas
+ * action refait sa propre vérification (schoolContext), un layout n'étant pas
  * réexécuté à chaque navigation. `modal` : panneau latéral des routes
  * interceptées (`@modal`), vide le reste du temps.
  */

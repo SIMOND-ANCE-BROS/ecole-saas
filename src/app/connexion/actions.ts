@@ -24,7 +24,7 @@ export async function signIn(_etat: ConnectionState, formData: FormData): Promis
   }
 
   const requestHeaders = await headers();
-  // Tentative enregistrée avant la vérification du mot de passe (voir limite-connexion.ts).
+  // Tentative enregistrée avant la vérification du mot de passe (voir sign-in-limit.ts).
   const ip = trustedIp(requestHeaders);
   if (!(await recordAttempt(donnees.data.email, ip))) {
     return {

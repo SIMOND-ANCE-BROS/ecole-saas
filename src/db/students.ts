@@ -26,7 +26,7 @@ import { relationship, person } from "./schema";
  * Élèves et contacts (#77) : la même table `personne`, présentée en clair.
  * Un élève a des responsables, des personnes à prévenir et un payeur
  * (« facturé à ») ; un contact est un parent, un payeur ou un organisme.
- * Toujours avec la transaction d'`avecEcole()` (RLS).
+ * Toujours avec la transaction d'`withSchool()` (RLS).
  */
 
 /** Lignes au plus dans une liste : au-delà, l'accueil affine la recherche ou filtre. */

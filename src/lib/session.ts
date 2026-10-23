@@ -19,7 +19,7 @@ export const currentSession = cache(async () => {
 
 /**
  * École courante, prise sur la session côté serveur et revérifiée (membre
- * actif) ; sinon redirection vers le choix de l'école. À passer à avecEcole().
+ * actif) ; sinon redirection vers le choix de l'école. À passer à withSchool().
  */
 export const schoolContext = cache(async (): Promise<SchoolContext> => {
   const { session, user } = await currentSession();
