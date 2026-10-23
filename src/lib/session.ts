@@ -5,12 +5,12 @@ import { type SchoolContext, contextFromSession, type MemberRole } from "./schoo
 import { auth } from "./auth";
 
 /**
- * Couche d'accès (DAL) : à appeler dans chaque page et chaque server action
- * protégée, au plus près des données (pas dans un layout, qui n'est pas
- * réexécuté à chaque navigation). Mise en cache le temps d'un rendu.
+ * Data access layer (DAL): to call in every protected page and server action,
+ * as close to the data as possible (not in a layout, which is not re-run on
+ * every navigation). Cached for the duration of a render.
  */
 
-/** Session valide (vérifiée en base), sinon redirection vers la connexion. */
+/** Valid session (checked in the database), otherwise redirect to sign-in. */
 export const currentSession = cache(async () => {
   const result = await auth.api.getSession({ headers: await headers() });
   if (!result) redirect("/connexion");
@@ -18,8 +18,8 @@ export const currentSession = cache(async () => {
 });
 
 /**
- * École courante, prise sur la session côté serveur et revérifiée (membre
- * actif) ; sinon redirection vers le choix de l'école. À passer à withSchool().
+ * Current school, taken from the server-side session and re-checked (active
+ * member); otherwise redirect to the school choice. To pass to withSchool().
  */
 export const schoolContext = cache(async (): Promise<SchoolContext> => {
   const { session, user } = await currentSession();
@@ -28,7 +28,7 @@ export const schoolContext = cache(async (): Promise<SchoolContext> => {
   return context;
 });
 
-/** École courante, à condition d'avoir l'un des rôles demandés. */
+/** Current school, provided the user has one of the required roles. */
 export async function requireRole(...roles: MemberRole[]): Promise<SchoolContext> {
   const context = await schoolContext();
   if (!roles.includes(context.role)) redirect("/");

@@ -19,7 +19,7 @@ import {
   deleteSite,
 } from "./settings";
 
-/** Paramètres de l'école (#80), comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
+/** School settings (#80), as the application runs them (app_user, RLS). Fictitious data deleted at the end. */
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
@@ -143,7 +143,7 @@ describe("disciplines", () => {
       message: "Cette discipline existe déjà.",
     });
     expect((await withSchool(school, (tx) => renameDiscipline(tx, jazz, "Modern’jazz"))).ok).toBe(true);
-    // La discipline « Jazz » de l'autre école n'est ni vue ni gênante.
+    // The other school's « Jazz » discipline is neither seen nor in the way.
     expect((await withSchool(school, (tx) => listDisciplines(tx))).map((d) => d.name)).toEqual([
       "Hip-hop",
       "Modern’jazz",

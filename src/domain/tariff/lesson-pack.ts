@@ -1,10 +1,10 @@
 import type { LessonPackRequest, LessonPackTariffRow, LessonPackResult } from "./types";
 
 /**
- * Prix d'un carnet de cours particuliers d'après la grille de l'école.
- * Une ligne vaut pour « jusqu'à N personnes » : on retient la plus petite
- * tranche qui couvre le nombre de personnes. Hors grille (nombre de séances
- * inconnu, groupe trop grand) : erreur, prix sur devis saisi par l'accueil.
+ * Price of a private lesson pack from the school's tariff grid.
+ * A row applies "up to N people": the smallest bracket covering the number
+ * of people is chosen. Outside the grid (unknown number of lessons, group
+ * too large): error, price on quote entered by the front desk.
  */
 export function priceLessonPack(grid: readonly LessonPackTariffRow[], request: LessonPackRequest): LessonPackResult {
   const { lessonCount: lessonCount, peopleCount: peopleCount } = request;

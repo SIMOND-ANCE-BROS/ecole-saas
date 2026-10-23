@@ -1,6 +1,6 @@
 /**
- * Données de DÉMONSTRATION pour le développement local : une école fictive et
- * deux comptes (accueil, direction). Idempotent. Ne jamais lancer en production.
+ * DEMO data for local development: a fictitious school and
+ * two accounts (front desk, management). Idempotent. Never run in production.
  *
  *   npm run db:seed
  */
@@ -16,7 +16,7 @@ const ACCOUNTS = [
   { email: "direction@demo.test", name: "Direction Démo", role: "direction" },
 ] as const;
 
-/** Un payeur et les danseurs dont il paie les cours. */
+/** A payer and the students whose courses they pay for. */
 type DemoFamily = {
   name: string;
   firstName?: string;
@@ -94,8 +94,8 @@ async function principal() {
       ON CONFLICT (school_id, user_id) DO NOTHING`;
   }
 
-  // Personnes fictives (aucune personne réelle), créées une seule fois. Un danseur
-  // qui porte le prénom du payeur est le payeur lui-même (adulte seul).
+  // Fictitious people (no real person), created only once. A student
+  // who bears the payer's first name is the payer themselves (adult on their own).
   const [{ n }] = await admin`SELECT count(*)::int AS n FROM person WHERE school_id = ${school.id}`;
   if (n === 0) {
     for (const f of FAMILIES) {
@@ -119,7 +119,7 @@ async function principal() {
     }
   }
 
-  // Planning fictif : sites, salles, disciplines, professeurs, cours de la saison.
+  // Fictitious schedule: sites, rooms, disciplines, teachers, courses of the season.
   const [season] = await admin`SELECT id FROM season WHERE school_id = ${school.id} AND label = '2026-2027'`;
   const [{ nbCours }] = await admin`SELECT count(*)::int AS "nbCours" FROM course WHERE season_id = ${season.id}`;
   if (nbCours === 0) {
@@ -160,7 +160,7 @@ async function principal() {
         VALUES (${school.id}, ${name}, ${firstName}, ${status}, 'non_applicable', ${mode}, ${tariff}) RETURNING id`;
       profs[firstName] = p.id;
     }
-    // [discipline, salle, prof, jour (1 = lundi), heure, durée, âge min, âge max, niveau]
+    // [discipline, room, teacher, day (1 = Monday), time, duration, min age, max age, level]
     const COURSE = [
       ["Éveil", "Petite salle", "Inès", 3, "14:00", 45, 4, 5, null],
       ["Éveil", "Petite salle", "Inès", 6, "10:00", 45, 4, 5, null],
@@ -184,12 +184,12 @@ async function principal() {
     }
   }
 
-  // Capacité des cours de démonstration : celle de leur salle, si elle n'est pas renseignée.
+  // Capacity of the demo courses: that of their room, if not set.
   await admin`
     UPDATE course SET max_capacity = s.capacity FROM room s
     WHERE course.room_id = s.id AND course.school_id = ${school.id} AND course.max_capacity IS NULL`;
 
-  // Grille tarifaire et réduction fratrie de démonstration (montants en euros).
+  // Demo tariff grid and siblings discount (amounts in euros).
   const [{ nbTarifs }] = await admin`SELECT count(*)::int AS "nbTarifs" FROM tariff WHERE season_id = ${season.id}`;
   if (nbTarifs === 0) {
     const GRID: [publicTarif: string, combinaison: number[], trimestre: number, annee: number][] = [
@@ -227,7 +227,7 @@ async function principal() {
       VALUES (${school.id}, ${season.id}, 'fratrie', 1000, 2, '{enfant}', false)`;
   }
 
-  // Fermetures de démonstration (dates fictives) puis séances à venir, comme l'application les crée.
+  // Demo closures (fictitious dates) then upcoming lessons, as the application creates them.
   const [{ nbFermetures }] =
     await admin`SELECT count(*)::int AS "nbFermetures" FROM closure WHERE season_id = ${season.id}`;
   if (nbFermetures === 0) {

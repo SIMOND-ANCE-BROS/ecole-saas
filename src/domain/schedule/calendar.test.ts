@@ -34,16 +34,16 @@ describe("disposer", () => {
     const courses = [
       c("jazz", 3, "17:00", 60),
       c("zumba", 3, "17:30", 60),
-      c("salsa", 3, "18:15", 60), // chevauche zumba seulement
-      c("eveil", 3, "14:00", 45), // seul
-      c("lundi", 1, "17:00", 60), // autre jour
+      c("salsa", 3, "18:15", 60), // overlaps zumba only
+      c("eveil", 3, "14:00", 45), // alone
+      c("lundi", 1, "17:00", 60), // another day
     ];
     const d = arrange(courses);
     expect(d.get("eveil")).toEqual({ column: 0, columns: 1 });
     expect(d.get("lundi")).toEqual({ column: 0, columns: 1 });
     expect(d.get("jazz")).toEqual({ column: 0, columns: 2 });
     expect(d.get("zumba")).toEqual({ column: 1, columns: 2 });
-    // salsa reprend la colonne libérée par jazz, dans le même groupe à deux colonnes.
+    // salsa takes the column freed by jazz, in the same two-column group.
     expect(d.get("salsa")).toEqual({ column: 0, columns: 2 });
   });
 

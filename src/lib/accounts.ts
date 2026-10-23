@@ -1,9 +1,9 @@
 import { auth } from "./auth";
 
 /**
- * Crée un compte (e-mail + mot de passe) sans passer par l'inscription libre,
- * fermée. Réservé à l'administration (script de démonstration, futur écran des
- * membres) : le rattachement à une école se fait ensuite dans `membre`.
+ * Creates an account (e-mail + password) without going through open sign-up,
+ * which is closed. Reserved for administration (demo script, future members
+ * screen): the link to a school is then made in `member`.
  */
 export async function createAccount(account: {
   email: string;
@@ -13,9 +13,9 @@ export async function createAccount(account: {
 }): Promise<string> {
   const ctx = await auth.$context;
   const user = await ctx.internalAdapter.createUser(
-    // Un compte créé par un lien d'invitation transmis à la main n'a pas prouvé son e-mail (#105).
+    // An account created through an invitation link passed on by hand has not proven its e-mail (#105).
     { email: account.email.trim().toLowerCase(), name: account.name, emailVerified: account.emailVerified ?? true },
-    { method: "admin" }, // compte créé par l'école, pas par inscription
+    { method: "admin" }, // account created by the school, not by sign-up
   );
   await ctx.internalAdapter.linkAccount({
     userId: user.id,

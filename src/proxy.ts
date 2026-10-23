@@ -2,9 +2,9 @@ import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
 
 /**
- * Redirection OPTIMISTE vers la connexion quand aucun cookie de session n'est
- * présent. Ce n'est pas une protection : la session est vérifiée en base par
- * la couche d'accès (src/lib/session.ts) dans chaque page et chaque action.
+ * OPTIMISTIC redirect to sign-in when no session cookie is present.
+ * This is not protection: the session is checked against the database by
+ * the access layer (src/lib/session.ts) in every page and every action.
  */
 export function proxy(request: NextRequest) {
   if (!getSessionCookie(request)) {

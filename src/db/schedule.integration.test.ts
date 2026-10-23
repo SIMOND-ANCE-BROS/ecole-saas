@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
 import { seasonCourses, scheduleCourse, enrolledInCourse, currentSeason } from "./schedule";
 
-/** Planning, lu comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
+/** Schedule, read as the application does (app_user, RLS). Fictitious data deleted at the end. */
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");

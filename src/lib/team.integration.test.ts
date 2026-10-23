@@ -7,10 +7,10 @@ import { createAccount } from "./accounts";
 import { acceptLink, createResetLink, openLink } from "./invitations";
 
 /**
- * Équipe d'une école (#104) : invitations, rôles, réinitialisation, contre la
- * vraie base et Better Auth. Données fictives supprimées à la fin (le journal,
- * inaltérable, est nettoyé en désactivant son trigger le temps d'une
- * transaction d'administration).
+ * A school's team (#104): invitations, roles, reset, against the real
+ * database and Better Auth. Fictitious data deleted at the end (the audit
+ * log, immutable, is cleaned by disabling its trigger for the duration of
+ * an administration transaction).
  */
 
 const url = process.env.DATABASE_ADMIN_URL;
@@ -39,7 +39,7 @@ beforeAll(async () => {
   diana = await createAccount({ email: emailDiana, name: "Diana Test", password: PASSWORD });
   [{ id: dianaMember }] =
     await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${diana}, 'direction') RETURNING id`;
-  // Un compte déjà membre d'une autre école.
+  // An account already a member of another school.
   teacher = await createAccount({ email: teacherEmail, name: "Prof Ailleurs", password: PASSWORD });
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${otherSchool}, ${teacher}, 'direction')`;
 });
@@ -52,7 +52,7 @@ afterAll(async () => {
   });
   await admin`DELETE FROM invitation WHERE school_id IN (${school}, ${otherSchool})`;
   await admin`DELETE FROM member WHERE school_id IN (${school}, ${otherSchool})`;
-  await admin`DELETE FROM "user" WHERE email IN (${emailDiana}, ${teacherEmail}, ${newMemberEmail})`; // sessions et comptes en cascade
+  await admin`DELETE FROM "user" WHERE email IN (${emailDiana}, ${teacherEmail}, ${newMemberEmail})`; // sessions and accounts cascade
   await admin`DELETE FROM school WHERE id IN (${school}, ${otherSchool})`;
   await admin.end();
 });
@@ -80,7 +80,7 @@ describe("invitation", () => {
     );
     if (!r1.ok || !r2.ok) throw new Error("invitation refusée");
     token = r2.token;
-    expect(await openLink(school, r1.token)).toBeNull(); // remplacée par la seconde
+    expect(await openLink(school, r1.token)).toBeNull(); // replaced by the second one
     expect(await openLink(school, token)).toMatchObject({
       type: "invitation",
       email: newMemberEmail,
@@ -163,11 +163,11 @@ describe("rôles et accès", () => {
 
   it("seule la direction gère l'équipe, même sans passer par la page", async () => {
     const p = await member(teacherEmail);
-    // Diana passe le prof à l'accueil : elle reste à la direction, c'est permis.
+    // Diana moves the teacher to the front desk: she stays in management, that is allowed.
     expect(
       (await withSchool(school, (tx) => updateMember(tx, diana, p.id, { role: "accueil", active: true }))).ok,
     ).toBe(true);
-    // À l'accueil, il ne peut plus toucher à l'équipe ni inviter.
+    // At the front desk, they can no longer touch the team nor invite.
     expect(
       await withSchool(school, (tx) => updateMember(tx, teacher, dianaMember, { role: "accueil", active: true })),
     ).toEqual({ ok: false, message: "Accès refusé." });
@@ -212,7 +212,7 @@ describe("réinitialisation du mot de passe", () => {
     expect(after).toBe(0);
     await expect(connect(newMemberEmail, PASSWORD)).rejects.toThrow();
     await expect(connect(newMemberEmail, next)).resolves.toBeTruthy();
-    // Compte créé par un lien transmis à la main : e-mail non vérifié (#105).
+    // Account created through a link passed on by hand: e-mail not verified (#105).
     const [{ email_verified }] = await admin`SELECT email_verified FROM "user" WHERE id = ${n.userId}`;
     expect(email_verified).toBe(false);
   });

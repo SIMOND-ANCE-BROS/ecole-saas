@@ -11,11 +11,11 @@ import { Navigation, GlobalSearch } from "./navigation";
 const ROLE_LABEL = { direction: "Direction", accueil: "Accueil", professeur: "Professeur" } as const;
 
 /**
- * Cadre de l'espace connecté : barre latérale (école, navigation, compte) et
- * recherche globale. Il n'affiche que des informations : chaque page et chaque
- * action refait sa propre vérification (schoolContext), un layout n'étant pas
- * réexécuté à chaque navigation. `modal` : panneau latéral des routes
- * interceptées (`@modal`), vide le reste du temps.
+ * Frame of the signed-in workspace: sidebar (school, navigation, account) and
+ * global search. It only displays information: every page and every action
+ * runs its own check (schoolContext), since a layout is not re-run on every
+ * navigation. `modal`: side panel of the intercepted routes (`@modal`),
+ * empty the rest of the time.
  */
 export default async function WorkspaceLayout({ children, modal }: LayoutProps<"/">) {
   const [{ schoolId: schoolId, role }, { user }] = await Promise.all([schoolContext(), currentSession()]);
@@ -26,7 +26,7 @@ export default async function WorkspaceLayout({ children, modal }: LayoutProps<"
   return (
     <Frame
       header={
-        // useSearchParams exige une frontière Suspense.
+        // useSearchParams requires a Suspense boundary.
         <Suspense>{role !== "professeur" && <GlobalSearch />}</Suspense>
       }
       pane={

@@ -4,14 +4,14 @@ import { withSchool } from "@/db";
 import { readCalendar } from "@/db/calendar-feed";
 import { icsCalendar } from "@/domain/schedule/ical";
 
-/** Historique gardé dans l'agenda de l'intervenant. */
+/** History kept in the instructor's calendar. */
 const PAST_DAYS = 60;
 
 /**
- * Abonnement iCal privé d'un intervenant : `/agenda/<école>/<jeton>.ics`.
- * Sans session (les agendas ne s'authentifient pas) : l'école limite la lecture
- * par la RLS, le jeton en est le secret. Réponse identique pour une école ou un
- * jeton inconnus.
+ * An instructor's private iCal subscription: `/agenda/<école>/<jeton>.ics`.
+ * No session (calendars don't authenticate): the school restricts reading
+ * through RLS, the token is the secret. Same response for an unknown school
+ * or token.
  */
 export async function GET(_req: NextRequest, ctx: RouteContext<"/agenda/[ecole]/[jeton]">) {
   const { ecole, jeton } = await ctx.params;

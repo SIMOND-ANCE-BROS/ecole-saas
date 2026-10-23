@@ -4,7 +4,7 @@ import { addDays, validDate, weekDays, weekdayOf, mondayOf } from "./week";
 describe("semaines", () => {
   it("jour de la semaine et lundi, y compris au changement d'heure", () => {
     expect(weekdayOf("2026-10-19")).toBe(1);
-    expect(weekdayOf("2026-10-25")).toBe(7); // passage à l'heure d'hiver
+    expect(weekdayOf("2026-10-25")).toBe(7); // switch to winter time
     expect(mondayOf("2026-10-25")).toBe("2026-10-19");
     expect(mondayOf("2026-10-19")).toBe("2026-10-19");
     expect(mondayOf("2027-01-01")).toBe("2026-12-28");

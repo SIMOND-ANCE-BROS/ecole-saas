@@ -7,15 +7,15 @@ import { effectiveDuration, effectiveTime } from "./lessons";
 import { course, discipline, school, instructor, room, lesson, site } from "./schema";
 
 /**
- * Abonnement d'un intervenant à ses séances (iCal). Le jeton n'est montré
- * qu'une fois, à sa création ; seule son empreinte est gardée. Toujours avec la
- * transaction d'`withSchool()` : l'école vient de l'adresse d'abonnement, le
- * jeton en est le secret.
+ * An instructor's subscription to their lessons (iCal). The token is shown
+ * only once, when created; only its hash is kept. Always within the
+ * `withSchool()` transaction: the school comes from the subscription URL, the
+ * token is its secret.
  */
 
 const hash = (token: string) => createHash("sha256").update(token).digest("hex");
 
-/** Crée (ou remplace) le jeton ; l'ancien lien cesse aussitôt de fonctionner. null si l'intervenant n'existe pas. */
+/** Creates (or replaces) the token; the old link stops working immediately. null if the instructor does not exist. */
 export async function createCalendarToken(tx: Tx, instructorId: string): Promise<string | null> {
   if (!z.uuid().safeParse(instructorId).success) return null;
   const token = randomBytes(32).toString("base64url");
@@ -37,7 +37,7 @@ export async function revokeCalendarToken(tx: Tx, instructorId: string): Promise
   return rows.length === 1;
 }
 
-/** Date de création du lien en cours, ou null s'il n'y en a pas. */
+/** Creation date of the current link, or null if there is none. */
 export async function calendarState(tx: Tx, instructorId: string): Promise<Date | null> {
   if (!z.uuid().safeParse(instructorId).success) return null;
   const [i] = await tx
@@ -47,7 +47,7 @@ export async function calendarState(tx: Tx, instructorId: string): Promise<Date 
   return i?.createdAt ?? null;
 }
 
-/** Intervenant actif au jeton donné (page personnelle de l'intervenant) ; null sinon. */
+/** Active instructor for the given token (instructor's personal page); null otherwise. */
 export async function tokenInstructor(
   tx: Tx,
   token: string,
@@ -57,15 +57,15 @@ export async function tokenInstructor(
     .select({ id: instructor.id, firstName: instructor.firstName, school: school.name })
     .from(instructor)
     .innerJoin(school, eq(school.id, instructor.schoolId))
-    // Un intervenant parti (inactif) ne reçoit plus rien, même avec un ancien lien.
+    // An instructor who has left (inactive) receives nothing any more, even with an old link.
     .where(and(eq(instructor.calendarTokenHash, hash(token)), eq(instructor.active, true)));
   return i ?? null;
 }
 
 /**
- * Séances de l'intervenant au jeton donné, à partir de `depuis`, y compris ses
- * remplacements ; null si le jeton est inconnu ou révoqué. Aucune donnée
- * d'élève : titre du cours et lieu seulement.
+ * Lessons of the instructor for the given token, from `since` on, including their
+ * replacements; null if the token is unknown or revoked. No student
+ * data: course title and place only.
  */
 export async function readCalendar(
   tx: Tx,

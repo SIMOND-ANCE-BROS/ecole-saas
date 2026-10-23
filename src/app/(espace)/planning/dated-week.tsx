@@ -11,9 +11,9 @@ import { Calendar, type Slot, type CalendarElement, type CalendarResponse } from
 import { shortDate, end } from "./format";
 
 type Props = {
-  /** Séances visibles de la semaine (filtres appliqués). */
+  /** Visible lessons of the week (filters applied). */
   lessons: ScheduleLesson[];
-  /** Lundi de la semaine affichée. */
+  /** Monday of the displayed week. */
   monday: string;
   today: string;
   closures: { label: string; start: string; end: string }[];
@@ -24,9 +24,9 @@ type Props = {
 const capital = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
 /**
- * Planning daté, semaine par semaine (#90) : les vraies séances (déplacées,
- * remplacées, annulées) et les fermetures. Déplacer une séance d'un cours
- * régulier demande « cette séance seulement » ou « cette séance et les
+ * Dated schedule, week by week (#90): the actual lessons (moved, replaced,
+ * cancelled) and the closures. Moving a lesson of a recurring course asks
+ * « cette séance seulement » or « cette séance et les
  * suivantes ».
  */
 export function DatedWeek({
@@ -67,7 +67,7 @@ export function DatedWeek({
     const s = lessons.find((x) => x.id === id);
     const date = dates[slot.weekday - 1];
     const when = `${shortDate(date, true)} ${slot.startTime}–${end(slot.startTime, slot.durationMinutes)}`;
-    // Cours ponctuel : seule la séance existe ; cours régulier : demander la portée.
+    // One-off course: only the lesson exists; recurring course: ask for the scope.
     if (!choice && s?.recurrence !== "dates") {
       return {
         status: "choisir",

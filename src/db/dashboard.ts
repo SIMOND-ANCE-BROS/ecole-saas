@@ -3,11 +3,11 @@ import type { Tx } from "./index";
 import { nomAffiche } from "./people";
 import { enrollment, person } from "./schema";
 
-/** Lectures du tableau de bord, toujours avec la transaction d'`withSchool()` (RLS). */
+/** Dashboard reads, always within the `withSchool()` transaction (RLS). */
 
 export type SeasonFigures = { enrollments: number; students: number; netTotalCents: number };
 
-/** Inscriptions actives de la saison, danseurs distincts inscrits, montant total inscrit. */
+/** Active enrollments of the season, distinct enrolled students, total enrolled amount. */
 export async function seasonFigures(tx: Tx, seasonId: string): Promise<SeasonFigures> {
   const [row] = await tx
     .select({
@@ -27,13 +27,13 @@ export async function seasonFigures(tx: Tx, seasonId: string): Promise<SeasonFig
 export type LastEnrollment = {
   id: string;
   payerId: string;
-  /** Nom du payeur. */
+  /** Payer's name. */
   payer: string;
   students: string;
   netPriceCents: number;
 };
 
-/** Dernières inscriptions de la saison, les plus récentes d'abord. */
+/** Latest enrollments of the season, most recent first. */
 export async function lastEnrollments(tx: Tx, seasonId: string, nombre = 8): Promise<LastEnrollment[]> {
   const rows = await tx
     .select({

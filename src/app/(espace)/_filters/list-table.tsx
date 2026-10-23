@@ -27,47 +27,47 @@ import { type AddressFilter, useAddressFilter } from "./address-filter";
 export type CellValue = string | number | string[] | null;
 export type TableRow = {
   id: string;
-  /** Lien de la colonne `lien` (fiche) ; absent : texte simple. */
+  /** Record link for the column named by `relationship`; absent: plain text. */
   href?: string;
-  /** Ligne grisée (intervenant inactif…). */
+  /** Greyed-out row (inactive instructor…). */
   dimmed?: boolean;
-  /** Petite étiquette après le nom (« inactif », « organisme »). */
+  /** Small badge after the name (« inactif », « organisme »). */
   badge?: string;
   cellules: Record<string, CellValue>;
 };
 
 type Props = {
   list: List;
-  /** « les élèves » : pour les libellés accessibles. */
+  /** « les élèves »: for accessible labels. */
   what: string;
   caption: string;
   columns: ColumnDef[];
-  /** Disposition enregistrée du membre, ou null. */
+  /** The member's saved layout, or null. */
   layout: string[] | null;
   rows: TableRow[];
-  /** Colonne qui porte le lien vers la fiche. */
+  /** Column carrying the link to the record. */
   relationship: string;
-  /** Message quand aucune ligne ne s'affiche. */
+  /** Message when no row is shown. */
   vide: string;
-  /** Affichage propre au téléphone (le tableau y est masqué). */
+  /** Phone-specific display (the table is hidden there). */
   mobile?: ReactNode;
-  /** Valeurs à cocher fournies par la page, par colonne (cours de la saison, statuts…). */
+  /** Checkbox values supplied by the page, per column (courses of the season, statuses…). */
   choice?: Record<string, readonly string[]>;
-  /** Action proposée quand la liste est vide sans filtre (« Nouvel élève »). */
+  /** Action offered when the list is empty without a filter (« Nouvel élève »). */
   emptyAction?: ReactNode;
 };
 
-/** Au-delà, la liste des cases à cocher a son propre champ de recherche. */
+/** Beyond this, the checkbox list gets its own search field. */
 const CELLS_WITHOUT_SEARCH = 8;
 
 /**
- * Liste en tableau (#89, #107), pensée pour l'accueil et proche d'Excel :
- * chaque titre de colonne ouvre un menu pour trier et filtrer (cases à
- * cocher, « de … à … », « contient »). Le sens du tri et les colonnes filtrées
- * se voient sur les titres ; les filtres actifs sont rappelés en pastilles.
- * Toute la ligne ouvre la fiche. Le menu « Colonnes » affiche, masque et
- * réordonne (mémorisé pour le membre). Filtres et tri vont dans l'adresse ;
- * la page relit et interroge le serveur.
+ * Table list (#89, #107), designed for the front desk and close to Excel:
+ * each column header opens a menu to sort and filter (checkboxes,
+ * « de … à … », « contient »). The sort direction and filtered columns
+ * show on the headers; active filters are repeated as pills.
+ * The whole row opens the record. The « Colonnes » menu shows, hides and
+ * reorders columns (saved for the member). Filters and sort go into the URL;
+ * the page reads it back and queries the server.
  */
 export function ListTable({
   list: list,
@@ -113,7 +113,7 @@ export function ListTable({
     startSort(() => router.replace(texte ? `${path}?${texte}` : path, { scroll: false }));
   }
 
-  /** Clic sur une ligne : ouvre la fiche, sauf sur un lien ou un bouton, ou pendant une sélection de texte. */
+  /** Click on a row: opens the record, except on a link or a button, or during a text selection. */
   function open(e: React.MouseEvent<HTMLTableRowElement>, href: string | undefined) {
     if (!href || (e.target as HTMLElement).closest("a, button, input, select") || window.getSelection()?.toString())
       return;
@@ -127,12 +127,12 @@ export function ListTable({
     startTransition(async () => setFailure(!(await saveColumns(list, writeLayout(d)))));
   }
 
-  // Glisser-déposer d'un en-tête (souris) ; au clavier, les flèches du menu « Colonnes ».
+  // Drag and drop of a header (mouse); with the keyboard, the arrows of the « Colonnes » menu.
   const [dragged, setDragged] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
 
-  // Largeur : on tire le bord droit d'un en-tête ; enregistrée au lâcher, double-clic pour l'automatique.
-  // Pendant ce geste, l'en-tête (déplaçable) ne doit pas partir en glisser-déposer.
+  // Width: drag a header's right edge; saved on release, double-click for automatic width.
+  // During this gesture, the (draggable) header must not start a drag and drop.
   const resizing = useRef(false);
   function startResize(e: React.PointerEvent<HTMLElement>, id: string) {
     e.preventDefault();
@@ -156,7 +156,7 @@ export function ListTable({
     window.addEventListener("pointerup", release);
   }
 
-  // Pastilles des filtres actifs, colonnes masquées comprises.
+  // Pills for active filters, hidden columns included.
   const pastilles = columns.flatMap((d) => {
     const fc = readColumnFilter(f.filter, d);
     const summary = columnFilterSummary(d, fc);
@@ -221,7 +221,7 @@ export function ListTable({
                   ? "Disposition non enregistrée : réessayez."
                   : ""}
           </span>
-          {/* Sur téléphone, des cartes : pas de colonnes à régler. */}
+          {/* On phones, cards: no columns to adjust. */}
           <span className={mobile ? "hidden sm:inline" : ""}>
             <Popover
               title={`Colonnes de ${what}`}
@@ -255,7 +255,7 @@ export function ListTable({
                   }
                   draggable
                   onMouseDown={(e) => {
-                    // Une poignée de largeur saisie : pas de glisser-déposer natif.
+                    // A width handle is grabbed: no native drag and drop.
                     if ((e.target as HTMLElement).dataset.poignee) e.preventDefault();
                   }}
                   style={style(d.id)}
@@ -418,8 +418,8 @@ function Cellule({ def, value: value }: { def: ColumnDef; value: CellValue }) {
 }
 
 /**
- * Bulle native (`popover`) : au-dessus de tout, fermée par Échap ou un clic
- * ailleurs, le focus revient au bouton. Placée sous son bouton à l'ouverture.
+ * Native popover (`popover`): above everything, closed by Escape or a click
+ * elsewhere, focus returns to the button. Placed under its button when opened.
  */
 function Popover({
   title: title,
@@ -478,7 +478,7 @@ function Popover({
   );
 }
 
-/** Libellés des deux sens de tri, selon la nature de la colonne. */
+/** Labels of the two sort directions, depending on the column's kind. */
 const SENS: Record<ColumnDef["type"], [string, string]> = {
   texte: ["De A à Z", "De Z à A"],
   telephone: ["Croissant", "Décroissant"],
@@ -487,10 +487,10 @@ const SENS: Record<ColumnDef["type"], [string, string]> = {
 };
 
 /**
- * Titre d'une colonne et son menu, comme un filtre automatique d'Excel :
- * trier dans un sens ou l'autre, puis filtrer selon la nature de la colonne.
- * Le titre montre le sens du tri (▲ ▼) et un entonnoir plein si la colonne
- * est filtrée ; la flèche ▾ signale qu'on peut cliquer.
+ * A column header and its menu, like an Excel autofilter: sort either way,
+ * then filter according to the column's kind. The header shows the sort
+ * direction (▲ ▼) and a filled funnel if the column is filtered; the ▾ arrow
+ * signals that it can be clicked.
  */
 function TitleMenu({
   def,
@@ -594,7 +594,7 @@ function TitleMenu({
   );
 }
 
-/** Le filtre d'une colonne selon sa nature : cases à cocher, bornes, ou texte contenu. */
+/** A column's filter according to its kind: checkboxes, bounds, or contained text. */
 function TitleFilter({
   def,
   choice: choice,
@@ -614,7 +614,7 @@ function TitleFilter({
     const toggleChoice = (v: string) =>
       change({ choice: checked.includes(v) ? checked.filter((x) => x !== v) : [...checked, v] });
     const label = (v: string) => (v === EMPTY ? `(${def.ifEmpty ?? "vide"})` : v);
-    // « (aucune) » seulement pour une colonne qui peut être vide (`siVide`).
+    // « (aucune) » only for a column that can be empty (`ifEmpty`).
     const toutes = def.ifEmpty ? [...choice, EMPTY] : [...choice];
     const visible = search ? toutes.filter((v) => label(v).toLowerCase().includes(search.toLowerCase())) : toutes;
     return (
@@ -690,7 +690,7 @@ function TitleFilter({
   );
 }
 
-/** Menu « Colonnes » : afficher, masquer et déplacer les colonnes. */
+/** « Colonnes » menu: show, hide and move columns. */
 function ColumnsMenu({
   columns: columns,
   availability: availability,

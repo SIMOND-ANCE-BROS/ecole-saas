@@ -4,16 +4,15 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, type ReactNode, use, useEffect, useRef, useState } from "react";
 
-/** Vrai à l'intérieur d'un panneau : « Annuler » y revient en arrière au lieu de naviguer. */
+/** True inside a panel: « Annuler » goes back there instead of navigating. */
 const InPanel = createContext(false);
 
 type Props = { title: string; children: ReactNode };
 
 /**
- * Panneau latéral ouvert par une route interceptée (`@modal`) : la page
- * d'origine reste derrière, l'adresse est celle de la page complète. Se ferme
- * par « Fermer », Échap, un clic à côté ou le bouton Retour ; le focus revient
- * là où il était.
+ * Side panel opened by an intercepted route (`@modal`): the original page
+ * stays behind, the URL is the full page's. Closed by « Fermer », Escape,
+ * a click outside or the Back button; focus returns to where it was.
  *
  * A parallel slot keeps its content on a client navigation to a route it does
  * not intercept (redirect after saving, link): the panel hides itself once the
@@ -31,7 +30,7 @@ export function Panel(props: Props) {
 function PanelDialog({ title, children, path }: Props & { path: string }) {
   const router = useRouter();
   const dialogue = useRef<HTMLDialogElement>(null);
-  /** Élément qui avait le focus avant l'ouverture (noté une seule fois : l'effet peut être rejoué). */
+  /** Element that had focus before opening (recorded once only: the effect may run again). */
   const before = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -60,7 +59,7 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
     >
       <div className="flex h-full flex-col">
         <div className="flex items-center justify-end gap-2 border-b border-bordure px-4 py-2">
-          {/* Lien classique : rechargement complet, donc la page entière sans panneau. */}
+          {/* Plain link: full reload, hence the whole page without a panel. */}
           <a href={path} className="lien text-sm">
             Ouvrir en pleine page
           </a>
@@ -76,7 +75,7 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
   );
 }
 
-/** « Annuler » d'un formulaire : ferme le panneau, ou mène à `href` en pleine page. */
+/** A form's « Annuler »: closes the panel, or leads to `href` as a full page. */
 export function Cancel({ href }: { href: string }) {
   const router = useRouter();
   if (use(InPanel)) {

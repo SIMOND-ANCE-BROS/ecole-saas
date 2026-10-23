@@ -12,13 +12,13 @@ import {
 } from "../domain/filters/filters";
 
 /**
- * Traduction SQL des filtres par colonne (`src/domain/filters/filters.ts`),
- * avec les mêmes règles que l'évaluation en mémoire : accents et majuscules
- * ignorés, chiffres seuls pour un téléphone, une valeur absente compte comme
- * vide. Les valeurs passent en paramètres, jamais dans le texte SQL.
+ * SQL translation of the column filters (`src/domain/filters/filters.ts`),
+ * with the same rules as the in-memory evaluation: accents and case
+ * ignored, digits only for a phone number, a missing value counts as
+ * empty. Values go through parameters, never into the SQL text.
  */
 
-/** Expression SQL d'une colonne ; `liste` : un tableau de textes (responsables…). */
+/** SQL expression of a column; `list`: an array of texts (guardians…). */
 export type ColumnExpression = { sql: SQL; list?: boolean };
 
 const normalize = (x: SQL) =>
@@ -79,7 +79,7 @@ function condition(c: Condition, def: ColumnDef, e: ColumnExpression): SQL | und
     def.type === "telephone"
       ? sql`regexp_replace(coalesce(${raw}, ''), '[^0-9]', '', 'g')`
       : normalize(sql`coalesce(${raw}, '')`);
-  // Une liste « est » X si l'un de ses éléments vaut X.
+  // A list "is" X if one of its items equals X.
   const unElement = sql`EXISTS (SELECT 1 FROM unnest(${e.sql}) AS element WHERE ${normalize(sql`element`)} = ${v})`;
   switch (c.operator) {
     case "vide":
@@ -117,7 +117,7 @@ function condition(c: Condition, def: ColumnDef, e: ColumnExpression): SQL | und
   }
 }
 
-/** Condition WHERE d'un filtre ; undefined s'il n'y a rien à filtrer. */
+/** WHERE condition of a filter; undefined if there is nothing to filter. */
 export function filterCondition(
   filter: Filter,
   columns: ColumnDef[],
@@ -134,9 +134,9 @@ export function filterCondition(
 }
 
 /**
- * Clé ORDER BY d'une colonne triée (#107), avec les règles de `trierLignes` :
- * accents et majuscules ignorés, nombres et dates dans leur ordre, vides en
- * dernier. undefined sans tri (l'appelant garde son ordre par défaut).
+ * ORDER BY key of a sorted column (#107), with the rules of `sortRows`:
+ * accents and case ignored, numbers and dates in their order, empty values
+ * last. undefined without sorting (the caller keeps its default order).
  */
 export function columnOrder(
   currentSort: Sort | null,

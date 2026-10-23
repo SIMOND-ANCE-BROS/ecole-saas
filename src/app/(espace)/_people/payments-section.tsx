@@ -21,14 +21,14 @@ type Props = {
   payerId: string;
   balance: Balance | null;
   payments: PaymentRow[];
-  /** Fiche où revenir après un encaissement. */
+  /** Record to return to after a payment. */
   back: string;
-  /** Direction : peut corriger un paiement. */
+  /** Management: may correct a payment. */
   direction: boolean;
   today: string;
 };
 
-/** Paiements d'un payeur (#97) : solde, chèques à encaisser, règlements reçus, corrections. */
+/** A payer's payments (#97): balance, cheques to cash, payments received, corrections. */
 export function PaymentsSection({
   payerId: payerId,
   balance: balance,

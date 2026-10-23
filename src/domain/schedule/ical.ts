@@ -1,14 +1,14 @@
 /**
- * Abonnement iCalendar (RFC 5545) aux séances d'un intervenant : lisible par
- * Google Agenda, Outlook et Apple Calendrier. Fonction pure ; l'heure de
- * génération est fournie par l'appelant.
+ * iCalendar subscription (RFC 5545) to an instructor's lessons: readable by
+ * Google Calendar, Outlook and Apple Calendar. Pure function; the generation
+ * time is supplied by the caller.
  */
 
 export type CalendarLesson = {
   id: string;
   /** `YYYY-MM-DD` */
   date: string;
-  /** `HH:MM`, heure de Paris */
+  /** `HH:MM`, Paris time */
   startTime: string;
   durationMinutes: number;
   title: string;
@@ -18,7 +18,7 @@ export type CalendarLesson = {
 
 const TIME_ZONE = "Europe/Paris";
 
-/** Règles de l'heure d'été européenne (dernier dimanche de mars et d'octobre). */
+/** European summer time rules (last Sunday of March and of October). */
 const VTIMEZONE = [
   "BEGIN:VTIMEZONE",
   `TZID:${TIME_ZONE}`,
@@ -42,14 +42,14 @@ const VTIMEZONE = [
 const escape = (texte: string) =>
   texte.replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 
-/** Replie une ligne en morceaux de 75 octets au plus, sans couper un caractère. */
+/** Folds a line into chunks of at most 75 bytes, without splitting a character. */
 function collapse(row: string): string[] {
   const chunks: string[] = [];
   let current = "";
   let octets = 0;
   for (const character of row) {
     const size = new TextEncoder().encode(character).length;
-    const limit = chunks.length === 0 ? 75 : 74; // l'espace de continuation compte
+    const limit = chunks.length === 0 ? 75 : 74; // the continuation space counts
     if (octets + size > limit) {
       chunks.push(current);
       current = "";
@@ -62,7 +62,7 @@ function collapse(row: string): string[] {
   return chunks.map((m, i) => (i === 0 ? m : ` ${m}`));
 }
 
-/** Date et heure locales `YYYYMMDDTHHMMSS`, minutes ajoutées sans passer par un fuseau. */
+/** Local date and time `YYYYMMDDTHHMMSS`, minutes added without going through a time zone. */
 function local(date: string, heure: string, minutesEnPlus = 0): string {
   const [a, m, j] = date.split("-").map(Number);
   const total = Number(heure.slice(0, 2)) * 60 + Number(heure.slice(3, 5)) + minutesEnPlus;

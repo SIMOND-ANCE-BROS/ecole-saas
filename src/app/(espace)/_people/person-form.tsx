@@ -7,14 +7,14 @@ import { createContact, updateIdentity, type Refusal } from "./actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
 
 type Props = {
-  /** Personne modifiée ; null pour la création d'un contact (un élève se crée avec le formulaire guidé). */
+  /** Person being edited; null when creating a contact (a student is created with the guided form). */
   person: Omit<PersonRecord, "relationships" | "courses" | "documents"> | null;
-  /** Fiche d'où l'on vient : élève (naissance et notes) ou contact. */
+  /** Record we come from: student (birth date and notes) or contact. */
   section: "eleves" | "contacts";
   proposedName?: string;
 };
 
-/** Identité et coordonnées d'un élève ou d'un contact. */
+/** Identity and contact details of a student or a contact. */
 export function PersonForm({ person: person, section: section, proposedName: proposedName }: Props) {
   const [v, setV] = useState({
     type: person?.type ?? "particulier",

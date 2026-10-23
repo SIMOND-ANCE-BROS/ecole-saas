@@ -6,11 +6,11 @@ import { alias } from "drizzle-orm/pg-core";
 import { nomAffiche } from "./people";
 import { course, discipline, enrollment, enrollmentCourse, instructor, person, season, room, site } from "./schema";
 
-/** Lectures du planning, toujours avec la transaction d'`withSchool()` (RLS). */
+/** Schedule reads, always within the `withSchool()` transaction (RLS). */
 
 export type Season = { id: string; label: string; startDate: string; endDate: string };
 
-/** Saison qui contient le jour (`YYYY-MM-DD`), sinon la plus récente ; null s'il n'y en a aucune. */
+/** Season containing the day (`YYYY-MM-DD`), otherwise the most recent; null if there is none. */
 export async function currentSeason(tx: Tx, day: string): Promise<Season | null> {
   const [s] = await tx
     .select({ id: season.id, label: season.label, startDate: season.startDate, endDate: season.endDate })
@@ -22,7 +22,7 @@ export async function currentSeason(tx: Tx, day: string): Promise<Season | null>
 
 export type ScheduleCourse = {
   id: string;
-  /** 1 = lundi … 7 = dimanche ; null pour un stage. */
+  /** 1 = Monday … 7 = Sunday; null for a workshop. */
   weekday: number | null;
   /** `HH:MM` */
   startTime: string;
@@ -32,7 +32,7 @@ export type ScheduleCourse = {
   roomId: string;
   room: string;
   siteId: string;
-  /** Récurrence (#90) ; `dates` : cours ponctuel, sans jour. */
+  /** Recurrence (#90); `dates`: one-off course, without a day. */
   recurrence: "hebdomadaire" | "quinzaine" | "dates";
   startDate: string | null;
   endDate: string | null;
@@ -45,13 +45,13 @@ export type ScheduleCourse = {
   ageMax: number | null;
   level: string | null;
   maxCapacity: number | null;
-  /** Danseurs distincts inscrits (inscriptions actives). */
+  /** Distinct enrolled students (active enrollments). */
   enrolled: number;
 };
 
 /**
- * Effectif d'un cours, écrit avec les noms de tables : dans un `select`, Drizzle
- * n'écrit pas le nom de table devant `cours.id`, qui serait ambigu ici.
+ * Headcount of a course, written with the table names: in a `select`, Drizzle
+ * does not write the table name before `course.id`, which would be ambiguous here.
  */
 const effective = sql<number>`(
   SELECT count(DISTINCT ic.student_id)::int
@@ -60,12 +60,12 @@ const effective = sql<number>`(
   WHERE ic.course_id = ${course}.${sql.identifier("id")}
 )`;
 
-/** Cours d'une saison, par jour puis par heure. */
+/** Courses of a season, by day then by time. */
 export function seasonCourses(tx: Tx, seasonId: string): Promise<ScheduleCourse[]> {
   return readScheduleCourse(tx, eq(course.seasonId, seasonId));
 }
 
-/** Un cours du planning, ou null s'il n'existe pas dans l'école courante. */
+/** A schedule course, or null if it does not exist in the current school. */
 export async function scheduleCourse(tx: Tx, id: string): Promise<ScheduleCourse | null> {
   if (!z.uuid().safeParse(id).success) return null;
   const [c] = await readScheduleCourse(tx, eq(course.id, id));
@@ -119,7 +119,7 @@ export type Enrolled = {
   name: string;
   birthDate: string | null;
   payerId: string;
-  /** Nom du payeur (raison sociale pour un professionnel). */
+  /** Payer's name (company name for a professional). */
   payer: string;
   telephone: string | null;
   email: string | null;
@@ -127,7 +127,7 @@ export type Enrolled = {
   enrollmentDate: string;
 };
 
-/** Danseurs du cours en cours d'année (actifs, à l'essai, en liste d'attente), par nom puis prénom. */
+/** Students of the course during the year (active, on trial, on the waitlist), by last then first name. */
 export async function enrolledInCourse(tx: Tx, courseId: string): Promise<Enrolled[]> {
   if (!z.uuid().safeParse(courseId).success) return [];
   const student = alias(person, "danseur");
@@ -142,7 +142,7 @@ export async function enrolledInCourse(tx: Tx, courseId: string): Promise<Enroll
       payerName: payer.lastName,
       payerFirstName: payer.firstName,
       companyName: payer.companyName,
-      // Téléphone du danseur, sinon celui de son payeur (un enfant n'en a souvent pas).
+      // Student's phone, otherwise their payer's (a child often has none).
       telephone: sql<string | null>`coalesce(${student.phone}, ${payer.phone})`,
       email: sql<string | null>`coalesce(${student.email}, ${payer.email})`,
       status: sql<Enrolled["status"]>`${enrollment.status}`,

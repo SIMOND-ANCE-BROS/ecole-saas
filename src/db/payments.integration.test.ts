@@ -4,9 +4,9 @@ import { withSchool } from "./index";
 import { correctPayment, collect, paymentsOf, balanceOf } from "./payments";
 
 /**
- * Encaissements (#97), comme l'application (app_user, RLS). Données fictives
- * supprimées à la fin ; paiements et journal étant inaltérables, le nettoyage
- * désactive leurs triggers le temps d'une transaction d'administration.
+ * Payments (#97), as the application runs them (app_user, RLS). Fictitious data
+ * deleted at the end; payments and the audit log being immutable, the cleanup
+ * disables their triggers for the duration of an administration transaction.
  */
 
 const url = process.env.DATABASE_ADMIN_URL;

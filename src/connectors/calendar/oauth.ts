@@ -1,10 +1,10 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 /**
- * Connexion aux agendas Google et Microsoft des intervenants (OAuth 2 avec
- * PKCE) et lecture des seules plages occupées. Une application par
- * fournisseur, tenue par l'éditeur pour toutes les écoles ; identifiants en
- * variables d'environnement. `fetch` est injecté pour les tests.
+ * Connection to instructors' Google and Microsoft calendars (OAuth 2 with
+ * PKCE), reading busy ranges only. One application per provider, owned by
+ * the vendor for all schools; credentials in environment variables. `fetch`
+ * is injected for tests.
  */
 
 export type Provider = "google" | "microsoft";
@@ -26,7 +26,7 @@ const POINTS: Record<Provider, Point> = {
   google: {
     authorization: "https://accounts.google.com/o/oauth2/v2/auth",
     token: "https://oauth2.googleapis.com/token",
-    // Disponibilités seulement : ni titre, ni lieu, ni participants.
+    // Availability only: no title, no location, no attendees.
     scopes: "openid email https://www.googleapis.com/auth/calendar.freebusy",
     settings: { access_type: "offline", prompt: "consent" },
     variables: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
@@ -34,7 +34,7 @@ const POINTS: Record<Provider, Point> = {
   microsoft: {
     authorization: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     token: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-    // Lecture de base : horaires et disponibilité, sans le corps des événements.
+    // Basic read: times and availability, without the event body.
     scopes: "openid email offline_access Calendars.ReadBasic",
     settings: { prompt: "select_account" },
     variables: ["MICROSOFT_CLIENT_ID", "MICROSOFT_CLIENT_SECRET"],
@@ -43,7 +43,7 @@ const POINTS: Record<Provider, Point> = {
 
 export type Credentials = { identifier: string; secret: string };
 
-/** Identifiants de l'application chez le fournisseur ; null s'il n'est pas configuré. */
+/** The application's credentials at the provider; null if not configured. */
 export function credentials(f: Provider, env: Record<string, string | undefined> = process.env): Credentials | null {
   const [i, s] = POINTS[f].variables;
   return env[i] && env[s] ? { identifier: env[i] as string, secret: env[s] as string } : null;
@@ -76,7 +76,7 @@ export function authorizationUrl(
 }
 
 // ---------------------------------------------------------------------------
-// État signé (CSRF) : qui se connecte, auprès de quel fournisseur, jusqu'à quand.
+// Signed state (CSRF): who is connecting, with which provider, until when.
 // ---------------------------------------------------------------------------
 
 export type State = { schoolId: string; instructorId: string; provider: Provider; nonce: string; expiresAt: number };
@@ -105,7 +105,7 @@ export function verifyState(state: string, secret: string, now = Date.now()): St
 }
 
 // ---------------------------------------------------------------------------
-// Jetons
+// Tokens
 // ---------------------------------------------------------------------------
 
 type Fetch = typeof fetch;
@@ -119,7 +119,7 @@ async function requestToken(f: Provider, id: Credentials, body: Record<string, s
   });
   const json = (await response.json()) as Record<string, string | undefined>;
   if (!response.ok) {
-    // invalid_grant : l'intervenant a retiré l'accès, ou le jeton a expiré.
+    // invalid_grant: the instructor revoked access, or the token expired.
     if (json.error === "invalid_grant")
       throw new AccessRemoved("Accès à l’agenda retiré ou expiré : reconnecter l’agenda.");
     throw new Error(`Réponse ${response.status} du fournisseur (${json.error ?? "erreur inconnue"})`);
@@ -127,7 +127,7 @@ async function requestToken(f: Provider, id: Credentials, body: Record<string, s
   return json;
 }
 
-/** Adresse du compte, lue dans le jeton d'identité reçu directement du fournisseur. */
+/** Account address, read from the ID token received directly from the provider. */
 function tokenAccount(idToken: string | undefined): string | null {
   const payload = idToken?.split(".")[1];
   if (!payload) return null;
@@ -158,7 +158,7 @@ export async function exchangeCode(
   return { refreshToken: json.refresh_token, account: tokenAccount(json.id_token) };
 }
 
-/** Jeton d'accès frais ; Microsoft peut aussi renvoyer un nouveau jeton de rafraîchissement. */
+/** Fresh access token; Microsoft may also return a new refresh token. */
 export async function refresh(
   f: Provider,
   id: Credentials,
@@ -171,12 +171,12 @@ export async function refresh(
 }
 
 // ---------------------------------------------------------------------------
-// Plages occupées
+// Busy ranges
 // ---------------------------------------------------------------------------
 
 export type Range = { start: Date; end: Date };
 
-/** Réponse de l'API free/busy de Google (agenda principal). */
+/** Response of Google's free/busy API (primary calendar). */
 export function googleRanges(json: unknown): Range[] {
   const busy =
     (json as { calendars?: { primary?: { busy?: { start: string; end: string }[] } } }).calendars?.primary?.busy ?? [];
@@ -190,10 +190,10 @@ type MicrosoftEvent = {
   isCancelled?: boolean;
 };
 const MICROSOFT_BUSY = new Set(["busy", "oof", "tentative", "workingElsewhere"]);
-/** Heure UTC de Microsoft Graph (demandée par l'en-tête Prefer), sans suffixe. */
+/** Microsoft Graph UTC time (requested via the Prefer header), without suffix. */
 const utcMicrosoft = (t: string) => new Date(/[zZ]|[+-]\d\d:\d\d$/.test(t) ? t : `${t}Z`);
 
-/** Événements de calendarView ; seuls les occupés (pas « libre ») et non annulés comptent. */
+/** calendarView events; only busy (not "free") and non-cancelled ones count. */
 export function microsoftRanges(json: unknown): Range[] {
   const events = (json as { value?: MicrosoftEvent[] }).value ?? [];
   return events

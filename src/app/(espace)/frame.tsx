@@ -6,9 +6,9 @@ import { type ReactNode, useEffect, useState } from "react";
 type Props = { pane: ReactNode; header: ReactNode; children: ReactNode };
 
 /**
- * Cadre de l'espace connecté. Sur ordinateur, la barre latérale est toujours
- * visible ; sur téléphone, elle se replie derrière un bouton « Menu » placé à
- * côté de la recherche, et se referme à chaque navigation ou avec Échap.
+ * Frame of the signed-in workspace. On desktop, the sidebar is always
+ * visible; on phones, it folds behind a « Menu » button next to the search,
+ * and closes on every navigation or with Escape.
  */
 export function Frame({ pane: pane, header: header, children }: Props) {
   const [open, setOpen] = useState(false);

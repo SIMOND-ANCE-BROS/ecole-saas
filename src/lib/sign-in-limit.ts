@@ -4,13 +4,13 @@ import { db } from "../db";
 import { loginAttempt } from "../db/schema";
 
 /**
- * Limitation des essais de mots de passe, sur une fenêtre glissante :
- * - `parPaire` tentatives pour une même adresse e-mail depuis une même IP ;
- * - `parEmail` tentatives au total sur une adresse (borne le brute force
- *   distribué, sans permettre de bloquer facilement le compte d'autrui) ;
- * - `parIp` tentatives depuis une même IP (balayage d'adresses).
- * Chaque tentative est enregistrée AVANT d'être comptée (pas de course entre
- * requêtes simultanées). Stockage en base, clés HMAC : rien en clair.
+ * Limiting password attempts, over a sliding window:
+ * - `byPair` attempts for the same e-mail address from the same IP;
+ * - `byEmail` attempts in total on an address (bounds distributed brute
+ *   force, without making it easy to lock someone else's account);
+ * - `byIp` attempts from the same IP (address sweeping).
+ * Each attempt is recorded BEFORE being counted (no race between
+ * simultaneous requests). Stored in the database, HMAC keys: nothing in clear.
  */
 export const LIMITES = { byPair: 5, byEmail: 20, byIp: 30, windowMinutes: 15 } as const;
 
@@ -23,10 +23,10 @@ export function attemptKey(type: KeyType, value: string): string {
 }
 
 /**
- * IP du client, lue SEULEMENT dans l'en-tête posé par notre propre proxy
- * (IP_CLIENT_EN_TETE, ex. « x-real-ip ») : un en-tête fourni par le client
- * (x-forwarded-for…) est falsifiable. Sans configuration : null, et la limite
- * par IP ne s'applique pas.
+ * Client IP, read ONLY from the header set by our own proxy
+ * (IP_CLIENT_EN_TETE, e.g. "x-real-ip"): a header supplied by the client
+ * (x-forwarded-for…) can be forged. Without configuration: null, and the
+ * per-IP limit does not apply.
  */
 export function trustedIp(requestHeaders: Headers, headerName = process.env.IP_CLIENT_EN_TETE): string | null {
   if (!headerName) return null;
@@ -43,10 +43,10 @@ function keys(email: string, ip: string | null) {
 }
 
 /**
- * Enregistre une tentative puis vérifie les limites, nouvelle tentative
- * comprise. Renvoie false si la connexion doit être refusée sans vérifier le
- * mot de passe ; la tentative refusée est alors retirée, pour que s'acharner
- * ne prolonge pas le blocage (il expire après la dernière tentative acceptée).
+ * Records an attempt then checks the limits, new attempt included. Returns
+ * false if sign-in must be refused without checking the password; the
+ * refused attempt is then removed, so that persisting does not extend the
+ * lock (it expires after the last accepted attempt).
  */
 export async function recordAttempt(email: string, ip: string | null): Promise<boolean> {
   const limites = keys(email, ip);
@@ -67,7 +67,7 @@ export async function recordAttempt(email: string, ip: string | null): Promise<b
       ),
     )
     .groupBy(loginAttempt.key);
-  // Purge au fil de l'eau : rien n'est gardé au-delà d'une journée.
+  // Ongoing purge: nothing is kept beyond one day.
   await db.delete(loginAttempt).where(lt(loginAttempt.at, sql`now() - interval '1 day'`));
   const allowed = limites.every(({ key: key, max }) => (accounts.find((c) => c.key === key)?.n ?? 0) <= max);
   if (!allowed) {
@@ -81,7 +81,7 @@ export async function recordAttempt(email: string, ip: string | null): Promise<b
   return allowed;
 }
 
-/** Après une connexion réussie : l'adresse et la paire repartent de zéro (pas l'IP). */
+/** After a successful sign-in: the address and the pair start again from zero (not the IP). */
 export async function clearAttempts(email: string, ip: string | null): Promise<void> {
   const [pair, address] = keys(email, ip);
   await db.delete(loginAttempt).where(inArray(loginAttempt.key, [pair.key, address.key]));

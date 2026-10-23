@@ -8,7 +8,7 @@ import { listUnavailabilities } from "../db/unavailabilities";
 import { encrypt, decrypt } from "./encryption";
 import { syncCalendar } from "./calendar-sync";
 
-/** Synchronisation d'un agenda connecté, avec un faux fournisseur (aucun appel réseau). */
+/** Sync of a connected calendar, with a fake provider (no network call). */
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
@@ -131,7 +131,7 @@ describe("synchroniserAgenda", () => {
         saveConnection(tx, camille, { provider: "microsoft", account: null, encryptedToken: encrypt("r") }),
       ),
     ).toBe(false);
-    // Même une ligne restée en base (restauration) est ignorée.
+    // Even a row left in the database (restore) is ignored.
     await admin`INSERT INTO calendar_connection (school_id, instructor_id, provider, encrypted_token) VALUES (${school}, ${camille}, 'microsoft', ${encrypt("r")})`;
     expect(await syncCalendar(school, camille, fetch, NOW)).toEqual({
       ok: false,

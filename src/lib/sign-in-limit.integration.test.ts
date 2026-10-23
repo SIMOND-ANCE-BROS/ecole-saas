@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { auth } from "./auth";
 import { attemptKey, clearAttempts, recordAttempt, trustedIp, LIMITES } from "./sign-in-limit";
 
-/** Limitation des tentatives de connexion, contre la vraie base (données fictives nettoyées). */
+/** Sign-in attempt limiting, against the real database (fictitious data cleaned up). */
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
@@ -15,7 +15,7 @@ const ip = (n: number) => `203.0.113.${n}`;
 const addresses: string[] = [];
 const ips: string[] = [];
 
-/** n tentatives ; renvoie le nombre de tentatives autorisées. */
+/** n attempts; returns the number of allowed attempts. */
 async function tentatives(address: string, since: string | null, n: number) {
   addresses.push(address);
   if (since) ips.push(since);

@@ -6,7 +6,7 @@ import { displayedName } from "@/domain/people/name";
 import { deferredQuery } from "@/lib/deferred-query";
 import { searchPeopleAction } from "./actions";
 
-/** Personne choisie dans la base, ou à créer avec l'essentiel. */
+/** Person picked from the database, or to be created with the essentials. */
 export type Choice =
   | { id: string; name: string }
   | {
@@ -25,7 +25,7 @@ export const newPerson = (type: "particulier" | "professionnel"): Choice => ({
   newPerson: { type, firstName: "", name: "", companyName: "", siren: "", telephone: "", email: "" },
 });
 
-/** Pour l'envoi au serveur : forme attendue par saisiePersonneValide. */
+/** For sending to the server: shape expected by validPersonInput. */
 export function toInput(c: Choice) {
   if ("id" in c) return { id: c.id };
   const n = c.newPerson;
@@ -46,21 +46,21 @@ export function toInput(c: Choice) {
 }
 
 type Props = {
-  /** Identifiant de base des champs (plusieurs choix sur une même page). */
+  /** Base id of the fields (several choices on the same page). */
   id: string;
   label: string;
   value: Choice | null;
   onChange: (c: Choice | null) => void;
-  /** Personnes à ne pas proposer (l'élève lui-même). */
+  /** People not to offer (the student themself). */
   exclude?: string[];
-  /** Organisme (CSE, entreprise) plutôt que particulier pour une nouvelle personne. */
+  /** Organisation (CSE, company) rather than individual for a new person. */
   organization?: boolean;
   errors?: Partial<Record<string, string>>;
 };
 
 /**
- * Rechercher une personne déjà connue (nom, téléphone…) ou en créer une avec
- * l'essentiel, sans quitter le formulaire.
+ * Search for an already known person (name, phone…) or create one with the
+ * essentials, without leaving the form.
  */
 export function PersonChoice({
   id,
@@ -75,7 +75,7 @@ export function PersonChoice({
   const [results, setResults] = useState<PersonResult[] | null>(null);
   const [error, setError] = useState(false);
   const active = saisie.trim().length >= 2 && !value;
-  // Clé stable : un tableau recréé à chaque rendu relancerait la recherche sans fin.
+  // Stable key: an array recreated on every render would restart the search endlessly.
   const excluded = exclude.join(",");
 
   useEffect(() => {

@@ -11,8 +11,8 @@ type Props = {
 };
 
 /**
- * Fiche d'appel au clavier : P ou A sur une ligne marque le danseur et passe à
- * la suivante, flèches haut et bas pour se déplacer, Ctrl + Entrée enregistre.
+ * Keyboard attendance sheet: P or A on a row marks the student and moves to
+ * the next one, up and down arrows to move around, Ctrl + Enter saves.
  */
 export function AttendanceRecord({ attendance: attendance, instructors: instructors }: Props) {
   const [attendances, setAttendances] = useState<Record<string, boolean | null>>(

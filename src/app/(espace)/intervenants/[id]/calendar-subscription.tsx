@@ -13,8 +13,8 @@ const dateTime = new Intl.DateTimeFormat("fr-FR", {
 });
 
 /**
- * Lien d'abonnement à l'agenda de l'intervenant. L'adresse n'est montrée qu'à
- * sa création (seule son empreinte est gardée) : la recréer remplace l'ancienne.
+ * Subscription link to the instructor's calendar. The address is shown only when
+ * created (only its hash is kept): recreating it replaces the old one.
  */
 type Connection = { provider: string; account: string | null; lastSyncedAt: string | null; error: string | null };
 

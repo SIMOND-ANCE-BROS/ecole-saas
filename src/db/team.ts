@@ -6,10 +6,10 @@ import type { Tx } from "./index";
 import { school, invitation, auditLog, member, user } from "./schema";
 
 /**
- * Équipe d'une école (#104) : membres, invitations et liens de
- * réinitialisation. Le jeton d'un lien n'est rendu qu'une fois, à sa
- * création ; seule son empreinte est gardée. Toujours avec la transaction
- * d'`withSchool()` (RLS).
+ * Team of a school (#104): members, invitations and reset
+ * links. A link's token is returned only once, when
+ * created; only its hash is kept. Always within the
+ * `withSchool()` transaction (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
@@ -21,14 +21,14 @@ const DAY = 86_400_000;
 export const INVITATION_DURATION = 7 * DAY;
 export const RESET_DURATION = DAY;
 
-/** Rôles qu'on peut donner aujourd'hui ; les comptes professeurs viendront plus tard (#22). */
+/** Roles that can be given today; teacher accounts will come later (#22). */
 export const ROLES_INVITABLES = { direction: "Direction", accueil: "Accueil" } as const;
 export const ROLES = { ...ROLES_INVITABLES, professeur: "Professeur" } as const;
 
 export type Result = { ok: true; id: string } | { ok: false; message: string };
 export type RelationshipResult = { ok: true; id: string; token: string } | { ok: false; message: string };
 
-/** Membre actif de la direction : seul à gérer l'équipe (vérifié ici aussi, pas seulement par la page). */
+/** Active member of management: the only one who manages the team (checked here too, not only by the page). */
 async function memberOf(tx: Tx, userId: string) {
   const [m] = await tx
     .select({ id: member.id })
@@ -38,10 +38,10 @@ async function memberOf(tx: Tx, userId: string) {
 }
 
 /**
- * Le compte appartient-il (même désactivé) à une autre école ? Son mot de
- * passe y donne accès : une école ne doit pas pouvoir le changer pour une
- * autre. Lu dans la transaction courante grâce à la politique RLS
- * `my_memberships` (app.user_id), remise à vide aussitôt.
+ * Does the account belong (even deactivated) to another school? Its
+ * password gives access there: one school must not be able to change it for
+ * another. Read in the current transaction thanks to the RLS policy
+ * `my_memberships` (app.user_id), reset to empty right away.
  */
 async function elsewhereAccount(tx: Tx, userId: string): Promise<boolean> {
   await tx.execute(sql`select set_config('app.user_id', ${userId}, true)`);
@@ -55,7 +55,7 @@ async function elsewhereAccount(tx: Tx, userId: string): Promise<boolean> {
 export const SHARED =
   "Ce compte sert aussi dans une autre école : la personne doit changer elle-même son mot de passe.";
 
-/** Compte (global) d'un membre de l'école, ou null. */
+/** (Global) account of a member of the school, or null. */
 export async function memberAccount(tx: Tx, memberId: string): Promise<string | null> {
   if (!isUuid(memberId)) return null;
   const [m] = await tx.select({ userId: member.userId }).from(member).where(eq(member.id, memberId));
@@ -64,7 +64,7 @@ export async function memberAccount(tx: Tx, memberId: string): Promise<string | 
 
 export type MemberListItem = { id: string; userId: string; name: string; email: string; role: Role; active: boolean };
 
-/** Membres de l'école, actifs d'abord, par nom. */
+/** Members of the school, active first, by name. */
 export function listMembers(tx: Tx): Promise<MemberListItem[]> {
   return tx
     .select({
@@ -82,7 +82,7 @@ export function listMembers(tx: Tx): Promise<MemberListItem[]> {
 
 export type PendingInvitation = { id: string; email: string; name: string | null; role: Role | null; expiresAt: Date };
 
-/** Invitations ni utilisées ni expirées. */
+/** Invitations neither used nor expired. */
 export function pendingInvitations(tx: Tx, now: Date): Promise<PendingInvitation[]> {
   return tx
     .select({
@@ -103,7 +103,7 @@ export const validInvitation = z.object({
   role: z.enum(Object.keys(ROLES_INVITABLES) as [keyof typeof ROLES_INVITABLES]),
 });
 
-/** Invite une personne ; une invitation encore ouverte pour le même e-mail est remplacée. */
+/** Invites a person; an invitation still open for the same e-mail is replaced. */
 export async function invite(
   tx: Tx,
   userId: string,
@@ -140,7 +140,7 @@ export async function invite(
   return { ok: true, id, token };
 }
 
-/** Révoque une invitation pas encore utilisée : le lien cesse aussitôt de fonctionner. */
+/** Revokes an invitation not yet used: the link stops working immediately. */
 export async function revokeInvitation(tx: Tx, id: string): Promise<Result> {
   if (!isUuid(id)) return { ok: false, message: "Cette invitation n’existe plus." };
   const rows = await tx
@@ -150,7 +150,7 @@ export async function revokeInvitation(tx: Tx, id: string): Promise<Result> {
   return rows.length === 1 ? { ok: true, id } : { ok: false, message: "Cette invitation n’existe plus." };
 }
 
-/** Change le rôle ou l'activité d'un membre (direction), avec les garde-fous de l'équipe ; trace dans le journal. */
+/** Changes a member's role or active state (management), with the team's guards; recorded in the audit log. */
 export async function updateMember(
   tx: Tx,
   userId: string,
@@ -178,9 +178,9 @@ export async function updateMember(
 }
 
 /**
- * Lien de réinitialisation du mot de passe d'un membre, valable 24 heures ;
- * refusé si le compte appartient aussi à une autre école (revérifié quand le
- * lien est utilisé).
+ * Password reset link for a member, valid for 24 hours;
+ * refused if the account also belongs to another school (checked again when the
+ * link is used).
  */
 export async function resetLink(tx: Tx, userId: string, memberId: string, now: Date): Promise<RelationshipResult> {
   if (!isUuid(memberId)) return { ok: false, message: "Ce membre n’existe plus." };
@@ -223,7 +223,7 @@ export type OpenedLink = {
   school: string;
 };
 
-/** Lien encore valable pour ce jeton (ni utilisé ni expiré), ou null. */
+/** Link still valid for this token (neither used nor expired), or null. */
 export async function readRelationship(tx: Tx, token: string, now: Date): Promise<OpenedLink | null> {
   if (!TOKEN.test(token)) return null;
   const [l] = await tx
@@ -243,9 +243,9 @@ export async function readRelationship(tx: Tx, token: string, now: Date): Promis
 }
 
 /**
- * Marque le lien utilisé (une seule fois) et, pour une invitation, fait
- * entrer le compte dans l'équipe avec le rôle prévu. Une réinitialisation est
- * refusée si le compte a rejoint une autre école depuis la création du lien.
+ * Marks the link used (once only) and, for an invitation, brings
+ * the account into the team with the planned role. A reset is
+ * refused if the account has joined another school since the link was created.
  */
 export async function consumeLink(
   tx: Tx,

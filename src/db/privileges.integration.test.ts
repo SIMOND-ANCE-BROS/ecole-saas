@@ -2,9 +2,9 @@ import postgres from "postgres";
 import { afterAll, describe, expect, it } from "vitest";
 
 /**
- * Droits du rôle applicatif `app_user` : toute table et séquence du schéma
- * public lui est accessible (la RLS filtre ensuite les lignes), y compris
- * celles créées par une migration future (droits par défaut, migration 0006).
+ * Privileges of the application role `app_user`: every table and sequence of the
+ * public schema is accessible to it (RLS then filters the rows), including
+ * those created by a future migration (default privileges, migration 0006).
  */
 
 const url = process.env.DATABASE_ADMIN_URL;
@@ -45,7 +45,7 @@ describe("Droits de app_user", () => {
   });
 
   it("couvrent une table créée par une migration future", async () => {
-    // Même rôle que les migrations (DATABASE_ADMIN_URL), table témoin annulée.
+    // Same role as the migrations (DATABASE_ADMIN_URL), rolled-back probe table.
     const result = await admin
       .begin(async (tx) => {
         await tx.unsafe("CREATE TABLE temoin_droits (id bigserial PRIMARY KEY, school_id uuid)");

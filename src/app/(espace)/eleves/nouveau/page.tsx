@@ -8,7 +8,7 @@ import { NewStudentGuide } from "./guide";
 
 export const metadata: Metadata = { title: "Nouvel élève" };
 
-/** `?responsable=<id>` : depuis la fiche d'un contact (« Ajouter un enfant »), le responsable est déjà choisi. */
+/** `?responsable=<id>`: from a contact's record (« Ajouter un enfant »), the guardian is already chosen. */
 export default async function NewStudentPage({ searchParams }: PageProps<"/eleves/nouveau">) {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const { responsable } = await searchParams;

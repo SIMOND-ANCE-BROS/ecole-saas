@@ -9,7 +9,7 @@ import {
   type InstructorInput,
 } from "./instructors";
 
-/** Intervenants, lus et écrits comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
+/** Instructors, read and written as the application does (app_user, RLS). Fictitious data deleted at the end. */
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");

@@ -13,15 +13,15 @@ import type {
 } from "./types";
 
 /**
- * Calcule le prix des inscriptions d'un payeur pour une saison, avec le détail
- * à afficher à l'accueil : forfait retenu, réductions appliquées ou écartées.
+ * Computes the price of a payer's enrollments for a season, with the detail
+ * shown at the front desk: package chosen, discounts applied or rejected.
  *
- * - Le forfait est la ligne de la grille dont la combinaison de durées est
- *   exactement celle des cours choisis ; une ligne réservée à une discipline
- *   prime quand tous les cours sont de cette discipline. Combinaison absente :
- *   erreur, l'accueil saisit le prix.
- * - Chaque réduction est arrondie au centime sur sa propre inscription ; les
- *   totaux sont la somme des lignes.
+ * - The package is the tariff grid row whose combination of durations is
+ *   exactly that of the chosen courses; a row reserved for a discipline wins
+ *   when all courses are of that discipline. Missing combination: error, the
+ *   front desk enters the price.
+ * - Each discount is rounded to the cent on its own enrollment; the totals
+ *   are the sum of the rows.
  */
 export function computeTariff(request: TariffRequest): TariffResult {
   request.discounts.forEach(checkRule);
@@ -124,8 +124,8 @@ function evaluate(rule: DiscountRule, enrollment: EnrollmentRequest, toutes: rea
     };
   }
 
-  // Danseurs distincts du payeur dans un public éligible, y compris ceux dont
-  // le forfait est à saisir à la main ou sur un forfait 2 disciplines.
+  // Distinct students of the payer in an eligible audience, including those whose
+  // package is to be entered by hand or is a two-disciplines package.
   const students = new Set(toutes.filter((i) => eligible(i.audience)).flatMap((i) => i.studentIds));
   const countLabel = `${students.size} ${studentWord(rule, students.size)} du même payeur`;
   if (students.size < rule.minStudents) {
@@ -143,7 +143,7 @@ function discountAmount(rule: DiscountRule, priceCents: number): number {
   return rule.rateBps !== null ? applyRate(priceCents, rule.rateBps) : (rule.amountCents as number);
 }
 
-/** Une réduction mal paramétrée est une erreur de données, pas un cas à afficher. */
+/** A misconfigured discount is a data error, not a case to display. */
 function checkRule(rule: DiscountRule) {
   if ((rule.rateBps === null) === (rule.amountCents === null)) {
     throw new TypeError(`Réduction « ${rule.code} » : renseigner un taux ou un montant, pas les deux`);
@@ -151,7 +151,7 @@ function checkRule(rule: DiscountRule) {
 }
 
 // ---------------------------------------------------------------------------
-// Libellés
+// Labels
 // ---------------------------------------------------------------------------
 
 const PUBLIC_LABEL: Record<Public, string> = {
@@ -167,7 +167,7 @@ const PERIOD_LABEL: Record<Period, string> = {
   unite: "à l’unité",
 };
 
-/** « enfant(s) » si la règle ne vise que les enfants, « danseur(s) » sinon. */
+/** « enfant(s) » if the rule targets children only, « danseur(s) » otherwise. */
 function studentWord(rule: DiscountRule, count: number): string {
   const name = rule.audiences.length === 1 && rule.audiences[0] === "enfant" ? "enfant" : "danseur";
   return count > 1 ? `${name}s` : name;
@@ -187,7 +187,7 @@ export function combinationLabel(combination: readonly number[]): string {
 }
 
 // ---------------------------------------------------------------------------
-// Outils
+// Helpers
 // ---------------------------------------------------------------------------
 
 function sort(durees: readonly number[]): number[] {
@@ -201,7 +201,7 @@ function memesDurees(a: readonly number[], b: readonly number[]): boolean {
   return a.length === b.length && a.every((d, i) => d === b[i]);
 }
 
-/** La discipline commune à tous les cours, ou null s'ils en mélangent plusieurs. */
+/** The discipline shared by all courses, or null if they mix several. */
 function disciplineUnique(courses: readonly ChosenCourse[]): string | null {
   const disciplines = new Set(courses.map((c) => c.disciplineId));
   return disciplines.size === 1 ? [...disciplines][0] : null;

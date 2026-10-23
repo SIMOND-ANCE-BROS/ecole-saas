@@ -7,8 +7,8 @@ import { effectiveDuration, effectiveTime } from "./lessons";
 import { course, discipline, closure, unavailability, instructor, season, lesson } from "./schema";
 
 /**
- * Indisponibilités des intervenants, conflits avec les séances et remplaçants
- * libres. Toujours avec la transaction d'`withSchool()` (RLS).
+ * Instructors' unavailabilities, conflicts with lessons and free
+ * substitutes. Always within the `withSchool()` transaction (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
@@ -23,7 +23,7 @@ export type UnavailabilityItem = {
   label: string | null;
 };
 
-/** Indisponibilités d'un intervenant qui ne sont pas terminées à `depuis`, par début. */
+/** Unavailabilities of an instructor not over at `since`, by start. */
 export function listUnavailabilities(tx: Tx, instructorId: string, since: Date): Promise<UnavailabilityItem[]> {
   if (!isUuid(instructorId)) return Promise.resolve([]);
   return tx
@@ -39,7 +39,7 @@ export function listUnavailabilities(tx: Tx, instructorId: string, since: Date):
     .orderBy(asc(unavailability.startsAt));
 }
 
-/** Indisponibilité saisie par la direction. */
+/** Unavailability entered by management. */
 export async function addUnavailability(
   tx: Tx,
   instructorId: string,
@@ -63,7 +63,7 @@ export async function addUnavailability(
   return { ok: true, id };
 }
 
-/** Retire une indisponibilité saisie ; celles d'un agenda reviennent à la synchronisation suivante. */
+/** Removes a manually entered unavailability; calendar ones come back at the next synchronisation. */
 export async function deleteUnavailability(tx: Tx, id: string): Promise<Result> {
   const refusal = { ok: false as const, message: "Cette indisponibilité n’existe plus ou vient d’un agenda." };
   if (!isUuid(id)) return refusal;
@@ -75,8 +75,8 @@ export async function deleteUnavailability(tx: Tx, id: string): Promise<Result> 
 }
 
 /**
- * Remplace les plages lues dans l'agenda d'un intervenant sur une fenêtre de
- * temps (synchronisation) ; les indisponibilités saisies ne sont pas touchées.
+ * Replaces the slots read from an instructor's calendar over a time
+ * window (synchronisation); manually entered unavailabilities are not touched.
  */
 export async function replaceCalendarUnavailabilities(
   tx: Tx,
@@ -110,7 +110,7 @@ export async function replaceCalendarUnavailabilities(
   return valid.length;
 }
 
-/** Indisponibilités (de tous ou de certains intervenants) qui touchent une période. */
+/** Unavailabilities (of all or some instructors) that touch a period. */
 async function unavailabilitiesBetween(
   tx: Tx,
   start: Date,
@@ -131,15 +131,15 @@ async function unavailabilitiesBetween(
 }
 
 const DAY = 86_400_000;
-/** Période large (un jour de marge de chaque côté) couvrant des dates `YYYY-MM-DD` triées. */
+/** Wide period (one day of margin on each side) covering sorted `YYYY-MM-DD` dates. */
 const period = (dates: string[]) => ({
   start: new Date(Date.parse(dates[0]) - DAY),
   end: new Date(Date.parse(dates[dates.length - 1]) + 2 * DAY),
 });
 
 /**
- * Dates à venir où un créneau hebdomadaire tomberait pendant une
- * indisponibilité de l'intervenant (formulaire de cours, avant enregistrement).
+ * Upcoming dates when a weekly slot would fall during an
+ * unavailability of the instructor (course form, before saving).
  */
 export async function slotConflicts(
   tx: Tx,
@@ -177,7 +177,7 @@ export async function slotConflicts(
   return conflicts(lessons, unavailabilities).map((c) => c.lessonId);
 }
 
-/** Séances prévues d'un cours, à partir d'aujourd'hui, dont l'intervenant est indisponible. */
+/** Planned lessons of a course, from today on, whose instructor is unavailable. */
 export async function conflictingLessons(tx: Tx, courseId: string, today: string): Promise<Set<string>> {
   if (!isUuid(courseId)) return new Set();
   const rows = await tx
@@ -210,8 +210,8 @@ export type Substitute = {
 };
 
 /**
- * Pour une séance : son intervenant est-il indisponible, et quels intervenants
- * actifs pourraient la reprendre (libres d'abord, la discipline en tête).
+ * For a lesson: is its instructor unavailable, and which active instructors
+ * could take it over (free ones first, the discipline's at the top).
  */
 export async function lessonAvailabilities(
   tx: Tx,

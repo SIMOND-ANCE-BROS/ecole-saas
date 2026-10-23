@@ -16,7 +16,7 @@ import { requireRole } from "@/lib/session";
 
 export type Refusal = { message: string; errors: Partial<Record<string, string>> };
 
-/** Crée (id null) ou modifie un cours de la saison courante ; réservé à la direction. */
+/** Creates (null id) or updates a course of the current season; management only. */
 export async function saveCourse(id: string | null, saisie: unknown): Promise<Refusal> {
   const { schoolId: schoolId } = await requireRole("direction");
   const donnees = validCourseInput.safeParse(saisie);
@@ -34,7 +34,7 @@ export async function saveCourse(id: string | null, saisie: unknown): Promise<Re
         message: id !== null ? "Ce cours n’existe plus." : "Aucune saison n’est paramétrée.",
       };
     const r = id !== null ? await updateCourse(tx, id, donnees.data) : await createCourse(tx, seasonId, donnees.data);
-    // Séances à venir recalculées dans la même transaction (jour changé, nouveau cours…).
+    // Upcoming lessons recomputed in the same transaction (day changed, new course…).
     if (r.ok) await syncLessons(tx, seasonId, today);
     return r;
   });
@@ -49,7 +49,7 @@ export async function remove(id: string): Promise<Refusal> {
   redirect("/planning?supprime=1");
 }
 
-/** Dates à venir où l'intervenant choisi serait indisponible sur ce créneau (pendant la saisie). */
+/** Upcoming dates when the chosen instructor would be unavailable for this slot (while typing). */
 export async function checkSlot(
   courseId: string | null,
   slot: { instructorId: string; weekday: number; startTime: string; durationMinutes: number },
@@ -70,9 +70,9 @@ export type MoveResponse =
 const shortDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
 
 /**
- * Glisser-déposer de la vue agenda : nouveau jour, heure ou durée. Les séances
- * à venir suivent ; le résultat signale salle ou intervenant déjà pris et les
- * indisponibilités de l'intervenant sur ce créneau.
+ * Drag and drop from the calendar view: new day, time or length. Upcoming
+ * lessons follow; the result reports a room or instructor already taken and the
+ * instructor's unavailabilities for this slot.
  */
 export async function move(courseId: string, slot: unknown, confirmed: boolean): Promise<MoveResponse> {
   const { schoolId: schoolId } = await requireRole("direction");

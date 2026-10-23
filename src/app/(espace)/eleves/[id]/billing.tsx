@@ -11,12 +11,12 @@ type Props = {
   firstName: string;
   minor: boolean;
   billedTo: StudentRecord["billedTo"];
-  /** Proches qui peuvent être facturés (responsables et proches « vers » l'élève). */
+  /** Relatives who can be invoiced (guardians and relatives « vers » the student). */
   relatives: StudentRelative[];
   siblings: StudentRecord["siblings"];
 };
 
-/** « Facturé à » : un seul payeur, changé en un geste. */
+/** « Facturé à »: a single payer, changed in one gesture. */
 export function Billing({
   studentId: studentId,
   firstName: firstName,

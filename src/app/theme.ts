@@ -1,12 +1,12 @@
 import { createTheme, type MantineColorsTuple } from "@mantine/core";
 
 /**
- * Thème Mantine (#107), aligné sur les jetons de `globals.css` : indigo de
- * l'interface en couleur principale, gris ardoise, police Geist, arrondis
- * de 8 px. Modèle : le back-office de FFD-Connect (apps/admin/src/theme.ts).
+ * Mantine theme (#107), aligned with the `globals.css` tokens: the interface
+ * indigo as primary colour, slate grey, Geist font, 8 px corner radius.
+ * Model: the FFD-Connect back office (apps/admin/src/theme.ts).
  */
 
-// Indigo de l'interface (#4f46e5 en clair, plus lumineux en sombre).
+// Interface indigo (#4f46e5 in light mode, brighter in dark mode).
 const accent: MantineColorsTuple = [
   "#eef2ff",
   "#e0e7ff",
@@ -20,7 +20,7 @@ const accent: MantineColorsTuple = [
   "#312e81",
 ];
 
-// Gris ardoise pour les gris clairs de l'interface.
+// Slate grey for the interface's light greys.
 const slate: MantineColorsTuple = [
   "#f8fafc",
   "#f1f5f9",
@@ -34,7 +34,7 @@ const slate: MantineColorsTuple = [
   "#0f172a",
 ];
 
-// Échelle sombre de Mantine : du texte clair (0) à la surface la plus sombre (9), proche de --fond / --surface.
+// Mantine dark scale: from light text (0) to the darkest surface (9), close to --fond / --surface.
 const dark: MantineColorsTuple = [
   "#e6e8ef",
   "#c7ccd8",
@@ -57,7 +57,7 @@ export const theme = createTheme({
   headings: { fontWeight: "600" },
   defaultRadius: "md",
   radius: { xs: "4px", sm: "6px", md: "8px", lg: "12px", xl: "16px" },
-  // Densité de l'accueil : des champs et tableaux compacts.
+  // Front-desk density: compact fields and tables.
   components: {
     Table: { defaultProps: { verticalSpacing: "xs", highlightOnHover: true } },
   },

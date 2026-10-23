@@ -6,7 +6,7 @@ describe("appliquerTaux", () => {
     expect(applyRate(31500, 1000)).toBe(3150);
   });
   it("arrondit au centime le plus proche", () => {
-    expect(applyRate(1005, 1000)).toBe(101); // 100,5 → 101
+    expect(applyRate(1005, 1000)).toBe(101); // 100.5 → 101
   });
   it("refuse les nombres à virgule", () => {
     expect(() => applyRate(10.5, 1000)).toThrow();

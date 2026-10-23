@@ -15,9 +15,9 @@ import { payableStudents } from "./people";
 import { course, discipline, enrollment, enrollmentCourse, person, discount, tariff } from "./schema";
 
 /**
- * Inscriptions : chargement des données de l'école, validation de la saisie,
- * calcul par le moteur de tarif (pur) et enregistrement. Toujours avec la
- * transaction d'`withSchool()` : la RLS limite tout à l'école courante.
+ * Enrollments: loading the school's data, validating the input,
+ * computing with the (pure) tariff engine and saving. Always within the
+ * `withSchool()` transaction: RLS limits everything to the current school.
  */
 
 export type EnrollmentInput = {
@@ -60,7 +60,7 @@ export async function loadDiscounts(tx: Tx, seasonId: string): Promise<DiscountR
 
 type Existing = EnrollmentRequest & { savedDeposit: number };
 
-/** Inscriptions actives du payeur pour la saison, sous la forme attendue par le moteur. */
+/** Active enrollments of the payer for the season, in the shape expected by the engine. */
 async function existingEnrollments(tx: Tx, payerId: string, seasonId: string): Promise<Existing[]> {
   const rows = await tx
     .select({
@@ -106,7 +106,7 @@ async function existingEnrollments(tx: Tx, payerId: string, seasonId: string): P
   });
 }
 
-/** Danseurs du payeur et cours de la saison réellement choisis ; sinon le motif du refus. */
+/** Payer's students and the season's courses actually chosen; otherwise the reason for refusal. */
 async function validate(
   tx: Tx,
   payerId: string,
@@ -133,7 +133,7 @@ async function validate(
   return chosen;
 }
 
-/** Une inscription déjà enregistrée dont la remise changerait avec la nouvelle (ex. fratrie). */
+/** An already saved enrollment whose discount would change with the new one (e.g. siblings). */
 export type ExistingImpact = {
   reference: string;
   students: string;
@@ -145,7 +145,7 @@ export type Preview =
   | { status: "invalide"; message: string }
   | { status: "ok"; newEnrollment: EnrollmentResult; existingImpacts: ExistingImpact[] };
 
-/** Prix de la nouvelle inscription, calculé avec la grille, les réductions et les autres inscriptions du payeur. */
+/** Price of the new enrollment, computed with the grid, the discounts and the payer's other enrollments. */
 export async function enrollmentPreview(
   tx: Tx,
   payerId: string,
@@ -185,7 +185,7 @@ export async function enrollmentPreview(
   return { status: "ok", newEnrollment: result.enrollments.find((i) => i.reference === NEW)!, existingImpacts: other };
 }
 
-/** Enregistre l'inscription au prix recalculé ici (jamais celui envoyé par le navigateur). */
+/** Saves the enrollment at the price recomputed here (never the one sent by the browser). */
 export async function saveEnrollment(
   tx: Tx,
   payerId: string,
@@ -238,7 +238,7 @@ export type PaidEnrollment = {
   netPriceCents: number;
 };
 
-/** Inscriptions actives payées par une personne pour la saison, triées par danseur. */
+/** Active enrollments paid by a person for the season, sorted by student. */
 export async function enrollmentsPayeesBy(tx: Tx, payerId: string, seasonId: string): Promise<PaidEnrollment[]> {
   const rows = await tx
     .select({

@@ -7,11 +7,11 @@ import { correctPayment, collect } from "@/db/payments";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 
-/** Retour vers la fiche du payeur : seulement une fiche élève ou contact. */
+/** Return to the payer's record: only a student or contact record. */
 const safeReturnPath = (r: unknown) =>
   typeof r === "string" && /^\/(eleves|contacts)\/[0-9a-f-]{36}$/.test(r) ? r : null;
 
-/** Encaisse un ou plusieurs règlements (accueil et direction), puis revient à la fiche du payeur. */
+/** Records one or more payments (front desk and management), then returns to the payer's record. */
 export async function collectPayments(payerId: string, saisie: unknown, back: unknown): Promise<{ message: string }> {
   const { schoolId: schoolId, userId } = await requireRole("direction", "accueil");
   const r = await withSchool(schoolId, (tx) => collect(tx, userId, payerId, saisie as never));
@@ -20,7 +20,7 @@ export async function collectPayments(payerId: string, saisie: unknown, back: un
   redirect(`${safeReturnPath(back) ?? `/personnes/${payerId}`}?encaisse=${r.ids.length}`);
 }
 
-/** Correction d'un paiement par un paiement négatif : direction seulement. */
+/** Corrects a payment with a negative payment: management only. */
 export async function correct(
   paymentId: string,
   amountCents: number,

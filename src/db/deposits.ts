@@ -6,9 +6,9 @@ import { alreadyCorrected, type Method } from "./payments";
 import { auditLog, member, payment, person, bankDeposit, bankDepositPayment } from "./schema";
 
 /**
- * Journal des encaissements et remises en banque (#98). Une remise relie des
- * paiements par une table à part : le paiement, inaltérable, n'est jamais
- * modifié. Toujours avec la transaction d'`withSchool()` (RLS).
+ * Payments log and bank deposits (#98). A deposit links
+ * payments through a separate table: the payment, immutable, is never
+ * modified. Always within the `withSchool()` transaction (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
@@ -52,7 +52,7 @@ function rows(tx: Tx) {
     .leftJoin(bankDeposit, eq(bankDeposit.id, bankDepositPayment.bankDepositId));
 }
 
-/** Paiements reçus entre deux dates (incluses), éventuellement d'un seul moyen, du plus ancien au plus récent. */
+/** Payments received between two dates (inclusive), optionally of a single method, oldest first. */
 export async function paymentLog(tx: Tx, du: string, au: string, method: Method | null): Promise<AuditLogRow[]> {
   return rows(tx)
     .where(
@@ -61,7 +61,7 @@ export async function paymentLog(tx: Tx, du: string, au: string, method: Method 
     .orderBy(asc(payment.date), asc(payment.createdAt));
 }
 
-/** Chèques arrivés à échéance, espèces et chèques vacances pas encore remis, par moyen. */
+/** Cheques that have come due, cash and holiday vouchers not yet deposited, by method. */
 export async function paymentsToDeposit(tx: Tx, today: string): Promise<Record<DepositMethod, AuditLogRow[]>> {
   const candidates = await rows(tx)
     .where(
@@ -91,7 +91,7 @@ async function memberOf(tx: Tx, userId: string) {
   return m?.id ?? null;
 }
 
-/** Crée une remise : chaque paiement doit être à remettre, du moyen de la remise, à la date de la remise. */
+/** Creates a deposit: each payment must be pending deposit, of the deposit's method, at the deposit date. */
 export async function createDeposit(
   tx: Tx,
   userId: string,
@@ -131,7 +131,7 @@ export async function createDeposit(
   return { ok: true, id };
 }
 
-/** Annule une remise faite par erreur (direction) : ses paiements redeviennent à remettre ; trace dans le journal. */
+/** Cancels a deposit made by mistake (management): its payments go back to pending; logged in the audit log. */
 export async function cancelDeposit(tx: Tx, userId: string, id: string): Promise<Result> {
   if (!isUuid(id)) return { ok: false, message: "Cette remise n’existe plus." };
   const [x] = await tx
@@ -155,7 +155,7 @@ export async function cancelDeposit(tx: Tx, userId: string, id: string): Promise
 
 export type DepositRow = { id: string; date: string; method: DepositMethod; nombre: number; totalCents: number };
 
-/** Remises, de la plus récente à la plus ancienne. */
+/** Deposits, most recent first. */
 export function listDeposits(tx: Tx): Promise<DepositRow[]> {
   return tx
     .select({
@@ -172,7 +172,7 @@ export function listDeposits(tx: Tx): Promise<DepositRow[]> {
     .orderBy(desc(bankDeposit.date), desc(bankDeposit.createdAt));
 }
 
-/** Une remise et ses paiements (bordereau), ou null. */
+/** A deposit and its payments (deposit slip), or null. */
 export async function readDeposit(tx: Tx, id: string): Promise<(DepositRow & { payments: AuditLogRow[] }) | null> {
   if (!isUuid(id)) return null;
   const [x] = await tx

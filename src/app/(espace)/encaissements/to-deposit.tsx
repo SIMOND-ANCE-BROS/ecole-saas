@@ -10,8 +10,8 @@ import { deposit } from "./actions";
 const day = (iso: string) => iso.split("-").reverse().join("/");
 
 /**
- * Paiements d'un moyen à remettre (#98) : tous cochés par défaut ; la remise
- * prend la date choisie (aujourd'hui par défaut) et ouvre son bordereau.
+ * Payments of one method to deposit (#98): all ticked by default; the bank deposit
+ * takes the chosen date (today by default) and opens its deposit slip.
  */
 export function ToDeposit({
   method: method,

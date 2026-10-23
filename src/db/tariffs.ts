@@ -4,9 +4,9 @@ import type { Tx } from "./index";
 import { discipline, enrollment, discount, tariff, lessonPackTariff } from "./schema";
 
 /**
- * Grille tarifaire, réductions et carnets d'une saison (#80). Ce sont des
- * données de l'école : le moteur de tarif les reçoit telles quelles. Toujours
- * avec la transaction d'`withSchool()` (RLS).
+ * Tariff grid, discounts and lesson packs of a season (#80). They are the
+ * school's data: the tariff engine receives them as they are. Always
+ * within the `withSchool()` transaction (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
@@ -19,20 +19,20 @@ export type Public = (typeof AUDIENCES)[number];
 export type Period = (typeof PERIODS)[number];
 
 // ---------------------------------------------------------------------------
-// Grille
+// Grid
 // ---------------------------------------------------------------------------
 
 export type GridRow = {
   audience: Public;
-  /** Durées triées, en minutes. */
+  /** Sorted durations, in minutes. */
   combination: number[];
   disciplineId: string | null;
   discipline: string | null;
-  /** Prix par périodicité (absent : pas de forfait pour cette périodicité). */
+  /** Price per periodicity (missing: no package for that periodicity). */
   price: Partial<Record<Period, { id: string; cents: number; used: boolean }>>;
 };
 
-/** Lignes de la grille d'une saison, regroupées par public, combinaison et discipline ; des plus courtes aux plus longues. */
+/** Rows of a season's grid, grouped by audience, combination and discipline; shortest to longest. */
 export async function seasonGrid(tx: Tx, seasonId: string): Promise<GridRow[]> {
   if (!isUuid(seasonId)) return [];
   const tariffId = sql`${tariff}.${sql.identifier("id")}`;
@@ -82,7 +82,7 @@ export const validCell = z.object({
   combination: z.array(z.int().min(5).max(600)).min(1, "Indiquez au moins un cours").max(6),
   disciplineId: z.uuid().nullable(),
   period: z.enum(PERIODS),
-  /** null : retirer le prix de cette case. */
+  /** null: remove the price of this cell. */
   priceCents: z.int().min(0).max(10_000_00).nullable(),
 });
 
@@ -96,9 +96,9 @@ const sameCase = (seasonId: string, c: z.output<typeof validCell>, combination: 
   );
 
 /**
- * Fixe (ou retire) le prix d'une case de la grille. Le prix d'une case déjà
- * utilisée peut changer (les inscriptions gardent le leur) ; elle ne peut pas
- * être retirée.
+ * Sets (or removes) the price of a grid cell. The price of a cell already
+ * in use can change (enrollments keep theirs); it cannot be
+ * removed.
  */
 export async function savePrice(tx: Tx, seasonId: string, saisie: z.input<typeof validCell>): Promise<Result> {
   const c = validCell.safeParse(saisie);
@@ -146,7 +146,7 @@ export async function savePrice(tx: Tx, seasonId: string, saisie: z.input<typeof
 }
 
 // ---------------------------------------------------------------------------
-// Réductions (le moteur ne connaît que la fratrie)
+// Discounts (the engine only knows siblings)
 // ---------------------------------------------------------------------------
 
 export type Siblings = {
@@ -194,7 +194,7 @@ const siblingsRow = (f: z.output<typeof validSiblings>) => ({
   combinableWithMultiDiscipline: f.combinableWithMultiDiscipline,
 });
 
-/** Règle de la réduction fratrie de la saison ; null la supprime. */
+/** Siblings discount rule of the season; null deletes it. */
 export async function saveSiblings(
   tx: Tx,
   seasonId: string,
@@ -215,7 +215,7 @@ export async function saveSiblings(
 }
 
 // ---------------------------------------------------------------------------
-// Carnets (cours particuliers)
+// Lesson packs (private lessons)
 // ---------------------------------------------------------------------------
 
 export type LessonPackRow = { id: string; lessonCount: number; maxPeople: number; priceCents: number };
@@ -240,7 +240,7 @@ export const validLessonPack = z.object({
   priceCents: z.int().min(0).max(10_000_00),
 });
 
-/** Crée ou met à jour le prix d'un carnet (séances, personnes). */
+/** Creates or updates the price of a lesson pack (lessons, people). */
 export async function saveLessonPack(
   tx: Tx,
   seasonId: string,

@@ -8,7 +8,7 @@ import { requireRole } from "@/lib/session";
 
 export type Refusal = { message: string; errors: Partial<Record<string, string>>; duplicates?: Duplicate[] };
 
-/** Nouveau contact (parent, payeur, organisme) ; sans `confirme`, renvoie d'abord les doublons probables. */
+/** New contact (parent, payer, organisation); without `confirmed`, first returns the likely duplicates. */
 export async function createContact(saisie: unknown, confirmed: boolean): Promise<Refusal> {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const p = validPersonInput.safeParse(saisie);
@@ -19,7 +19,7 @@ export async function createContact(saisie: unknown, confirmed: boolean): Promis
   redirect(`/contacts/${r.id}?enregistre=cree`);
 }
 
-/** Identité et coordonnées d'un élève ou d'un contact. */
+/** Identity and contact details of a student or a contact. */
 export async function updateIdentity(id: string, saisie: unknown, back: "eleves" | "contacts"): Promise<Refusal> {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const p = validPersonInput.safeParse(saisie);
@@ -29,7 +29,7 @@ export async function updateIdentity(id: string, saisie: unknown, back: "eleves"
   redirect(`/${back}/${id}?enregistre=modifie`);
 }
 
-/** Recherche d'une personne existante pendant la frappe (responsable, payeur). */
+/** Search for an existing person while typing (guardian, payer). */
 export async function searchPeopleAction(saisie: string) {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
   if (typeof saisie !== "string") return [];

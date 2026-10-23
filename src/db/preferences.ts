@@ -3,15 +3,15 @@ import type { Tx } from "./index";
 import { member, listPreference } from "./schema";
 
 /**
- * Disposition des colonnes des listes, propre à chaque membre (#89). Le
- * membre est retrouvé par son compte dans l'école courante (RLS) : un compte
- * membre de deux écoles a une disposition par école. La validation des
- * colonnes revient à l'appelant (`lireDisposition`).
+ * Column layout of the lists, specific to each member (#89). The
+ * member is found by their account in the current school (RLS): an account
+ * that is a member of two schools has one layout per school. Validating the
+ * columns is up to the caller (`readLayout`).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 
-/** Colonnes enregistrées par ce compte pour cette liste, ou null (disposition par défaut). */
+/** Columns saved by this account for this list, or null (default layout). */
 export async function readPreference(tx: Tx, userId: string, list: string): Promise<string[] | null> {
   const [p] = await tx
     .select({ columns: listPreference.columns })
@@ -21,7 +21,7 @@ export async function readPreference(tx: Tx, userId: string, list: string): Prom
   return p?.columns ?? null;
 }
 
-/** Enregistre (ou remplace) la disposition ; false si le compte n'est pas membre de l'école courante. */
+/** Saves (or replaces) the layout; false if the account is not a member of the current school. */
 export async function savePreference(tx: Tx, userId: string, list: string, columns: string[]): Promise<boolean> {
   const [m] = await tx.select({ id: member.id }).from(member).where(eq(member.userId, userId));
   if (!m) return false;

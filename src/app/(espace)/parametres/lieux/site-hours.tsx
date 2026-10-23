@@ -8,9 +8,9 @@ const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "
 type Day = { open: boolean; opening: string; closure: string };
 
 /**
- * Jours et heures d'ouverture d'un site (#90) : l'agenda du planning s'y
- * limite et le formulaire de cours prévient d'un créneau qui en sort. Sans
- * aucun jour coché, le site n'impose rien.
+ * Opening days and hours of a site (#90): the schedule calendar is bounded by
+ * them and the course form warns about a slot outside them. With no day
+ * ticked, the site imposes nothing.
  */
 export function SiteHours({ siteId, name: name, hours: hours }: { siteId: string; name: string; hours: Hours[] }) {
   const initial = () =>

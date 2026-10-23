@@ -13,13 +13,13 @@ import {
   toParams,
 } from "@/domain/filters/filters";
 
-/** Délai avant d'appliquer une valeur tapée (la liste se recharge depuis le serveur). */
+/** Delay before applying a typed value (the list reloads from the server). */
 const DELAY = 350;
 
 /**
- * Filtre d'une liste (#87, #89) : état local, dont seules les conditions
- * complètes vont dans l'adresse (`?f=…&mode=ou`) que la page relit côté
- * serveur. Une condition en cours de saisie reste locale.
+ * A list's filter (#87, #89): local state, of which only complete conditions
+ * go into the URL (`?f=…&mode=ou`) that the page reads back on the server.
+ * A condition still being typed stays local.
  */
 export function useAddressFilter(columns: ColumnDef[]) {
   const router = useRouter();
@@ -47,13 +47,13 @@ export function useAddressFilter(columns: ColumnDef[]) {
     else send();
   }
 
-  /** Change le filtre ; `differe` pour une valeur en cours de frappe. */
+  /** Changes the filter; `deferred` for a value still being typed. */
   function change(f: Filter, deferred = false) {
     setFilter(f);
     publish(f, deferred);
   }
 
-  /** Modifie la condition d'indice `i` (opérateur adapté au type de la colonne, valeur vidée si inutile). */
+  /** Updates the condition at index `i` (operator adapted to the column type, value cleared when unused). */
   function update(i: number, updated: Partial<Condition>) {
     const conditions = filter.conditions.map((c, j) => {
       if (j !== i) return c;
@@ -66,7 +66,7 @@ export function useAddressFilter(columns: ColumnDef[]) {
     change({ ...filter, conditions }, ("value" satisfies keyof Condition) in updated);
   }
 
-  /** Nouvelle condition vide sur une colonne : rien à recharger tant qu'elle n'a pas de valeur. */
+  /** New empty condition on a column: nothing to reload until it has a value. */
   function add(column: string) {
     setFilter({
       ...filter,
@@ -78,7 +78,7 @@ export function useAddressFilter(columns: ColumnDef[]) {
     change({ ...filter, conditions: filter.conditions.filter((_, j) => j !== i) });
   }
 
-  /** À la fermeture d'une bulle : oublie les conditions de cette colonne restées sans valeur (jamais publiées). */
+  /** When a popover closes: drops this column's conditions left without a value (never published). */
   function clean(column: string) {
     setFilter((f) => ({ ...f, conditions: f.conditions.filter((c) => c.column !== column || complete(c)) }));
   }

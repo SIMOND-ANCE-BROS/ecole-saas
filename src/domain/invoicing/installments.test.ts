@@ -55,7 +55,7 @@ describe("ajouterMois", () => {
   });
 
   it("calcule chaque date depuis la première, sans dérive après un mois court", () => {
-    // 31 janvier + 2 mois = 31 mars, pas 28 mars.
+    // 31 January + 2 months = 31 March, not 28 March.
     expect(addMonths("2027-01-31", 2)).toBe("2027-03-31");
   });
 

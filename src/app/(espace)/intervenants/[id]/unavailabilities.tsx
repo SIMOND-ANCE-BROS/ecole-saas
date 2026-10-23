@@ -20,7 +20,7 @@ const day = new Intl.DateTimeFormat("fr-FR", {
 });
 const heure = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
 
-/** « mer. 4 nov., 16:30 à 19:00 », ou « mer. 4 nov. au ven. 6 nov. » pour des journées entières. */
+/** « mer. 4 nov., 16:30 à 19:00 », or « mer. 4 nov. au ven. 6 nov. » for whole days. */
 function range(isoStart: string, isoEnd: string): string {
   const start = new Date(isoStart);
   const end = new Date(isoEnd);
@@ -36,7 +36,7 @@ function range(isoStart: string, isoEnd: string): string {
     : `${day.format(start)} ${heure.format(start)} au ${day.format(end)} ${heure.format(end)}`;
 }
 
-/** Indisponibilités à venir d'un intervenant ; celles d'un agenda connecté ne se retirent pas ici. */
+/** Upcoming unavailabilities of an instructor; those from a connected calendar cannot be removed here. */
 export function Unavailabilities({
   instructorId: instructorId,
   firstName: firstName,

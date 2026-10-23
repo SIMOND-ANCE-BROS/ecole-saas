@@ -12,9 +12,9 @@ const EMPTY_ROW: Row = { method: "cheque", amount: "", reference: "", issuer: ""
 type Props = { payerId: string; payer: string; remaining: number | null; today: string; back: string };
 
 /**
- * Encaissement d'un payeur (#97) : une ligne par règlement (trois chèques
- * datés, un chèque et des espèces…), date de réception commune, total
- * comparé au reste à payer.
+ * Payment from a payer (#97): one row per payment (three dated cheques,
+ * a cheque and some cash…), a shared date received, total compared with
+ * the amount still due.
  */
 export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaining, today: today, back: back }: Props) {
   const [rows, setRows] = useState<Row[]>([

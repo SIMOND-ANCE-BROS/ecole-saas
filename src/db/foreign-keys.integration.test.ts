@@ -2,10 +2,10 @@ import postgres from "postgres";
 import { afterAll, describe, expect, it } from "vitest";
 
 /**
- * Garde-fou : une clé étrangère entre deux tables portant `school_id` doit
- * associer school_id à school_id (clé composite, voir `sameSchool` dans
- * src/db/schema.ts). La vérification d'une clé étrangère ignore la Row Level
- * Security : une clé simple laisserait une ligne viser celle d'une autre école.
+ * Guard: a foreign key between two tables carrying `school_id` must
+ * match school_id to school_id (composite key, see `sameSchool` in
+ * src/db/schema.ts). Foreign-key checks ignore Row Level
+ * Security: a plain key would let a row point to one of another school.
  */
 
 const QUERY_KEYS_WITHOUT_SCHOOL = `
@@ -54,7 +54,7 @@ describe("Clés étrangères entre écoles", () => {
   });
 
   it("détecte une clé étrangère simple entre deux tables d’école", async () => {
-    // Vérifie le garde-fou lui-même, sur des tables témoins annulées.
+    // Checks the guard itself, on rolled-back probe tables.
     const result = await admin
       .begin(async (tx) => {
         await tx.unsafe(`

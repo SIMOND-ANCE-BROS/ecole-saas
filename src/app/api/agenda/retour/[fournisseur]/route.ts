@@ -8,9 +8,9 @@ import { publicAddress, COOKIE_OAUTH, redirectionOAuth } from "@/lib/public-cale
 import { syncCalendar } from "@/lib/calendar-sync";
 
 /**
- * Retour de Google ou Microsoft : vérifie l'état signé et le cookie du départ,
- * échange le code (PKCE), chiffre l'accès durable, synchronise une première
- * fois, puis renvoie l'intervenant sur sa page personnelle.
+ * Return from Google or Microsoft: checks the signed state and the departure
+ * cookie, exchanges the code (PKCE), encrypts the long-lived access, syncs a
+ * first time, then sends the instructor back to their personal page.
  */
 const cookieOAuth = z.object({ verifier: z.string(), nonce: z.string(), back: z.string() });
 
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/agenda/retou
       verifier: cookie.verifier,
       redirection: redirectionOAuth(f),
     });
-    // L'intervenant a pu être désactivé entre le départ et le retour : rien n'est alors enregistré.
+    // The instructor may have been deactivated between departure and return: nothing is saved then.
     const saves = await withSchool(state.schoolId, (tx) =>
       saveConnection(tx, state.instructorId, {
         provider: f,

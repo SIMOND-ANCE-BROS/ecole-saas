@@ -24,8 +24,8 @@ const dateTime = new Intl.DateTimeFormat("fr-FR", {
 });
 
 /**
- * Page personnelle d'un intervenant, ouverte par son lien privé (sans compte) :
- * abonnement à ses séances et connexion de son agenda.
+ * An instructor's personal page, opened through their private link (no account):
+ * subscription to their lessons and connection of their calendar.
  */
 export default async function MyCalendarPage({ params, searchParams }: PageProps<"/mon-agenda/[ecole]/[jeton]">) {
   const [{ ecole, jeton }, { agenda: status }] = await Promise.all([params, searchParams]);

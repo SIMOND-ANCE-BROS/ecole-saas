@@ -1,8 +1,8 @@
 /**
- * Données de TEST uniquement : grille de l'école Ribas, recopiée de sa plaquette
- * publique (https://www.ecolededanseribas.com/public/files/6a2ee0ca86921.pdf).
- * Ne jamais importer depuis le code applicatif : en production, la grille vient
- * de la table `tarif` de chaque école.
+ * TEST data only: the Ribas school's tariff grid, copied from its public
+ * brochure (https://www.ecolededanseribas.com/public/files/6a2ee0ca86921.pdf).
+ * Never import from application code: in production, the tariff grid comes
+ * from each school's `tariff` table.
  */
 import type { TariffRow, LessonPackTariffRow, Period, Public, DiscountRule } from "../types";
 
@@ -31,7 +31,7 @@ const adultes: TariffRow[] = [
   // « 1 cours »
   row("adulte", "unite", [60], 15),
   row("adulte", "unite", [90], 20),
-  // Trimestriel individuel
+  // Quarterly individual
   row("adulte", "trimestre", [60], 120),
   row("adulte", "trimestre", [90], 165),
   row("adulte", "trimestre", [60, 60], 205),
@@ -40,33 +40,33 @@ const adultes: TariffRow[] = [
   row("adulte", "trimestre", [60, 60, 90], 285),
   row("adulte", "trimestre", [60, 60, 60], 250),
   row("adulte", "trimestre", [60, 90, 90], 315),
-  // Trimestriel couple
+  // Quarterly couple
   row("couple", "trimestre", [60], 230),
   row("couple", "trimestre", [90], 295),
   row("couple", "trimestre", [60, 60], 390),
   row("couple", "trimestre", [60, 90], 445),
   row("couple", "trimestre", [90, 90], 500),
-  // Trimestriel étudiant
+  // Quarterly student rate
   row("etudiant", "trimestre", [60], 115),
   row("etudiant", "trimestre", [90], 155),
-  // Annuel individuel
+  // Yearly individual
   row("adulte", "annee", [60], 305),
   row("adulte", "annee", [90], 420),
   row("adulte", "annee", [60, 60], 520),
   row("adulte", "annee", [60, 90], 615),
   row("adulte", "annee", [90, 90], 715),
-  // « Zumba 2h00 » : hypothèse, 2 cours de 1 h 00 de Zumba (question D de #11).
+  // « Zumba 2h00 »: assumption, 2 Zumba courses of 1 h 00 (question D of #11).
   row("adulte", "annee", [60, 60], 430, ZUMBA),
   row("adulte", "annee", [60, 60, 90], 720),
   row("adulte", "annee", [60, 60, 60], 640),
   row("adulte", "annee", [60, 90, 90], 800),
-  // Annuel couple
+  // Yearly couple
   row("couple", "annee", [60], 550),
   row("couple", "annee", [90], 755),
   row("couple", "annee", [60, 60], 920),
   row("couple", "annee", [60, 90], 1100),
   row("couple", "annee", [90, 90], 1280),
-  // Annuel étudiant
+  // Yearly student rate
   row("etudiant", "annee", [60], 290),
   row("etudiant", "annee", [90], 400),
 ];
@@ -93,8 +93,8 @@ const children: TariffRow[] = (
 export const ribasGrid: TariffRow[] = [...adultes, ...children];
 
 /**
- * Page 3, cours particuliers : « 1 OU 2 PERSONNES », « 3 PERSONNES », « 4 PERSONNES » ;
- * « 1h00 » = carnet d'une séance. Au-delà de 4 personnes : devis.
+ * Page 3, private lessons: « 1 OU 2 PERSONNES », « 3 PERSONNES », « 4 PERSONNES »;
+ * « 1h00 » = one-lesson pack. Beyond 4 people: quote.
  */
 export const ribasLessonPacksGrid: LessonPackTariffRow[] = (
   [

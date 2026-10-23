@@ -13,10 +13,10 @@ import type { CalendarResponse } from "./calendar";
 import { shortDate, end } from "./format";
 
 /**
- * Déplace une séance du planning daté (#90) : « seance » (elle seule) ou
- * « suivantes » (le cours change à partir d'elle). Signale ensuite une salle
- * ou un intervenant déjà pris ce jour-là et un créneau hors des horaires du
- * site.
+ * Moves a lesson of the dated schedule (#90): « seance » (that one only) or
+ * « suivantes » (the course changes from that lesson on). Then reports a room
+ * or instructor already taken that day and a slot outside the site's opening
+ * hours.
  */
 export async function moveOneLesson(
   lessonId: string,

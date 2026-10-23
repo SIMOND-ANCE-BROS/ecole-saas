@@ -1,25 +1,24 @@
 import { type Condition, type ColumnDef, type Filter, SEPARATOR, EMPTY, amongValues } from "./filters";
 
 /**
- * Filtre d'une colonne tel que le montre le menu de son titre (#107), comme
- * dans Excel : des cases à cocher pour une colonne à valeurs connues
- * (inscription, cours, statut), « de … à … » pour un nombre ou une date,
- * « contient » pour un texte. Il s'écrit en conditions ordinaires de
- * l'adresse (`?f=…`), filtrées par le serveur.
+ * A column's filter as shown by its header menu (#107), as in Excel:
+ * checkboxes for a column with known values (enrollment, course, status),
+ * « de … à … » for a number or a date, « contient » for text. It is written
+ * as ordinary URL conditions (`?f=…`), filtered by the server.
  */
 export type ColumnFilter = {
-  /** Valeurs cochées (`VIDE` : sans valeur) ; null : pas de filtre par cases. */
+  /** Checked values (`EMPTY`: no value); null: no checkbox filter. */
   choice: string[] | null;
-  /** Texte recherché dans la colonne. */
+  /** Text searched in the column. */
   text: string;
-  /** Bornes incluses d'un nombre ou d'une date (`YYYY-MM-DD`). */
+  /** Inclusive bounds of a number or a date (`YYYY-MM-DD`). */
   min: string;
   max: string;
-  /** Conditions de l'adresse que le menu ne sait pas montrer (anciens liens) : affichées telles quelles. */
+  /** URL conditions the menu cannot show (old links): displayed as they are. */
   otherConditions: Condition[];
 };
 
-/** Filtre de la colonne `def` lu dans le filtre de la liste. */
+/** Filter of column `def`, read from the list's filter. */
 export function readColumnFilter(filter: Filter, def: ColumnDef): ColumnFilter {
   const r: ColumnFilter = { choice: null, text: "", min: "", max: "", otherConditions: [] };
   const bound = def.type === "nombre" || def.type === "date";
@@ -35,9 +34,8 @@ export function readColumnFilter(filter: Filter, def: ColumnDef): ColumnFilter {
 }
 
 /**
- * Filtre de la liste où la colonne `def` porte `fc` : ses conditions sont
- * remplacées, celles des autres colonnes gardées. Les colonnes filtrées se
- * cumulent (mode ET).
+ * List filter where column `def` carries `fc`: its conditions are replaced,
+ * those of the other columns kept. Filtered columns combine (AND mode).
  */
 export function writeColumnFilter(filter: Filter, def: ColumnDef, fc: Partial<ColumnFilter>): Filter {
   const conditions = filter.conditions.filter((c) => c.column !== def.id);
@@ -53,9 +51,9 @@ export function writeColumnFilter(filter: Filter, def: ColumnDef, fc: Partial<Co
 const date = (v: string) => v.split("-").reverse().join("/");
 
 /**
- * Résumé du filtre d'une colonne, pour la pastille au-dessus du tableau :
+ * Summary of a column's filter, for the chip above the table:
  * « Inscription : Inscrit, aucune », « Âge : de 3 à 17 », « Élève : contient « mart » ».
- * null sans filtre (les conditions `autres` ont leur propre pastille).
+ * null without a filter (the `otherConditions` have their own chip).
  */
 export function columnFilterSummary(def: ColumnDef, fc: ColumnFilter): string | null {
   const parties: string[] = [];

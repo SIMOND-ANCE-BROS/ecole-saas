@@ -5,10 +5,10 @@ import type { Tx } from "./index";
 import { lessonPack, enrollment, auditLog, member, payment, person, user } from "./schema";
 
 /**
- * Encaissements (#97) : paiements enregistrés sur le payeur, inaltérables
- * (trigger) ; une erreur se corrige par un paiement négatif lié au paiement
- * d'origine. Chaque écriture laisse une trace dans le journal. Toujours avec
- * la transaction d'`withSchool()` (RLS).
+ * Payments (#97): payments recorded against the payer, immutable
+ * (trigger); an error is fixed by a negative payment linked to the original
+ * payment. Every write leaves a trace in the audit log. Always within
+ * the `withSchool()` transaction (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
@@ -56,13 +56,13 @@ export const validPayments = z.array(validPayment).min(1, "Aucun règlement").ma
 export type Result = { ok: true; ids: string[] } | { ok: false; message: string };
 
 /**
- * Montant déjà annulé par des corrections. Identifiant écrit avec le nom de
- * table : dans un `select`, Drizzle l'écrirait seul, et il désignerait alors
- * la ligne de la sous-requête.
+ * Amount already cancelled by corrections. Identifier written with the table
+ * name: in a `select`, Drizzle would write it alone, and it would then refer to
+ * the subquery's row.
  */
 export const alreadyCorrected = sql<number>`coalesce((SELECT -sum(c.amount_cents) FROM payment c WHERE c.corrects_id = ${payment}.${sql.identifier("id")}), 0)::int`;
 
-/** Membre de l'école courante qui saisit (pour `saisi_par` et le journal). */
+/** Member of the current school who enters the data (for `entered_by` and the audit log). */
 async function memberOf(tx: Tx, userId: string): Promise<string | null> {
   const [m] = await tx
     .select({ id: member.id })
@@ -82,7 +82,7 @@ async function log(tx: Tx, who: string, id: string, after: Record<string, unknow
   });
 }
 
-/** Enregistre un ou plusieurs règlements d'un payeur (trois chèques datés, chèque + espèces…). */
+/** Records one or more payments from a payer (three dated cheques, cheque + cash…). */
 export async function collect(
   tx: Tx,
   userId: string,
@@ -124,8 +124,8 @@ export async function collect(
 }
 
 /**
- * Annule tout ou partie d'un paiement (direction) : paiement négatif du même
- * moyen, lié à l'original, dans la limite de ce qui n'est pas déjà corrigé.
+ * Cancels all or part of a payment (management): negative payment of the same
+ * method, linked to the original, within what is not already corrected.
  */
 export async function correctPayment(
   tx: Tx,
@@ -178,12 +178,12 @@ export type PaymentRow = {
   issuer: string | null;
   plannedPayment: string | null;
   correctedId: string | null;
-  /** Montant déjà annulé par des corrections (paiements positifs). */
+  /** Amount already cancelled by corrections (positive payments). */
   correctedCents: number;
   enteredBy: string | null;
 };
 
-/** Paiements d'un payeur, du plus récent au plus ancien. */
+/** Payments of a payer, most recent first. */
 export async function paymentsOf(tx: Tx, payerId: string): Promise<PaymentRow[]> {
   if (!isUuid(payerId)) return [];
   return tx
@@ -206,7 +206,7 @@ export async function paymentsOf(tx: Tx, payerId: string): Promise<PaymentRow[]>
     .orderBy(desc(payment.date), desc(payment.createdAt));
 }
 
-/** Solde d'un payeur sur toutes ses inscriptions et ses carnets ; null s'il n'a jamais rien payé ni dû. */
+/** Balance of a payer over all their enrollments and lesson packs; null if they never paid nor owed anything. */
 export async function balanceOf(tx: Tx, payerId: string, today: string): Promise<Balance | null> {
   if (!isUuid(payerId)) return null;
   const enrollments = await tx

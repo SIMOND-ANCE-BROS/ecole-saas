@@ -5,7 +5,7 @@ import { ENROLLMENT_STATUS_LABELS as STATUT } from "@/domain/enrollment/statuses
 import { formatEuros } from "@/lib/money";
 import { DAYS } from "../planning/format";
 
-/** Sections communes aux fiches élève et contact. */
+/** Sections shared by the student and contact records. */
 
 const DOCUMENT = {
   certificat_medical: "Certificat médical",
@@ -139,7 +139,7 @@ export function Documents({ documents, today: today }: { documents: PersonRecord
   );
 }
 
-/** Inscriptions facturées à une personne : un engagement, pas un encaissement. */
+/** Enrollments invoiced to a person: a commitment, not a payment. */
 export function FactureesEnrollments({
   enrollments: enrollments,
   season: season,

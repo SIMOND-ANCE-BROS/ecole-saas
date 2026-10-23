@@ -1,4 +1,4 @@
-/** Âge en années révolues au jour donné (dates `YYYY-MM-DD`, sans heure). */
+/** Age in completed years on the given day (`YYYY-MM-DD` dates, no time). */
 export function ageAt(birthDate: string, day: string): number {
   const [yearN, monthN, dayN] = birthDate.split("-").map(Number);
   const [annee, month, j] = day.split("-").map(Number);
@@ -13,7 +13,7 @@ const formatParis = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
-/** Date du jour à Paris, `YYYY-MM-DD` (le serveur peut tourner en UTC). */
+/** Today's date in Paris, `YYYY-MM-DD` (the server may run in UTC). */
 export function todayInParis(now: Date = new Date()): string {
   return formatParis.format(now);
 }

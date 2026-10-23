@@ -6,7 +6,7 @@ import { requireRole } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Paramètres" };
 
-/** Ce qui est propre à l'école se saisit ici : jamais dans le code. */
+/** Whatever is specific to the school is entered here: never in the code. */
 export default async function SettingsPage() {
   const { schoolId: schoolId } = await requireRole("direction");
   const {

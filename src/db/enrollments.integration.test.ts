@@ -5,7 +5,7 @@ import { enrollmentPreview, saveEnrollment, enrollmentsPayeesBy } from "./enroll
 import { seasonCourses } from "./schedule";
 import { seasonFigures, lastEnrollments } from "./dashboard";
 
-/** Inscriptions, exécutées comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
+/** Enrollments, run as the application (app_user, RLS). Fictitious data deleted at the end. */
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");

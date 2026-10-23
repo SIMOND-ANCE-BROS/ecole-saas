@@ -1,6 +1,6 @@
 /**
- * Remises en banque et journal des encaissements (#98) : règles pures, en
- * centimes, dates `YYYY-MM-DD`.
+ * Bank deposits and payment log (#98): pure rules, in cents, dates
+ * `YYYY-MM-DD`.
  */
 
 export const DEPOSIT_METHODS = ["cheque", "especes", "cheque_vacances"] as const;
@@ -12,16 +12,16 @@ export type DepositablePayment = {
   id: string;
   method: string;
   amountCents: number;
-  /** Montant déjà annulé par des corrections. */
+  /** Amount already cancelled by corrections. */
   correctedCents: number;
   plannedPayment: string | null;
   depositId: string | null;
 };
 
 /**
- * Paiements à remettre, par moyen : chèques (une fois leur date
- * d'encaissement arrivée), espèces et chèques vacances, pas encore remis ni
- * entièrement annulés par une correction.
+ * Payments to deposit, by method: cheques (once their cashing date has
+ * come), cash and holiday vouchers, not yet deposited nor fully cancelled
+ * by a correction.
  */
 export function toDeposit<T extends DepositablePayment>(payments: T[], today: string): Record<DepositMethod, T[]> {
   const r: Record<DepositMethod, T[]> = { cheque: [], especes: [], cheque_vacances: [] };
@@ -34,7 +34,7 @@ export function toDeposit<T extends DepositablePayment>(payments: T[], today: st
   return r;
 }
 
-/** Total général et par moyen. */
+/** Grand total and total per method. */
 export function totals<T extends { method: string; amountCents: number }>(
   rows: T[],
 ): { total: number; byMethod: Record<string, number> } {
@@ -61,14 +61,14 @@ export type ExportRow = {
 const amount = (c: number) =>
   `${c < 0 ? "-" : ""}${Math.floor(Math.abs(c) / 100)},${String(Math.abs(c) % 100).padStart(2, "0")}`;
 const dateFr = (iso: string | null) => (iso ? iso.split("-").reverse().join("/") : "");
-/** Cellule texte : guillemets si besoin, et jamais interprétée comme formule par un tableur. */
+/** Text cell: quoted if needed, and never interpreted as a formula by a spreadsheet. */
 function texte(v: string | null): string {
   let t = v ?? "";
   if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`;
   return /[;"\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
 }
 
-/** Export CSV pour la comptabilité : séparateur « ; », montants « 123,45 », dates JJ/MM/AAAA, BOM pour Excel. */
+/** CSV export for accounting: separator « ; », amounts « 123,45 », dates DD/MM/YYYY, BOM for Excel. */
 export function toCsv(rows: ExportRow[]): string {
   const header = ["Date", "Payeur", "Moyen", "Montant", "Référence", "Émetteur", "Encaissement prévu", "Remise"];
   const body = rows.map((l) =>

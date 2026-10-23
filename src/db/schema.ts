@@ -1,13 +1,13 @@
 /**
- * Modèle de données multi-école (SaaS) – Drizzle ORM / PostgreSQL
+ * Multi-school data model (SaaS) – Drizzle ORM / PostgreSQL
  *
  * Conventions
- *  - Chaque table métier porte `school_id` : l'isolation entre écoles est
- *    garantie par la Row Level Security (voir migrations/0001_rls.sql).
- *  - Montants en CENTIMES entiers (`*_centimes`), taux en points de base
- *    (2000 = 20 %) : aucun nombre à virgule côté TypeScript.
- *  - Le numéro de facture est fourni par l'outil de facturation de l'école.
- *  - Paiements et journal sont inaltérables (triggers dans 0001_rls.sql).
+ *  - Every business table carries `school_id`: isolation between schools is
+ *    guaranteed by Row Level Security (see migrations/0001_rls.sql).
+ *  - Amounts in integer CENTS (`*_cents`), rates in basis points
+ *    (2000 = 20 %): no floating-point number on the TypeScript side.
+ *  - The invoice number is provided by the school's invoicing tool.
+ *  - Payments and the audit log are immutable (triggers in 0001_rls.sql).
  */
 import { getTableName, sql } from "drizzle-orm";
 import {
@@ -33,7 +33,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------
-// Types énumérés
+// Enumerated types
 // ---------------------------------------------------------------------------
 export const personType = pgEnum("person_type", ["particulier", "professionnel"]);
 export const relationshipType = pgEnum("relationship_type", ["representant_legal", "conjoint", "autre"]);
@@ -48,7 +48,7 @@ export const vatRegime = pgEnum("vat_regime", ["franchise_293b", "assujetti", "n
 export const payMode = pgEnum("pay_mode", ["heure", "cours", "forfait_mensuel"]);
 export const courseType = pgEnum("course_type", ["collectif", "particulier", "competition", "stage"]);
 export const lessonStatus = pgEnum("lesson_status", ["prevue", "effectuee", "annulee"]);
-/** Chaque semaine, une semaine sur deux, ou à des dates précises (#90). */
+/** Every week, every other week, or on specific dates (#90). */
 export const courseRecurrence = pgEnum("course_recurrence", ["hebdomadaire", "quinzaine", "dates"]);
 export const unavailabilitySource = pgEnum("unavailability_source", ["saisie", "google", "microsoft"]);
 export const calendarProvider = pgEnum("calendar_provider", ["google", "microsoft"]);
@@ -84,31 +84,31 @@ export const statementStatus = pgEnum("statement_status", ["a_controler", "confo
 export const memberRole = pgEnum("member_role", ["direction", "accueil", "professeur"]);
 
 // ---------------------------------------------------------------------------
-// Locataire : l'école
+// Tenant: the school
 // ---------------------------------------------------------------------------
 export const school = pgTable("school", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
-  slug: text("slug").notNull().unique(), // sous-domaine : ribas.monapp.fr
+  slug: text("slug").notNull().unique(), // subdomain: ribas.monapp.fr
   companyName: text("company_name"),
   siren: char("siren", { length: 9 }),
   vatRegime: vatRegime("vat_regime").notNull().default("non_applicable"),
-  vatMention: text("vat_mention"), // ex. « TVA non applicable, art. 293 B du CGI »
+  vatMention: text("vat_mention"), // e.g. « TVA non applicable, art. 293 B du CGI »
   timeZone: text("time_zone").notNull().default("Europe/Paris"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** Colonne `school_id` commune à toutes les tables métier. */
+/** `school_id` column shared by all business tables. */
 const schoolIdColumn = () =>
   uuid("school_id")
     .notNull()
     .references(() => school.id, { onDelete: "cascade" });
 
 /**
- * Clé étrangère entre deux tables métier : composite (school_id, colonne) vers
- * (school_id, id), pour que la ligne visée appartienne forcément à la même école.
- * Une clé étrangère simple ne suffit pas : sa vérification ignore la Row Level
- * Security. Colonne NULL acceptée (MATCH SIMPLE). Nom : <table>_<colonne>_same_school_fk.
+ * Foreign key between two business tables: composite (school_id, column) to
+ * (school_id, id), so that the target row necessarily belongs to the same school.
+ * A plain foreign key is not enough: its check ignores Row Level
+ * Security. NULL column accepted (MATCH SIMPLE). Name: <table>_<column>_same_school_fk.
  */
 function sameSchool(
   t: { schoolId: AnyPgColumn },
@@ -122,26 +122,26 @@ function sameSchool(
   });
 }
 
-/** Contrainte unique (school_id, id), cible des clés étrangères `sameSchool`. */
+/** Unique constraint (school_id, id), target of the `sameSchool` foreign keys. */
 function sameSchoolTarget(t: { schoolId: AnyPgColumn; id: AnyPgColumn }) {
   return unique(`${getTableName(t.id.table)}_school_id_id_unique`).on(t.schoolId, t.id);
 }
 
-/** Configuration du connecteur de facturation, une par école. */
+/** Invoicing connector configuration, one per school. */
 export const invoicingConnector = pgTable("invoicing_connector", {
   schoolId: uuid("school_id")
     .primaryKey()
     .references(() => school.id, { onDelete: "cascade" }),
   tool: invoicingTool("tool").notNull(),
-  encryptedCredentials: text("encrypted_credentials").notNull(), // chiffré côté application
+  encryptedCredentials: text("encrypted_credentials").notNull(), // encrypted on the application side
   oneConnectEnabled: boolean("one_connect_enabled").notNull().default(false),
   active: boolean("active").notNull().default(true),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 /**
- * Appartenance d'un utilisateur (géré par Better Auth, table `user`) à une
- * école, avec son rôle. Un même compte peut appartenir à plusieurs écoles.
+ * Membership of a user (managed by Better Auth, `user` table) in a
+ * school, with their role. The same account can belong to several schools.
  */
 export const member = pgTable(
   "member",
@@ -150,7 +150,7 @@ export const member = pgTable(
     schoolId: schoolIdColumn(),
     userId: text("user_id")
       .notNull()
-      .references((): AnyPgColumn => user.id), // compte Better Auth (global, toutes écoles)
+      .references((): AnyPgColumn => user.id), // Better Auth account (global, all schools)
     role: memberRole("role").notNull(),
     instructorId: uuid("instructor_id"),
     active: boolean("active").notNull().default(true),
@@ -158,13 +158,13 @@ export const member = pgTable(
   (t) => [unique().on(t.schoolId, t.userId), sameSchoolTarget(t), sameSchool(t, t.instructorId, instructor)],
 );
 
-/** Lien envoyé à une personne : rejoindre l'équipe, ou choisir un nouveau mot de passe (#104). */
+/** Link sent to a person: join the team, or choose a new password (#104). */
 export const invitationType = pgEnum("invitation_type", ["invitation", "reinitialisation"]);
 
 /**
- * Invitation dans l'équipe d'une école, ou réinitialisation du mot de passe
- * d'un membre (#104). Le jeton n'est montré qu'une fois, dans le lien ; seule
- * son empreinte est gardée. Usage unique, durée limitée.
+ * Invitation to a school's team, or password reset for a
+ * member (#104). The token is shown only once, in the link; only
+ * its hash is kept. Single use, limited lifetime.
  */
 export const invitation = pgTable(
   "invitation",
@@ -174,8 +174,8 @@ export const invitation = pgTable(
     type: invitationType("type").notNull(),
     email: text("email").notNull(),
     name: text("name"),
-    role: memberRole("role"), // invitation : rôle donné en rejoignant l'école
-    userId: text("user_id").references((): AnyPgColumn => user.id, { onDelete: "cascade" }), // réinitialisation : compte visé
+    role: memberRole("role"), // invitation: role given when joining the school
+    userId: text("user_id").references((): AnyPgColumn => user.id, { onDelete: "cascade" }), // reset: target account
     tokenHash: text("token_hash").notNull().unique(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdBy: uuid("created_by"),
@@ -192,9 +192,9 @@ export const invitation = pgTable(
 );
 
 /**
- * Disposition des colonnes d'une liste (élèves, contacts…) propre à chaque
- * membre (#89) : identifiants des colonnes affichées, dans l'ordre. Une simple
- * préférence d'affichage, supprimée avec le membre.
+ * Column layout of a list (students, contacts…) specific to each
+ * member (#89): ids of the displayed columns, in order. A mere
+ * display preference, deleted with the member.
  */
 export const listPreference = pgTable(
   "list_preference",
@@ -209,7 +209,7 @@ export const listPreference = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Lieux et calendrier
+// Premises and calendar
 // ---------------------------------------------------------------------------
 export const site = pgTable(
   "site",
@@ -224,15 +224,15 @@ export const site = pgTable(
 );
 
 /**
- * Jours et heures d'ouverture d'un site (#90) : un jour absent est fermé. Un
- * site sans aucun horaire saisi n'impose rien (le planning reste libre).
+ * Opening days and hours of a site (#90): a missing day is closed. A
+ * site without any hours entered imposes nothing (the schedule stays free).
  */
 export const siteHours = pgTable(
   "site_hours",
   {
     schoolId: schoolIdColumn(),
     siteId: uuid("site_id").notNull(),
-    weekday: smallint("weekday").notNull(), // 1 = lundi … 7 = dimanche
+    weekday: smallint("weekday").notNull(), // 1 = Monday … 7 = Sunday
     opensAt: time("opens_at").notNull(),
     closesAt: time("closes_at").notNull(),
   },
@@ -286,12 +286,12 @@ export const closure = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Personnes et liens (plus de « famille » : voir #67)
+// People and relationships (no more « famille »: see #67)
 // ---------------------------------------------------------------------------
 /**
- * Toute personne connue de l'école : danseur, parent, conjoint, contact
- * d'urgence, ou payeur professionnel (entreprise, CSE). Un adulte seul est à la
- * fois danseur et payeur : pas de « famille » à créer.
+ * Anyone known to the school: student, parent, partner, emergency
+ * contact, or professional payer (company, CSE). An adult on their own is both
+ * student and payer: no « famille » to create.
  */
 export const person = pgTable(
   "person",
@@ -307,10 +307,10 @@ export const person = pgTable(
     email: text("email"),
     phone: text("phone"),
     address: text("address"),
-    notes: text("notes"), // santé, consignes : visibles par l'accueil et la direction
-    // Élève de l'école (danseur) ; sinon contact : parent, payeur, organisme.
+    notes: text("notes"), // health, instructions: visible to the front desk and management
+    // Student of the school (dancer); otherwise contact: parent, payer, organisation.
     isStudent: boolean("is_student").notNull().default(false),
-    toolRef: text("tool_ref"), // id du client dans l'outil de facturation
+    toolRef: text("tool_ref"), // customer id in the invoicing tool
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -321,8 +321,8 @@ export const person = pgTable(
 );
 
 /**
- * Lien orienté : `personne` est <type> de `lie_a` (Hélène, représentante
- * légale de Zoé). Un conjoint n'est enregistré qu'une fois, dans un sens.
+ * Directed relationship: `person_id` is <type> of `related_person_id` (Hélène, legal
+ * guardian of Zoé). A partner is recorded only once, in one direction.
  */
 export const relationship = pgTable(
   "relationship",
@@ -359,7 +359,7 @@ export const studentDocument = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Professeurs
+// Teachers
 // ---------------------------------------------------------------------------
 export const instructor = pgTable(
   "instructor",
@@ -374,9 +374,9 @@ export const instructor = pgTable(
     vatRegime: vatRegime("vat_regime").notNull(),
     isOwner: boolean("is_owner").notNull().default(false),
     payMode: payMode("pay_mode").notNull(),
-    rateCents: integer("rate_cents").notNull(), // par heure, cours ou mois
+    rateCents: integer("rate_cents").notNull(), // per hour, course or month
     active: boolean("active").notNull().default(true),
-    // Abonnement à l'agenda : seule l'empreinte SHA-256 du jeton est gardée.
+    // Calendar subscription: only the SHA-256 hash of the token is kept.
     calendarTokenHash: text("calendar_token_hash").unique(),
     calendarTokenCreatedAt: timestamp("calendar_token_created_at", { withTimezone: true }),
   },
@@ -384,8 +384,8 @@ export const instructor = pgTable(
 );
 
 /**
- * Plage où un intervenant n'est pas disponible : saisie par la direction, ou
- * lue dans son agenda (plage occupée seulement, jamais le contenu).
+ * Time range when an instructor is not available: entered by management, or
+ * read from their calendar (busy slot only, never the content).
  */
 export const unavailability = pgTable(
   "unavailability",
@@ -396,7 +396,7 @@ export const unavailability = pgTable(
     startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
     endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
     source: unavailabilitySource("source").notNull().default("saisie"),
-    label: text("label"), // saisie seulement
+    label: text("label"), // manual entry only
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -407,8 +407,8 @@ export const unavailability = pgTable(
 );
 
 /**
- * Agenda Google ou Microsoft connecté par un intervenant : jeton de
- * rafraîchissement chiffré (src/lib/encryption.ts), jamais en clair.
+ * Google or Microsoft calendar connected by an instructor: encrypted refresh
+ * token (src/lib/encryption.ts), never in clear.
  */
 export const calendarConnection = pgTable(
   "calendar_connection",
@@ -427,7 +427,7 @@ export const calendarConnection = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Offre et planning
+// Offer and schedule
 // ---------------------------------------------------------------------------
 export const discipline = pgTable(
   "discipline",
@@ -453,8 +453,8 @@ export const course = pgTable(
     ageMin: smallint("age_min"),
     ageMax: smallint("age_max"),
     recurrence: courseRecurrence("recurrence").notNull().default("hebdomadaire"),
-    weekday: smallint("weekday"), // 1 = lundi ; NULL pour des dates précises (table cours_date)
-    // Période limitée d'un cours régulier dans la saison ; NULL : depuis le début, jusqu'à la fin.
+    weekday: smallint("weekday"), // 1 = Monday; NULL for specific dates (table course_date)
+    // Limited period of a regular course within the season; NULL: from the start, until the end.
     startDate: date("start_date"),
     endDate: date("end_date"),
     startTime: time("start_time").notNull(),
@@ -475,7 +475,7 @@ export const course = pgTable(
   ],
 );
 
-/** Dates d'un cours ponctuel (récurrence « dates » : stage, cours exceptionnel). */
+/** Dates of a one-off course (recurrence « dates »: workshop, exceptional course). */
 export const courseDate = pgTable(
   "course_date",
   {
@@ -493,13 +493,13 @@ export const lesson = pgTable(
     schoolId: schoolIdColumn(),
     courseId: uuid("course_id").notNull(),
     date: date("date").notNull(),
-    // Séance déplacée (#90) : sa date d'origine, qui sert de repère à la génération des séances.
+    // Moved lesson (#90): its original date, which serves as the reference for lesson generation.
     plannedDate: date("planned_date"),
-    // Heure et durée propres à la séance (déplacée, ou figée avant un changement de créneau) ; NULL : celles du cours.
+    // Time and duration specific to the lesson (moved, or frozen before a slot change); NULL: the course's.
     startTime: time("start_time"),
     durationMinutes: integer("duration_minutes"),
     status: lessonStatus("status").notNull().default("prevue"),
-    instructorId: uuid("instructor_id").notNull(), // remplaçant possible
+    instructorId: uuid("instructor_id").notNull(), // possible substitute
   },
   (t) => [
     unique().on(t.courseId, t.date),
@@ -527,9 +527,9 @@ export const attendance = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Tarifs et réductions
+// Tariffs and discounts
 // ---------------------------------------------------------------------------
-/** Une ligne par case de la grille : public × périodicité × combinaison de cours (× discipline). */
+/** One row per grid cell: audience × periodicity × combination of courses (× discipline). */
 export const tariff = pgTable(
   "tariff",
   {
@@ -538,14 +538,14 @@ export const tariff = pgTable(
     seasonId: uuid("season_id").notNull(),
     audience: tariffAudience("audience").notNull(),
     period: period("period").notNull(),
-    // Durées des cours de la semaine, en minutes, triées : {45,45,60} = « 45 min + 45 min + 1 h 00 ».
+    // Durations of the week's courses, in minutes, sorted: {45,45,60} = « 45 min + 45 min + 1 h 00 ».
     combination: smallint("combination").array().notNull(),
-    // Forfait réservé à une discipline (ex. « Zumba 2 h 00 ») ; NULL = toutes disciplines.
+    // Package restricted to one discipline (e.g. « Zumba 2 h 00 »); NULL = all disciplines.
     disciplineId: uuid("discipline_id"),
     priceCents: integer("price_cents").notNull(),
   },
   (t) => [
-    // NULLS NOT DISTINCT : deux lignes « toutes disciplines » identiques sont refusées.
+    // NULLS NOT DISTINCT: two identical « toutes disciplines » rows are refused.
     unique("tariff_cell_unique").on(t.seasonId, t.audience, t.period, t.combination, t.disciplineId).nullsNotDistinct(),
     check("tariff_combination", sql`cardinality(${t.combination}) >= 1 AND 0 < ALL(${t.combination})`),
     sameSchoolTarget(t),
@@ -560,21 +560,21 @@ export const discount = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     schoolId: schoolIdColumn(),
     seasonId: uuid("season_id").notNull(),
-    code: text("code").notNull(), // type de réduction connu du moteur de tarif : 'fratrie'
+    code: text("code").notNull(), // discount type known to the tariff engine: 'fratrie'
     rateBps: integer("rate_bps"), // 1000 = 10 %
     amountCents: integer("amount_cents"),
     notCombinableWith: text("not_combinable_with")
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
-    // Nombre minimal de danseurs éligibles du même payeur (fratrie : 2).
+    // Minimum number of eligible students of the same payer (siblings: 2).
     minStudents: smallint("min_students").notNull().default(1),
-    // Publics éligibles ; vide = tous.
+    // Eligible audiences; empty = all.
     audiences: tariffAudience("audiences")
       .array()
       .notNull()
       .default(sql`'{}'::tariff_audience[]`),
-    // false : écartée sur un forfait dont les cours relèvent d'au moins 2 disciplines.
+    // false: excluded on a package whose courses span at least 2 disciplines.
     combinableWithMultiDiscipline: boolean("combinable_with_multi_discipline").notNull().default(true),
   },
   (t) => [
@@ -585,9 +585,9 @@ export const discount = pgTable(
 );
 
 /**
- * Grille des carnets de cours particuliers : une ligne par nombre de séances
- * et tranche de personnes (« jusqu'à personnes_max »). Au-delà de la dernière
- * tranche : devis, prix saisi sur le carnet.
+ * Grid of private-lesson packs: one row per number of lessons
+ * and band of people (« jusqu'à max_people »). Beyond the last
+ * band: quote, price entered on the lesson pack.
  */
 export const lessonPackTariff = pgTable(
   "lesson_pack_tariff",
@@ -607,9 +607,9 @@ export const lessonPackTariff = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Inscriptions
+// Enrollments
 // ---------------------------------------------------------------------------
-/** Un forfait payé par un payeur ; peut couvrir deux danseurs (tarif couple). */
+/** A package paid by a payer; may cover two students (couple rate). */
 export const enrollment = pgTable(
   "enrollment",
   {
@@ -618,8 +618,8 @@ export const enrollment = pgTable(
     payerId: uuid("payer_id").notNull(),
     seasonId: uuid("season_id").notNull(),
     tariffId: uuid("tariff_id"),
-    // Public et périodicité choisis : nécessaires pour recalculer la fratrie
-    // avec les inscriptions existantes, même sans tarif retenu (prix manuel).
+    // Chosen audience and periodicity: needed to recompute the siblings discount
+    // with the existing enrollments, even without a selected tariff (manual price).
     audience: tariffAudience("audience").notNull(),
     period: period("period").notNull(),
     status: enrollmentStatus("status").notNull().default("active"),
@@ -659,8 +659,8 @@ export const enrollmentCourse = pgTable(
 );
 
 /**
- * Cours particuliers : un carnet acheté, prix figé à l'achat (grille `tarif_carnet`
- * ou devis). Nombres de séances et de personnes : données de l'école, pas de limite ici.
+ * Private lessons: a purchased lesson pack, price frozen at purchase (`lesson_pack_tariff` grid
+ * or quote). Numbers of lessons and people: school data, no limit here.
  */
 export const lessonPack = pgTable(
   "lesson_pack",
@@ -695,7 +695,7 @@ export const lessonPackUsage = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Facturation et encaissements
+// Invoicing and payments
 // ---------------------------------------------------------------------------
 export const invoice = pgTable(
   "invoice",
@@ -706,7 +706,7 @@ export const invoice = pgTable(
     status: invoiceStatus("status").notNull().default("a_envoyer"),
     tool: invoicingTool("tool"),
     toolRef: text("tool_ref"),
-    number: text("number"), // renvoyé par l'outil, jamais saisi ici
+    number: text("number"), // returned by the tool, never entered here
     issuedOn: date("issued_on"),
     totalExclTaxCents: integer("total_excl_tax_cents").notNull().default(0),
     totalVatCents: integer("total_vat_cents").notNull().default(0),
@@ -735,7 +735,7 @@ export const invoiceLine = pgTable(
     unitPriceCents: integer("unit_price_cents").notNull(),
     vatRateBps: integer("vat_rate_bps").notNull().default(0), // 2000 = 20 %
     enrollmentId: uuid("enrollment_id"),
-    lessonPackId: uuid("lesson_pack_id"), // NULL : stage, location, billet…
+    lessonPackId: uuid("lesson_pack_id"), // NULL: workshop, rental, ticket…
   },
   (t) => [
     sameSchool(t, t.invoiceId, invoice),
@@ -765,7 +765,7 @@ export const installment = pgTable(
   ],
 );
 
-/** Inaltérable : une erreur ou un remboursement = un paiement négatif. */
+/** Immutable: an error or a refund = a negative payment. */
 export const payment = pgTable(
   "payment",
   {
@@ -775,12 +775,12 @@ export const payment = pgTable(
     date: date("date").notNull().defaultNow(),
     amountCents: integer("amount_cents").notNull(),
     method: paymentMethod("method").notNull(),
-    reference: text("reference"), // numéro de chèque, d'autorisation…
-    // Banque ou titulaire d'un chèque quand ce n'est pas le payeur (#97).
+    reference: text("reference"), // cheque number, authorisation number…
+    // Bank or holder of a cheque when it is not the payer (#97).
     issuer: text("issuer"),
-    // Chèque à encaisser plus tard (remis à l'inscription, encaissé au trimestre) ; NULL : tout de suite.
+    // Cheque to be cashed later (handed in at enrollment, cashed each term); NULL: straight away.
     depositPlannedOn: date("deposit_planned_on"),
-    // Correction : paiement négatif qui annule tout ou partie de ce paiement-ci.
+    // Correction: negative payment cancelling all or part of this payment.
     correctsId: uuid("corrects_id"),
     enteredBy: uuid("entered_by"),
     toolSynced: boolean("tool_synced").notNull().default(false),
@@ -795,10 +795,10 @@ export const payment = pgTable(
   ],
 );
 
-/** Moyens remis à la banque (ou à l'ANCV) par bordereau (#98). */
+/** Methods deposited at the bank (or at ANCV) with a deposit slip (#98). */
 export const depositMethod = pgEnum("deposit_method", ["cheque", "especes", "cheque_vacances"]);
 
-/** Remise en banque : un bordereau de chèques, d'espèces ou de chèques vacances déposés ensemble (#98). */
+/** Bank deposit: a deposit slip of cheques, cash or holiday vouchers deposited together (#98). */
 export const bankDeposit = pgTable(
   "bank_deposit",
   {
@@ -812,7 +812,7 @@ export const bankDeposit = pgTable(
   (t) => [sameSchoolTarget(t), sameSchool(t, t.createdBy, member)],
 );
 
-/** Paiements d'une remise ; un paiement ne figure que dans une seule remise (le paiement, inaltérable, n'est pas modifié). */
+/** Payments of a deposit; a payment appears in a single deposit only (the payment, immutable, is not modified). */
 export const bankDepositPayment = pgTable(
   "bank_deposit_payment",
   {
@@ -844,7 +844,7 @@ export const paymentAllocation = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Rémunération des professeurs
+// Instructor pay
 // ---------------------------------------------------------------------------
 export const instructorStatement = pgTable(
   "instructor_statement",
@@ -852,7 +852,7 @@ export const instructorStatement = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     schoolId: schoolIdColumn(),
     instructorId: uuid("instructor_id").notNull(),
-    month: date("month").notNull(), // 1er jour du mois
+    month: date("month").notNull(), // 1st day of the month
     lessonCount: integer("lesson_count").notNull(),
     minutes: integer("minutes").notNull(),
     amountDueCents: integer("amount_due_cents").notNull(),
@@ -864,7 +864,7 @@ export const instructorStatement = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Journal d'audit (append-only)
+// Audit log (append-only)
 // ---------------------------------------------------------------------------
 export const auditLog = pgTable(
   "audit_log",
@@ -883,9 +883,9 @@ export const auditLog = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Authentification (Better Auth) : tables GLOBALES, sans school_id ni RLS.
-// Un compte peut appartenir à plusieurs écoles (`membre`). Structure attendue
-// par Better Auth 1.7 (getAuthTables) ; propriétés en camelCase, colonnes en snake_case.
+// Authentication (Better Auth): GLOBAL tables, without school_id or RLS.
+// An account can belong to several schools (`member`). Structure expected
+// by Better Auth 1.7 (getAuthTables); properties in camelCase, columns in snake_case.
 // ---------------------------------------------------------------------------
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -910,8 +910,8 @@ export const session = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    // École choisie après connexion, fixée côté serveur après vérification de
-    // l'appartenance. Pas nommée school_id : la session n'est pas une donnée d'école.
+    // School chosen after sign-in, set on the server side after checking
+    // membership. Not named school_id: the session is not school data.
     selectedSchoolId: uuid("selected_school_id").references(() => school.id, { onDelete: "set null" }),
   },
   (t) => [index().on(t.userId)],
@@ -932,7 +932,7 @@ export const account = pgTable(
     accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
     refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
     scope: text("scope"),
-    password: text("password"), // haché par Better Auth
+    password: text("password"), // hashed by Better Auth
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -940,9 +940,9 @@ export const account = pgTable(
 );
 
 /**
- * Échecs de connexion récents, pour limiter les essais de mots de passe
- * (src/lib/sign-in-limit.ts). La clé est un HMAC de l'e-mail ou de l'IP :
- * aucune donnée personnelle en clair. Purgée au fil de l'eau.
+ * Recent sign-in failures, to limit password attempts
+ * (src/lib/sign-in-limit.ts). The key is an HMAC of the e-mail or the IP:
+ * no personal data in clear. Purged as it goes.
  */
 export const loginAttempt = pgTable(
   "login_attempt",

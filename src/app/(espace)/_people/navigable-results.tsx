@@ -3,8 +3,8 @@
 import type { KeyboardEvent, ReactNode } from "react";
 
 /**
- * Rend une liste de résultats navigable au clavier : flèches haut et bas pour
- * passer d'un lien `[data-resultat]` à l'autre, Entrée pour l'ouvrir.
+ * Makes a result list keyboard-navigable: up and down arrows move from one
+ * `[data-resultat]` link to the next, Enter opens it.
  */
 export function NavigableResults({ children }: { children: ReactNode }) {
   const move = (e: KeyboardEvent<HTMLDivElement>) => {

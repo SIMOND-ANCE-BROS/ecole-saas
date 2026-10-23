@@ -1,12 +1,12 @@
 /**
- * Solde d'un payeur (#97), en centimes. Tant que les factures n'existent pas,
- * le dû se calcule sur les inscriptions et les carnets du payeur, et les
- * paiements s'enregistrent sur le payeur.
+ * A payer's balance (#97), in cents. Until invoices exist, the amount due is
+ * computed from the payer's enrollments and lesson packs, and payments are
+ * recorded against the payer.
  */
 
 export type EnrollmentStatus = "essai" | "liste_attente" | "active" | "abandon" | "terminee";
 
-/** Statuts comptés dans le dû. Abandon et essai : règle à fixer par l'école (#99), montrés à part. */
+/** Statuses counted in the amount due. Dropped and trial: rule to be set by the school (#99), shown apart. */
 export const DUE_STATUSES: EnrollmentStatus[] = ["active", "terminee"];
 
 export type EnrollmentDue = { status: EnrollmentStatus; netPriceCents: number };
@@ -15,11 +15,11 @@ export type BalancePayment = { amountCents: number; plannedPayment: string | nul
 export type Balance = {
   du: number;
   paye: number;
-  /** Positif : reste à payer ; négatif : trop-perçu. */
+  /** Positive: left to pay; negative: overpaid. */
   remaining: number;
-  /** Chèques reçus mais à encaisser après aujourd'hui (comptés dans « payé »). */
+  /** Cheques received but to be cashed after today (counted in « payé »). */
   toCollect: number;
-  /** Inscriptions hors du calcul, par statut (montants), pour que la direction les voie. */
+  /** Enrollments left out of the calculation, by status (amounts), so that management sees them. */
   outsideCalculation: Partial<Record<EnrollmentStatus, number>>;
 };
 

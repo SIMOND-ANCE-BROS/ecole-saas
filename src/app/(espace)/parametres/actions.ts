@@ -21,7 +21,7 @@ import { requireRole } from "@/lib/session";
 
 type Back = { message: string | null };
 
-/** Paramètres : direction seulement ; chaque action recharge la page concernée. */
+/** Settings: management only; each action revalidates the page concerned. */
 async function act(
   page: string,
   action: (tx: Tx) => Promise<{ ok: true } | { ok: false; message: string }>,
@@ -57,7 +57,7 @@ export async function changeSite(id: string, saisie: unknown) {
 }
 export async function changeHours(siteId: string, hours: unknown) {
   const r = await act("lieux", (tx) => saveHours(tx, siteId, hours as never));
-  // L'agenda du planning dépend des horaires.
+  // The schedule calendar depends on the opening hours.
   revalidatePath("/planning");
   return r;
 }

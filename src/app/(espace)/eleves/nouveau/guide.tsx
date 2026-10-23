@@ -10,8 +10,8 @@ import { Cancel } from "@/app/(espace)/_panel/panel";
 type Billing = "eleve" | "responsable" | "autre";
 
 /**
- * Nouvel élève en une seule saisie : identité ; s'il est mineur, son
- * responsable (connu ou nouveau) et s'il faut le prévenir ; puis à qui facturer.
+ * New student in a single entry: identity; if a minor, their guardian
+ * (known or new) and whether to notify them; then whom to invoice.
  */
 export function NewStudentGuide({
   today: today,
@@ -35,7 +35,7 @@ export function NewStudentGuide({
 
   const age = /^\d{4}-\d{2}-\d{2}$/.test(e.birthDate) ? ageAt(e.birthDate, today) : null;
   const minor = age !== null && age < 18;
-  // Par défaut : un mineur a un responsable qui paie ; un adulte paie lui-même. L'accueil peut changer.
+  // By default: a minor has a guardian who pays; an adult pays for themself. The front desk can change it.
   const displayedGuardian = withGuardian ?? minor;
   const chosenBilling: Billing = billing ?? (displayedGuardian ? "responsable" : "eleve");
   const firstName = e.firstName.trim() || "l’élève";
@@ -128,7 +128,7 @@ export function NewStudentGuide({
               label={`Qui est le responsable légal de ${firstName} (parent, tuteur) ?`}
               value={guardian}
               onChange={(c) => {
-                // Nouvelle personne : même nom de famille proposé.
+                // New person: same family name suggested.
                 setGuardian(
                   c && "newPerson" in c && !c.newPerson.name && !c.newPerson.firstName
                     ? { newPerson: { ...c.newPerson, name: e.name } }
