@@ -12,9 +12,9 @@ const safeReturnPath = (r: unknown) =>
   typeof r === "string" && /^\/(eleves|contacts)\/[0-9a-f-]{36}$/.test(r) ? r : null;
 
 /** Records one or more payments (front desk and management), then returns to the payer's record. */
-export async function collectPayments(payerId: string, saisie: unknown, back: unknown): Promise<{ message: string }> {
+export async function collectPayments(payerId: string, entry: unknown, back: unknown): Promise<{ message: string }> {
   const { schoolId: schoolId, userId } = await requireRole("direction", "accueil");
-  const r = await withSchool(schoolId, (tx) => collect(tx, userId, payerId, saisie as never));
+  const r = await withSchool(schoolId, (tx) => collect(tx, userId, payerId, entry as never));
   if (!r.ok) return { message: r.message };
   revalidatePath("/encaissements");
   redirect(`${safeReturnPath(back) ?? `/personnes/${payerId}`}?encaisse=${r.ids.length}`);

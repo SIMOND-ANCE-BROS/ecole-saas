@@ -106,14 +106,14 @@ export const withoutValue = (o: Operator) => o === "vide" || o === "non_vide";
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Accent mappings, shared with the SQL translation (`translate`). */
-export const ACCENTS = "àâäáãåéèêëíìîïóòôöõúùûüçñÿ";
+export const DIACRITICS = "àâäáãåéèêëíìîïóòôöõúùûüçñÿ";
 export const SANS_ACCENTS = "aaaaaaeeeeiiiiooooouuuucny";
 
 /** Lower case without accents, collapsed whitespace. */
 export function normalizeText(v: string): string {
   let r = "";
   for (const c of v.toLowerCase()) {
-    const i = ACCENTS.indexOf(c);
+    const i = DIACRITICS.indexOf(c);
     r += i === -1 ? c : SANS_ACCENTS[i];
   }
   return r.replace(/\s+/g, " ").trim();
@@ -174,12 +174,12 @@ export function toParams(filter: Filter): [string, string][] {
 }
 
 /** A cell's value: text, number, list (guardians…) or missing. */
-export type Cellule = string | number | string[] | null | undefined;
+export type Cell = string | number | string[] | null | undefined;
 
-function evaluate(cellule: Cellule, c: Condition, type: ColumnType): boolean {
+function evaluate(cell: Cell, c: Condition, type: ColumnType): boolean {
   const v = normalizedValue(c, type);
   if (type === "nombre") {
-    const n = typeof cellule === "number" ? cellule : null;
+    const n = typeof cell === "number" ? cell : null;
     if (c.operator === "vide") return n === null;
     if (c.operator === "non_vide") return n !== null;
     if (c.operator === "different") return n !== v;
@@ -200,7 +200,7 @@ function evaluate(cellule: Cellule, c: Condition, type: ColumnType): boolean {
     }
   }
   if (type === "date") {
-    const d = typeof cellule === "string" && cellule !== "" ? cellule.slice(0, 10) : null;
+    const d = typeof cell === "string" && cell !== "" ? cell.slice(0, 10) : null;
     if (c.operator === "vide") return d === null;
     if (c.operator === "non_vide") return d !== null;
     if (d === null || typeof v !== "string") return false;
@@ -219,7 +219,7 @@ function evaluate(cellule: Cellule, c: Condition, type: ColumnType): boolean {
         return false;
     }
   }
-  const raw = Array.isArray(cellule) ? cellule.join(", ") : cellule == null ? "" : String(cellule);
+  const raw = Array.isArray(cell) ? cell.join(", ") : cell == null ? "" : String(cell);
   const t = type === "telephone" ? digits(raw) : normalizeText(raw);
   const target = String(v);
   switch (c.operator) {
@@ -233,15 +233,15 @@ function evaluate(cellule: Cellule, c: Condition, type: ColumnType): boolean {
       return !t.includes(target);
     // A list "is" X if one of its items equals X.
     case "est":
-      return Array.isArray(cellule) ? cellule.some((e) => normalizeText(e) === target) : t === target;
+      return Array.isArray(cell) ? cell.some((e) => normalizeText(e) === target) : t === target;
     case "n_est_pas":
-      return Array.isArray(cellule) ? !cellule.some((e) => normalizeText(e) === target) : t !== target;
+      return Array.isArray(cell) ? !cell.some((e) => normalizeText(e) === target) : t !== target;
     case "commence":
       return t.startsWith(target);
     case "parmi": {
       const vs = target.split(SEPARATOR);
       if (t === "") return vs.includes(EMPTY);
-      return Array.isArray(cellule) ? cellule.some((e) => vs.includes(normalizeText(e))) : vs.includes(t);
+      return Array.isArray(cell) ? cell.some((e) => vs.includes(normalizeText(e))) : vs.includes(t);
     }
     default:
       return false;
@@ -249,7 +249,7 @@ function evaluate(cellule: Cellule, c: Condition, type: ColumnType): boolean {
 }
 
 /** Rows that satisfy all (AND) or at least one (OR) of the conditions. */
-export function applyFilter<T>(rows: T[], filter: Filter, columns: (ColumnDef & { value: (l: T) => Cellule })[]): T[] {
+export function applyFilter<T>(rows: T[], filter: Filter, columns: (ColumnDef & { value: (l: T) => Cell })[]): T[] {
   const actives = filter.conditions.flatMap((c) => {
     const def = columns.find((d) => d.id === c.column);
     return def ? [{ c, def }] : [];
@@ -287,9 +287,9 @@ export function readSort(
 }
 
 /** In-memory sort, with the SQL sort's rules: accents ignored, numbers in numeric order, empty values last. */
-export function sortRows<L>(rows: L[], currentSort: Sort | null, value: (l: L, column: string) => Cellule): L[] {
+export function sortRows<L>(rows: L[], currentSort: Sort | null, value: (l: L, column: string) => Cell): L[] {
   if (!currentSort) return rows;
-  const key = (v: Cellule) => (Array.isArray(v) ? v.join(", ") : v);
+  const key = (v: Cell) => (Array.isArray(v) ? v.join(", ") : v);
   const sens = currentSort.sens === "asc" ? 1 : -1;
   return [...rows].sort((a, b) => {
     const x = key(value(a, currentSort.column));

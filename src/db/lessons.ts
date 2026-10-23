@@ -49,8 +49,8 @@ export function listClosures(tx: Tx, seasonId: string): Promise<Closure[]> {
     .orderBy(asc(closure.startDate));
 }
 
-export async function addClosure(tx: Tx, seasonId: string, saisie: z.input<typeof validClosureInput>): Promise<Result> {
-  const f = validClosureInput.safeParse(saisie);
+export async function addClosure(tx: Tx, seasonId: string, entry: z.input<typeof validClosureInput>): Promise<Result> {
+  const f = validClosureInput.safeParse(entry);
   if (!f.success) return { ok: false, message: f.error.issues[0].message };
   if (f.data.end < f.data.start) return { ok: false, message: "La fin précède le début." };
   const [{ id }] = await tx
@@ -97,12 +97,12 @@ export async function syncLessons(
   seasonId: string,
   today: string,
   since?: string,
-): Promise<{ added: number; retirees: number }> {
+): Promise<{ added: number; removed: number }> {
   const [s] = await tx
     .select({ start: season.startDate, end: season.endDate })
     .from(season)
     .where(eq(season.id, seasonId));
-  if (!s) return { added: 0, retirees: 0 };
+  if (!s) return { added: 0, removed: 0 };
   const start = [s.start, today, since ?? ""].reduce((a, b) => (b > a ? b : a));
   const closures = await listClosures(tx, seasonId);
   const tous = await tx
@@ -173,7 +173,7 @@ export async function syncLessons(
     )
     .map((e) => e.id);
   if (toRemove.length > 0) await tx.delete(lesson).where(inArray(lesson.id, toRemove));
-  return { added: added.length, retirees: toRemove.length };
+  return { added: added.length, removed: toRemove.length };
 }
 
 // ---------------------------------------------------------------------------
@@ -338,9 +338,9 @@ export const validAttendance = z.array(z.object({ studentId: z.uuid(), present: 
 export async function saveAttendance(
   tx: Tx,
   lessonId: string,
-  saisie: z.input<typeof validAttendance>,
+  entry: z.input<typeof validAttendance>,
 ): Promise<Result> {
-  const rows = validAttendance.safeParse(saisie);
+  const rows = validAttendance.safeParse(entry);
   if (!rows.success) return { ok: false, message: "Saisie invalide." };
   const attendanceSheet = await readAttendance(tx, lessonId);
   if (!attendanceSheet) return { ok: false, message: "Cette séance n’existe plus." };

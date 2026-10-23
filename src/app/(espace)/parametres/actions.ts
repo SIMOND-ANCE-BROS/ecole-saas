@@ -32,11 +32,11 @@ async function act(
   return { message: r.ok ? null : r.message };
 }
 
-export async function newSeason(saisie: unknown, copyFrom: string | null) {
-  return act("saisons", (tx) => createSeason(tx, saisie as never, copyFrom));
+export async function newSeason(entry: unknown, copyFrom: string | null) {
+  return act("saisons", (tx) => createSeason(tx, entry as never, copyFrom));
 }
-export async function changeSeason(id: string, saisie: unknown) {
-  return act("saisons", (tx) => updateSeason(tx, id, saisie as never));
+export async function changeSeason(id: string, entry: unknown) {
+  return act("saisons", (tx) => updateSeason(tx, id, entry as never));
 }
 
 export async function newDiscipline(name: string) {
@@ -49,11 +49,11 @@ export async function removeDiscipline(id: string) {
   return act("disciplines", (tx) => deleteDiscipline(tx, id));
 }
 
-export async function newSite(saisie: unknown) {
-  return act("lieux", (tx) => createSite(tx, saisie as never));
+export async function newSite(entry: unknown) {
+  return act("lieux", (tx) => createSite(tx, entry as never));
 }
-export async function changeSite(id: string, saisie: unknown) {
-  return act("lieux", (tx) => updateSite(tx, id, saisie as never));
+export async function changeSite(id: string, entry: unknown) {
+  return act("lieux", (tx) => updateSite(tx, id, entry as never));
 }
 export async function changeHours(siteId: string, hours: unknown) {
   const r = await act("lieux", (tx) => saveHours(tx, siteId, hours as never));
@@ -64,24 +64,24 @@ export async function changeHours(siteId: string, hours: unknown) {
 export async function removeSite(id: string) {
   return act("lieux", (tx) => deleteSite(tx, id));
 }
-export async function newRoom(saisie: unknown) {
-  return act("lieux", (tx) => createRoom(tx, saisie as never));
+export async function newRoom(entry: unknown) {
+  return act("lieux", (tx) => createRoom(tx, entry as never));
 }
-export async function changeRoom(id: string, saisie: unknown) {
-  return act("lieux", (tx) => updateRoom(tx, id, saisie as never));
+export async function changeRoom(id: string, entry: unknown) {
+  return act("lieux", (tx) => updateRoom(tx, id, entry as never));
 }
 export async function removeRoom(id: string) {
   return act("lieux", (tx) => deleteRoom(tx, id));
 }
 
-export async function cellPrice(seasonId: string, saisie: unknown) {
-  return act("tarifs", (tx) => savePrice(tx, seasonId, saisie as never));
+export async function cellPrice(seasonId: string, entry: unknown) {
+  return act("tarifs", (tx) => savePrice(tx, seasonId, entry as never));
 }
-export async function siblingsRule(seasonId: string, saisie: unknown) {
-  return act("tarifs", (tx) => saveSiblings(tx, seasonId, saisie as never));
+export async function siblingsRule(seasonId: string, entry: unknown) {
+  return act("tarifs", (tx) => saveSiblings(tx, seasonId, entry as never));
 }
-export async function lessonPack(seasonId: string, saisie: unknown) {
-  return act("tarifs", (tx) => saveLessonPack(tx, seasonId, saisie as never));
+export async function lessonPack(seasonId: string, entry: unknown) {
+  return act("tarifs", (tx) => saveLessonPack(tx, seasonId, entry as never));
 }
 export async function removeLessonPack(id: string) {
   return act("tarifs", (tx) => deleteLessonPack(tx, id));

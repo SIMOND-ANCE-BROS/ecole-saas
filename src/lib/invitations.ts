@@ -29,14 +29,14 @@ export async function openLink(
   return { ...link, existingAccount };
 }
 
-export async function acceptLink(schoolId: string, token: string, saisie: LinkInput): Promise<LinkResult> {
+export async function acceptLink(schoolId: string, token: string, entry: LinkInput): Promise<LinkResult> {
   const link = await withSchool(schoolId, (tx) => readRelationship(tx, token, new Date()));
   if (!link) return { ok: false, message: EXPIRE };
   const ctx = await auth.$context;
   let userId: string;
 
   if (link.type === "reinitialisation") {
-    const refusal = passwordRefusal(saisie.password, saisie.confirmation);
+    const refusal = passwordRefusal(entry.password, entry.confirmation);
     if (refusal) return { ok: false, message: refusal };
     if (!link.userId) return { ok: false, message: EXPIRE };
     userId = link.userId;
@@ -46,19 +46,19 @@ export async function acceptLink(schoolId: string, token: string, saisie: LinkIn
       // Already an account (in another school): the user proves they own it.
       const credential = await ctx.internalAdapter.findCredentialAccount(existing.user.id);
       const bon = credential?.password
-        ? await ctx.password.verify({ password: saisie.currentPassword, hash: credential.password })
+        ? await ctx.password.verify({ password: entry.currentPassword, hash: credential.password })
         : false;
       if (!bon) return { ok: false, message: "Mot de passe actuel incorrect." };
       userId = existing.user.id;
     } else {
-      const refusal = passwordRefusal(saisie.password, saisie.confirmation);
+      const refusal = passwordRefusal(entry.password, entry.confirmation);
       if (refusal) return { ok: false, message: refusal };
-      const name = saisie.name.trim() || link.name || link.email;
+      const name = entry.name.trim() || link.name || link.email;
       if (name.length > 100) return { ok: false, message: "Nom trop long." };
       // Re-read just before creation: a link used in the meantime does not create an orphan account.
       if (!(await withSchool(schoolId, (tx) => readRelationship(tx, token, new Date()))))
         return { ok: false, message: EXPIRE };
-      userId = await createAccount({ email: link.email, name, password: saisie.password, emailVerified: false });
+      userId = await createAccount({ email: link.email, name, password: entry.password, emailVerified: false });
     }
   }
 
@@ -67,7 +67,7 @@ export async function acceptLink(schoolId: string, token: string, saisie: LinkIn
   if (used === "partage") return { ok: false, message: SHARED };
   if (used !== "ok") return { ok: false, message: EXPIRE };
   if (link.type === "reinitialisation") {
-    await ctx.internalAdapter.updatePassword(userId, await ctx.password.hash(saisie.password));
+    await ctx.internalAdapter.updatePassword(userId, await ctx.password.hash(entry.password));
     // Sessions opened with the old password are closed.
     await ctx.internalAdapter.deleteUserSessions(userId);
   }

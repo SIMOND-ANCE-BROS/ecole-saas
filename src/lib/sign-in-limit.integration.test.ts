@@ -1,7 +1,7 @@
 import postgres from "postgres";
 import { afterAll, describe, expect, it } from "vitest";
 import { auth } from "./auth";
-import { attemptKey, clearAttempts, recordAttempt, trustedIp, LIMITES } from "./sign-in-limit";
+import { attemptKey, clearAttempts, recordAttempt, trustedIp, LIMITS } from "./sign-in-limit";
 
 /** Sign-in attempt limiting, against the real database (fictitious data cleaned up). */
 
@@ -39,56 +39,56 @@ afterAll(async () => {
 
 describe("Limitation des tentatives de connexion", () => {
   it("bloque une adresse e-mail depuis une même IP au-delà de la limite de la paire", async () => {
-    expect(await tentatives(email("cible"), ip(1), LIMITES.byPair + 2)).toBe(LIMITES.byPair);
+    expect(await tentatives(email("cible"), ip(1), LIMITS.byPair + 2)).toBe(LIMITS.byPair);
   });
 
   it("laisse la vraie personne se connecter depuis une autre IP (pas de blocage du compte d’autrui)", async () => {
-    await tentatives(email("victime"), ip(2), LIMITES.byPair + 3);
+    await tentatives(email("victime"), ip(2), LIMITS.byPair + 3);
     expect(await recordAttempt(email("victime"), ip(9))).toBe(true);
   });
 
   it("borne malgré tout le nombre total d’essais sur une même adresse", async () => {
     let allowed = 0;
-    for (let i = 0; i < LIMITES.byEmail + 5; i++) allowed += await tentatives(email("globale"), ip(100 + (i % 50)), 1);
-    expect(allowed).toBe(LIMITES.byEmail);
+    for (let i = 0; i < LIMITS.byEmail + 5; i++) allowed += await tentatives(email("globale"), ip(100 + (i % 50)), 1);
+    expect(allowed).toBe(LIMITS.byEmail);
   });
 
   it("bloque une IP qui balaye beaucoup d’adresses", async () => {
     let allowed = 0;
-    for (let i = 0; i < LIMITES.byIp + 3; i++) allowed += await tentatives(email(`balayage-${i}`), ip(3), 1);
-    expect(allowed).toBe(LIMITES.byIp);
+    for (let i = 0; i < LIMITS.byIp + 3; i++) allowed += await tentatives(email(`balayage-${i}`), ip(3), 1);
+    expect(allowed).toBe(LIMITS.byIp);
   });
 
   it("résiste aux tentatives simultanées", async () => {
     addresses.push(email("course"));
     ips.push(ip(4));
     const results = await Promise.all(Array.from({ length: 10 }, () => recordAttempt(email("course"), ip(4))));
-    expect(results.filter(Boolean).length).toBeLessThanOrEqual(LIMITES.byPair);
+    expect(results.filter(Boolean).length).toBeLessThanOrEqual(LIMITS.byPair);
   });
 
   it("ne prolonge pas le blocage quand on s’acharne (les tentatives refusées ne comptent pas)", async () => {
-    await tentatives(email("acharne"), ip(10), LIMITES.byPair + 20);
+    await tentatives(email("acharne"), ip(10), LIMITS.byPair + 20);
     const [{ n }] = await admin`
       SELECT count(*)::int AS n FROM login_attempt
       WHERE key = ${attemptKey("paire", `${email("acharne")}|${ip(10)}`)}`;
-    expect(n).toBe(LIMITES.byPair);
+    expect(n).toBe(LIMITS.byPair);
   });
 
   it("efface les tentatives de l’adresse après une connexion réussie", async () => {
-    await tentatives(email("oubli"), ip(5), LIMITES.byPair);
+    await tentatives(email("oubli"), ip(5), LIMITS.byPair);
     expect(await recordAttempt(email("oubli"), ip(5))).toBe(false);
     await clearAttempts(email("oubli"), ip(5));
     expect(await recordAttempt(email("oubli"), ip(5))).toBe(true);
   });
 
   it("sans IP de confiance, applique la limite de la paire à l’adresse seule", async () => {
-    expect(await tentatives(email("sans-ip"), null, LIMITES.byPair + 1)).toBe(LIMITES.byPair);
+    expect(await tentatives(email("sans-ip"), null, LIMITS.byPair + 1)).toBe(LIMITS.byPair);
   });
 
   it("ne compte plus les tentatives sorties de la fenêtre", async () => {
-    await tentatives(email("ancienne"), ip(7), LIMITES.byPair);
+    await tentatives(email("ancienne"), ip(7), LIMITS.byPair);
     await admin`
-      UPDATE login_attempt SET at = now() - make_interval(mins => ${LIMITES.windowMinutes + 1})
+      UPDATE login_attempt SET at = now() - make_interval(mins => ${LIMITS.windowMinutes + 1})
       WHERE key IN (${attemptKey("email", email("ancienne"))}, ${attemptKey("paire", `${email("ancienne")}|${ip(7)}`)})`;
     expect(await recordAttempt(email("ancienne"), ip(7))).toBe(true);
   });

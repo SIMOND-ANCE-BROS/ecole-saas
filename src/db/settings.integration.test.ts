@@ -118,14 +118,14 @@ describe("saisons", () => {
   });
 
   it("modifie les dates d’une saison, sans chevaucher l’autre", async () => {
-    const saisie = { label: "2026-2027", startDate: "2026-08-25", endDate: "2027-07-05" };
-    expect((await withSchool(school, (tx) => updateSeason(tx, season2026, saisie))).ok).toBe(true);
-    expect(
-      await withSchool(school, (tx) => updateSeason(tx, season2026, { ...saisie, endDate: "2027-09-15" })),
-    ).toEqual({
-      ok: false,
-      message: "Ces dates chevauchent la saison 2027-2028.",
-    });
+    const entry = { label: "2026-2027", startDate: "2026-08-25", endDate: "2027-07-05" };
+    expect((await withSchool(school, (tx) => updateSeason(tx, season2026, entry))).ok).toBe(true);
+    expect(await withSchool(school, (tx) => updateSeason(tx, season2026, { ...entry, endDate: "2027-09-15" }))).toEqual(
+      {
+        ok: false,
+        message: "Ces dates chevauchent la saison 2027-2028.",
+      },
+    );
   });
 });
 

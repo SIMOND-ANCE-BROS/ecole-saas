@@ -59,7 +59,7 @@ export async function moveOneLesson(
     const when = `${shortDate(slot.date, true)} ${slot.startTime}–${end(slot.startTime, slot.durationMinutes)}`;
     return {
       status: "ok",
-      texte:
+      text:
         scope === "seance"
           ? `Séance déplacée au ${when}.`
           : `Cours déplacé à partir du ${when} : les séances suivantes suivent.`,

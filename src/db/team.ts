@@ -22,8 +22,8 @@ export const INVITATION_DURATION = 7 * DAY;
 export const RESET_DURATION = DAY;
 
 /** Roles that can be given today; teacher accounts will come later (#22). */
-export const ROLES_INVITABLES = { direction: "Direction", accueil: "Accueil" } as const;
-export const ROLES = { ...ROLES_INVITABLES, professeur: "Professeur" } as const;
+export const INVITABLE_ROLES = { direction: "Direction", accueil: "Accueil" } as const;
+export const ROLES = { ...INVITABLE_ROLES, professeur: "Professeur" } as const;
 
 export type Result = { ok: true; id: string } | { ok: false; message: string };
 export type RelationshipResult = { ok: true; id: string; token: string } | { ok: false; message: string };
@@ -100,17 +100,17 @@ export function pendingInvitations(tx: Tx, now: Date): Promise<PendingInvitation
 export const validInvitation = z.object({
   email: z.email("E-mail invalide").trim().toLowerCase().max(200),
   name: z.string().trim().min(1, "Nom obligatoire").max(100),
-  role: z.enum(Object.keys(ROLES_INVITABLES) as [keyof typeof ROLES_INVITABLES]),
+  role: z.enum(Object.keys(INVITABLE_ROLES) as [keyof typeof INVITABLE_ROLES]),
 });
 
 /** Invites a person; an invitation still open for the same e-mail is replaced. */
 export async function invite(
   tx: Tx,
   userId: string,
-  saisie: z.input<typeof validInvitation>,
+  entry: z.input<typeof validInvitation>,
   now: Date,
 ): Promise<RelationshipResult> {
-  const s = validInvitation.safeParse(saisie);
+  const s = validInvitation.safeParse(entry);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };

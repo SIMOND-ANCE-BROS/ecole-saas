@@ -11,7 +11,7 @@ import {
 } from "@/connectors/calendar/oauth";
 import { withSchool } from "@/db";
 import { tokenInstructor } from "@/db/calendar-feed";
-import { COOKIE_OAUTH, personalPage, redirectionOAuth } from "@/lib/public-calendar";
+import { COOKIE_OAUTH, personalPage, oauthRedirect } from "@/lib/public-calendar";
 
 /**
  * Departure to Google or Microsoft from an instructor's personal page.
@@ -34,13 +34,13 @@ export async function GET(_req: NextRequest, ctx: RouteContext<"/mon-agenda/[eco
   const nonce = randomBytes(16).toString("base64url");
   const state = signState({ schoolId: ecole, instructorId: instructor.id, provider: f, nonce }, secret);
   const response = Response.redirect(
-    authorizationUrl(f, id.identifier, { redirection: redirectionOAuth(f), state, challenge: challenge }),
+    authorizationUrl(f, id.identifier, { redirectUri: oauthRedirect(f), state, challenge: challenge }),
     302,
   );
   const cookie = Buffer.from(JSON.stringify({ verifier: verifier, nonce, back: personalPage(ecole, jeton) })).toString(
     "base64url",
   );
-  const secured = redirectionOAuth(f).startsWith("https:") ? "; Secure" : "";
+  const secured = oauthRedirect(f).startsWith("https:") ? "; Secure" : "";
   const requestHeaders = new Headers(response.headers);
   requestHeaders.append(
     "Set-Cookie",

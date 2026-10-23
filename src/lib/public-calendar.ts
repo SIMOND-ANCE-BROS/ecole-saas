@@ -6,6 +6,6 @@ import type { Provider } from "../connectors/calendar/oauth";
  * BETTER_AUTH_URL (the application's public URL), not from the request.
  */
 export const publicAddress = () => (process.env.BETTER_AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
-export const redirectionOAuth = (f: Provider) => `${publicAddress()}/api/agenda/retour/${f}`;
+export const oauthRedirect = (f: Provider) => `${publicAddress()}/api/agenda/retour/${f}`;
 export const personalPage = (schoolId: string, token: string) => `/mon-agenda/${schoolId}/${token}`;
 export const COOKIE_OAUTH = "agenda_oauth";

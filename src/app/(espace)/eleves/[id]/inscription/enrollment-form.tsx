@@ -43,7 +43,7 @@ export function EnrollmentForm({
   const [courseIds, setCourseIds] = useState<string[]>([]);
   const [filter, setFilter] = useState("");
   const [lastPreview, setPreview] = useState<{
-    saisie: FormInput;
+    entry: FormInput;
     attempt: number;
     result: Preview | null;
     error: boolean;
@@ -52,7 +52,7 @@ export function EnrollmentForm({
   const [refusal, setRefusal] = useState<string | null>(null);
   const [sending, startSend] = useTransition();
 
-  const saisie: FormInput = useMemo(
+  const entry: FormInput = useMemo(
     () => ({
       payerId: payerId,
       studentIds: studentIds,
@@ -65,14 +65,14 @@ export function EnrollmentForm({
 
   // No price from a previous selection is shown as the current price.
   useEffect(() => {
-    if (saisie.studentIds.length === 0 || saisie.courseIds.length === 0) return;
+    if (entry.studentIds.length === 0 || entry.courseIds.length === 0) return;
     return deferredQuery(
-      () => preview(saisie),
-      (result) => setPreview({ saisie, attempt: calculationAttempt, result, error: false }),
-      () => setPreview({ saisie, attempt: calculationAttempt, result: null, error: true }),
+      () => preview(entry),
+      (result) => setPreview({ entry, attempt: calculationAttempt, result, error: false }),
+      () => setPreview({ entry, attempt: calculationAttempt, result: null, error: true }),
     );
-  }, [saisie, calculationAttempt]);
-  const current = lastPreview?.saisie === saisie && lastPreview.attempt === calculationAttempt ? lastPreview : null;
+  }, [entry, calculationAttempt]);
+  const current = lastPreview?.entry === entry && lastPreview.attempt === calculationAttempt ? lastPreview : null;
   const calculation = studentIds.length > 0 && courseIds.length > 0 && current === null;
   const result = current?.result ?? null;
 
@@ -106,7 +106,7 @@ export function EnrollmentForm({
         e.preventDefault();
         if (!canSave) return;
         setRefusal(null);
-        startSend(async () => setRefusal((await enroll(saisie)).message));
+        startSend(async () => setRefusal((await enroll(entry)).message));
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canSave) {

@@ -10,7 +10,7 @@ import { saveCourse, type Refusal, remove, checkSlot } from "./actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
 
 const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
-const DUREES = [45, 60, 90, 120];
+const DURATIONS = [45, 60, 90, 120];
 const NEW = "nouvelle";
 const shortDate = new Intl.DateTimeFormat("fr-FR", {
   weekday: "short",
@@ -81,7 +81,7 @@ export function CourseForm({
   const chosenRoom = r.salles.find((s) => s.id === v.roomId);
   const existingDiscipline = r.disciplines.find((d) => d.name.toLowerCase() === v.discipline.trim().toLowerCase());
 
-  const saisie = {
+  const entry = {
     discipline: existingDiscipline ? { id: existingDiscipline.id } : { name: v.discipline },
     room:
       v.roomId !== NEW
@@ -109,9 +109,9 @@ export function CourseForm({
   const overlaps = conflicts(
     {
       id: cours?.id ?? null,
-      weekday: saisie.weekday,
+      weekday: entry.weekday,
       startTime: v.startTime,
-      durationMinutes: saisie.durationMinutes || 0,
+      durationMinutes: entry.durationMinutes || 0,
       roomId: v.roomId,
       instructorId: v.instructorId,
     },
@@ -126,9 +126,9 @@ export function CourseForm({
   // Slot outside the opening hours of the room's site (warning only: an exceptional course is still allowed).
   const roomSite = r.salles.find((s) => s.id === v.roomId)?.siteId;
   const outsideOpening =
-    !oneOff && roomSite && saisie.weekday && saisie.durationMinutes > 0
+    !oneOff && roomSite && entry.weekday && entry.durationMinutes > 0
       ? outsideHours(
-          { weekday: saisie.weekday, startTime: v.startTime, durationMinutes: saisie.durationMinutes },
+          { weekday: entry.weekday, startTime: v.startTime, durationMinutes: entry.durationMinutes },
           r.hours[roomSite] ?? [],
         )
       : null;
@@ -161,9 +161,9 @@ export function CourseForm({
     );
   const invalid = (field: string) =>
     refusal?.errors[field] ? { "aria-invalid": true, "aria-describedby": `${field}-erreur` } : {};
-  const label = (section: string, texte: string) => (
+  const label = (section: string, text: string) => (
     <label htmlFor={section} className="text-sm font-medium">
-      {texte}
+      {text}
     </label>
   );
 
@@ -174,7 +174,7 @@ export function CourseForm({
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
-        startTransition(async () => setRefusal(await saveCourse(cours?.id ?? null, saisie)));
+        startTransition(async () => setRefusal(await saveCourse(cours?.id ?? null, entry)));
       }}
     >
       <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
@@ -350,7 +350,7 @@ export function CourseForm({
             {...invalid("durationMinutes")}
           />
           <div className="flex gap-1" role="group" aria-label="Durées courantes">
-            {DUREES.map((d) => (
+            {DURATIONS.map((d) => (
               <button
                 key={d}
                 type="button"

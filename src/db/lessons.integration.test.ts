@@ -106,9 +106,9 @@ const sync = () => withSchool(school, (tx) => syncLessons(tx, season, TODAY));
 
 describe("fermetures et génération des séances", () => {
   it("génère les mercredis à venir de la saison, sans le passé, puis ne duplique rien", async () => {
-    expect(await sync()).toEqual({ added: 6, retirees: 0 });
+    expect(await sync()).toEqual({ added: 6, removed: 0 });
     expect(await dates()).toEqual(["2026-10-21", "2026-10-28", "2026-11-04", "2026-11-11", "2026-11-18", "2026-11-25"]);
-    expect(await sync()).toEqual({ added: 0, retirees: 0 });
+    expect(await sync()).toEqual({ added: 0, removed: 0 });
   });
 
   it("refuse une fermeture dont la fin précède le début", async () => {
@@ -127,12 +127,12 @@ describe("fermetures et génération des séances", () => {
       addClosure(tx, season, { label: "Toussaint", start: "2026-10-17", end: "2026-11-01" }),
     );
     expect(r.ok).toBe(true);
-    expect(await sync()).toEqual({ added: 0, retirees: 2 });
+    expect(await sync()).toEqual({ added: 0, removed: 2 });
     expect(await dates()).toEqual(["2026-11-04", "2026-11-11", "2026-11-18", "2026-11-25"]);
     expect((await withSchool(school, (tx) => listClosures(tx, season))).map((f) => f.label)).toEqual(["Toussaint"]);
 
     await withSchool(school, (tx) => deleteClosure(tx, r.ok ? r.id : ""));
-    expect(await sync()).toEqual({ added: 2, retirees: 0 });
+    expect(await sync()).toEqual({ added: 2, removed: 0 });
   });
 });
 
@@ -191,7 +191,7 @@ describe("appel", () => {
     await withSchool(school, (tx) =>
       addClosure(tx, season, { label: "Grève", start: "2026-10-21", end: "2026-10-21" }),
     );
-    expect(await sync()).toEqual({ added: 0, retirees: 0 });
+    expect(await sync()).toEqual({ added: 0, removed: 0 });
     expect((await dates())[0]).toBe("2026-10-21");
   });
 });
@@ -252,7 +252,7 @@ describe("cours et séances", () => {
       level: level,
       maxCapacity: maxCapacity,
     } = course;
-    const saisie = {
+    const entry = {
       type,
       recurrence,
       weekday: weekday,
@@ -268,7 +268,7 @@ describe("cours et séances", () => {
     };
     const r = await withSchool(school, (tx) =>
       updateCourse(tx, wednesday, {
-        ...saisie,
+        ...entry,
         discipline: { id: course.disciplineId },
         room: { id: course.roomId },
         instructorId: ines,
@@ -318,9 +318,9 @@ describe("récurrences (#90)", () => {
       start: start,
       end: end,
     }));
-    const create = (saisie: Parameters<typeof createCourse>[2]) =>
+    const create = (entry: Parameters<typeof createCourse>[2]) =>
       withSchool(school, async (tx) => {
-        const r = await createCourse(tx, season, saisie);
+        const r = await createCourse(tx, season, entry);
         if (!r.ok) throw new Error(r.message);
         return r.id;
       });

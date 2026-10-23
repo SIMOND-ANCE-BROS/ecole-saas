@@ -100,8 +100,8 @@ const sameCase = (seasonId: string, c: z.output<typeof validCell>, combination: 
  * in use can change (enrollments keep theirs); it cannot be
  * removed.
  */
-export async function savePrice(tx: Tx, seasonId: string, saisie: z.input<typeof validCell>): Promise<Result> {
-  const c = validCell.safeParse(saisie);
+export async function savePrice(tx: Tx, seasonId: string, entry: z.input<typeof validCell>): Promise<Result> {
+  const c = validCell.safeParse(entry);
   if (!c.success) return { ok: false, message: c.error.issues[0].message };
   if (!isUuid(seasonId)) return { ok: false, message: "Saison introuvable." };
   const combination = [...c.data.combination].sort((a, b) => a - b);
@@ -198,14 +198,14 @@ const siblingsRow = (f: z.output<typeof validSiblings>) => ({
 export async function saveSiblings(
   tx: Tx,
   seasonId: string,
-  saisie: z.input<typeof validSiblings> | null,
+  entry: z.input<typeof validSiblings> | null,
 ): Promise<Result> {
   if (!isUuid(seasonId)) return { ok: false, message: "Saison introuvable." };
-  if (saisie === null) {
+  if (entry === null) {
     await tx.delete(discount).where(and(eq(discount.seasonId, seasonId), eq(discount.code, "fratrie")));
     return { ok: true, id: seasonId };
   }
-  const f = validSiblings.safeParse(saisie);
+  const f = validSiblings.safeParse(entry);
   if (!f.success) return { ok: false, message: f.error.issues[0].message };
   await tx
     .insert(discount)
@@ -244,9 +244,9 @@ export const validLessonPack = z.object({
 export async function saveLessonPack(
   tx: Tx,
   seasonId: string,
-  saisie: z.input<typeof validLessonPack>,
+  entry: z.input<typeof validLessonPack>,
 ): Promise<Result> {
-  const c = validLessonPack.safeParse(saisie);
+  const c = validLessonPack.safeParse(entry);
   if (!c.success) return { ok: false, message: c.error.issues[0].message };
   if (!isUuid(seasonId)) return { ok: false, message: "Saison introuvable." };
   const [{ id }] = await tx

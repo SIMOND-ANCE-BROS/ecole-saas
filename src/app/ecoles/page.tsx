@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Choisir une école" };
 
 const ROLE_LABEL = { direction: "Direction", accueil: "Accueil", professeur: "Professeur" } as const;
 
-export default async function PageEcoles() {
+export default async function SchoolsPage() {
   const { user } = await currentSession();
   const ecoles = await schoolsOf(user.id);
 

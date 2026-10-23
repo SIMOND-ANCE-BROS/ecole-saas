@@ -17,10 +17,10 @@ export const metadata: Metadata = { title: "Contacts" };
 export default async function PageContacts({ searchParams }: PageProps<"/contacts">) {
   const { schoolId: schoolId, userId } = await requireRole("direction", "accueil");
   const { q, f, mode, sort, order } = await searchParams;
-  const saisie = typeof q === "string" ? q.trim() : "";
+  const entry = typeof q === "string" ? q.trim() : "";
   const filter = readFilter(f, mode, CONTACT_COLUMNS);
   const { contacts, layout: layout } = await withSchool(schoolId, async (tx) => ({
-    contacts: await listContacts(tx, saisie, { filter, currentSort: readSort(sort, order, CONTACT_COLUMNS) }),
+    contacts: await listContacts(tx, entry, { filter, currentSort: readSort(sort, order, CONTACT_COLUMNS) }),
     layout: await readPreference(tx, userId, "contacts"),
   }));
 
@@ -43,12 +43,12 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
             caption="Contacts"
             columns={CONTACT_COLUMNS}
             layout={layout}
-            relationship="nom"
+            linkColumn="nom"
             vide={
               filter.conditions.length > 0
                 ? "Aucun contact ne correspond à ces filtres."
-                : saisie
-                  ? `Aucun contact ne correspond à « ${saisie} ».`
+                : entry
+                  ? `Aucun contact ne correspond à « ${entry} ».`
                   : "Aucun contact pour l’instant."
             }
             emptyAction={
@@ -60,7 +60,7 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
               id: c.id,
               href: `/contacts/${c.id}`,
               badge: c.type === "professionnel" ? "organisme" : undefined,
-              cellules: { nom: nomAffiche(c), eleves: c.students, telephone: c.telephone, email: c.email },
+              cells: { nom: nomAffiche(c), eleves: c.students, telephone: c.telephone, email: c.email },
             }))}
           />
         </Suspense>

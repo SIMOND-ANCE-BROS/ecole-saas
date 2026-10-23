@@ -12,7 +12,7 @@ import { loginAttempt } from "../db/schema";
  * Each attempt is recorded BEFORE being counted (no race between
  * simultaneous requests). Stored in the database, HMAC keys: nothing in clear.
  */
-export const LIMITES = { byPair: 5, byEmail: 20, byIp: 30, windowMinutes: 15 } as const;
+export const LIMITS = { byPair: 5, byEmail: 20, byIp: 30, windowMinutes: 15 } as const;
 
 type KeyType = "email" | "paire" | "ip";
 
@@ -34,12 +34,12 @@ export function trustedIp(requestHeaders: Headers, headerName = process.env.IP_C
 }
 
 function keys(email: string, ip: string | null) {
-  const limites: { key: string; max: number }[] = [
-    { key: attemptKey("paire", `${email}|${ip ?? ""}`), max: LIMITES.byPair },
-    { key: attemptKey("email", email), max: LIMITES.byEmail },
+  const limits: { key: string; max: number }[] = [
+    { key: attemptKey("paire", `${email}|${ip ?? ""}`), max: LIMITS.byPair },
+    { key: attemptKey("email", email), max: LIMITS.byEmail },
   ];
-  if (ip) limites.push({ key: attemptKey("ip", ip), max: LIMITES.byIp });
-  return limites;
+  if (ip) limits.push({ key: attemptKey("ip", ip), max: LIMITS.byIp });
+  return limits;
 }
 
 /**
@@ -49,10 +49,10 @@ function keys(email: string, ip: string | null) {
  * lock (it expires after the last accepted attempt).
  */
 export async function recordAttempt(email: string, ip: string | null): Promise<boolean> {
-  const limites = keys(email, ip);
+  const limits = keys(email, ip);
   const inserted = await db
     .insert(loginAttempt)
-    .values(limites.map(({ key: key }) => ({ key: key })))
+    .values(limits.map(({ key: key }) => ({ key: key })))
     .returning({ id: loginAttempt.id });
   const accounts = await db
     .select({ key: loginAttempt.key, n: count() })
@@ -61,15 +61,15 @@ export async function recordAttempt(email: string, ip: string | null): Promise<b
       and(
         inArray(
           loginAttempt.key,
-          limites.map((l) => l.key),
+          limits.map((l) => l.key),
         ),
-        gt(loginAttempt.at, sql`now() - make_interval(mins => ${LIMITES.windowMinutes})`),
+        gt(loginAttempt.at, sql`now() - make_interval(mins => ${LIMITS.windowMinutes})`),
       ),
     )
     .groupBy(loginAttempt.key);
   // Ongoing purge: nothing is kept beyond one day.
   await db.delete(loginAttempt).where(lt(loginAttempt.at, sql`now() - interval '1 day'`));
-  const allowed = limites.every(({ key: key, max }) => (accounts.find((c) => c.key === key)?.n ?? 0) <= max);
+  const allowed = limits.every(({ key: key, max }) => (accounts.find((c) => c.key === key)?.n ?? 0) <= max);
   if (!allowed) {
     await db.delete(loginAttempt).where(
       inArray(

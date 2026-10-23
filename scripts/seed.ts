@@ -121,8 +121,9 @@ async function principal() {
 
   // Fictitious schedule: sites, rooms, disciplines, teachers, courses of the season.
   const [season] = await admin`SELECT id FROM season WHERE school_id = ${school.id} AND label = '2026-2027'`;
-  const [{ nbCours }] = await admin`SELECT count(*)::int AS "nbCours" FROM course WHERE season_id = ${season.id}`;
-  if (nbCours === 0) {
+  const [{ nbCours: courseCount }] =
+    await admin`SELECT count(*)::int AS "nbCours" FROM course WHERE season_id = ${season.id}`;
+  if (courseCount === 0) {
     const sites: Record<string, string> = {};
     for (const [name, address, permanence] of [
       ["Site Centre", "3 place de la Mairie, 69100 Villeurbanne", true],
@@ -190,8 +191,9 @@ async function principal() {
     WHERE course.room_id = s.id AND course.school_id = ${school.id} AND course.max_capacity IS NULL`;
 
   // Demo tariff grid and siblings discount (amounts in euros).
-  const [{ nbTarifs }] = await admin`SELECT count(*)::int AS "nbTarifs" FROM tariff WHERE season_id = ${season.id}`;
-  if (nbTarifs === 0) {
+  const [{ nbTarifs: tariffCount }] =
+    await admin`SELECT count(*)::int AS "nbTarifs" FROM tariff WHERE season_id = ${season.id}`;
+  if (tariffCount === 0) {
     const GRID: [publicTarif: string, combinaison: number[], trimestre: number, annee: number][] = [
       ["enfant", [45], 85, 210],
       ["enfant", [60], 110, 280],
@@ -228,9 +230,9 @@ async function principal() {
   }
 
   // Demo closures (fictitious dates) then upcoming lessons, as the application creates them.
-  const [{ nbFermetures }] =
+  const [{ nbFermetures: closureCount }] =
     await admin`SELECT count(*)::int AS "nbFermetures" FROM closure WHERE season_id = ${season.id}`;
-  if (nbFermetures === 0) {
+  if (closureCount === 0) {
     for (const [label, start, end] of [
       ["Vacances d’automne", "2026-10-17", "2026-11-01"],
       ["Jour férié", "2026-11-11", "2026-11-11"],

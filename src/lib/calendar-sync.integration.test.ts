@@ -122,9 +122,9 @@ describe("synchroniserAgenda", () => {
     );
     const record = await withSchool(school, (tx) => readInstructor(tx, camille));
     if (!record) throw new Error("intervenant introuvable");
-    const { id, ...saisie } = record;
+    const { id, ...entry } = record;
     expect(id).toBe(camille);
-    await withSchool(school, (tx) => updateInstructor(tx, camille, { ...saisie, active: false }));
+    await withSchool(school, (tx) => updateInstructor(tx, camille, { ...entry, active: false }));
     expect(await withSchool(school, (tx) => connectionState(tx, camille))).toBeNull();
     expect(
       await withSchool(school, (tx) =>

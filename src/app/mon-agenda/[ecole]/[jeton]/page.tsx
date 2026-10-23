@@ -10,10 +10,10 @@ import { DisconnectButton } from "./disconnect-button";
 
 export const metadata: Metadata = { title: "Mon agenda", robots: { index: false, follow: false } };
 
-const BANNERS: Record<string, { texte: string; error: boolean }> = {
-  connecte: { texte: "Agenda connecté : vos indisponibilités sont transmises à l’école.", error: false },
-  refuse: { texte: "Connexion annulée : rien n’a été transmis.", error: true },
-  erreur: { texte: "La connexion n’a pas abouti. Réessayez dans quelques minutes.", error: true },
+const BANNERS: Record<string, { text: string; error: boolean }> = {
+  connecte: { text: "Agenda connecté : vos indisponibilités sont transmises à l’école.", error: false },
+  refuse: { text: "Connexion annulée : rien n’a été transmis.", error: true },
+  erreur: { text: "La connexion n’a pas abouti. Réessayez dans quelques minutes.", error: true },
 };
 const dateTime = new Intl.DateTimeFormat("fr-FR", {
   day: "numeric",
@@ -37,7 +37,7 @@ export default async function MyCalendarPage({ params, searchParams }: PageProps
   if (!donnees) notFound();
   const { instructor: instructor, connection: connection } = donnees;
   const ics = `${publicAddress()}/agenda/${ecole}/${jeton}.ics`;
-  const bandeau = typeof status === "string" ? BANNERS[status] : undefined;
+  const banner = typeof status === "string" ? BANNERS[status] : undefined;
   const available = PROVIDERS.filter((f) => credentials(f));
 
   return (
@@ -48,12 +48,12 @@ export default async function MyCalendarPage({ params, searchParams }: PageProps
         <p className="text-sm text-doux">Cette page vous est personnelle : ne partagez pas son adresse.</p>
       </header>
 
-      {bandeau && (
+      {banner && (
         <p
-          role={bandeau.error ? "alert" : "status"}
-          className={`rounded-md px-3 py-2 text-sm ${bandeau.error ? "bg-alerte-fond text-alerte-texte" : "border border-accent bg-accent-doux"}`}
+          role={banner.error ? "alert" : "status"}
+          className={`rounded-md px-3 py-2 text-sm ${banner.error ? "bg-alerte-fond text-alerte-texte" : "border border-accent bg-accent-doux"}`}
         >
-          {bandeau.texte}
+          {banner.text}
         </p>
       )}
 

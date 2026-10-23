@@ -1,6 +1,6 @@
 import { AccessRemoved, credentials, readBusyRanges, refresh } from "../connectors/calendar/oauth";
 import { withSchool } from "../db";
-import { connectesInstructors, readConnection, recordSync } from "../db/calendar-connections";
+import { connectedInstructors, readConnection, recordSync } from "../db/calendar-connections";
 import { replaceCalendarUnavailabilities } from "../db/unavailabilities";
 import { encrypt, decrypt } from "./encryption";
 
@@ -62,7 +62,7 @@ export async function syncSchool(
   schoolId: string,
   query: typeof fetch = fetch,
 ): Promise<{ succeeded: number; failed: number }> {
-  const ids = await withSchool(schoolId, (tx) => connectesInstructors(tx));
+  const ids = await withSchool(schoolId, (tx) => connectedInstructors(tx));
   let succeeded = 0;
   for (const instructorId of ids) if ((await syncCalendar(schoolId, instructorId, query)).ok) succeeded++;
   return { succeeded, failed: ids.length - succeeded };

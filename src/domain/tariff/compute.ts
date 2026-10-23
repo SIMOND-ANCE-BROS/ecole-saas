@@ -99,7 +99,7 @@ function findRow(
     (l) =>
       l.audience === enrollment.audience &&
       l.period === enrollment.period &&
-      memesDurees(sort(l.combination), combination),
+      sameDurations(sort(l.combination), combination),
   );
   const discipline = disciplineUnique(enrollment.courses);
   return (
@@ -190,14 +190,14 @@ export function combinationLabel(combination: readonly number[]): string {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function sort(durees: readonly number[]): number[] {
-  for (const d of durees) {
+function sort(durations: readonly number[]): number[] {
+  for (const d of durations) {
     if (!Number.isInteger(d) || d <= 0) throw new TypeError(`Durée de cours invalide : ${d}`);
   }
-  return [...durees].sort((a, b) => a - b);
+  return [...durations].sort((a, b) => a - b);
 }
 
-function memesDurees(a: readonly number[], b: readonly number[]): boolean {
+function sameDurations(a: readonly number[], b: readonly number[]): boolean {
   return a.length === b.length && a.every((d, i) => d === b[i]);
 }
 

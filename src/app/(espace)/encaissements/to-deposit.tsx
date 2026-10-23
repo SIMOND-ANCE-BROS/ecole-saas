@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { MOYENS } from "@/db/payments";
+import { PAYMENT_METHODS } from "@/db/payments";
 import type { AuditLogRow } from "@/db/deposits";
 import type { DepositMethod } from "@/domain/payments/deposits";
 import { formatEuros } from "@/lib/money";
@@ -34,7 +34,7 @@ export function ToDeposit({
     else s.add(id);
     setChosen(s);
   };
-  const title = MOYENS[method];
+  const title = PAYMENT_METHODS[method];
 
   return (
     <section aria-labelledby={`remettre-${method}`} className="flex flex-col gap-2">

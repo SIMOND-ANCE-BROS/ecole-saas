@@ -39,7 +39,7 @@ export function Navigation({ role }: { role: "direction" | "accueil" | "professe
 }
 
 /** Lists where the top search filters in place, with the field's help text. */
-const LISTES: Record<string, { label: string; example: string }> = {
+const LISTS: Record<string, { label: string; example: string }> = {
   "/eleves": { label: "Rechercher un élève ou un parent", example: "Élève, parent, téléphone…" },
   "/contacts": { label: "Rechercher un contact", example: "Contact, téléphone, e-mail…" },
   "/intervenants": { label: "Rechercher un intervenant", example: "Nom ou e-mail de l’intervenant…" },
@@ -57,7 +57,7 @@ export function GlobalSearch() {
   const router = useRouter();
   const path = usePathname();
   const settings = useSearchParams();
-  const list = LISTES[path];
+  const list = LISTS[path];
   const onList = list !== undefined;
   const search = onList ? (settings.get("q") ?? "") : "";
   const [inProgress, navigate] = useTransition();

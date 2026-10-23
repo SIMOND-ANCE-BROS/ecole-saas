@@ -9,9 +9,9 @@ import { requireRole } from "@/lib/session";
 export type Refusal = { message: string; errors: Partial<Record<string, string>>; duplicates?: Duplicate[] };
 
 /** New contact (parent, payer, organisation); without `confirmed`, first returns the likely duplicates. */
-export async function createContact(saisie: unknown, confirmed: boolean): Promise<Refusal> {
+export async function createContact(entry: unknown, confirmed: boolean): Promise<Refusal> {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
-  const p = validPersonInput.safeParse(saisie);
+  const p = validPersonInput.safeParse(entry);
   if (!p.success) return { message: "Vérifiez les champs signalés.", errors: errorsOf(p.error.issues) };
   const r = await withSchool(schoolId, (tx) => createPerson(tx, p.data, confirmed));
   if (r.status === "doublons")
@@ -20,9 +20,9 @@ export async function createContact(saisie: unknown, confirmed: boolean): Promis
 }
 
 /** Identity and contact details of a student or a contact. */
-export async function updateIdentity(id: string, saisie: unknown, back: "eleves" | "contacts"): Promise<Refusal> {
+export async function updateIdentity(id: string, entry: unknown, back: "eleves" | "contacts"): Promise<Refusal> {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
-  const p = validPersonInput.safeParse(saisie);
+  const p = validPersonInput.safeParse(entry);
   if (!p.success) return { message: "Vérifiez les champs signalés.", errors: errorsOf(p.error.issues) };
   const r = await withSchool(schoolId, (tx) => updatePerson(tx, id, p.data));
   if (!r.ok) return { message: r.message, errors: {} };
@@ -30,8 +30,8 @@ export async function updateIdentity(id: string, saisie: unknown, back: "eleves"
 }
 
 /** Search for an existing person while typing (guardian, payer). */
-export async function searchPeopleAction(saisie: string) {
+export async function searchPeopleAction(entry: string) {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
-  if (typeof saisie !== "string") return [];
-  return withSchool(schoolId, (tx) => searchPeople(tx, saisie.slice(0, 100)));
+  if (typeof entry !== "string") return [];
+  return withSchool(schoolId, (tx) => searchPeople(tx, entry.slice(0, 100)));
 }

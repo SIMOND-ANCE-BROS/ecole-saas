@@ -35,7 +35,7 @@ export type CalendarColumn = { day: number; title: string; closed?: string | nul
 
 /** Response to a move: done, refused, or a choice to offer (« cette séance seulement »…). */
 export type CalendarResponse =
-  | { status: "ok"; texte: string; alertes: string[] }
+  | { status: "ok"; text: string; alertes: string[] }
   | { status: "choisir"; question: string; choice: { value: string; label: string }[] }
   | { status: "refus"; message: string };
 type Gesture =
@@ -90,7 +90,7 @@ export function Calendar({
     question: string;
     choice: { value: string; label: string }[];
   } | null>(null);
-  const [message, setMessage] = useState<{ type: "ok" | "refus"; texte: string; alertes: string[] } | null>(null);
+  const [message, setMessage] = useState<{ type: "ok" | "refus"; text: string; alertes: string[] } | null>(null);
   const columns = useRef(new Map<number, HTMLDivElement>());
   const justDragged = useRef(false);
 
@@ -139,10 +139,10 @@ export function Calendar({
       setToConfirm(null);
       if (r.status === "refus") {
         setPreview(null);
-        setMessage({ type: "refus", texte: r.message, alertes: [] });
+        setMessage({ type: "refus", text: r.message, alertes: [] });
         return;
       }
-      setMessage({ type: "ok", texte: r.texte, alertes: r.alertes });
+      setMessage({ type: "ok", text: r.text, alertes: r.alertes });
       router.refresh();
       setPreview(null);
     });
@@ -316,7 +316,7 @@ export function Calendar({
             role="status"
             className={`rounded-md border px-3 py-2 text-sm ${message.type === "ok" ? "border-accent bg-accent-doux" : "border-erreur text-erreur"}`}
           >
-            <p>{message.texte}</p>
+            <p>{message.text}</p>
             {message.alertes.length > 0 && (
               <ul className="mt-1 list-disc pl-5 text-alerte-texte">
                 {message.alertes.map((a) => (

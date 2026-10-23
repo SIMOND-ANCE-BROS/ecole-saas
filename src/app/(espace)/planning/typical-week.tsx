@@ -66,7 +66,7 @@ export function TypicalWeek({
     if (r.status === "refus") return r;
     return {
       status: "ok",
-      texte: `Cours déplacé — ${c?.discipline ?? "Cours"} : ${when(slot)}.`,
+      text: `Cours déplacé — ${c?.discipline ?? "Cours"} : ${when(slot)}.`,
       alertes: r.alertes,
     };
   }

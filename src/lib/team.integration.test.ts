@@ -57,7 +57,7 @@ afterAll(async () => {
   await admin.end();
 });
 
-const saisie = (
+const entry = (
   password: string,
   extra: Partial<{ name: string; confirmation: string; currentPassword: string }> = {},
 ) => ({
@@ -99,13 +99,13 @@ describe("invitation", () => {
   });
 
   it("refuse un mot de passe trop court, puis crée le compte ; le lien ne sert qu'une fois", async () => {
-    expect(await acceptLink(school, token, saisie("court"))).toMatchObject({ ok: false });
-    expect(await acceptLink(school, token, saisie(PASSWORD))).toEqual({
+    expect(await acceptLink(school, token, entry("court"))).toMatchObject({ ok: false });
+    expect(await acceptLink(school, token, entry(PASSWORD))).toEqual({
       ok: true,
       type: "invitation",
       email: newMemberEmail,
     });
-    expect(await acceptLink(school, token, saisie(PASSWORD))).toMatchObject({ ok: false });
+    expect(await acceptLink(school, token, entry(PASSWORD))).toMatchObject({ ok: false });
     await expect(connect(newMemberEmail, PASSWORD)).resolves.toBeTruthy();
     expect(await member(newMemberEmail)).toMatchObject({ role: "accueil", active: true, name: "Accueil Nouvelle" });
   });
@@ -116,11 +116,11 @@ describe("invitation", () => {
     );
     if (!r.ok) throw new Error(r.message);
     expect(await openLink(school, r.token)).toMatchObject({ existingAccount: true });
-    expect(await acceptLink(school, r.token, saisie("", { currentPassword: "pas le bon" }))).toEqual({
+    expect(await acceptLink(school, r.token, entry("", { currentPassword: "pas le bon" }))).toEqual({
       ok: false,
       message: "Mot de passe actuel incorrect.",
     });
-    expect((await acceptLink(school, r.token, saisie("", { currentPassword: PASSWORD }))).ok).toBe(true);
+    expect((await acceptLink(school, r.token, entry("", { currentPassword: PASSWORD }))).ok).toBe(true);
     expect(await member(teacherEmail)).toMatchObject({ role: "direction", active: true });
   });
 
@@ -203,7 +203,7 @@ describe("réinitialisation du mot de passe", () => {
     if (!r.ok) throw new Error(r.message);
     expect(await openLink(school, r.token)).toMatchObject({ type: "reinitialisation", email: newMemberEmail });
     const next = "un tout nouveau mot de passe";
-    expect(await acceptLink(school, r.token, saisie(next))).toEqual({
+    expect(await acceptLink(school, r.token, entry(next))).toEqual({
       ok: true,
       type: "reinitialisation",
       email: newMemberEmail,
@@ -222,7 +222,7 @@ describe("réinitialisation du mot de passe", () => {
     const r = await createResetLink(school, diana, n.id);
     if (!r.ok) throw new Error(r.message);
     await admin`INSERT INTO member (school_id, user_id, role, active) VALUES (${otherSchool}, ${n.userId}, 'accueil', false)`;
-    expect(await acceptLink(school, r.token, saisie("encore un autre mot de passe"))).toEqual({
+    expect(await acceptLink(school, r.token, entry("encore un autre mot de passe"))).toEqual({
       ok: false,
       message: "Ce compte sert aussi dans une autre école : la personne doit changer elle-même son mot de passe.",
     });

@@ -90,24 +90,24 @@ export async function readInstructor(tx: Tx, id: string): Promise<Instructor | n
   return i ?? null;
 }
 
-export async function createInstructor(tx: Tx, saisie: InstructorInput): Promise<string> {
+export async function createInstructor(tx: Tx, entry: InstructorInput): Promise<string> {
   const [{ id }] = await tx
     .insert(instructor)
-    .values({ ...instructorRow(saisie), schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid` })
+    .values({ ...instructorRow(entry), schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid` })
     .returning({ id: instructor.id });
   return id;
 }
 
 /** false if the instructor does not exist in the current school. */
-export async function updateInstructor(tx: Tx, id: string, saisie: InstructorInput): Promise<boolean> {
+export async function updateInstructor(tx: Tx, id: string, entry: InstructorInput): Promise<boolean> {
   if (!z.uuid().safeParse(id).success) return false;
   // Deactivating an instructor also cuts off their subscription and connected calendar.
-  const cutoff = saisie.active ? {} : { calendarTokenHash: null, calendarTokenCreatedAt: null };
+  const cutoff = entry.active ? {} : { calendarTokenHash: null, calendarTokenCreatedAt: null };
   const rows = await tx
     .update(instructor)
-    .set({ ...instructorRow(saisie), ...cutoff })
+    .set({ ...instructorRow(entry), ...cutoff })
     .where(eq(instructor.id, id))
     .returning({ id: instructor.id });
-  if (rows.length === 1 && !saisie.active) await deleteConnection(tx, id);
+  if (rows.length === 1 && !entry.active) await deleteConnection(tx, id);
   return rows.length === 1;
 }

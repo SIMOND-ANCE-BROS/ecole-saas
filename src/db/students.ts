@@ -143,7 +143,7 @@ function studentEnrollment(seasonId: string | null): SQL<string | null> {
  */
 export async function listStudents(
   tx: Tx,
-  saisie = "",
+  entry = "",
   {
     filter: filter = EMPTY_FILTER,
     currentSort: currentSort = null,
@@ -151,9 +151,9 @@ export async function listStudents(
     seasonId: seasonId = null,
   }: ListOptions = {},
 ): Promise<StudentRow[]> {
-  const studentCondition = searchCondition(saisie);
-  const relativeCondition = searchCondition(saisie, "r");
-  if (saisie.trim() && !studentCondition) return [];
+  const studentCondition = searchCondition(entry);
+  const relativeCondition = searchCondition(entry, "r");
+  if (entry.trim() && !studentCondition) return [];
   const validSeasonId = seasonId && isUuid(seasonId) ? seasonId : null;
   const seasonCourses = studentCourses(validSeasonId);
   const seasonStatus = studentEnrollment(validSeasonId);
@@ -217,11 +217,11 @@ export type ContactRow = {
 /** Contacts: whoever is not a student, or is a guardian or payer of a student. */
 export async function listContacts(
   tx: Tx,
-  saisie = "",
+  entry = "",
   { filter: filter = EMPTY_FILTER, currentSort: currentSort = null }: ListOptions = {},
 ): Promise<ContactRow[]> {
-  const condition = searchCondition(saisie);
-  if (saisie.trim() && !condition) return [];
+  const condition = searchCondition(entry);
+  if (entry.trim() && !condition) return [];
   const expressions = {
     nom: { sql: sqlName("person") },
     eleves: { sql: contactStudents, list: true },
@@ -318,9 +318,9 @@ export async function readStudent(tx: Tx, id: string, today: string): Promise<St
           .filter((d) => d.id !== id && d.id !== billedTo.id)
           .map((d) => ({ id: d.id, firstName: d.firstName }))
       : [];
-  const { relationships: liens, ...reste } = p;
+  const { relationships: liens, ...rest } = p;
   return {
-    ...reste,
+    ...rest,
     isStudent: student,
     guardians: to.filter((l) => l.type === "representant_legal").map(relative),
     // The other relatives, and the relationships entered from the student (guardian of, partner entered on their side).
@@ -347,9 +347,9 @@ export async function readContact(tx: Tx, id: string): Promise<ContactRecord | n
   const p = await readPerson(tx, id);
   if (!p) return null;
   const [{ student: student }] = await tx.select({ student: person.isStudent }).from(person).where(eq(person.id, id));
-  const { relationships: liens, ...reste } = p;
+  const { relationships: liens, ...rest } = p;
   return {
-    ...reste,
+    ...rest,
     isStudent: student,
     students: liens
       .filter((l) => l.sens === "de")
@@ -409,38 +409,38 @@ export class CreationRefusal extends Error {}
  */
 export async function createStudent(
   tx: Tx,
-  saisie: StudentInput,
+  entry: StudentInput,
   confirmed: boolean,
 ): Promise<{ status: "ok"; id: string } | { status: "doublons"; duplicates: DuplicateWithRole[] }> {
   if (!confirmed) {
-    const nextItems: [DuplicateWithRole["role"], PersonInput][] = [["élève", saisie.student]];
-    if (saisie.guardian && "newPerson" in saisie.guardian) nextItems.push(["responsable", saisie.guardian.newPerson]);
-    if (saisie.billing.type === "autre" && "newPerson" in saisie.billing.payeur)
-      nextItems.push(["payeur", saisie.billing.payeur.newPerson]);
+    const nextItems: [DuplicateWithRole["role"], PersonInput][] = [["élève", entry.student]];
+    if (entry.guardian && "newPerson" in entry.guardian) nextItems.push(["responsable", entry.guardian.newPerson]);
+    if (entry.billing.type === "autre" && "newPerson" in entry.billing.payeur)
+      nextItems.push(["payeur", entry.billing.payeur.newPerson]);
     const duplicates: DuplicateWithRole[] = [];
     for (const [role, s] of nextItems) duplicates.push(...(await likelyDuplicates(tx, s)).map((d) => ({ ...d, role })));
     if (duplicates.length > 0) return { status: "doublons", duplicates };
   }
 
-  const created = await createPerson(tx, saisie.student, true);
+  const created = await createPerson(tx, entry.student, true);
   if (created.status !== "ok") throw new CreationRefusal("Création impossible.");
   const id = created.id;
   await tx.update(person).set({ isStudent: true }).where(eq(person.id, id));
 
-  if (saisie.guardian) {
-    const guardianId = await resolve(tx, saisie.guardian);
+  if (entry.guardian) {
+    const guardianId = await resolve(tx, entry.guardian);
     if (!guardianId) throw new CreationRefusal("Responsable introuvable.");
     const r = await addRelationship(tx, {
       personId: guardianId,
       relatedPersonId: id,
       type: "representant_legal",
-      emergencyContact: saisie.toNotify,
-      paysFor: saisie.billing.type === "responsable",
+      emergencyContact: entry.toNotify,
+      paysFor: entry.billing.type === "responsable",
     });
     if (!r.ok) throw new CreationRefusal(r.message);
   }
-  if (saisie.billing.type === "autre") {
-    const payerId = await resolve(tx, saisie.billing.payeur);
+  if (entry.billing.type === "autre") {
+    const payerId = await resolve(tx, entry.billing.payeur);
     if (!payerId) throw new CreationRefusal("Payeur introuvable.");
     const r = await setBilling(tx, id, { type: "personne", id: payerId });
     if (!r.ok) throw new CreationRefusal(r.message);

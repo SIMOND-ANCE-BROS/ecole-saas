@@ -11,7 +11,7 @@ import { DatedWeek } from "./dated-week";
 import { TypicalWeek } from "./typical-week";
 
 export type ScheduleView = "datee" | "type" | "liste";
-const VUES: Record<ScheduleView, string> = { datee: "Par semaine", type: "Semaine type", liste: "Liste" };
+const VIEWS: Record<ScheduleView, string> = { datee: "Par semaine", type: "Semaine type", liste: "Liste" };
 
 type Props = {
   courses: ScheduleCourse[];
@@ -156,7 +156,7 @@ export function ScheduleGrid({
           aria-label="Affichage"
           className="ml-auto flex overflow-hidden rounded-md border border-bordure text-sm"
         >
-          {(Object.keys(VUES) as ScheduleView[]).map((v) => (
+          {(Object.keys(VIEWS) as ScheduleView[]).map((v) => (
             <button
               key={v}
               type="button"
@@ -164,7 +164,7 @@ export function ScheduleGrid({
               className={`px-3 py-1.5 ${view === v ? "bg-accent text-sur-accent" : "hover:bg-accent-doux"}`}
               onClick={() => chooseView(v)}
             >
-              {VUES[v]}
+              {VIEWS[v]}
             </button>
           ))}
         </div>

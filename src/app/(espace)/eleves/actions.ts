@@ -27,9 +27,9 @@ type Back = { message: string | null };
 const back = (r: { ok: true } | { ok: false; message: string }): Back => ({ message: r.ok ? null : r.message });
 
 /** Student, guardian and payer in a single entry; without `confirmed`, first returns the likely duplicates. */
-export async function createStudentFromGuide(saisie: unknown, confirmed: boolean): Promise<StudentRefusal> {
+export async function createStudentFromGuide(entry: unknown, confirmed: boolean): Promise<StudentRefusal> {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
-  const s = validStudentInput.safeParse(saisie);
+  const s = validStudentInput.safeParse(entry);
   if (!s.success) return { message: "Vérifiez les champs signalés.", errors: errorsOf(s.error.issues) };
   let r;
   try {

@@ -1,7 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
-import { enrollmentPreview, saveEnrollment, enrollmentsPayeesBy } from "./enrollments";
+import { enrollmentPreview, saveEnrollment, enrollmentsPaidBy } from "./enrollments";
 import { seasonCourses } from "./schedule";
 import { seasonFigures, lastEnrollments } from "./dashboard";
 
@@ -94,10 +94,10 @@ const enfant = (studentIds: string[], courseIds: string[]) => ({
   period: "trimestre" as const,
   courseIds: courseIds,
 });
-const preview = (saisie: ReturnType<typeof enfant>) =>
-  withSchool(ids.ecole, (tx) => enrollmentPreview(tx, ids.payeur, ids.saison, saisie));
-const save = (saisie: ReturnType<typeof enfant>) =>
-  withSchool(ids.ecole, (tx) => saveEnrollment(tx, ids.payeur, ids.saison, saisie));
+const preview = (entry: ReturnType<typeof enfant>) =>
+  withSchool(ids.ecole, (tx) => enrollmentPreview(tx, ids.payeur, ids.saison, entry));
+const save = (entry: ReturnType<typeof enfant>) =>
+  withSchool(ids.ecole, (tx) => saveEnrollment(tx, ids.payeur, ids.saison, entry));
 
 describe("Inscription", () => {
   it("donne un aperçu du prix pour un premier enfant, sans fratrie", async () => {
@@ -142,7 +142,7 @@ describe("Inscription", () => {
   });
 
   it("liste les inscriptions payées par la personne pour la saison", async () => {
-    const list = await withSchool(ids.ecole, (tx) => enrollmentsPayeesBy(tx, ids.payeur, ids.saison));
+    const list = await withSchool(ids.ecole, (tx) => enrollmentsPaidBy(tx, ids.payeur, ids.saison));
     expect(list.map((i) => [i.students, i.netPriceCents])).toEqual([
       ["Noé", 14850],
       ["Zoé", 11000],

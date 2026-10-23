@@ -14,7 +14,7 @@ import { lessonPack, enrollment, auditLog, member, payment, person, user } from 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const isUuid = (v: string) => z.uuid().safeParse(v).success;
 
-export const MOYENS = {
+export const PAYMENT_METHODS = {
   cheque: "Chèque",
   especes: "Espèces",
   carte: "Carte",
@@ -24,7 +24,7 @@ export const MOYENS = {
   pass_sport: "Pass’Sport",
   autre: "Autre",
 } as const;
-export type Method = keyof typeof MOYENS;
+export type Method = keyof typeof PAYMENT_METHODS;
 
 const shortText = (max: number) =>
   z
@@ -36,7 +36,7 @@ const shortText = (max: number) =>
 
 export const validPayment = z
   .object({
-    method: z.enum(Object.keys(MOYENS) as [Method, ...Method[]]),
+    method: z.enum(Object.keys(PAYMENT_METHODS) as [Method, ...Method[]]),
     amountCents: z.int("Montant invalide").min(1, "Montant invalide").max(10_000_00, "Montant trop élevé"),
     date: z.iso.date("Date invalide"),
     reference: shortText(60),
@@ -87,9 +87,9 @@ export async function collect(
   tx: Tx,
   userId: string,
   payerId: string,
-  saisie: z.input<typeof validPayments>,
+  entry: z.input<typeof validPayments>,
 ): Promise<Result> {
-  const r = validPayments.safeParse(saisie);
+  const r = validPayments.safeParse(entry);
   if (!r.success) return { ok: false, message: r.error.issues[0].message };
   if (!isUuid(payerId)) return { ok: false, message: "Payeur introuvable." };
   const [p] = await tx.select({ id: person.id }).from(person).where(eq(person.id, payerId));

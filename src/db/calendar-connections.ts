@@ -67,7 +67,7 @@ export async function readConnection(tx: Tx, instructorId: string) {
   return c ?? null;
 }
 
-export async function connectesInstructors(tx: Tx): Promise<string[]> {
+export async function connectedInstructors(tx: Tx): Promise<string[]> {
   const rows = await tx
     .select({ id: calendarConnection.instructorId })
     .from(calendarConnection)

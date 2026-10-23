@@ -33,8 +33,8 @@ export function formatEuros(cents: number): string {
  * Input in euros (« 40 », « 40,50 », « 1 234,56 € ») → integer cents, without
  * going through a floating-point number; null if the input is not a positive amount.
  */
-export function parseEuros(saisie: string): number | null {
-  const m = /^(\d+)(?:[,.](\d{1,2}))?$/.exec(saisie.replace(/[\s €]/g, ""));
+export function parseEuros(entry: string): number | null {
+  const m = /^(\d+)(?:[,.](\d{1,2}))?$/.exec(entry.replace(/[\s €]/g, ""));
   if (!m) return null;
   return Number(m[1]) * 100 + Number((m[2] ?? "").padEnd(2, "0"));
 }

@@ -57,13 +57,13 @@ export function pkceChallenge(): { verifier: string; challenge: string } {
 export function authorizationUrl(
   f: Provider,
   identifier: string,
-  o: { redirection: string; state: string; challenge: string },
+  o: { redirectUri: string; state: string; challenge: string },
 ): string {
   const p = POINTS[f];
   const url = new URL(p.authorization);
   for (const [key, value] of Object.entries({
     client_id: identifier,
-    redirect_uri: o.redirection,
+    redirect_uri: o.redirectUri,
     response_type: "code",
     scope: p.scopes,
     state: o.state,
@@ -145,13 +145,13 @@ function tokenAccount(idToken: string | undefined): string | null {
 export async function exchangeCode(
   f: Provider,
   id: Credentials,
-  o: { code: string; verifier: string; redirection: string },
+  o: { code: string; verifier: string; redirectUri: string },
   query: Fetch = fetch,
 ): Promise<{ refreshToken: string; account: string | null }> {
   const json = await requestToken(
     f,
     id,
-    { grant_type: "authorization_code", code: o.code, code_verifier: o.verifier, redirect_uri: o.redirection },
+    { grant_type: "authorization_code", code: o.code, code_verifier: o.verifier, redirect_uri: o.redirectUri },
     query,
   );
   if (!json.refresh_token) throw new Error("Le fournisseur n’a pas donné d’accès durable (refresh_token absent).");

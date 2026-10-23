@@ -55,8 +55,8 @@ async function withCurrentSeason(action: (seasonId: string) => Parameters<typeof
   return back(r);
 }
 
-export async function close(saisie: unknown): Promise<Back> {
-  return withCurrentSeason((seasonId) => (tx) => addClosure(tx, seasonId, saisie as never));
+export async function close(entry: unknown): Promise<Back> {
+  return withCurrentSeason((seasonId) => (tx) => addClosure(tx, seasonId, entry as never));
 }
 
 export async function reopen(closureId: string): Promise<Back> {

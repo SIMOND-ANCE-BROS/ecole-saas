@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Cancel } from "@/app/(espace)/_panel/panel";
-import { MOYENS, type Method } from "@/db/payments";
+import { PAYMENT_METHODS, type Method } from "@/db/payments";
 import { formatEuros, parseEuros } from "@/lib/money";
 import { collectPayments } from "../actions";
 
@@ -24,29 +24,29 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
   const [message, setMessage] = useState<string | null>(null);
   const [sending, startTransition] = useTransition();
   const updated = (i: number, v: Partial<Row>) => setRows(rows.map((l, j) => (j === i ? { ...l, ...v } : l)));
-  const montants = rows.map((l) => parseEuros(l.amount));
-  const total = montants.reduce<number>((s, m) => s + (m ?? 0), 0);
-  const invalides = rows.map((l, i) => l.amount.trim() !== "" && (montants[i] === null || montants[i] === 0));
+  const amounts = rows.map((l) => parseEuros(l.amount));
+  const total = amounts.reduce<number>((s, m) => s + (m ?? 0), 0);
+  const invalides = rows.map((l, i) => l.amount.trim() !== "" && (amounts[i] === null || amounts[i] === 0));
 
   return (
     <form
       className="flex flex-col gap-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (montants.some((m) => !m)) {
+        if (amounts.some((m) => !m)) {
           setMessage("Indiquez un montant pour chaque règlement.");
           return;
         }
-        const saisie = rows.map((l, i) => ({
+        const entry = rows.map((l, i) => ({
           method: l.method,
-          amountCents: montants[i],
+          amountCents: amounts[i],
           date,
           reference: l.reference,
           issuer: l.issuer,
           plannedPayment: l.method === "cheque" && l.payment ? l.payment : null,
         }));
         setMessage(null);
-        startTransition(async () => setMessage((await collectPayments(payerId, saisie, back)).message));
+        startTransition(async () => setMessage((await collectPayments(payerId, entry, back)).message));
       }}
     >
       <p className="text-sm">
@@ -91,7 +91,7 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
                 value={l.method}
                 onChange={(e) => updated(i, { method: e.target.value as Method })}
               >
-                {Object.entries(MOYENS).map(([k, v]) => (
+                {Object.entries(PAYMENT_METHODS).map(([k, v]) => (
                   <option key={k} value={k}>
                     {v}
                   </option>

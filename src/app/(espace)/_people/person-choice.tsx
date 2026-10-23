@@ -71,24 +71,24 @@ export function PersonChoice({
   organization: organization = false,
   errors: errors = {},
 }: Props) {
-  const [saisie, setInput] = useState("");
+  const [entry, setInput] = useState("");
   const [results, setResults] = useState<PersonResult[] | null>(null);
   const [error, setError] = useState(false);
-  const active = saisie.trim().length >= 2 && !value;
+  const active = entry.trim().length >= 2 && !value;
   // Stable key: an array recreated on every render would restart the search endlessly.
   const excluded = exclude.join(",");
 
   useEffect(() => {
     if (!active) return;
     return deferredQuery(
-      () => searchPeopleAction(saisie),
+      () => searchPeopleAction(entry),
       (r) => {
         setResults(r.filter((p) => !excluded.split(",").includes(p.id)));
         setError(false);
       },
       () => setError(true),
     );
-  }, [saisie, active, excluded]);
+  }, [entry, active, excluded]);
 
   if (value && "id" in value) {
     return (
@@ -105,10 +105,10 @@ export function PersonChoice({
     const n = value.newPerson;
     const updated = (field: keyof typeof n) => (e: { target: { value: string } }) =>
       onChange({ newPerson: { ...n, [field]: e.target.value } });
-    const field = (key: keyof typeof n, texte: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
+    const field = (key: keyof typeof n, text: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
       <div className="flex flex-col gap-1">
         <label htmlFor={`${id}-${key}`} className="text-sm">
-          {texte}
+          {text}
         </label>
         <input
           id={`${id}-${key}`}
@@ -162,7 +162,7 @@ export function PersonChoice({
         className="champ"
         autoComplete="off"
         placeholder="Nom, prénom, téléphone…"
-        value={saisie}
+        value={entry}
         onChange={(e) => {
           setInput(e.target.value);
           setResults(null);
