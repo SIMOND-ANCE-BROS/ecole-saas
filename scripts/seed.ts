@@ -6,9 +6,9 @@
  */
 import postgres from "postgres";
 import { withSchool } from "../src/db";
-import { syncLessons } from "../src/db/seances";
-import { todayInParis } from "../src/domaine/personnes/age";
-import { createAccount } from "../src/lib/comptes";
+import { syncLessons } from "../src/db/lessons";
+import { todayInParis } from "../src/domain/people/age";
+import { createAccount } from "../src/lib/accounts";
 
 const PASSWORD = process.env.SEED_MOT_DE_PASSE ?? "demo-ecole-de-danse";
 const ACCOUNTS = [

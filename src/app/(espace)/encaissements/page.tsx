@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { withSchool } from "@/db";
-import { MOYENS, type Method } from "@/db/paiements";
-import { paymentLog, listDeposits, paymentsToDeposit } from "@/db/remises";
-import { DEPOSIT_METHODS, totals } from "@/domaine/encaissement/remises";
-import { validDate } from "@/domaine/planning/semaine";
-import { todayInParis } from "@/domaine/personnes/age";
-import { formatEuros } from "@/lib/montant";
+import { MOYENS, type Method } from "@/db/payments";
+import { paymentLog, listDeposits, paymentsToDeposit } from "@/db/deposits";
+import { DEPOSIT_METHODS, totals } from "@/domain/payments/deposits";
+import { validDate } from "@/domain/schedule/week";
+import { todayInParis } from "@/domain/people/age";
+import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
-import { ToDeposit } from "./a-remettre";
+import { ToDeposit } from "./to-deposit";
 
 export const metadata: Metadata = { title: "Encaissements" };
 

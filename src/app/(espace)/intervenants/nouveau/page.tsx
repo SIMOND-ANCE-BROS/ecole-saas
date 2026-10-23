@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/session";
-import { InstructorForm } from "../formulaire";
+import { InstructorForm } from "../instructor-form";
 
 export const metadata: Metadata = { title: "Nouvel intervenant" };
 

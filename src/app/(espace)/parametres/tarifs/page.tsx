@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { withSchool } from "@/db";
-import { listDisciplines, listSeasons } from "@/db/parametres";
-import { currentSeason } from "@/db/planning";
-import { seasonGrid, readSiblings, listLessonPacks } from "@/db/tarifs";
-import { todayInParis } from "@/domaine/personnes/age";
+import { listDisciplines, listSeasons } from "@/db/settings";
+import { currentSeason } from "@/db/schedule";
+import { seasonGrid, readSiblings, listLessonPacks } from "@/db/tariffs";
+import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
-import { SettingsHeader } from "../entete";
-import { LessonPacks, Siblings, Grid } from "./tarifs";
+import { SettingsHeader } from "../settings-header";
+import { LessonPacks, Siblings, Grid } from "./tariffs";
 
 export const metadata: Metadata = { title: "Tarifs et réductions" };
 

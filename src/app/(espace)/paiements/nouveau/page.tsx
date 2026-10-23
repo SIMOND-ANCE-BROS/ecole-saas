@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
-import { isStudent } from "@/db/eleves";
-import { balanceOf } from "@/db/paiements";
-import { readPerson, nomAffiche } from "@/db/personnes";
-import { todayInParis } from "@/domaine/personnes/age";
+import { isStudent } from "@/db/students";
+import { balanceOf } from "@/db/payments";
+import { readPerson, nomAffiche } from "@/db/people";
+import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
-import { PaymentForm } from "./formulaire";
+import { PaymentForm } from "./payment-form";
 
 export const metadata: Metadata = { title: "Encaisser" };
 

@@ -1,9 +1,9 @@
 import { withSchool } from "@/db";
-import { MOYENS, type Method } from "@/db/paiements";
-import { paymentLog } from "@/db/remises";
-import { toCsv } from "@/domaine/encaissement/remises";
-import { validDate } from "@/domaine/planning/semaine";
-import { todayInParis } from "@/domaine/personnes/age";
+import { MOYENS, type Method } from "@/db/payments";
+import { paymentLog } from "@/db/deposits";
+import { toCsv } from "@/domain/payments/deposits";
+import { validDate } from "@/domain/schedule/week";
+import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 
 /** Export CSV du journal des encaissements (`?du=&au=&moyen=`), pour la comptabilité (#98). */

@@ -13,9 +13,9 @@ import {
   markStudent,
   CreationRefusal,
   validStudentInput,
-} from "@/db/eleves";
-import { deleteRelationship } from "@/db/personnes";
-import { errorsOf } from "@/lib/erreurs-saisie";
+} from "@/db/students";
+import { deleteRelationship } from "@/db/people";
+import { errorsOf } from "@/lib/form-errors";
 import { requireRole } from "@/lib/session";
 
 export type StudentRefusal = {

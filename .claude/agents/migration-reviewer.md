@@ -17,8 +17,8 @@ You review database changes of the dance-school SaaS (PostgreSQL 16, Drizzle
    `FORCE ROW LEVEL SECURITY` and the tenant policy (model `0001_rls.sql`);
    the guard `src/db/rls.integration.test.ts` will check it.
 3. **References** between business tables are composite FKs `(school_id, x_id)`
-   via `memeEcole`/`cibleMemeEcole`, never a plain `.references()`
-   (`src/db/cles-etrangeres.integration.test.ts`).
+   via `sameSchool`/`sameSchoolTarget`, never a plain `.references()`
+   (`src/db/foreign-keys.integration.test.ts`).
 4. **Immutability**: payments and the audit log keep their triggers; a rename
    recreates triggers and functions consistently.
 5. **Renames** (English rename #114): `ALTER TABLE … RENAME`, `ALTER TYPE …
@@ -32,7 +32,7 @@ RENAME VALUE`, constraints, indexes, sequences, policies, triggers and
 8. **Indexes** for new foreign keys and frequent filters; unique constraints
    include `school_id` when uniqueness is per school.
 9. Anything touching `0001_rls.sql`, the immutability triggers or
-   `avecEcole()` must be flagged explicitly in the PR.
+   `withSchool()` must be flagged explicitly in the PR.
 
 ## Output
 

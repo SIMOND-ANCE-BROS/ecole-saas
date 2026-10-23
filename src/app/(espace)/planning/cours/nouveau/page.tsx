@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { withSchool } from "@/db";
-import { scheduleReferential } from "@/db/cours";
-import { seasonCourses, currentSeason } from "@/db/planning";
-import { todayInParis } from "@/domaine/personnes/age";
-import { validDate } from "@/domaine/planning/semaine";
+import { scheduleReferential } from "@/db/courses";
+import { seasonCourses, currentSeason } from "@/db/schedule";
+import { todayInParis } from "@/domain/people/age";
+import { validDate } from "@/domain/schedule/week";
 import { requireRole } from "@/lib/session";
-import { CourseForm } from "../formulaire";
+import { CourseForm } from "../course-form";
 
 export const metadata: Metadata = { title: "Nouveau cours" };
 

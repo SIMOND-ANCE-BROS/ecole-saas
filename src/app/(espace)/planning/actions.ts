@@ -2,14 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { withSchool } from "@/db";
-import { hoursBySite } from "@/db/parametres";
-import { moveLesson, weekLessons, syncLessons } from "@/db/seances";
-import { conflicts } from "@/domaine/planning/chevauchement";
-import { outsideHours } from "@/domaine/planning/horaires";
-import { todayInParis } from "@/domaine/personnes/age";
-import { weekdayOf, mondayOf } from "@/domaine/planning/semaine";
+import { hoursBySite } from "@/db/settings";
+import { moveLesson, weekLessons, syncLessons } from "@/db/lessons";
+import { conflicts } from "@/domain/schedule/overlap";
+import { outsideHours } from "@/domain/schedule/hours";
+import { todayInParis } from "@/domain/people/age";
+import { weekdayOf, mondayOf } from "@/domain/schedule/week";
 import { requireRole } from "@/lib/session";
-import type { CalendarResponse } from "./agenda";
+import type { CalendarResponse } from "./calendar";
 import { shortDate, end } from "./format";
 
 /**

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { DisciplineRow } from "@/db/parametres";
+import type { DisciplineRow } from "@/db/settings";
 import { newDiscipline, rename, removeDiscipline } from "../actions";
 
 export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {

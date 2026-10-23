@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { withSchool } from "@/db";
-import { correctPayment, collect } from "@/db/paiements";
-import { todayInParis } from "@/domaine/personnes/age";
+import { correctPayment, collect } from "@/db/payments";
+import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 
 /** Retour vers la fiche du payeur : seulement une fiche élève ou contact. */

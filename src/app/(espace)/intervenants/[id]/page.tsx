@@ -2,15 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
-import { calendarState } from "@/db/agenda";
-import { PROVIDER_NAME } from "@/connecteurs/agenda/oauth";
-import { connectionState } from "@/db/connexions-agenda";
-import { listUnavailabilities } from "@/db/disponibilites";
-import { readInstructor, PAY_MODES, VAT_REGIMES, STATUSES, PAY_UNITS } from "@/db/intervenants";
-import { formatEuros } from "@/lib/montant";
+import { calendarState } from "@/db/calendar-feed";
+import { PROVIDER_NAME } from "@/connectors/calendar/oauth";
+import { connectionState } from "@/db/calendar-connections";
+import { listUnavailabilities } from "@/db/unavailabilities";
+import { readInstructor, PAY_MODES, VAT_REGIMES, STATUSES, PAY_UNITS } from "@/db/instructors";
+import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
-import { CalendarSubscription } from "./agenda";
-import { Unavailabilities } from "./indisponibilites";
+import { CalendarSubscription } from "./calendar-subscription";
+import { Unavailabilities } from "./unavailabilities";
 
 export const metadata: Metadata = { title: "Intervenant" };
 

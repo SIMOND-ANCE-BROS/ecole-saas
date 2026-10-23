@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
-import { readPerson, nomAffiche } from "@/db/personnes";
+import { readPerson, nomAffiche } from "@/db/people";
 import { requireRole } from "@/lib/session";
-import { PersonForm } from "../../../_personnes/formulaire";
+import { PersonForm } from "../../../_people/person-form";
 
 export const metadata: Metadata = { title: "Modifier un contact" };
 

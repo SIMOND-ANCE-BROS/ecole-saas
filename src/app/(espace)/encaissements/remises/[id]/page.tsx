@@ -3,11 +3,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
-import { readDeposit } from "@/db/remises";
+import { readDeposit } from "@/db/deposits";
 import { school } from "@/db/schema";
-import { formatEuros } from "@/lib/montant";
+import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
-import { CancelDeposit, Print } from "./boutons";
+import { CancelDeposit, Print } from "./buttons";
 
 export const metadata: Metadata = { title: "Bordereau de remise" };
 

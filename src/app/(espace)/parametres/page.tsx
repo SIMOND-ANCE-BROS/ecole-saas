@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { withSchool } from "@/db";
-import { listDisciplines, listPlaces, listSeasons } from "@/db/parametres";
+import { listDisciplines, listPlaces, listSeasons } from "@/db/settings";
 import { requireRole } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Paramètres" };

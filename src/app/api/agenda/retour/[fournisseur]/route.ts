@@ -1,11 +1,11 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { exchangeCode, PROVIDERS, type Provider, credentials, verifyState } from "@/connecteurs/agenda/oauth";
+import { exchangeCode, PROVIDERS, type Provider, credentials, verifyState } from "@/connectors/calendar/oauth";
 import { withSchool } from "@/db";
-import { saveConnection } from "@/db/connexions-agenda";
-import { encrypt } from "@/lib/chiffrement";
-import { publicAddress, COOKIE_OAUTH, redirectionOAuth } from "@/lib/agenda-public";
-import { syncCalendar } from "@/lib/synchro-agenda";
+import { saveConnection } from "@/db/calendar-connections";
+import { encrypt } from "@/lib/encryption";
+import { publicAddress, COOKIE_OAUTH, redirectionOAuth } from "@/lib/public-calendar";
+import { syncCalendar } from "@/lib/calendar-sync";
 
 /**
  * Retour de Google ou Microsoft : vérifie l'état signé et le cookie du départ,

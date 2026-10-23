@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
-import { readCourse, scheduleReferential } from "@/db/cours";
-import { seasonCourses } from "@/db/planning";
+import { readCourse, scheduleReferential } from "@/db/courses";
+import { seasonCourses } from "@/db/schedule";
 import { requireRole } from "@/lib/session";
-import { CourseForm } from "../../formulaire";
+import { CourseForm } from "../../course-form";
 
 export const metadata: Metadata = { title: "Modifier un cours" };
 

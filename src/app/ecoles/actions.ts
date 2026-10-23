@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { chooseSchool } from "@/lib/acces-ecole";
+import { chooseSchool } from "@/lib/school-access";
 import { currentSession } from "@/lib/session";
 
 /** L'école proposée par le formulaire n'est retenue que si l'utilisateur en est membre actif. */

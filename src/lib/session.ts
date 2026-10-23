@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { type SchoolContext, contextFromSession, type MemberRole } from "./acces-ecole";
+import { type SchoolContext, contextFromSession, type MemberRole } from "./school-access";
 import { auth } from "./auth";
 
 /**
@@ -19,7 +19,7 @@ export const currentSession = cache(async () => {
 
 /**
  * École courante, prise sur la session côté serveur et revérifiée (membre
- * actif) ; sinon redirection vers le choix de l'école. À passer à avecEcole().
+ * actif) ; sinon redirection vers le choix de l'école. À passer à withSchool().
  */
 export const schoolContext = cache(async (): Promise<SchoolContext> => {
   const { session, user } = await currentSession();

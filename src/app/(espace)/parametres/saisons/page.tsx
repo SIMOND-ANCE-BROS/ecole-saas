@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { withSchool } from "@/db";
-import { listSeasons } from "@/db/parametres";
+import { listSeasons } from "@/db/settings";
 import { requireRole } from "@/lib/session";
-import { SettingsHeader } from "../entete";
-import { Seasons } from "./saisons";
+import { SettingsHeader } from "../settings-header";
+import { Seasons } from "./seasons";
 
 export const metadata: Metadata = { title: "Saisons" };
 

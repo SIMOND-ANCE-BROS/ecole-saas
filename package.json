@@ -14,7 +14,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:up": "docker compose up -d db",
     "db:seed": "tsx --env-file=.env scripts/seed.ts",
-    "agendas:synchroniser": "tsx --env-file=.env scripts/synchroniser-agendas.ts",
+    "calendars:sync": "tsx --env-file=.env scripts/sync-calendars.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "preflight": "sh scripts/preflight.sh",

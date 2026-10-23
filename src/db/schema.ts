@@ -122,7 +122,7 @@ function sameSchool(
   });
 }
 
-/** Contrainte unique (school_id, id), cible des clés étrangères `memeEcole`. */
+/** Contrainte unique (school_id, id), cible des clés étrangères `sameSchool`. */
 function sameSchoolTarget(t: { schoolId: AnyPgColumn; id: AnyPgColumn }) {
   return unique(`${getTableName(t.id.table)}_school_id_id_unique`).on(t.schoolId, t.id);
 }
@@ -408,7 +408,7 @@ export const unavailability = pgTable(
 
 /**
  * Agenda Google ou Microsoft connecté par un intervenant : jeton de
- * rafraîchissement chiffré (src/lib/chiffrement.ts), jamais en clair.
+ * rafraîchissement chiffré (src/lib/encryption.ts), jamais en clair.
  */
 export const calendarConnection = pgTable(
   "calendar_connection",
@@ -941,7 +941,7 @@ export const account = pgTable(
 
 /**
  * Échecs de connexion récents, pour limiter les essais de mots de passe
- * (src/lib/limite-connexion.ts). La clé est un HMAC de l'e-mail ou de l'IP :
+ * (src/lib/sign-in-limit.ts). La clé est un HMAC de l'e-mail ou de l'IP :
  * aucune donnée personnelle en clair. Purgée au fil de l'eau.
  */
 export const loginAttempt = pgTable(

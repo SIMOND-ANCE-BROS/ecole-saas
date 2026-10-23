@@ -18,16 +18,16 @@ SECURITY` with the policy `school_isolation`, comparing `school_id` with the
   transaction setting `app.school_id` (`migrations/0001_rls.sql`, then one SQL
   migration per new table).
 - The application connects as `app_user` (no BYPASSRLS). Every business query
-  runs inside `avecEcole(ecoleId, tx => …)` (`src/db/index.ts`), which sets
+  runs inside `withSchool(schoolId, tx => …)` (`src/db/index.ts`), which sets
   `app.school_id` for the transaction. `ecoleId` comes from the server-side
   session only.
 - References between business tables are composite foreign keys
-  `(school_id, x_id)` (`memeEcole` / `cibleMemeEcole`), because foreign-key
+  `(school_id, x_id)` (`sameSchool` / `sameSchoolTarget`), because foreign-key
   checks bypass RLS.
 - `app_admin` (BYPASSRLS) is reserved for administration scripts.
 - Guards run in CI: `src/db/rls.integration.test.ts` (every table with
-  `school_id` has forced RLS and the policy), `src/db/cles-etrangeres.integration.test.ts`,
-  `src/db/droits.integration.test.ts`.
+  `school_id` has forced RLS and the policy), `src/db/foreign-keys.integration.test.ts`,
+  `src/db/privileges.integration.test.ts`.
 
 ## Alternatives considered
 
@@ -39,7 +39,7 @@ SECURITY` with the policy `school_isolation`, comparing `school_id` with the
 
 - Tests about isolation run against a real PostgreSQL, never mocks.
 - Every new table needs its RLS migration; the guard test fails otherwise.
-- Changing `0001_rls.sql`, `avecEcole()` or the policy is flagged explicitly in
+- Changing `0001_rls.sql`, `withSchool()` or the policy is flagged explicitly in
   the PR. Names are English since migration `0027_english_names` (#114):
   column `school_id`, policy `school_isolation`, setting `app.school_id`
   (originally `ecole_id`, `isolation_ecole`, `app.ecole_id`).

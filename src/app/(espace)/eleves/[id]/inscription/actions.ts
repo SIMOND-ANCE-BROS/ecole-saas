@@ -3,9 +3,9 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { withSchool } from "@/db";
-import { type Preview, enrollmentPreview, saveEnrollment } from "@/db/inscriptions";
-import { currentSeason } from "@/db/planning";
-import { todayInParis } from "@/domaine/personnes/age";
+import { type Preview, enrollmentPreview, saveEnrollment } from "@/db/enrollments";
+import { currentSeason } from "@/db/schedule";
+import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 
 const validInput = z.object({

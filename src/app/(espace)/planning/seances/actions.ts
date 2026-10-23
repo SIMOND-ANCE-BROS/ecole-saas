@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { withSchool } from "@/db";
-import { currentSeason } from "@/db/planning";
+import { currentSeason } from "@/db/schedule";
 import {
   addClosure,
   cancelLesson,
@@ -11,8 +11,8 @@ import {
   restoreLesson,
   deleteClosure,
   syncLessons,
-} from "@/db/seances";
-import { todayInParis } from "@/domaine/personnes/age";
+} from "@/db/lessons";
+import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 
 type Back = { message: string | null };

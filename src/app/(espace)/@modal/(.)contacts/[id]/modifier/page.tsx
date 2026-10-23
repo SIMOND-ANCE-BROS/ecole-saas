@@ -1,4 +1,4 @@
-import { Panel } from "@/app/(espace)/_panneau/panneau";
+import { Panel } from "@/app/(espace)/_panel/panel";
 import Page from "@/app/(espace)/contacts/[id]/modifier/page";
 
 /** « Modifier le contact » ouvert en panneau par-dessus la page courante. */

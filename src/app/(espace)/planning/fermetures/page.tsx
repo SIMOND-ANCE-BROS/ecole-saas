@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { withSchool } from "@/db";
-import { currentSeason } from "@/db/planning";
-import { listClosures } from "@/db/seances";
-import { todayInParis } from "@/domaine/personnes/age";
+import { currentSeason } from "@/db/schedule";
+import { listClosures } from "@/db/lessons";
+import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
-import { ClosuresManagement } from "./gestion";
+import { ClosuresManagement } from "./closures";
 
 export const metadata: Metadata = { title: "Fermetures" };
 

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
-import { readInstructor } from "@/db/intervenants";
+import { readInstructor } from "@/db/instructors";
 import { requireRole } from "@/lib/session";
-import { InstructorForm } from "../../formulaire";
+import { InstructorForm } from "../../instructor-form";
 
 export const metadata: Metadata = { title: "Modifier un intervenant" };
 

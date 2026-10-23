@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { withSchool } from "@/db";
-import { readPerson, nomAffiche } from "@/db/personnes";
-import { todayInParis } from "@/domaine/personnes/age";
+import { readPerson, nomAffiche } from "@/db/people";
+import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { NewStudentGuide } from "./guide";
 

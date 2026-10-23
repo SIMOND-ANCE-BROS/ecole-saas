@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { z } from "zod";
-import { PROVIDERS, credentials, PROVIDER_NAME } from "@/connecteurs/agenda/oauth";
+import { PROVIDERS, credentials, PROVIDER_NAME } from "@/connectors/calendar/oauth";
 import { withSchool } from "@/db";
-import { tokenInstructor } from "@/db/agenda";
-import { connectionState } from "@/db/connexions-agenda";
-import { publicAddress } from "@/lib/agenda-public";
-import { DisconnectButton } from "./deconnecter";
+import { tokenInstructor } from "@/db/calendar-feed";
+import { connectionState } from "@/db/calendar-connections";
+import { publicAddress } from "@/lib/public-calendar";
+import { DisconnectButton } from "./disconnect-button";
 
 export const metadata: Metadata = { title: "Mon agenda", robots: { index: false, follow: false } };
 

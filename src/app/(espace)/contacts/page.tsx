@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { withSchool } from "@/db";
-import { listContacts } from "@/db/eleves";
+import { listContacts } from "@/db/students";
 import { readPreference } from "@/db/preferences";
-import { nomAffiche } from "@/db/personnes";
-import { CONTACT_COLUMNS } from "@/domaine/filtres/colonnes";
-import { readFilter, readSort } from "@/domaine/filtres/filtres";
+import { nomAffiche } from "@/db/people";
+import { CONTACT_COLUMNS } from "@/domain/filters/columns";
+import { readFilter, readSort } from "@/domain/filters/filters";
 import { requireRole } from "@/lib/session";
-import { ListTable } from "../_filtres/tableau-liste";
-import { NavigableResults } from "../_personnes/resultats";
+import { ListTable } from "../_filters/list-table";
+import { NavigableResults } from "../_people/navigable-results";
 
 export const metadata: Metadata = { title: "Contacts" };
 

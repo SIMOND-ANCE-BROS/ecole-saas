@@ -1,0 +1,113 @@
+import { asc, desc, eq, sql } from "drizzle-orm";
+import { z } from "zod";
+import { deleteConnection } from "./calendar-connections";
+import type { Tx } from "./index";
+import { instructor } from "./schema";
+
+/** Intervenants (professeurs), toujours avec la transaction d'`withSchool()` (RLS). */
+
+export const STATUSES = { micro_entreprise: "Micro-entreprise", societe: "Société", salarie: "Salarié" } as const;
+export const VAT_REGIMES = {
+  franchise_293b: "Franchise en base (293 B)",
+  assujetti: "Assujetti à la TVA",
+  non_applicable: "Non applicable",
+} as const;
+export const PAY_MODES = {
+  heure: "à l’heure",
+  cours: "au cours",
+  forfait_mensuel: "forfait mensuel",
+} as const;
+/** Unité du tarif selon le mode de rémunération. */
+export const PAY_UNITS = { heure: "heure", cours: "cours", forfait_mensuel: "mois" } as const;
+
+const keys = <T extends object>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
+
+export const validInstructorInput = z.object({
+  firstName: z.string().trim().min(1, "Prénom obligatoire").max(100),
+  name: z.string().trim().min(1, "Nom obligatoire").max(100),
+  email: z.union([z.literal(""), z.email("E-mail invalide")]).transform((v) => v || null),
+  status: z.enum(keys(STATUSES)),
+  siren: z
+    .string()
+    .transform((v) => v.replace(/\s/g, ""))
+    .refine((v) => v === "" || /^\d{9}$/.test(v), "Le SIREN compte 9 chiffres")
+    .transform((v) => v || null),
+  vatRegime: z.enum(keys(VAT_REGIMES)),
+  isOwner: z.boolean(),
+  payMode: z.enum(keys(PAY_MODES)),
+  rateCents: z.int().min(0).max(100_000_00),
+  active: z.boolean(),
+});
+
+export type InstructorInput = z.output<typeof validInstructorInput>;
+export type Instructor = InstructorInput & { id: string };
+
+/** Instructor columns from the form input. */
+const instructorRow = (s: InstructorInput) => ({
+  firstName: s.firstName,
+  lastName: s.name,
+  email: s.email,
+  status: s.status,
+  siren: s.siren,
+  vatRegime: s.vatRegime,
+  isOwner: s.isOwner,
+  payMode: s.payMode,
+  rateCents: s.rateCents,
+  active: s.active,
+});
+
+const columns = {
+  id: instructor.id,
+  firstName: instructor.firstName,
+  name: instructor.lastName,
+  email: instructor.email,
+  status: instructor.status,
+  siren: instructor.siren,
+  vatRegime: instructor.vatRegime,
+  isOwner: instructor.isOwner,
+  payMode: instructor.payMode,
+  rateCents: instructor.rateCents,
+  active: instructor.active,
+};
+
+/** Cours d'une saison donnés par l'intervenant (titulaire du cours). */
+const seasonCourses = (seasonId: string) => sql<number>`(
+  SELECT count(*)::int FROM course c
+  WHERE c.instructor_id = ${instructor}.${sql.identifier("id")} AND c.season_id = ${seasonId}
+)`;
+
+/** Actifs d'abord, puis par nom et prénom. */
+export function listInstructors(tx: Tx, seasonId: string): Promise<(Instructor & { seasonCourses: number })[]> {
+  return tx
+    .select({ ...columns, seasonCourses: seasonCourses(seasonId) })
+    .from(instructor)
+    .orderBy(desc(instructor.active), asc(instructor.lastName), asc(instructor.firstName));
+}
+
+export async function readInstructor(tx: Tx, id: string): Promise<Instructor | null> {
+  if (!z.uuid().safeParse(id).success) return null;
+  const [i] = await tx.select(columns).from(instructor).where(eq(instructor.id, id));
+  return i ?? null;
+}
+
+export async function createInstructor(tx: Tx, saisie: InstructorInput): Promise<string> {
+  const [{ id }] = await tx
+    .insert(instructor)
+    .values({ ...instructorRow(saisie), schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid` })
+    .returning({ id: instructor.id });
+  return id;
+}
+
+/** false si l'intervenant n'existe pas dans l'école courante. */
+export async function updateInstructor(tx: Tx, id: string, saisie: InstructorInput): Promise<boolean> {
+  if (!z.uuid().safeParse(id).success) return false;
+  // Désactiver un intervenant coupe aussi son abonnement et son agenda connecté.
+  const cutoff = saisie.active ? {} : { calendarTokenHash: null, calendarTokenCreatedAt: null };
+  const rows = await tx
+    .update(instructor)
+    .set({ ...instructorRow(saisie), ...cutoff })
+    .where(eq(instructor.id, id))
+    .returning({ id: instructor.id });
+  if (rows.length === 1 && !saisie.active) await deleteConnection(tx, id);
+  return rows.length === 1;
+}

@@ -5,9 +5,9 @@
 /src/db/                     @GabinSMD
 /src/lib/session.ts          @GabinSMD
 /src/lib/auth.ts             @GabinSMD
-/src/lib/chiffrement.ts      @GabinSMD
+/src/lib/encryption.ts      @GabinSMD
 /src/lib/invitations.ts      @GabinSMD
-/src/connecteurs/            @GabinSMD
+/src/connectors/             @GabinSMD
 /src/proxy.ts                @GabinSMD
 /.github/workflows/          @GabinSMD
 /.github/CODEOWNERS          @GabinSMD
