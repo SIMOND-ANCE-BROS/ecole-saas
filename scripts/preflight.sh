@@ -16,8 +16,8 @@ step() {
   fi
 }
 step "format" npm run --silent format:check
-step "lint" npm run --silent lint
 step "typecheck" npm run --silent typecheck
+step "lint" npm run --silent lint
 step "unit tests" npm test --silent
 if pg_isready -h localhost -p 5433 >/dev/null 2>&1; then
   step "integration tests" npm run --silent test:integration

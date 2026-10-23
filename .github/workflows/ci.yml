@@ -49,8 +49,9 @@ jobs:
       - name: Migrations
         run: npm run db:migrate
       - run: npm run format:check
-      - run: npm run lint
+      # typecheck first: it generates the Next route types that type-aware lint rules need.
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
       - name: Integration tests (real database)
         run: npm run test:integration
