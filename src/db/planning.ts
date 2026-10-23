@@ -54,10 +54,10 @@ export type CoursPlanning = {
  * n'écrit pas le nom de table devant `cours.id`, qui serait ambigu ici.
  */
 const effectif = sql<number>`(
-  SELECT count(DISTINCT ic.danseur_id)::int
-  FROM inscription_cours ic
-  JOIN inscription i ON i.id = ic.inscription_id AND i.statut = 'active'
-  WHERE ic.cours_id = ${cours}.${sql.identifier("id")}
+  SELECT count(DISTINCT ic.student_id)::int
+  FROM enrollment_course ic
+  JOIN enrollment i ON i.id = ic.enrollment_id AND i.status = 'active'
+  WHERE ic.course_id = ${cours}.${sql.identifier("id")}
 )`;
 
 /** Cours d'une saison, par jour puis par heure. */

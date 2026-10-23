@@ -9,7 +9,7 @@ import { discipline, inscription, reduction, tarif, tarifCarnet } from "./schema
  * avec la transaction d'`avecEcole()` (RLS).
  */
 
-const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uuid`;
+const ECOLE_COURANTE = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const estUuid = (v: string) => z.uuid().safeParse(v).success;
 export type Resultat = { ok: true; id: string } | { ok: false; message: string };
 
@@ -45,7 +45,7 @@ export async function grilleSaison(tx: Tx, saisonId: string): Promise<LigneGrill
       disciplineId: tarif.disciplineId,
       discipline: discipline.nom,
       prixCentimes: tarif.prixCentimes,
-      utilise: sql<boolean>`EXISTS (SELECT 1 FROM inscription i WHERE i.tarif_id = ${idTarif})`,
+      utilise: sql<boolean>`EXISTS (SELECT 1 FROM enrollment i WHERE i.tariff_id = ${idTarif})`,
     })
     .from(tarif)
     .leftJoin(discipline, eq(discipline.id, tarif.disciplineId))

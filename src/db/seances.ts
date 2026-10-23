@@ -22,7 +22,7 @@ import {
  * la transaction d'`avecEcole()` (RLS).
  */
 
-const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uuid`;
+const ECOLE_COURANTE = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const estUuid = (v: string) => z.uuid().safeParse(v).success;
 export type Resultat = { ok: true; id: string } | { ok: false; message: string };
 
@@ -79,7 +79,7 @@ export async function supprimerFermeture(tx: Tx, id: string): Promise<Resultat> 
 export const heureEffective = sql<string>`coalesce(${seance.heureDebut}, ${cours.heureDebut})::text`;
 export const dureeEffective = sql<number>`coalesce(${seance.dureeMinutes}, ${cours.dureeMinutes})`;
 
-const avecAppel = sql`EXISTS (SELECT 1 FROM presence p WHERE p.seance_id = ${seance}.${sql.identifier("id")})`;
+const avecAppel = sql`EXISTS (SELECT 1 FROM attendance p WHERE p.lesson_id = ${seance}.${sql.identifier("id")})`;
 
 /**
  * Met les séances à venir de la saison en accord avec les cours et les
@@ -166,7 +166,7 @@ export async function synchroniserSeances(
 // ---------------------------------------------------------------------------
 
 const comptePresences = (present: boolean) => sql<number>`(
-  SELECT count(*)::int FROM presence p WHERE p.seance_id = ${seance}.${sql.identifier("id")} AND p.present = ${present}
+  SELECT count(*)::int FROM attendance p WHERE p.lesson_id = ${seance}.${sql.identifier("id")} AND p.present = ${present}
 )`;
 
 export type SeanceCours = {
@@ -430,15 +430,15 @@ export async function seancesDeLaSemaine(tx: Tx, lundi: string): Promise<SeanceP
       salleId: cours.salleId,
       salle: salle.nom,
       siteId: salle.siteId,
-      site: sql<string>`(SELECT s.nom FROM site s WHERE s.id = ${salle.siteId})`,
+      site: sql<string>`(SELECT s.name FROM site s WHERE s.id = ${salle.siteId})`,
       intervenantId: seance.intervenantId,
       prenom: intervenant.prenom,
       nom: intervenant.nom,
       remplacement: sql<boolean>`${seance.intervenantId} <> ${cours.intervenantId}`,
       inscrits: sql<number>`(
-        SELECT count(DISTINCT ic.danseur_id)::int FROM inscription_cours ic
-        JOIN inscription i ON i.id = ic.inscription_id AND i.statut = 'active'
-        WHERE ic.cours_id = ${seance.coursId})`,
+        SELECT count(DISTINCT ic.student_id)::int FROM enrollment_course ic
+        JOIN enrollment i ON i.id = ic.enrollment_id AND i.status = 'active'
+        WHERE ic.course_id = ${seance.coursId})`,
       capaciteMax: cours.capaciteMax,
     })
     .from(seance)

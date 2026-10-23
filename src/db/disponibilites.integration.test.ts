@@ -30,19 +30,20 @@ const seances: Record<string, string> = {};
 const AUJOURDHUI = "2026-10-19";
 
 beforeAll(async () => {
-  [{ id: ecole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École A', ${`da-${suffixe}`}) RETURNING id`;
-  [{ id: autreEcole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École B', ${`db-${suffixe}`}) RETURNING id`;
+  [{ id: ecole }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`da-${suffixe}`}) RETURNING id`;
+  [{ id: autreEcole }] =
+    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`db-${suffixe}`}) RETURNING id`;
   [{ id: saison }] =
-    await admin`INSERT INTO saison (ecole_id, libelle, date_debut, date_fin) VALUES (${ecole}, '2026-2027', '2026-09-01', '2026-11-30') RETURNING id`;
-  const [d] = await admin`INSERT INTO discipline (ecole_id, nom) VALUES (${ecole}, 'Jazz') RETURNING id`;
-  const [z] = await admin`INSERT INTO discipline (ecole_id, nom) VALUES (${ecole}, 'Zumba') RETURNING id`;
+    await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${ecole}, '2026-2027', '2026-09-01', '2026-11-30') RETURNING id`;
+  const [d] = await admin`INSERT INTO discipline (school_id, name) VALUES (${ecole}, 'Jazz') RETURNING id`;
+  const [z] = await admin`INSERT INTO discipline (school_id, name) VALUES (${ecole}, 'Zumba') RETURNING id`;
   const [s] =
-    await admin`INSERT INTO site (ecole_id, nom, adresse) VALUES (${ecole}, 'Centre', '1 rue Test') RETURNING id`;
+    await admin`INSERT INTO site (school_id, name, address) VALUES (${ecole}, 'Centre', '1 rue Test') RETURNING id`;
   const [salle] =
-    await admin`INSERT INTO salle (ecole_id, site_id, nom) VALUES (${ecole}, ${s.id}, 'Studio') RETURNING id`;
+    await admin`INSERT INTO room (school_id, site_id, name) VALUES (${ecole}, ${s.id}, 'Studio') RETURNING id`;
   const prof = async (ecoleId: string, prenom: string) =>
     (
-      await admin`INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
+      await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
         VALUES (${ecoleId}, 'Prof', ${prenom}, 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`
     )[0].id as string;
   camille = await prof(ecole, "Camille");
@@ -51,25 +52,25 @@ beforeAll(async () => {
   etranger = await prof(autreEcole, "Ailleurs");
   // Jazz le mercredi 17:00 (Camille) ; Zumba le mercredi 17:30 (Lucas, qui enseigne aussi le jazz ailleurs dans la saison).
   [{ id: jazz }] =
-    await admin`INSERT INTO cours (ecole_id, saison_id, discipline_id, salle_id, intervenant_id, jour_semaine, heure_debut, duree_minutes)
+    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
     VALUES (${ecole}, ${saison}, ${d.id}, ${salle.id}, ${camille}, 3, '17:00', 60) RETURNING id`;
   const [zumba] =
-    await admin`INSERT INTO cours (ecole_id, saison_id, discipline_id, salle_id, intervenant_id, jour_semaine, heure_debut, duree_minutes)
+    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
     VALUES (${ecole}, ${saison}, ${z.id}, ${salle.id}, ${lucas}, 3, '17:30', 60) RETURNING id`;
-  await admin`INSERT INTO cours (ecole_id, saison_id, discipline_id, salle_id, intervenant_id, jour_semaine, heure_debut, duree_minutes)
+  await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
     VALUES (${ecole}, ${saison}, ${d.id}, ${salle.id}, ${lucas}, 5, '18:00', 60)`;
   for (const date of ["2026-11-04", "2026-11-18"]) {
     [{ id: seances[date] }] =
-      await admin`INSERT INTO seance (ecole_id, cours_id, date, intervenant_id) VALUES (${ecole}, ${jazz}, ${date}, ${camille}) RETURNING id`;
-    await admin`INSERT INTO seance (ecole_id, cours_id, date, intervenant_id) VALUES (${ecole}, ${zumba.id}, ${date}, ${lucas})`;
+      await admin`INSERT INTO lesson (school_id, course_id, date, instructor_id) VALUES (${ecole}, ${jazz}, ${date}, ${camille}) RETURNING id`;
+    await admin`INSERT INTO lesson (school_id, course_id, date, instructor_id) VALUES (${ecole}, ${zumba.id}, ${date}, ${lucas})`;
   }
 });
 
 afterAll(async () => {
-  for (const t of ["indisponibilite", "seance", "cours", "intervenant", "salle", "site", "discipline", "saison"]) {
-    await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
+  for (const t of ["unavailability", "lesson", "course", "instructor", "room", "site", "discipline", "season"]) {
+    await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [ecole, autreEcole]);
   }
-  await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
+  await admin`DELETE FROM school WHERE id IN (${ecole}, ${autreEcole})`;
   await admin.end();
 });
 

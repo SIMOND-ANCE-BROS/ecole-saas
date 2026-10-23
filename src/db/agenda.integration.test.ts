@@ -17,26 +17,27 @@ let camille: string;
 let ines: string;
 
 beforeAll(async () => {
-  [{ id: ecole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École A', ${`ga-${suffixe}`}) RETURNING id`;
-  [{ id: autreEcole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École B', ${`gb-${suffixe}`}) RETURNING id`;
+  [{ id: ecole }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`ga-${suffixe}`}) RETURNING id`;
+  [{ id: autreEcole }] =
+    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`gb-${suffixe}`}) RETURNING id`;
   const [saison] =
-    await admin`INSERT INTO saison (ecole_id, libelle, date_debut, date_fin) VALUES (${ecole}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
-  const [d] = await admin`INSERT INTO discipline (ecole_id, nom) VALUES (${ecole}, 'Jazz') RETURNING id`;
+    await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${ecole}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
+  const [d] = await admin`INSERT INTO discipline (school_id, name) VALUES (${ecole}, 'Jazz') RETURNING id`;
   const [s] =
-    await admin`INSERT INTO site (ecole_id, nom, adresse) VALUES (${ecole}, 'Centre', '1 rue Test') RETURNING id`;
+    await admin`INSERT INTO site (school_id, name, address) VALUES (${ecole}, 'Centre', '1 rue Test') RETURNING id`;
   const [salle] =
-    await admin`INSERT INTO salle (ecole_id, site_id, nom) VALUES (${ecole}, ${s.id}, 'Studio') RETURNING id`;
+    await admin`INSERT INTO room (school_id, site_id, name) VALUES (${ecole}, ${s.id}, 'Studio') RETURNING id`;
   const prof = async (prenom: string) =>
     (
-      await admin`INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
+      await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
         VALUES (${ecole}, 'Prof', ${prenom}, 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`
     )[0].id as string;
   camille = await prof("Camille");
   ines = await prof("Inès");
   const [c] =
-    await admin`INSERT INTO cours (ecole_id, saison_id, discipline_id, salle_id, intervenant_id, jour_semaine, heure_debut, duree_minutes, niveau)
+    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes, level)
     VALUES (${ecole}, ${saison.id}, ${d.id}, ${salle.id}, ${camille}, 3, '17:00', 60, 'Débutant') RETURNING id`;
-  await admin`INSERT INTO seance (ecole_id, cours_id, date, intervenant_id, statut) VALUES
+  await admin`INSERT INTO lesson (school_id, course_id, date, instructor_id, status) VALUES
     (${ecole}, ${c.id}, '2026-10-14', ${camille}, 'effectuee'),
     (${ecole}, ${c.id}, '2026-11-04', ${camille}, 'prevue'),
     (${ecole}, ${c.id}, '2026-11-18', ${ines}, 'prevue'),
@@ -44,10 +45,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const t of ["seance", "cours", "intervenant", "salle", "site", "discipline", "saison"]) {
-    await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
+  for (const t of ["lesson", "course", "instructor", "room", "site", "discipline", "season"]) {
+    await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [ecole, autreEcole]);
   }
-  await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
+  await admin`DELETE FROM school WHERE id IN (${ecole}, ${autreEcole})`;
   await admin.end();
 });
 
@@ -55,7 +56,8 @@ describe("abonnement iCal", () => {
   it("crée un jeton dont seule l’empreinte est gardée, et donne les séances à venir sans le remplacement", async () => {
     const jeton = await avecEcole(ecole, (tx) => creerJetonAgenda(tx, camille));
     expect(jeton).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    const [{ jeton_agenda_hash }] = await admin`SELECT jeton_agenda_hash FROM intervenant WHERE id = ${camille}`;
+    const [{ calendar_token_hash: jeton_agenda_hash }] =
+      await admin`SELECT calendar_token_hash FROM instructor WHERE id = ${camille}`;
     expect(jeton_agenda_hash).not.toBe(jeton);
     expect(jeton_agenda_hash).toMatch(/^[0-9a-f]{64}$/);
     expect(await avecEcole(ecole, (tx) => etatAgenda(tx, camille))).toBeInstanceOf(Date);
@@ -104,7 +106,7 @@ describe("abonnement iCal", () => {
 
     // Même si l'empreinte revenait (restauration de sauvegarde), un inactif ne lit rien.
     const [{ empreinte }] = await admin`SELECT encode(sha256(${jeton}::bytea), 'hex') AS empreinte`;
-    await admin`UPDATE intervenant SET jeton_agenda_hash = ${empreinte} WHERE id = ${ines}`;
+    await admin`UPDATE instructor SET calendar_token_hash = ${empreinte} WHERE id = ${ines}`;
     expect(await avecEcole(ecole, (tx) => lireAgenda(tx, jeton, "2026-10-20"))).toBeNull();
   });
 });

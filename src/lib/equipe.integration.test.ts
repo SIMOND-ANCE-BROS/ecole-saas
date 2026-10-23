@@ -34,26 +34,27 @@ const membre = async (email: string) =>
   (await avecEcole(ecole, (tx) => listerMembres(tx))).find((m) => m.email === email)!;
 
 beforeAll(async () => {
-  [{ id: ecole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École A', ${`ea-${suffixe}`}) RETURNING id`;
-  [{ id: autreEcole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École B', ${`eb-${suffixe}`}) RETURNING id`;
+  [{ id: ecole }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`ea-${suffixe}`}) RETURNING id`;
+  [{ id: autreEcole }] =
+    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`eb-${suffixe}`}) RETURNING id`;
   diana = await creerCompte({ email: emailDiana, nom: "Diana Test", motDePasse: MDP });
   [{ id: dianaMembre }] =
-    await admin`INSERT INTO membre (ecole_id, user_id, role) VALUES (${ecole}, ${diana}, 'direction') RETURNING id`;
+    await admin`INSERT INTO member (school_id, user_id, role) VALUES (${ecole}, ${diana}, 'direction') RETURNING id`;
   // Un compte déjà membre d'une autre école.
   prof = await creerCompte({ email: emailProf, nom: "Prof Ailleurs", motDePasse: MDP });
-  await admin`INSERT INTO membre (ecole_id, user_id, role) VALUES (${autreEcole}, ${prof}, 'direction')`;
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${autreEcole}, ${prof}, 'direction')`;
 });
 
 afterAll(async () => {
   await admin.begin(async (t) => {
-    await t`ALTER TABLE journal DISABLE TRIGGER journal_ajout_seul`;
-    await t`DELETE FROM journal WHERE ecole_id IN (${ecole}, ${autreEcole})`;
-    await t`ALTER TABLE journal ENABLE TRIGGER journal_ajout_seul`;
+    await t`ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only`;
+    await t`DELETE FROM audit_log WHERE school_id IN (${ecole}, ${autreEcole})`;
+    await t`ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only`;
   });
-  await admin`DELETE FROM invitation WHERE ecole_id IN (${ecole}, ${autreEcole})`;
-  await admin`DELETE FROM membre WHERE ecole_id IN (${ecole}, ${autreEcole})`;
+  await admin`DELETE FROM invitation WHERE school_id IN (${ecole}, ${autreEcole})`;
+  await admin`DELETE FROM member WHERE school_id IN (${ecole}, ${autreEcole})`;
   await admin`DELETE FROM "user" WHERE email IN (${emailDiana}, ${emailProf}, ${emailNouvelle})`; // sessions et comptes en cascade
-  await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
+  await admin`DELETE FROM school WHERE id IN (${ecole}, ${autreEcole})`;
   await admin.end();
 });
 
@@ -89,7 +90,7 @@ describe("invitation", () => {
       compteExistant: false,
     });
     expect(await ouvrirLien(autreEcole, jeton)).toBeNull();
-    const [{ jeton_hash }] = await admin`SELECT jeton_hash FROM invitation WHERE id = ${r2.id}`;
+    const [{ token_hash: jeton_hash }] = await admin`SELECT token_hash FROM invitation WHERE id = ${r2.id}`;
     expect(jeton_hash).not.toContain(jeton);
     expect(await avecEcole(ecole, (tx) => invitationsEnCours(tx, new Date()))).toHaveLength(1);
   });
@@ -153,8 +154,8 @@ describe("rôles et accès", () => {
       (await avecEcole(ecole, (tx) => modifierMembre(tx, diana, dianaMembre, { role: "accueil", actif: true }))).ok,
     ).toBe(false);
     const [t] =
-      await admin`SELECT avant->>'actif' AS avant, apres->>'actif' AS apres FROM journal WHERE ligne_id = ${accueil.id}`;
-    expect(t).toEqual({ avant: "true", apres: "false" });
+      await admin`SELECT before->>'actif' AS before, after->>'actif' AS after FROM audit_log WHERE row_id = ${accueil.id}`;
+    expect(t).toEqual({ before: "true", after: "false" });
   });
 
   it("seule la direction gère l'équipe, même sans passer par la page", async () => {
@@ -217,7 +218,7 @@ describe("réinitialisation du mot de passe", () => {
     const n = await membre(emailNouvelle);
     const r = await creerLienReinitialisation(ecole, diana, n.id);
     if (!r.ok) throw new Error(r.message);
-    await admin`INSERT INTO membre (ecole_id, user_id, role, actif) VALUES (${autreEcole}, ${n.userId}, 'accueil', false)`;
+    await admin`INSERT INTO member (school_id, user_id, role, active) VALUES (${autreEcole}, ${n.userId}, 'accueil', false)`;
     expect(await accepterLien(ecole, r.jeton, saisie("encore un autre mot de passe"))).toEqual({
       ok: false,
       message: "Ce compte sert aussi dans une autre école : la personne doit changer elle-même son mot de passe.",

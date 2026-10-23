@@ -11,7 +11,7 @@ import { journal, membre, paiement, personne, remise, remisePaiement } from "./s
  * modifié. Toujours avec la transaction d'`avecEcole()` (RLS).
  */
 
-const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uuid`;
+const ECOLE_COURANTE = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const estUuid = (v: string) => z.uuid().safeParse(v).success;
 const nomPayeur = sql<string>`coalesce(${personne.raisonSociale}, concat_ws(' ', ${personne.prenom}, ${personne.nom}))`;
 
@@ -128,7 +128,7 @@ export async function creerRemise(
   await tx.insert(journal).values({
     ecoleId: ECOLE_COURANTE,
     qui,
-    tableCible: "remise",
+    tableCible: "bank_deposit",
     ligneId: id,
     action: "insert",
     apres: { date, moyen, paiements: ids.length },
@@ -147,7 +147,7 @@ export async function annulerRemise(tx: Tx, userId: string, id: string): Promise
   await tx.insert(journal).values({
     ecoleId: ECOLE_COURANTE,
     qui,
-    tableCible: "remise",
+    tableCible: "bank_deposit",
     ligneId: id,
     action: "delete",
     avant: { date: x.date, moyen: x.moyen },

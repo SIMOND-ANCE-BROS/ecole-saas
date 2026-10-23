@@ -21,8 +21,8 @@ instructors invoice the school in B2B. The school's VAT regime and its tool
   `creerAvoir`/`createCreditNote`, `lireStatut`/`readStatus`).
 - It never generates an invoice number: it stores the number returned by the tool.
 - An issued invoice is never modified: a credit note corrects it.
-- VAT regime and mentions are school configuration (`ecole.regime_tva`,
-  `ecole.mention_tva`), never code.
+- VAT regime and mentions are school configuration (`school.vat_regime`,
+  `school.vat_mention`), never code.
 - Tool credentials are stored encrypted.
 
 ## Alternatives considered

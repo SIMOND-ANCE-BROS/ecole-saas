@@ -51,16 +51,17 @@ let zoe: string;
 let helene: string;
 
 beforeAll(async () => {
-  [{ id: ecole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École A', ${`ea-${suffixe}`}) RETURNING id`;
-  [{ id: autreEcole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École B', ${`eb-${suffixe}`}) RETURNING id`;
+  [{ id: ecole }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`ea-${suffixe}`}) RETURNING id`;
+  [{ id: autreEcole }] =
+    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`eb-${suffixe}`}) RETURNING id`;
   [{ id: etranger }] =
-    await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${autreEcole}, 'Ailleurs', 'Inconnue') RETURNING id`;
+    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${autreEcole}, 'Ailleurs', 'Inconnue') RETURNING id`;
 });
 
 afterAll(async () => {
-  for (const t of ["lien", "personne"])
-    await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
-  await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
+  for (const t of ["relationship", "person"])
+    await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [ecole, autreEcole]);
+  await admin`DELETE FROM school WHERE id IN (${ecole}, ${autreEcole})`;
   await admin.end();
 });
 
@@ -137,7 +138,7 @@ describe("création guidée", () => {
   });
 
   it("n’enregistre rien quand une partie est refusée (responsable d’une autre école)", async () => {
-    const [{ avant }] = await admin`SELECT count(*)::int AS avant FROM personne WHERE ecole_id = ${ecole}`;
+    const [{ avant }] = await admin`SELECT count(*)::int AS before FROM person WHERE school_id = ${ecole}`;
     await expect(
       creer(
         {
@@ -149,7 +150,7 @@ describe("création guidée", () => {
         true,
       ),
     ).rejects.toBeInstanceOf(RefusCreation);
-    const [{ apres }] = await admin`SELECT count(*)::int AS apres FROM personne WHERE ecole_id = ${ecole}`;
+    const [{ apres }] = await admin`SELECT count(*)::int AS after FROM person WHERE school_id = ${ecole}`;
     expect(apres).toBe(avant);
   });
 });
@@ -190,9 +191,9 @@ describe("modifications depuis la fiche", () => {
 
   it("retourne un lien saisi dans l’autre sens pour en faire le payeur", async () => {
     const [{ id: conjoint }] =
-      await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${ecole}, 'Moreau', 'Sam') RETURNING id`;
-    const [{ id: ines }] = await admin`SELECT id FROM personne WHERE ecole_id = ${ecole} AND prenom = 'Inès'`;
-    await admin`INSERT INTO lien (ecole_id, personne_id, lie_a_id, type) VALUES (${ecole}, ${ines}, ${conjoint}, 'conjoint')`;
+      await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${ecole}, 'Moreau', 'Sam') RETURNING id`;
+    const [{ id: ines }] = await admin`SELECT id FROM person WHERE school_id = ${ecole} AND first_name = 'Inès'`;
+    await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type) VALUES (${ecole}, ${ines}, ${conjoint}, 'conjoint')`;
     await avecEcole(ecole, (tx) => definirFacturation(tx, ines, { type: "personne", id: conjoint }));
     const f = await fiche(ines);
     expect(f?.factureA).toMatchObject({ type: "personne", nom: "Sam Moreau" });
@@ -200,7 +201,7 @@ describe("modifications depuis la fiche", () => {
   });
 
   it("fait d’un proche existant un responsable, et refuse un responsable d’une autre école", async () => {
-    const [{ id: lou }] = await admin`SELECT id FROM personne WHERE ecole_id = ${ecole} AND prenom = 'Lou'`;
+    const [{ id: lou }] = await admin`SELECT id FROM person WHERE school_id = ${ecole} AND first_name = 'Lou'`;
     expect((await avecEcole(ecole, (tx) => ajouterResponsable(tx, lou, { id: helene }, true))).ok).toBe(true);
     expect((await fiche(lou))?.responsables).toMatchObject([{ id: helene, aPrevenir: true, paie: false }]);
     expect(await avecEcole(ecole, (tx) => ajouterResponsable(tx, lou, { id: etranger }, true))).toEqual({

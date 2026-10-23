@@ -22,34 +22,35 @@ let payeur: string;
 let etranger: string;
 
 beforeAll(async () => {
-  [{ id: ecole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École A', ${`pa-${suffixe}`}) RETURNING id`;
-  [{ id: autreEcole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École B', ${`pb-${suffixe}`}) RETURNING id`;
+  [{ id: ecole }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`pa-${suffixe}`}) RETURNING id`;
+  [{ id: autreEcole }] =
+    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`pb-${suffixe}`}) RETURNING id`;
   await admin`INSERT INTO "user" (id, name, email) VALUES (${accueil}, 'Accueil Test', ${`${accueil}@exemple.test`})`;
-  await admin`INSERT INTO membre (ecole_id, user_id, role) VALUES (${ecole}, ${accueil}, 'accueil')`;
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${ecole}, ${accueil}, 'accueil')`;
   [{ id: payeur }] =
-    await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${ecole}, 'Martin', 'Sophie') RETURNING id`;
+    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${ecole}, 'Martin', 'Sophie') RETURNING id`;
   [{ id: etranger }] =
-    await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${autreEcole}, 'Ailleurs', 'Paul') RETURNING id`;
+    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${autreEcole}, 'Ailleurs', 'Paul') RETURNING id`;
   const [s] =
-    await admin`INSERT INTO saison (ecole_id, libelle, date_debut, date_fin) VALUES (${ecole}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
-  await admin`INSERT INTO inscription (ecole_id, saison_id, payeur_id, public, periodicite, prix_brut_centimes) VALUES (${ecole}, ${s.id}, ${payeur}, 'enfant', 'annee', 30000)`;
-  await admin`INSERT INTO inscription (ecole_id, saison_id, payeur_id, public, periodicite, prix_brut_centimes, statut) VALUES (${ecole}, ${s.id}, ${payeur}, 'enfant', 'trimestre', 9000, 'abandon')`;
+    await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${ecole}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
+  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents) VALUES (${ecole}, ${s.id}, ${payeur}, 'enfant', 'annee', 30000)`;
+  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status) VALUES (${ecole}, ${s.id}, ${payeur}, 'enfant', 'trimestre', 9000, 'abandon')`;
 });
 
 afterAll(async () => {
   await admin.begin(async (t) => {
-    await t`ALTER TABLE paiement DISABLE TRIGGER paiement_inalterable`;
-    await t`ALTER TABLE journal DISABLE TRIGGER journal_ajout_seul`;
-    await t`DELETE FROM journal WHERE ecole_id IN (${ecole}, ${autreEcole})`;
-    await t`DELETE FROM paiement WHERE ecole_id IN (${ecole}, ${autreEcole}) AND corrige_id IS NOT NULL`;
-    await t`DELETE FROM paiement WHERE ecole_id IN (${ecole}, ${autreEcole})`;
-    await t`ALTER TABLE paiement ENABLE TRIGGER paiement_inalterable`;
-    await t`ALTER TABLE journal ENABLE TRIGGER journal_ajout_seul`;
+    await t`ALTER TABLE payment DISABLE TRIGGER payment_immutable`;
+    await t`ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only`;
+    await t`DELETE FROM audit_log WHERE school_id IN (${ecole}, ${autreEcole})`;
+    await t`DELETE FROM payment WHERE school_id IN (${ecole}, ${autreEcole}) AND corrects_id IS NOT NULL`;
+    await t`DELETE FROM payment WHERE school_id IN (${ecole}, ${autreEcole})`;
+    await t`ALTER TABLE payment ENABLE TRIGGER payment_immutable`;
+    await t`ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only`;
   });
-  for (const t of ["inscription", "saison", "personne", "membre"])
-    await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
+  for (const t of ["enrollment", "season", "person", "member"])
+    await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [ecole, autreEcole]);
   await admin`DELETE FROM "user" WHERE id = ${accueil}`;
-  await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
+  await admin`DELETE FROM school WHERE id IN (${ecole}, ${autreEcole})`;
   await admin.end();
 });
 
@@ -83,7 +84,7 @@ describe("encaisser", () => {
       horsCalcul: { abandon: 9000 },
     });
     const traces =
-      await admin`SELECT action, apres->>'montant_centimes' AS montant, qui IS NOT NULL AS signe FROM journal WHERE ecole_id = ${ecole} AND table_cible = 'paiement'`;
+      await admin`SELECT action, after->>'montant_centimes' AS montant, actor IS NOT NULL AS signe FROM audit_log WHERE school_id = ${ecole} AND target_table = 'payment'`;
     expect(traces).toHaveLength(3);
     expect(traces.every((t) => t.action === "insert" && t.montant === "10000" && t.signe)).toBe(true);
   });
@@ -108,10 +109,13 @@ describe("encaisser", () => {
   });
 
   it("un paiement ne se modifie ni ne se supprime (trigger) ; on corrige par un paiement négatif", async () => {
-    await expect(admin`UPDATE paiement SET montant_centimes = 1 WHERE id = ${ids[0]}`).rejects.toThrow(
-      /ne se modifie pas/,
+    await expect(admin`UPDATE payment SET amount_cents = 1 WHERE id = ${ids[0]}`).rejects.toThrow(/cannot be modified/);
+    await expect(admin`DELETE FROM payment WHERE id = ${ids[0]}`).rejects.toThrow(/cannot be deleted/);
+    // Only exception: the invoicing tool sync flag.
+    await expect(admin`UPDATE payment SET tool_synced = true WHERE id = ${ids[0]}`).resolves.toBeDefined();
+    await expect(admin`UPDATE payment SET tool_synced = false, amount_cents = 1 WHERE id = ${ids[0]}`).rejects.toThrow(
+      /cannot be modified/,
     );
-    await expect(admin`DELETE FROM paiement WHERE id = ${ids[0]}`).rejects.toThrow(/ne se supprime pas/);
     expect((await avecEcole(ecole, (tx) => corrigerPaiement(tx, accueil, ids[0], 4000, AUJOURDHUI))).ok).toBe(true);
     expect(await avecEcole(ecole, (tx) => corrigerPaiement(tx, accueil, ids[0], 7000, AUJOURDHUI))).toEqual({
       ok: false,

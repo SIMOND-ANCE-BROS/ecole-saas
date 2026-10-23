@@ -2,8 +2,8 @@ import postgres from "postgres";
 import { afterAll, describe, expect, it } from "vitest";
 
 /**
- * Garde-fou : une clé étrangère entre deux tables portant `ecole_id` doit
- * associer ecole_id à ecole_id (clé composite, voir `memeEcole` dans
+ * Garde-fou : une clé étrangère entre deux tables portant `school_id` doit
+ * associer school_id à school_id (clé composite, voir `memeEcole` dans
  * src/db/schema.ts). La vérification d'une clé étrangère ignore la Row Level
  * Security : une clé simple laisserait une ligne viser celle d'une autre école.
  */
@@ -14,7 +14,7 @@ const REQUETE_CLES_SANS_ECOLE = `
     FROM pg_attribute a
     JOIN pg_class c ON c.oid = a.attrelid AND c.relkind IN ('r', 'p')
     JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
-    WHERE a.attname = 'ecole_id' AND NOT a.attisdropped
+    WHERE a.attname = 'school_id' AND NOT a.attisdropped
   )
   SELECT con.conrelid::regclass::text || ' → ' || con.confrelid::regclass::text
          || ' (' || con.conname || ')' AS defaut
@@ -49,7 +49,7 @@ class Annulation extends Error {
 }
 
 describe("Clés étrangères entre écoles", () => {
-  it("associent toujours ecole_id à ecole_id", async () => {
+  it("associent toujours school_id à school_id", async () => {
     expect(await defauts(admin)).toEqual([]);
   });
 
@@ -58,11 +58,11 @@ describe("Clés étrangères entre écoles", () => {
     const resultat = await admin
       .begin(async (tx) => {
         await tx.unsafe(`
-          CREATE TABLE temoin_cible (id uuid PRIMARY KEY, ecole_id uuid NOT NULL, UNIQUE (ecole_id, id));
-          CREATE TABLE temoin_simple (ecole_id uuid, cible_id uuid REFERENCES temoin_cible (id));
+          CREATE TABLE temoin_cible (id uuid PRIMARY KEY, school_id uuid NOT NULL, UNIQUE (school_id, id));
+          CREATE TABLE temoin_simple (school_id uuid, cible_id uuid REFERENCES temoin_cible (id));
           CREATE TABLE temoin_composite (
-            ecole_id uuid, cible_id uuid,
-            FOREIGN KEY (ecole_id, cible_id) REFERENCES temoin_cible (ecole_id, id)
+            school_id uuid, cible_id uuid,
+            FOREIGN KEY (school_id, cible_id) REFERENCES temoin_cible (school_id, id)
           );`);
         throw new Annulation(await defauts(tx));
       })

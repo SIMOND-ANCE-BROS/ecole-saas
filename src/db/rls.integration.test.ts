@@ -2,8 +2,8 @@ import postgres from "postgres";
 import { afterAll, describe, expect, it } from "vitest";
 
 /**
- * Garde-fou : toute table du schéma public portant `ecole_id` doit avoir la
- * Row Level Security activée ET forcée, et une politique `isolation_ecole`
+ * Garde-fou : toute table du schéma public portant `school_id` doit avoir la
+ * Row Level Security activée ET forcée, et une politique `school_isolation`
  * valable pour toutes les commandes.
  *
  * Exécuté contre la vraie base (npm run test:integration), après les migrations.
@@ -18,6 +18,8 @@ type TableEcole = {
   rls_forcee: boolean;
   politique: boolean;
   politique_toutes_commandes: boolean;
+  /** USING and WITH CHECK both compare school_id with the setting app.school_id. */
+  politique_lit_ecole: boolean;
 };
 
 const REQUETE_TABLES_ECOLE = `
@@ -25,11 +27,16 @@ const REQUETE_TABLES_ECOLE = `
          c.relrowsecurity AS rls_activee,
          c.relforcerowsecurity AS rls_forcee,
          p.polname IS NOT NULL AS politique,
-         coalesce(p.polcmd = '*', false) AS politique_toutes_commandes
+         coalesce(p.polcmd = '*', false) AS politique_toutes_commandes,
+         coalesce(
+           pg_get_expr(p.polqual, p.polrelid) LIKE '%school_id = (NULLIF(current_setting(''app.school_id''%'
+           AND pg_get_expr(p.polwithcheck, p.polrelid) LIKE '%school_id = (NULLIF(current_setting(''app.school_id''%',
+           false
+         ) AS politique_lit_ecole
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
-  JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'ecole_id' AND NOT a.attisdropped
-  LEFT JOIN pg_policy p ON p.polrelid = c.oid AND p.polname = 'isolation_ecole'
+  JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'school_id' AND NOT a.attisdropped
+  LEFT JOIN pg_policy p ON p.polrelid = c.oid AND p.polname = 'school_isolation'
   WHERE c.relkind IN ('r', 'p')
   ORDER BY c.relname
 `;
@@ -39,8 +46,9 @@ function defauts(tables: TableEcole[]): string[] {
     const manques = [
       !t.rls_activee && "RLS non activée (ENABLE ROW LEVEL SECURITY)",
       !t.rls_forcee && "RLS non forcée (FORCE ROW LEVEL SECURITY)",
-      !t.politique && "politique isolation_ecole absente",
-      t.politique && !t.politique_toutes_commandes && "isolation_ecole ne couvre pas toutes les commandes",
+      !t.politique && "politique school_isolation absente",
+      t.politique && !t.politique_toutes_commandes && "school_isolation ne couvre pas toutes les commandes",
+      t.politique && !t.politique_lit_ecole && "school_isolation ne compare pas school_id au réglage app.school_id",
     ].filter(Boolean);
     return manques.length ? [`${t.table} : ${manques.join(", ")}`] : [];
   });
@@ -67,19 +75,19 @@ afterAll(async () => {
 });
 
 describe("Row Level Security", () => {
-  it("protège toutes les tables portant ecole_id", async () => {
+  it("protège toutes les tables portant school_id", async () => {
     const tables = await app.unsafe<TableEcole[]>(REQUETE_TABLES_ECOLE);
 
     // Base vide ou migrations non appliquées : le test ne doit pas passer à vide.
-    expect(tables.length, "aucune table avec ecole_id : migrations appliquées ?").toBeGreaterThan(0);
+    expect(tables.length, "aucune table avec school_id : migrations appliquées ?").toBeGreaterThan(0);
     expect(defauts(tables)).toEqual([]);
   });
 
-  it("détecte une table portant ecole_id sans RLS", async () => {
+  it("détecte une table portant school_id sans RLS", async () => {
     // Vérifie le garde-fou lui-même : une table oubliée doit être signalée.
     const erreurs = await admin
       .begin(async (tx) => {
-        await tx.unsafe("CREATE TABLE garde_fou_temoin (id int, ecole_id uuid)");
+        await tx.unsafe("CREATE TABLE garde_fou_temoin (id int, school_id uuid)");
         throw new Annulation(defauts(await tx.unsafe<TableEcole[]>(REQUETE_TABLES_ECOLE)));
       })
       .catch((e: unknown) => {
@@ -90,7 +98,31 @@ describe("Row Level Security", () => {
     // Seule la table témoin compte ici : un vrai défaut est signalé par le test précédent.
     expect(erreurs.filter((e) => e.startsWith("garde_fou_temoin "))).toEqual([
       "garde_fou_temoin : RLS non activée (ENABLE ROW LEVEL SECURITY), " +
-        "RLS non forcée (FORCE ROW LEVEL SECURITY), politique isolation_ecole absente",
+        "RLS non forcée (FORCE ROW LEVEL SECURITY), politique school_isolation absente",
+    ]);
+  });
+
+  it("détecte une politique school_isolation qui lit un autre réglage que app.school_id", async () => {
+    // A policy with the right name but a stale setting (e.g. app.ecole_id after a rename) must be reported.
+    const erreurs = await admin
+      .begin(async (tx) => {
+        await tx.unsafe(`
+          CREATE TABLE garde_fou_reglage (id int, school_id uuid);
+          ALTER TABLE garde_fou_reglage ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE garde_fou_reglage FORCE ROW LEVEL SECURITY;
+          CREATE POLICY school_isolation ON garde_fou_reglage
+            USING (school_id = NULLIF(current_setting('app.ecole_id', true), '')::uuid)
+            WITH CHECK (school_id = NULLIF(current_setting('app.ecole_id', true), '')::uuid);
+        `);
+        throw new Annulation(defauts(await tx.unsafe<TableEcole[]>(REQUETE_TABLES_ECOLE)));
+      })
+      .catch((e: unknown) => {
+        if (e instanceof Annulation) return e.resultat;
+        throw e;
+      });
+
+    expect(erreurs.filter((e) => e.startsWith("garde_fou_reglage "))).toEqual([
+      "garde_fou_reglage : school_isolation ne compare pas school_id au réglage app.school_id",
     ]);
   });
 });

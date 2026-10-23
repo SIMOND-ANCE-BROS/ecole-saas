@@ -12,7 +12,7 @@ import { ecole, invitation, journal, membre, user } from "./schema";
  * d'`avecEcole()` (RLS).
  */
 
-const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uuid`;
+const ECOLE_COURANTE = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const estUuid = (v: string) => z.uuid().safeParse(v).success;
 const empreinte = (jeton: string) => createHash("sha256").update(jeton).digest("hex");
 const nouveauJeton = () => randomBytes(32).toString("base64url");
@@ -41,7 +41,7 @@ async function membreDe(tx: Tx, userId: string) {
  * Le compte appartient-il (même désactivé) à une autre école ? Son mot de
  * passe y donne accès : une école ne doit pas pouvoir le changer pour une
  * autre. Lu dans la transaction courante grâce à la politique RLS
- * `mes_appartenances` (app.user_id), remise à vide aussitôt.
+ * `my_memberships` (app.user_id), remise à vide aussitôt.
  */
 async function compteAilleurs(tx: Tx, userId: string): Promise<boolean> {
   await tx.execute(sql`select set_config('app.user_id', ${userId}, true)`);
@@ -166,7 +166,7 @@ export async function modifierMembre(
   await tx.insert(journal).values({
     ecoleId: ECOLE_COURANTE,
     qui,
-    tableCible: "membre",
+    tableCible: "member",
     ligneId: membreId,
     action: "update",
     avant: { role: avant.role, actif: avant.actif },

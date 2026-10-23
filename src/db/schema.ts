@@ -2,7 +2,7 @@
  * Modèle de données multi-école (SaaS) – Drizzle ORM / PostgreSQL
  *
  * Conventions
- *  - Chaque table métier porte `ecole_id` : l'isolation entre écoles est
+ *  - Chaque table métier porte `school_id` : l'isolation entre écoles est
  *    garantie par la Row Level Security (voir migrations/0001_rls.sql).
  *  - Montants en CENTIMES entiers (`*_centimes`), taux en points de base
  *    (2000 = 20 %) : aucun nombre à virgule côté TypeScript.
@@ -35,35 +35,35 @@ import {
 // ---------------------------------------------------------------------------
 // Types énumérés
 // ---------------------------------------------------------------------------
-export const typePersonne = pgEnum("type_personne", ["particulier", "professionnel"]);
-export const typeLien = pgEnum("type_lien", ["representant_legal", "conjoint", "autre"]);
-export const typeDocument = pgEnum("type_document", [
+export const typePersonne = pgEnum("person_type", ["particulier", "professionnel"]);
+export const typeLien = pgEnum("relationship_type", ["representant_legal", "conjoint", "autre"]);
+export const typeDocument = pgEnum("document_type", [
   "certificat_medical",
   "autorisation_parentale",
   "droit_image",
   "autre",
 ]);
-export const statutIntervenant = pgEnum("statut_intervenant", ["micro_entreprise", "societe", "salarie"]);
-export const regimeTva = pgEnum("regime_tva", ["franchise_293b", "assujetti", "non_applicable"]);
-export const modeRemuneration = pgEnum("mode_remuneration", ["heure", "cours", "forfait_mensuel"]);
-export const typeCours = pgEnum("type_cours", ["collectif", "particulier", "competition", "stage"]);
-export const statutSeance = pgEnum("statut_seance", ["prevue", "effectuee", "annulee"]);
+export const statutIntervenant = pgEnum("instructor_status", ["micro_entreprise", "societe", "salarie"]);
+export const regimeTva = pgEnum("vat_regime", ["franchise_293b", "assujetti", "non_applicable"]);
+export const modeRemuneration = pgEnum("pay_mode", ["heure", "cours", "forfait_mensuel"]);
+export const typeCours = pgEnum("course_type", ["collectif", "particulier", "competition", "stage"]);
+export const statutSeance = pgEnum("lesson_status", ["prevue", "effectuee", "annulee"]);
 /** Chaque semaine, une semaine sur deux, ou à des dates précises (#90). */
-export const recurrenceCours = pgEnum("recurrence_cours", ["hebdomadaire", "quinzaine", "dates"]);
-export const origineIndisponibilite = pgEnum("origine_indisponibilite", ["saisie", "google", "microsoft"]);
-export const fournisseurAgenda = pgEnum("fournisseur_agenda", ["google", "microsoft"]);
-export const publicTarif = pgEnum("public_tarif", ["enfant", "adulte", "couple", "etudiant"]);
-export const periodicite = pgEnum("periodicite", ["trimestre", "annee", "unite"]);
-export const statutInscription = pgEnum("statut_inscription", [
+export const recurrenceCours = pgEnum("course_recurrence", ["hebdomadaire", "quinzaine", "dates"]);
+export const origineIndisponibilite = pgEnum("unavailability_source", ["saisie", "google", "microsoft"]);
+export const fournisseurAgenda = pgEnum("calendar_provider", ["google", "microsoft"]);
+export const publicTarif = pgEnum("tariff_audience", ["enfant", "adulte", "couple", "etudiant"]);
+export const periodicite = pgEnum("period", ["trimestre", "annee", "unite"]);
+export const statutInscription = pgEnum("enrollment_status", [
   "essai",
   "liste_attente",
   "active",
   "abandon",
   "terminee",
 ]);
-export const statutFacture = pgEnum("statut_facture", ["a_envoyer", "brouillon_outil", "emise", "rejetee", "annulee"]);
-export const outilFacturation = pgEnum("outil_facturation", ["pennylane", "abby", "shine"]);
-export const moyenPaiement = pgEnum("moyen_paiement", [
+export const statutFacture = pgEnum("invoice_status", ["a_envoyer", "brouillon_outil", "emise", "rejetee", "annulee"]);
+export const outilFacturation = pgEnum("invoicing_tool", ["pennylane", "abby", "shine"]);
+export const moyenPaiement = pgEnum("payment_method", [
   "cheque",
   "especes",
   "carte",
@@ -73,36 +73,36 @@ export const moyenPaiement = pgEnum("moyen_paiement", [
   "pass_sport",
   "autre",
 ]);
-export const statutEcheance = pgEnum("statut_echeance", ["a_venir", "payee", "partielle", "en_retard", "annulee"]);
-export const statutReleve = pgEnum("statut_releve", ["a_controler", "conforme", "ecart", "paye"]);
-export const roleMembre = pgEnum("role_membre", ["direction", "accueil", "professeur"]);
+export const statutEcheance = pgEnum("installment_status", ["a_venir", "payee", "partielle", "en_retard", "annulee"]);
+export const statutReleve = pgEnum("statement_status", ["a_controler", "conforme", "ecart", "paye"]);
+export const roleMembre = pgEnum("member_role", ["direction", "accueil", "professeur"]);
 
 // ---------------------------------------------------------------------------
 // Locataire : l'école
 // ---------------------------------------------------------------------------
-export const ecole = pgTable("ecole", {
+export const ecole = pgTable("school", {
   id: uuid("id").primaryKey().defaultRandom(),
-  nom: text("nom").notNull(),
+  nom: text("name").notNull(),
   slug: text("slug").notNull().unique(), // sous-domaine : ribas.monapp.fr
-  raisonSociale: text("raison_sociale"),
+  raisonSociale: text("company_name"),
   siren: char("siren", { length: 9 }),
-  regimeTva: regimeTva("regime_tva").notNull().default("non_applicable"),
-  mentionTva: text("mention_tva"), // ex. « TVA non applicable, art. 293 B du CGI »
-  fuseau: text("fuseau").notNull().default("Europe/Paris"),
-  creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  regimeTva: regimeTva("vat_regime").notNull().default("non_applicable"),
+  mentionTva: text("vat_mention"), // ex. « TVA non applicable, art. 293 B du CGI »
+  fuseau: text("time_zone").notNull().default("Europe/Paris"),
+  creeLe: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** Colonne `ecole_id` commune à toutes les tables métier. */
+/** Colonne `school_id` commune à toutes les tables métier. */
 const ecoleId = () =>
-  uuid("ecole_id")
+  uuid("school_id")
     .notNull()
     .references(() => ecole.id, { onDelete: "cascade" });
 
 /**
- * Clé étrangère entre deux tables métier : composite (ecole_id, colonne) vers
- * (ecole_id, id), pour que la ligne visée appartienne forcément à la même école.
+ * Clé étrangère entre deux tables métier : composite (school_id, colonne) vers
+ * (school_id, id), pour que la ligne visée appartienne forcément à la même école.
  * Une clé étrangère simple ne suffit pas : sa vérification ignore la Row Level
- * Security. Colonne NULL acceptée (MATCH SIMPLE). Nom : <table>_<colonne>_meme_ecole_fk.
+ * Security. Colonne NULL acceptée (MATCH SIMPLE). Nom : <table>_<colonne>_same_school_fk.
  */
 function memeEcole(
   t: { ecoleId: AnyPgColumn },
@@ -110,27 +110,27 @@ function memeEcole(
   cible: { ecoleId: AnyPgColumn; id: AnyPgColumn },
 ) {
   return foreignKey({
-    name: `${getTableName(colonne.table)}_${colonne.name.replace(/_id$/, "")}_meme_ecole_fk`,
+    name: `${getTableName(colonne.table)}_${colonne.name.replace(/_id$/, "")}_same_school_fk`,
     columns: [t.ecoleId, colonne],
     foreignColumns: [cible.ecoleId, cible.id],
   });
 }
 
-/** Contrainte unique (ecole_id, id), cible des clés étrangères `memeEcole`. */
+/** Contrainte unique (school_id, id), cible des clés étrangères `memeEcole`. */
 function cibleMemeEcole(t: { ecoleId: AnyPgColumn; id: AnyPgColumn }) {
-  return unique(`${getTableName(t.id.table)}_ecole_id_id_unique`).on(t.ecoleId, t.id);
+  return unique(`${getTableName(t.id.table)}_school_id_id_unique`).on(t.ecoleId, t.id);
 }
 
 /** Configuration du connecteur de facturation, une par école. */
-export const connecteurFacturation = pgTable("connecteur_facturation", {
-  ecoleId: uuid("ecole_id")
+export const connecteurFacturation = pgTable("invoicing_connector", {
+  ecoleId: uuid("school_id")
     .primaryKey()
     .references(() => ecole.id, { onDelete: "cascade" }),
-  outil: outilFacturation("outil").notNull(),
-  identifiantsChiffres: text("identifiants_chiffres").notNull(), // chiffré côté application
-  oneConnectActif: boolean("one_connect_actif").notNull().default(false),
-  actif: boolean("actif").notNull().default(true),
-  majLe: timestamp("maj_le", { withTimezone: true }).notNull().defaultNow(),
+  outil: outilFacturation("tool").notNull(),
+  identifiantsChiffres: text("encrypted_credentials").notNull(), // chiffré côté application
+  oneConnectActif: boolean("one_connect_enabled").notNull().default(false),
+  actif: boolean("active").notNull().default(true),
+  majLe: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 /**
@@ -138,7 +138,7 @@ export const connecteurFacturation = pgTable("connecteur_facturation", {
  * école, avec son rôle. Un même compte peut appartenir à plusieurs écoles.
  */
 export const membre = pgTable(
-  "membre",
+  "member",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
@@ -146,14 +146,14 @@ export const membre = pgTable(
       .notNull()
       .references((): AnyPgColumn => user.id), // compte Better Auth (global, toutes écoles)
     role: roleMembre("role").notNull(),
-    intervenantId: uuid("intervenant_id"),
-    actif: boolean("actif").notNull().default(true),
+    intervenantId: uuid("instructor_id"),
+    actif: boolean("active").notNull().default(true),
   },
   (t) => [unique().on(t.ecoleId, t.userId), cibleMemeEcole(t), memeEcole(t, t.intervenantId, intervenant)],
 );
 
 /** Lien envoyé à une personne : rejoindre l'équipe, ou choisir un nouveau mot de passe (#104). */
-export const typeInvitation = pgEnum("type_invitation", ["invitation", "reinitialisation"]);
+export const typeInvitation = pgEnum("invitation_type", ["invitation", "reinitialisation"]);
 
 /**
  * Invitation dans l'équipe d'une école, ou réinitialisation du mot de passe
@@ -167,18 +167,18 @@ export const invitation = pgTable(
     ecoleId: ecoleId(),
     type: typeInvitation("type").notNull(),
     email: text("email").notNull(),
-    nom: text("nom"),
+    nom: text("name"),
     role: roleMembre("role"), // invitation : rôle donné en rejoignant l'école
     userId: text("user_id").references((): AnyPgColumn => user.id, { onDelete: "cascade" }), // réinitialisation : compte visé
-    jetonHash: text("jeton_hash").notNull().unique(),
-    expireLe: timestamp("expire_le", { withTimezone: true }).notNull(),
-    creePar: uuid("cree_par"),
-    utiliseLe: timestamp("utilise_le", { withTimezone: true }),
-    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    jetonHash: text("token_hash").notNull().unique(),
+    expireLe: timestamp("expires_at", { withTimezone: true }).notNull(),
+    creePar: uuid("created_by"),
+    utiliseLe: timestamp("used_at", { withTimezone: true }),
+    creeLe: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     check(
-      "invitation_contenu",
+      "invitation_content",
       sql`(${t.type} = 'invitation' AND ${t.role} IS NOT NULL) OR (${t.type} = 'reinitialisation' AND ${t.userId} IS NOT NULL)`,
     ),
     memeEcole(t, t.creePar, membre),
@@ -191,13 +191,13 @@ export const invitation = pgTable(
  * préférence d'affichage, supprimée avec le membre.
  */
 export const preferenceListe = pgTable(
-  "preference_liste",
+  "list_preference",
   {
     ecoleId: ecoleId(),
-    membreId: uuid("membre_id").notNull(),
-    liste: text("liste").notNull(),
-    colonnes: text("colonnes").array().notNull(),
-    modifieLe: timestamp("modifie_le", { withTimezone: true }).notNull().defaultNow(),
+    membreId: uuid("member_id").notNull(),
+    liste: text("list").notNull(),
+    colonnes: text("columns").array().notNull(),
+    modifieLe: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.membreId, t.liste] }), memeEcole(t, t.membreId, membre).onDelete("cascade")],
 );
@@ -210,9 +210,9 @@ export const site = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    nom: text("nom").notNull(),
-    adresse: text("adresse").notNull(),
-    permanence: boolean("permanence").notNull().default(false),
+    nom: text("name").notNull(),
+    adresse: text("address").notNull(),
+    permanence: boolean("enrollment_desk").notNull().default(false),
   },
   (t) => [cibleMemeEcole(t)],
 );
@@ -222,59 +222,59 @@ export const site = pgTable(
  * site sans aucun horaire saisi n'impose rien (le planning reste libre).
  */
 export const horaireSite = pgTable(
-  "horaire_site",
+  "site_hours",
   {
     ecoleId: ecoleId(),
     siteId: uuid("site_id").notNull(),
-    jourSemaine: smallint("jour_semaine").notNull(), // 1 = lundi … 7 = dimanche
-    ouverture: time("ouverture").notNull(),
-    fermeture: time("fermeture").notNull(),
+    jourSemaine: smallint("weekday").notNull(), // 1 = lundi … 7 = dimanche
+    ouverture: time("opens_at").notNull(),
+    fermeture: time("closes_at").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.siteId, t.jourSemaine] }),
-    check("horaire_site_jour", sql`${t.jourSemaine} BETWEEN 1 AND 7`),
-    check("horaire_site_ordre", sql`${t.fermeture} > ${t.ouverture}`),
+    check("site_hours_weekday", sql`${t.jourSemaine} BETWEEN 1 AND 7`),
+    check("site_hours_order", sql`${t.fermeture} > ${t.ouverture}`),
     memeEcole(t, t.siteId, site).onDelete("cascade"),
   ],
 );
 
 export const salle = pgTable(
-  "salle",
+  "room",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
     siteId: uuid("site_id").notNull(),
-    nom: text("nom").notNull(),
-    capacite: integer("capacite"),
+    nom: text("name").notNull(),
+    capacite: integer("capacity"),
   },
   (t) => [cibleMemeEcole(t), memeEcole(t, t.siteId, site)],
 );
 
 export const saison = pgTable(
-  "saison",
+  "season",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    libelle: text("libelle").notNull(), // '2027-2028'
-    dateDebut: date("date_debut").notNull(),
-    dateFin: date("date_fin").notNull(),
+    libelle: text("label").notNull(), // '2027-2028'
+    dateDebut: date("start_date").notNull(),
+    dateFin: date("end_date").notNull(),
   },
   (t) => [
     unique().on(t.ecoleId, t.libelle),
-    check("saison_dates", sql`${t.dateFin} > ${t.dateDebut}`),
+    check("season_dates", sql`${t.dateFin} > ${t.dateDebut}`),
     cibleMemeEcole(t),
   ],
 );
 
 export const fermeture = pgTable(
-  "fermeture",
+  "closure",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    saisonId: uuid("saison_id").notNull(),
-    libelle: text("libelle").notNull(),
-    debut: date("debut").notNull(),
-    fin: date("fin").notNull(),
+    saisonId: uuid("season_id").notNull(),
+    libelle: text("label").notNull(),
+    debut: date("start_date").notNull(),
+    fin: date("end_date").notNull(),
   },
   (t) => [memeEcole(t, t.saisonId, saison)],
 );
@@ -288,27 +288,27 @@ export const fermeture = pgTable(
  * fois danseur et payeur : pas de « famille » à créer.
  */
 export const personne = pgTable(
-  "personne",
+  "person",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
     type: typePersonne("type").notNull().default("particulier"),
-    nom: text("nom").notNull(),
-    prenom: text("prenom"),
-    raisonSociale: text("raison_sociale"),
+    nom: text("last_name").notNull(),
+    prenom: text("first_name"),
+    raisonSociale: text("company_name"),
     siren: char("siren", { length: 9 }),
-    dateNaissance: date("date_naissance"),
+    dateNaissance: date("birth_date"),
     email: text("email"),
-    telephone: text("telephone"),
-    adresse: text("adresse"),
+    telephone: text("phone"),
+    adresse: text("address"),
     notes: text("notes"), // santé, consignes : visibles par l'accueil et la direction
     // Élève de l'école (danseur) ; sinon contact : parent, payeur, organisme.
-    eleve: boolean("eleve").notNull().default(false),
-    refOutil: text("ref_outil"), // id du client dans l'outil de facturation
-    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    eleve: boolean("is_student").notNull().default(false),
+    refOutil: text("tool_ref"), // id du client dans l'outil de facturation
+    creeLe: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check("personne_pro_siren", sql`${t.type} = 'particulier' OR ${t.siren} IS NOT NULL`),
+    check("person_company_siren", sql`${t.type} = 'particulier' OR ${t.siren} IS NOT NULL`),
     index().on(t.ecoleId, t.nom),
     cibleMemeEcole(t),
   ],
@@ -319,19 +319,19 @@ export const personne = pgTable(
  * légale de Zoé). Un conjoint n'est enregistré qu'une fois, dans un sens.
  */
 export const lien = pgTable(
-  "lien",
+  "relationship",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    personneId: uuid("personne_id").notNull(),
-    lieAId: uuid("lie_a_id").notNull(),
+    personneId: uuid("person_id").notNull(),
+    lieAId: uuid("related_person_id").notNull(),
     type: typeLien("type").notNull(),
-    contactUrgence: boolean("contact_urgence").notNull().default(false),
-    paiePour: boolean("paie_pour").notNull().default(false),
+    contactUrgence: boolean("emergency_contact").notNull().default(false),
+    paiePour: boolean("pays_for").notNull().default(false),
   },
   (t) => [
     unique().on(t.personneId, t.lieAId),
-    check("lien_distinct", sql`${t.personneId} <> ${t.lieAId}`),
+    check("relationship_distinct", sql`${t.personneId} <> ${t.lieAId}`),
     index().on(t.lieAId),
     memeEcole(t, t.personneId, personne),
     memeEcole(t, t.lieAId, personne),
@@ -339,15 +339,15 @@ export const lien = pgTable(
 );
 
 export const documentDanseur = pgTable(
-  "document_danseur",
+  "student_document",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    danseurId: uuid("danseur_id").notNull(),
+    danseurId: uuid("student_id").notNull(),
     type: typeDocument("type").notNull(),
-    accorde: boolean("accorde").notNull().default(true),
-    valideJusqu: date("valide_jusqu"),
-    fichier: text("fichier"),
+    accorde: boolean("granted").notNull().default(true),
+    valideJusqu: date("valid_until"),
+    fichier: text("file"),
   },
   (t) => [memeEcole(t, t.danseurId, personne)],
 );
@@ -356,23 +356,23 @@ export const documentDanseur = pgTable(
 // Professeurs
 // ---------------------------------------------------------------------------
 export const intervenant = pgTable(
-  "intervenant",
+  "instructor",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    nom: text("nom").notNull(),
-    prenom: text("prenom").notNull(),
+    nom: text("last_name").notNull(),
+    prenom: text("first_name").notNull(),
     email: text("email"),
-    statut: statutIntervenant("statut").notNull(),
+    statut: statutIntervenant("status").notNull(),
     siren: char("siren", { length: 9 }),
-    regimeTva: regimeTva("regime_tva").notNull(),
-    estDirigeant: boolean("est_dirigeant").notNull().default(false),
-    modeRemuneration: modeRemuneration("mode_remuneration").notNull(),
-    tarifCentimes: integer("tarif_centimes").notNull(), // par heure, cours ou mois
-    actif: boolean("actif").notNull().default(true),
+    regimeTva: regimeTva("vat_regime").notNull(),
+    estDirigeant: boolean("is_owner").notNull().default(false),
+    modeRemuneration: modeRemuneration("pay_mode").notNull(),
+    tarifCentimes: integer("rate_cents").notNull(), // par heure, cours ou mois
+    actif: boolean("active").notNull().default(true),
     // Abonnement à l'agenda : seule l'empreinte SHA-256 du jeton est gardée.
-    jetonAgendaHash: text("jeton_agenda_hash").unique(),
-    jetonAgendaCreeLe: timestamp("jeton_agenda_cree_le", { withTimezone: true }),
+    jetonAgendaHash: text("calendar_token_hash").unique(),
+    jetonAgendaCreeLe: timestamp("calendar_token_created_at", { withTimezone: true }),
   },
   (t) => [cibleMemeEcole(t)],
 );
@@ -382,19 +382,19 @@ export const intervenant = pgTable(
  * lue dans son agenda (plage occupée seulement, jamais le contenu).
  */
 export const indisponibilite = pgTable(
-  "indisponibilite",
+  "unavailability",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    intervenantId: uuid("intervenant_id").notNull(),
-    debut: timestamp("debut", { withTimezone: true }).notNull(),
-    fin: timestamp("fin", { withTimezone: true }).notNull(),
-    origine: origineIndisponibilite("origine").notNull().default("saisie"),
-    libelle: text("libelle"), // saisie seulement
-    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    intervenantId: uuid("instructor_id").notNull(),
+    debut: timestamp("starts_at", { withTimezone: true }).notNull(),
+    fin: timestamp("ends_at", { withTimezone: true }).notNull(),
+    origine: origineIndisponibilite("source").notNull().default("saisie"),
+    libelle: text("label"), // saisie seulement
+    creeLe: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check("indisponibilite_fin", sql`${t.fin} > ${t.debut}`),
+    check("unavailability_end", sql`${t.fin} > ${t.debut}`),
     index().on(t.intervenantId, t.debut),
     memeEcole(t, t.intervenantId, intervenant),
   ],
@@ -405,17 +405,17 @@ export const indisponibilite = pgTable(
  * rafraîchissement chiffré (src/lib/chiffrement.ts), jamais en clair.
  */
 export const connexionAgenda = pgTable(
-  "connexion_agenda",
+  "calendar_connection",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    intervenantId: uuid("intervenant_id").notNull(),
-    fournisseur: fournisseurAgenda("fournisseur").notNull(),
-    compte: text("compte"),
-    jetonChiffre: text("jeton_chiffre").notNull(),
-    derniereSynchro: timestamp("derniere_synchro", { withTimezone: true }),
-    erreur: text("erreur"),
-    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    intervenantId: uuid("instructor_id").notNull(),
+    fournisseur: fournisseurAgenda("provider").notNull(),
+    compte: text("account"),
+    jetonChiffre: text("encrypted_token").notNull(),
+    derniereSynchro: timestamp("last_synced_at", { withTimezone: true }),
+    erreur: text("error"),
+    creeLe: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique().on(t.intervenantId), memeEcole(t, t.intervenantId, intervenant)],
 );
@@ -428,38 +428,38 @@ export const discipline = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    nom: text("nom").notNull(),
+    nom: text("name").notNull(),
   },
   (t) => [unique().on(t.ecoleId, t.nom), cibleMemeEcole(t)],
 );
 
 export const cours = pgTable(
-  "cours",
+  "course",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    saisonId: uuid("saison_id").notNull(),
+    saisonId: uuid("season_id").notNull(),
     disciplineId: uuid("discipline_id").notNull(),
-    salleId: uuid("salle_id").notNull(),
-    intervenantId: uuid("intervenant_id").notNull(),
+    salleId: uuid("room_id").notNull(),
+    intervenantId: uuid("instructor_id").notNull(),
     type: typeCours("type").notNull().default("collectif"),
-    niveau: text("niveau"),
+    niveau: text("level"),
     ageMin: smallint("age_min"),
     ageMax: smallint("age_max"),
     recurrence: recurrenceCours("recurrence").notNull().default("hebdomadaire"),
-    jourSemaine: smallint("jour_semaine"), // 1 = lundi ; NULL pour des dates précises (table cours_date)
+    jourSemaine: smallint("weekday"), // 1 = lundi ; NULL pour des dates précises (table cours_date)
     // Période limitée d'un cours régulier dans la saison ; NULL : depuis le début, jusqu'à la fin.
-    dateDebut: date("date_debut"),
-    dateFin: date("date_fin"),
-    heureDebut: time("heure_debut").notNull(),
-    dureeMinutes: integer("duree_minutes").notNull(),
-    capaciteMax: integer("capacite_max"),
+    dateDebut: date("start_date"),
+    dateFin: date("end_date"),
+    heureDebut: time("start_time").notNull(),
+    dureeMinutes: integer("duration_minutes").notNull(),
+    capaciteMax: integer("max_capacity"),
   },
   (t) => [
-    check("cours_jour", sql`${t.jourSemaine} BETWEEN 1 AND 7`),
-    check("cours_recurrence_jour", sql`(${t.recurrence} = 'dates') = (${t.jourSemaine} IS NULL)`),
-    check("cours_periode", sql`${t.dateDebut} IS NULL OR ${t.dateFin} IS NULL OR ${t.dateDebut} <= ${t.dateFin}`),
-    check("cours_duree", sql`${t.dureeMinutes} > 0`),
+    check("course_weekday", sql`${t.jourSemaine} BETWEEN 1 AND 7`),
+    check("course_recurrence_weekday", sql`(${t.recurrence} = 'dates') = (${t.jourSemaine} IS NULL)`),
+    check("course_period", sql`${t.dateDebut} IS NULL OR ${t.dateFin} IS NULL OR ${t.dateDebut} <= ${t.dateFin}`),
+    check("course_duration", sql`${t.dureeMinutes} > 0`),
     index().on(t.saisonId, t.jourSemaine),
     cibleMemeEcole(t),
     memeEcole(t, t.saisonId, saison),
@@ -471,29 +471,29 @@ export const cours = pgTable(
 
 /** Dates d'un cours ponctuel (récurrence « dates » : stage, cours exceptionnel). */
 export const coursDate = pgTable(
-  "cours_date",
+  "course_date",
   {
     ecoleId: ecoleId(),
-    coursId: uuid("cours_id").notNull(),
+    coursId: uuid("course_id").notNull(),
     date: date("date").notNull(),
   },
   (t) => [primaryKey({ columns: [t.coursId, t.date] }), memeEcole(t, t.coursId, cours).onDelete("cascade")],
 );
 
 export const seance = pgTable(
-  "seance",
+  "lesson",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    coursId: uuid("cours_id").notNull(),
+    coursId: uuid("course_id").notNull(),
     date: date("date").notNull(),
     // Séance déplacée (#90) : sa date d'origine, qui sert de repère à la génération des séances.
-    datePrevue: date("date_prevue"),
+    datePrevue: date("planned_date"),
     // Heure et durée propres à la séance (déplacée, ou figée avant un changement de créneau) ; NULL : celles du cours.
-    heureDebut: time("heure_debut"),
-    dureeMinutes: integer("duree_minutes"),
-    statut: statutSeance("statut").notNull().default("prevue"),
-    intervenantId: uuid("intervenant_id").notNull(), // remplaçant possible
+    heureDebut: time("start_time"),
+    dureeMinutes: integer("duration_minutes"),
+    statut: statutSeance("status").notNull().default("prevue"),
+    intervenantId: uuid("instructor_id").notNull(), // remplaçant possible
   },
   (t) => [
     unique().on(t.coursId, t.date),
@@ -506,11 +506,11 @@ export const seance = pgTable(
 );
 
 export const presence = pgTable(
-  "presence",
+  "attendance",
   {
     ecoleId: ecoleId(),
-    seanceId: uuid("seance_id").notNull(),
-    danseurId: uuid("danseur_id").notNull(),
+    seanceId: uuid("lesson_id").notNull(),
+    danseurId: uuid("student_id").notNull(),
     present: boolean("present").notNull(),
   },
   (t) => [
@@ -525,25 +525,25 @@ export const presence = pgTable(
 // ---------------------------------------------------------------------------
 /** Une ligne par case de la grille : public × périodicité × combinaison de cours (× discipline). */
 export const tarif = pgTable(
-  "tarif",
+  "tariff",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    saisonId: uuid("saison_id").notNull(),
-    public: publicTarif("public").notNull(),
-    periodicite: periodicite("periodicite").notNull(),
+    saisonId: uuid("season_id").notNull(),
+    public: publicTarif("audience").notNull(),
+    periodicite: periodicite("period").notNull(),
     // Durées des cours de la semaine, en minutes, triées : {45,45,60} = « 45 min + 45 min + 1 h 00 ».
-    combinaison: smallint("combinaison").array().notNull(),
+    combinaison: smallint("combination").array().notNull(),
     // Forfait réservé à une discipline (ex. « Zumba 2 h 00 ») ; NULL = toutes disciplines.
     disciplineId: uuid("discipline_id"),
-    prixCentimes: integer("prix_centimes").notNull(),
+    prixCentimes: integer("price_cents").notNull(),
   },
   (t) => [
     // NULLS NOT DISTINCT : deux lignes « toutes disciplines » identiques sont refusées.
-    unique("tarif_case_unique")
+    unique("tariff_cell_unique")
       .on(t.saisonId, t.public, t.periodicite, t.combinaison, t.disciplineId)
       .nullsNotDistinct(),
-    check("tarif_combinaison", sql`cardinality(${t.combinaison}) >= 1 AND 0 < ALL(${t.combinaison})`),
+    check("tariff_combination", sql`cardinality(${t.combinaison}) >= 1 AND 0 < ALL(${t.combinaison})`),
     cibleMemeEcole(t),
     memeEcole(t, t.saisonId, saison),
     memeEcole(t, t.disciplineId, discipline),
@@ -551,31 +551,31 @@ export const tarif = pgTable(
 );
 
 export const reduction = pgTable(
-  "reduction",
+  "discount",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    saisonId: uuid("saison_id").notNull(),
+    saisonId: uuid("season_id").notNull(),
     code: text("code").notNull(), // type de réduction connu du moteur de tarif : 'fratrie'
-    tauxPointsBase: integer("taux_points_base"), // 1000 = 10 %
-    montantCentimes: integer("montant_centimes"),
-    nonCumulableAvec: text("non_cumulable_avec")
+    tauxPointsBase: integer("rate_bps"), // 1000 = 10 %
+    montantCentimes: integer("amount_cents"),
+    nonCumulableAvec: text("not_combinable_with")
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
     // Nombre minimal de danseurs éligibles du même payeur (fratrie : 2).
-    seuilDanseurs: smallint("seuil_danseurs").notNull().default(1),
+    seuilDanseurs: smallint("min_students").notNull().default(1),
     // Publics éligibles ; vide = tous.
-    publics: publicTarif("publics")
+    publics: publicTarif("audiences")
       .array()
       .notNull()
-      .default(sql`'{}'::public_tarif[]`),
+      .default(sql`'{}'::tariff_audience[]`),
     // false : écartée sur un forfait dont les cours relèvent d'au moins 2 disciplines.
-    cumulableMultiDisciplines: boolean("cumulable_multi_disciplines").notNull().default(true),
+    cumulableMultiDisciplines: boolean("combinable_with_multi_discipline").notNull().default(true),
   },
   (t) => [
     unique().on(t.saisonId, t.code),
-    check("reduction_valeur", sql`${t.tauxPointsBase} IS NOT NULL OR ${t.montantCentimes} IS NOT NULL`),
+    check("discount_value", sql`${t.tauxPointsBase} IS NOT NULL OR ${t.montantCentimes} IS NOT NULL`),
     memeEcole(t, t.saisonId, saison),
   ],
 );
@@ -586,18 +586,18 @@ export const reduction = pgTable(
  * tranche : devis, prix saisi sur le carnet.
  */
 export const tarifCarnet = pgTable(
-  "tarif_carnet",
+  "lesson_pack_tariff",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    saisonId: uuid("saison_id").notNull(),
-    nbSeances: smallint("nb_seances").notNull(),
-    personnesMax: smallint("personnes_max").notNull(),
-    prixCentimes: integer("prix_centimes").notNull(),
+    saisonId: uuid("season_id").notNull(),
+    nbSeances: smallint("lesson_count").notNull(),
+    personnesMax: smallint("max_people").notNull(),
+    prixCentimes: integer("price_cents").notNull(),
   },
   (t) => [
-    unique("tarif_carnet_case_unique").on(t.saisonId, t.nbSeances, t.personnesMax),
-    check("tarif_carnet_valeurs", sql`${t.nbSeances} >= 1 AND ${t.personnesMax} >= 1 AND ${t.prixCentimes} >= 0`),
+    unique("lesson_pack_tariff_cell_unique").on(t.saisonId, t.nbSeances, t.personnesMax),
+    check("lesson_pack_tariff_values", sql`${t.nbSeances} >= 1 AND ${t.personnesMax} >= 1 AND ${t.prixCentimes} >= 0`),
     memeEcole(t, t.saisonId, saison),
   ],
 );
@@ -607,27 +607,27 @@ export const tarifCarnet = pgTable(
 // ---------------------------------------------------------------------------
 /** Un forfait payé par un payeur ; peut couvrir deux danseurs (tarif couple). */
 export const inscription = pgTable(
-  "inscription",
+  "enrollment",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    payeurId: uuid("payeur_id").notNull(),
-    saisonId: uuid("saison_id").notNull(),
-    tarifId: uuid("tarif_id"),
+    payeurId: uuid("payer_id").notNull(),
+    saisonId: uuid("season_id").notNull(),
+    tarifId: uuid("tariff_id"),
     // Public et périodicité choisis : nécessaires pour recalculer la fratrie
     // avec les inscriptions existantes, même sans tarif retenu (prix manuel).
-    public: publicTarif("public").notNull(),
-    periodicite: periodicite("periodicite").notNull(),
-    statut: statutInscription("statut").notNull().default("active"),
-    dateInscription: date("date_inscription").notNull().defaultNow(),
-    prixBrutCentimes: integer("prix_brut_centimes").notNull(),
-    remiseCentimes: integer("remise_centimes").notNull().default(0),
-    prixNetCentimes: integer("prix_net_centimes").generatedAlwaysAs(sql`prix_brut_centimes - remise_centimes`),
-    reductions: text("reductions")
+    public: publicTarif("audience").notNull(),
+    periodicite: periodicite("period").notNull(),
+    statut: statutInscription("status").notNull().default("active"),
+    dateInscription: date("enrolled_on").notNull().defaultNow(),
+    prixBrutCentimes: integer("gross_price_cents").notNull(),
+    remiseCentimes: integer("discount_cents").notNull().default(0),
+    prixNetCentimes: integer("net_price_cents").generatedAlwaysAs(sql`gross_price_cents - discount_cents`),
+    reductions: text("discounts")
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
-    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    creeLe: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index().on(t.payeurId, t.saisonId),
@@ -639,12 +639,12 @@ export const inscription = pgTable(
 );
 
 export const inscriptionCours = pgTable(
-  "inscription_cours",
+  "enrollment_course",
   {
     ecoleId: ecoleId(),
-    inscriptionId: uuid("inscription_id").notNull(),
-    danseurId: uuid("danseur_id").notNull(),
-    coursId: uuid("cours_id").notNull(),
+    inscriptionId: uuid("enrollment_id").notNull(),
+    danseurId: uuid("student_id").notNull(),
+    coursId: uuid("course_id").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.inscriptionId, t.danseurId, t.coursId] }),
@@ -659,29 +659,29 @@ export const inscriptionCours = pgTable(
  * ou devis). Nombres de séances et de personnes : données de l'école, pas de limite ici.
  */
 export const carnet = pgTable(
-  "carnet",
+  "lesson_pack",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    payeurId: uuid("payeur_id").notNull(),
-    nbPersonnes: smallint("nb_personnes").notNull(),
-    seancesTotal: smallint("seances_total").notNull(),
-    prixCentimes: integer("prix_centimes").notNull(),
-    acheteLe: date("achete_le").notNull().defaultNow(),
+    payeurId: uuid("payer_id").notNull(),
+    nbPersonnes: smallint("people_count").notNull(),
+    seancesTotal: smallint("lesson_count").notNull(),
+    prixCentimes: integer("price_cents").notNull(),
+    acheteLe: date("purchased_on").notNull().defaultNow(),
   },
   (t) => [
-    check("carnet_personnes", sql`${t.nbPersonnes} >= 1 AND ${t.seancesTotal} >= 1`),
+    check("lesson_pack_people", sql`${t.nbPersonnes} >= 1 AND ${t.seancesTotal} >= 1`),
     cibleMemeEcole(t),
     memeEcole(t, t.payeurId, personne),
   ],
 );
 
 export const carnetUtilisation = pgTable(
-  "carnet_utilisation",
+  "lesson_pack_usage",
   {
     ecoleId: ecoleId(),
-    carnetId: uuid("carnet_id").notNull(),
-    seanceId: uuid("seance_id").notNull(),
+    carnetId: uuid("lesson_pack_id").notNull(),
+    seanceId: uuid("lesson_id").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.carnetId, t.seanceId] }),
@@ -694,22 +694,22 @@ export const carnetUtilisation = pgTable(
 // Facturation et encaissements
 // ---------------------------------------------------------------------------
 export const facture = pgTable(
-  "facture",
+  "invoice",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    payeurId: uuid("payeur_id").notNull(),
-    statut: statutFacture("statut").notNull().default("a_envoyer"),
-    outil: outilFacturation("outil"),
-    refOutil: text("ref_outil"),
-    numero: text("numero"), // renvoyé par l'outil, jamais saisi ici
-    dateEmission: date("date_emission"),
-    totalHtCentimes: integer("total_ht_centimes").notNull().default(0),
-    totalTvaCentimes: integer("total_tva_centimes").notNull().default(0),
-    totalTtcCentimes: integer("total_ttc_centimes").notNull().default(0),
-    avoirDe: uuid("avoir_de"),
+    payeurId: uuid("payer_id").notNull(),
+    statut: statutFacture("status").notNull().default("a_envoyer"),
+    outil: outilFacturation("tool"),
+    refOutil: text("tool_ref"),
+    numero: text("number"), // renvoyé par l'outil, jamais saisi ici
+    dateEmission: date("issued_on"),
+    totalHtCentimes: integer("total_excl_tax_cents").notNull().default(0),
+    totalTvaCentimes: integer("total_vat_cents").notNull().default(0),
+    totalTtcCentimes: integer("total_incl_tax_cents").notNull().default(0),
+    avoirDe: uuid("credit_note_of"),
     pdfUrl: text("pdf_url"),
-    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    creeLe: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     unique().on(t.ecoleId, t.numero),
@@ -721,17 +721,17 @@ export const facture = pgTable(
 );
 
 export const ligneFacture = pgTable(
-  "ligne_facture",
+  "invoice_line",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    factureId: uuid("facture_id").notNull(),
-    libelle: text("libelle").notNull(),
-    quantiteMilliemes: integer("quantite_milliemes").notNull().default(1000), // 1000 = 1
-    prixUnitaireCentimes: integer("prix_unitaire_centimes").notNull(),
-    tauxTvaPointsBase: integer("taux_tva_points_base").notNull().default(0), // 2000 = 20 %
-    inscriptionId: uuid("inscription_id"),
-    carnetId: uuid("carnet_id"), // NULL : stage, location, billet…
+    factureId: uuid("invoice_id").notNull(),
+    libelle: text("label").notNull(),
+    quantiteMilliemes: integer("quantity_thousandths").notNull().default(1000), // 1000 = 1
+    prixUnitaireCentimes: integer("unit_price_cents").notNull(),
+    tauxTvaPointsBase: integer("vat_rate_bps").notNull().default(0), // 2000 = 20 %
+    inscriptionId: uuid("enrollment_id"),
+    carnetId: uuid("lesson_pack_id"), // NULL : stage, location, billet…
   },
   (t) => [
     memeEcole(t, t.factureId, facture),
@@ -741,19 +741,19 @@ export const ligneFacture = pgTable(
 );
 
 export const echeance = pgTable(
-  "echeance",
+  "installment",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    factureId: uuid("facture_id").notNull(),
-    rang: smallint("rang").notNull(),
-    datePrevue: date("date_prevue").notNull(),
-    montantCentimes: integer("montant_centimes").notNull(),
-    statut: statutEcheance("statut").notNull().default("a_venir"),
+    factureId: uuid("invoice_id").notNull(),
+    rang: smallint("rank").notNull(),
+    datePrevue: date("due_date").notNull(),
+    montantCentimes: integer("amount_cents").notNull(),
+    statut: statutEcheance("status").notNull().default("a_venir"),
   },
   (t) => [
     unique().on(t.factureId, t.rang),
-    index("echeance_ouvertes")
+    index("installment_open")
       .on(t.ecoleId, t.datePrevue)
       .where(sql`${t.statut} IN ('a_venir', 'partielle', 'en_retard')`),
     cibleMemeEcole(t),
@@ -763,27 +763,27 @@ export const echeance = pgTable(
 
 /** Inaltérable : une erreur ou un remboursement = un paiement négatif. */
 export const paiement = pgTable(
-  "paiement",
+  "payment",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    payeurId: uuid("payeur_id").notNull(),
+    payeurId: uuid("payer_id").notNull(),
     date: date("date").notNull().defaultNow(),
-    montantCentimes: integer("montant_centimes").notNull(),
-    moyen: moyenPaiement("moyen").notNull(),
+    montantCentimes: integer("amount_cents").notNull(),
+    moyen: moyenPaiement("method").notNull(),
     reference: text("reference"), // numéro de chèque, d'autorisation…
     // Banque ou titulaire d'un chèque quand ce n'est pas le payeur (#97).
-    emetteur: text("emetteur"),
+    emetteur: text("issuer"),
     // Chèque à encaisser plus tard (remis à l'inscription, encaissé au trimestre) ; NULL : tout de suite.
-    encaissementPrevu: date("encaissement_prevu"),
+    encaissementPrevu: date("deposit_planned_on"),
     // Correction : paiement négatif qui annule tout ou partie de ce paiement-ci.
-    corrigeId: uuid("corrige_id"),
-    saisiPar: uuid("saisi_par"),
-    synchroOutil: boolean("synchro_outil").notNull().default(false),
-    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    corrigeId: uuid("corrects_id"),
+    saisiPar: uuid("entered_by"),
+    synchroOutil: boolean("tool_synced").notNull().default(false),
+    creeLe: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check("paiement_montant", sql`${t.montantCentimes} <> 0`),
+    check("payment_amount", sql`${t.montantCentimes} <> 0`),
     cibleMemeEcole(t),
     memeEcole(t, t.payeurId, personne),
     memeEcole(t, t.saisiPar, membre),
@@ -792,29 +792,29 @@ export const paiement = pgTable(
 );
 
 /** Moyens remis à la banque (ou à l'ANCV) par bordereau (#98). */
-export const moyenRemise = pgEnum("moyen_remise", ["cheque", "especes", "cheque_vacances"]);
+export const moyenRemise = pgEnum("deposit_method", ["cheque", "especes", "cheque_vacances"]);
 
 /** Remise en banque : un bordereau de chèques, d'espèces ou de chèques vacances déposés ensemble (#98). */
 export const remise = pgTable(
-  "remise",
+  "bank_deposit",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
     date: date("date").notNull(),
-    moyen: moyenRemise("moyen").notNull(),
-    creePar: uuid("cree_par"),
-    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    moyen: moyenRemise("method").notNull(),
+    creePar: uuid("created_by"),
+    creeLe: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [cibleMemeEcole(t), memeEcole(t, t.creePar, membre)],
 );
 
 /** Paiements d'une remise ; un paiement ne figure que dans une seule remise (le paiement, inaltérable, n'est pas modifié). */
 export const remisePaiement = pgTable(
-  "remise_paiement",
+  "bank_deposit_payment",
   {
     ecoleId: ecoleId(),
-    remiseId: uuid("remise_id").notNull(),
-    paiementId: uuid("paiement_id").notNull(),
+    remiseId: uuid("bank_deposit_id").notNull(),
+    paiementId: uuid("payment_id").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.paiementId] }),
@@ -825,12 +825,12 @@ export const remisePaiement = pgTable(
 );
 
 export const affectationPaiement = pgTable(
-  "affectation_paiement",
+  "payment_allocation",
   {
     ecoleId: ecoleId(),
-    paiementId: uuid("paiement_id").notNull(),
-    echeanceId: uuid("echeance_id").notNull(),
-    montantCentimes: integer("montant_centimes").notNull(),
+    paiementId: uuid("payment_id").notNull(),
+    echeanceId: uuid("installment_id").notNull(),
+    montantCentimes: integer("amount_cents").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.paiementId, t.echeanceId] }),
@@ -843,18 +843,18 @@ export const affectationPaiement = pgTable(
 // Rémunération des professeurs
 // ---------------------------------------------------------------------------
 export const releveIntervenant = pgTable(
-  "releve_intervenant",
+  "instructor_statement",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ecoleId: ecoleId(),
-    intervenantId: uuid("intervenant_id").notNull(),
-    mois: date("mois").notNull(), // 1er jour du mois
-    nbSeances: integer("nb_seances").notNull(),
+    intervenantId: uuid("instructor_id").notNull(),
+    mois: date("month").notNull(), // 1er jour du mois
+    nbSeances: integer("lesson_count").notNull(),
     minutes: integer("minutes").notNull(),
-    montantDuCentimes: integer("montant_du_centimes").notNull(),
-    factureRecue: text("facture_recue"),
-    montantFactureCentimes: integer("montant_facture_centimes"),
-    statut: statutReleve("statut").notNull().default("a_controler"),
+    montantDuCentimes: integer("amount_due_cents").notNull(),
+    factureRecue: text("invoice_received"),
+    montantFactureCentimes: integer("invoiced_amount_cents"),
+    statut: statutReleve("status").notNull().default("a_controler"),
   },
   (t) => [unique().on(t.intervenantId, t.mois), memeEcole(t, t.intervenantId, intervenant)],
 );
@@ -863,23 +863,23 @@ export const releveIntervenant = pgTable(
 // Journal d'audit (append-only)
 // ---------------------------------------------------------------------------
 export const journal = pgTable(
-  "journal",
+  "audit_log",
   {
     id: bigserial("id", { mode: "number" }).primaryKey(),
     ecoleId: ecoleId(),
-    quand: timestamp("quand", { withTimezone: true }).notNull().defaultNow(),
-    qui: uuid("qui"),
-    tableCible: text("table_cible").notNull(),
-    ligneId: uuid("ligne_id").notNull(),
+    quand: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    qui: uuid("actor"),
+    tableCible: text("target_table").notNull(),
+    ligneId: uuid("row_id").notNull(),
     action: text("action").notNull(), // insert | update | delete
-    avant: jsonb("avant"),
-    apres: jsonb("apres"),
+    avant: jsonb("before"),
+    apres: jsonb("after"),
   },
   (t) => [index().on(t.ecoleId, t.tableCible, t.ligneId), memeEcole(t, t.qui, membre)],
 );
 
 // ---------------------------------------------------------------------------
-// Authentification (Better Auth) : tables GLOBALES, sans ecole_id ni RLS.
+// Authentification (Better Auth) : tables GLOBALES, sans school_id ni RLS.
 // Un compte peut appartenir à plusieurs écoles (`membre`). Structure attendue
 // par Better Auth 1.7 (getAuthTables) ; propriétés en camelCase, colonnes en snake_case.
 // ---------------------------------------------------------------------------
@@ -907,8 +907,8 @@ export const session = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     // École choisie après connexion, fixée côté serveur après vérification de
-    // l'appartenance. Pas nommée ecole_id : la session n'est pas une donnée d'école.
-    ecoleChoisie: uuid("ecole_choisie").references(() => ecole.id, { onDelete: "set null" }),
+    // l'appartenance. Pas nommée school_id : la session n'est pas une donnée d'école.
+    ecoleChoisie: uuid("selected_school_id").references(() => ecole.id, { onDelete: "set null" }),
   },
   (t) => [index().on(t.userId)],
 );
@@ -941,11 +941,11 @@ export const account = pgTable(
  * aucune donnée personnelle en clair. Purgée au fil de l'eau.
  */
 export const tentativeConnexion = pgTable(
-  "tentative_connexion",
+  "login_attempt",
   {
     id: bigserial("id", { mode: "number" }).primaryKey(),
-    cle: text("cle").notNull(),
-    quand: timestamp("quand", { withTimezone: true }).notNull().defaultNow(),
+    cle: text("key").notNull(),
+    quand: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index().on(t.cle, t.quand)],
 );

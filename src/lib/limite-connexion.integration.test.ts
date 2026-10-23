@@ -33,7 +33,7 @@ afterAll(async () => {
     ]),
     ...ips.map((i) => cleDeTentative("ip", i)),
   ];
-  await admin`DELETE FROM tentative_connexion WHERE cle IN ${admin(cles)}`;
+  await admin`DELETE FROM login_attempt WHERE key IN ${admin(cles)}`;
   await admin.end();
 });
 
@@ -70,8 +70,8 @@ describe("Limitation des tentatives de connexion", () => {
   it("ne prolonge pas le blocage quand on s’acharne (les tentatives refusées ne comptent pas)", async () => {
     await tentatives(email("acharne"), ip(10), LIMITES.parPaire + 20);
     const [{ n }] = await admin`
-      SELECT count(*)::int AS n FROM tentative_connexion
-      WHERE cle = ${cleDeTentative("paire", `${email("acharne")}|${ip(10)}`)}`;
+      SELECT count(*)::int AS n FROM login_attempt
+      WHERE key = ${cleDeTentative("paire", `${email("acharne")}|${ip(10)}`)}`;
     expect(n).toBe(LIMITES.parPaire);
   });
 
@@ -89,16 +89,15 @@ describe("Limitation des tentatives de connexion", () => {
   it("ne compte plus les tentatives sorties de la fenêtre", async () => {
     await tentatives(email("ancienne"), ip(7), LIMITES.parPaire);
     await admin`
-      UPDATE tentative_connexion SET quand = now() - make_interval(mins => ${LIMITES.fenetreMinutes + 1})
-      WHERE cle IN (${cleDeTentative("email", email("ancienne"))}, ${cleDeTentative("paire", `${email("ancienne")}|${ip(7)}`)})`;
+      UPDATE login_attempt SET at = now() - make_interval(mins => ${LIMITES.fenetreMinutes + 1})
+      WHERE key IN (${cleDeTentative("email", email("ancienne"))}, ${cleDeTentative("paire", `${email("ancienne")}|${ip(7)}`)})`;
     expect(await enregistrerTentative(email("ancienne"), ip(7))).toBe(true);
   });
 
   it("ne stocke ni l’adresse e-mail ni l’IP en clair", async () => {
-    const lignes =
-      await admin`SELECT cle FROM tentative_connexion WHERE cle = ${cleDeTentative("email", email("cible"))}`;
+    const lignes = await admin`SELECT key FROM login_attempt WHERE key = ${cleDeTentative("email", email("cible"))}`;
     expect(lignes.length).toBeGreaterThan(0);
-    expect(lignes[0].cle).not.toContain("@");
+    expect(lignes[0].key).not.toContain("@");
   });
 });
 

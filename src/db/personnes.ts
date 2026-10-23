@@ -13,7 +13,7 @@ import { cours, discipline, documentDanseur, inscription, inscriptionCours, lien
 
 const LONGUEUR_MINIMALE = 2;
 const RESULTATS_MAX = 50;
-const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uuid`;
+const ECOLE_COURANTE = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 
 /** Minuscules sans accents, côté base (sans extension) et côté saisie. */
 const ACCENTS = "àâäáãéèêëíìîïóòôöõúùûüçñ";
@@ -45,9 +45,9 @@ export { nomAffiche };
  */
 const idCourant = sql`${personne}.${sql.identifier("id")}`;
 const liees = sql<string[]>`coalesce((
-  SELECT array_agg(coalesce(a.raison_sociale, concat_ws(' ', a.prenom, a.nom)) ORDER BY a.prenom, a.nom)
-  FROM lien l JOIN personne a ON a.id = CASE WHEN l.personne_id = ${idCourant} THEN l.lie_a_id ELSE l.personne_id END
-  WHERE l.personne_id = ${idCourant} OR l.lie_a_id = ${idCourant}
+  SELECT array_agg(coalesce(a.company_name, concat_ws(' ', a.first_name, a.last_name)) ORDER BY a.first_name, a.last_name)
+  FROM relationship l JOIN person a ON a.id = CASE WHEN l.person_id = ${idCourant} THEN l.related_person_id ELSE l.person_id END
+  WHERE l.person_id = ${idCourant} OR l.related_person_id = ${idCourant}
 ), '{}')`;
 
 const colonnesResultat = {
@@ -84,23 +84,23 @@ export type ResultatPersonne = {
  * les deux ordres), raison sociale, e-mail, téléphone (chiffres seuls), sans
  * accents ni majuscules ; null si la saisie est trop courte.
  */
-export function conditionRecherche(saisie: string, alias = "personne"): SQL | null {
+export function conditionRecherche(saisie: string, alias = "person"): SQL | null {
   const texte = normaliser(saisie);
   if (texte.length < LONGUEUR_MINIMALE) return null;
   const motif = contient(texte);
   const col = (c: string) =>
     sql`translate(lower(coalesce(${sql.identifier(alias)}.${sql.identifier(c)}, '')), ${ACCENTS}, ${SANS_ACCENTS})`;
   const conditions: SQL[] = [
-    sql`${col("nom")} LIKE ${motif}`,
-    sql`${col("prenom")} LIKE ${motif}`,
-    sql`${col("raison_sociale")} LIKE ${motif}`,
-    sql`(${col("prenom")} || ' ' || ${col("nom")}) LIKE ${motif}`,
-    sql`(${col("nom")} || ' ' || ${col("prenom")}) LIKE ${motif}`,
+    sql`${col("last_name")} LIKE ${motif}`,
+    sql`${col("first_name")} LIKE ${motif}`,
+    sql`${col("company_name")} LIKE ${motif}`,
+    sql`(${col("first_name")} || ' ' || ${col("last_name")}) LIKE ${motif}`,
+    sql`(${col("last_name")} || ' ' || ${col("first_name")}) LIKE ${motif}`,
     sql`lower(coalesce(${sql.identifier(alias)}.email, '')) LIKE ${motif}`,
   ];
   if (chiffres(texte).length >= 4) {
     conditions.push(
-      sql`regexp_replace(coalesce(${sql.identifier(alias)}.telephone, ''), '[^0-9]', '', 'g') LIKE ${contient(chiffres(texte))}`,
+      sql`regexp_replace(coalesce(${sql.identifier(alias)}.phone, ''), '[^0-9]', '', 'g') LIKE ${contient(chiffres(texte))}`,
     );
   }
   return or(...conditions) ?? null;
@@ -173,8 +173,8 @@ export type FichePersonne = {
 
 /** Présences ou absences d'un danseur aux séances du cours de la ligne. */
 const presences = (danseurId: string, present: boolean) => sql<number>`(
-  SELECT count(*)::int FROM presence p JOIN seance s ON s.id = p.seance_id
-  WHERE s.cours_id = ${cours}.${sql.identifier("id")} AND p.danseur_id = ${danseurId} AND p.present = ${present}
+  SELECT count(*)::int FROM attendance p JOIN lesson s ON s.id = p.lesson_id
+  WHERE s.course_id = ${cours}.${sql.identifier("id")} AND p.student_id = ${danseurId} AND p.present = ${present}
 )`;
 
 export async function lirePersonne(tx: Tx, id: string): Promise<FichePersonne | null> {
@@ -278,7 +278,7 @@ export async function danseursPayables(
       or(
         // Le payeur lui-même seulement s'il est élève : un parent qui paie n'est pas proposé à l'inscription.
         and(eq(personne.id, payeurId), eq(personne.eleve, true)),
-        sql`EXISTS (SELECT 1 FROM lien l WHERE l.personne_id = ${payeurId} AND l.lie_a_id = ${idCourant} AND l.paie_pour)`,
+        sql`EXISTS (SELECT 1 FROM relationship l WHERE l.person_id = ${payeurId} AND l.related_person_id = ${idCourant} AND l.pays_for)`,
       ),
     )
     .orderBy(asc(personne.prenom), asc(personne.nom));

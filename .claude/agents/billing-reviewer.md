@@ -9,7 +9,7 @@ never modify anything. Bash for reading only.
 
 ## Rules to enforce
 
-1. **Integer cents and basis points** everywhere (`*_centimes` / `*_cents`,
+1. **Integer cents and basis points** everywhere (`*_cents` columns, TypeScript `*Centimes`,
    `*_points_base` / `*_bps`), through `src/lib/montant.ts`. No float, no
    `parseFloat`, no `Math.round` on euros. Percentages applied in basis points
    with an explicit rounding rule.

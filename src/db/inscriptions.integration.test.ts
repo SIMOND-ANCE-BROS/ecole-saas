@@ -15,33 +15,33 @@ const suffixe = Math.random().toString(36).slice(2, 8);
 const ids = {} as Record<string, string>;
 
 beforeAll(async () => {
-  [{ id: ids.ecole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École I', ${`i-${suffixe}`}) RETURNING id`;
+  [{ id: ids.ecole }] = await admin`INSERT INTO school (name, slug) VALUES ('École I', ${`i-${suffixe}`}) RETURNING id`;
   const e = ids.ecole;
   [{ id: ids.saison }] =
-    await admin`INSERT INTO saison (ecole_id, libelle, date_debut, date_fin) VALUES (${e}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
+    await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${e}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   [{ id: ids.autreSaison }] =
-    await admin`INSERT INTO saison (ecole_id, libelle, date_debut, date_fin) VALUES (${e}, '2027-2028', '2027-09-01', '2028-06-30') RETURNING id`;
+    await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${e}, '2027-2028', '2027-09-01', '2028-06-30') RETURNING id`;
   for (const [combinaison, prix] of [
     ["{60}", 11000],
     ["{45,60}", 16500],
     ["{60,60}", 18500],
   ] as const) {
-    await admin`INSERT INTO tarif (ecole_id, saison_id, public, periodicite, combinaison, prix_centimes)
+    await admin`INSERT INTO tariff (school_id, season_id, audience, period, combination, price_cents)
       VALUES (${e}, ${ids.saison}, 'enfant', 'trimestre', ${combinaison}::smallint[], ${prix})`;
   }
-  await admin`INSERT INTO reduction (ecole_id, saison_id, code, taux_points_base, seuil_danseurs, publics, cumulable_multi_disciplines)
+  await admin`INSERT INTO discount (school_id, season_id, code, rate_bps, min_students, audiences, combinable_with_multi_discipline)
     VALUES (${e}, ${ids.saison}, 'fratrie', 1000, 2, '{enfant}', false)`;
-  const [site] = await admin`INSERT INTO site (ecole_id, nom, adresse) VALUES (${e}, 'Site', 'Adresse') RETURNING id`;
+  const [site] = await admin`INSERT INTO site (school_id, name, address) VALUES (${e}, 'Site', 'Adresse') RETURNING id`;
   const [salle] =
-    await admin`INSERT INTO salle (ecole_id, site_id, nom) VALUES (${e}, ${site.id}, 'Salle') RETURNING id`;
+    await admin`INSERT INTO room (school_id, site_id, name) VALUES (${e}, ${site.id}, 'Salle') RETURNING id`;
   const [prof] =
-    await admin`INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
+    await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
     VALUES (${e}, 'Prof', 'Test', 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`;
-  const [jazz] = await admin`INSERT INTO discipline (ecole_id, nom) VALUES (${e}, 'Jazz') RETURNING id`;
-  const [classique] = await admin`INSERT INTO discipline (ecole_id, nom) VALUES (${e}, 'Classique') RETURNING id`;
+  const [jazz] = await admin`INSERT INTO discipline (school_id, name) VALUES (${e}, 'Jazz') RETURNING id`;
+  const [classique] = await admin`INSERT INTO discipline (school_id, name) VALUES (${e}, 'Classique') RETURNING id`;
   const cours = async (saisonId: string, disciplineId: string, duree: number, jour: number) =>
     (
-      await admin`INSERT INTO cours (ecole_id, saison_id, discipline_id, salle_id, intervenant_id, jour_semaine, heure_debut, duree_minutes)
+      await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
       VALUES (${e}, ${saisonId}, ${disciplineId}, ${salle.id}, ${prof.id}, ${jour}, '17:00', ${duree}) RETURNING id`
     )[0].id as string;
   ids.jazz60 = await cours(ids.saison, jazz.id, 60, 1);
@@ -49,42 +49,42 @@ beforeAll(async () => {
   ids.classique60 = await cours(ids.saison, classique.id, 60, 3);
   ids.autreSaison60 = await cours(ids.autreSaison, jazz.id, 60, 1);
   [{ id: ids.payeur }] =
-    await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${e}, 'Famille', 'Test') RETURNING id`;
+    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${e}, 'Famille', 'Test') RETURNING id`;
   [{ id: ids.autrePayeur }] =
-    await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${e}, 'Autre', 'Famille') RETURNING id`;
+    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${e}, 'Autre', 'Famille') RETURNING id`;
   [{ id: ids.zoe }] =
-    await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${e}, 'Famille', 'Zoé') RETURNING id`;
+    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${e}, 'Famille', 'Zoé') RETURNING id`;
   [{ id: ids.noe }] =
-    await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${e}, 'Famille', 'Noé') RETURNING id`;
+    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${e}, 'Famille', 'Noé') RETURNING id`;
   [{ id: ids.etranger }] =
-    await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${e}, 'Autre', 'Max') RETURNING id`;
+    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${e}, 'Autre', 'Max') RETURNING id`;
   for (const [payeur, danseur] of [
     [ids.payeur, ids.zoe],
     [ids.payeur, ids.noe],
     [ids.autrePayeur, ids.etranger],
   ]) {
-    await admin`INSERT INTO lien (ecole_id, personne_id, lie_a_id, type, paie_pour) VALUES (${e}, ${payeur}, ${danseur}, 'representant_legal', true)`;
+    await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for) VALUES (${e}, ${payeur}, ${danseur}, 'representant_legal', true)`;
   }
 });
 
 afterAll(async () => {
   for (const t of [
-    "inscription_cours",
-    "inscription",
-    "cours",
-    "lien",
-    "personne",
-    "intervenant",
-    "salle",
+    "enrollment_course",
+    "enrollment",
+    "course",
+    "relationship",
+    "person",
+    "instructor",
+    "room",
     "site",
     "discipline",
-    "reduction",
-    "tarif",
-    "saison",
+    "discount",
+    "tariff",
+    "season",
   ]) {
-    await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id = $1`, [ids.ecole]);
+    await admin.unsafe(`DELETE FROM ${t} WHERE school_id = $1`, [ids.ecole]);
   }
-  await admin`DELETE FROM ecole WHERE id = ${ids.ecole}`;
+  await admin`DELETE FROM school WHERE id = ${ids.ecole}`;
   await admin.end();
 });
 
@@ -110,19 +110,19 @@ describe("Inscription", () => {
     const r = await enregistrer(enfant([ids.zoe], [ids.jazz60]));
     if (!r.ok) throw new Error(r.message);
     const [ligne] =
-      await admin`SELECT public, periodicite, prix_brut_centimes, remise_centimes, prix_net_centimes, reductions, tarif_id
-      FROM inscription WHERE id = ${r.id}`;
+      await admin`SELECT audience, period, gross_price_cents, discount_cents, net_price_cents, discounts, tariff_id
+      FROM enrollment WHERE id = ${r.id}`;
     expect(ligne).toMatchObject({
-      public: "enfant",
-      periodicite: "trimestre",
-      prix_brut_centimes: 11000,
-      remise_centimes: 0,
-      prix_net_centimes: 11000,
-      reductions: [],
+      audience: "enfant",
+      period: "trimestre",
+      gross_price_cents: 11000,
+      discount_cents: 0,
+      net_price_cents: 11000,
+      discounts: [],
     });
-    expect(ligne.tarif_id).toBeTruthy();
-    const coursLies = await admin`SELECT danseur_id, cours_id FROM inscription_cours WHERE inscription_id = ${r.id}`;
-    expect(coursLies).toEqual([{ danseur_id: ids.zoe, cours_id: ids.jazz60 }]);
+    expect(ligne.tariff_id).toBeTruthy();
+    const coursLies = await admin`SELECT student_id, course_id FROM enrollment_course WHERE enrollment_id = ${r.id}`;
+    expect(coursLies).toEqual([{ student_id: ids.zoe, course_id: ids.jazz60 }]);
   });
 
   it("applique la fratrie avec l’inscription déjà enregistrée, et le signale pour elle", async () => {
@@ -136,9 +136,8 @@ describe("Inscription", () => {
   it("enregistre le second enfant avec la fratrie (deux cours de la même discipline)", async () => {
     const r = await enregistrer(enfant([ids.noe], [ids.jazz45, ids.jazz60]));
     if (!r.ok) throw new Error(r.message);
-    const [ligne] =
-      await admin`SELECT prix_brut_centimes, remise_centimes, reductions FROM inscription WHERE id = ${r.id}`;
-    expect(ligne).toMatchObject({ prix_brut_centimes: 16500, remise_centimes: 1650, reductions: ["fratrie"] });
+    const [ligne] = await admin`SELECT gross_price_cents, discount_cents, discounts FROM enrollment WHERE id = ${r.id}`;
+    expect(ligne).toMatchObject({ gross_price_cents: 16500, discount_cents: 1650, discounts: ["fratrie"] });
   });
 
   it("liste les inscriptions payées par la personne pour la saison", async () => {
@@ -165,11 +164,11 @@ describe("Refus", () => {
   });
 
   it("refuse une combinaison absente de la grille, sans rien enregistrer", async () => {
-    const [{ avant }] = await admin`SELECT count(*)::int AS avant FROM inscription WHERE ecole_id = ${ids.ecole}`;
+    const [{ avant }] = await admin`SELECT count(*)::int AS before FROM enrollment WHERE school_id = ${ids.ecole}`;
     const r = await enregistrer(enfant([ids.zoe], [ids.jazz60, ids.classique60, ids.jazz45]));
     expect(r).toMatchObject({ ok: false });
     if (!r.ok) expect(r.message).toContain("prix à saisir par l’accueil");
-    const [{ apres }] = await admin`SELECT count(*)::int AS apres FROM inscription WHERE ecole_id = ${ids.ecole}`;
+    const [{ apres }] = await admin`SELECT count(*)::int AS after FROM enrollment WHERE school_id = ${ids.ecole}`;
     expect(apres).toBe(avant);
   });
 });

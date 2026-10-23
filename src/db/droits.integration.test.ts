@@ -48,7 +48,7 @@ describe("Droits de app_user", () => {
     // Même rôle que les migrations (DATABASE_ADMIN_URL), table témoin annulée.
     const resultat = await admin
       .begin(async (tx) => {
-        await tx.unsafe("CREATE TABLE temoin_droits (id bigserial PRIMARY KEY, ecole_id uuid)");
+        await tx.unsafe("CREATE TABLE temoin_droits (id bigserial PRIMARY KEY, school_id uuid)");
         throw new Annulation(await sansDroits(tx));
       })
       .catch((e: unknown) => {

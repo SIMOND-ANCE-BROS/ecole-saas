@@ -30,12 +30,13 @@ let autreEcole: string;
 const ids: Record<string, string> = {};
 
 beforeAll(async () => {
-  [{ id: ecole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École A', ${`ra-${suffixe}`}) RETURNING id`;
-  [{ id: autreEcole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École B', ${`rb-${suffixe}`}) RETURNING id`;
+  [{ id: ecole }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`ra-${suffixe}`}) RETURNING id`;
+  [{ id: autreEcole }] =
+    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`rb-${suffixe}`}) RETURNING id`;
   await admin`INSERT INTO "user" (id, name, email) VALUES (${direction}, 'Direction Test', ${`${direction}@exemple.test`})`;
-  await admin`INSERT INTO membre (ecole_id, user_id, role) VALUES (${ecole}, ${direction}, 'direction'), (${autreEcole}, ${direction}, 'direction')`;
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${ecole}, ${direction}, 'direction'), (${autreEcole}, ${direction}, 'direction')`;
   const [p] =
-    await admin`INSERT INTO personne (ecole_id, nom, prenom) VALUES (${ecole}, 'Martin', 'Sophie') RETURNING id`;
+    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${ecole}, 'Martin', 'Sophie') RETURNING id`;
   const r = await avecEcole(ecole, (tx) =>
     encaisser(tx, direction, p.id, [
       {
@@ -87,19 +88,19 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await admin.begin(async (t) => {
-    await t`DELETE FROM remise WHERE ecole_id IN (${ecole}, ${autreEcole})`;
-    await t`ALTER TABLE paiement DISABLE TRIGGER paiement_inalterable`;
-    await t`ALTER TABLE journal DISABLE TRIGGER journal_ajout_seul`;
-    await t`DELETE FROM journal WHERE ecole_id IN (${ecole}, ${autreEcole})`;
-    await t`DELETE FROM paiement WHERE ecole_id IN (${ecole}, ${autreEcole}) AND corrige_id IS NOT NULL`;
-    await t`DELETE FROM paiement WHERE ecole_id IN (${ecole}, ${autreEcole})`;
-    await t`ALTER TABLE paiement ENABLE TRIGGER paiement_inalterable`;
-    await t`ALTER TABLE journal ENABLE TRIGGER journal_ajout_seul`;
+    await t`DELETE FROM bank_deposit WHERE school_id IN (${ecole}, ${autreEcole})`;
+    await t`ALTER TABLE payment DISABLE TRIGGER payment_immutable`;
+    await t`ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only`;
+    await t`DELETE FROM audit_log WHERE school_id IN (${ecole}, ${autreEcole})`;
+    await t`DELETE FROM payment WHERE school_id IN (${ecole}, ${autreEcole}) AND corrects_id IS NOT NULL`;
+    await t`DELETE FROM payment WHERE school_id IN (${ecole}, ${autreEcole})`;
+    await t`ALTER TABLE payment ENABLE TRIGGER payment_immutable`;
+    await t`ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only`;
   });
-  for (const t of ["personne", "membre"])
-    await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id IN ($1, $2)`, [ecole, autreEcole]);
+  for (const t of ["person", "member"])
+    await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [ecole, autreEcole]);
   await admin`DELETE FROM "user" WHERE id = ${direction}`;
-  await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
+  await admin`DELETE FROM school WHERE id IN (${ecole}, ${autreEcole})`;
   await admin.end();
 });
 
@@ -154,11 +155,11 @@ describe("remises en banque", () => {
 
   it("un paiement ne peut figurer que dans une seule remise (contrainte en base)", async () => {
     const [{ id: autre }] =
-      await admin`INSERT INTO remise (ecole_id, date, moyen) VALUES (${ecole}, ${AUJOURDHUI}, 'cheque') RETURNING id`;
+      await admin`INSERT INTO bank_deposit (school_id, date, method) VALUES (${ecole}, ${AUJOURDHUI}, 'cheque') RETURNING id`;
     await expect(
-      admin`INSERT INTO remise_paiement (ecole_id, remise_id, paiement_id) VALUES (${ecole}, ${autre}, ${ids.cheque})`,
+      admin`INSERT INTO bank_deposit_payment (school_id, bank_deposit_id, payment_id) VALUES (${ecole}, ${autre}, ${ids.cheque})`,
     ).rejects.toThrow();
-    await admin`DELETE FROM remise WHERE id = ${autre}`;
+    await admin`DELETE FROM bank_deposit WHERE id = ${autre}`;
   });
 
   it("bordereau, liste et journal des encaissements", async () => {
@@ -183,7 +184,7 @@ describe("remises en banque", () => {
   it("annuler une remise rend ses chèques à remettre et laisse une trace", async () => {
     expect((await avecEcole(ecole, (tx) => annulerRemise(tx, direction, remiseCheques))).ok).toBe(true);
     expect((await aRemettre()).cheque.map((p) => p.id)).toEqual([ids.cheque]);
-    const [t] = await admin`SELECT action FROM journal WHERE ligne_id = ${remiseCheques} AND action = 'delete'`;
+    const [t] = await admin`SELECT action FROM audit_log WHERE row_id = ${remiseCheques} AND action = 'delete'`;
     expect(t?.action).toBe("delete");
   });
 
