@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { type PaymentRow, MOYENS } from "@/db/payments";
+import { type PaymentRow, PAYMENT_METHODS } from "@/db/payments";
 import type { Balance } from "@/domain/payments/balance";
 import { formatEuros } from "@/lib/money";
 import { CorrectPayment } from "./correct-payment";
@@ -98,7 +98,7 @@ export function PaymentsSection({
                 return (
                   <tr key={p.id} className={p.amountCents < 0 ? "text-doux" : ""}>
                     <td className="whitespace-nowrap">{day(p.date)}</td>
-                    <td>{MOYENS[p.method]}</td>
+                    <td>{PAYMENT_METHODS[p.method]}</td>
                     <td>{[p.reference, p.issuer].filter(Boolean).join(", ") || "—"}</td>
                     <td className="text-right tabular-nums whitespace-nowrap">{formatEuros(p.amountCents)}</td>
                     <td className="whitespace-nowrap">

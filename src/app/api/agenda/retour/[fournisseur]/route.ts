@@ -4,7 +4,7 @@ import { exchangeCode, PROVIDERS, type Provider, credentials, verifyState } from
 import { withSchool } from "@/db";
 import { saveConnection } from "@/db/calendar-connections";
 import { encrypt } from "@/lib/encryption";
-import { publicAddress, COOKIE_OAUTH, redirectionOAuth } from "@/lib/public-calendar";
+import { publicAddress, COOKIE_OAUTH, oauthRedirect } from "@/lib/public-calendar";
 import { syncCalendar } from "@/lib/calendar-sync";
 
 /**
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/agenda/retou
     const { refreshToken: refreshToken, account: account } = await exchangeCode(f, id, {
       code,
       verifier: cookie.verifier,
-      redirection: redirectionOAuth(f),
+      redirectUri: oauthRedirect(f),
     });
     // The instructor may have been deactivated between departure and return: nothing is saved then.
     const saves = await withSchool(state.schoolId, (tx) =>

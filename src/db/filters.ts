@@ -1,6 +1,6 @@
 import { and, or, type SQL, sql } from "drizzle-orm";
 import {
-  ACCENTS,
+  DIACRITICS,
   type Condition,
   type ColumnDef,
   type Filter,
@@ -22,7 +22,7 @@ import {
 export type ColumnExpression = { sql: SQL; list?: boolean };
 
 const normalize = (x: SQL) =>
-  sql`regexp_replace(btrim(translate(lower(${x}), ${ACCENTS}, ${SANS_ACCENTS})), '\\s+', ' ', 'g')`;
+  sql`regexp_replace(btrim(translate(lower(${x}), ${DIACRITICS}, ${SANS_ACCENTS})), '\\s+', ' ', 'g')`;
 
 function condition(c: Condition, def: ColumnDef, e: ColumnExpression): SQL | undefined {
   const v = normalizedValue(c, def.type);

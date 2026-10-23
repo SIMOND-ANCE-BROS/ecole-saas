@@ -22,28 +22,28 @@ const NO_SEASON_MESSAGE = "Aucune saison n’est paramétrée.";
 const WITHOUT_SEASON: Preview = { status: "invalide", message: NO_SEASON_MESSAGE };
 
 /** Price preview, recomputed on the server on every change to the input. */
-export async function preview(saisie: FormInput): Promise<Preview> {
+export async function preview(entry: FormInput): Promise<Preview> {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
-  const donnees = validInput.safeParse(saisie);
+  const donnees = validInput.safeParse(entry);
   if (!donnees.success) return { status: "invalide", message: "Saisie invalide." };
-  const { payerId: payerId, ...reste } = donnees.data;
+  const { payerId: payerId, ...rest } = donnees.data;
   return withSchool(schoolId, async (tx) => {
     const season = await currentSeason(tx, todayInParis());
-    return season ? enrollmentPreview(tx, payerId, season.id, reste) : WITHOUT_SEASON;
+    return season ? enrollmentPreview(tx, payerId, season.id, rest) : WITHOUT_SEASON;
   });
 }
 
 /** Saves the enrollment; when refused, returns the message to display. */
-export async function enroll(saisie: FormInput): Promise<{ message: string }> {
+export async function enroll(entry: FormInput): Promise<{ message: string }> {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
-  const donnees = validInput.safeParse(saisie);
+  const donnees = validInput.safeParse(entry);
   if (!donnees.success) return { message: "Saisie invalide." };
-  const { payerId: payerId, ...reste } = donnees.data;
+  const { payerId: payerId, ...rest } = donnees.data;
   const result = await withSchool(schoolId, async (tx) => {
     const season = await currentSeason(tx, todayInParis());
     if (!season) return { ok: false as const, message: NO_SEASON_MESSAGE };
-    return saveEnrollment(tx, payerId, season.id, reste);
+    return saveEnrollment(tx, payerId, season.id, rest);
   });
   if (!result.ok) return { message: result.message };
-  redirect(`/eleves/${reste.studentIds[0]}?inscription=enregistree`);
+  redirect(`/eleves/${rest.studentIds[0]}?inscription=enregistree`);
 }

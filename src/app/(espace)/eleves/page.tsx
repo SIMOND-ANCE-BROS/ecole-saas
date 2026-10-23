@@ -20,7 +20,7 @@ export const metadata: Metadata = { title: "Élèves" };
 export default async function StudentsPage({ searchParams }: PageProps<"/eleves">) {
   const { schoolId: schoolId, userId } = await requireRole("direction", "accueil");
   const { q, f, mode, sort, order } = await searchParams;
-  const saisie = typeof q === "string" ? q.trim() : "";
+  const entry = typeof q === "string" ? q.trim() : "";
   const filter = readFilter(f, mode, STUDENT_COLUMNS);
   const currentSort = readSort(sort, order, STUDENT_COLUMNS);
   const filtering = filter.conditions.length > 0;
@@ -33,19 +33,19 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
   } = await withSchool(schoolId, async (tx) => {
     const season = await currentSeason(tx, today);
     return {
-      students: await listStudents(tx, saisie, { filter, currentSort, today, seasonId: season?.id }),
+      students: await listStudents(tx, entry, { filter, currentSort, today, seasonId: season?.id }),
       courses: season ? await seasonCourseLabels(tx, season.id) : [],
-      contacts: saisie ? await listContacts(tx, saisie) : [],
+      contacts: entry ? await listContacts(tx, entry) : [],
       layout: await readPreference(tx, userId, "eleves"),
     };
   });
   const emptyMessage =
-    saisie.length === 1
+    entry.length === 1
       ? "Tapez au moins deux caractères."
       : filtering
         ? "Aucun élève ne correspond à ces filtres."
-        : saisie
-          ? `Aucun élève ne correspond à « ${saisie} ».`
+        : entry
+          ? `Aucun élève ne correspond à « ${entry} ».`
           : "Aucun élève pour l’instant.";
   const plural = (n: number, mot: string) => `${n} ${mot}${n > 1 ? "s" : ""}`;
 
@@ -55,11 +55,11 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
         <div>
           <h1 className="titre-page">Élèves</h1>
           <p className="text-sm text-doux" aria-live="polite">
-            {saisie ? `${plural(students.length, "élève")} pour « ${saisie} »` : plural(students.length, "élève")}
+            {entry ? `${plural(students.length, "élève")} pour « ${entry} »` : plural(students.length, "élève")}
             {filtering && " avec ces filtres"}
             {students.length >= MAX_RESULTS &&
               ` : seuls les ${MAX_RESULTS} premiers sont affichés, précisez la recherche ou filtrez`}
-            {!saisie && !filtering && (
+            {!entry && !filtering && (
               <span className="hidden sm:inline">. Recherche par nom, téléphone, ou nom d’un parent (Ctrl K).</span>
             )}
           </p>
@@ -78,11 +78,11 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
             caption="Élèves"
             columns={STUDENT_COLUMNS}
             layout={layout}
-            relationship="nom"
+            linkColumn="nom"
             vide={emptyMessage}
             choice={{ cours }}
             emptyAction={
-              !saisie && (
+              !entry && (
                 <Link href="/eleves/nouveau" className="bouton-principal">
                   Nouvel élève
                 </Link>
@@ -91,7 +91,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
             rows={students.map((e) => ({
               id: e.id,
               href: `/eleves/${e.id}`,
-              cellules: {
+              cells: {
                 nom: [e.firstName, e.name].filter(Boolean).join(" "),
                 age: e.birthDate ? ageAt(e.birthDate, today) : null,
                 responsables: e.guardians,
@@ -138,7 +138,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
         {contacts.length > 0 && (
           <section aria-labelledby="contacts-trouves" className="mt-6 flex flex-col gap-2">
             <h2 id="contacts-trouves" className="text-base font-semibold">
-              Contacts pour « {saisie} »
+              Contacts pour « {entry} »
             </h2>
             <ul className="panneau divide-y divide-bordure text-sm">
               {contacts.map((c) => (

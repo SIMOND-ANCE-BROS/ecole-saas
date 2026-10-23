@@ -31,7 +31,7 @@ describe("configuration", () => {
     const { challenge: challenge } = pkceChallenge();
     const url = new URL(
       authorizationUrl("google", "client", {
-        redirection: "https://app.test/retour",
+        redirectUri: "https://app.test/retour",
         state: "e",
         challenge: challenge,
       }),
@@ -42,7 +42,7 @@ describe("configuration", () => {
     expect(url.searchParams.get("access_type")).toBe("offline");
     const ms = new URL(
       authorizationUrl("microsoft", "client", {
-        redirection: "https://app.test/retour",
+        redirectUri: "https://app.test/retour",
         state: "e",
         challenge: challenge,
       }),
@@ -72,7 +72,7 @@ describe("jetons", () => {
     const r = await exchangeCode(
       "google",
       id,
-      { code: "c", verifier: "v", redirection: "https://app.test/retour" },
+      { code: "c", verifier: "v", redirectUri: "https://app.test/retour" },
       async (_u, init) => {
         body = String(init?.body);
         return response(200, {

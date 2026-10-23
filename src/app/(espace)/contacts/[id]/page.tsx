@@ -3,13 +3,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { readContact } from "@/db/students";
-import { enrollmentsPayeesBy } from "@/db/enrollments";
+import { enrollmentsPaidBy } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
 import { nomAffiche } from "@/db/people";
 import { currentSeason } from "@/db/schedule";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
-import { Bandeau, FactureesEnrollments, Telephone } from "../../_people/sections";
+import { Banner, BilledEnrollments, Telephone } from "../../_people/sections";
 import { PaymentsSection } from "../../_people/payments-section";
 import { BecomeStudent } from "./become-student";
 
@@ -34,13 +34,13 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
     return {
       contact,
       season: season,
-      facturees: season ? await enrollmentsPayeesBy(tx, contact.id, season.id) : [],
+      billed: season ? await enrollmentsPaidBy(tx, contact.id, season.id) : [],
       balance: await balanceOf(tx, contact.id, today),
       payments: await paymentsOf(tx, contact.id),
     };
   });
   if (!donnees) notFound();
-  const { contact: c, season: season, facturees, balance: balance, payments: payments } = donnees;
+  const { contact: c, season: season, billed, balance: balance, payments: payments } = donnees;
   const name = nomAffiche(c);
   const firstName = c.firstName ?? name;
   const roles = (e: (typeof c.students)[number]) =>
@@ -55,7 +55,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
         </Link>
         <span className="text-doux"> / {name}</span>
       </nav>
-      <Bandeau texte={collected(encaisse) ?? BANNERS[String(enregistre)]} />
+      <Banner text={collected(encaisse) ?? BANNERS[String(enregistre)]} />
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -124,7 +124,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
               </ul>
             )}
           </section>
-          {season && <FactureesEnrollments enrollments={facturees} season={season.label} />}
+          {season && <BilledEnrollments enrollments={billed} season={season.label} />}
           <PaymentsSection
             payerId={c.id}
             balance={balance}

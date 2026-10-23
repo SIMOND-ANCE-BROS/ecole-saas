@@ -17,9 +17,9 @@ import { requireRole } from "@/lib/session";
 export type Refusal = { message: string; errors: Partial<Record<string, string>> };
 
 /** Creates (null id) or updates a course of the current season; management only. */
-export async function saveCourse(id: string | null, saisie: unknown): Promise<Refusal> {
+export async function saveCourse(id: string | null, entry: unknown): Promise<Refusal> {
   const { schoolId: schoolId } = await requireRole("direction");
-  const donnees = validCourseInput.safeParse(saisie);
+  const donnees = validCourseInput.safeParse(entry);
   if (!donnees.success) {
     const errors: Refusal["errors"] = {};
     for (const p of donnees.error.issues) errors[String(p.path[0])] ??= p.message;

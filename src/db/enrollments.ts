@@ -111,12 +111,12 @@ async function validate(
   tx: Tx,
   payerId: string,
   seasonId: string,
-  saisie: EnrollmentInput,
+  entry: EnrollmentInput,
 ): Promise<string | ChosenCourse[]> {
-  const studentIds = [...new Set(saisie.studentIds)];
-  const courseIds = [...new Set(saisie.courseIds)];
-  if (saisie.audience === "couple" && studentIds.length !== 2) return "Un couple réunit deux danseurs.";
-  if (saisie.audience !== "couple" && studentIds.length !== 1)
+  const studentIds = [...new Set(entry.studentIds)];
+  const courseIds = [...new Set(entry.courseIds)];
+  if (entry.audience === "couple" && studentIds.length !== 2) return "Un couple réunit deux danseurs.";
+  if (entry.audience !== "couple" && studentIds.length !== 1)
     return "Une inscription individuelle concerne un seul danseur.";
   if (![...studentIds, ...courseIds].every((id) => uuid.safeParse(id).success)) return "Saisie invalide.";
 
@@ -150,9 +150,9 @@ export async function enrollmentPreview(
   tx: Tx,
   payerId: string,
   seasonId: string,
-  saisie: EnrollmentInput,
+  entry: EnrollmentInput,
 ): Promise<Preview> {
-  const chosenCourses = await validate(tx, payerId, seasonId, saisie);
+  const chosenCourses = await validate(tx, payerId, seasonId, entry);
   if (typeof chosenCourses === "string") return { status: "invalide", message: chosenCourses };
 
   const grid = await loadGrid(tx, seasonId);
@@ -165,9 +165,9 @@ export async function enrollmentPreview(
       ...existing,
       {
         reference: NEW,
-        studentIds: saisie.studentIds,
-        audience: saisie.audience,
-        period: saisie.period,
+        studentIds: entry.studentIds,
+        audience: entry.audience,
+        period: entry.period,
         courses: chosenCourses,
       },
     ],
@@ -190,9 +190,9 @@ export async function saveEnrollment(
   tx: Tx,
   payerId: string,
   seasonId: string,
-  saisie: EnrollmentInput,
+  entry: EnrollmentInput,
 ): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
-  const preview = await enrollmentPreview(tx, payerId, seasonId, saisie);
+  const preview = await enrollmentPreview(tx, payerId, seasonId, entry);
   if (preview.status === "invalide") return { ok: false, message: preview.message };
   const r = preview.newEnrollment;
   if (r.status === "erreur") return { ok: false, message: r.error.message };
@@ -204,16 +204,16 @@ export async function saveEnrollment(
       payerId: payerId,
       seasonId: seasonId,
       tariffId: r.tariffRowId,
-      audience: saisie.audience,
-      period: saisie.period,
+      audience: entry.audience,
+      period: entry.period,
       grossPriceCents: r.grossPriceCents,
       discountCents: r.discountCents,
       discounts: r.discounts.filter((d) => d.status === "appliquee").map((d) => d.code),
     })
     .returning({ id: enrollment.id });
 
-  const studentIds = [...new Set(saisie.studentIds)];
-  const courseIds = [...new Set(saisie.courseIds)];
+  const studentIds = [...new Set(entry.studentIds)];
+  const courseIds = [...new Set(entry.courseIds)];
   if (courseIds.length > 0) {
     await tx.insert(enrollmentCourse).values(
       studentIds.flatMap((studentId) =>
@@ -239,7 +239,7 @@ export type PaidEnrollment = {
 };
 
 /** Active enrollments paid by a person for the season, sorted by student. */
-export async function enrollmentsPayeesBy(tx: Tx, payerId: string, seasonId: string): Promise<PaidEnrollment[]> {
+export async function enrollmentsPaidBy(tx: Tx, payerId: string, seasonId: string): Promise<PaidEnrollment[]> {
   const rows = await tx
     .select({
       id: enrollment.id,

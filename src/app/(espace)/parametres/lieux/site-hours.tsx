@@ -21,7 +21,7 @@ export function SiteHours({ siteId, name: name, hours: hours }: { siteId: string
       }),
     ) as Record<number, Day>;
   const [days, setDays] = useState(initial);
-  const [message, setMessage] = useState<{ ok: boolean; texte: string } | null>(null);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [inProgress, startTransition] = useTransition();
   const updated = (j: number, v: Partial<Day>) => setDays({ ...days, [j]: { ...days[j], ...v } });
   const open = Object.values(days).filter((j) => j.open).length;
@@ -40,12 +40,12 @@ export function SiteHours({ siteId, name: name, hours: hours }: { siteId: string
         className="flex flex-col gap-2 px-3 pb-3"
         onSubmit={(e) => {
           e.preventDefault();
-          const saisie = [1, 2, 3, 4, 5, 6, 7]
+          const entry = [1, 2, 3, 4, 5, 6, 7]
             .filter((j) => days[j].open)
             .map((j) => ({ weekday: j, opening: days[j].opening, closure: days[j].closure }));
           startTransition(async () => {
-            const r = await changeHours(siteId, saisie);
-            setMessage(r.message ? { ok: false, texte: r.message } : { ok: true, texte: "Horaires enregistrés." });
+            const r = await changeHours(siteId, entry);
+            setMessage(r.message ? { ok: false, text: r.message } : { ok: true, text: "Horaires enregistrés." });
           });
         }}
       >
@@ -124,7 +124,7 @@ export function SiteHours({ siteId, name: name, hours: hours }: { siteId: string
             </button>
           )}
           <span role="status" className={`text-sm ${message?.ok === false ? "text-erreur" : "text-doux"}`}>
-            {message?.texte}
+            {message?.text}
           </span>
         </div>
       </form>

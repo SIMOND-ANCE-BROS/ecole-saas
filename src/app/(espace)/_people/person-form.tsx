@@ -43,7 +43,7 @@ export function PersonForm({ person: person, section: section, proposedName: pro
   const updated = (field: keyof typeof v) => (e: { target: { value: string } }) =>
     setV({ ...v, [field]: e.target.value });
 
-  const saisie = {
+  const entry = {
     ...v,
     companyName: pro ? v.companyName : "",
     siren: pro ? v.siren : "",
@@ -52,7 +52,7 @@ export function PersonForm({ person: person, section: section, proposedName: pro
   const student = section === "eleves";
   const send = (confirmed: boolean) =>
     startTransition(async () =>
-      setRefusal(person ? await updateIdentity(person.id, saisie, section) : await createContact(saisie, confirmed)),
+      setRefusal(person ? await updateIdentity(person.id, entry, section) : await createContact(entry, confirmed)),
     );
 
   const field = (name: keyof typeof v, label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (

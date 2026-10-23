@@ -62,7 +62,7 @@ const amount = (c: number) =>
   `${c < 0 ? "-" : ""}${Math.floor(Math.abs(c) / 100)},${String(Math.abs(c) % 100).padStart(2, "0")}`;
 const dateFr = (iso: string | null) => (iso ? iso.split("-").reverse().join("/") : "");
 /** Text cell: quoted if needed, and never interpreted as a formula by a spreadsheet. */
-function texte(v: string | null): string {
+function text(v: string | null): string {
   let t = v ?? "";
   if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`;
   return /[;"\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
@@ -74,11 +74,11 @@ export function toCsv(rows: ExportRow[]): string {
   const body = rows.map((l) =>
     [
       dateFr(l.date),
-      texte(l.payer),
-      texte(l.method),
+      text(l.payer),
+      text(l.method),
       amount(l.amountCents),
-      texte(l.reference),
-      texte(l.issuer),
+      text(l.reference),
+      text(l.issuer),
       dateFr(l.plannedPayment),
       dateFr(l.deposit),
     ].join(";"),

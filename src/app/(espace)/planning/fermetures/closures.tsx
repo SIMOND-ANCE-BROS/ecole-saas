@@ -16,13 +16,13 @@ type Props = { closures: Closure[]; seasonStart: string; seasonEnd: string };
 
 export function ClosuresManagement({ closures: closures, seasonStart: seasonStart, seasonEnd: seasonEnd }: Props) {
   const [v, setV] = useState({ label: "", start: "", end: "" });
-  const [message, setMessage] = useState<{ texte: string; error: boolean } | null>(null);
+  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [inProgress, startTransition] = useTransition();
 
   const act = (action: () => Promise<{ message: string | null }>, success: string, after?: () => void) =>
     startTransition(async () => {
       const { message: error } = await action();
-      setMessage(error ? { texte: error, error: true } : { texte: success, error: false });
+      setMessage(error ? { text: error, error: true } : { text: success, error: false });
       if (!error) after?.();
     });
 
@@ -91,7 +91,7 @@ export function ClosuresManagement({ closures: closures, seasonStart: seasonStar
 
       {message && (
         <p role={message.error ? "alert" : "status"} className={`text-sm ${message.error ? "text-erreur" : ""}`}>
-          {message.texte}
+          {message.text}
         </p>
       )}
 

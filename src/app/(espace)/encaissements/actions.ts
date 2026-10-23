@@ -8,9 +8,9 @@ import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 
 /** Creates a bank deposit (front desk and management) then opens its deposit slip. */
-export async function deposit(saisie: unknown): Promise<{ message: string }> {
+export async function deposit(entry: unknown): Promise<{ message: string }> {
   const { schoolId: schoolId, userId } = await requireRole("direction", "accueil");
-  const r = await withSchool(schoolId, (tx) => createDeposit(tx, userId, saisie as never, todayInParis()));
+  const r = await withSchool(schoolId, (tx) => createDeposit(tx, userId, entry as never, todayInParis()));
   if (!r.ok) return { message: r.message };
   revalidatePath("/encaissements");
   redirect(`/encaissements/remises/${r.id}?cree=1`);

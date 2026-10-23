@@ -1,5 +1,5 @@
 import { withSchool } from "@/db";
-import { MOYENS, type Method } from "@/db/payments";
+import { PAYMENT_METHODS, type Method } from "@/db/payments";
 import { paymentLog } from "@/db/deposits";
 import { toCsv } from "@/domain/payments/deposits";
 import { validDate } from "@/domain/schedule/week";
@@ -14,13 +14,13 @@ export async function GET(query: Request) {
   const du = validDate(p.get("du")) ?? today;
   const au = validDate(p.get("au")) ?? today;
   const m = p.get("moyen");
-  const method = m && m in MOYENS ? (m as Method) : null;
+  const method = m && m in PAYMENT_METHODS ? (m as Method) : null;
   const rows = await withSchool(schoolId, (tx) => paymentLog(tx, du, au, method));
   const csv = toCsv(
     rows.map((l) => ({
       date: l.date,
       payer: l.payer,
-      method: MOYENS[l.method],
+      method: PAYMENT_METHODS[l.method],
       amountCents: l.amountCents,
       reference: l.reference,
       issuer: l.issuer,

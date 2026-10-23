@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { Siblings as RegleFratrie, LessonPackRow, GridRow, Period, Public } from "@/db/tariffs";
+import type { Siblings as SiblingsRule, LessonPackRow, GridRow, Period, Public } from "@/db/tariffs";
 import { combinationLabel } from "@/domain/tariff/compute";
 import { formatEuros, parseEuros } from "@/lib/money";
 import { lessonPack, cellPrice, siblingsRule, removeLessonPack } from "../actions";
@@ -17,7 +17,7 @@ const PERIODS: [Period, string][] = [
   ["annee", "Année"],
   ["unite", "À l’unité"],
 ];
-const DUREES = [30, 45, 60, 75, 90, 120];
+const DURATIONS = [30, 45, 60, 75, 90, 120];
 
 /** Cents → euro input (« 110 », « 112,50 »), without floating-point numbers. */
 const inEuros = (c: number) => `${Math.trunc(c / 100)}${c % 100 ? `,${String(c % 100).padStart(2, "0")}` : ""}`;
@@ -242,7 +242,7 @@ export function Grid({
           <div className="flex flex-col gap-1">
             <label htmlFor="duree">Cours de</label>
             <select id="duree" className="champ" value={duration} onChange={(e) => setDuration(e.target.value)}>
-              {DUREES.map((d) => (
+              {DURATIONS.map((d) => (
                 <option key={d} value={d}>
                   {combinationLabel([d])}
                 </option>
@@ -322,7 +322,7 @@ export function Siblings({
   siblings: siblings,
 }: {
   seasonId: string;
-  siblings: RegleFratrie | null;
+  siblings: SiblingsRule | null;
 }) {
   const [v, setV] = useState({
     active: siblings !== null,
@@ -332,14 +332,14 @@ export function Siblings({
     audiences: siblings?.audiences ?? (["enfant"] as Public[]),
     combinable: siblings?.combinableWithMultiDiscipline ?? false,
   });
-  const [message, setMessage] = useState<{ texte: string; error: boolean } | null>(null);
+  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [inProgress, startTransition] = useTransition();
 
   const save = () =>
     startTransition(async () => {
       // Percentage entered as « 10 » or « 12,5 »: in basis points (1000 = 10 %), without floating-point numbers.
       const nombre = parseEuros(v.value);
-      if (v.active && nombre === null) return setMessage({ texte: "Valeur invalide.", error: true });
+      if (v.active && nombre === null) return setMessage({ text: "Valeur invalide.", error: true });
       const r = await siblingsRule(
         seasonId,
         v.active
@@ -352,7 +352,7 @@ export function Siblings({
             }
           : null,
       );
-      setMessage(r.message ? { texte: r.message, error: true } : { texte: "Réduction enregistrée.", error: false });
+      setMessage(r.message ? { text: r.message, error: true } : { text: "Réduction enregistrée.", error: false });
     });
 
   return (
@@ -438,7 +438,7 @@ export function Siblings({
       </button>
       {message && (
         <p role={message.error ? "alert" : "status"} className={message.error ? "text-erreur" : ""}>
-          {message.texte}
+          {message.text}
         </p>
       )}
     </section>

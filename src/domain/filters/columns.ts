@@ -45,9 +45,9 @@ export const INSTRUCTOR_COLUMNS: ColumnDef[] = [
 ];
 
 /** Lists whose column layout is saved per member (#89). */
-export const LISTES = {
+export const LISTS = {
   eleves: STUDENT_COLUMNS,
   contacts: CONTACT_COLUMNS,
   intervenants: INSTRUCTOR_COLUMNS,
 } as const;
-export type List = keyof typeof LISTES;
+export type List = keyof typeof LISTS;

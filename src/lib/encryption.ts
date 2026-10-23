@@ -12,10 +12,10 @@ function key(): Buffer {
   return raw;
 }
 
-export function encrypt(texte: string): string {
+export function encrypt(text: string): string {
   const iv = randomBytes(12);
   const encryptor = createCipheriv("aes-256-gcm", key(), iv);
-  const donnees = Buffer.concat([encryptor.update(texte, "utf8"), encryptor.final()]);
+  const donnees = Buffer.concat([encryptor.update(text, "utf8"), encryptor.final()]);
   return [
     "v1",
     iv.toString("base64url"),

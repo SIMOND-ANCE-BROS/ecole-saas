@@ -22,13 +22,13 @@ export type FormState = {
   values: Record<string, string> | null;
 };
 
-const texte = (f: FormData, name: string) => String(f.get(name) ?? "");
+const text = (f: FormData, name: string) => String(f.get(name) ?? "");
 
 /** Creates (null id) or updates an instructor; management only. */
 export async function saveInstructor(id: string | null, state: FormState, f: FormData): Promise<FormState> {
   const { schoolId: schoolId } = await requireRole("direction");
   const values = Object.fromEntries(
-    ["firstName", "name", "email", "status", "siren", "vatRegime", "payMode", "tariff"].map((n) => [n, texte(f, n)]),
+    ["firstName", "name", "email", "status", "siren", "vatRegime", "payMode", "tariff"].map((n) => [n, text(f, n)]),
   );
   const rateCents = parseEuros(values.tariff);
   const donnees = validInstructorInput.safeParse({
@@ -40,7 +40,7 @@ export async function saveInstructor(id: string | null, state: FormState, f: For
   const refusal = (errors: FormState["errors"]) => ({
     attempt: state.attempt + 1,
     errors: errors,
-    values: { ...values, isOwner: texte(f, "isOwner"), active: texte(f, "active") },
+    values: { ...values, isOwner: text(f, "isOwner"), active: text(f, "active") },
   });
   if (!donnees.success) {
     const errors: FormState["errors"] = {};
@@ -96,10 +96,10 @@ const unavailabilityInput = z
 /** Whole days (no times) or a time range, in Paris time. */
 export async function addUnavailabilityAction(
   instructorId: string,
-  saisie: unknown,
+  entry: unknown,
 ): Promise<{ message: string | null }> {
   const { schoolId: schoolId } = await requireRole("direction");
-  const s = unavailabilityInput.safeParse(saisie);
+  const s = unavailabilityInput.safeParse(entry);
   if (!s.success) return { message: s.error.issues[0].message };
   const { du, au, de, a, label: label } = s.data;
   const nextDay = new Date(Date.parse(au) + 86_400_000).toISOString().slice(0, 10);

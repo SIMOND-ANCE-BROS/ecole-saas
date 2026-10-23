@@ -79,10 +79,10 @@ async function checkSeason(tx: Tx, s: z.output<typeof validSeasonInput>, except?
  */
 export async function createSeason(
   tx: Tx,
-  saisie: z.input<typeof validSeasonInput>,
+  entry: z.input<typeof validSeasonInput>,
   copyFrom: string | null,
 ): Promise<Result> {
-  const s = validSeasonInput.safeParse(saisie);
+  const s = validSeasonInput.safeParse(entry);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   const refusal = await checkSeason(tx, s.data);
   if (refusal) return { ok: false, message: refusal };
@@ -112,8 +112,8 @@ export async function createSeason(
   return { ok: true, id };
 }
 
-export async function updateSeason(tx: Tx, id: string, saisie: z.input<typeof validSeasonInput>): Promise<Result> {
-  const s = validSeasonInput.safeParse(saisie);
+export async function updateSeason(tx: Tx, id: string, entry: z.input<typeof validSeasonInput>): Promise<Result> {
+  const s = validSeasonInput.safeParse(entry);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   if (!isUuid(id)) return { ok: false, message: "Cette saison n’existe plus." };
   const refusal = await checkSeason(tx, s.data, id);
@@ -241,8 +241,8 @@ const siteRow = (s: z.output<typeof validSiteInput>) => ({
   enrollmentDesk: s.permanence,
 });
 
-export async function createSite(tx: Tx, saisie: z.input<typeof validSiteInput>): Promise<Result> {
-  const s = validSiteInput.safeParse(saisie);
+export async function createSite(tx: Tx, entry: z.input<typeof validSiteInput>): Promise<Result> {
+  const s = validSiteInput.safeParse(entry);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   const [{ id }] = await tx
     .insert(site)
@@ -251,8 +251,8 @@ export async function createSite(tx: Tx, saisie: z.input<typeof validSiteInput>)
   return { ok: true, id };
 }
 
-export async function updateSite(tx: Tx, id: string, saisie: z.input<typeof validSiteInput>): Promise<Result> {
-  const s = validSiteInput.safeParse(saisie);
+export async function updateSite(tx: Tx, id: string, entry: z.input<typeof validSiteInput>): Promise<Result> {
+  const s = validSiteInput.safeParse(entry);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   if (!isUuid(id)) return { ok: false, message: "Ce site n’existe plus." };
   const rows = await tx.update(site).set(siteRow(s.data)).where(eq(site.id, id)).returning({ id: site.id });
@@ -299,8 +299,8 @@ export const validHours = z
   .refine((h) => h.every((x) => x.closure > x.opening), "L’heure de fermeture doit suivre l’ouverture.");
 
 /** Replaces a site's opening hours; an empty list removes any opening-hours constraint. */
-export async function saveHours(tx: Tx, siteId: string, saisie: z.input<typeof validHours>): Promise<Result> {
-  const h = validHours.safeParse(saisie);
+export async function saveHours(tx: Tx, siteId: string, entry: z.input<typeof validHours>): Promise<Result> {
+  const h = validHours.safeParse(entry);
   if (!h.success) return { ok: false, message: h.error.issues[0].message };
   if (!isUuid(siteId)) return { ok: false, message: "Ce site n’existe plus." };
   const [s] = await tx.select({ id: site.id }).from(site).where(eq(site.id, siteId));
@@ -328,8 +328,8 @@ export const validRoomInput = z.object({
 /** Room columns from the form input. */
 const roomRow = (s: z.output<typeof validRoomInput>) => ({ siteId: s.siteId, name: s.name, capacity: s.capacity });
 
-export async function createRoom(tx: Tx, saisie: z.input<typeof validRoomInput>): Promise<Result> {
-  const s = validRoomInput.safeParse(saisie);
+export async function createRoom(tx: Tx, entry: z.input<typeof validRoomInput>): Promise<Result> {
+  const s = validRoomInput.safeParse(entry);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   const [x] = await tx.select({ id: site.id }).from(site).where(eq(site.id, s.data.siteId));
   if (!x) return { ok: false, message: "Site introuvable." };
@@ -340,8 +340,8 @@ export async function createRoom(tx: Tx, saisie: z.input<typeof validRoomInput>)
   return { ok: true, id };
 }
 
-export async function updateRoom(tx: Tx, id: string, saisie: z.input<typeof validRoomInput>): Promise<Result> {
-  const s = validRoomInput.safeParse(saisie);
+export async function updateRoom(tx: Tx, id: string, entry: z.input<typeof validRoomInput>): Promise<Result> {
+  const s = validRoomInput.safeParse(entry);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   if (!isUuid(id)) return { ok: false, message: "Cette salle n’existe plus." };
   const [x] = await tx.select({ id: site.id }).from(site).where(eq(site.id, s.data.siteId));

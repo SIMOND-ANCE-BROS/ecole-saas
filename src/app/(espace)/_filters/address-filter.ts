@@ -40,8 +40,8 @@ export function useAddressFilter(columns: ColumnDef[]) {
       p.delete("f");
       p.delete("mode");
       for (const [key, value] of toParams({ ...f, conditions: f.conditions.filter(complete) })) p.append(key, value);
-      const texte = p.toString();
-      startTransition(() => router.replace(texte ? `${path}?${texte}` : path, { scroll: false }));
+      const text = p.toString();
+      startTransition(() => router.replace(text ? `${path}?${text}` : path, { scroll: false }));
     };
     if (deferred) timer.current = setTimeout(send, DELAY);
     else send();

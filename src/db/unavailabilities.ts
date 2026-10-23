@@ -43,18 +43,18 @@ export function listUnavailabilities(tx: Tx, instructorId: string, since: Date):
 export async function addUnavailability(
   tx: Tx,
   instructorId: string,
-  saisie: { start: Date; end: Date; label: string | null },
+  entry: { start: Date; end: Date; label: string | null },
 ): Promise<Result> {
   if (!isUuid(instructorId)) return { ok: false, message: "Intervenant introuvable." };
-  if (!(saisie.end > saisie.start)) return { ok: false, message: "La fin doit suivre le début." };
+  if (!(entry.end > entry.start)) return { ok: false, message: "La fin doit suivre le début." };
   const [i] = await tx.select({ id: instructor.id }).from(instructor).where(eq(instructor.id, instructorId));
   if (!i) return { ok: false, message: "Intervenant introuvable." };
   const [{ id }] = await tx
     .insert(unavailability)
     .values({
-      startsAt: saisie.start,
-      endsAt: saisie.end,
-      label: saisie.label?.trim() || null,
+      startsAt: entry.start,
+      endsAt: entry.end,
+      label: entry.label?.trim() || null,
       instructorId: instructorId,
       source: "saisie",
       schoolId: CURRENT_SCHOOL,
@@ -143,36 +143,36 @@ const period = (dates: string[]) => ({
  */
 export async function slotConflicts(
   tx: Tx,
-  saisie: { seasonId: string; instructorId: string; weekday: number; startTime: string; durationMinutes: number },
+  entry: { seasonId: string; instructorId: string; weekday: number; startTime: string; durationMinutes: number },
   today: string,
 ): Promise<string[]> {
-  if (!isUuid(saisie.seasonId) || !isUuid(saisie.instructorId)) return [];
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(saisie.startTime) || !(saisie.durationMinutes > 0)) return [];
-  if (!Number.isInteger(saisie.weekday) || saisie.weekday < 1 || saisie.weekday > 7) return [];
+  if (!isUuid(entry.seasonId) || !isUuid(entry.instructorId)) return [];
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.startTime) || !(entry.durationMinutes > 0)) return [];
+  if (!Number.isInteger(entry.weekday) || entry.weekday < 1 || entry.weekday > 7) return [];
   const [s] = await tx
     .select({ start: season.startDate, end: season.endDate })
     .from(season)
-    .where(eq(season.id, saisie.seasonId));
+    .where(eq(season.id, entry.seasonId));
   if (!s) return [];
   const closures = await tx
     .select({ start: closure.startDate, end: closure.endDate })
     .from(closure)
-    .where(eq(closure.seasonId, saisie.seasonId));
+    .where(eq(closure.seasonId, entry.seasonId));
   const dates = lessonDates({
     start: s.start > today ? s.start : today,
     end: s.end,
-    weekday: saisie.weekday,
+    weekday: entry.weekday,
     closures,
   });
   if (dates.length === 0) return [];
   const { start: start, end: end } = period(dates);
-  const unavailabilities = await unavailabilitiesBetween(tx, start, end, [saisie.instructorId]);
+  const unavailabilities = await unavailabilitiesBetween(tx, start, end, [entry.instructorId]);
   const lessons = dates.map((date) => ({
     id: date,
     date,
-    startTime: saisie.startTime,
-    durationMinutes: saisie.durationMinutes,
-    instructorId: saisie.instructorId,
+    startTime: entry.startTime,
+    durationMinutes: entry.durationMinutes,
+    instructorId: entry.instructorId,
   }));
   return conflicts(lessons, unavailabilities).map((c) => c.lessonId);
 }

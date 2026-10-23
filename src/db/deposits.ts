@@ -95,10 +95,10 @@ async function memberOf(tx: Tx, userId: string) {
 export async function createDeposit(
   tx: Tx,
   userId: string,
-  saisie: z.input<typeof validDeposit>,
+  entry: z.input<typeof validDeposit>,
   today: string,
 ): Promise<Result> {
-  const r = validDeposit.safeParse(saisie);
+  const r = validDeposit.safeParse(entry);
   if (!r.success) return { ok: false, message: r.error.issues[0].message };
   const { date, method: method, paymentIds: paymentIds } = r.data;
   const ids = [...new Set(paymentIds)];

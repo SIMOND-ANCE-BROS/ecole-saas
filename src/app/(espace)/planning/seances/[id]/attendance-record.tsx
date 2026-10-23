@@ -18,7 +18,7 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
   const [attendances, setAttendances] = useState<Record<string, boolean | null>>(
     Object.fromEntries(attendance.students.map((d) => [d.id, d.present])),
   );
-  const [message, setMessage] = useState<{ texte: string; error: boolean } | null>(null);
+  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [inProgress, startTransition] = useTransition();
   const rows = useRef<(HTMLLIElement | null)[]>([]);
   const annulee = attendance.status === "annulee";
@@ -31,7 +31,7 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
   const act = (action: () => Promise<{ message: string | null }>, success: string) =>
     startTransition(async () => {
       const { message: error } = await action();
-      setMessage(error ? { texte: error, error: true } : { texte: success, error: false });
+      setMessage(error ? { text: error, error: true } : { text: success, error: false });
     });
   const save = () =>
     act(
@@ -146,7 +146,7 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
         )}
         {message && (
           <p role={message.error ? "alert" : "status"} className={`text-sm ${message.error ? "text-erreur" : ""}`}>
-            {message.texte}
+            {message.text}
           </p>
         )}
       </div>

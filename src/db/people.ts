@@ -25,18 +25,18 @@ const MAX_RESULTS = 50;
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 
 /** Lowercase without accents, on the database side (no extension) and on the input side. */
-const ACCENTS = "àâäáãéèêëíìîïóòôöõúùûüçñ";
+const DIACRITICS = "àâäáãéèêëíìîïóòôöõúùûüçñ";
 const SANS_ACCENTS = "aaaaaeeeeiiiiooooouuuucn";
 const normalizeColumn = (column: AnyColumn) =>
-  sql`translate(lower(coalesce(${column}, '')), ${ACCENTS}, ${SANS_ACCENTS})`;
+  sql`translate(lower(coalesce(${column}, '')), ${DIACRITICS}, ${SANS_ACCENTS})`;
 
-function normalize(saisie: string): string {
-  return saisie.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+function normalize(entry: string): string {
+  return entry.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
 
 /** Escapes the LIKE wildcards (%, _, \) of an input. */
-function contient(texte: string): string {
-  return `%${texte.replace(/[\\%_]/g, "\\$&")}%`;
+function contient(text: string): string {
+  return `%${text.replace(/[\\%_]/g, "\\$&")}%`;
 }
 
 const digits = (v: string) => v.replace(/\D/g, "");
@@ -93,12 +93,12 @@ export type PersonResult = {
  * both orders), company name, e-mail, phone (digits only), ignoring
  * accents and case; null if the input is too short.
  */
-export function searchCondition(saisie: string, alias = "person"): SQL | null {
-  const texte = normalize(saisie);
-  if (texte.length < MINIMUM_LENGTH) return null;
-  const pattern = contient(texte);
+export function searchCondition(entry: string, alias = "person"): SQL | null {
+  const text = normalize(entry);
+  if (text.length < MINIMUM_LENGTH) return null;
+  const pattern = contient(text);
   const col = (c: string) =>
-    sql`translate(lower(coalesce(${sql.identifier(alias)}.${sql.identifier(c)}, '')), ${ACCENTS}, ${SANS_ACCENTS})`;
+    sql`translate(lower(coalesce(${sql.identifier(alias)}.${sql.identifier(c)}, '')), ${DIACRITICS}, ${SANS_ACCENTS})`;
   const conditions: SQL[] = [
     sql`${col("last_name")} LIKE ${pattern}`,
     sql`${col("first_name")} LIKE ${pattern}`,
@@ -107,17 +107,17 @@ export function searchCondition(saisie: string, alias = "person"): SQL | null {
     sql`(${col("last_name")} || ' ' || ${col("first_name")}) LIKE ${pattern}`,
     sql`lower(coalesce(${sql.identifier(alias)}.email, '')) LIKE ${pattern}`,
   ];
-  if (digits(texte).length >= 4) {
+  if (digits(text).length >= 4) {
     conditions.push(
-      sql`regexp_replace(coalesce(${sql.identifier(alias)}.phone, ''), '[^0-9]', '', 'g') LIKE ${contient(digits(texte))}`,
+      sql`regexp_replace(coalesce(${sql.identifier(alias)}.phone, ''), '[^0-9]', '', 'g') LIKE ${contient(digits(text))}`,
     );
   }
   return or(...conditions) ?? null;
 }
 
 /** Search among all the school's people (see searchCondition). */
-export async function searchPeople(tx: Tx, saisie: string): Promise<PersonResult[]> {
-  const condition = searchCondition(saisie);
+export async function searchPeople(tx: Tx, entry: string): Promise<PersonResult[]> {
+  const condition = searchCondition(entry);
   if (!condition) return [];
   return tx
     .select(resultColumns)
@@ -406,17 +406,17 @@ export class RelationshipRefusal extends Error {}
  */
 export async function createPerson(
   tx: Tx,
-  saisie: PersonInput,
+  entry: PersonInput,
   confirmed: boolean,
   relationshipWith?: NewRelationship & { otherId: string; de: "nouvelle" | "autre" },
 ): Promise<{ status: "ok"; id: string } | { status: "doublons"; duplicates: Duplicate[] }> {
   if (!confirmed) {
-    const duplicates = await likelyDuplicates(tx, saisie);
+    const duplicates = await likelyDuplicates(tx, entry);
     if (duplicates.length > 0) return { status: "doublons", duplicates };
   }
   const [{ id }] = await tx
     .insert(person)
-    .values({ ...personValues(saisie), schoolId: CURRENT_SCHOOL })
+    .values({ ...personValues(entry), schoolId: CURRENT_SCHOOL })
     .returning({ id: person.id });
   if (relationshipWith) {
     const { otherId: otherId, de, ...l } = relationshipWith;
@@ -431,10 +431,10 @@ export async function createPerson(
   return { status: "ok", id };
 }
 
-export async function updatePerson(tx: Tx, id: string, saisie: PersonInput): Promise<Result> {
+export async function updatePerson(tx: Tx, id: string, entry: PersonInput): Promise<Result> {
   const refusal = { ok: false as const, message: "Cette personne n’existe plus." };
   if (!z.uuid().safeParse(id).success) return refusal;
-  const rows = await tx.update(person).set(personValues(saisie)).where(eq(person.id, id)).returning({ id: person.id });
+  const rows = await tx.update(person).set(personValues(entry)).where(eq(person.id, id)).returning({ id: person.id });
   return rows.length === 1 ? { ok: true, id } : refusal;
 }
 
@@ -447,8 +447,8 @@ export const validRelationship = z.object({
 });
 
 /** Links two people of the school; a single relationship per pair, whatever the direction. */
-export async function addRelationship(tx: Tx, saisie: z.input<typeof validRelationship>): Promise<Result> {
-  const l = validRelationship.safeParse(saisie);
+export async function addRelationship(tx: Tx, entry: z.input<typeof validRelationship>): Promise<Result> {
+  const l = validRelationship.safeParse(entry);
   if (!l.success) return { ok: false, message: "Lien invalide." };
   const { personId: personId, relatedPersonId: relatedPersonId } = l.data;
   if (personId === relatedPersonId) return { ok: false, message: "Une personne ne peut pas être liée à elle-même." };
@@ -482,12 +482,12 @@ export async function addRelationship(tx: Tx, saisie: z.input<typeof validRelati
 }
 
 /** Changes the type or flags of a relationship, without changing its direction. */
-export async function updateRelationship(tx: Tx, id: string, saisie: NewRelationship): Promise<Result> {
+export async function updateRelationship(tx: Tx, id: string, entry: NewRelationship): Promise<Result> {
   const refusal = { ok: false as const, message: "Ce lien n’existe plus." };
   if (!z.uuid().safeParse(id).success) return refusal;
   const rows = await tx
     .update(relationship)
-    .set({ type: saisie.type, emergencyContact: saisie.emergencyContact, paysFor: saisie.paysFor })
+    .set({ type: entry.type, emergencyContact: entry.emergencyContact, paysFor: entry.paysFor })
     .where(eq(relationship.id, id))
     .returning({ id: relationship.id });
   return rows.length === 1 ? { ok: true, id } : refusal;

@@ -11,12 +11,12 @@ const day = (iso: string) => date.format(new Date(`${iso}T00:00:00Z`));
 function next(seasons: SeasonRow[]) {
   const last = seasons[0];
   if (!last) return { label: "", startDate: "", endDate: "" };
-  const plusUnAn = (iso: string) => `${Number(iso.slice(0, 4)) + 1}${iso.slice(4)}`;
+  const oneYearLater = (iso: string) => `${Number(iso.slice(0, 4)) + 1}${iso.slice(4)}`;
   const [a, b] = last.label.split("-").map(Number);
   return {
     label: Number.isInteger(a) && Number.isInteger(b) ? `${a + 1}-${b + 1}` : "",
-    startDate: plusUnAn(last.startDate),
-    endDate: plusUnAn(last.endDate),
+    startDate: oneYearLater(last.startDate),
+    endDate: oneYearLater(last.endDate),
   };
 }
 

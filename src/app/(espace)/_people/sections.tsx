@@ -30,11 +30,11 @@ export const Telephone = ({ number: number }: { number: string }) => (
   </a>
 );
 
-export function Bandeau({ texte }: { texte?: string }) {
-  if (!texte) return null;
+export function Banner({ text }: { text?: string }) {
+  if (!text) return null;
   return (
     <p role="status" className="rounded-md border border-accent bg-accent-doux px-3 py-2 text-sm">
-      {texte}
+      {text}
     </p>
   );
 }
@@ -140,7 +140,7 @@ export function Documents({ documents, today: today }: { documents: PersonRecord
 }
 
 /** Enrollments invoiced to a person: a commitment, not a payment. */
-export function FactureesEnrollments({
+export function BilledEnrollments({
   enrollments: enrollments,
   season: season,
 }: {

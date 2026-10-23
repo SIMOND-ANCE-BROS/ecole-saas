@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { withSchool } from "@/db";
-import { MOYENS, type Method } from "@/db/payments";
+import { PAYMENT_METHODS, type Method } from "@/db/payments";
 import { paymentLog, listDeposits, paymentsToDeposit } from "@/db/deposits";
 import { DEPOSIT_METHODS, totals } from "@/domain/payments/deposits";
 import { validDate } from "@/domain/schedule/week";
@@ -12,19 +12,19 @@ import { ToDeposit } from "./to-deposit";
 
 export const metadata: Metadata = { title: "Encaissements" };
 
-const VUES = { journal: "Journal", remettre: "À remettre", remises: "Remises" } as const;
-type View = keyof typeof VUES;
+const VIEWS = { journal: "Journal", remettre: "À remettre", remises: "Remises" } as const;
+type View = keyof typeof VIEWS;
 const day = (iso: string) => iso.split("-").reverse().join("/");
 
 /** Payments (#98): log by period, payments to deposit at the bank, bank deposits and deposit slips. */
 export default async function PaymentsPage({ searchParams }: PageProps<"/encaissements">) {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const p = await searchParams;
-  const view: View = typeof p.vue === "string" && p.vue in VUES ? (p.vue as View) : "journal";
+  const view: View = typeof p.vue === "string" && p.vue in VIEWS ? (p.vue as View) : "journal";
   const today = todayInParis();
   const du = validDate(p.du) ?? `${today.slice(0, 8)}01`;
   const au = validDate(p.au) ?? today;
-  const method = typeof p.moyen === "string" && p.moyen in MOYENS ? (p.moyen as Method) : null;
+  const method = typeof p.moyen === "string" && p.moyen in PAYMENT_METHODS ? (p.moyen as Method) : null;
 
   const donnees = await withSchool(schoolId, async (tx) => ({
     journal: view === "journal" ? await paymentLog(tx, du, au, method) : [],
@@ -43,14 +43,14 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
         </p>
       )}
       <nav aria-label="Vues" className="flex overflow-hidden self-start rounded-md border border-bordure text-sm">
-        {(Object.keys(VUES) as View[]).map((v) => (
+        {(Object.keys(VIEWS) as View[]).map((v) => (
           <Link
             key={v}
             href={`/encaissements?vue=${v}`}
             aria-current={view === v ? "page" : undefined}
             className={`px-3 py-1.5 ${view === v ? "bg-accent text-sur-accent" : "hover:bg-accent-doux"}`}
           >
-            {VUES[v]}
+            {VIEWS[v]}
           </Link>
         ))}
       </nav>
@@ -77,7 +77,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
               </label>
               <select id="moyen" name="moyen" className="champ" defaultValue={method ?? ""}>
                 <option value="">Tous</option>
-                {Object.entries(MOYENS).map(([k, v]) => (
+                {Object.entries(PAYMENT_METHODS).map(([k, v]) => (
                   <option key={k} value={k}>
                     {v}
                   </option>
@@ -98,7 +98,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
             </div>
             {Object.entries(t.byMethod).map(([m, c]) => (
               <div key={m}>
-                <dt className="inline text-doux">{MOYENS[m as Method]} : </dt>
+                <dt className="inline text-doux">{PAYMENT_METHODS[m as Method]} : </dt>
                 <dd className="inline tabular-nums">{formatEuros(c)}</dd>
               </div>
             ))}
@@ -131,7 +131,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
                           {l.payer}
                         </Link>
                       </td>
-                      <td>{MOYENS[l.method]}</td>
+                      <td>{PAYMENT_METHODS[l.method]}</td>
                       <td>{[l.reference, l.issuer].filter(Boolean).join(", ") || "—"}</td>
                       <td className="text-right tabular-nums whitespace-nowrap">{formatEuros(l.amountCents)}</td>
                       <td className="whitespace-nowrap">
@@ -192,7 +192,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
                         {day(r.date)}
                       </Link>
                     </td>
-                    <td>{MOYENS[r.method]}</td>
+                    <td>{PAYMENT_METHODS[r.method]}</td>
                     <td className="text-right tabular-nums">{r.nombre}</td>
                     <td className="text-right tabular-nums">{formatEuros(r.totalCents)}</td>
                   </tr>

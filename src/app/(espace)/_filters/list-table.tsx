@@ -33,7 +33,7 @@ export type TableRow = {
   dimmed?: boolean;
   /** Small badge after the name (« inactif », « organisme »). */
   badge?: string;
-  cellules: Record<string, CellValue>;
+  cells: Record<string, CellValue>;
 };
 
 type Props = {
@@ -46,7 +46,7 @@ type Props = {
   layout: string[] | null;
   rows: TableRow[];
   /** Column carrying the link to the record. */
-  relationship: string;
+  linkColumn: string;
   /** Message when no row is shown. */
   vide: string;
   /** Phone-specific display (the table is hidden there). */
@@ -76,7 +76,7 @@ export function ListTable({
   columns: columns,
   layout: layout,
   rows: rows,
-  relationship: relationship,
+  linkColumn: linkColumn,
   vide,
   mobile,
   choice: choice = {},
@@ -109,8 +109,8 @@ export function ListTable({
       p.set("sort", next.column);
       p.set("order", next.sens);
     }
-    const texte = p.toString();
-    startSort(() => router.replace(texte ? `${path}?${texte}` : path, { scroll: false }));
+    const text = p.toString();
+    startSort(() => router.replace(text ? `${path}?${text}` : path, { scroll: false }));
   }
 
   /** Click on a row: opens the record, except on a link or a button, or during a text selection. */
@@ -363,14 +363,14 @@ export function ListTable({
                       style={style(d.id)}
                       className={`${d.right ? "text-right tabular-nums" : ""} ${widthOf(d.id) ? "break-words" : ""}`}
                     >
-                      {d.id === relationship ? (
+                      {d.id === linkColumn ? (
                         <>
                           {l.href ? (
                             <Link href={l.href} data-resultat className="lien font-medium">
-                              {texte(l.cellules[d.id])}
+                              {text(l.cells[d.id])}
                             </Link>
                           ) : (
-                            <span className="font-medium">{texte(l.cellules[d.id])}</span>
+                            <span className="font-medium">{text(l.cells[d.id])}</span>
                           )}
                           {l.badge && (
                             <span className="ml-2 rounded border border-bordure px-1.5 text-xs font-normal text-doux">
@@ -379,7 +379,7 @@ export function ListTable({
                           )}
                         </>
                       ) : (
-                        <Cellule def={d} value={l.cellules[d.id]} />
+                        <CellContent def={d} value={l.cells[d.id]} />
                       )}
                     </td>
                   ))}
@@ -394,10 +394,10 @@ export function ListTable({
   );
 }
 
-const texte = (v: CellValue) => (Array.isArray(v) ? v.join(", ") : v == null ? "" : String(v));
+const text = (v: CellValue) => (Array.isArray(v) ? v.join(", ") : v == null ? "" : String(v));
 
-function Cellule({ def, value: value }: { def: ColumnDef; value: CellValue }) {
-  const t = texte(value);
+function CellContent({ def, value: value }: { def: ColumnDef; value: CellValue }) {
+  const t = text(value);
   if (t === "") return <span className="text-doux">{def.ifEmpty ?? "—"}</span>;
   if (def.type === "telephone") {
     return (

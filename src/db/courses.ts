@@ -203,20 +203,20 @@ async function resolveRoom(tx: Tx, s: CourseInput["room"]): Promise<string | nul
 }
 
 /** Resolves discipline, room and instructor; an inactive instructor is accepted only if it is `guard`. */
-async function values(tx: Tx, saisie: CourseInput, guard?: string) {
+async function values(tx: Tx, entry: CourseInput, guard?: string) {
   const [i] = await tx
     .select({ id: instructor.id })
     .from(instructor)
     .where(
       and(
-        eq(instructor.id, saisie.instructorId),
+        eq(instructor.id, entry.instructorId),
         guard ? or(eq(instructor.active, true), eq(instructor.id, guard)) : eq(instructor.active, true),
       ),
     );
   if (!i) return { ok: false as const, message: "Intervenant introuvable ou inactif." };
-  const roomId = await resolveRoom(tx, saisie.room);
+  const roomId = await resolveRoom(tx, entry.room);
   if (!roomId) return { ok: false as const, message: "Salle introuvable." };
-  const disciplineId = await resolveDiscipline(tx, saisie.discipline);
+  const disciplineId = await resolveDiscipline(tx, entry.discipline);
   if (!disciplineId) return { ok: false as const, message: "Discipline introuvable." };
   const {
     instructorId: instructorId,
@@ -228,11 +228,11 @@ async function values(tx: Tx, saisie: CourseInput, guard?: string) {
     ageMax,
     level: level,
     maxCapacity: maxCapacity,
-  } = saisie;
+  } = entry;
   // Specific dates: neither day nor period; regular course: no dates.
   const oneOff = recurrence === "dates";
-  const weekday = oneOff ? null : saisie.weekday;
-  const [startDate, endDate] = oneOff ? [null, null] : [saisie.startDate, saisie.endDate];
+  const weekday = oneOff ? null : entry.weekday;
+  const [startDate, endDate] = oneOff ? [null, null] : [entry.startDate, entry.endDate];
   return {
     ok: true as const,
     // Course columns, ready for insert/update.
@@ -252,12 +252,12 @@ async function values(tx: Tx, saisie: CourseInput, guard?: string) {
       level: level,
       maxCapacity: maxCapacity,
     },
-    dates: oneOff ? [...new Set(saisie.dates)].sort() : [],
+    dates: oneOff ? [...new Set(entry.dates)].sort() : [],
   };
 }
 
-export async function createCourse(tx: Tx, seasonId: string, saisie: CourseInput): Promise<Result> {
-  const r = await values(tx, saisie);
+export async function createCourse(tx: Tx, seasonId: string, entry: CourseInput): Promise<Result> {
+  const r = await values(tx, entry);
   if (!r.ok) return r;
   const [{ id }] = await tx
     .insert(course)
@@ -273,10 +273,10 @@ async function replaceDates(tx: Tx, courseId: string, dates: string[]) {
     await tx.insert(courseDate).values(dates.map((date) => ({ schoolId: CURRENT_SCHOOL, courseId: courseId, date })));
 }
 
-export async function updateCourse(tx: Tx, id: string, saisie: CourseInput): Promise<Result> {
+export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Promise<Result> {
   const existing = await readCourse(tx, id);
   if (!existing) return { ok: false, message: "Ce cours n’existe plus." };
-  const r = await values(tx, saisie, existing.instructorId);
+  const r = await values(tx, entry, existing.instructorId);
   if (!r.ok) return r;
   await tx.update(course).set(r.values).where(eq(course.id, id));
   await replaceDates(tx, id, r.dates);

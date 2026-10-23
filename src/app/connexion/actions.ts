@@ -7,18 +7,18 @@ import { z } from "zod";
 import { schoolsOf } from "@/db";
 import { chooseSchool, idDeSession } from "@/lib/school-access";
 import { auth } from "@/lib/auth";
-import { clearAttempts, recordAttempt, trustedIp, LIMITES } from "@/lib/sign-in-limit";
+import { clearAttempts, recordAttempt, trustedIp, LIMITS } from "@/lib/sign-in-limit";
 
 export type ConnectionState = { error: string | null; email: string };
 
-const saisie = z.object({
+const entry = z.object({
   email: z.email(),
   password: z.string().min(1),
 });
 
 export async function signIn(_etat: ConnectionState, formData: FormData): Promise<ConnectionState> {
   const email = String(formData.get("email") ?? "");
-  const donnees = saisie.safeParse({ email, password: formData.get("password") });
+  const donnees = entry.safeParse({ email, password: formData.get("password") });
   if (!donnees.success) {
     return { error: "Saisissez une adresse e-mail valide et votre mot de passe.", email };
   }
@@ -28,7 +28,7 @@ export async function signIn(_etat: ConnectionState, formData: FormData): Promis
   const ip = trustedIp(requestHeaders);
   if (!(await recordAttempt(donnees.data.email, ip))) {
     return {
-      error: `Trop de tentatives de connexion. Réessayez dans ${LIMITES.windowMinutes} minutes.`,
+      error: `Trop de tentatives de connexion. Réessayez dans ${LIMITS.windowMinutes} minutes.`,
       email,
     };
   }

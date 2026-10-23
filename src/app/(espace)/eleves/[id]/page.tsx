@@ -3,22 +3,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { readStudent } from "@/db/students";
-import { enrollmentsPayeesBy } from "@/db/enrollments";
+import { enrollmentsPaidBy } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
 import { nomAffiche } from "@/db/people";
 import { currentSeason } from "@/db/schedule";
 import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { PaymentsSection } from "../../_people/payments-section";
-import {
-  Bandeau,
-  FollowedCourses,
-  Documents,
-  FactureesEnrollments,
-  dayOf,
-  Notes,
-  Telephone,
-} from "../../_people/sections";
+import { Banner, FollowedCourses, Documents, BilledEnrollments, dayOf, Notes, Telephone } from "../../_people/sections";
 import { Billing } from "./billing";
 import { Relatives } from "./relatives";
 
@@ -49,13 +41,13 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
     return {
       student: student,
       season: season,
-      facturees: season ? await enrollmentsPayeesBy(tx, student.id, season.id) : [],
+      billed: season ? await enrollmentsPaidBy(tx, student.id, season.id) : [],
       balance: paysForThemselves ? await balanceOf(tx, student.id, today) : null,
       payments: paysForThemselves ? await paymentsOf(tx, student.id) : [],
     };
   });
   if (!donnees) notFound();
-  const { student: e, season: season, facturees, balance: balance, payments: payments } = donnees;
+  const { student: e, season: season, billed, balance: balance, payments: payments } = donnees;
 
   const name = nomAffiche(e);
   const firstName = e.firstName ?? name;
@@ -64,7 +56,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   const urgences = e.guardians
     .filter((r) => r.toNotify)
     .concat(e.otherRelationships.filter((a) => a.toNotify && a.sens === "vers"));
-  const bandeau = BANNERS[String(inscription ?? enregistre)];
+  const banner = BANNERS[String(inscription ?? enregistre)];
 
   return (
     <article className="flex w-full min-w-0 flex-col gap-5">
@@ -74,7 +66,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
         </Link>
         <span className="text-doux"> / {name}</span>
       </nav>
-      <Bandeau texte={collected(encaisse) ?? bandeau} />
+      <Banner text={collected(encaisse) ?? banner} />
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -147,7 +139,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
         <div className="flex min-w-0 flex-col gap-5">
           <Relatives studentId={e.id} firstName={firstName} guardians={e.guardians} other={e.otherRelationships} />
           <FollowedCourses courses={e.courses} />
-          {season && <FactureesEnrollments enrollments={facturees} season={season.label} />}
+          {season && <BilledEnrollments enrollments={billed} season={season.label} />}
           {e.billedTo.type === "personne" ? (
             <p className="text-sm text-doux">
               Paiements : sur la fiche de{" "}

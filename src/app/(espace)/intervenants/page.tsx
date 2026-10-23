@@ -6,7 +6,7 @@ import { listInstructors, PAY_MODES, STATUSES } from "@/db/instructors";
 import { readPreference } from "@/db/preferences";
 import { currentSeason } from "@/db/schedule";
 import { INSTRUCTOR_COLUMNS } from "@/domain/filters/columns";
-import { applyFilter, type Cellule, readFilter, readSort, normalizeText, sortRows } from "@/domain/filters/filters";
+import { applyFilter, type Cell, readFilter, readSort, normalizeText, sortRows } from "@/domain/filters/filters";
 import { todayInParis } from "@/domain/people/age";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: "Intervenants" };
 export default async function InstructorsPage({ searchParams }: PageProps<"/intervenants">) {
   const { schoolId: schoolId, role, userId } = await requireRole("direction", "accueil");
   const { enregistre, f, mode, sort, order, q } = await searchParams;
-  const saisie = typeof q === "string" ? normalizeText(q) : "";
+  const entry = typeof q === "string" ? normalizeText(q) : "";
   const {
     season: season,
     instructors: instructors,
@@ -35,7 +35,7 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
   const columns = direction ? INSTRUCTOR_COLUMNS : INSTRUCTOR_COLUMNS.filter((c) => c.id !== "tarif");
   // Full list already loaded (a few instructors): in-memory filtering, same rules as in SQL.
   const filter = readFilter(f, mode, INSTRUCTOR_COLUMNS);
-  const values: Record<string, (i: (typeof instructors)[number]) => Cellule> = {
+  const values: Record<string, (i: (typeof instructors)[number]) => Cell> = {
     nom: (i) => `${i.firstName} ${i.name}`,
     statut: (i) => STATUSES[i.status],
     cours: (i) => i.seasonCourses,
@@ -44,7 +44,7 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
   const visible = sortRows(
     applyFilter(
       // Top search bar (Ctrl K): name or e-mail.
-      instructors.filter((i) => !saisie || normalizeText(`${i.firstName} ${i.name} ${i.email ?? ""}`).includes(saisie)),
+      instructors.filter((i) => !entry || normalizeText(`${i.firstName} ${i.name} ${i.email ?? ""}`).includes(entry)),
       filter,
       columns.map((c) => ({ ...c, value: values[c.id] ?? (() => null) })),
     ),
@@ -89,9 +89,9 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
             caption="Intervenants"
             columns={columns}
             layout={layout}
-            relationship="nom"
+            linkColumn="nom"
             vide={
-              saisie
+              entry
                 ? "Aucun intervenant ne correspond à cette recherche."
                 : "Aucun intervenant ne correspond à ces filtres."
             }
@@ -101,7 +101,7 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
               href: direction ? `/intervenants/${i.id}` : undefined,
               dimmed: !i.active,
               badge: i.active ? undefined : "inactif",
-              cellules: {
+              cells: {
                 nom: `${i.firstName} ${i.name}`,
                 statut: STATUSES[i.status],
                 cours: i.seasonCourses,
