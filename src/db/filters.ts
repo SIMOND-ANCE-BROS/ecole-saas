@@ -12,7 +12,7 @@ import {
 } from "../domain/filters/filters";
 
 /**
- * Traduction SQL des filtres par colonne (`src/domaine/filtres/filtres.ts`),
+ * Traduction SQL des filtres par colonne (`src/domain/filters/filters.ts`),
  * avec les mêmes règles que l'évaluation en mémoire : accents et majuscules
  * ignorés, chiffres seuls pour un téléphone, une valeur absente compte comme
  * vide. Les valeurs passent en paramètres, jamais dans le texte SQL.

@@ -408,7 +408,7 @@ export const unavailability = pgTable(
 
 /**
  * Agenda Google ou Microsoft connecté par un intervenant : jeton de
- * rafraîchissement chiffré (src/lib/chiffrement.ts), jamais en clair.
+ * rafraîchissement chiffré (src/lib/encryption.ts), jamais en clair.
  */
 export const calendarConnection = pgTable(
   "calendar_connection",
