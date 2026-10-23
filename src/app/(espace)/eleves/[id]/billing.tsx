@@ -110,7 +110,7 @@ export function Billing({
               />
               {p.name}
               <span className="text-xs text-doux">
-                {p.relation === "responsable" ? "responsable" : p.relation === "partner" ? "partner" : "proche"}
+                {p.relation === "responsable" ? "responsable" : p.relation === "partner" ? "conjoint" : "proche"}
               </span>
             </label>
           ))}
