@@ -32,7 +32,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
     remises: view === "remises" ? await listDeposits(tx) : [],
   }));
   const t = totals(donnees.journal);
-  const exportUrl = `/encaissements/export?${new URLSearchParams({ du, au, ...(method ? { method: method } : {}) })}`;
+  const exportUrl = `/encaissements/export?${new URLSearchParams({ du, au, ...(method ? { moyen: method } : {}) })}`;
 
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">

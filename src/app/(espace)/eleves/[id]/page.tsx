@@ -25,9 +25,9 @@ import { Relatives } from "./proches";
 export const metadata: Metadata = { title: "Fiche élève" };
 
 const BANNERS: Record<string, string> = {
-  created: "Élève créé.",
-  modified: "Fiche enregistrée.",
-  saved: "Inscription enregistrée.",
+  cree: "Élève créé.",
+  modifie: "Fiche enregistrée.",
+  enregistree: "Inscription enregistrée.",
 };
 
 /** Bandeau après un encaissement (`?encaisse=3`). */

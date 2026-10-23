@@ -11,9 +11,9 @@ import { DisconnectButton } from "./deconnecter";
 export const metadata: Metadata = { title: "Mon agenda", robots: { index: false, follow: false } };
 
 const BANNERS: Record<string, { texte: string; error: boolean }> = {
-  connected: { texte: "Agenda connecté : vos indisponibilités sont transmises à l’école.", error: false },
-  refused: { texte: "Connexion annulée : rien n’a été transmis.", error: true },
-  error: { texte: "La connexion n’a pas abouti. Réessayez dans quelques minutes.", error: true },
+  connecte: { texte: "Agenda connecté : vos indisponibilités sont transmises à l’école.", error: false },
+  refuse: { texte: "Connexion annulée : rien n’a été transmis.", error: true },
+  erreur: { texte: "La connexion n’a pas abouti. Réessayez dans quelques minutes.", error: true },
 };
 const dateTime = new Intl.DateTimeFormat("fr-FR", {
   day: "numeric",

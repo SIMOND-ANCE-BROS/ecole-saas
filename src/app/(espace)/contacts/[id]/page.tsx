@@ -15,7 +15,7 @@ import { BecomeStudent } from "./devenir-eleve";
 
 export const metadata: Metadata = { title: "Fiche contact" };
 
-const BANNERS: Record<string, string> = { created: "Contact créé.", modified: "Fiche enregistrée." };
+const BANNERS: Record<string, string> = { cree: "Contact créé.", modifie: "Fiche enregistrée." };
 
 /** Bandeau après un encaissement (`?encaisse=3`). */
 const collected = (n: unknown) => {
