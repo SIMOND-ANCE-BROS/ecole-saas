@@ -72,17 +72,17 @@ const studentPhone = sql<string | null>`coalesce(${person.phone}, (
   WHERE l.related_person_id = ${currentId} AND l.emergency_contact AND r.phone IS NOT NULL ORDER BY r.last_name LIMIT 1))`;
 const studentGuardians = sql<string[]>`coalesce((
   SELECT array_agg(${sqlName("r")} ORDER BY r.first_name) FROM relationship l JOIN person r ON r.id = l.person_id
-  WHERE l.related_person_id = ${currentId} AND l.type = 'representant_legal'), '{}')`;
+  WHERE l.related_person_id = ${currentId} AND l.type = 'legal_guardian'), '{}')`;
 const studentBilledTo = sql<string | null>`(
   SELECT ${sqlName("r")} FROM relationship l JOIN person r ON r.id = l.person_id
   WHERE l.related_person_id = ${currentId} AND l.pays_for ORDER BY r.last_name LIMIT 1)`;
 const contactStudents = sql<string[]>`coalesce((
   SELECT array_agg(DISTINCT coalesce(e.first_name, e.last_name)) FROM relationship l JOIN person e ON e.id = l.related_person_id
-  WHERE l.person_id = ${currentId} AND e.is_student AND (l.type = 'representant_legal' OR l.pays_for)), '{}')`;
+  WHERE l.person_id = ${currentId} AND e.is_student AND (l.type = 'legal_guardian' OR l.pays_for)), '{}')`;
 
 const studentEmail = sql<string | null>`coalesce(${person.email}, (
   SELECT r.email FROM relationship l JOIN person r ON r.id = l.person_id
-  WHERE l.related_person_id = ${currentId} AND l.type = 'representant_legal' AND r.email IS NOT NULL ORDER BY r.last_name LIMIT 1))`;
+  WHERE l.related_person_id = ${currentId} AND l.type = 'legal_guardian' AND r.email IS NOT NULL ORDER BY r.last_name LIMIT 1))`;
 const studentToNotify = sql<string[]>`coalesce((
   SELECT array_agg(concat_ws(', ', ${sqlName("r")}, r.phone) ORDER BY r.last_name) FROM relationship l JOIN person r ON r.id = l.person_id
   WHERE l.related_person_id = ${currentId} AND l.emergency_contact), '{}')`;
@@ -204,7 +204,7 @@ export async function listStudents(
 
 export type ContactRow = {
   id: string;
-  type: "particulier" | "professionnel";
+  type: "individual" | "organisation";
   name: string;
   firstName: string | null;
   companyName: string | null;
@@ -246,7 +246,7 @@ export async function listContacts(
       and(
         or(
           eq(person.isStudent, false),
-          sql`EXISTS (SELECT 1 FROM relationship l WHERE l.person_id = ${currentId} AND (l.type = 'representant_legal' OR l.pays_for))`,
+          sql`EXISTS (SELECT 1 FROM relationship l WHERE l.person_id = ${currentId} AND (l.type = 'legal_guardian' OR l.pays_for))`,
         ),
         condition ?? undefined,
         columnsCondition,
@@ -268,7 +268,7 @@ export type StudentRelative = {
   email: string | null;
   toNotify: boolean;
   paysFor: boolean;
-  relation: "responsable" | "conjoint" | "autre";
+  relation: "responsable" | "partner" | "other";
   /** « vers »: this relative is <relation> of the student; « de »: the student is <relation> of this relative. */
   sens: "de" | "vers";
 };
@@ -302,7 +302,7 @@ export async function readStudent(tx: Tx, id: string, today: string): Promise<St
     email: l.autre.email,
     toNotify: l.emergencyContact,
     paysFor: l.paysFor,
-    relation: l.type === "representant_legal" ? "responsable" : l.type,
+    relation: l.type === "legal_guardian" ? "responsable" : l.type,
     sens: l.sens,
   });
   const to = p.relationships.filter((l) => l.sens === "vers");
@@ -322,9 +322,9 @@ export async function readStudent(tx: Tx, id: string, today: string): Promise<St
   return {
     ...rest,
     isStudent: student,
-    guardians: to.filter((l) => l.type === "representant_legal").map(relative),
+    guardians: to.filter((l) => l.type === "legal_guardian").map(relative),
     // The other relatives, and the relationships entered from the student (guardian of, partner entered on their side).
-    otherRelationships: liens.filter((l) => l.sens === "de" || l.type !== "representant_legal").map(relative),
+    otherRelationships: liens.filter((l) => l.sens === "de" || l.type !== "legal_guardian").map(relative),
     billedTo,
     siblings,
   };
@@ -357,7 +357,7 @@ export async function readContact(tx: Tx, id: string): Promise<ContactRecord | n
         relationshipId: l.id,
         id: l.autre.id,
         name: l.autre.name,
-        guardian: l.type === "representant_legal",
+        guardian: l.type === "legal_guardian",
         paysFor: l.paysFor,
         toNotify: l.emergencyContact,
       })),
@@ -381,7 +381,7 @@ export const validStudentInput = z
       z.object({ type: z.literal("autre"), payeur: otherValidPerson }),
     ]),
   })
-  .refine((s) => s.student.type === "particulier", { path: ["student"], message: "Un élève est un particulier." })
+  .refine((s) => s.student.type === "individual", { path: ["student"], message: "Un élève est un particulier." })
   .refine((s) => s.billing.type !== "responsable" || s.guardian !== null, {
     path: ["billing"],
     message: "Indiquez le responsable à facturer.",
@@ -433,7 +433,7 @@ export async function createStudent(
     const r = await addRelationship(tx, {
       personId: guardianId,
       relatedPersonId: id,
-      type: "representant_legal",
+      type: "legal_guardian",
       emergencyContact: entry.toNotify,
       paysFor: entry.billing.type === "responsable",
     });
@@ -492,7 +492,7 @@ export async function setBilling(
   const r = await addRelationship(tx, {
     personId: target.id,
     relatedPersonId: studentId,
-    type: "autre",
+    type: "other",
     emergencyContact: false,
     paysFor: true,
   });
@@ -519,14 +519,14 @@ export async function addGuardian(
   if (existing) {
     await tx
       .update(relationship)
-      .set({ type: "representant_legal", emergencyContact: toNotify })
+      .set({ type: "legal_guardian", emergencyContact: toNotify })
       .where(eq(relationship.id, existing.id));
     return { ok: true, id: existing.id };
   }
   return addRelationship(tx, {
     personId: guardianId,
     relatedPersonId: studentId,
-    type: "representant_legal",
+    type: "legal_guardian",
     emergencyContact: toNotify,
     paysFor: false,
   });

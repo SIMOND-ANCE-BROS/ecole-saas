@@ -36,13 +36,13 @@ import { ROLE_VALUES } from "../domain/team/rules";
 // ---------------------------------------------------------------------------
 // Enumerated types
 // ---------------------------------------------------------------------------
-export const personType = pgEnum("person_type", ["particulier", "professionnel"]);
-export const relationshipType = pgEnum("relationship_type", ["representant_legal", "conjoint", "autre"]);
+export const personType = pgEnum("person_type", ["individual", "organisation"]);
+export const relationshipType = pgEnum("relationship_type", ["legal_guardian", "partner", "other"]);
 export const documentType = pgEnum("document_type", [
-  "certificat_medical",
-  "autorisation_parentale",
-  "droit_image",
-  "autre",
+  "medical_certificate",
+  "parental_consent",
+  "image_rights",
+  "other",
 ]);
 export const instructorStatus = pgEnum("instructor_status", ["micro_entreprise", "societe", "salarie"]);
 export const vatRegime = pgEnum("vat_regime", ["franchise_293b", "assujetti", "non_applicable"]);
@@ -299,7 +299,7 @@ export const person = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     schoolId: schoolIdColumn(),
-    type: personType("type").notNull().default("particulier"),
+    type: personType("type").notNull().default("individual"),
     lastName: text("last_name").notNull(),
     firstName: text("first_name"),
     companyName: text("company_name"),
@@ -315,7 +315,7 @@ export const person = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check("person_company_siren", sql`${t.type} = 'particulier' OR ${t.siren} IS NOT NULL`),
+    check("person_company_siren", sql`${t.type} = 'individual' OR ${t.siren} IS NOT NULL`),
     index().on(t.schoolId, t.lastName),
     sameSchoolTarget(t),
   ],

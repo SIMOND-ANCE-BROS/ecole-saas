@@ -73,7 +73,7 @@ const resultColumns = {
 
 export type PersonResult = {
   id: string;
-  type: "particulier" | "professionnel";
+  type: "individual" | "organisation";
   name: string;
   firstName: string | null;
   companyName: string | null;
@@ -136,7 +136,7 @@ export function listPeople(tx: Tx, limit = 200): Promise<PersonResult[]> {
 // Record
 // ---------------------------------------------------------------------------
 
-export const RELATIONSHIP_TYPES = ["representant_legal", "conjoint", "autre"] as const;
+export const RELATIONSHIP_TYPES = ["legal_guardian", "partner", "other"] as const;
 export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number];
 
 export type RelationshipItem = {
@@ -152,7 +152,7 @@ export type RelationshipItem = {
 
 export type PersonRecord = {
   id: string;
-  type: "particulier" | "professionnel";
+  type: "individual" | "organisation";
   name: string;
   firstName: string | null;
   companyName: string | null;
@@ -320,7 +320,7 @@ const optionalText = (max: number) =>
 
 export const validPersonInput = z
   .object({
-    type: z.enum(["particulier", "professionnel"]),
+    type: z.enum(["individual", "organisation"]),
     name: z.string().trim().max(100),
     firstName: optionalText(100),
     companyName: optionalText(200),
@@ -342,11 +342,11 @@ export const validPersonInput = z
     notes: optionalText(2000),
   })
   .superRefine((f, ctx) => {
-    if (f.type === "particulier" && !f.name)
+    if (f.type === "individual" && !f.name)
       ctx.addIssue({ code: "custom", path: ["name"], message: "Nom obligatoire" });
-    if (f.type === "professionnel" && !f.companyName)
+    if (f.type === "organisation" && !f.companyName)
       ctx.addIssue({ code: "custom", path: ["companyName"], message: "Raison sociale obligatoire" });
-    if (f.type === "professionnel" && !f.siren)
+    if (f.type === "organisation" && !f.siren)
       ctx.addIssue({ code: "custom", path: ["siren"], message: "SIREN obligatoire pour un professionnel" });
   });
 
@@ -358,10 +358,10 @@ export type Result = { ok: true; id: string } | { ok: false; message: string };
 const personValues = (f: PersonInput) => ({
   type: f.type,
   lastName: f.name || f.companyName || "",
-  firstName: f.type === "particulier" ? f.firstName : null,
-  companyName: f.type === "professionnel" ? f.companyName : null,
-  siren: f.type === "professionnel" ? f.siren : null,
-  birthDate: f.type === "particulier" ? f.birthDate : null,
+  firstName: f.type === "individual" ? f.firstName : null,
+  companyName: f.type === "organisation" ? f.companyName : null,
+  siren: f.type === "organisation" ? f.siren : null,
+  birthDate: f.type === "individual" ? f.birthDate : null,
   email: f.email,
   phone: f.telephone,
   address: f.address,
@@ -373,7 +373,7 @@ export async function likelyDuplicates(tx: Tx, f: PersonInput): Promise<Duplicat
   const conditions: SQL[] = [];
   if (f.telephone && digits(f.telephone).length >= 6) conditions.push(sql`${phoneDigits} = ${digits(f.telephone)}`);
   if (f.email) conditions.push(sql`lower(${person.email}) = lower(${f.email})`);
-  if (f.type === "particulier" && f.firstName)
+  if (f.type === "individual" && f.firstName)
     conditions.push(
       sql`${normalizeColumn(person.lastName)} = ${normalize(f.name)} AND ${normalizeColumn(person.firstName)} = ${normalize(f.firstName)}`,
     );

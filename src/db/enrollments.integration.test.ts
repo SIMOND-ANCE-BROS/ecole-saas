@@ -63,7 +63,7 @@ beforeAll(async () => {
     [ids.payeur, ids.noe],
     [ids.autrePayeur, ids.etranger],
   ]) {
-    await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for) VALUES (${e}, ${payer}, ${student}, 'representant_legal', true)`;
+    await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for) VALUES (${e}, ${payer}, ${student}, 'legal_guardian', true)`;
   }
 });
 

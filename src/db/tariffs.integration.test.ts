@@ -50,8 +50,8 @@ beforeAll(async () => {
   [{ id: ines }] =
     await admin`INSERT INTO person (school_id, last_name, first_name, birth_date) VALUES (${school}, 'Moreau', 'Inès', '1992-07-14') RETURNING id`;
   [{ id: payer }] =
-    await admin`INSERT INTO person (school_id, last_name, company_name, type, siren) VALUES (${school}, 'CSE', 'CSE Ateliers', 'professionnel', '123456789') RETURNING id`;
-  await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for) VALUES (${school}, ${payer}, ${ines}, 'autre', true)`;
+    await admin`INSERT INTO person (school_id, last_name, company_name, type, siren) VALUES (${school}, 'CSE', 'CSE Ateliers', 'organisation', '123456789') RETURNING id`;
+  await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for) VALUES (${school}, ${payer}, ${ines}, 'other', true)`;
 });
 
 afterAll(async () => {

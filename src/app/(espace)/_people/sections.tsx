@@ -8,10 +8,10 @@ import { DAYS } from "../planning/format";
 /** Sections shared by the student and contact records. */
 
 const DOCUMENT = {
-  certificat_medical: "Certificat médical",
-  autorisation_parentale: "Autorisation parentale",
-  droit_image: "Droit à l’image",
-  autre: "Autre document",
+  medical_certificate: "Certificat médical",
+  parental_consent: "Autorisation parentale",
+  image_rights: "Droit à l’image",
+  other: "Autre document",
 } as const;
 const PERIOD = { trimestre: "trimestre", annee: "année", unite: "unité" } as const;
 const PUBLIC = { enfant: "Enfant", adulte: "Adulte", couple: "Couple", etudiant: "Étudiant" } as const;

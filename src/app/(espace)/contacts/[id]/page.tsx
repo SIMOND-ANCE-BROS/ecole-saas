@@ -61,14 +61,14 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
         <div>
           <h1 className="titre-page">{name}</h1>
           <p className="text-sm text-doux">
-            {c.type === "professionnel" ? `Organisme${c.siren ? `, SIREN ${c.siren}` : ""}` : "Particulier"}
+            {c.type === "organisation" ? `Organisme${c.siren ? `, SIREN ${c.siren}` : ""}` : "Particulier"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href={`/contacts/${c.id}/modifier`} className="bouton-secondaire">
             Modifier
           </Link>
-          {c.type === "particulier" &&
+          {c.type === "individual" &&
             (c.isStudent ? (
               <Link href={`/eleves/${c.id}`} className="bouton-secondaire">
                 Voir sa fiche élève
@@ -103,7 +103,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
               <h2 id="eleves" className="text-base font-semibold">
                 Élèves
               </h2>
-              {c.type === "particulier" && (
+              {c.type === "individual" && (
                 <Link href={`/eleves/nouveau?responsable=${c.id}`} className="lien text-sm">
                   Ajouter un enfant
                 </Link>

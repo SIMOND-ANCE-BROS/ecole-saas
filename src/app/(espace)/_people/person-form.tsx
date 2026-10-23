@@ -17,9 +17,9 @@ type Props = {
 /** Identity and contact details of a student or a contact. */
 export function PersonForm({ person: person, section: section, proposedName: proposedName }: Props) {
   const [v, setV] = useState({
-    type: person?.type ?? "particulier",
+    type: person?.type ?? "individual",
     name:
-      person?.type === "professionnel"
+      person?.type === "organisation"
         ? person.name === person.companyName
           ? ""
           : person.name
@@ -39,7 +39,7 @@ export function PersonForm({ person: person, section: section, proposedName: pro
   useEffect(() => {
     if (refusal) form.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
   }, [refusal]);
-  const pro = v.type === "professionnel";
+  const pro = v.type === "organisation";
   const updated = (field: keyof typeof v) => (e: { target: { value: string } }) =>
     setV({ ...v, [field]: e.target.value });
 
@@ -93,8 +93,8 @@ export function PersonForm({ person: person, section: section, proposedName: pro
           <legend className="px-1 text-sm font-semibold">Contact</legend>
           {(
             [
-              ["particulier", "Particulier"],
-              ["professionnel", "Professionnel (entreprise, CSE, association)"],
+              ["individual", "Particulier"],
+              ["organisation", "Professionnel (entreprise, CSE, association)"],
             ] as const
           ).map(([value, label]) => (
             <label key={value} className="flex items-center gap-2">
