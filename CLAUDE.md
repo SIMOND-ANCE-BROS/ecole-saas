@@ -180,6 +180,7 @@ DESIGN.md                    interface rules
 - Every piece of work starts from an issue and goes through a branch and a PR, never a direct commit on `main`; no merge without explicit approval. Conventions: `docs/guides/issues.md`, summarised in `AGENTS.md`.
 - **Conventional commits** in English, imperative: `feat(enrollment): compute the siblings discount`, `fix(lists): keep the sort when searching`. Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`, `security`. The squash-merged PR title follows the same format.
 - **Ask before** adding a dependency. Exact pinned versions, published at least 14 days ago. No dependency for what fits in a few lines.
+  - **Security exception**: a release fixing a high or critical advisory that affects us may be installed before 14 days, after reading the advisory and the changelog, with the owner's approval, in a dedicated `fix/` PR that cites the advisory (first case: Next.js 16.4.2, #126).
 - Do not modify `migrations/0001_rls.sql`, the immutability triggers or `avecEcole()` without saying so explicitly.
 - When an architecture decision changes, update this file and add an ADR (`docs/adr/`) in the same PR.
 
