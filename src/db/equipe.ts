@@ -41,7 +41,7 @@ async function membreDe(tx: Tx, userId: string) {
  * Le compte appartient-il (même désactivé) à une autre école ? Son mot de
  * passe y donne accès : une école ne doit pas pouvoir le changer pour une
  * autre. Lu dans la transaction courante grâce à la politique RLS
- * `mes_appartenances` (app.user_id), remise à vide aussitôt.
+ * `my_memberships` (app.user_id), remise à vide aussitôt.
  */
 async function compteAilleurs(tx: Tx, userId: string): Promise<boolean> {
   await tx.execute(sql`select set_config('app.user_id', ${userId}, true)`);

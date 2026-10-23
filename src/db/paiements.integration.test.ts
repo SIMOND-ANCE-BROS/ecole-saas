@@ -111,6 +111,11 @@ describe("encaisser", () => {
   it("un paiement ne se modifie ni ne se supprime (trigger) ; on corrige par un paiement négatif", async () => {
     await expect(admin`UPDATE payment SET amount_cents = 1 WHERE id = ${ids[0]}`).rejects.toThrow(/cannot be modified/);
     await expect(admin`DELETE FROM payment WHERE id = ${ids[0]}`).rejects.toThrow(/cannot be deleted/);
+    // Only exception: the invoicing tool sync flag.
+    await expect(admin`UPDATE payment SET tool_synced = true WHERE id = ${ids[0]}`).resolves.toBeDefined();
+    await expect(admin`UPDATE payment SET tool_synced = false, amount_cents = 1 WHERE id = ${ids[0]}`).rejects.toThrow(
+      /cannot be modified/,
+    );
     expect((await avecEcole(ecole, (tx) => corrigerPaiement(tx, accueil, ids[0], 4000, AUJOURDHUI))).ok).toBe(true);
     expect(await avecEcole(ecole, (tx) => corrigerPaiement(tx, accueil, ids[0], 7000, AUJOURDHUI))).toEqual({
       ok: false,
