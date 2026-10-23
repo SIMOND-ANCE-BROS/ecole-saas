@@ -1,21 +1,21 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { devenirEleve } from "../../eleves/actions";
+import { becomeStudent } from "../../eleves/actions";
 
 /** Un parent qui prend aussi des cours : il rejoint la liste des élèves. */
-export function DevenirEleve({ id, prenom }: { id: string; prenom: string }) {
+export function BecomeStudent({ id, firstName: firstName }: { id: string; firstName: string }) {
   const [message, setMessage] = useState<string | null>(null);
-  const [enCours, demarrer] = useTransition();
+  const [inProgress, startTransition] = useTransition();
   return (
     <>
       <button
         type="button"
         className="bouton-secondaire"
-        disabled={enCours}
-        onClick={() => demarrer(async () => setMessage((await devenirEleve(id)).message))}
+        disabled={inProgress}
+        onClick={() => startTransition(async () => setMessage((await becomeStudent(id)).message))}
       >
-        {prenom} prend aussi des cours
+        {firstName} prend aussi des cours
       </button>
       {message && (
         <p role="alert" className="text-sm text-erreur">

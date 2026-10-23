@@ -3,19 +3,19 @@
  * centimes, dates `YYYY-MM-DD`.
  */
 
-export const MOYENS_REMISE = ["cheque", "especes", "cheque_vacances"] as const;
-export type MoyenRemise = (typeof MOYENS_REMISE)[number];
-export const estRemisable = (moyen: string): moyen is MoyenRemise =>
-  (MOYENS_REMISE as readonly string[]).includes(moyen);
+export const DEPOSIT_METHODS = ["cheque", "especes", "cheque_vacances"] as const;
+export type DepositMethod = (typeof DEPOSIT_METHODS)[number];
+export const isDepositable = (method: string): method is DepositMethod =>
+  (DEPOSIT_METHODS as readonly string[]).includes(method);
 
-export type PaiementRemisable = {
+export type DepositablePayment = {
   id: string;
-  moyen: string;
-  montantCentimes: number;
+  method: string;
+  amountCents: number;
   /** Montant déjà annulé par des corrections. */
-  corrigeCentimes: number;
-  encaissementPrevu: string | null;
-  remiseId: string | null;
+  correctedCents: number;
+  plannedPayment: string | null;
+  depositId: string | null;
 };
 
 /**
@@ -23,42 +23,42 @@ export type PaiementRemisable = {
  * d'encaissement arrivée), espèces et chèques vacances, pas encore remis ni
  * entièrement annulés par une correction.
  */
-export function aRemettre<T extends PaiementRemisable>(paiements: T[], aujourdhui: string): Record<MoyenRemise, T[]> {
-  const r: Record<MoyenRemise, T[]> = { cheque: [], especes: [], cheque_vacances: [] };
-  for (const p of paiements) {
-    if (!estRemisable(p.moyen) || p.montantCentimes <= 0 || p.remiseId !== null) continue;
-    if (p.montantCentimes - p.corrigeCentimes <= 0) continue;
-    if (p.encaissementPrevu !== null && p.encaissementPrevu > aujourdhui) continue;
-    r[p.moyen].push(p);
+export function toDeposit<T extends DepositablePayment>(payments: T[], today: string): Record<DepositMethod, T[]> {
+  const r: Record<DepositMethod, T[]> = { cheque: [], especes: [], cheque_vacances: [] };
+  for (const p of payments) {
+    if (!isDepositable(p.method) || p.amountCents <= 0 || p.depositId !== null) continue;
+    if (p.amountCents - p.correctedCents <= 0) continue;
+    if (p.plannedPayment !== null && p.plannedPayment > today) continue;
+    r[p.method].push(p);
   }
   return r;
 }
 
 /** Total général et par moyen. */
-export function totaux<T extends { moyen: string; montantCentimes: number }>(
-  lignes: T[],
-): { total: number; parMoyen: Record<string, number> } {
-  const parMoyen: Record<string, number> = {};
+export function totals<T extends { method: string; amountCents: number }>(
+  rows: T[],
+): { total: number; byMethod: Record<string, number> } {
+  const byMethod: Record<string, number> = {};
   let total = 0;
-  for (const l of lignes) {
-    parMoyen[l.moyen] = (parMoyen[l.moyen] ?? 0) + l.montantCentimes;
-    total += l.montantCentimes;
+  for (const l of rows) {
+    byMethod[l.method] = (byMethod[l.method] ?? 0) + l.amountCents;
+    total += l.amountCents;
   }
-  return { total, parMoyen };
+  return { total, byMethod };
 }
 
-export type LigneExport = {
+export type ExportRow = {
   date: string;
-  payeur: string;
-  moyen: string;
-  montantCentimes: number;
+  payer: string;
+  method: string;
+  amountCents: number;
   reference: string | null;
-  emetteur: string | null;
-  encaissementPrevu: string | null;
-  remise: string | null;
+  issuer: string | null;
+  plannedPayment: string | null;
+  deposit: string | null;
 };
 
-const montant = (c: number) =>
+const amount = (c: number) =>
   `${c < 0 ? "-" : ""}${Math.floor(Math.abs(c) / 100)},${String(Math.abs(c) % 100).padStart(2, "0")}`;
 const dateFr = (iso: string | null) => (iso ? iso.split("-").reverse().join("/") : "");
 /** Cellule texte : guillemets si besoin, et jamais interprétée comme formule par un tableur. */
@@ -69,19 +69,19 @@ function texte(v: string | null): string {
 }
 
 /** Export CSV pour la comptabilité : séparateur « ; », montants « 123,45 », dates JJ/MM/AAAA, BOM pour Excel. */
-export function versCsv(lignes: LigneExport[]): string {
-  const entete = ["Date", "Payeur", "Moyen", "Montant", "Référence", "Émetteur", "Encaissement prévu", "Remise"];
-  const corps = lignes.map((l) =>
+export function toCsv(rows: ExportRow[]): string {
+  const header = ["Date", "Payeur", "Moyen", "Montant", "Référence", "Émetteur", "Encaissement prévu", "Remise"];
+  const body = rows.map((l) =>
     [
       dateFr(l.date),
-      texte(l.payeur),
-      texte(l.moyen),
-      montant(l.montantCentimes),
+      texte(l.payer),
+      texte(l.method),
+      amount(l.amountCents),
       texte(l.reference),
-      texte(l.emetteur),
-      dateFr(l.encaissementPrevu),
-      dateFr(l.remise),
+      texte(l.issuer),
+      dateFr(l.plannedPayment),
+      dateFr(l.deposit),
     ].join(";"),
   );
-  return `﻿${[entete.join(";"), ...corps].join("\r\n")}\r\n`;
+  return `﻿${[header.join(";"), ...body].join("\r\n")}\r\n`;
 }

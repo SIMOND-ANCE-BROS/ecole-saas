@@ -21,7 +21,7 @@ const accent: MantineColorsTuple = [
 ];
 
 // Gris ardoise pour les gris clairs de l'interface.
-const ardoise: MantineColorsTuple = [
+const slate: MantineColorsTuple = [
   "#f8fafc",
   "#f1f5f9",
   "#e2e8f0",
@@ -35,7 +35,7 @@ const ardoise: MantineColorsTuple = [
 ];
 
 // Échelle sombre de Mantine : du texte clair (0) à la surface la plus sombre (9), proche de --fond / --surface.
-const sombre: MantineColorsTuple = [
+const dark: MantineColorsTuple = [
   "#e6e8ef",
   "#c7ccd8",
   "#9ba2b4",
@@ -51,7 +51,7 @@ const sombre: MantineColorsTuple = [
 export const theme = createTheme({
   primaryColor: "accent",
   primaryShade: { light: 6, dark: 4 },
-  colors: { accent, gray: ardoise, dark: sombre },
+  colors: { accent, gray: slate, dark: dark },
   fontFamily: "var(--font-geist-sans), system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
   fontFamilyMonospace: "var(--font-geist-mono), ui-monospace, monospace",
   headings: { fontWeight: "600" },

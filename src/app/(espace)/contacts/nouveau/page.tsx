@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { exigerRole } from "@/lib/session";
-import { FormulairePersonne } from "../../_personnes/formulaire";
+import { requireRole } from "@/lib/session";
+import { PersonForm } from "../../_personnes/formulaire";
 
 export const metadata: Metadata = { title: "Nouveau contact" };
 
-export default async function PageNouveauContact() {
-  await exigerRole("direction", "accueil");
+export default async function NewContactPage() {
+  await requireRole("direction", "accueil");
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
@@ -23,7 +23,7 @@ export default async function PageNouveauContact() {
         </Link>{" "}
         : le parent y est créé dans la foulée.
       </p>
-      <FormulairePersonne personne={null} pour="contacts" />
+      <PersonForm person={null} section="contacts" />
     </section>
   );
 }

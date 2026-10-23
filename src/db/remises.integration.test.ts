@@ -1,15 +1,8 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { avecEcole } from "./index";
-import { corrigerPaiement, encaisser } from "./paiements";
-import {
-  annulerRemise,
-  creerRemise,
-  journalEncaissements,
-  lireRemise,
-  listerRemises,
-  paiementsARemettre,
-} from "./remises";
+import { withSchool } from "./index";
+import { correctPayment, collect } from "./paiements";
+import { cancelDeposit, createDeposit, paymentLog, readDeposit, listDeposits, paymentsToDeposit } from "./remises";
 
 /**
  * Remises en banque et journal des encaissements (#98), comme l'application
@@ -22,179 +15,179 @@ const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
 const admin = postgres(url, { max: 1, onnotice: () => {} });
 
-const suffixe = Math.random().toString(36).slice(2, 8);
-const direction = `rem-direction-${suffixe}`;
-const AUJOURDHUI = "2026-10-21";
-let ecole: string;
-let autreEcole: string;
+const suffix = Math.random().toString(36).slice(2, 8);
+const direction = `rem-direction-${suffix}`;
+const TODAY = "2026-10-21";
+let school: string;
+let otherSchool: string;
 const ids: Record<string, string> = {};
 
 beforeAll(async () => {
-  [{ id: ecole }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`ra-${suffixe}`}) RETURNING id`;
-  [{ id: autreEcole }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`rb-${suffixe}`}) RETURNING id`;
+  [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`ra-${suffix}`}) RETURNING id`;
+  [{ id: otherSchool }] =
+    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`rb-${suffix}`}) RETURNING id`;
   await admin`INSERT INTO "user" (id, name, email) VALUES (${direction}, 'Direction Test', ${`${direction}@exemple.test`})`;
-  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${ecole}, ${direction}, 'direction'), (${autreEcole}, ${direction}, 'direction')`;
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${direction}, 'direction'), (${otherSchool}, ${direction}, 'direction')`;
   const [p] =
-    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${ecole}, 'Martin', 'Sophie') RETURNING id`;
-  const r = await avecEcole(ecole, (tx) =>
-    encaisser(tx, direction, p.id, [
+    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Martin', 'Sophie') RETURNING id`;
+  const r = await withSchool(school, (tx) =>
+    collect(tx, direction, p.id, [
       {
-        moyen: "cheque",
-        montantCentimes: 10000,
-        date: AUJOURDHUI,
+        method: "cheque",
+        amountCents: 10000,
+        date: TODAY,
         reference: "0001",
-        emetteur: "Banque A",
-        encaissementPrevu: null,
+        issuer: "Banque A",
+        plannedPayment: null,
       },
       {
-        moyen: "cheque",
-        montantCentimes: 10000,
-        date: AUJOURDHUI,
+        method: "cheque",
+        amountCents: 10000,
+        date: TODAY,
         reference: "0002",
-        emetteur: "Banque A",
-        encaissementPrevu: "2027-01-05",
+        issuer: "Banque A",
+        plannedPayment: "2027-01-05",
       },
       {
-        moyen: "especes",
-        montantCentimes: 2000,
-        date: AUJOURDHUI,
+        method: "especes",
+        amountCents: 2000,
+        date: TODAY,
         reference: null,
-        emetteur: null,
-        encaissementPrevu: null,
+        issuer: null,
+        plannedPayment: null,
       },
       {
-        moyen: "carte",
-        montantCentimes: 8000,
-        date: AUJOURDHUI,
+        method: "carte",
+        amountCents: 8000,
+        date: TODAY,
         reference: null,
-        emetteur: null,
-        encaissementPrevu: null,
+        issuer: null,
+        plannedPayment: null,
       },
       {
-        moyen: "cheque",
-        montantCentimes: 5000,
-        date: AUJOURDHUI,
+        method: "cheque",
+        amountCents: 5000,
+        date: TODAY,
         reference: "0003",
-        emetteur: null,
-        encaissementPrevu: null,
+        issuer: null,
+        plannedPayment: null,
       },
     ]),
   );
   if (!r.ok) throw new Error(r.message);
   [ids.cheque, ids.differe, ids.especes, ids.carte, ids.annule] = r.ids;
-  await avecEcole(ecole, (tx) => corrigerPaiement(tx, direction, ids.annule, 5000, AUJOURDHUI));
+  await withSchool(school, (tx) => correctPayment(tx, direction, ids.annule, 5000, TODAY));
 });
 
 afterAll(async () => {
   await admin.begin(async (t) => {
-    await t`DELETE FROM bank_deposit WHERE school_id IN (${ecole}, ${autreEcole})`;
+    await t`DELETE FROM bank_deposit WHERE school_id IN (${school}, ${otherSchool})`;
     await t`ALTER TABLE payment DISABLE TRIGGER payment_immutable`;
     await t`ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only`;
-    await t`DELETE FROM audit_log WHERE school_id IN (${ecole}, ${autreEcole})`;
-    await t`DELETE FROM payment WHERE school_id IN (${ecole}, ${autreEcole}) AND corrects_id IS NOT NULL`;
-    await t`DELETE FROM payment WHERE school_id IN (${ecole}, ${autreEcole})`;
+    await t`DELETE FROM audit_log WHERE school_id IN (${school}, ${otherSchool})`;
+    await t`DELETE FROM payment WHERE school_id IN (${school}, ${otherSchool}) AND corrects_id IS NOT NULL`;
+    await t`DELETE FROM payment WHERE school_id IN (${school}, ${otherSchool})`;
     await t`ALTER TABLE payment ENABLE TRIGGER payment_immutable`;
     await t`ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only`;
   });
   for (const t of ["person", "member"])
-    await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [ecole, autreEcole]);
+    await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [school, otherSchool]);
   await admin`DELETE FROM "user" WHERE id = ${direction}`;
-  await admin`DELETE FROM school WHERE id IN (${ecole}, ${autreEcole})`;
+  await admin`DELETE FROM school WHERE id IN (${school}, ${otherSchool})`;
   await admin.end();
 });
 
-const aRemettre = () => avecEcole(ecole, (tx) => paiementsARemettre(tx, AUJOURDHUI));
+const toDeposit = () => withSchool(school, (tx) => paymentsToDeposit(tx, TODAY));
 
 describe("remises en banque", () => {
-  let remiseCheques: string;
+  let chequesDeposit: string;
 
   it("à remettre : chèque arrivé à échéance et espèces ; ni carte, ni chèque différé, ni chèque entièrement corrigé", async () => {
-    const r = await aRemettre();
+    const r = await toDeposit();
     expect(r.cheque.map((p) => p.id)).toEqual([ids.cheque]);
     expect(r.especes.map((p) => p.id)).toEqual([ids.especes]);
     expect(r.cheque_vacances).toEqual([]);
   });
 
   it("crée une remise de chèques ; refuse un chèque déjà remis, un autre moyen, un chèque pas encore à encaisser", async () => {
-    const r = await avecEcole(ecole, (tx) =>
-      creerRemise(tx, direction, { date: AUJOURDHUI, moyen: "cheque", paiementIds: [ids.cheque] }, AUJOURDHUI),
+    const r = await withSchool(school, (tx) =>
+      createDeposit(tx, direction, { date: TODAY, method: "cheque", paymentIds: [ids.cheque] }, TODAY),
     );
     if (!r.ok) throw new Error(r.message);
-    remiseCheques = r.id;
-    const refus = {
+    chequesDeposit = r.id;
+    const refusal = {
       ok: false,
       message:
         "Un des paiements choisis n’est plus à remettre (déjà remis, corrigé, pas encore à encaisser ou d’un autre moyen).",
     };
     expect(
-      await avecEcole(ecole, (tx) =>
-        creerRemise(tx, direction, { date: AUJOURDHUI, moyen: "cheque", paiementIds: [ids.cheque] }, AUJOURDHUI),
+      await withSchool(school, (tx) =>
+        createDeposit(tx, direction, { date: TODAY, method: "cheque", paymentIds: [ids.cheque] }, TODAY),
       ),
-    ).toEqual(refus);
+    ).toEqual(refusal);
     expect(
-      await avecEcole(ecole, (tx) =>
-        creerRemise(tx, direction, { date: AUJOURDHUI, moyen: "cheque", paiementIds: [ids.especes] }, AUJOURDHUI),
+      await withSchool(school, (tx) =>
+        createDeposit(tx, direction, { date: TODAY, method: "cheque", paymentIds: [ids.especes] }, TODAY),
       ),
-    ).toEqual(refus);
+    ).toEqual(refusal);
     expect(
-      await avecEcole(ecole, (tx) =>
-        creerRemise(tx, direction, { date: AUJOURDHUI, moyen: "cheque", paiementIds: [ids.differe] }, AUJOURDHUI),
+      await withSchool(school, (tx) =>
+        createDeposit(tx, direction, { date: TODAY, method: "cheque", paymentIds: [ids.differe] }, TODAY),
       ),
-    ).toEqual(refus);
+    ).toEqual(refusal);
     // Une remise datée du jour d'encaissement prévu accepte le chèque différé.
     expect(
       (
-        await avecEcole(ecole, (tx) =>
-          creerRemise(tx, direction, { date: "2027-01-05", moyen: "cheque", paiementIds: [ids.differe] }, AUJOURDHUI),
+        await withSchool(school, (tx) =>
+          createDeposit(tx, direction, { date: "2027-01-05", method: "cheque", paymentIds: [ids.differe] }, TODAY),
         )
       ).ok,
     ).toBe(true);
-    expect((await aRemettre()).cheque).toEqual([]);
+    expect((await toDeposit()).cheque).toEqual([]);
   });
 
   it("un paiement ne peut figurer que dans une seule remise (contrainte en base)", async () => {
     const [{ id: autre }] =
-      await admin`INSERT INTO bank_deposit (school_id, date, method) VALUES (${ecole}, ${AUJOURDHUI}, 'cheque') RETURNING id`;
+      await admin`INSERT INTO bank_deposit (school_id, date, method) VALUES (${school}, ${TODAY}, 'cheque') RETURNING id`;
     await expect(
-      admin`INSERT INTO bank_deposit_payment (school_id, bank_deposit_id, payment_id) VALUES (${ecole}, ${autre}, ${ids.cheque})`,
+      admin`INSERT INTO bank_deposit_payment (school_id, bank_deposit_id, payment_id) VALUES (${school}, ${autre}, ${ids.cheque})`,
     ).rejects.toThrow();
     await admin`DELETE FROM bank_deposit WHERE id = ${autre}`;
   });
 
   it("bordereau, liste et journal des encaissements", async () => {
-    const b = await avecEcole(ecole, (tx) => lireRemise(tx, remiseCheques));
+    const b = await withSchool(school, (tx) => readDeposit(tx, chequesDeposit));
     expect(b).toMatchObject({
-      moyen: "cheque",
+      method: "cheque",
       nombre: 1,
-      totalCentimes: 10000,
-      paiements: [{ reference: "0001", emetteur: "Banque A", payeur: "Sophie Martin" }],
+      totalCents: 10000,
+      payments: [{ reference: "0001", issuer: "Banque A", payer: "Sophie Martin" }],
     });
     expect(
-      (await avecEcole(ecole, (tx) => listerRemises(tx))).map(
-        (x) => `${x.date} ${x.moyen} ${x.nombre} ${x.totalCentimes}`,
+      (await withSchool(school, (tx) => listDeposits(tx))).map(
+        (x) => `${x.date} ${x.method} ${x.nombre} ${x.totalCents}`,
       ),
     ).toEqual(["2027-01-05 cheque 1 10000", "2026-10-21 cheque 1 10000"]);
-    const j = await avecEcole(ecole, (tx) => journalEncaissements(tx, AUJOURDHUI, AUJOURDHUI, null));
+    const j = await withSchool(school, (tx) => paymentLog(tx, TODAY, TODAY, null));
     expect(j).toHaveLength(6); // cinq règlements et une correction
-    expect(j.find((x) => x.id === ids.cheque)?.remiseDate).toBe(AUJOURDHUI);
-    expect(await avecEcole(ecole, (tx) => journalEncaissements(tx, AUJOURDHUI, AUJOURDHUI, "especes"))).toHaveLength(1);
+    expect(j.find((x) => x.id === ids.cheque)?.dateDeposit).toBe(TODAY);
+    expect(await withSchool(school, (tx) => paymentLog(tx, TODAY, TODAY, "especes"))).toHaveLength(1);
   });
 
   it("annuler une remise rend ses chèques à remettre et laisse une trace", async () => {
-    expect((await avecEcole(ecole, (tx) => annulerRemise(tx, direction, remiseCheques))).ok).toBe(true);
-    expect((await aRemettre()).cheque.map((p) => p.id)).toEqual([ids.cheque]);
-    const [t] = await admin`SELECT action FROM audit_log WHERE row_id = ${remiseCheques} AND action = 'delete'`;
+    expect((await withSchool(school, (tx) => cancelDeposit(tx, direction, chequesDeposit))).ok).toBe(true);
+    expect((await toDeposit()).cheque.map((p) => p.id)).toEqual([ids.cheque]);
+    const [t] = await admin`SELECT action FROM audit_log WHERE row_id = ${chequesDeposit} AND action = 'delete'`;
     expect(t?.action).toBe("delete");
   });
 
   it("une autre école ne voit rien et ne peut pas remettre ces paiements", async () => {
-    expect(await avecEcole(autreEcole, (tx) => listerRemises(tx))).toEqual([]);
-    expect((await avecEcole(autreEcole, (tx) => paiementsARemettre(tx, AUJOURDHUI))).cheque).toEqual([]);
+    expect(await withSchool(otherSchool, (tx) => listDeposits(tx))).toEqual([]);
+    expect((await withSchool(otherSchool, (tx) => paymentsToDeposit(tx, TODAY))).cheque).toEqual([]);
     expect(
       (
-        await avecEcole(autreEcole, (tx) =>
-          creerRemise(tx, direction, { date: AUJOURDHUI, moyen: "cheque", paiementIds: [ids.cheque] }, AUJOURDHUI),
+        await withSchool(otherSchool, (tx) =>
+          createDeposit(tx, direction, { date: TODAY, method: "cheque", paymentIds: [ids.cheque] }, TODAY),
         )
       ).ok,
     ).toBe(false);

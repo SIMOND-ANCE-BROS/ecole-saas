@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { avecEcole } from "@/db";
-import { lirePersonne, nomAffiche } from "@/db/personnes";
-import { exigerRole } from "@/lib/session";
-import { FormulairePersonne } from "../../../_personnes/formulaire";
+import { withSchool } from "@/db";
+import { readPerson, nomAffiche } from "@/db/personnes";
+import { requireRole } from "@/lib/session";
+import { PersonForm } from "../../../_personnes/formulaire";
 
 export const metadata: Metadata = { title: "Modifier un contact" };
 
-export default async function PageModifierContact({ params }: PageProps<"/contacts/[id]/modifier">) {
-  const { ecoleId } = await exigerRole("direction", "accueil");
+export default async function EditContactPage({ params }: PageProps<"/contacts/[id]/modifier">) {
+  const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const { id } = await params;
-  const fiche = await avecEcole(ecoleId, (tx) => lirePersonne(tx, id));
-  if (!fiche) notFound();
+  const record = await withSchool(schoolId, (tx) => readPerson(tx, id));
+  if (!record) notFound();
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
@@ -20,13 +20,13 @@ export default async function PageModifierContact({ params }: PageProps<"/contac
           Contacts
         </Link>
         <span className="text-doux"> / </span>
-        <Link href={`/contacts/${fiche.id}`} className="lien">
-          {nomAffiche(fiche)}
+        <Link href={`/contacts/${record.id}`} className="lien">
+          {nomAffiche(record)}
         </Link>
         <span className="text-doux"> / Modifier</span>
       </nav>
-      <h1 className="titre-page">Modifier {nomAffiche(fiche)}</h1>
-      <FormulairePersonne personne={fiche} pour="contacts" />
+      <h1 className="titre-page">Modifier {nomAffiche(record)}</h1>
+      <PersonForm person={record} section="contacts" />
     </section>
   );
 }

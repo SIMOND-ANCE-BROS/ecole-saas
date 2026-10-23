@@ -1,48 +1,53 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { avecEcole } from "@/db";
-import { libellesCoursSaison, listerContacts, listerEleves, RESULTATS_MAX } from "@/db/eleves";
-import { saisonCourante } from "@/db/planning";
-import { lirePreference } from "@/db/preferences";
+import { withSchool } from "@/db";
+import { seasonCourseLabels, listContacts, listStudents, MAX_RESULTS } from "@/db/eleves";
+import { currentSeason } from "@/db/planning";
+import { readPreference } from "@/db/preferences";
 import { nomAffiche } from "@/db/personnes";
-import { COLONNES_ELEVES } from "@/domaine/filtres/colonnes";
-import { lireFiltre, lireTri } from "@/domaine/filtres/filtres";
-import { ageAu, aujourdhuiAParis } from "@/domaine/personnes/age";
-import { exigerRole } from "@/lib/session";
-import { TableauListe } from "../_filtres/tableau-liste";
-import { ResultatsNavigables } from "../_personnes/resultats";
+import { STUDENT_COLUMNS } from "@/domaine/filtres/colonnes";
+import { readFilter, readSort } from "@/domaine/filtres/filtres";
+import { ageAt, todayInParis } from "@/domaine/personnes/age";
+import { requireRole } from "@/lib/session";
+import { ListTable } from "../_filtres/tableau-liste";
+import { NavigableResults } from "../_personnes/resultats";
 import { Telephone } from "../_personnes/sections";
 
 export const metadata: Metadata = { title: "Élèves" };
 
 /** Élèves de l'école ; une recherche montre aussi les contacts qui correspondent (parent, payeur). */
-export default async function PageEleves({ searchParams }: PageProps<"/eleves">) {
-  const { ecoleId, userId } = await exigerRole("direction", "accueil");
+export default async function StudentsPage({ searchParams }: PageProps<"/eleves">) {
+  const { schoolId: schoolId, userId } = await requireRole("direction", "accueil");
   const { q, f, mode, sort, order } = await searchParams;
   const saisie = typeof q === "string" ? q.trim() : "";
-  const filtre = lireFiltre(f, mode, COLONNES_ELEVES);
-  const tri = lireTri(sort, order, COLONNES_ELEVES);
-  const filtrage = filtre.conditions.length > 0;
-  const aujourdhui = aujourdhuiAParis();
-  const { eleves, contacts, disposition, cours } = await avecEcole(ecoleId, async (tx) => {
-    const saison = await saisonCourante(tx, aujourdhui);
+  const filter = readFilter(f, mode, STUDENT_COLUMNS);
+  const currentSort = readSort(sort, order, STUDENT_COLUMNS);
+  const filtering = filter.conditions.length > 0;
+  const today = todayInParis();
+  const {
+    students: students,
+    contacts,
+    layout: layout,
+    courses: cours,
+  } = await withSchool(schoolId, async (tx) => {
+    const season = await currentSeason(tx, today);
     return {
-      eleves: await listerEleves(tx, saisie, { filtre, tri, aujourdhui, saisonId: saison?.id }),
-      cours: saison ? await libellesCoursSaison(tx, saison.id) : [],
-      contacts: saisie ? await listerContacts(tx, saisie) : [],
-      disposition: await lirePreference(tx, userId, "eleves"),
+      students: await listStudents(tx, saisie, { filter, currentSort, today, seasonId: season?.id }),
+      courses: season ? await seasonCourseLabels(tx, season.id) : [],
+      contacts: saisie ? await listContacts(tx, saisie) : [],
+      layout: await readPreference(tx, userId, "eleves"),
     };
   });
-  const messageVide =
+  const emptyMessage =
     saisie.length === 1
       ? "Tapez au moins deux caractères."
-      : filtrage
+      : filtering
         ? "Aucun élève ne correspond à ces filtres."
         : saisie
           ? `Aucun élève ne correspond à « ${saisie} ».`
           : "Aucun élève pour l’instant.";
-  const pluriel = (n: number, mot: string) => `${n} ${mot}${n > 1 ? "s" : ""}`;
+  const plural = (n: number, mot: string) => `${n} ${mot}${n > 1 ? "s" : ""}`;
 
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
@@ -50,11 +55,11 @@ export default async function PageEleves({ searchParams }: PageProps<"/eleves">)
         <div>
           <h1 className="titre-page">Élèves</h1>
           <p className="text-sm text-doux" aria-live="polite">
-            {saisie ? `${pluriel(eleves.length, "élève")} pour « ${saisie} »` : pluriel(eleves.length, "élève")}
-            {filtrage && " avec ces filtres"}
-            {eleves.length >= RESULTATS_MAX &&
-              ` : seuls les ${RESULTATS_MAX} premiers sont affichés, précisez la recherche ou filtrez`}
-            {!saisie && !filtrage && (
+            {saisie ? `${plural(students.length, "élève")} pour « ${saisie} »` : plural(students.length, "élève")}
+            {filtering && " avec ces filtres"}
+            {students.length >= MAX_RESULTS &&
+              ` : seuls les ${MAX_RESULTS} premiers sont affichés, précisez la recherche ou filtrez`}
+            {!saisie && !filtering && (
               <span className="hidden sm:inline">. Recherche par nom, téléphone, ou nom d’un parent (Ctrl K).</span>
             )}
           </p>
@@ -64,64 +69,62 @@ export default async function PageEleves({ searchParams }: PageProps<"/eleves">)
         </Link>
       </div>
 
-      <ResultatsNavigables>
+      <NavigableResults>
         {/* useSearchParams exige une frontière Suspense. */}
         <Suspense>
-          <TableauListe
-            liste="eleves"
-            quoi="les élèves"
-            legende="Élèves"
-            colonnes={COLONNES_ELEVES}
-            disposition={disposition}
-            lien="nom"
-            vide={messageVide}
-            choix={{ cours }}
-            actionVide={
+          <ListTable
+            list="eleves"
+            what="les élèves"
+            caption="Élèves"
+            columns={STUDENT_COLUMNS}
+            layout={layout}
+            relationship="nom"
+            vide={emptyMessage}
+            choice={{ cours }}
+            emptyAction={
               !saisie && (
                 <Link href="/eleves/nouveau" className="bouton-principal">
                   Nouvel élève
                 </Link>
               )
             }
-            lignes={eleves.map((e) => ({
+            rows={students.map((e) => ({
               id: e.id,
               href: `/eleves/${e.id}`,
               cellules: {
-                nom: [e.prenom, e.nom].filter(Boolean).join(" "),
-                age: e.dateNaissance ? ageAu(e.dateNaissance, aujourdhui) : null,
-                responsables: e.responsables,
-                facture: e.factureA,
+                nom: [e.firstName, e.name].filter(Boolean).join(" "),
+                age: e.birthDate ? ageAt(e.birthDate, today) : null,
+                responsables: e.guardians,
+                facture: e.billedTo,
                 telephone: e.telephone,
-                naissance: e.dateNaissance,
+                naissance: e.birthDate,
                 email: e.email,
-                cours: e.cours,
-                inscription: e.inscription,
-                prevenir: e.prevenir,
+                cours: e.courses,
+                inscription: e.enrollmentStatus,
+                prevenir: e.toNotify,
               },
             }))}
             mobile={
-              eleves.length === 0 ? (
-                <p className="text-sm">{messageVide}</p>
+              students.length === 0 ? (
+                <p className="text-sm">{emptyMessage}</p>
               ) : (
                 <ul className="panneau divide-y divide-bordure">
-                  {eleves.map((e) => (
+                  {students.map((e) => (
                     <li key={e.id} className="flex flex-col gap-0.5 px-3 py-2.5 text-sm">
                       <span className="flex items-baseline justify-between gap-2">
                         <Link href={`/eleves/${e.id}`} className="lien text-base font-medium">
-                          {[e.prenom, e.nom].filter(Boolean).join(" ")}
+                          {[e.firstName, e.name].filter(Boolean).join(" ")}
                         </Link>
-                        {e.dateNaissance && (
-                          <span className="shrink-0 tabular-nums text-doux">
-                            {ageAu(e.dateNaissance, aujourdhui)} ans
-                          </span>
+                        {e.birthDate && (
+                          <span className="shrink-0 tabular-nums text-doux">{ageAt(e.birthDate, today)} ans</span>
                         )}
                       </span>
-                      {e.responsables.length > 0 && (
-                        <span className="text-doux">Responsable : {e.responsables.join(", ")}</span>
+                      {e.guardians.length > 0 && (
+                        <span className="text-doux">Responsable : {e.guardians.join(", ")}</span>
                       )}
                       {e.telephone && (
                         <span className="self-start py-1">
-                          <Telephone numero={e.telephone} />
+                          <Telephone number={e.telephone} />
                         </span>
                       )}
                     </li>
@@ -143,14 +146,14 @@ export default async function PageEleves({ searchParams }: PageProps<"/eleves">)
                   <Link href={`/contacts/${c.id}`} data-resultat className="lien font-medium">
                     {nomAffiche(c)}
                   </Link>
-                  {c.eleves.length > 0 && <span className="text-doux">pour {c.eleves.join(", ")}</span>}
+                  {c.students.length > 0 && <span className="text-doux">pour {c.students.join(", ")}</span>}
                   {c.telephone && <span className="ml-auto tabular-nums">{c.telephone}</span>}
                 </li>
               ))}
             </ul>
           </section>
         )}
-      </ResultatsNavigables>
+      </NavigableResults>
     </section>
   );
 }

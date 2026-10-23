@@ -4,98 +4,97 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   type Condition,
-  type DefColonne,
-  type Filtre,
-  lireFiltre,
-  OPERATEURS,
-  sansValeur,
-  valeurNormalisee,
-  versParametres,
+  type ColumnDef,
+  type Filter,
+  readFilter,
+  OPERATORS,
+  withoutValue,
+  normalizedValue,
+  toParams,
 } from "@/domaine/filtres/filtres";
 
 /** Délai avant d'appliquer une valeur tapée (la liste se recharge depuis le serveur). */
-const DELAI = 350;
+const DELAY = 350;
 
 /**
  * Filtre d'une liste (#87, #89) : état local, dont seules les conditions
  * complètes vont dans l'adresse (`?f=…&mode=ou`) que la page relit côté
  * serveur. Une condition en cours de saisie reste locale.
  */
-export function useFiltreAdresse(colonnes: DefColonne[]) {
+export function useAddressFilter(columns: ColumnDef[]) {
   const router = useRouter();
-  const chemin = usePathname();
+  const path = usePathname();
   const params = useSearchParams();
-  const [enCours, demarrer] = useTransition();
-  const [filtre, setFiltre] = useState<Filtre>(() => lireFiltre(params.getAll("f"), params.get("mode"), colonnes));
-  const minuteur = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(minuteur.current), []);
+  const [inProgress, startTransition] = useTransition();
+  const [filter, setFilter] = useState<Filter>(() => readFilter(params.getAll("f"), params.get("mode"), columns));
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
 
-  const typeDe = (colonne: string) => colonnes.find((c) => c.id === colonne)?.type ?? "texte";
-  const complete = (c: Condition) => valeurNormalisee(c, typeDe(c.colonne)) !== null;
+  const typeDe = (column: string) => columns.find((c) => c.id === column)?.type ?? "texte";
+  const complete = (c: Condition) => normalizedValue(c, typeDe(c.column)) !== null;
 
-  function publier(f: Filtre, differe = false) {
-    clearTimeout(minuteur.current);
-    const envoyer = () => {
+  function publish(f: Filter, deferred = false) {
+    clearTimeout(timer.current);
+    const send = () => {
       const p = new URLSearchParams(params.toString());
       p.delete("f");
       p.delete("mode");
-      for (const [cle, valeur] of versParametres({ ...f, conditions: f.conditions.filter(complete) }))
-        p.append(cle, valeur);
+      for (const [key, value] of toParams({ ...f, conditions: f.conditions.filter(complete) })) p.append(key, value);
       const texte = p.toString();
-      demarrer(() => router.replace(texte ? `${chemin}?${texte}` : chemin, { scroll: false }));
+      startTransition(() => router.replace(texte ? `${path}?${texte}` : path, { scroll: false }));
     };
-    if (differe) minuteur.current = setTimeout(envoyer, DELAI);
-    else envoyer();
+    if (deferred) timer.current = setTimeout(send, DELAY);
+    else send();
   }
 
   /** Change le filtre ; `differe` pour une valeur en cours de frappe. */
-  function changer(f: Filtre, differe = false) {
-    setFiltre(f);
-    publier(f, differe);
+  function change(f: Filter, deferred = false) {
+    setFilter(f);
+    publish(f, deferred);
   }
 
   /** Modifie la condition d'indice `i` (opérateur adapté au type de la colonne, valeur vidée si inutile). */
-  function modifier(i: number, maj: Partial<Condition>) {
-    const conditions = filtre.conditions.map((c, j) => {
+  function update(i: number, updated: Partial<Condition>) {
+    const conditions = filter.conditions.map((c, j) => {
       if (j !== i) return c;
-      const suivante = { ...c, ...maj };
-      const ops = OPERATEURS[typeDe(suivante.colonne)];
-      if (!ops.includes(suivante.operateur)) suivante.operateur = ops[0];
-      if (sansValeur(suivante.operateur)) suivante.valeur = "";
-      return suivante;
+      const next = { ...c, ...updated };
+      const ops = OPERATORS[typeDe(next.column)];
+      if (!ops.includes(next.operator)) next.operator = ops[0];
+      if (withoutValue(next.operator)) next.value = "";
+      return next;
     });
-    changer({ ...filtre, conditions }, "valeur" in maj);
+    change({ ...filter, conditions }, ("value" satisfies keyof Condition) in updated);
   }
 
   /** Nouvelle condition vide sur une colonne : rien à recharger tant qu'elle n'a pas de valeur. */
-  function ajouter(colonne: string) {
-    setFiltre({
-      ...filtre,
-      conditions: [...filtre.conditions, { colonne, operateur: OPERATEURS[typeDe(colonne)][0], valeur: "" }],
+  function add(column: string) {
+    setFilter({
+      ...filter,
+      conditions: [...filter.conditions, { column, operator: OPERATORS[typeDe(column)][0], value: "" }],
     });
   }
 
-  function retirer(i: number) {
-    changer({ ...filtre, conditions: filtre.conditions.filter((_, j) => j !== i) });
+  function remove(i: number) {
+    change({ ...filter, conditions: filter.conditions.filter((_, j) => j !== i) });
   }
 
   /** À la fermeture d'une bulle : oublie les conditions de cette colonne restées sans valeur (jamais publiées). */
-  function nettoyer(colonne: string) {
-    setFiltre((f) => ({ ...f, conditions: f.conditions.filter((c) => c.colonne !== colonne || complete(c)) }));
+  function clean(column: string) {
+    setFilter((f) => ({ ...f, conditions: f.conditions.filter((c) => c.column !== column || complete(c)) }));
   }
 
   return {
-    filtre,
-    enCours,
+    filter: filter,
+    inProgress: inProgress,
     typeDe,
     complete,
-    changer,
-    modifier,
-    ajouter,
-    retirer,
-    nettoyer,
-    appliquer: () => publier(filtre),
+    change: change,
+    update: update,
+    add: add,
+    remove: remove,
+    clean: clean,
+    apply: () => publish(filter),
   };
 }
 
-export type FiltreAdresse = ReturnType<typeof useFiltreAdresse>;
+export type AddressFilter = ReturnType<typeof useAddressFilter>;

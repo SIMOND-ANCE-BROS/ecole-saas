@@ -1,5 +1,5 @@
-import { LIBELLES_STATUT_INSCRIPTION } from "../inscription/statuts";
-import type { DefColonne } from "./filtres";
+import { ENROLLMENT_STATUS_LABELS } from "../inscription/statuts";
+import type { ColumnDef } from "./filtres";
 
 /**
  * Colonnes filtrables de chaque liste, partagées par la page (serveur), la
@@ -7,47 +7,47 @@ import type { DefColonne } from "./filtres";
  * apparaissent dans l'adresse : ne pas les renommer sans raison.
  */
 
-export const COLONNES_ELEVES: DefColonne[] = [
-  { id: "nom", libelle: "Élève", type: "texte", obligatoire: true },
-  { id: "age", libelle: "Âge", type: "nombre", droite: true },
-  { id: "responsables", libelle: "Responsables", type: "texte" },
-  { id: "facture", libelle: "Facturé à", type: "texte", siVide: "l’élève" },
+export const STUDENT_COLUMNS: ColumnDef[] = [
+  { id: "nom", label: "Élève", type: "texte", required: true },
+  { id: "age", label: "Âge", type: "nombre", right: true },
+  { id: "responsables", label: "Responsables", type: "texte" },
+  { id: "facture", label: "Facturé à", type: "texte", ifEmpty: "l’élève" },
   // Filtrées par cases à cocher (#107) : statuts connus ; les cours viennent du planning de la saison.
   {
     id: "inscription",
-    libelle: "Inscription",
+    label: "Inscription",
     type: "texte",
-    siVide: "aucune",
-    choix: Object.values(LIBELLES_STATUT_INSCRIPTION),
+    ifEmpty: "aucune",
+    choice: Object.values(ENROLLMENT_STATUS_LABELS),
   },
-  { id: "cours", libelle: "Cours suivis", type: "texte", siVide: "aucun" },
-  { id: "telephone", libelle: "Téléphone", type: "telephone" },
+  { id: "cours", label: "Cours suivis", type: "texte", ifEmpty: "aucun" },
+  { id: "telephone", label: "Téléphone", type: "telephone" },
   // Proposées dans « Colonnes », masquées par défaut (#89).
-  { id: "naissance", libelle: "Naissance", type: "date", parDefaut: false },
-  { id: "email", libelle: "E-mail", type: "texte", courriel: true, parDefaut: false },
-  { id: "prevenir", libelle: "À prévenir", type: "texte", parDefaut: false },
+  { id: "naissance", label: "Naissance", type: "date", byDefault: false },
+  { id: "email", label: "E-mail", type: "texte", email: true, byDefault: false },
+  { id: "prevenir", label: "À prévenir", type: "texte", byDefault: false },
 ];
 
-export const COLONNES_CONTACTS: DefColonne[] = [
-  { id: "nom", libelle: "Contact", type: "texte", obligatoire: true },
-  { id: "eleves", libelle: "Pour les élèves", type: "texte" },
-  { id: "telephone", libelle: "Téléphone", type: "telephone" },
-  { id: "email", libelle: "E-mail", type: "texte", courriel: true },
+export const CONTACT_COLUMNS: ColumnDef[] = [
+  { id: "nom", label: "Contact", type: "texte", required: true },
+  { id: "eleves", label: "Pour les élèves", type: "texte" },
+  { id: "telephone", label: "Téléphone", type: "telephone" },
+  { id: "email", label: "E-mail", type: "texte", email: true },
 ];
 
-export const COLONNES_INTERVENANTS: DefColonne[] = [
-  { id: "nom", libelle: "Nom", type: "texte", obligatoire: true },
-  { id: "statut", libelle: "Statut", type: "texte" },
-  { id: "cours", libelle: "Cours", type: "nombre", droite: true },
+export const INSTRUCTOR_COLUMNS: ColumnDef[] = [
+  { id: "nom", label: "Nom", type: "texte", required: true },
+  { id: "statut", label: "Statut", type: "texte" },
+  { id: "cours", label: "Cours", type: "nombre", right: true },
   /** Réservée à la direction : la page la retire pour l'accueil. */
-  { id: "tarif", libelle: "Tarif", type: "texte", droite: true, filtrable: false, triable: false },
-  { id: "email", libelle: "E-mail", type: "texte", courriel: true },
+  { id: "tarif", label: "Tarif", type: "texte", right: true, filterable: false, sortable: false },
+  { id: "email", label: "E-mail", type: "texte", email: true },
 ];
 
 /** Listes dont la disposition des colonnes est mémorisée par membre (#89). */
 export const LISTES = {
-  eleves: COLONNES_ELEVES,
-  contacts: COLONNES_CONTACTS,
-  intervenants: COLONNES_INTERVENANTS,
+  eleves: STUDENT_COLUMNS,
+  contacts: CONTACT_COLUMNS,
+  intervenants: INSTRUCTOR_COLUMNS,
 } as const;
-export type Liste = keyof typeof LISTES;
+export type List = keyof typeof LISTES;

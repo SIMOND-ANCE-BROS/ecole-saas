@@ -4,24 +4,24 @@
  * génération est fournie par l'appelant.
  */
 
-export type SeanceAgenda = {
+export type CalendarLesson = {
   id: string;
   /** `YYYY-MM-DD` */
   date: string;
   /** `HH:MM`, heure de Paris */
-  heureDebut: string;
-  dureeMinutes: number;
-  titre: string;
-  lieu: string;
+  startTime: string;
+  durationMinutes: number;
+  title: string;
+  place: string;
   annulee: boolean;
 };
 
-const FUSEAU = "Europe/Paris";
+const TIME_ZONE = "Europe/Paris";
 
 /** Règles de l'heure d'été européenne (dernier dimanche de mars et d'octobre). */
 const VTIMEZONE = [
   "BEGIN:VTIMEZONE",
-  `TZID:${FUSEAU}`,
+  `TZID:${TIME_ZONE}`,
   "BEGIN:DAYLIGHT",
   "TZOFFSETFROM:+0100",
   "TZOFFSETTO:+0200",
@@ -39,37 +39,37 @@ const VTIMEZONE = [
   "END:VTIMEZONE",
 ];
 
-const echapper = (texte: string) =>
+const escape = (texte: string) =>
   texte.replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 
 /** Replie une ligne en morceaux de 75 octets au plus, sans couper un caractère. */
-function replier(ligne: string): string[] {
-  const morceaux: string[] = [];
-  let courant = "";
+function collapse(row: string): string[] {
+  const chunks: string[] = [];
+  let current = "";
   let octets = 0;
-  for (const caractere of ligne) {
-    const taille = new TextEncoder().encode(caractere).length;
-    const limite = morceaux.length === 0 ? 75 : 74; // l'espace de continuation compte
-    if (octets + taille > limite) {
-      morceaux.push(courant);
-      courant = "";
+  for (const character of row) {
+    const size = new TextEncoder().encode(character).length;
+    const limit = chunks.length === 0 ? 75 : 74; // l'espace de continuation compte
+    if (octets + size > limit) {
+      chunks.push(current);
+      current = "";
       octets = 0;
     }
-    courant += caractere;
-    octets += taille;
+    current += character;
+    octets += size;
   }
-  morceaux.push(courant);
-  return morceaux.map((m, i) => (i === 0 ? m : ` ${m}`));
+  chunks.push(current);
+  return chunks.map((m, i) => (i === 0 ? m : ` ${m}`));
 }
 
 /** Date et heure locales `YYYYMMDDTHHMMSS`, minutes ajoutées sans passer par un fuseau. */
 function local(date: string, heure: string, minutesEnPlus = 0): string {
   const [a, m, j] = date.split("-").map(Number);
   const total = Number(heure.slice(0, 2)) * 60 + Number(heure.slice(3, 5)) + minutesEnPlus;
-  const jour = new Date(Date.UTC(a, m - 1, j) + Math.floor(total / 1440) * 86_400_000);
-  const deux = (n: number) => String(n).padStart(2, "0");
-  const reste = total % 1440;
-  return `${jour.getUTCFullYear()}${deux(jour.getUTCMonth() + 1)}${deux(jour.getUTCDate())}T${deux(Math.floor(reste / 60))}${deux(reste % 60)}00`;
+  const day = new Date(Date.UTC(a, m - 1, j) + Math.floor(total / 1440) * 86_400_000);
+  const two = (n: number) => String(n).padStart(2, "0");
+  const remaining = total % 1440;
+  return `${day.getUTCFullYear()}${two(day.getUTCMonth() + 1)}${two(day.getUTCDate())}T${two(Math.floor(remaining / 60))}${two(remaining % 60)}00`;
 }
 
 const utc = (d: Date) =>
@@ -78,39 +78,39 @@ const utc = (d: Date) =>
     .replace(/[-:]/g, "")
     .replace(/\.\d{3}/, "");
 
-export function agendaIcs({
-  nom,
-  genereLe,
-  seances,
+export function icsCalendar({
+  name: name,
+  generatedAt: generatedAt,
+  lessons: lessons,
 }: {
-  nom: string;
-  genereLe: Date;
-  seances: SeanceAgenda[];
+  name: string;
+  generatedAt: Date;
+  lessons: CalendarLesson[];
 }): string {
-  const lignes = [
+  const rows = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
     "PRODID:-//ecole-saas//agenda//FR",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    `X-WR-CALNAME:${echapper(nom)}`,
-    `X-WR-TIMEZONE:${FUSEAU}`,
+    `X-WR-CALNAME:${escape(name)}`,
+    `X-WR-TIMEZONE:${TIME_ZONE}`,
     "REFRESH-INTERVAL;VALUE=DURATION:PT1H",
     "X-PUBLISHED-TTL:PT1H",
     ...VTIMEZONE,
-    ...seances.flatMap((s) => [
+    ...lessons.flatMap((s) => [
       "BEGIN:VEVENT",
       `UID:seance-${s.id}@ecole-saas`,
-      `DTSTAMP:${utc(genereLe)}`,
-      `DTSTART;TZID=${FUSEAU}:${local(s.date, s.heureDebut)}`,
-      `DTEND;TZID=${FUSEAU}:${local(s.date, s.heureDebut, s.dureeMinutes)}`,
-      `SUMMARY:${echapper(s.titre)}`,
-      `LOCATION:${echapper(s.lieu)}`,
+      `DTSTAMP:${utc(generatedAt)}`,
+      `DTSTART;TZID=${TIME_ZONE}:${local(s.date, s.startTime)}`,
+      `DTEND;TZID=${TIME_ZONE}:${local(s.date, s.startTime, s.durationMinutes)}`,
+      `SUMMARY:${escape(s.title)}`,
+      `LOCATION:${escape(s.place)}`,
       `STATUS:${s.annulee ? "CANCELLED" : "CONFIRMED"}`,
       "TRANSP:OPAQUE",
       "END:VEVENT",
     ]),
     "END:VCALENDAR",
   ];
-  return `${lignes.flatMap(replier).join("\r\n")}\r\n`;
+  return `${rows.flatMap(collapse).join("\r\n")}\r\n`;
 }

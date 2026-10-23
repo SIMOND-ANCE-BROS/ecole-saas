@@ -1,43 +1,49 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { avecEcole } from "@/db";
-import { horairesParSite } from "@/db/parametres";
-import { coursDeLaSaison, saisonCourante } from "@/db/planning";
-import { fermeturesEntre, seancesDeLaSemaine } from "@/db/seances";
-import { ajouterJours, dateValide, lundiDe } from "@/domaine/planning/semaine";
-import { aujourdhuiAParis } from "@/domaine/personnes/age";
-import { contexteEcole } from "@/lib/session";
-import { GrillePlanning } from "./grille";
+import { withSchool } from "@/db";
+import { hoursBySite } from "@/db/parametres";
+import { seasonCourses, currentSeason } from "@/db/planning";
+import { closuresBetween, weekLessons } from "@/db/seances";
+import { addDays, validDate, mondayOf } from "@/domaine/planning/semaine";
+import { todayInParis } from "@/domaine/personnes/age";
+import { schoolContext } from "@/lib/session";
+import { ScheduleGrid } from "./grille";
 
 export const metadata: Metadata = { title: "Planning" };
 
-export default async function PagePlanning({ searchParams }: PageProps<"/planning">) {
-  const { ecoleId, role } = await contexteEcole();
+export default async function SchedulePage({ searchParams }: PageProps<"/planning">) {
+  const { schoolId: schoolId, role } = await schoolContext();
   const { enregistre, supprime, vue, semaine } = await searchParams;
-  const aujourdhui = aujourdhuiAParis();
-  const lundi = lundiDe(dateValide(semaine) ?? aujourdhui);
-  const { saison, cours, horaires, seances, fermetures } = await avecEcole(ecoleId, async (tx) => {
-    const s = await saisonCourante(tx, aujourdhui);
+  const today = todayInParis();
+  const monday = mondayOf(validDate(semaine) ?? today);
+  const {
+    season: season,
+    courses: cours,
+    hours: hours,
+    lessons: lessons,
+    closures: closures,
+  } = await withSchool(schoolId, async (tx) => {
+    const s = await currentSeason(tx, today);
     return {
-      saison: s,
-      cours: s ? await coursDeLaSaison(tx, s.id) : [],
-      horaires: await horairesParSite(tx),
-      seances: await seancesDeLaSemaine(tx, lundi),
-      fermetures: await fermeturesEntre(tx, lundi, ajouterJours(lundi, 6)),
+      season: s,
+      courses: s ? await seasonCourses(tx, s.id) : [],
+      hours: await hoursBySite(tx),
+      lessons: await weekLessons(tx, monday),
+      closures: await closuresBetween(tx, monday, addDays(monday, 6)),
     };
   });
 
-  if (!saison) {
+  if (!season) {
     return <p className="text-sm text-doux">Aucune saison n’est encore paramétrée.</p>;
   }
   const direction = role === "direction";
-  const enregistreId = typeof enregistre === "string" ? enregistre : undefined;
-  const confirme = cours.find((c) => c.id === enregistreId);
+  const savedId = typeof enregistre === "string" ? enregistre : undefined;
+  const confirmed = cours.find((c) => c.id === savedId);
 
   return (
     <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="titre-page">Planning {saison.libelle}</h1>
+        <h1 className="titre-page">Planning {season.label}</h1>
         {direction && (
           <div className="flex gap-2">
             <Link href="/planning/fermetures" className="bouton-secondaire">
@@ -49,9 +55,9 @@ export default async function PagePlanning({ searchParams }: PageProps<"/plannin
           </div>
         )}
       </div>
-      {confirme && (
+      {confirmed && (
         <p role="status" className="rounded-md border border-accent bg-accent-doux px-3 py-2 text-sm">
-          Cours de {confirme.discipline} enregistré.
+          Cours de {confirmed.discipline} enregistré.
         </p>
       )}
       {supprime && (
@@ -64,16 +70,16 @@ export default async function PagePlanning({ searchParams }: PageProps<"/plannin
           Aucun cours pour cette saison.{direction && " Créez le premier avec « Nouveau cours »."}
         </p>
       ) : (
-        <GrillePlanning
-          cours={cours}
-          modifiable={direction}
-          misEnAvant={confirme?.id}
-          vue={vue === "liste" ? "liste" : vue === "type" ? "type" : "datee"}
-          horaires={horaires}
-          lundi={lundi}
-          aujourdhui={aujourdhui}
-          seances={seances}
-          fermetures={fermetures}
+        <ScheduleGrid
+          courses={cours}
+          editable={direction}
+          highlighted={confirmed?.id}
+          view={vue === "liste" ? "liste" : vue === "type" ? "type" : "datee"}
+          hours={hours}
+          monday={monday}
+          today={today}
+          lessons={lessons}
+          closures={closures}
         />
       )}
     </section>

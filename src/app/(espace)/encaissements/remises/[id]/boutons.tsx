@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { annuler } from "../../actions";
+import { cancel } from "../../actions";
 
-export function Imprimer() {
+export function Print() {
   return (
     <button type="button" className="bouton-principal" onClick={() => window.print()}>
       Imprimer le bordereau
@@ -12,13 +12,13 @@ export function Imprimer() {
 }
 
 /** Annulation d'une remise faite par erreur (direction), après confirmation. */
-export function AnnulerRemise({ id }: { id: string }) {
-  const [confirmer, setConfirmer] = useState(false);
+export function CancelDeposit({ id }: { id: string }) {
+  const [confirm, setConfirm] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [envoi, demarrer] = useTransition();
-  if (!confirmer) {
+  const [sending, startTransition] = useTransition();
+  if (!confirm) {
     return (
-      <button type="button" className="lien text-sm text-erreur" onClick={() => setConfirmer(true)}>
+      <button type="button" className="lien text-sm text-erreur" onClick={() => setConfirm(true)}>
         Annuler la remise
       </button>
     );
@@ -29,12 +29,12 @@ export function AnnulerRemise({ id }: { id: string }) {
       <button
         type="button"
         className="bouton-secondaire"
-        disabled={envoi}
-        onClick={() => demarrer(async () => setMessage((await annuler(id)).message))}
+        disabled={sending}
+        onClick={() => startTransition(async () => setMessage((await cancel(id)).message))}
       >
         Oui, annuler
       </button>
-      <button type="button" className="lien" onClick={() => setConfirmer(false)}>
+      <button type="button" className="lien" onClick={() => setConfirm(false)}>
         Non
       </button>
       {message && (

@@ -1,67 +1,67 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { requeteDifferee } from "./requete-differee";
+import { deferredQuery } from "./requete-differee";
 
 afterEach(() => vi.useRealTimers());
-const promesse = <T>() => {
-  let resoudre!: (valeur: T) => void;
-  let rejeter!: (erreur: Error) => void;
-  const attente = new Promise<T>((resolve, reject) => {
-    resoudre = resolve;
-    rejeter = reject;
+const promise = <T>() => {
+  let resolveIt!: (value: T) => void;
+  let rejectIt!: (error: Error) => void;
+  const pending = new Promise<T>((resolve, reject) => {
+    resolveIt = resolve;
+    rejectIt = reject;
   });
-  return { attente, resoudre, rejeter };
+  return { pending, resolve: resolveIt, reject: rejectIt };
 };
 
 describe("aperçu différé lié à la saisie courante", () => {
   it("ne lance pas un calcul annulé pendant la frappe", async () => {
     vi.useFakeTimers();
-    const charger = vi.fn(async () => 100);
-    const annuler = requeteDifferee(charger, vi.fn(), vi.fn());
-    annuler();
+    const load = vi.fn(async () => 100);
+    const cancel = deferredQuery(load, vi.fn(), vi.fn());
+    cancel();
     await vi.runAllTimersAsync();
-    expect(charger).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
   });
 
   it("ignore une ancienne réponse arrivée après le nouveau prix", async () => {
     vi.useFakeTimers();
-    const ancien = promesse<number>();
-    const nouveau = promesse<number>();
-    const afficher = vi.fn();
-    const annuler = requeteDifferee(() => ancien.attente, afficher, vi.fn());
+    const old = promise<number>();
+    const next = promise<number>();
+    const display = vi.fn();
+    const cancel = deferredQuery(() => old.pending, display, vi.fn());
     await vi.advanceTimersByTimeAsync(150);
-    annuler();
-    requeteDifferee(() => nouveau.attente, afficher, vi.fn());
+    cancel();
+    deferredQuery(() => next.pending, display, vi.fn());
     await vi.advanceTimersByTimeAsync(150);
-    nouveau.resoudre(16500);
+    next.resolve(16500);
     await vi.runAllTimersAsync();
-    ancien.resoudre(9500);
+    old.resolve(9500);
     await vi.runAllTimersAsync();
-    expect(afficher.mock.calls).toEqual([[16500]]);
+    expect(display.mock.calls).toEqual([[16500]]);
   });
 
   it("signale un échec pour proposer une nouvelle tentative", async () => {
     vi.useFakeTimers();
-    const erreur = vi.fn();
-    requeteDifferee(
+    const error = vi.fn();
+    deferredQuery(
       async () => {
         throw new Error("indisponible");
       },
       vi.fn(),
-      erreur,
+      error,
     );
     await vi.runAllTimersAsync();
-    expect(erreur).toHaveBeenCalledOnce();
+    expect(error).toHaveBeenCalledOnce();
   });
 
   it("ignore un échec après changement de saisie ou départ de la page", async () => {
     vi.useFakeTimers();
-    const ancienne = promesse<number>();
-    const erreur = vi.fn();
-    const annuler = requeteDifferee(() => ancienne.attente, vi.fn(), erreur);
+    const old = promise<number>();
+    const error = vi.fn();
+    const cancel = deferredQuery(() => old.pending, vi.fn(), error);
     await vi.advanceTimersByTimeAsync(150);
-    annuler();
-    ancienne.rejeter(new Error("ancienne requête"));
+    cancel();
+    old.reject(new Error("ancienne requête"));
     await vi.runAllTimersAsync();
-    expect(erreur).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
   });
 });

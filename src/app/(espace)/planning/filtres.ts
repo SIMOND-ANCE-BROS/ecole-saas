@@ -1,18 +1,18 @@
-import type { CoursPlanning } from "@/db/planning";
+import type { ScheduleCourse } from "@/db/planning";
 
-export type FiltresPlanning = { discipline: string; site: string; salleId: string; intervenantId: string };
-export const FILTRES_VIDES: FiltresPlanning = { discipline: "", site: "", salleId: "", intervenantId: "" };
+export type ScheduleFilters = { discipline: string; site: string; roomId: string; instructorId: string };
+export const EMPTY_FILTERS: ScheduleFilters = { discipline: "", site: "", roomId: "", instructorId: "" };
 
 /** Les identifiants distinguent les salles homonymes de deux sites. */
-export function filtrerPlanning<T extends Pick<CoursPlanning, "discipline" | "site" | "salleId" | "intervenantId">>(
-  cours: T[],
-  filtres: FiltresPlanning,
+export function filterSchedule<T extends Pick<ScheduleCourse, "discipline" | "site" | "roomId" | "instructorId">>(
+  courses: T[],
+  filters: ScheduleFilters,
 ): T[] {
-  return cours.filter(
+  return courses.filter(
     (c) =>
-      (!filtres.discipline || c.discipline === filtres.discipline) &&
-      (!filtres.site || c.site === filtres.site) &&
-      (!filtres.salleId || c.salleId === filtres.salleId) &&
-      (!filtres.intervenantId || c.intervenantId === filtres.intervenantId),
+      (!filters.discipline || c.discipline === filters.discipline) &&
+      (!filters.site || c.site === filters.site) &&
+      (!filters.roomId || c.roomId === filters.roomId) &&
+      (!filters.instructorId || c.instructorId === filters.instructorId),
   );
 }

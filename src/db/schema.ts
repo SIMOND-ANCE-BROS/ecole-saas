@@ -110,20 +110,20 @@ const schoolIdColumn = () =>
  * Une clé étrangère simple ne suffit pas : sa vérification ignore la Row Level
  * Security. Colonne NULL acceptée (MATCH SIMPLE). Nom : <table>_<colonne>_same_school_fk.
  */
-function memeEcole(
+function sameSchool(
   t: { schoolId: AnyPgColumn },
-  colonne: AnyPgColumn,
-  cible: { schoolId: AnyPgColumn; id: AnyPgColumn },
+  column: AnyPgColumn,
+  target: { schoolId: AnyPgColumn; id: AnyPgColumn },
 ) {
   return foreignKey({
-    name: `${getTableName(colonne.table)}_${colonne.name.replace(/_id$/, "")}_same_school_fk`,
-    columns: [t.schoolId, colonne],
-    foreignColumns: [cible.schoolId, cible.id],
+    name: `${getTableName(column.table)}_${column.name.replace(/_id$/, "")}_same_school_fk`,
+    columns: [t.schoolId, column],
+    foreignColumns: [target.schoolId, target.id],
   });
 }
 
 /** Contrainte unique (school_id, id), cible des clés étrangères `memeEcole`. */
-function cibleMemeEcole(t: { schoolId: AnyPgColumn; id: AnyPgColumn }) {
+function sameSchoolTarget(t: { schoolId: AnyPgColumn; id: AnyPgColumn }) {
   return unique(`${getTableName(t.id.table)}_school_id_id_unique`).on(t.schoolId, t.id);
 }
 
@@ -155,7 +155,7 @@ export const member = pgTable(
     instructorId: uuid("instructor_id"),
     active: boolean("active").notNull().default(true),
   },
-  (t) => [unique().on(t.schoolId, t.userId), cibleMemeEcole(t), memeEcole(t, t.instructorId, instructor)],
+  (t) => [unique().on(t.schoolId, t.userId), sameSchoolTarget(t), sameSchool(t, t.instructorId, instructor)],
 );
 
 /** Lien envoyé à une personne : rejoindre l'équipe, ou choisir un nouveau mot de passe (#104). */
@@ -187,7 +187,7 @@ export const invitation = pgTable(
       "invitation_content",
       sql`(${t.type} = 'invitation' AND ${t.role} IS NOT NULL) OR (${t.type} = 'reinitialisation' AND ${t.userId} IS NOT NULL)`,
     ),
-    memeEcole(t, t.createdBy, member),
+    sameSchool(t, t.createdBy, member),
   ],
 );
 
@@ -205,7 +205,7 @@ export const listPreference = pgTable(
     columns: text("columns").array().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.memberId, t.list] }), memeEcole(t, t.memberId, member).onDelete("cascade")],
+  (t) => [primaryKey({ columns: [t.memberId, t.list] }), sameSchool(t, t.memberId, member).onDelete("cascade")],
 );
 
 // ---------------------------------------------------------------------------
@@ -220,7 +220,7 @@ export const site = pgTable(
     address: text("address").notNull(),
     enrollmentDesk: boolean("enrollment_desk").notNull().default(false),
   },
-  (t) => [cibleMemeEcole(t)],
+  (t) => [sameSchoolTarget(t)],
 );
 
 /**
@@ -240,7 +240,7 @@ export const siteHours = pgTable(
     primaryKey({ columns: [t.siteId, t.weekday] }),
     check("site_hours_weekday", sql`${t.weekday} BETWEEN 1 AND 7`),
     check("site_hours_order", sql`${t.closesAt} > ${t.opensAt}`),
-    memeEcole(t, t.siteId, site).onDelete("cascade"),
+    sameSchool(t, t.siteId, site).onDelete("cascade"),
   ],
 );
 
@@ -253,7 +253,7 @@ export const room = pgTable(
     name: text("name").notNull(),
     capacity: integer("capacity"),
   },
-  (t) => [cibleMemeEcole(t), memeEcole(t, t.siteId, site)],
+  (t) => [sameSchoolTarget(t), sameSchool(t, t.siteId, site)],
 );
 
 export const season = pgTable(
@@ -268,7 +268,7 @@ export const season = pgTable(
   (t) => [
     unique().on(t.schoolId, t.label),
     check("season_dates", sql`${t.endDate} > ${t.startDate}`),
-    cibleMemeEcole(t),
+    sameSchoolTarget(t),
   ],
 );
 
@@ -282,7 +282,7 @@ export const closure = pgTable(
     startDate: date("start_date").notNull(),
     endDate: date("end_date").notNull(),
   },
-  (t) => [memeEcole(t, t.seasonId, season)],
+  (t) => [sameSchool(t, t.seasonId, season)],
 );
 
 // ---------------------------------------------------------------------------
@@ -316,7 +316,7 @@ export const person = pgTable(
   (t) => [
     check("person_company_siren", sql`${t.type} = 'particulier' OR ${t.siren} IS NOT NULL`),
     index().on(t.schoolId, t.lastName),
-    cibleMemeEcole(t),
+    sameSchoolTarget(t),
   ],
 );
 
@@ -339,8 +339,8 @@ export const relationship = pgTable(
     unique().on(t.personId, t.relatedPersonId),
     check("relationship_distinct", sql`${t.personId} <> ${t.relatedPersonId}`),
     index().on(t.relatedPersonId),
-    memeEcole(t, t.personId, person),
-    memeEcole(t, t.relatedPersonId, person),
+    sameSchool(t, t.personId, person),
+    sameSchool(t, t.relatedPersonId, person),
   ],
 );
 
@@ -355,7 +355,7 @@ export const studentDocument = pgTable(
     validUntil: date("valid_until"),
     file: text("file"),
   },
-  (t) => [memeEcole(t, t.studentId, person)],
+  (t) => [sameSchool(t, t.studentId, person)],
 );
 
 // ---------------------------------------------------------------------------
@@ -380,7 +380,7 @@ export const instructor = pgTable(
     calendarTokenHash: text("calendar_token_hash").unique(),
     calendarTokenCreatedAt: timestamp("calendar_token_created_at", { withTimezone: true }),
   },
-  (t) => [cibleMemeEcole(t)],
+  (t) => [sameSchoolTarget(t)],
 );
 
 /**
@@ -402,7 +402,7 @@ export const unavailability = pgTable(
   (t) => [
     check("unavailability_end", sql`${t.endsAt} > ${t.startsAt}`),
     index().on(t.instructorId, t.startsAt),
-    memeEcole(t, t.instructorId, instructor),
+    sameSchool(t, t.instructorId, instructor),
   ],
 );
 
@@ -423,7 +423,7 @@ export const calendarConnection = pgTable(
     error: text("error"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [unique().on(t.instructorId), memeEcole(t, t.instructorId, instructor)],
+  (t) => [unique().on(t.instructorId), sameSchool(t, t.instructorId, instructor)],
 );
 
 // ---------------------------------------------------------------------------
@@ -436,7 +436,7 @@ export const discipline = pgTable(
     schoolId: schoolIdColumn(),
     name: text("name").notNull(),
   },
-  (t) => [unique().on(t.schoolId, t.name), cibleMemeEcole(t)],
+  (t) => [unique().on(t.schoolId, t.name), sameSchoolTarget(t)],
 );
 
 export const course = pgTable(
@@ -467,11 +467,11 @@ export const course = pgTable(
     check("course_period", sql`${t.startDate} IS NULL OR ${t.endDate} IS NULL OR ${t.startDate} <= ${t.endDate}`),
     check("course_duration", sql`${t.durationMinutes} > 0`),
     index().on(t.seasonId, t.weekday),
-    cibleMemeEcole(t),
-    memeEcole(t, t.seasonId, season),
-    memeEcole(t, t.disciplineId, discipline),
-    memeEcole(t, t.roomId, room),
-    memeEcole(t, t.instructorId, instructor),
+    sameSchoolTarget(t),
+    sameSchool(t, t.seasonId, season),
+    sameSchool(t, t.disciplineId, discipline),
+    sameSchool(t, t.roomId, room),
+    sameSchool(t, t.instructorId, instructor),
   ],
 );
 
@@ -483,7 +483,7 @@ export const courseDate = pgTable(
     courseId: uuid("course_id").notNull(),
     date: date("date").notNull(),
   },
-  (t) => [primaryKey({ columns: [t.courseId, t.date] }), memeEcole(t, t.courseId, course).onDelete("cascade")],
+  (t) => [primaryKey({ columns: [t.courseId, t.date] }), sameSchool(t, t.courseId, course).onDelete("cascade")],
 );
 
 export const lesson = pgTable(
@@ -505,9 +505,9 @@ export const lesson = pgTable(
     unique().on(t.courseId, t.date),
     index().on(t.schoolId, t.date),
     index().on(t.instructorId, t.date),
-    cibleMemeEcole(t),
-    memeEcole(t, t.courseId, course),
-    memeEcole(t, t.instructorId, instructor),
+    sameSchoolTarget(t),
+    sameSchool(t, t.courseId, course),
+    sameSchool(t, t.instructorId, instructor),
   ],
 );
 
@@ -521,8 +521,8 @@ export const attendance = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.lessonId, t.studentId] }),
-    memeEcole(t, t.lessonId, lesson),
-    memeEcole(t, t.studentId, person),
+    sameSchool(t, t.lessonId, lesson),
+    sameSchool(t, t.studentId, person),
   ],
 );
 
@@ -548,9 +548,9 @@ export const tariff = pgTable(
     // NULLS NOT DISTINCT : deux lignes « toutes disciplines » identiques sont refusées.
     unique("tariff_cell_unique").on(t.seasonId, t.audience, t.period, t.combination, t.disciplineId).nullsNotDistinct(),
     check("tariff_combination", sql`cardinality(${t.combination}) >= 1 AND 0 < ALL(${t.combination})`),
-    cibleMemeEcole(t),
-    memeEcole(t, t.seasonId, season),
-    memeEcole(t, t.disciplineId, discipline),
+    sameSchoolTarget(t),
+    sameSchool(t, t.seasonId, season),
+    sameSchool(t, t.disciplineId, discipline),
   ],
 );
 
@@ -580,7 +580,7 @@ export const discount = pgTable(
   (t) => [
     unique().on(t.seasonId, t.code),
     check("discount_value", sql`${t.rateBps} IS NOT NULL OR ${t.amountCents} IS NOT NULL`),
-    memeEcole(t, t.seasonId, season),
+    sameSchool(t, t.seasonId, season),
   ],
 );
 
@@ -602,7 +602,7 @@ export const lessonPackTariff = pgTable(
   (t) => [
     unique("lesson_pack_tariff_cell_unique").on(t.seasonId, t.lessonCount, t.maxPeople),
     check("lesson_pack_tariff_values", sql`${t.lessonCount} >= 1 AND ${t.maxPeople} >= 1 AND ${t.priceCents} >= 0`),
-    memeEcole(t, t.seasonId, season),
+    sameSchool(t, t.seasonId, season),
   ],
 );
 
@@ -635,10 +635,10 @@ export const enrollment = pgTable(
   },
   (t) => [
     index().on(t.payerId, t.seasonId),
-    cibleMemeEcole(t),
-    memeEcole(t, t.payerId, person),
-    memeEcole(t, t.seasonId, season),
-    memeEcole(t, t.tariffId, tariff),
+    sameSchoolTarget(t),
+    sameSchool(t, t.payerId, person),
+    sameSchool(t, t.seasonId, season),
+    sameSchool(t, t.tariffId, tariff),
   ],
 );
 
@@ -652,9 +652,9 @@ export const enrollmentCourse = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.enrollmentId, t.studentId, t.courseId] }),
-    memeEcole(t, t.enrollmentId, enrollment),
-    memeEcole(t, t.studentId, person),
-    memeEcole(t, t.courseId, course),
+    sameSchool(t, t.enrollmentId, enrollment),
+    sameSchool(t, t.studentId, person),
+    sameSchool(t, t.courseId, course),
   ],
 );
 
@@ -675,8 +675,8 @@ export const lessonPack = pgTable(
   },
   (t) => [
     check("lesson_pack_people", sql`${t.peopleCount} >= 1 AND ${t.lessonCount} >= 1`),
-    cibleMemeEcole(t),
-    memeEcole(t, t.payerId, person),
+    sameSchoolTarget(t),
+    sameSchool(t, t.payerId, person),
   ],
 );
 
@@ -689,8 +689,8 @@ export const lessonPackUsage = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.lessonPackId, t.lessonId] }),
-    memeEcole(t, t.lessonPackId, lessonPack),
-    memeEcole(t, t.lessonId, lesson),
+    sameSchool(t, t.lessonPackId, lessonPack),
+    sameSchool(t, t.lessonId, lesson),
   ],
 );
 
@@ -718,9 +718,9 @@ export const invoice = pgTable(
   (t) => [
     unique().on(t.schoolId, t.number),
     index().on(t.payerId),
-    cibleMemeEcole(t),
-    memeEcole(t, t.payerId, person),
-    memeEcole(t, t.creditNoteOf, t),
+    sameSchoolTarget(t),
+    sameSchool(t, t.payerId, person),
+    sameSchool(t, t.creditNoteOf, t),
   ],
 );
 
@@ -738,9 +738,9 @@ export const invoiceLine = pgTable(
     lessonPackId: uuid("lesson_pack_id"), // NULL : stage, location, billet…
   },
   (t) => [
-    memeEcole(t, t.invoiceId, invoice),
-    memeEcole(t, t.enrollmentId, enrollment),
-    memeEcole(t, t.lessonPackId, lessonPack),
+    sameSchool(t, t.invoiceId, invoice),
+    sameSchool(t, t.enrollmentId, enrollment),
+    sameSchool(t, t.lessonPackId, lessonPack),
   ],
 );
 
@@ -760,8 +760,8 @@ export const installment = pgTable(
     index("installment_open")
       .on(t.schoolId, t.dueDate)
       .where(sql`${t.status} IN ('a_venir', 'partielle', 'en_retard')`),
-    cibleMemeEcole(t),
-    memeEcole(t, t.invoiceId, invoice),
+    sameSchoolTarget(t),
+    sameSchool(t, t.invoiceId, invoice),
   ],
 );
 
@@ -788,10 +788,10 @@ export const payment = pgTable(
   },
   (t) => [
     check("payment_amount", sql`${t.amountCents} <> 0`),
-    cibleMemeEcole(t),
-    memeEcole(t, t.payerId, person),
-    memeEcole(t, t.enteredBy, member),
-    memeEcole(t, t.correctsId, t),
+    sameSchoolTarget(t),
+    sameSchool(t, t.payerId, person),
+    sameSchool(t, t.enteredBy, member),
+    sameSchool(t, t.correctsId, t),
   ],
 );
 
@@ -809,7 +809,7 @@ export const bankDeposit = pgTable(
     createdBy: uuid("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [cibleMemeEcole(t), memeEcole(t, t.createdBy, member)],
+  (t) => [sameSchoolTarget(t), sameSchool(t, t.createdBy, member)],
 );
 
 /** Paiements d'une remise ; un paiement ne figure que dans une seule remise (le paiement, inaltérable, n'est pas modifié). */
@@ -823,8 +823,8 @@ export const bankDepositPayment = pgTable(
   (t) => [
     primaryKey({ columns: [t.paymentId] }),
     index().on(t.bankDepositId),
-    memeEcole(t, t.bankDepositId, bankDeposit).onDelete("cascade"),
-    memeEcole(t, t.paymentId, payment),
+    sameSchool(t, t.bankDepositId, bankDeposit).onDelete("cascade"),
+    sameSchool(t, t.paymentId, payment),
   ],
 );
 
@@ -838,8 +838,8 @@ export const paymentAllocation = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.paymentId, t.installmentId] }),
-    memeEcole(t, t.paymentId, payment),
-    memeEcole(t, t.installmentId, installment),
+    sameSchool(t, t.paymentId, payment),
+    sameSchool(t, t.installmentId, installment),
   ],
 );
 
@@ -860,7 +860,7 @@ export const instructorStatement = pgTable(
     invoicedAmountCents: integer("invoiced_amount_cents"),
     status: statementStatus("status").notNull().default("a_controler"),
   },
-  (t) => [unique().on(t.instructorId, t.month), memeEcole(t, t.instructorId, instructor)],
+  (t) => [unique().on(t.instructorId, t.month), sameSchool(t, t.instructorId, instructor)],
 );
 
 // ---------------------------------------------------------------------------
@@ -879,7 +879,7 @@ export const auditLog = pgTable(
     before: jsonb("before"),
     after: jsonb("after"),
   },
-  (t) => [index().on(t.schoolId, t.targetTable, t.rowId), memeEcole(t, t.actor, member)],
+  (t) => [index().on(t.schoolId, t.targetTable, t.rowId), sameSchool(t, t.actor, member)],
 );
 
 // ---------------------------------------------------------------------------

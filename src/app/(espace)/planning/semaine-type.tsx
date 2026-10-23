@@ -2,21 +2,21 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { CoursPlanning } from "@/db/planning";
-import { versHeure } from "@/domaine/planning/agenda";
-import { cadreAgenda, type Horaire } from "@/domaine/planning/horaires";
-import { Agenda, type Creneau, type ElementAgenda, type RetourAgenda } from "./agenda";
-import { deplacer } from "./cours/actions";
-import { fin, JOURS, marqueRecurrence, recurrenceTexte } from "./format";
+import type { ScheduleCourse } from "@/db/planning";
+import { toTime } from "@/domaine/planning/agenda";
+import { calendarFrame, type Hours } from "@/domaine/planning/horaires";
+import { Calendar, type Slot, type CalendarElement, type CalendarResponse } from "./agenda";
+import { move } from "./cours/actions";
+import { end, DAYS, recurrenceBadge, recurrenceText } from "./format";
 
 type Props = {
   /** Cours visibles (filtres appliqués). */
-  cours: CoursPlanning[];
+  courses: ScheduleCourse[];
   /** Tous les cours de la saison : plage horaire stable quels que soient les filtres. */
-  tous: CoursPlanning[];
-  modifiable: boolean;
-  misEnAvant?: string;
-  horaires: Horaire[];
+  tous: ScheduleCourse[];
+  editable: boolean;
+  highlighted?: string;
+  hours: Hours[];
 };
 
 /**
@@ -24,76 +24,81 @@ type Props = {
  * heure ; déplacer un cours change le cours (et ses séances à venir). Les
  * cours à dates précises sont listés dessous.
  */
-export function SemaineType({ cours, tous, modifiable, misEnAvant, horaires }: Props) {
+export function TypicalWeek({
+  courses: cours,
+  tous,
+  editable: editable,
+  highlighted: highlighted,
+  hours: hours,
+}: Props) {
   const router = useRouter();
-  const reguliers = cours.filter((c) => c.jourSemaine !== null);
-  const ponctuels = cours.filter((c) => c.jourSemaine === null);
-  const { jours, debut, fin: finJournee } = cadreAgenda(horaires, tous);
+  const regular = cours.filter((c) => c.weekday !== null);
+  const oneOff = cours.filter((c) => c.weekday === null);
+  const { days: days, start: start, end: dayEnd } = calendarFrame(hours, tous);
 
-  const elements: ElementAgenda[] = reguliers.map((c) => ({
+  const elements: CalendarElement[] = regular.map((c) => ({
     id: c.id,
-    jourSemaine: c.jourSemaine as number,
-    heureDebut: c.heureDebut,
-    dureeMinutes: c.dureeMinutes,
-    titre: c.discipline,
-    lignes: [
-      `${c.salle} · ${c.intervenant}`,
-      `${c.inscrits}${c.capaciteMax ? ` / ${c.capaciteMax}` : ""} inscrit${c.inscrits > 1 ? "s" : ""}`,
+    weekday: c.weekday as number,
+    startTime: c.startTime,
+    durationMinutes: c.durationMinutes,
+    title: c.discipline,
+    rows: [
+      `${c.room} · ${c.instructor}`,
+      `${c.enrolled}${c.maxCapacity ? ` / ${c.maxCapacity}` : ""} inscrit${c.enrolled > 1 ? "s" : ""}`,
     ],
-    etiquette: marqueRecurrence(c),
-    alerte: c.capaciteMax !== null && c.inscrits >= c.capaciteMax ? "complet" : null,
+    tag: recurrenceBadge(c),
+    alert: c.maxCapacity !== null && c.enrolled >= c.maxCapacity ? "complet" : null,
     href: `/planning/cours/${c.id}`,
-    deplacable: true,
+    movable: true,
   }));
 
-  const quand = (c: Creneau) =>
-    `${JOURS[c.jourSemaine].toLowerCase()} ${c.heureDebut}–${fin(c.heureDebut, c.dureeMinutes)}`;
-  async function deplacerCours(id: string, creneau: Creneau, choix: string | null): Promise<RetourAgenda> {
+  const when = (c: Slot) => `${DAYS[c.weekday].toLowerCase()} ${c.startTime}–${end(c.startTime, c.durationMinutes)}`;
+  async function moveCourse(id: string, slot: Slot, choice: string | null): Promise<CalendarResponse> {
     const c = cours.find((x) => x.id === id);
-    const r = await deplacer(id, creneau, choix === "oui");
-    if (r.statut === "confirmer") {
+    const r = await move(id, slot, choice === "oui");
+    if (r.status === "confirmer") {
       return {
-        statut: "choisir",
-        question: `${c?.discipline} compte ${r.inscrits} élève${r.inscrits > 1 ? "s" : ""} inscrit${r.inscrits > 1 ? "s" : ""}. Passer au ${quand(creneau)} ? Les séances à venir suivent ; pensez à prévenir les familles.`,
-        choix: [{ valeur: "oui", libelle: "Déplacer le cours" }],
+        status: "choisir",
+        question: `${c?.discipline} compte ${r.enrolled} élève${r.enrolled > 1 ? "s" : ""} inscrit${r.enrolled > 1 ? "s" : ""}. Passer au ${when(slot)} ? Les séances à venir suivent ; pensez à prévenir les familles.`,
+        choice: [{ value: "oui", label: "Déplacer le cours" }],
       };
     }
-    if (r.statut === "refus") return r;
+    if (r.status === "refus") return r;
     return {
-      statut: "ok",
-      texte: `Cours déplacé — ${c?.discipline ?? "Cours"} : ${quand(creneau)}.`,
+      status: "ok",
+      texte: `Cours déplacé — ${c?.discipline ?? "Cours"} : ${when(slot)}.`,
       alertes: r.alertes,
     };
   }
 
   return (
     <div className="flex flex-col gap-3">
-      <Agenda
+      <Calendar
         elements={elements}
-        colonnes={jours.map((j) => ({ jour: j, titre: JOURS[j] }))}
-        debut={debut}
-        fin={finJournee}
-        horaires={horaires}
-        modifiable={modifiable}
-        misEnAvant={misEnAvant}
-        deplacer={deplacerCours}
-        creer={(jour, d, duree) =>
-          router.push(`/planning/cours/nouveau?jour=${jour}&heure=${versHeure(d)}&duree=${duree}`)
+        columns={days.map((j) => ({ day: j, title: DAYS[j] }))}
+        start={start}
+        end={dayEnd}
+        hours={hours}
+        editable={editable}
+        highlighted={highlighted}
+        move={moveCourse}
+        create={(day, d, duration) =>
+          router.push(`/planning/cours/nouveau?jour=${day}&heure=${toTime(d)}&duree=${duration}`)
         }
       />
-      {ponctuels.length > 0 && (
+      {oneOff.length > 0 && (
         <section aria-labelledby="agenda-ponctuels" className="flex flex-col gap-1">
           <h2 id="agenda-ponctuels" className="text-sm font-semibold">
             À dates précises (stages, cours exceptionnels)
           </h2>
           <ul className="flex flex-col gap-1 text-sm">
-            {ponctuels.map((s) => (
+            {oneOff.map((s) => (
               <li key={s.id} className="panneau px-2.5 py-1.5">
                 <Link href={`/planning/cours/${s.id}`} className="lien font-medium">
                   {s.discipline}
                 </Link>{" "}
                 <span className="text-doux">
-                  {s.heureDebut}–{fin(s.heureDebut, s.dureeMinutes)}, {s.salle} — {recurrenceTexte(s)}
+                  {s.startTime}–{end(s.startTime, s.durationMinutes)}, {s.room} — {recurrenceText(s)}
                 </span>
               </li>
             ))}

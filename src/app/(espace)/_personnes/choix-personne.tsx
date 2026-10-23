@@ -1,45 +1,45 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ResultatPersonne } from "@/db/personnes";
-import { nomAffiche } from "@/domaine/personnes/nom";
-import { requeteDifferee } from "@/lib/requete-differee";
-import { chercherPersonnes } from "./actions";
+import type { PersonResult } from "@/db/personnes";
+import { displayedName } from "@/domaine/personnes/nom";
+import { deferredQuery } from "@/lib/requete-differee";
+import { searchPeopleAction } from "./actions";
 
 /** Personne choisie dans la base, ou à créer avec l'essentiel. */
-export type Choix =
-  | { id: string; nom: string }
+export type Choice =
+  | { id: string; name: string }
   | {
-      nouveau: {
+      newPerson: {
         type: "particulier" | "professionnel";
-        prenom: string;
-        nom: string;
-        raisonSociale: string;
+        firstName: string;
+        name: string;
+        companyName: string;
         siren: string;
         telephone: string;
         email: string;
       };
     };
 
-export const nouvellePersonne = (type: "particulier" | "professionnel"): Choix => ({
-  nouveau: { type, prenom: "", nom: "", raisonSociale: "", siren: "", telephone: "", email: "" },
+export const newPerson = (type: "particulier" | "professionnel"): Choice => ({
+  newPerson: { type, firstName: "", name: "", companyName: "", siren: "", telephone: "", email: "" },
 });
 
 /** Pour l'envoi au serveur : forme attendue par saisiePersonneValide. */
-export function versSaisie(c: Choix) {
+export function toInput(c: Choice) {
   if ("id" in c) return { id: c.id };
-  const n = c.nouveau;
+  const n = c.newPerson;
   return {
-    nouveau: {
+    newPerson: {
       type: n.type,
-      nom: n.nom,
-      prenom: n.prenom,
-      raisonSociale: n.raisonSociale,
+      name: n.name,
+      firstName: n.firstName,
+      companyName: n.companyName,
       siren: n.siren,
       email: n.email,
       telephone: n.telephone,
-      adresse: "",
-      dateNaissance: "",
+      address: "",
+      birthDate: "",
       notes: "",
     },
   };
@@ -48,44 +48,52 @@ export function versSaisie(c: Choix) {
 type Props = {
   /** Identifiant de base des champs (plusieurs choix sur une même page). */
   id: string;
-  libelle: string;
-  valeur: Choix | null;
-  onChange: (c: Choix | null) => void;
+  label: string;
+  value: Choice | null;
+  onChange: (c: Choice | null) => void;
   /** Personnes à ne pas proposer (l'élève lui-même). */
-  exclure?: string[];
+  exclude?: string[];
   /** Organisme (CSE, entreprise) plutôt que particulier pour une nouvelle personne. */
-  organisme?: boolean;
-  erreurs?: Partial<Record<string, string>>;
+  organization?: boolean;
+  errors?: Partial<Record<string, string>>;
 };
 
 /**
  * Rechercher une personne déjà connue (nom, téléphone…) ou en créer une avec
  * l'essentiel, sans quitter le formulaire.
  */
-export function ChoixPersonne({ id, libelle, valeur, onChange, exclure = [], organisme = false, erreurs = {} }: Props) {
-  const [saisie, setSaisie] = useState("");
-  const [resultats, setResultats] = useState<ResultatPersonne[] | null>(null);
-  const [erreur, setErreur] = useState(false);
-  const active = saisie.trim().length >= 2 && !valeur;
+export function PersonChoice({
+  id,
+  label: label,
+  value: value,
+  onChange,
+  exclude: exclude = [],
+  organization: organization = false,
+  errors: errors = {},
+}: Props) {
+  const [saisie, setInput] = useState("");
+  const [results, setResults] = useState<PersonResult[] | null>(null);
+  const [error, setError] = useState(false);
+  const active = saisie.trim().length >= 2 && !value;
   // Clé stable : un tableau recréé à chaque rendu relancerait la recherche sans fin.
-  const exclus = exclure.join(",");
+  const excluded = exclude.join(",");
 
   useEffect(() => {
     if (!active) return;
-    return requeteDifferee(
-      () => chercherPersonnes(saisie),
+    return deferredQuery(
+      () => searchPeopleAction(saisie),
       (r) => {
-        setResultats(r.filter((p) => !exclus.split(",").includes(p.id)));
-        setErreur(false);
+        setResults(r.filter((p) => !excluded.split(",").includes(p.id)));
+        setError(false);
       },
-      () => setErreur(true),
+      () => setError(true),
     );
-  }, [saisie, active, exclus]);
+  }, [saisie, active, excluded]);
 
-  if (valeur && "id" in valeur) {
+  if (value && "id" in value) {
     return (
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="font-medium">{valeur.nom}</span>
+        <span className="font-medium">{value.name}</span>
         <button type="button" className="lien text-sm" onClick={() => onChange(null)}>
           Changer
         </button>
@@ -93,25 +101,25 @@ export function ChoixPersonne({ id, libelle, valeur, onChange, exclure = [], org
     );
   }
 
-  if (valeur && "nouveau" in valeur) {
-    const n = valeur.nouveau;
-    const maj = (champ: keyof typeof n) => (e: { target: { value: string } }) =>
-      onChange({ nouveau: { ...n, [champ]: e.target.value } });
-    const champ = (cle: keyof typeof n, texte: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
+  if (value && "newPerson" in value) {
+    const n = value.newPerson;
+    const updated = (field: keyof typeof n) => (e: { target: { value: string } }) =>
+      onChange({ newPerson: { ...n, [field]: e.target.value } });
+    const field = (key: keyof typeof n, texte: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${id}-${cle}`} className="text-sm">
+        <label htmlFor={`${id}-${key}`} className="text-sm">
           {texte}
         </label>
         <input
-          id={`${id}-${cle}`}
+          id={`${id}-${key}`}
           className="champ"
           autoComplete="off"
-          value={n[cle]}
-          onChange={maj(cle)}
-          aria-invalid={erreurs[cle] ? true : undefined}
+          value={n[key]}
+          onChange={updated(key)}
+          aria-invalid={errors[key] ? true : undefined}
           {...props}
         />
-        {erreurs[cle] && <p className="text-xs text-erreur">{erreurs[cle]}</p>}
+        {errors[key] && <p className="text-xs text-erreur">{errors[key]}</p>}
       </div>
     );
     return (
@@ -127,17 +135,17 @@ export function ChoixPersonne({ id, libelle, valeur, onChange, exclure = [], org
         <div className="grid gap-2 sm:grid-cols-2">
           {n.type === "professionnel" ? (
             <>
-              {champ("raisonSociale", "Raison sociale", { autoFocus: true })}
-              {champ("siren", "SIREN", { inputMode: "numeric", placeholder: "9 chiffres" })}
+              {field("companyName", "Raison sociale", { autoFocus: true })}
+              {field("siren", "SIREN", { inputMode: "numeric", placeholder: "9 chiffres" })}
             </>
           ) : (
             <>
-              {champ("prenom", "Prénom", { autoFocus: true })}
-              {champ("nom", "Nom")}
+              {field("firstName", "Prénom", { autoFocus: true })}
+              {field("name", "Nom")}
             </>
           )}
-          {champ("telephone", "Téléphone", { type: "tel", inputMode: "tel" })}
-          {champ("email", "E-mail", { type: "email" })}
+          {field("telephone", "Téléphone", { type: "tel", inputMode: "tel" })}
+          {field("email", "E-mail", { type: "email" })}
         </div>
       </div>
     );
@@ -146,7 +154,7 @@ export function ChoixPersonne({ id, libelle, valeur, onChange, exclure = [], org
   return (
     <div className="flex flex-col gap-2">
       <label htmlFor={`${id}-cherche`} className="text-sm">
-        {libelle}
+        {label}
       </label>
       <input
         id={`${id}-cherche`}
@@ -156,33 +164,33 @@ export function ChoixPersonne({ id, libelle, valeur, onChange, exclure = [], org
         placeholder="Nom, prénom, téléphone…"
         value={saisie}
         onChange={(e) => {
-          setSaisie(e.target.value);
-          setResultats(null);
+          setInput(e.target.value);
+          setResults(null);
         }}
       />
       <div role="status" className="text-xs text-doux">
         {active &&
-          (erreur
+          (error
             ? "Recherche indisponible, réessayez."
-            : resultats === null
+            : results === null
               ? "Recherche…"
-              : resultats.length === 0
+              : results.length === 0
                 ? "Personne de connu à ce nom."
                 : "")}
       </div>
-      {active && resultats && resultats.length > 0 && (
+      {active && results && results.length > 0 && (
         <ul className="panneau max-h-56 divide-y divide-bordure overflow-y-auto text-sm">
-          {resultats.map((p) => (
+          {results.map((p) => (
             <li key={p.id}>
               <button
                 type="button"
                 className="flex w-full flex-wrap gap-x-3 px-3 py-2 text-left hover:bg-accent-doux/40"
                 onClick={() => {
-                  onChange({ id: p.id, nom: nomAffiche(p) });
-                  setSaisie("");
+                  onChange({ id: p.id, name: displayedName(p) });
+                  setInput("");
                 }}
               >
-                <span className="font-medium">{nomAffiche(p)}</span>
+                <span className="font-medium">{displayedName(p)}</span>
                 {p.telephone && <span className="tabular-nums text-doux">{p.telephone}</span>}
                 {p.liees.length > 0 && <span className="text-doux">liée à {p.liees.join(", ")}</span>}
               </button>
@@ -193,9 +201,9 @@ export function ChoixPersonne({ id, libelle, valeur, onChange, exclure = [], org
       <button
         type="button"
         className="lien self-start text-sm"
-        onClick={() => onChange(nouvellePersonne(organisme ? "professionnel" : "particulier"))}
+        onClick={() => onChange(newPerson(organization ? "professionnel" : "particulier"))}
       >
-        {organisme ? "Nouvel organisme (CSE, entreprise…)" : "Nouvelle personne"}
+        {organization ? "Nouvel organisme (CSE, entreprise…)" : "Nouvelle personne"}
       </button>
     </div>
   );

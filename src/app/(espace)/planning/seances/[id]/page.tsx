@@ -1,56 +1,57 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { avecEcole } from "@/db";
-import { referentielPlanning } from "@/db/cours";
-import { disponibilitesSeance } from "@/db/disponibilites";
-import { lireAppel } from "@/db/seances";
-import { ageAu } from "@/domaine/personnes/age";
-import { exigerRole } from "@/lib/session";
-import { fin } from "../../format";
-import { FicheAppel } from "./fiche";
+import { withSchool } from "@/db";
+import { scheduleReferential } from "@/db/cours";
+import { lessonAvailabilities } from "@/db/disponibilites";
+import { readAttendance } from "@/db/seances";
+import { ageAt } from "@/domaine/personnes/age";
+import { requireRole } from "@/lib/session";
+import { end } from "../../format";
+import { AttendanceRecord } from "./fiche";
 
 export const metadata: Metadata = { title: "Appel" };
 
-const dateLongue = new Intl.DateTimeFormat("fr-FR", {
+const longDate = new Intl.DateTimeFormat("fr-FR", {
   weekday: "long",
   day: "numeric",
   month: "long",
   timeZone: "UTC",
 });
 
-export default async function PageAppel({ params }: PageProps<"/planning/seances/[id]">) {
-  const { ecoleId } = await exigerRole("direction", "accueil");
+export default async function AttendancePage({ params }: PageProps<"/planning/seances/[id]">) {
+  const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const { id } = await params;
-  const donnees = await avecEcole(ecoleId, async (tx) => {
-    const appel = await lireAppel(tx, id);
-    if (!appel) return null;
-    const { intervenants } = await referentielPlanning(tx, appel.intervenantId);
-    const dispo = await disponibilitesSeance(tx, appel.id);
-    const classement = new Map(dispo?.remplacants.map((r, rang) => [r.id, { ...r, rang }]));
+  const donnees = await withSchool(schoolId, async (tx) => {
+    const attendance = await readAttendance(tx, id);
+    if (!attendance) return null;
+    const { instructors: instructors } = await scheduleReferential(tx, attendance.instructorId);
+    const availability = await lessonAvailabilities(tx, attendance.id);
+    const ranking = new Map(availability?.substitutes.map((r, rank) => [r.id, { ...r, rank: rank }]));
     // Intervenant de la séance d'abord, puis remplaçants libres, puis les autres avec leur motif.
-    const options = intervenants
+    const options = instructors
       .map((i) => {
-        const r = classement.get(i.id);
-        const etat = i.id === appel.intervenantId ? "" : r?.libre ? " (libre)" : r?.motif ? ` (${r.motif})` : "";
+        const r = ranking.get(i.id);
+        const state =
+          i.id === attendance.instructorId ? "" : r?.free ? " (libre)" : r?.pattern ? ` (${r.pattern})` : "";
         return {
           id: i.id,
-          nom: `${i.prenom} ${i.nom}${etat}`,
-          rang: i.id === appel.intervenantId ? -1 : (r?.rang ?? 999),
+          name: `${i.firstName} ${i.name}${state}`,
+          rank: i.id === attendance.instructorId ? -1 : (r?.rank ?? 999),
         };
       })
-      .sort((a, b) => a.rang - b.rang)
-      .map((o) => ({ id: o.id, nom: o.nom }));
+      .sort((a, b) => a.rank - b.rank)
+      .map((o) => ({ id: o.id, name: o.name }));
     return {
-      appel,
-      intervenants: options,
-      indisponible: dispo?.indisponible ?? false,
-      libres: dispo?.remplacants.filter((r) => r.libre).length ?? 0,
+      attendance: attendance,
+      instructors: options,
+      unavailable: availability?.unavailable ?? false,
+      free: availability?.substitutes.filter((r) => r.free).length ?? 0,
     };
   });
   if (!donnees) notFound();
-  const { appel, intervenants, indisponible, libres } = donnees;
-  const date = dateLongue.format(new Date(`${appel.date}T00:00:00Z`));
+  const { attendance: attendance, instructors: instructors, unavailable: unavailable, free: free } = donnees;
+  const date = longDate.format(new Date(`${attendance.date}T00:00:00Z`));
 
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
@@ -59,37 +60,37 @@ export default async function PageAppel({ params }: PageProps<"/planning/seances
           Planning
         </Link>
         <span className="text-doux"> / </span>
-        <Link href={`/planning/cours/${appel.coursId}`} className="lien">
-          {appel.discipline}
+        <Link href={`/planning/cours/${attendance.courseId}`} className="lien">
+          {attendance.discipline}
         </Link>
         <span className="text-doux"> / Appel du {date}</span>
       </nav>
       <div>
         <h1 className="titre-page">
-          Appel : {appel.discipline}
-          {appel.niveau && <span className="font-normal text-doux"> {appel.niveau}</span>}
+          Appel : {attendance.discipline}
+          {attendance.level && <span className="font-normal text-doux"> {attendance.level}</span>}
         </h1>
         <p className="text-sm first-letter:uppercase">
-          {date}, {appel.heureDebut}–{fin(appel.heureDebut, appel.dureeMinutes)}, {appel.salle}
+          {date}, {attendance.startTime}–{end(attendance.startTime, attendance.durationMinutes)}, {attendance.room}
         </p>
       </div>
-      {indisponible && appel.statut !== "annulee" && (
+      {unavailable && attendance.status !== "annulee" && (
         <p role="alert" className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
           L’intervenant de cette séance est indisponible.{" "}
-          {libres > 0
-            ? `${libres} remplaçant${libres > 1 ? "s" : ""} libre${libres > 1 ? "s" : ""} en tête de la liste « Intervenant de la séance ».`
+          {free > 0
+            ? `${free} remplaçant${free > 1 ? "s" : ""} libre${free > 1 ? "s" : ""} en tête de la liste « Intervenant de la séance ».`
             : "Aucun autre intervenant n’est libre à cette heure."}
         </p>
       )}
-      <FicheAppel
-        appel={{
-          ...appel,
-          danseurs: appel.danseurs.map((d) => ({
+      <AttendanceRecord
+        attendance={{
+          ...attendance,
+          students: attendance.students.map((d) => ({
             ...d,
-            age: d.dateNaissance ? ageAu(d.dateNaissance, appel.date) : null,
+            age: d.birthDate ? ageAt(d.birthDate, attendance.date) : null,
           })),
         }}
-        intervenants={intervenants}
+        instructors={instructors}
       />
     </section>
   );

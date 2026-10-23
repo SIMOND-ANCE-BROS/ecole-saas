@@ -4,40 +4,40 @@
  * paiements s'enregistrent sur le payeur.
  */
 
-export type StatutInscription = "essai" | "liste_attente" | "active" | "abandon" | "terminee";
+export type EnrollmentStatus = "essai" | "liste_attente" | "active" | "abandon" | "terminee";
 
 /** Statuts comptés dans le dû. Abandon et essai : règle à fixer par l'école (#99), montrés à part. */
-export const STATUTS_DUS: StatutInscription[] = ["active", "terminee"];
+export const DUE_STATUSES: EnrollmentStatus[] = ["active", "terminee"];
 
-export type InscriptionDue = { statut: StatutInscription; prixNetCentimes: number };
-export type PaiementSolde = { montantCentimes: number; encaissementPrevu: string | null };
+export type EnrollmentDue = { status: EnrollmentStatus; netPriceCents: number };
+export type BalancePayment = { amountCents: number; plannedPayment: string | null };
 
-export type Solde = {
+export type Balance = {
   du: number;
   paye: number;
   /** Positif : reste à payer ; négatif : trop-perçu. */
-  reste: number;
+  remaining: number;
   /** Chèques reçus mais à encaisser après aujourd'hui (comptés dans « payé »). */
-  aEncaisser: number;
+  toCollect: number;
   /** Inscriptions hors du calcul, par statut (montants), pour que la direction les voie. */
-  horsCalcul: Partial<Record<StatutInscription, number>>;
+  outsideCalculation: Partial<Record<EnrollmentStatus, number>>;
 };
 
-export function soldePayeur(
-  inscriptions: InscriptionDue[],
-  carnets: { prixCentimes: number }[],
-  paiements: PaiementSolde[],
-  aujourdhui: string,
-): Solde {
-  let du = carnets.reduce((s, c) => s + c.prixCentimes, 0);
-  const horsCalcul: Solde["horsCalcul"] = {};
-  for (const i of inscriptions) {
-    if (STATUTS_DUS.includes(i.statut)) du += i.prixNetCentimes;
-    else horsCalcul[i.statut] = (horsCalcul[i.statut] ?? 0) + i.prixNetCentimes;
+export function payerBalance(
+  enrollments: EnrollmentDue[],
+  lessonPacks: { priceCents: number }[],
+  payments: BalancePayment[],
+  today: string,
+): Balance {
+  let du = lessonPacks.reduce((s, c) => s + c.priceCents, 0);
+  const outsideCalculation: Balance["outsideCalculation"] = {};
+  for (const i of enrollments) {
+    if (DUE_STATUSES.includes(i.status)) du += i.netPriceCents;
+    else outsideCalculation[i.status] = (outsideCalculation[i.status] ?? 0) + i.netPriceCents;
   }
-  const paye = paiements.reduce((s, p) => s + p.montantCentimes, 0);
-  const aEncaisser = paiements
-    .filter((p) => p.montantCentimes > 0 && p.encaissementPrevu !== null && p.encaissementPrevu > aujourdhui)
-    .reduce((s, p) => s + p.montantCentimes, 0);
-  return { du, paye, reste: du - paye, aEncaisser, horsCalcul };
+  const paye = payments.reduce((s, p) => s + p.amountCents, 0);
+  const toCollect = payments
+    .filter((p) => p.amountCents > 0 && p.plannedPayment !== null && p.plannedPayment > today)
+    .reduce((s, p) => s + p.amountCents, 0);
+  return { du, paye, remaining: du - paye, toCollect, outsideCalculation };
 }

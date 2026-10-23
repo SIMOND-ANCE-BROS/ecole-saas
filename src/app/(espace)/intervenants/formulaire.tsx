@@ -1,142 +1,146 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { type Intervenant, MODES_REMUNERATION, REGIMES_TVA, STATUTS, UNITES_REMUNERATION } from "@/db/intervenants";
-import { enregistrerIntervenant, type EtatFormulaire } from "./actions";
-import { Annuler } from "@/app/(espace)/_panneau/panneau";
+import { type Instructor, PAY_MODES, VAT_REGIMES, STATUSES, PAY_UNITS } from "@/db/intervenants";
+import { saveInstructor, type FormState } from "./actions";
+import { Cancel } from "@/app/(espace)/_panneau/panneau";
 
-type Mode = keyof typeof UNITES_REMUNERATION;
+type Mode = keyof typeof PAY_UNITS;
 
 /** Montant en centimes → saisie en euros (« 40 », « 40,50 »), sans nombre à virgule. */
-const enEuros = (c: number) => `${Math.trunc(c / 100)}${c % 100 ? `,${String(c % 100).padStart(2, "0")}` : ""}`;
+const inEuros = (c: number) => `${Math.trunc(c / 100)}${c % 100 ? `,${String(c % 100).padStart(2, "0")}` : ""}`;
 
-function versValeurs(i: Intervenant | null): Record<string, string> {
+function toValues(i: Instructor | null): Record<string, string> {
   return {
-    prenom: i?.prenom ?? "",
-    nom: i?.nom ?? "",
+    firstName: i?.firstName ?? "",
+    name: i?.name ?? "",
     email: i?.email ?? "",
-    statut: i?.statut ?? "micro_entreprise",
+    status: i?.status ?? "micro_entreprise",
     siren: i?.siren ?? "",
-    regimeTva: i?.regimeTva ?? "franchise_293b",
-    modeRemuneration: i?.modeRemuneration ?? "heure",
-    tarif: i ? enEuros(i.tarifCentimes) : "",
-    estDirigeant: i?.estDirigeant ? "on" : "",
-    actif: !i || i.actif ? "on" : "",
+    vatRegime: i?.vatRegime ?? "franchise_293b",
+    payMode: i?.payMode ?? "heure",
+    tariff: i ? inEuros(i.rateCents) : "",
+    isOwner: i?.isOwner ? "on" : "",
+    active: !i || i.active ? "on" : "",
   };
 }
 
-export function FormulaireIntervenant({ intervenant }: { intervenant: Intervenant | null }) {
-  const action = enregistrerIntervenant.bind(null, intervenant?.id ?? null);
-  const [etat, envoyer, enCours] = useActionState<EtatFormulaire, FormData>(action, {
-    essai: 0,
-    erreurs: {},
-    valeurs: null,
+export function InstructorForm({ instructor: instructor }: { instructor: Instructor | null }) {
+  const action = saveInstructor.bind(null, instructor?.id ?? null);
+  const [state, send, inProgress] = useActionState<FormState, FormData>(action, {
+    attempt: 0,
+    errors: {},
+    values: null,
   });
   // Remonté après chaque refus pour reprendre la saisie renvoyée par le serveur.
   return (
     <Champs
-      key={etat.essai}
-      etat={etat}
-      envoyer={envoyer}
-      enCours={enCours}
-      retour={intervenant ? `/intervenants/${intervenant.id}` : "/intervenants"}
-      edition={intervenant !== null}
-      initial={versValeurs(intervenant)}
+      key={state.attempt}
+      state={state}
+      send={send}
+      inProgress={inProgress}
+      back={instructor ? `/intervenants/${instructor.id}` : "/intervenants"}
+      edition={instructor !== null}
+      initial={toValues(instructor)}
     />
   );
 }
 
 type PropsChamps = {
-  etat: EtatFormulaire;
-  envoyer: (f: FormData) => void;
-  enCours: boolean;
+  state: FormState;
+  send: (f: FormData) => void;
+  inProgress: boolean;
   edition: boolean;
-  retour: string;
+  back: string;
   initial: Record<string, string>;
 };
 
-function Champs({ etat, envoyer, enCours, edition, initial, retour }: PropsChamps) {
-  const v = etat.valeurs ?? initial;
-  const [statut, setStatut] = useState(v.statut);
-  const [mode, setMode] = useState(v.modeRemuneration as Mode);
-  const e = etat.erreurs;
-  const formulaire = useRef<HTMLFormElement>(null);
+function Champs({ state: state, send: send, inProgress: inProgress, edition, initial, back: back }: PropsChamps) {
+  const v = state.values ?? initial;
+  const [status, setStatus] = useState(v.status);
+  const [mode, setMode] = useState(v.payMode as Mode);
+  const e = state.errors;
+  const form = useRef<HTMLFormElement>(null);
 
   // Après un refus, le curseur va sur le premier champ en erreur.
   useEffect(() => {
-    if (etat.essai > 0) formulaire.current?.querySelector<HTMLElement>("[aria-invalid]")?.focus();
-  }, [etat.essai]);
+    if (state.attempt > 0) form.current?.querySelector<HTMLElement>("[aria-invalid]")?.focus();
+  }, [state.attempt]);
 
-  const champ = (nom: string, libelle: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
+  const field = (name: string, label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
     <div className="flex flex-col gap-1">
-      <label htmlFor={nom} className="text-sm font-medium">
-        {libelle}
+      <label htmlFor={name} className="text-sm font-medium">
+        {label}
       </label>
       <input
-        id={nom}
-        name={nom}
+        id={name}
+        name={name}
         className="champ"
-        defaultValue={v[nom]}
-        aria-invalid={e[nom] ? true : undefined}
-        aria-describedby={e[nom] ? `${nom}-erreur` : undefined}
+        defaultValue={v[name]}
+        aria-invalid={e[name] ? true : undefined}
+        aria-describedby={e[name] ? `${name}-erreur` : undefined}
         {...props}
       />
-      {e[nom] && (
-        <p id={`${nom}-erreur`} className="text-xs text-erreur">
-          {e[nom]}
+      {e[name] && (
+        <p id={`${name}-erreur`} className="text-xs text-erreur">
+          {e[name]}
         </p>
       )}
     </div>
   );
 
   return (
-    <form ref={formulaire} action={envoyer} className="flex w-full min-w-0 flex-col gap-5" noValidate>
-      {e.formulaire && (
+    <form ref={form} action={send} className="flex w-full min-w-0 flex-col gap-5" noValidate>
+      {e.form && (
         <p role="alert" className="text-sm text-erreur">
-          {e.formulaire}
+          {e.form}
         </p>
       )}
 
       <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
         <legend className="px-1 text-sm font-semibold">Identité</legend>
-        {champ("prenom", "Prénom", { autoComplete: "off", autoFocus: !edition && etat.essai === 0, required: true })}
-        {champ("nom", "Nom", { autoComplete: "off", required: true })}
+        {field("firstName", "Prénom", {
+          autoComplete: "off",
+          autoFocus: !edition && state.attempt === 0,
+          required: true,
+        })}
+        {field("name", "Nom", { autoComplete: "off", required: true })}
         <div className="sm:col-span-2">
-          {champ("email", "E-mail (facultatif, pour l’agenda et les relevés)", { type: "email", autoComplete: "off" })}
+          {field("email", "E-mail (facultatif, pour l’agenda et les relevés)", { type: "email", autoComplete: "off" })}
         </div>
       </fieldset>
 
       <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
         <legend className="px-1 text-sm font-semibold">Statut</legend>
         <div className="flex flex-col gap-1">
-          <label htmlFor="statut" className="text-sm font-medium">
+          <label htmlFor="status" className="text-sm font-medium">
             Statut
           </label>
           <select
-            id="statut"
-            name="statut"
+            id="status"
+            name="status"
             className="champ"
-            defaultValue={v.statut}
-            onChange={(x) => setStatut(x.target.value)}
+            defaultValue={v.status}
+            onChange={(x) => setStatus(x.target.value)}
           >
-            {Object.entries(STATUTS).map(([k, l]) => (
+            {Object.entries(STATUSES).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
             ))}
           </select>
         </div>
-        {statut !== "salarie" ? (
-          champ("siren", "SIREN (facultatif)", { inputMode: "numeric", autoComplete: "off", placeholder: "9 chiffres" })
+        {status !== "salarie" ? (
+          field("siren", "SIREN (facultatif)", { inputMode: "numeric", autoComplete: "off", placeholder: "9 chiffres" })
         ) : (
           <input type="hidden" name="siren" value="" />
         )}
         <div className="flex flex-col gap-1">
-          <label htmlFor="regimeTva" className="text-sm font-medium">
+          <label htmlFor="vatRegime" className="text-sm font-medium">
             TVA
           </label>
-          <select id="regimeTva" name="regimeTva" className="champ" defaultValue={v.regimeTva}>
-            {Object.entries(REGIMES_TVA).map(([k, l]) => (
+          <select id="vatRegime" name="vatRegime" className="champ" defaultValue={v.vatRegime}>
+            {Object.entries(VAT_REGIMES).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
@@ -144,7 +148,7 @@ function Champs({ etat, envoyer, enCours, edition, initial, retour }: PropsChamp
           </select>
         </div>
         <label className="flex items-center gap-2 self-end pb-1.5 text-sm">
-          <input type="checkbox" name="estDirigeant" defaultChecked={v.estDirigeant === "on"} />
+          <input type="checkbox" name="isOwner" defaultChecked={v.isOwner === "on"} />
           Dirigeant de l’école
         </label>
       </fieldset>
@@ -152,24 +156,24 @@ function Champs({ etat, envoyer, enCours, edition, initial, retour }: PropsChamp
       <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
         <legend className="px-1 text-sm font-semibold">Rémunération</legend>
         <div className="flex flex-col gap-1">
-          <label htmlFor="modeRemuneration" className="text-sm font-medium">
+          <label htmlFor="payMode" className="text-sm font-medium">
             Mode de rémunération
           </label>
           <select
-            id="modeRemuneration"
-            name="modeRemuneration"
+            id="payMode"
+            name="payMode"
             className="champ"
-            defaultValue={v.modeRemuneration}
+            defaultValue={v.payMode}
             onChange={(x) => setMode(x.target.value as Mode)}
           >
-            {Object.entries(MODES_REMUNERATION).map(([k, l]) => (
+            {Object.entries(PAY_MODES).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
             ))}
           </select>
         </div>
-        {champ("tarif", `Tarif (€ / ${UNITES_REMUNERATION[mode]})`, {
+        {field("tariff", `Tarif (€ / ${PAY_UNITS[mode]})`, {
           inputMode: "decimal",
           autoComplete: "off",
           required: true,
@@ -178,7 +182,7 @@ function Champs({ etat, envoyer, enCours, edition, initial, retour }: PropsChamp
 
       {edition && (
         <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" name="actif" defaultChecked={v.actif === "on"} className="mt-0.5" />
+          <input type="checkbox" name="active" defaultChecked={v.active === "on"} className="mt-0.5" />
           <span>
             Actif
             <span className="block text-xs text-doux">
@@ -189,10 +193,10 @@ function Champs({ etat, envoyer, enCours, edition, initial, retour }: PropsChamp
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-bordure pt-4">
-        <button type="submit" className="bouton-principal" disabled={enCours}>
-          {enCours ? "Enregistrement…" : edition ? "Enregistrer les modifications" : "Ajouter l’intervenant"}
+        <button type="submit" className="bouton-principal" disabled={inProgress}>
+          {inProgress ? "Enregistrement…" : edition ? "Enregistrer les modifications" : "Ajouter l’intervenant"}
         </button>
-        <Annuler href={retour} />
+        <Cancel href={back} />
       </div>
     </form>
   );

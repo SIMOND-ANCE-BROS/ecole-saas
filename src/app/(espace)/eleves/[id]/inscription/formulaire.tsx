@@ -1,94 +1,102 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import type { Apercu } from "@/db/inscriptions";
-import type { CoursPlanning } from "@/db/planning";
-import { seChevauchent } from "@/domaine/planning/chevauchement";
-import { formaterEuros } from "@/lib/montant";
-import { requeteDifferee } from "@/lib/requete-differee";
-import { apercu, inscrire, type SaisieFormulaire } from "./actions";
+import type { Preview } from "@/db/inscriptions";
+import type { ScheduleCourse } from "@/db/planning";
+import { overlaps } from "@/domaine/planning/chevauchement";
+import { formatEuros } from "@/lib/montant";
+import { deferredQuery } from "@/lib/requete-differee";
+import { preview, enroll, type FormInput } from "./actions";
 
-const JOURS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
-const PUBLICS = [
+const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+const AUDIENCES = [
   ["enfant", "Enfant"],
   ["adulte", "Adulte"],
   ["couple", "Couple"],
   ["etudiant", "Étudiant"],
 ] as const;
-const PERIODICITES = [
+const PERIODS = [
   ["trimestre", "Trimestre"],
   ["annee", "Année"],
 ] as const;
 
 type Props = {
-  payeurId: string;
-  danseurs: { id: string; prenom: string; age: number | null }[];
-  cours: CoursPlanning[];
+  payerId: string;
+  students: { id: string; firstName: string; age: number | null }[];
+  courses: ScheduleCourse[];
   /** Danseur choisi d'avance (bouton « Inscrire » de sa fiche). */
-  danseurInitial?: string;
+  initialStudent?: string;
 };
 
-export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitial }: Props) {
-  const initial = danseurs.find((d) => d.id === danseurInitial) ?? (danseurs.length === 1 ? danseurs[0] : undefined);
-  const [danseurIds, setDanseurIds] = useState<string[]>(initial ? [initial.id] : []);
-  const [publicChoisi, setPublic] = useState<SaisieFormulaire["public"]>(
+export function EnrollmentForm({
+  payerId: payerId,
+  students: students,
+  courses: cours,
+  initialStudent: initialStudent,
+}: Props) {
+  const initial = students.find((d) => d.id === initialStudent) ?? (students.length === 1 ? students[0] : undefined);
+  const [studentIds, setStudentIds] = useState<string[]>(initial ? [initial.id] : []);
+  const [chosenAudience, setPublic] = useState<FormInput["audience"]>(
     initial && initial.age !== null && initial.age >= 18 ? "adulte" : "enfant",
   );
-  const [periodicite, setPeriodicite] = useState<SaisieFormulaire["periodicite"]>("trimestre");
-  const [coursIds, setCoursIds] = useState<string[]>([]);
-  const [filtre, setFiltre] = useState("");
-  const [dernierApercu, setApercu] = useState<{
-    saisie: SaisieFormulaire;
-    essai: number;
-    resultat: Apercu | null;
-    erreur: boolean;
+  const [period, setPeriod] = useState<FormInput["period"]>("trimestre");
+  const [courseIds, setCourseIds] = useState<string[]>([]);
+  const [filter, setFilter] = useState("");
+  const [lastPreview, setPreview] = useState<{
+    saisie: FormInput;
+    attempt: number;
+    result: Preview | null;
+    error: boolean;
   } | null>(null);
-  const [essaiCalcul, setEssaiCalcul] = useState(0);
-  const [refus, setRefus] = useState<string | null>(null);
-  const [envoi, demarrerEnvoi] = useTransition();
+  const [calculationAttempt, setCalculationAttempt] = useState(0);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const [sending, startSend] = useTransition();
 
-  const saisie: SaisieFormulaire = useMemo(
-    () => ({ payeurId, danseurIds, public: publicChoisi, periodicite, coursIds }),
-    [payeurId, danseurIds, publicChoisi, periodicite, coursIds],
+  const saisie: FormInput = useMemo(
+    () => ({
+      payerId: payerId,
+      studentIds: studentIds,
+      audience: chosenAudience,
+      period: period,
+      courseIds: courseIds,
+    }),
+    [payerId, studentIds, chosenAudience, period, courseIds],
   );
 
   // Aucun prix d’une sélection précédente n’est présenté comme le prix courant.
   useEffect(() => {
-    if (saisie.danseurIds.length === 0 || saisie.coursIds.length === 0) return;
-    return requeteDifferee(
-      () => apercu(saisie),
-      (resultat) => setApercu({ saisie, essai: essaiCalcul, resultat, erreur: false }),
-      () => setApercu({ saisie, essai: essaiCalcul, resultat: null, erreur: true }),
+    if (saisie.studentIds.length === 0 || saisie.courseIds.length === 0) return;
+    return deferredQuery(
+      () => preview(saisie),
+      (result) => setPreview({ saisie, attempt: calculationAttempt, result, error: false }),
+      () => setPreview({ saisie, attempt: calculationAttempt, result: null, error: true }),
     );
-  }, [saisie, essaiCalcul]);
-  const courant = dernierApercu?.saisie === saisie && dernierApercu.essai === essaiCalcul ? dernierApercu : null;
-  const calcul = danseurIds.length > 0 && coursIds.length > 0 && courant === null;
-  const resultat = courant?.resultat ?? null;
+  }, [saisie, calculationAttempt]);
+  const current = lastPreview?.saisie === saisie && lastPreview.attempt === calculationAttempt ? lastPreview : null;
+  const calculation = studentIds.length > 0 && courseIds.length > 0 && current === null;
+  const result = current?.result ?? null;
 
-  const basculer = (liste: string[], id: string) =>
-    liste.includes(id) ? liste.filter((x) => x !== id) : [...liste, id];
-  const coursVisibles = cours.filter((c) =>
-    `${c.discipline} ${c.niveau ?? ""} ${JOURS[c.jourSemaine ?? 0]}`
-      .toLowerCase()
-      .includes(filtre.trim().toLowerCase()),
+  const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+  const visibleCourses = cours.filter((c) =>
+    `${c.discipline} ${c.level ?? ""} ${DAYS[c.weekday ?? 0]}`.toLowerCase().includes(filter.trim().toLowerCase()),
   );
-  const nouvelle = resultat?.statut === "ok" ? resultat.nouvelle : null;
-  const peutEnregistrer = nouvelle?.statut === "ok" && !calcul && !envoi;
+  const next = result?.status === "ok" ? result.newEnrollment : null;
+  const canSave = next?.status === "ok" && !calculation && !sending;
 
   // Cours adaptés à l'âge du ou des danseurs choisis d'abord ; les autres restent sélectionnables.
-  const agesChoisis = danseurs.filter((d) => danseurIds.includes(d.id) && d.age !== null).map((d) => d.age as number);
-  const adapte = (c: CoursPlanning) =>
-    agesChoisis.length === 0 ||
-    agesChoisis.every((a) => (c.ageMin === null || a >= c.ageMin) && (c.ageMax === null || a <= c.ageMax));
-  const coursTries = [...coursVisibles.filter(adapte), ...coursVisibles.filter((c) => !adapte(c))];
+  const chosenAges = students.filter((d) => studentIds.includes(d.id) && d.age !== null).map((d) => d.age as number);
+  const adapted = (c: ScheduleCourse) =>
+    chosenAges.length === 0 ||
+    chosenAges.every((a) => (c.ageMin === null || a >= c.ageMin) && (c.ageMax === null || a <= c.ageMax));
+  const sortedCourses = [...visibleCourses.filter(adapted), ...visibleCourses.filter((c) => !adapted(c))];
 
   // Cours choisis qui se chevauchent le même jour.
-  const choisis = cours.filter((c) => coursIds.includes(c.id));
-  const chevauchements = choisis.flatMap((a, i) =>
-    choisis
+  const chosen = cours.filter((c) => courseIds.includes(c.id));
+  const overlappingCourses = chosen.flatMap((a, i) =>
+    chosen
       .slice(i + 1)
-      .filter((b) => seChevauchent(a, b))
-      .map((b) => `${a.discipline} et ${b.discipline} le ${JOURS[a.jourSemaine ?? 0].toLowerCase()}`),
+      .filter((b) => overlaps(a, b))
+      .map((b) => `${a.discipline} et ${b.discipline} le ${DAYS[a.weekday ?? 0].toLowerCase()}`),
   );
 
   return (
@@ -96,12 +104,12 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
       className="grid gap-6 lg:grid-cols-[1fr_22rem]"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!peutEnregistrer) return;
-        setRefus(null);
-        demarrerEnvoi(async () => setRefus((await inscrire(saisie)).message));
+        if (!canSave) return;
+        setRefusal(null);
+        startSend(async () => setRefusal((await enroll(saisie)).message));
       }}
       onKeyDown={(e) => {
-        if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && peutEnregistrer) {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canSave) {
           e.preventDefault();
           e.currentTarget.requestSubmit();
         }
@@ -110,20 +118,20 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
       <nav aria-label="Repères de saisie" className="lg:col-span-2">
         <ol className="grid grid-cols-3 gap-2 text-sm">
           {[
-            { cible: "choix-danseur", titre: "Danseur & formule", complet: danseurIds.length > 0 },
-            { cible: "choix-cours", titre: "Cours", complet: coursIds.length > 0 },
-            { cible: "prix-inscription", titre: "Vérification du prix", complet: peutEnregistrer },
-          ].map((etape, index) => (
-            <li key={etape.cible}>
+            { target: "choix-danseur", title: "Danseur & formule", full: studentIds.length > 0 },
+            { target: "choix-cours", title: "Cours", full: courseIds.length > 0 },
+            { target: "prix-inscription", title: "Vérification du prix", full: canSave },
+          ].map((step, index) => (
+            <li key={step.target}>
               <a
-                href={`#${etape.cible}`}
-                className={`flex h-full items-center gap-2 rounded-md border px-3 py-2 ${etape.complet ? "border-accent bg-accent-doux" : "border-bordure bg-surface text-doux"}`}
+                href={`#${step.target}`}
+                className={`flex h-full items-center gap-2 rounded-md border px-3 py-2 ${step.full ? "border-accent bg-accent-doux" : "border-bordure bg-surface text-doux"}`}
               >
                 <span aria-hidden className="font-semibold">
                   {index + 1}
                 </span>
-                <span>{etape.titre}</span>
-                {etape.complet && <span className="sr-only"> : renseigné</span>}
+                <span>{step.title}</span>
+                {step.full && <span className="sr-only"> : renseigné</span>}
               </a>
             </li>
           ))}
@@ -132,16 +140,16 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
       <div className="flex min-w-0 flex-col gap-4">
         <legend className="sr-only">Choix de l’inscription</legend>
         <fieldset id="choix-danseur" className="panneau flex flex-col gap-2 p-3">
-          <legend className="text-sm font-semibold">Danseur{publicChoisi === "couple" ? "s (deux)" : ""}</legend>
-          {danseurs.map((d) => (
+          <legend className="text-sm font-semibold">Danseur{chosenAudience === "couple" ? "s (deux)" : ""}</legend>
+          {students.map((d) => (
             <label key={d.id} className="flex items-center gap-2 text-sm">
               <input
-                type={publicChoisi === "couple" ? "checkbox" : "radio"}
+                type={chosenAudience === "couple" ? "checkbox" : "radio"}
                 name="danseur"
-                checked={danseurIds.includes(d.id)}
-                onChange={() => setDanseurIds(publicChoisi === "couple" ? basculer(danseurIds, d.id) : [d.id])}
+                checked={studentIds.includes(d.id)}
+                onChange={() => setStudentIds(chosenAudience === "couple" ? toggle(studentIds, d.id) : [d.id])}
               />
-              {d.prenom}
+              {d.firstName}
               {d.age !== null && <span className="text-doux">({d.age} ans)</span>}
             </label>
           ))}
@@ -155,14 +163,14 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
             <select
               id="public"
               className="champ"
-              value={publicChoisi}
+              value={chosenAudience}
               onChange={(e) => {
-                const valeur = e.target.value as SaisieFormulaire["public"];
-                setPublic(valeur);
-                if (valeur !== "couple") setDanseurIds(danseurIds.slice(0, 1));
+                const value = e.target.value as FormInput["audience"];
+                setPublic(value);
+                if (value !== "couple") setStudentIds(studentIds.slice(0, 1));
               }}
             >
-              {PUBLICS.map(([v, l]) => (
+              {AUDIENCES.map(([v, l]) => (
                 <option key={v} value={v}>
                   {l}
                 </option>
@@ -176,10 +184,10 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
             <select
               id="periodicite"
               className="champ"
-              value={periodicite}
-              onChange={(e) => setPeriodicite(e.target.value as SaisieFormulaire["periodicite"])}
+              value={period}
+              onChange={(e) => setPeriod(e.target.value as FormInput["period"])}
             >
-              {PERIODICITES.map(([v, l]) => (
+              {PERIODS.map(([v, l]) => (
                 <option key={v} value={v}>
                   {l}
                 </option>
@@ -190,7 +198,7 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
 
         <fieldset id="choix-cours" className="flex flex-col gap-2">
           <legend className="text-sm font-semibold">
-            Cours ({coursIds.length} choisi{coursIds.length > 1 ? "s" : ""})
+            Cours ({courseIds.length} choisi{courseIds.length > 1 ? "s" : ""})
           </legend>
           <label className="sr-only" htmlFor="filtre-cours">
             Filtrer les cours
@@ -200,42 +208,42 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
             type="search"
             className="champ max-w-xs"
             placeholder="Filtrer : jazz, mercredi, adultes…"
-            value={filtre}
-            onChange={(e) => setFiltre(e.target.value)}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
           />
           <ul className="panneau flex max-h-96 flex-col overflow-y-auto">
-            {coursTries.length === 0 && (
+            {sortedCourses.length === 0 && (
               <li className="flex flex-col items-start gap-2 p-3 text-doux">
                 <p>
                   {cours.length === 0
                     ? "Aucun cours n’est disponible pour cette saison."
                     : "Aucun cours ne correspond à votre recherche."}
                 </p>
-                {filtre && (
-                  <button type="button" className="bouton-secondaire" onClick={() => setFiltre("")}>
+                {filter && (
+                  <button type="button" className="bouton-secondaire" onClick={() => setFilter("")}>
                     Effacer le filtre
                   </button>
                 )}
               </li>
             )}
-            {coursTries.map((c) => {
-              const restantes = c.capaciteMax === null ? null : c.capaciteMax - c.inscrits;
+            {sortedCourses.map((c) => {
+              const restantes = c.maxCapacity === null ? null : c.maxCapacity - c.enrolled;
               return (
-                <li key={c.id} className={`border-b border-bordure last:border-0 ${adapte(c) ? "" : "opacity-60"}`}>
+                <li key={c.id} className={`border-b border-bordure last:border-0 ${adapted(c) ? "" : "opacity-60"}`}>
                   <label className="flex items-start gap-2 px-2 py-2 text-sm hover:bg-accent-doux/40 sm:items-center sm:py-1">
                     <input
                       type="checkbox"
                       className="mt-0.5 sm:mt-0"
-                      checked={coursIds.includes(c.id)}
-                      onChange={() => setCoursIds(basculer(coursIds, c.id))}
+                      checked={courseIds.includes(c.id)}
+                      onChange={() => setCourseIds(toggle(courseIds, c.id))}
                     />
                     <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
-                      <span className="w-20 shrink-0">{c.jourSemaine ? JOURS[c.jourSemaine] : "Stage"}</span>
-                      <span className="w-12 shrink-0 tabular-nums">{c.heureDebut}</span>
+                      <span className="w-20 shrink-0">{c.weekday ? DAYS[c.weekday] : "Stage"}</span>
+                      <span className="w-12 shrink-0 tabular-nums">{c.startTime}</span>
                       <span className="font-medium">{c.discipline}</span>
                       <span className="basis-full text-doux sm:basis-auto">
-                        {c.dureeMinutes} min{c.niveau ? `, ${c.niveau}` : ""}, {c.salle}
-                        {!adapte(c) && ", hors tranche d’âge"}
+                        {c.durationMinutes} min{c.level ? `, ${c.level}` : ""}, {c.room}
+                        {!adapted(c) && ", hors tranche d’âge"}
                       </span>
                     </span>
                     {restantes !== null && (
@@ -250,26 +258,25 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
               );
             })}
           </ul>
-          {choisis.length > 0 && (
+          {chosen.length > 0 && (
             <ul aria-label="Cours choisis" className="flex flex-wrap gap-1.5">
-              {choisis.map((c) => (
+              {chosen.map((c) => (
                 <li key={c.id}>
                   <button
                     type="button"
                     className="rounded-md border border-accent bg-accent-doux px-2 py-0.5 text-xs hover:border-accent-fort"
-                    onClick={() => setCoursIds(coursIds.filter((x) => x !== c.id))}
-                    aria-label={`Retirer ${c.discipline} ${c.jourSemaine ? JOURS[c.jourSemaine] : ""} ${c.heureDebut}`}
+                    onClick={() => setCourseIds(courseIds.filter((x) => x !== c.id))}
+                    aria-label={`Retirer ${c.discipline} ${c.weekday ? DAYS[c.weekday] : ""} ${c.startTime}`}
                   >
-                    {c.discipline} {c.jourSemaine ? JOURS[c.jourSemaine].slice(0, 3).toLowerCase() + "." : ""}{" "}
-                    {c.heureDebut} ×
+                    {c.discipline} {c.weekday ? DAYS[c.weekday].slice(0, 3).toLowerCase() + "." : ""} {c.startTime} ×
                   </button>
                 </li>
               ))}
             </ul>
           )}
-          {chevauchements.length > 0 && (
+          {overlappingCourses.length > 0 && (
             <p role="alert" className="rounded-md bg-alerte-fond px-2 py-1 text-xs text-alerte-texte">
-              Horaires qui se chevauchent : {chevauchements.join(" ; ")}.
+              Horaires qui se chevauchent : {overlappingCourses.join(" ; ")}.
             </p>
           )}
         </fieldset>
@@ -278,86 +285,88 @@ export function FormulaireInscription({ payeurId, danseurs, cours, danseurInitia
       <aside
         id="prix-inscription"
         aria-live="polite"
-        aria-busy={calcul}
+        aria-busy={calculation}
         className="panneau flex flex-col gap-3 self-start p-3 text-sm lg:sticky lg:top-16"
       >
         <h2 className="font-semibold">Récapitulatif de l’inscription</h2>
         <div className="border-b border-bordure pb-3 text-xs text-doux">
           <p className="text-sm font-medium text-texte">
-            {danseurs
-              .filter((d) => danseurIds.includes(d.id))
-              .map((d) => d.prenom)
+            {students
+              .filter((d) => studentIds.includes(d.id))
+              .map((d) => d.firstName)
               .join(" et ") || "Aucun danseur sélectionné"}
           </p>
           <p>
-            {PUBLICS.find(([v]) => v === publicChoisi)?.[1]} · {PERIODICITES.find(([v]) => v === periodicite)?.[1]}
+            {AUDIENCES.find(([v]) => v === chosenAudience)?.[1]} · {PERIODS.find(([v]) => v === period)?.[1]}
           </p>
           <p>
-            {choisis.length} cours · {choisis.reduce((total, c) => total + c.dureeMinutes, 0)} min par semaine
+            {chosen.length} cours · {chosen.reduce((total, c) => total + c.durationMinutes, 0)} min par semaine
           </p>
         </div>
-        {calcul && (
+        {calculation && (
           <p role="status" className="text-doux">
             Calcul du prix de votre sélection…
           </p>
         )}
-        {courant?.erreur && (
+        {current?.error && (
           <div role="alert" className="flex flex-col gap-2 text-erreur">
             <p>Le prix n’a pas pu être calculé. Votre sélection est conservée.</p>
-            <button type="button" className="bouton-secondaire self-start" onClick={() => setEssaiCalcul((n) => n + 1)}>
+            <button
+              type="button"
+              className="bouton-secondaire self-start"
+              onClick={() => setCalculationAttempt((n) => n + 1)}
+            >
               Réessayer le calcul
             </button>
           </div>
         )}
-        {!resultat && !calcul && !courant?.erreur && (
+        {!result && !calculation && !current?.error && (
           <p className="text-doux">
-            {danseurIds.length === 0
+            {studentIds.length === 0
               ? "Choisissez d’abord un danseur."
               : "Choisissez au moins un cours pour connaître le prix."}
           </p>
         )}
-        {resultat?.statut === "invalide" && <p role="alert">{resultat.message}</p>}
-        {nouvelle?.statut === "erreur" && <p role="alert">{nouvelle.erreur.message}</p>}
-        {nouvelle?.statut === "ok" && (
+        {result?.status === "invalide" && <p role="alert">{result.message}</p>}
+        {next?.status === "erreur" && <p role="alert">{next.error.message}</p>}
+        {next?.status === "ok" && (
           <dl className="flex flex-col gap-1">
             <div className="flex justify-between gap-2">
-              <dt>Forfait {nouvelle.libelleForfait}</dt>
-              <dd className="tabular-nums">{formaterEuros(nouvelle.prixBrutCentimes)}</dd>
+              <dt>Forfait {next.packageLabel}</dt>
+              <dd className="tabular-nums">{formatEuros(next.grossPriceCents)}</dd>
             </div>
-            {nouvelle.reductions.map((r) => (
-              <div key={r.code} className={r.statut === "ecartee" ? "text-doux" : ""}>
+            {next.discounts.map((r) => (
+              <div key={r.code} className={r.status === "ecartee" ? "text-doux" : ""}>
                 <div className="flex justify-between gap-2">
                   <dt>
                     Réduction {r.code}
-                    {r.statut === "ecartee" ? " (écartée)" : ""}
+                    {r.status === "ecartee" ? " (écartée)" : ""}
                   </dt>
-                  <dd className="tabular-nums">
-                    {r.statut === "appliquee" ? `−${formaterEuros(r.montantCentimes)}` : "—"}
-                  </dd>
+                  <dd className="tabular-nums">{r.status === "appliquee" ? `−${formatEuros(r.amountCents)}` : "—"}</dd>
                 </div>
-                <p className="text-xs">{r.motif}</p>
+                <p className="text-xs">{r.pattern}</p>
               </div>
             ))}
             <div className="mt-2 flex justify-between gap-2 border-t border-bordure pt-3 text-base font-semibold">
               <dt>Total</dt>
-              <dd className="tabular-nums">{formaterEuros(nouvelle.prixNetCentimes)}</dd>
+              <dd className="tabular-nums">{formatEuros(next.netPriceCents)}</dd>
             </div>
           </dl>
         )}
-        {resultat?.statut === "ok" &&
-          resultat.autres.map((a) => (
+        {result?.status === "ok" &&
+          result.existingImpacts.map((a) => (
             <p key={a.reference} className="rounded bg-alerte-fond p-2 text-xs text-alerte-texte">
-              L’inscription déjà enregistrée de {a.danseurs} aurait une remise de {formaterEuros(a.remiseRecalculee)} au
-              lieu de {formaterEuros(a.remiseEnregistree)} : à régulariser par un avoir si l’école le décide.
+              L’inscription déjà enregistrée de {a.students} aurait une remise de {formatEuros(a.recalculatedDiscount)}{" "}
+              au lieu de {formatEuros(a.savedDeposit)} : à régulariser par un avoir si l’école le décide.
             </p>
           ))}
-        {refus && (
+        {refusal && (
           <p role="alert" className="text-erreur">
-            {refus}
+            {refusal}
           </p>
         )}
-        <button type="submit" className="bouton-principal" disabled={!peutEnregistrer}>
-          {envoi ? "Enregistrement…" : "Enregistrer l’inscription"}
+        <button type="submit" className="bouton-principal" disabled={!canSave}>
+          {sending ? "Enregistrement…" : "Enregistrer l’inscription"}
         </button>
         <p className="text-xs text-doux">
           Vérifiez le prix avant d’enregistrer. Aucun paiement n’est encaissé à cette étape.

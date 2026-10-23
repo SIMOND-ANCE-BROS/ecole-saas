@@ -1,69 +1,69 @@
-import { AccesRetire, identifiants, lirePlagesOccupees, rafraichir } from "../connecteurs/agenda/oauth";
-import { avecEcole } from "../db";
-import { intervenantsConnectes, lireConnexion, noterSynchro } from "../db/connexions-agenda";
-import { remplacerIndisponibilitesAgenda } from "../db/disponibilites";
-import { chiffrer, dechiffrer } from "./chiffrement";
+import { AccessRemoved, credentials, readBusyRanges, refresh } from "../connecteurs/agenda/oauth";
+import { withSchool } from "../db";
+import { connectesInstructors, readConnection, recordSync } from "../db/connexions-agenda";
+import { replaceCalendarUnavailabilities } from "../db/disponibilites";
+import { encrypt, decrypt } from "./chiffrement";
 
 /** Fenêtre lue dans les agendas : de la veille à quatre mois. */
-const AVANT = 1;
-const APRES = 120;
-const JOUR = 86_400_000;
+const BEFORE = 1;
+const AFTER = 120;
+const DAY = 86_400_000;
 
 /**
  * Lit les plages occupées de l'agenda connecté d'un intervenant et remplace
  * ses indisponibilités venues de cet agenda. Les appels réseau ont lieu hors
  * transaction ; aucune donnée personnelle dans les messages d'erreur.
  */
-export async function synchroniserAgenda(
-  ecoleId: string,
-  intervenantId: string,
-  requete: typeof fetch = fetch,
-  maintenant = new Date(),
-): Promise<{ ok: true; plages: number } | { ok: false; message: string }> {
-  const connexion = await avecEcole(ecoleId, (tx) => lireConnexion(tx, intervenantId));
-  if (!connexion) return { ok: false, message: "Aucun agenda connecté." };
-  const echec = async (message: string) => {
-    await avecEcole(ecoleId, (tx) => noterSynchro(tx, intervenantId, { erreur: message }));
+export async function syncCalendar(
+  schoolId: string,
+  instructorId: string,
+  query: typeof fetch = fetch,
+  now = new Date(),
+): Promise<{ ok: true; ranges: number } | { ok: false; message: string }> {
+  const connection = await withSchool(schoolId, (tx) => readConnection(tx, instructorId));
+  if (!connection) return { ok: false, message: "Aucun agenda connecté." };
+  const failure = async (message: string) => {
+    await withSchool(schoolId, (tx) => recordSync(tx, instructorId, { error: message }));
     return { ok: false as const, message };
   };
-  const id = identifiants(connexion.fournisseur);
-  if (!id) return echec("Connexion à ce fournisseur non configurée sur le serveur.");
+  const id = credentials(connection.provider);
+  if (!id) return failure("Connexion à ce fournisseur non configurée sur le serveur.");
 
   try {
-    const { acces, nouveauRafraichissement } = await rafraichir(
-      connexion.fournisseur,
+    const { access: access, newRefreshToken: newRefreshToken } = await refresh(
+      connection.provider,
       id,
-      dechiffrer(connexion.jetonChiffre),
-      requete,
+      decrypt(connection.encryptedToken),
+      query,
     );
-    const fenetre = {
-      debut: new Date(maintenant.getTime() - AVANT * JOUR),
-      fin: new Date(maintenant.getTime() + APRES * JOUR),
+    const window = {
+      start: new Date(now.getTime() - BEFORE * DAY),
+      end: new Date(now.getTime() + AFTER * DAY),
     };
-    const plages = await lirePlagesOccupees(connexion.fournisseur, acces, fenetre, requete);
-    const nombre = await avecEcole(ecoleId, async (tx) => {
-      const n = await remplacerIndisponibilitesAgenda(tx, intervenantId, connexion.fournisseur, fenetre, plages);
-      await noterSynchro(tx, intervenantId, {
-        erreur: null,
-        jetonChiffre: nouveauRafraichissement ? chiffrer(nouveauRafraichissement) : undefined,
+    const ranges = await readBusyRanges(connection.provider, access, window, query);
+    const nombre = await withSchool(schoolId, async (tx) => {
+      const n = await replaceCalendarUnavailabilities(tx, instructorId, connection.provider, window, ranges);
+      await recordSync(tx, instructorId, {
+        error: null,
+        encryptedToken: newRefreshToken ? encrypt(newRefreshToken) : undefined,
       });
       return n;
     });
-    return { ok: true, plages: nombre };
+    return { ok: true, ranges: nombre };
   } catch (e) {
-    return echec(
-      e instanceof AccesRetire ? e.message : "Synchronisation impossible pour le moment ; elle sera retentée.",
+    return failure(
+      e instanceof AccessRemoved ? e.message : "Synchronisation impossible pour le moment ; elle sera retentée.",
     );
   }
 }
 
 /** Tous les agendas connectés d'une école (tâche de fond). */
-export async function synchroniserEcole(
-  ecoleId: string,
-  requete: typeof fetch = fetch,
-): Promise<{ reussies: number; echouees: number }> {
-  const ids = await avecEcole(ecoleId, (tx) => intervenantsConnectes(tx));
-  let reussies = 0;
-  for (const intervenantId of ids) if ((await synchroniserAgenda(ecoleId, intervenantId, requete)).ok) reussies++;
-  return { reussies, echouees: ids.length - reussies };
+export async function syncSchool(
+  schoolId: string,
+  query: typeof fetch = fetch,
+): Promise<{ succeeded: number; failed: number }> {
+  const ids = await withSchool(schoolId, (tx) => connectesInstructors(tx));
+  let succeeded = 0;
+  for (const instructorId of ids) if ((await syncCalendar(schoolId, instructorId, query)).ok) succeeded++;
+  return { succeeded, failed: ids.length - succeeded };
 }

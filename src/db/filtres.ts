@@ -2,13 +2,13 @@ import { and, or, type SQL, sql } from "drizzle-orm";
 import {
   ACCENTS,
   type Condition,
-  type DefColonne,
-  type Filtre,
+  type ColumnDef,
+  type Filter,
   SANS_ACCENTS,
-  SEPARATEUR,
-  VIDE,
-  type Tri,
-  valeurNormalisee,
+  SEPARATOR,
+  EMPTY,
+  type Sort,
+  normalizedValue,
 } from "../domaine/filtres/filtres";
 
 /**
@@ -19,18 +19,18 @@ import {
  */
 
 /** Expression SQL d'une colonne ; `liste` : un tableau de textes (responsables…). */
-export type ExpressionColonne = { sql: SQL; liste?: boolean };
+export type ColumnExpression = { sql: SQL; list?: boolean };
 
-const normaliser = (x: SQL) =>
+const normalize = (x: SQL) =>
   sql`regexp_replace(btrim(translate(lower(${x}), ${ACCENTS}, ${SANS_ACCENTS})), '\\s+', ' ', 'g')`;
 
-function condition(c: Condition, def: DefColonne, e: ExpressionColonne): SQL | undefined {
-  const v = valeurNormalisee(c, def.type);
+function condition(c: Condition, def: ColumnDef, e: ColumnExpression): SQL | undefined {
+  const v = normalizedValue(c, def.type);
   if (v === null) return undefined;
 
   if (def.type === "nombre") {
     const n = sql`(${e.sql})::numeric`;
-    switch (c.operateur) {
+    switch (c.operator) {
       case "vide":
         return sql`${n} IS NULL`;
       case "non_vide":
@@ -54,7 +54,7 @@ function condition(c: Condition, def: DefColonne, e: ExpressionColonne): SQL | u
 
   if (def.type === "date") {
     const d = sql`(${e.sql})::date`;
-    switch (c.operateur) {
+    switch (c.operator) {
       case "vide":
         return sql`${d} IS NULL`;
       case "non_vide":
@@ -74,14 +74,14 @@ function condition(c: Condition, def: DefColonne, e: ExpressionColonne): SQL | u
     }
   }
 
-  const brut = e.liste ? sql`array_to_string(${e.sql}, ', ')` : sql`(${e.sql})::text`;
+  const raw = e.list ? sql`array_to_string(${e.sql}, ', ')` : sql`(${e.sql})::text`;
   const t =
     def.type === "telephone"
-      ? sql`regexp_replace(coalesce(${brut}, ''), '[^0-9]', '', 'g')`
-      : normaliser(sql`coalesce(${brut}, '')`);
+      ? sql`regexp_replace(coalesce(${raw}, ''), '[^0-9]', '', 'g')`
+      : normalize(sql`coalesce(${raw}, '')`);
   // Une liste « est » X si l'un de ses éléments vaut X.
-  const unElement = sql`EXISTS (SELECT 1 FROM unnest(${e.sql}) AS element WHERE ${normaliser(sql`element`)} = ${v})`;
-  switch (c.operateur) {
+  const unElement = sql`EXISTS (SELECT 1 FROM unnest(${e.sql}) AS element WHERE ${normalize(sql`element`)} = ${v})`;
+  switch (c.operator) {
     case "vide":
       return sql`${t} = ''`;
     case "non_vide":
@@ -93,23 +93,23 @@ function condition(c: Condition, def: DefColonne, e: ExpressionColonne): SQL | u
     case "commence":
       return sql`starts_with(${t}, ${v})`;
     case "est":
-      return e.liste ? unElement : sql`${t} = ${v}`;
+      return e.list ? unElement : sql`${t} = ${v}`;
     case "n_est_pas":
-      return e.liste ? sql`NOT ${unElement}` : sql`${t} <> ${v}`;
+      return e.list ? sql`NOT ${unElement}` : sql`${t} <> ${v}`;
     case "parmi": {
-      const toutes = String(v).split(SEPARATEUR);
-      const vs = toutes.filter((x) => x !== VIDE);
-      const liste = sql.join(
+      const toutes = String(v).split(SEPARATOR);
+      const vs = toutes.filter((x) => x !== EMPTY);
+      const list = sql.join(
         vs.map((x) => sql`${x}`),
         sql`, `,
       );
       const parmi =
         vs.length === 0
           ? undefined
-          : e.liste
-            ? sql`EXISTS (SELECT 1 FROM unnest(${e.sql}) AS element WHERE ${normaliser(sql`element`)} IN (${liste}))`
-            : sql`${t} IN (${liste})`;
-      const vide = toutes.includes(VIDE) ? sql`${t} = ''` : undefined;
+          : e.list
+            ? sql`EXISTS (SELECT 1 FROM unnest(${e.sql}) AS element WHERE ${normalize(sql`element`)} IN (${list}))`
+            : sql`${t} IN (${list})`;
+      const vide = toutes.includes(EMPTY) ? sql`${t} = ''` : undefined;
       return parmi && vide ? sql`(${parmi} OR ${vide})` : (parmi ?? vide);
     }
     default:
@@ -118,19 +118,19 @@ function condition(c: Condition, def: DefColonne, e: ExpressionColonne): SQL | u
 }
 
 /** Condition WHERE d'un filtre ; undefined s'il n'y a rien à filtrer. */
-export function conditionFiltre(
-  filtre: Filtre,
-  colonnes: DefColonne[],
-  expressions: Record<string, ExpressionColonne>,
+export function filterCondition(
+  filter: Filter,
+  columns: ColumnDef[],
+  expressions: Record<string, ColumnExpression>,
 ): SQL | undefined {
-  const parties = filtre.conditions.flatMap((c) => {
-    const def = colonnes.find((d) => d.id === c.colonne);
-    const e = expressions[c.colonne];
+  const parties = filter.conditions.flatMap((c) => {
+    const def = columns.find((d) => d.id === c.column);
+    const e = expressions[c.column];
     const s = def && e ? condition(c, def, e) : undefined;
     return s ? [s] : [];
   });
   if (parties.length === 0) return undefined;
-  return filtre.mode === "ou" ? or(...parties) : and(...parties);
+  return filter.mode === "ou" ? or(...parties) : and(...parties);
 }
 
 /**
@@ -138,19 +138,19 @@ export function conditionFiltre(
  * accents et majuscules ignorés, nombres et dates dans leur ordre, vides en
  * dernier. undefined sans tri (l'appelant garde son ordre par défaut).
  */
-export function ordreColonne(
-  tri: Tri | null,
-  colonnes: DefColonne[],
-  expressions: Record<string, ExpressionColonne>,
+export function columnOrder(
+  currentSort: Sort | null,
+  columns: ColumnDef[],
+  expressions: Record<string, ColumnExpression>,
 ): SQL | undefined {
-  const def = tri && colonnes.find((d) => d.id === tri.colonne);
-  const e = tri && expressions[tri.colonne];
-  if (!tri || !def || !e || def.triable === false) return undefined;
-  const cle =
+  const def = currentSort && columns.find((d) => d.id === currentSort.column);
+  const e = currentSort && expressions[currentSort.column];
+  if (!currentSort || !def || !e || def.sortable === false) return undefined;
+  const key =
     def.type === "nombre"
       ? sql`(${e.sql})::numeric`
       : def.type === "date"
         ? sql`(${e.sql})::date`
-        : sql`nullif(${normaliser(e.liste ? sql`array_to_string(${e.sql}, ', ')` : sql`(${e.sql})::text`)}, '')`;
-  return tri.sens === "desc" ? sql`${cle} DESC NULLS LAST` : sql`${cle} ASC NULLS LAST`;
+        : sql`nullif(${normalize(e.list ? sql`array_to_string(${e.sql}, ', ')` : sql`(${e.sql})::text`)}, '')`;
+  return currentSort.sens === "desc" ? sql`${key} DESC NULLS LAST` : sql`${key} ASC NULLS LAST`;
 }

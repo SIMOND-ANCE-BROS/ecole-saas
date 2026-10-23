@@ -1,43 +1,37 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { avecEcole } from "@/db";
-import {
-  creerPersonne,
-  type Doublon,
-  modifierPersonne,
-  rechercherPersonnes,
-  saisiePersonneValide,
-} from "@/db/personnes";
-import { erreursDe } from "@/lib/erreurs-saisie";
-import { exigerRole } from "@/lib/session";
+import { withSchool } from "@/db";
+import { createPerson, type Duplicate, updatePerson, searchPeople, validPersonInput } from "@/db/personnes";
+import { errorsOf } from "@/lib/erreurs-saisie";
+import { requireRole } from "@/lib/session";
 
-export type Refus = { message: string; erreurs: Partial<Record<string, string>>; doublons?: Doublon[] };
+export type Refusal = { message: string; errors: Partial<Record<string, string>>; duplicates?: Duplicate[] };
 
 /** Nouveau contact (parent, payeur, organisme) ; sans `confirme`, renvoie d'abord les doublons probables. */
-export async function creerContact(saisie: unknown, confirme: boolean): Promise<Refus> {
-  const { ecoleId } = await exigerRole("direction", "accueil");
-  const p = saisiePersonneValide.safeParse(saisie);
-  if (!p.success) return { message: "Vérifiez les champs signalés.", erreurs: erreursDe(p.error.issues) };
-  const r = await avecEcole(ecoleId, (tx) => creerPersonne(tx, p.data, confirme));
-  if (r.statut === "doublons")
-    return { message: "Cette personne existe peut-être déjà.", erreurs: {}, doublons: r.doublons };
+export async function createContact(saisie: unknown, confirmed: boolean): Promise<Refusal> {
+  const { schoolId: schoolId } = await requireRole("direction", "accueil");
+  const p = validPersonInput.safeParse(saisie);
+  if (!p.success) return { message: "Vérifiez les champs signalés.", errors: errorsOf(p.error.issues) };
+  const r = await withSchool(schoolId, (tx) => createPerson(tx, p.data, confirmed));
+  if (r.status === "doublons")
+    return { message: "Cette personne existe peut-être déjà.", errors: {}, duplicates: r.duplicates };
   redirect(`/contacts/${r.id}?enregistre=cree`);
 }
 
 /** Identité et coordonnées d'un élève ou d'un contact. */
-export async function modifierIdentite(id: string, saisie: unknown, retour: "eleves" | "contacts"): Promise<Refus> {
-  const { ecoleId } = await exigerRole("direction", "accueil");
-  const p = saisiePersonneValide.safeParse(saisie);
-  if (!p.success) return { message: "Vérifiez les champs signalés.", erreurs: erreursDe(p.error.issues) };
-  const r = await avecEcole(ecoleId, (tx) => modifierPersonne(tx, id, p.data));
-  if (!r.ok) return { message: r.message, erreurs: {} };
-  redirect(`/${retour}/${id}?enregistre=modifie`);
+export async function updateIdentity(id: string, saisie: unknown, back: "eleves" | "contacts"): Promise<Refusal> {
+  const { schoolId: schoolId } = await requireRole("direction", "accueil");
+  const p = validPersonInput.safeParse(saisie);
+  if (!p.success) return { message: "Vérifiez les champs signalés.", errors: errorsOf(p.error.issues) };
+  const r = await withSchool(schoolId, (tx) => updatePerson(tx, id, p.data));
+  if (!r.ok) return { message: r.message, errors: {} };
+  redirect(`/${back}/${id}?enregistre=modifie`);
 }
 
 /** Recherche d'une personne existante pendant la frappe (responsable, payeur). */
-export async function chercherPersonnes(saisie: string) {
-  const { ecoleId } = await exigerRole("direction", "accueil");
+export async function searchPeopleAction(saisie: string) {
+  const { schoolId: schoolId } = await requireRole("direction", "accueil");
   if (typeof saisie !== "string") return [];
-  return avecEcole(ecoleId, (tx) => rechercherPersonnes(tx, saisie.slice(0, 100)));
+  return withSchool(schoolId, (tx) => searchPeople(tx, saisie.slice(0, 100)));
 }

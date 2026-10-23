@@ -1,31 +1,31 @@
 /** Recouvrement de créneaux hebdomadaires (cours réguliers ; un stage n'a pas de jour). */
 
-export type Creneau = {
+export type Slot = {
   /** 1 = lundi … 7 = dimanche ; null pour un stage. */
-  jourSemaine: number | null;
+  weekday: number | null;
   /** `HH:MM` */
-  heureDebut: string;
-  dureeMinutes: number;
+  startTime: string;
+  durationMinutes: number;
 };
 
 const minutes = (h: string) => Number(h.slice(0, 2)) * 60 + Number(h.slice(3, 5));
 
-export function seChevauchent(a: Creneau, b: Creneau): boolean {
-  if (a.jourSemaine === null || a.jourSemaine !== b.jourSemaine) return false;
-  const [da, db] = [minutes(a.heureDebut), minutes(b.heureDebut)];
-  return da < db + b.dureeMinutes && db < da + a.dureeMinutes;
+export function overlaps(a: Slot, b: Slot): boolean {
+  if (a.weekday === null || a.weekday !== b.weekday) return false;
+  const [da, db] = [minutes(a.startTime), minutes(b.startTime)];
+  return da < db + b.durationMinutes && db < da + a.durationMinutes;
 }
 
-type CoursPlace = Creneau & { id: string | null; salleId: string; intervenantId: string };
+type PlacedCourse = Slot & { id: string | null; roomId: string; instructorId: string };
 
 /** Cours qui occupent déjà la même salle ou le même intervenant sur le créneau de `cible`. */
-export function conflits(cible: CoursPlace, existants: CoursPlace[]) {
-  return existants
-    .filter((c) => c.id !== cible.id && seChevauchent(cible, c))
+export function conflicts(target: PlacedCourse, existing: PlacedCourse[]) {
+  return existing
+    .filter((c) => c.id !== target.id && overlaps(target, c))
     .map((c) => ({
       id: c.id as string,
-      salle: c.salleId === cible.salleId,
-      intervenant: c.intervenantId === cible.intervenantId,
+      room: c.roomId === target.roomId,
+      instructor: c.instructorId === target.instructorId,
     }))
-    .filter((c) => c.salle || c.intervenant);
+    .filter((c) => c.room || c.instructor);
 }

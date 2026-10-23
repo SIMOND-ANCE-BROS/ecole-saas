@@ -1,113 +1,113 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { supprimerConnexion } from "./connexions-agenda";
+import { deleteConnection } from "./connexions-agenda";
 import type { Tx } from "./index";
 import { instructor } from "./schema";
 
 /** Intervenants (professeurs), toujours avec la transaction d'`avecEcole()` (RLS). */
 
-export const STATUTS = { micro_entreprise: "Micro-entreprise", societe: "Société", salarie: "Salarié" } as const;
-export const REGIMES_TVA = {
+export const STATUSES = { micro_entreprise: "Micro-entreprise", societe: "Société", salarie: "Salarié" } as const;
+export const VAT_REGIMES = {
   franchise_293b: "Franchise en base (293 B)",
   assujetti: "Assujetti à la TVA",
   non_applicable: "Non applicable",
 } as const;
-export const MODES_REMUNERATION = {
+export const PAY_MODES = {
   heure: "à l’heure",
   cours: "au cours",
   forfait_mensuel: "forfait mensuel",
 } as const;
 /** Unité du tarif selon le mode de rémunération. */
-export const UNITES_REMUNERATION = { heure: "heure", cours: "cours", forfait_mensuel: "mois" } as const;
+export const PAY_UNITS = { heure: "heure", cours: "cours", forfait_mensuel: "mois" } as const;
 
-const cles = <T extends object>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
+const keys = <T extends object>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
 
-export const saisieIntervenantValide = z.object({
-  prenom: z.string().trim().min(1, "Prénom obligatoire").max(100),
-  nom: z.string().trim().min(1, "Nom obligatoire").max(100),
+export const validInstructorInput = z.object({
+  firstName: z.string().trim().min(1, "Prénom obligatoire").max(100),
+  name: z.string().trim().min(1, "Nom obligatoire").max(100),
   email: z.union([z.literal(""), z.email("E-mail invalide")]).transform((v) => v || null),
-  statut: z.enum(cles(STATUTS)),
+  status: z.enum(keys(STATUSES)),
   siren: z
     .string()
     .transform((v) => v.replace(/\s/g, ""))
     .refine((v) => v === "" || /^\d{9}$/.test(v), "Le SIREN compte 9 chiffres")
     .transform((v) => v || null),
-  regimeTva: z.enum(cles(REGIMES_TVA)),
-  estDirigeant: z.boolean(),
-  modeRemuneration: z.enum(cles(MODES_REMUNERATION)),
-  tarifCentimes: z.int().min(0).max(100_000_00),
-  actif: z.boolean(),
+  vatRegime: z.enum(keys(VAT_REGIMES)),
+  isOwner: z.boolean(),
+  payMode: z.enum(keys(PAY_MODES)),
+  rateCents: z.int().min(0).max(100_000_00),
+  active: z.boolean(),
 });
 
-export type SaisieIntervenant = z.output<typeof saisieIntervenantValide>;
-export type Intervenant = SaisieIntervenant & { id: string };
+export type InstructorInput = z.output<typeof validInstructorInput>;
+export type Instructor = InstructorInput & { id: string };
 
 /** Instructor columns from the form input. */
-const ligneIntervenant = (s: SaisieIntervenant) => ({
-  firstName: s.prenom,
-  lastName: s.nom,
+const instructorRow = (s: InstructorInput) => ({
+  firstName: s.firstName,
+  lastName: s.name,
   email: s.email,
-  status: s.statut,
+  status: s.status,
   siren: s.siren,
-  vatRegime: s.regimeTva,
-  isOwner: s.estDirigeant,
-  payMode: s.modeRemuneration,
-  rateCents: s.tarifCentimes,
-  active: s.actif,
+  vatRegime: s.vatRegime,
+  isOwner: s.isOwner,
+  payMode: s.payMode,
+  rateCents: s.rateCents,
+  active: s.active,
 });
 
-const colonnes = {
+const columns = {
   id: instructor.id,
-  prenom: instructor.firstName,
-  nom: instructor.lastName,
+  firstName: instructor.firstName,
+  name: instructor.lastName,
   email: instructor.email,
-  statut: instructor.status,
+  status: instructor.status,
   siren: instructor.siren,
-  regimeTva: instructor.vatRegime,
-  estDirigeant: instructor.isOwner,
-  modeRemuneration: instructor.payMode,
-  tarifCentimes: instructor.rateCents,
-  actif: instructor.active,
+  vatRegime: instructor.vatRegime,
+  isOwner: instructor.isOwner,
+  payMode: instructor.payMode,
+  rateCents: instructor.rateCents,
+  active: instructor.active,
 };
 
 /** Cours d'une saison donnés par l'intervenant (titulaire du cours). */
-const coursSaison = (saisonId: string) => sql<number>`(
+const seasonCourses = (seasonId: string) => sql<number>`(
   SELECT count(*)::int FROM course c
-  WHERE c.instructor_id = ${instructor}.${sql.identifier("id")} AND c.season_id = ${saisonId}
+  WHERE c.instructor_id = ${instructor}.${sql.identifier("id")} AND c.season_id = ${seasonId}
 )`;
 
 /** Actifs d'abord, puis par nom et prénom. */
-export function listerIntervenants(tx: Tx, saisonId: string): Promise<(Intervenant & { coursSaison: number })[]> {
+export function listInstructors(tx: Tx, seasonId: string): Promise<(Instructor & { seasonCourses: number })[]> {
   return tx
-    .select({ ...colonnes, coursSaison: coursSaison(saisonId) })
+    .select({ ...columns, seasonCourses: seasonCourses(seasonId) })
     .from(instructor)
     .orderBy(desc(instructor.active), asc(instructor.lastName), asc(instructor.firstName));
 }
 
-export async function lireIntervenant(tx: Tx, id: string): Promise<Intervenant | null> {
+export async function readInstructor(tx: Tx, id: string): Promise<Instructor | null> {
   if (!z.uuid().safeParse(id).success) return null;
-  const [i] = await tx.select(colonnes).from(instructor).where(eq(instructor.id, id));
+  const [i] = await tx.select(columns).from(instructor).where(eq(instructor.id, id));
   return i ?? null;
 }
 
-export async function creerIntervenant(tx: Tx, saisie: SaisieIntervenant): Promise<string> {
+export async function createInstructor(tx: Tx, saisie: InstructorInput): Promise<string> {
   const [{ id }] = await tx
     .insert(instructor)
-    .values({ ...ligneIntervenant(saisie), schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid` })
+    .values({ ...instructorRow(saisie), schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid` })
     .returning({ id: instructor.id });
   return id;
 }
 
 /** false si l'intervenant n'existe pas dans l'école courante. */
-export async function modifierIntervenant(tx: Tx, id: string, saisie: SaisieIntervenant): Promise<boolean> {
+export async function updateInstructor(tx: Tx, id: string, saisie: InstructorInput): Promise<boolean> {
   if (!z.uuid().safeParse(id).success) return false;
   // Désactiver un intervenant coupe aussi son abonnement et son agenda connecté.
-  const coupure = saisie.actif ? {} : { calendarTokenHash: null, calendarTokenCreatedAt: null };
-  const lignes = await tx
+  const cutoff = saisie.active ? {} : { calendarTokenHash: null, calendarTokenCreatedAt: null };
+  const rows = await tx
     .update(instructor)
-    .set({ ...ligneIntervenant(saisie), ...coupure })
+    .set({ ...instructorRow(saisie), ...cutoff })
     .where(eq(instructor.id, id))
     .returning({ id: instructor.id });
-  if (lignes.length === 1 && !saisie.actif) await supprimerConnexion(tx, id);
-  return lignes.length === 1;
+  if (rows.length === 1 && !saisie.active) await deleteConnection(tx, id);
+  return rows.length === 1;
 }

@@ -2,24 +2,24 @@
  * Attend la fin de la frappe et ignore les réponses périmées. La fonction
  * renvoyée annule le minuteur et la publication, pas la requête réseau lancée.
  */
-export function requeteDifferee<T>(
-  charger: () => Promise<T>,
-  publier: (resultat: T) => void,
-  signalerErreur: () => void,
+export function deferredQuery<T>(
+  load: () => Promise<T>,
+  publish: (result: T) => void,
+  reportError: () => void,
 ): () => void {
   let active = true;
-  const minuteur = setTimeout(() => {
-    charger().then(
-      (resultat) => {
-        if (active) publier(resultat);
+  const timer = setTimeout(() => {
+    load().then(
+      (result) => {
+        if (active) publish(result);
       },
       () => {
-        if (active) signalerErreur();
+        if (active) reportError();
       },
     );
   }, 150);
   return () => {
     active = false;
-    clearTimeout(minuteur);
+    clearTimeout(timer);
   };
 }

@@ -1,56 +1,56 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { avecEcole } from "@/db";
-import { coursDuPlanning, inscritsDuCours } from "@/db/planning";
-import { seancesEnConflit } from "@/db/disponibilites";
-import { seancesDuCours } from "@/db/seances";
-import { ageAu, aujourdhuiAParis } from "@/domaine/personnes/age";
-import { exigerRole } from "@/lib/session";
-import { ages, fin, recurrenceTexte } from "../../format";
-import { BoutonImprimer } from "./imprimer";
+import { withSchool } from "@/db";
+import { scheduleCourse, enrolledInCourse } from "@/db/planning";
+import { conflictingLessons } from "@/db/disponibilites";
+import { courseLessons } from "@/db/seances";
+import { ageAt, todayInParis } from "@/domaine/personnes/age";
+import { requireRole } from "@/lib/session";
+import { ages, end, recurrenceText } from "../../format";
+import { PrintButton } from "./imprimer";
 
 export const metadata: Metadata = { title: "Cours" };
 
-const STATUT = {
+const STATUS = {
   active: null,
-  essai: { libelle: "à l’essai", classe: "bg-accent-doux text-texte" },
-  liste_attente: { libelle: "en attente", classe: "bg-alerte-fond text-alerte-texte" },
+  essai: { label: "à l’essai", className: "bg-accent-doux text-texte" },
+  liste_attente: { label: "en attente", className: "bg-alerte-fond text-alerte-texte" },
 } as const;
 
-const dateSeance = new Intl.DateTimeFormat("fr-FR", {
+const lessonDate = new Intl.DateTimeFormat("fr-FR", {
   weekday: "short",
   day: "numeric",
   month: "short",
   timeZone: "UTC",
 });
-const dateCourte = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
+const shortDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
 
-export default async function PageCours({ params, searchParams }: PageProps<"/planning/cours/[id]">) {
-  const { ecoleId, role } = await exigerRole("direction", "accueil");
+export default async function CoursePage({ params, searchParams }: PageProps<"/planning/cours/[id]">) {
+  const { schoolId: schoolId, role } = await requireRole("direction", "accueil");
   const [{ id }, { modifie }] = await Promise.all([params, searchParams]);
-  const donnees = await avecEcole(ecoleId, async (tx) => {
-    const cours = await coursDuPlanning(tx, id);
-    return cours
+  const donnees = await withSchool(schoolId, async (tx) => {
+    const course = await scheduleCourse(tx, id);
+    return course
       ? {
-          cours,
-          inscrits: await inscritsDuCours(tx, cours.id),
-          seances: await seancesDuCours(tx, cours.id),
-          enConflit: await seancesEnConflit(tx, cours.id, aujourdhuiAParis()),
+          cours: course,
+          enrolled: await enrolledInCourse(tx, course.id),
+          lessons: await courseLessons(tx, course.id),
+          inConflict: await conflictingLessons(tx, course.id, todayInParis()),
         }
       : null;
   });
   if (!donnees) notFound();
-  const { cours, inscrits, seances, enConflit } = donnees;
-  const aujourdhui = aujourdhuiAParis();
+  const { cours, enrolled: enrolled, lessons: lessons, inConflict: inConflict } = donnees;
+  const today = todayInParis();
 
-  const actifs = inscrits.filter((i) => i.statut === "active").length;
-  const essais = inscrits.filter((i) => i.statut === "essai").length;
-  const attente = inscrits.filter((i) => i.statut === "liste_attente").length;
-  const complet = cours.capaciteMax !== null && actifs >= cours.capaciteMax;
+  const active = enrolled.filter((i) => i.status === "active").length;
+  const trials = enrolled.filter((i) => i.status === "essai").length;
+  const waitlist = enrolled.filter((i) => i.status === "liste_attente").length;
+  const full = cours.maxCapacity !== null && active >= cours.maxCapacity;
   // « Chaque lundi 17:00–18:00 », « Un mercredi sur deux… », « Le sam. 24 oct., … 10:00–12:00 » (#90).
-  const creneau = `${recurrenceTexte(cours)}, ${cours.heureDebut}–${fin(cours.heureDebut, cours.dureeMinutes)}`;
-  const public_ = [ages(cours.ageMin, cours.ageMax), cours.niveau].filter(Boolean).join(", ");
+  const slot = `${recurrenceText(cours)}, ${cours.startTime}–${end(cours.startTime, cours.durationMinutes)}`;
+  const public_ = [ages(cours.ageMin, cours.ageMax), cours.level].filter(Boolean).join(", ");
 
   return (
     <article className="flex w-full min-w-0 flex-col gap-5">
@@ -71,12 +71,12 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
         <div>
           <h1 className="titre-page">
             {cours.discipline}
-            {cours.niveau && <span className="font-normal text-doux"> {cours.niveau}</span>}
+            {cours.level && <span className="font-normal text-doux"> {cours.level}</span>}
           </h1>
-          <p className="text-sm">{creneau}</p>
+          <p className="text-sm">{slot}</p>
         </div>
         <div className="flex gap-2 print:hidden">
-          <BoutonImprimer />
+          <PrintButton />
           {role === "direction" && (
             <Link href={`/planning/cours/${cours.id}/modifier`} className="bouton-principal">
               Modifier le cours
@@ -89,12 +89,12 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
         <div>
           <dt className="text-xs text-doux">Salle</dt>
           <dd>
-            {cours.salle}, {cours.site}
+            {cours.room}, {cours.site}
           </dd>
         </div>
         <div>
           <dt className="text-xs text-doux">Intervenant</dt>
-          <dd>{cours.intervenant}</dd>
+          <dd>{cours.instructor}</dd>
         </div>
         <div>
           <dt className="text-xs text-doux">Public</dt>
@@ -104,25 +104,25 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
           <dt className="text-xs text-doux">Effectif</dt>
           <dd className="flex flex-col gap-1">
             <span className="tabular-nums">
-              {actifs}
-              {cours.capaciteMax !== null && ` / ${cours.capaciteMax}`} inscrit{actifs > 1 ? "s" : ""}
-              {complet && (
+              {active}
+              {cours.maxCapacity !== null && ` / ${cours.maxCapacity}`} inscrit{active > 1 ? "s" : ""}
+              {full && (
                 <span className="ml-2 rounded bg-alerte-fond px-1.5 text-xs font-medium text-alerte-texte">
                   Complet
                 </span>
               )}
             </span>
-            {cours.capaciteMax !== null && (
+            {cours.maxCapacity !== null && (
               <span className="h-1.5 overflow-hidden rounded-full bg-accent-doux" aria-hidden>
                 <span
-                  className={`block h-full rounded-full ${complet ? "bg-alerte-texte" : "bg-accent"}`}
-                  style={{ width: `${Math.min(1, actifs / cours.capaciteMax) * 100}%` }}
+                  className={`block h-full rounded-full ${full ? "bg-alerte-texte" : "bg-accent"}`}
+                  style={{ width: `${Math.min(1, active / cours.maxCapacity) * 100}%` }}
                 />
               </span>
             )}
-            {(essais > 0 || attente > 0) && (
+            {(trials > 0 || waitlist > 0) && (
               <span className="text-xs text-doux">
-                {[essais && `${essais} à l’essai`, attente && `${attente} en attente`].filter(Boolean).join(", ")}
+                {[trials && `${trials} à l’essai`, waitlist && `${waitlist} en attente`].filter(Boolean).join(", ")}
               </span>
             )}
           </dd>
@@ -140,30 +140,30 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
             </Link>
           )}
         </div>
-        {seances.length === 0 ? (
+        {lessons.length === 0 ? (
           <p className="text-sm text-doux">
             Aucune séance générée.{role === "direction" && " Utilisez « Mettre à jour les séances » dans Fermetures."}
           </p>
         ) : (
           <ul className="flex flex-wrap gap-1.5 text-sm">
             {[
-              ...seances.filter((s) => s.date < aujourdhui).slice(-4),
-              ...seances.filter((s) => s.date >= aujourdhui).slice(0, 4),
+              ...lessons.filter((s) => s.date < today).slice(-4),
+              ...lessons.filter((s) => s.date >= today).slice(0, 4),
             ].map((s) => (
               <li key={s.id}>
                 <Link
                   href={`/planning/seances/${s.id}`}
-                  className={`flex flex-col rounded-md border px-2.5 py-1 hover:border-accent ${enConflit.has(s.id) ? "border-alerte-texte bg-alerte-fond" : s.date === aujourdhui ? "border-accent bg-accent-doux" : "border-bordure"} ${s.statut === "annulee" ? "text-doux line-through" : ""}`}
+                  className={`flex flex-col rounded-md border px-2.5 py-1 hover:border-accent ${inConflict.has(s.id) ? "border-alerte-texte bg-alerte-fond" : s.date === today ? "border-accent bg-accent-doux" : "border-bordure"} ${s.status === "annulee" ? "text-doux line-through" : ""}`}
                 >
-                  <span className="tabular-nums">{dateSeance.format(new Date(`${s.date}T00:00:00Z`))}</span>
+                  <span className="tabular-nums">{lessonDate.format(new Date(`${s.date}T00:00:00Z`))}</span>
                   <span className="text-xs text-doux">
-                    {enConflit.has(s.id)
+                    {inConflict.has(s.id)
                       ? "prof indisponible"
-                      : s.statut === "annulee"
+                      : s.status === "annulee"
                         ? "annulée"
-                        : s.statut === "effectuee"
+                        : s.status === "effectuee"
                           ? `${s.presents} présent${s.presents > 1 ? "s" : ""}${s.absents ? `, ${s.absents} abs.` : ""}`
-                          : s.date <= aujourdhui
+                          : s.date <= today
                             ? "appel à faire"
                             : "prévue"}
                   </span>
@@ -176,9 +176,9 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
 
       <section aria-labelledby="inscrits" className="flex flex-col gap-2">
         <h2 id="inscrits" className="text-base font-semibold">
-          Danseurs ({inscrits.length})
+          Danseurs ({enrolled.length})
         </h2>
-        {inscrits.length === 0 ? (
+        {enrolled.length === 0 ? (
           <p className="text-sm text-doux">
             Personne n’est encore inscrit. Les inscriptions se font depuis la fiche du danseur ou de la personne qui
             paie.
@@ -196,34 +196,34 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
                 </tr>
               </thead>
               <tbody>
-                {inscrits.map((i) => {
-                  const statut = STATUT[i.statut];
-                  const age = i.dateNaissance ? ageAu(i.dateNaissance, aujourdhui) : null;
-                  const horsTranche =
+                {enrolled.map((i) => {
+                  const status = STATUS[i.status];
+                  const age = i.birthDate ? ageAt(i.birthDate, today) : null;
+                  const outsideBand =
                     age !== null &&
                     ((cours.ageMin !== null && age < cours.ageMin) || (cours.ageMax !== null && age > cours.ageMax));
                   return (
-                    <tr key={i.danseurId}>
+                    <tr key={i.studentId}>
                       <td className="font-medium">
-                        <Link href={`/eleves/${i.danseurId}`} className="lien">
-                          {i.prenom} {i.nom}
+                        <Link href={`/eleves/${i.studentId}`} className="lien">
+                          {i.firstName} {i.name}
                         </Link>
-                        {statut && (
-                          <span className={`ml-2 rounded px-1.5 text-xs font-normal ${statut.classe}`}>
-                            {statut.libelle}
+                        {status && (
+                          <span className={`ml-2 rounded px-1.5 text-xs font-normal ${status.className}`}>
+                            {status.label}
                           </span>
                         )}
                       </td>
                       <td
-                        className={`text-right tabular-nums ${horsTranche ? "font-medium text-alerte-texte" : ""}`}
-                        title={horsTranche ? "Hors tranche d’âge du cours" : undefined}
+                        className={`text-right tabular-nums ${outsideBand ? "font-medium text-alerte-texte" : ""}`}
+                        title={outsideBand ? "Hors tranche d’âge du cours" : undefined}
                       >
                         {age ?? "—"}
-                        {horsTranche && <span className="sr-only"> (hors tranche d’âge)</span>}
+                        {outsideBand && <span className="sr-only"> (hors tranche d’âge)</span>}
                       </td>
                       <td className="hidden sm:table-cell">
-                        <Link href={`/personnes/${i.payeurId}`} className="lien">
-                          {i.payeur}
+                        <Link href={`/personnes/${i.payerId}`} className="lien">
+                          {i.payer}
                         </Link>
                       </td>
                       <td className="whitespace-nowrap tabular-nums">
@@ -236,7 +236,7 @@ export default async function PageCours({ params, searchParams }: PageProps<"/pl
                         )}
                       </td>
                       <td className="hidden text-doux sm:table-cell print:hidden">
-                        {dateCourte.format(new Date(i.dateInscription))}
+                        {shortDate.format(new Date(i.enrollmentDate))}
                       </td>
                     </tr>
                   );

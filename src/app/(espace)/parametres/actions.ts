@@ -1,88 +1,88 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { avecEcole, type Tx } from "@/db";
+import { withSchool, type Tx } from "@/db";
 import {
-  creerDiscipline,
-  creerSaison,
-  creerSalle,
-  creerSite,
-  enregistrerHoraires,
-  modifierSaison,
-  modifierSalle,
-  modifierSite,
-  renommerDiscipline,
-  supprimerDiscipline,
-  supprimerSalle,
-  supprimerSite,
+  createDiscipline,
+  createSeason,
+  createRoom,
+  createSite,
+  saveHours,
+  updateSeason,
+  updateRoom,
+  updateSite,
+  renameDiscipline,
+  deleteDiscipline,
+  deleteRoom,
+  deleteSite,
 } from "@/db/parametres";
-import { enregistrerCarnet, enregistrerFratrie, enregistrerPrix, supprimerCarnet } from "@/db/tarifs";
-import { exigerRole } from "@/lib/session";
+import { saveLessonPack, saveSiblings, savePrice, deleteLessonPack } from "@/db/tarifs";
+import { requireRole } from "@/lib/session";
 
-type Retour = { message: string | null };
+type Back = { message: string | null };
 
 /** Paramètres : direction seulement ; chaque action recharge la page concernée. */
-async function agir(
+async function act(
   page: string,
   action: (tx: Tx) => Promise<{ ok: true } | { ok: false; message: string }>,
-): Promise<Retour> {
-  const { ecoleId } = await exigerRole("direction");
-  const r = await avecEcole(ecoleId, action);
+): Promise<Back> {
+  const { schoolId: schoolId } = await requireRole("direction");
+  const r = await withSchool(schoolId, action);
   revalidatePath(`/parametres/${page}`);
   return { message: r.ok ? null : r.message };
 }
 
-export async function nouvelleSaison(saisie: unknown, reprendreDe: string | null) {
-  return agir("saisons", (tx) => creerSaison(tx, saisie as never, reprendreDe));
+export async function newSeason(saisie: unknown, copyFrom: string | null) {
+  return act("saisons", (tx) => createSeason(tx, saisie as never, copyFrom));
 }
-export async function changerSaison(id: string, saisie: unknown) {
-  return agir("saisons", (tx) => modifierSaison(tx, id, saisie as never));
-}
-
-export async function nouvelleDiscipline(nom: string) {
-  return agir("disciplines", (tx) => creerDiscipline(tx, nom));
-}
-export async function renommer(id: string, nom: string) {
-  return agir("disciplines", (tx) => renommerDiscipline(tx, id, nom));
-}
-export async function retirerDiscipline(id: string) {
-  return agir("disciplines", (tx) => supprimerDiscipline(tx, id));
+export async function changeSeason(id: string, saisie: unknown) {
+  return act("saisons", (tx) => updateSeason(tx, id, saisie as never));
 }
 
-export async function nouveauSite(saisie: unknown) {
-  return agir("lieux", (tx) => creerSite(tx, saisie as never));
+export async function newDiscipline(name: string) {
+  return act("disciplines", (tx) => createDiscipline(tx, name));
 }
-export async function changerSite(id: string, saisie: unknown) {
-  return agir("lieux", (tx) => modifierSite(tx, id, saisie as never));
+export async function rename(id: string, name: string) {
+  return act("disciplines", (tx) => renameDiscipline(tx, id, name));
 }
-export async function changerHoraires(siteId: string, horaires: unknown) {
-  const r = await agir("lieux", (tx) => enregistrerHoraires(tx, siteId, horaires as never));
+export async function removeDiscipline(id: string) {
+  return act("disciplines", (tx) => deleteDiscipline(tx, id));
+}
+
+export async function newSite(saisie: unknown) {
+  return act("lieux", (tx) => createSite(tx, saisie as never));
+}
+export async function changeSite(id: string, saisie: unknown) {
+  return act("lieux", (tx) => updateSite(tx, id, saisie as never));
+}
+export async function changeHours(siteId: string, hours: unknown) {
+  const r = await act("lieux", (tx) => saveHours(tx, siteId, hours as never));
   // L'agenda du planning dépend des horaires.
   revalidatePath("/planning");
   return r;
 }
-export async function retirerSite(id: string) {
-  return agir("lieux", (tx) => supprimerSite(tx, id));
+export async function removeSite(id: string) {
+  return act("lieux", (tx) => deleteSite(tx, id));
 }
-export async function nouvelleSalle(saisie: unknown) {
-  return agir("lieux", (tx) => creerSalle(tx, saisie as never));
+export async function newRoom(saisie: unknown) {
+  return act("lieux", (tx) => createRoom(tx, saisie as never));
 }
-export async function changerSalle(id: string, saisie: unknown) {
-  return agir("lieux", (tx) => modifierSalle(tx, id, saisie as never));
+export async function changeRoom(id: string, saisie: unknown) {
+  return act("lieux", (tx) => updateRoom(tx, id, saisie as never));
 }
-export async function retirerSalle(id: string) {
-  return agir("lieux", (tx) => supprimerSalle(tx, id));
+export async function removeRoom(id: string) {
+  return act("lieux", (tx) => deleteRoom(tx, id));
 }
 
-export async function prixCase(saisonId: string, saisie: unknown) {
-  return agir("tarifs", (tx) => enregistrerPrix(tx, saisonId, saisie as never));
+export async function cellPrice(seasonId: string, saisie: unknown) {
+  return act("tarifs", (tx) => savePrice(tx, seasonId, saisie as never));
 }
-export async function regleFratrie(saisonId: string, saisie: unknown) {
-  return agir("tarifs", (tx) => enregistrerFratrie(tx, saisonId, saisie as never));
+export async function siblingsRule(seasonId: string, saisie: unknown) {
+  return act("tarifs", (tx) => saveSiblings(tx, seasonId, saisie as never));
 }
-export async function carnet(saisonId: string, saisie: unknown) {
-  return agir("tarifs", (tx) => enregistrerCarnet(tx, saisonId, saisie as never));
+export async function lessonPack(seasonId: string, saisie: unknown) {
+  return act("tarifs", (tx) => saveLessonPack(tx, seasonId, saisie as never));
 }
-export async function retirerCarnet(id: string) {
-  return agir("tarifs", (tx) => supprimerCarnet(tx, id));
+export async function removeLessonPack(id: string) {
+  return act("tarifs", (tx) => deleteLessonPack(tx, id));
 }

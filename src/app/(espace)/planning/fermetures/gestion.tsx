@@ -1,29 +1,29 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { Fermeture } from "@/db/seances";
-import { fermer, mettreAJourSeances, rouvrir } from "../seances/actions";
+import type { Closure } from "@/db/seances";
+import { close, updateLessons, reopen } from "../seances/actions";
 
-const dateCourte = new Intl.DateTimeFormat("fr-FR", {
+const shortDate = new Intl.DateTimeFormat("fr-FR", {
   day: "numeric",
   month: "short",
   year: "numeric",
   timeZone: "UTC",
 });
-const jour = (iso: string) => dateCourte.format(new Date(`${iso}T00:00:00Z`));
+const day = (iso: string) => shortDate.format(new Date(`${iso}T00:00:00Z`));
 
-type Props = { fermetures: Fermeture[]; debutSaison: string; finSaison: string };
+type Props = { closures: Closure[]; seasonStart: string; seasonEnd: string };
 
-export function GestionFermetures({ fermetures, debutSaison, finSaison }: Props) {
-  const [v, setV] = useState({ libelle: "", debut: "", fin: "" });
-  const [message, setMessage] = useState<{ texte: string; erreur: boolean } | null>(null);
-  const [enCours, demarrer] = useTransition();
+export function ClosuresManagement({ closures: closures, seasonStart: seasonStart, seasonEnd: seasonEnd }: Props) {
+  const [v, setV] = useState({ label: "", start: "", end: "" });
+  const [message, setMessage] = useState<{ texte: string; error: boolean } | null>(null);
+  const [inProgress, startTransition] = useTransition();
 
-  const agir = (action: () => Promise<{ message: string | null }>, succes: string, apres?: () => void) =>
-    demarrer(async () => {
-      const { message: erreur } = await action();
-      setMessage(erreur ? { texte: erreur, erreur: true } : { texte: succes, erreur: false });
-      if (!erreur) apres?.();
+  const act = (action: () => Promise<{ message: string | null }>, success: string, after?: () => void) =>
+    startTransition(async () => {
+      const { message: error } = await action();
+      setMessage(error ? { texte: error, error: true } : { texte: success, error: false });
+      if (!error) after?.();
     });
 
   return (
@@ -32,10 +32,10 @@ export function GestionFermetures({ fermetures, debutSaison, finSaison }: Props)
         className="panneau grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto] lg:items-end"
         onSubmit={(e) => {
           e.preventDefault();
-          agir(
-            () => fermer({ ...v, fin: v.fin || v.debut }),
+          act(
+            () => close({ ...v, end: v.end || v.start }),
             "Fermeture ajoutée, séances mises à jour.",
-            () => setV({ libelle: "", debut: "", fin: "" }),
+            () => setV({ label: "", start: "", end: "" }),
           );
         }}
       >
@@ -48,8 +48,8 @@ export function GestionFermetures({ fermetures, debutSaison, finSaison }: Props)
             className="champ"
             placeholder="Vacances de la Toussaint"
             autoFocus
-            value={v.libelle}
-            onChange={(e) => setV({ ...v, libelle: e.target.value })}
+            value={v.label}
+            onChange={(e) => setV({ ...v, label: e.target.value })}
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -60,10 +60,10 @@ export function GestionFermetures({ fermetures, debutSaison, finSaison }: Props)
             id="debut"
             type="date"
             className="champ"
-            min={debutSaison}
-            max={finSaison}
-            value={v.debut}
-            onChange={(e) => setV({ ...v, debut: e.target.value })}
+            min={seasonStart}
+            max={seasonEnd}
+            value={v.start}
+            onChange={(e) => setV({ ...v, start: e.target.value })}
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -74,45 +74,45 @@ export function GestionFermetures({ fermetures, debutSaison, finSaison }: Props)
             id="fin"
             type="date"
             className="champ"
-            min={v.debut || debutSaison}
-            max={finSaison}
-            value={v.fin}
-            onChange={(e) => setV({ ...v, fin: e.target.value })}
+            min={v.start || seasonStart}
+            max={seasonEnd}
+            value={v.end}
+            onChange={(e) => setV({ ...v, end: e.target.value })}
           />
         </div>
         <button
           type="submit"
           className="bouton-principal sm:col-span-2 sm:justify-self-start lg:col-span-1"
-          disabled={enCours}
+          disabled={inProgress}
         >
           Ajouter
         </button>
       </form>
 
       {message && (
-        <p role={message.erreur ? "alert" : "status"} className={`text-sm ${message.erreur ? "text-erreur" : ""}`}>
+        <p role={message.error ? "alert" : "status"} className={`text-sm ${message.error ? "text-erreur" : ""}`}>
           {message.texte}
         </p>
       )}
 
-      {fermetures.length === 0 ? (
+      {closures.length === 0 ? (
         <p className="text-sm text-doux">
           Aucune fermeture pour cette saison. Pensez aux vacances scolaires de votre zone et aux jours fériés.
         </p>
       ) : (
         <ul className="panneau divide-y divide-bordure text-sm">
-          {fermetures.map((f) => (
+          {closures.map((f) => (
             <li key={f.id} className="flex flex-wrap items-baseline gap-x-4 px-3 py-2">
-              <span className="font-medium">{f.libelle}</span>
+              <span className="font-medium">{f.label}</span>
               <span className="tabular-nums text-doux">
-                {f.debut === f.fin ? jour(f.debut) : `${jour(f.debut)} au ${jour(f.fin)}`}
+                {f.start === f.end ? day(f.start) : `${day(f.start)} au ${day(f.end)}`}
               </span>
               <button
                 type="button"
                 className="lien ml-auto text-xs text-doux"
-                disabled={enCours}
-                onClick={() => agir(() => rouvrir(f.id), "Fermeture retirée, séances remises.")}
-                aria-label={`Retirer la fermeture ${f.libelle}`}
+                disabled={inProgress}
+                onClick={() => act(() => reopen(f.id), "Fermeture retirée, séances remises.")}
+                aria-label={`Retirer la fermeture ${f.label}`}
               >
                 Retirer
               </button>
@@ -125,8 +125,8 @@ export function GestionFermetures({ fermetures, debutSaison, finSaison }: Props)
         <button
           type="button"
           className="bouton-secondaire"
-          disabled={enCours}
-          onClick={() => agir(mettreAJourSeances, "Séances à venir mises à jour.")}
+          disabled={inProgress}
+          onClick={() => act(updateLessons, "Séances à venir mises à jour.")}
         >
           Mettre à jour les séances
         </button>

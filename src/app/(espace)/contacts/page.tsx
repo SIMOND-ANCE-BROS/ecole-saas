@@ -1,27 +1,27 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { avecEcole } from "@/db";
-import { listerContacts } from "@/db/eleves";
-import { lirePreference } from "@/db/preferences";
+import { withSchool } from "@/db";
+import { listContacts } from "@/db/eleves";
+import { readPreference } from "@/db/preferences";
 import { nomAffiche } from "@/db/personnes";
-import { COLONNES_CONTACTS } from "@/domaine/filtres/colonnes";
-import { lireFiltre, lireTri } from "@/domaine/filtres/filtres";
-import { exigerRole } from "@/lib/session";
-import { TableauListe } from "../_filtres/tableau-liste";
-import { ResultatsNavigables } from "../_personnes/resultats";
+import { CONTACT_COLUMNS } from "@/domaine/filtres/colonnes";
+import { readFilter, readSort } from "@/domaine/filtres/filtres";
+import { requireRole } from "@/lib/session";
+import { ListTable } from "../_filtres/tableau-liste";
+import { NavigableResults } from "../_personnes/resultats";
 
 export const metadata: Metadata = { title: "Contacts" };
 
 /** Parents, payeurs et organismes (CSE, entreprises). */
 export default async function PageContacts({ searchParams }: PageProps<"/contacts">) {
-  const { ecoleId, userId } = await exigerRole("direction", "accueil");
+  const { schoolId: schoolId, userId } = await requireRole("direction", "accueil");
   const { q, f, mode, sort, order } = await searchParams;
   const saisie = typeof q === "string" ? q.trim() : "";
-  const filtre = lireFiltre(f, mode, COLONNES_CONTACTS);
-  const { contacts, disposition } = await avecEcole(ecoleId, async (tx) => ({
-    contacts: await listerContacts(tx, saisie, { filtre, tri: lireTri(sort, order, COLONNES_CONTACTS) }),
-    disposition: await lirePreference(tx, userId, "contacts"),
+  const filter = readFilter(f, mode, CONTACT_COLUMNS);
+  const { contacts, layout: layout } = await withSchool(schoolId, async (tx) => ({
+    contacts: await listContacts(tx, saisie, { filter, currentSort: readSort(sort, order, CONTACT_COLUMNS) }),
+    layout: await readPreference(tx, userId, "contacts"),
   }));
 
   return (
@@ -35,36 +35,36 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
           Nouveau contact
         </Link>
       </div>
-      <ResultatsNavigables>
+      <NavigableResults>
         <Suspense>
-          <TableauListe
-            liste="contacts"
-            quoi="les contacts"
-            legende="Contacts"
-            colonnes={COLONNES_CONTACTS}
-            disposition={disposition}
-            lien="nom"
+          <ListTable
+            list="contacts"
+            what="les contacts"
+            caption="Contacts"
+            columns={CONTACT_COLUMNS}
+            layout={layout}
+            relationship="nom"
             vide={
-              filtre.conditions.length > 0
+              filter.conditions.length > 0
                 ? "Aucun contact ne correspond à ces filtres."
                 : saisie
                   ? `Aucun contact ne correspond à « ${saisie} ».`
                   : "Aucun contact pour l’instant."
             }
-            actionVide={
+            emptyAction={
               <Link href="/contacts/nouveau" className="bouton-principal">
                 Nouveau contact
               </Link>
             }
-            lignes={contacts.map((c) => ({
+            rows={contacts.map((c) => ({
               id: c.id,
               href: `/contacts/${c.id}`,
-              marque: c.type === "professionnel" ? "organisme" : undefined,
-              cellules: { nom: nomAffiche(c), eleves: c.eleves, telephone: c.telephone, email: c.email },
+              badge: c.type === "professionnel" ? "organisme" : undefined,
+              cellules: { nom: nomAffiche(c), eleves: c.students, telephone: c.telephone, email: c.email },
             }))}
           />
         </Suspense>
-      </ResultatsNavigables>
+      </NavigableResults>
     </section>
   );
 }

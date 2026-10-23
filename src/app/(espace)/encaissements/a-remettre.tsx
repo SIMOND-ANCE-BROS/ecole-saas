@@ -2,89 +2,89 @@
 
 import { useState, useTransition } from "react";
 import { MOYENS } from "@/db/paiements";
-import type { LigneJournal } from "@/db/remises";
-import type { MoyenRemise } from "@/domaine/encaissement/remises";
-import { formaterEuros } from "@/lib/montant";
-import { remettre } from "./actions";
+import type { AuditLogRow } from "@/db/remises";
+import type { DepositMethod } from "@/domaine/encaissement/remises";
+import { formatEuros } from "@/lib/montant";
+import { deposit } from "./actions";
 
-const jour = (iso: string) => iso.split("-").reverse().join("/");
+const day = (iso: string) => iso.split("-").reverse().join("/");
 
 /**
  * Paiements d'un moyen à remettre (#98) : tous cochés par défaut ; la remise
  * prend la date choisie (aujourd'hui par défaut) et ouvre son bordereau.
  */
-export function ARemettre({
-  moyen,
-  paiements,
-  aujourdhui,
+export function ToDeposit({
+  method: method,
+  payments: payments,
+  today: today,
 }: {
-  moyen: MoyenRemise;
-  paiements: LigneJournal[];
-  aujourdhui: string;
+  method: DepositMethod;
+  payments: AuditLogRow[];
+  today: string;
 }) {
-  const [choisis, setChoisis] = useState(() => new Set(paiements.map((p) => p.id)));
-  const [date, setDate] = useState(aujourdhui);
+  const [chosen, setChosen] = useState(() => new Set(payments.map((p) => p.id)));
+  const [date, setDate] = useState(today);
   const [message, setMessage] = useState<string | null>(null);
-  const [envoi, demarrer] = useTransition();
-  const selection = paiements.filter((p) => choisis.has(p.id));
-  const total = selection.reduce((s, p) => s + p.montantCentimes, 0);
-  const basculer = (id: string) => {
-    const s = new Set(choisis);
+  const [sending, startTransition] = useTransition();
+  const selection = payments.filter((p) => chosen.has(p.id));
+  const total = selection.reduce((s, p) => s + p.amountCents, 0);
+  const toggle = (id: string) => {
+    const s = new Set(chosen);
     if (s.has(id)) s.delete(id);
     else s.add(id);
-    setChoisis(s);
+    setChosen(s);
   };
-  const titre = MOYENS[moyen];
+  const title = MOYENS[method];
 
   return (
-    <section aria-labelledby={`remettre-${moyen}`} className="flex flex-col gap-2">
-      <h2 id={`remettre-${moyen}`} className="text-base font-semibold">
-        {titre} <span className="text-sm font-normal text-doux">— {paiements.length} à remettre</span>
+    <section aria-labelledby={`remettre-${method}`} className="flex flex-col gap-2">
+      <h2 id={`remettre-${method}`} className="text-base font-semibold">
+        {title} <span className="text-sm font-normal text-doux">— {payments.length} à remettre</span>
       </h2>
       <div className="panneau overflow-x-auto">
         <table className="tableau">
-          <caption className="sr-only">{titre} à remettre</caption>
+          <caption className="sr-only">{title} à remettre</caption>
           <thead>
             <tr>
               <th>
                 <input
                   type="checkbox"
-                  aria-label={`Tout sélectionner (${titre.toLowerCase()})`}
-                  checked={choisis.size === paiements.length}
-                  onChange={(e) => setChoisis(new Set(e.target.checked ? paiements.map((p) => p.id) : []))}
+                  aria-label={`Tout sélectionner (${title.toLowerCase()})`}
+                  checked={chosen.size === payments.length}
+                  onChange={(e) => setChosen(new Set(e.target.checked ? payments.map((p) => p.id) : []))}
                 />
               </th>
               <th>Payeur</th>
-              {moyen !== "especes" && <th>N°</th>}
-              {moyen === "cheque" && <th>Banque ou titulaire</th>}
+              {method !== "especes" && <th>N°</th>}
+              {method === "cheque" && <th>Banque ou titulaire</th>}
               <th>Reçu le</th>
-              {moyen === "cheque" && <th>À encaisser le</th>}
+              {method === "cheque" && <th>À encaisser le</th>}
               <th className="text-right">Montant</th>
             </tr>
           </thead>
           <tbody>
-            {paiements.map((p) => (
+            {payments.map((p) => (
               <tr key={p.id}>
                 <td>
                   <input
                     type="checkbox"
-                    aria-label={`Remettre le paiement de ${p.payeur}, ${formaterEuros(p.montantCentimes)}`}
-                    checked={choisis.has(p.id)}
-                    onChange={() => basculer(p.id)}
+                    aria-label={`Remettre le paiement de ${p.payer}, ${formatEuros(p.amountCents)}`}
+                    checked={chosen.has(p.id)}
+                    onChange={() => toggle(p.id)}
                   />
                 </td>
-                <td>{p.payeur}</td>
-                {moyen !== "especes" && <td>{p.reference ?? "—"}</td>}
-                {moyen === "cheque" && <td>{p.emetteur ?? "—"}</td>}
-                <td className="whitespace-nowrap">{jour(p.date)}</td>
-                {moyen === "cheque" && (
-                  <td className="whitespace-nowrap">{p.encaissementPrevu ? jour(p.encaissementPrevu) : "—"}</td>
+                <td>{p.payer}</td>
+                {method !== "especes" && <td>{p.reference ?? "—"}</td>}
+                {method === "cheque" && <td>{p.issuer ?? "—"}</td>}
+                <td className="whitespace-nowrap">{day(p.date)}</td>
+                {method === "cheque" && (
+                  <td className="whitespace-nowrap">{p.plannedPayment ? day(p.plannedPayment) : "—"}</td>
                 )}
                 <td className="text-right tabular-nums whitespace-nowrap">
-                  {formaterEuros(p.montantCentimes)}
-                  {p.corrigeCentimes > 0 && (
+                  {formatEuros(p.amountCents)}
+                  {p.correctedCents > 0 && (
                     <span className="block text-xs text-alerte-texte">
-                      dont {formaterEuros(p.corrigeCentimes)} corrigés
+                      dont {formatEuros(p.correctedCents)} corrigés
                     </span>
                   )}
                 </td>
@@ -98,17 +98,17 @@ export function ARemettre({
         onSubmit={(e) => {
           e.preventDefault();
           setMessage(null);
-          demarrer(async () =>
-            setMessage((await remettre({ date, moyen, paiementIds: selection.map((p) => p.id) })).message),
+          startTransition(async () =>
+            setMessage((await deposit({ date, method: method, paymentIds: selection.map((p) => p.id) })).message),
           );
         }}
       >
         <div className="flex flex-col gap-1">
-          <label htmlFor={`date-remise-${moyen}`} className="text-xs text-doux">
+          <label htmlFor={`date-remise-${method}`} className="text-xs text-doux">
             Date de la remise
           </label>
           <input
-            id={`date-remise-${moyen}`}
+            id={`date-remise-${method}`}
             type="date"
             className="champ"
             value={date}
@@ -116,10 +116,10 @@ export function ARemettre({
             required
           />
         </div>
-        <button type="submit" className="bouton-principal" disabled={envoi || selection.length === 0}>
-          {envoi
+        <button type="submit" className="bouton-principal" disabled={sending || selection.length === 0}>
+          {sending
             ? "Création…"
-            : `Créer la remise : ${selection.length} × ${titre.toLowerCase()}, ${formaterEuros(total)}`}
+            : `Créer la remise : ${selection.length} × ${title.toLowerCase()}, ${formatEuros(total)}`}
         </button>
         {message && (
           <p role="alert" className="text-sm text-erreur">

@@ -1,60 +1,57 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { avecEcole } from "@/db";
-import { listerIntervenants, MODES_REMUNERATION, STATUTS } from "@/db/intervenants";
-import { lirePreference } from "@/db/preferences";
-import { saisonCourante } from "@/db/planning";
-import { COLONNES_INTERVENANTS } from "@/domaine/filtres/colonnes";
-import {
-  appliquerFiltre,
-  type Cellule,
-  lireFiltre,
-  lireTri,
-  normaliserTexte,
-  trierLignes,
-} from "@/domaine/filtres/filtres";
-import { aujourdhuiAParis } from "@/domaine/personnes/age";
-import { formaterEuros } from "@/lib/montant";
-import { exigerRole } from "@/lib/session";
-import { TableauListe } from "../_filtres/tableau-liste";
+import { withSchool } from "@/db";
+import { listInstructors, PAY_MODES, STATUSES } from "@/db/intervenants";
+import { readPreference } from "@/db/preferences";
+import { currentSeason } from "@/db/planning";
+import { INSTRUCTOR_COLUMNS } from "@/domaine/filtres/colonnes";
+import { applyFilter, type Cellule, readFilter, readSort, normalizeText, sortRows } from "@/domaine/filtres/filtres";
+import { todayInParis } from "@/domaine/personnes/age";
+import { formatEuros } from "@/lib/montant";
+import { requireRole } from "@/lib/session";
+import { ListTable } from "../_filtres/tableau-liste";
 
 export const metadata: Metadata = { title: "Intervenants" };
 
-export default async function PageIntervenants({ searchParams }: PageProps<"/intervenants">) {
-  const { ecoleId, role, userId } = await exigerRole("direction", "accueil");
+export default async function InstructorsPage({ searchParams }: PageProps<"/intervenants">) {
+  const { schoolId: schoolId, role, userId } = await requireRole("direction", "accueil");
   const { enregistre, f, mode, sort, order, q } = await searchParams;
-  const saisie = typeof q === "string" ? normaliserTexte(q) : "";
-  const { saison, intervenants, disposition } = await avecEcole(ecoleId, async (tx) => {
-    const s = await saisonCourante(tx, aujourdhuiAParis());
+  const saisie = typeof q === "string" ? normalizeText(q) : "";
+  const {
+    season: season,
+    instructors: instructors,
+    layout: layout,
+  } = await withSchool(schoolId, async (tx) => {
+    const s = await currentSeason(tx, todayInParis());
     return {
-      saison: s,
-      intervenants: s ? await listerIntervenants(tx, s.id) : [],
-      disposition: await lirePreference(tx, userId, "intervenants"),
+      season: s,
+      instructors: s ? await listInstructors(tx, s.id) : [],
+      layout: await readPreference(tx, userId, "intervenants"),
     };
   });
   const direction = role === "direction";
   // Le tarif des intervenants n'est montré qu'à la direction.
-  const colonnes = direction ? COLONNES_INTERVENANTS : COLONNES_INTERVENANTS.filter((c) => c.id !== "tarif");
+  const columns = direction ? INSTRUCTOR_COLUMNS : INSTRUCTOR_COLUMNS.filter((c) => c.id !== "tarif");
   // Liste complète déjà chargée (quelques intervenants) : filtrage en mémoire, mêmes règles qu'en SQL.
-  const filtre = lireFiltre(f, mode, COLONNES_INTERVENANTS);
-  const valeurs: Record<string, (i: (typeof intervenants)[number]) => Cellule> = {
-    nom: (i) => `${i.prenom} ${i.nom}`,
-    statut: (i) => STATUTS[i.statut],
-    cours: (i) => i.coursSaison,
+  const filter = readFilter(f, mode, INSTRUCTOR_COLUMNS);
+  const values: Record<string, (i: (typeof instructors)[number]) => Cellule> = {
+    nom: (i) => `${i.firstName} ${i.name}`,
+    statut: (i) => STATUSES[i.status],
+    cours: (i) => i.seasonCourses,
     email: (i) => i.email,
   };
-  const visibles = trierLignes(
-    appliquerFiltre(
+  const visible = sortRows(
+    applyFilter(
       // Recherche du haut (Ctrl K) : nom ou e-mail.
-      intervenants.filter((i) => !saisie || normaliserTexte(`${i.prenom} ${i.nom} ${i.email ?? ""}`).includes(saisie)),
-      filtre,
-      colonnes.map((c) => ({ ...c, valeur: valeurs[c.id] ?? (() => null) })),
+      instructors.filter((i) => !saisie || normalizeText(`${i.firstName} ${i.name} ${i.email ?? ""}`).includes(saisie)),
+      filter,
+      columns.map((c) => ({ ...c, value: values[c.id] ?? (() => null) })),
     ),
-    lireTri(sort, order, colonnes),
-    (i, colonne) => valeurs[colonne]?.(i),
+    readSort(sort, order, columns),
+    (i, column) => values[column]?.(i),
   );
-  const confirme = intervenants.find((i) => i.id === enregistre);
+  const confirmed = instructors.find((i) => i.id === enregistre);
 
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
@@ -62,9 +59,9 @@ export default async function PageIntervenants({ searchParams }: PageProps<"/int
         <div>
           <h1 className="titre-page">Intervenants</h1>
           <p className="text-sm text-doux">
-            {intervenants.filter((i) => i.actif).length} actif
-            {intervenants.filter((i) => i.actif).length > 1 ? "s" : ""}
-            {saison && `, cours de la saison ${saison.libelle}`}
+            {instructors.filter((i) => i.active).length} actif
+            {instructors.filter((i) => i.active).length > 1 ? "s" : ""}
+            {season && `, cours de la saison ${season.label}`}
           </p>
         </div>
         {direction && (
@@ -74,44 +71,42 @@ export default async function PageIntervenants({ searchParams }: PageProps<"/int
         )}
       </div>
 
-      {confirme && (
+      {confirmed && (
         <p role="status" className="rounded-md border border-accent bg-accent-doux px-3 py-2 text-sm">
-          {confirme.prenom} {confirme.nom} enregistré.
+          {confirmed.firstName} {confirmed.name} enregistré.
         </p>
       )}
 
-      {intervenants.length === 0 ? (
+      {instructors.length === 0 ? (
         <p className="text-sm text-doux">
           Aucun intervenant pour l’instant.{direction && " Ajoutez les professeurs avant de construire le planning."}
         </p>
       ) : (
         <Suspense>
-          <TableauListe
-            liste="intervenants"
-            quoi="les intervenants"
-            legende="Intervenants"
-            colonnes={colonnes}
-            disposition={disposition}
-            lien="nom"
+          <ListTable
+            list="intervenants"
+            what="les intervenants"
+            caption="Intervenants"
+            columns={columns}
+            layout={layout}
+            relationship="nom"
             vide={
               saisie
                 ? "Aucun intervenant ne correspond à cette recherche."
                 : "Aucun intervenant ne correspond à ces filtres."
             }
-            choix={{ statut: Object.values(STATUTS) }}
-            lignes={visibles.map((i) => ({
+            choice={{ statut: Object.values(STATUSES) }}
+            rows={visible.map((i) => ({
               id: i.id,
               href: direction ? `/intervenants/${i.id}` : undefined,
-              attenue: !i.actif,
-              marque: i.actif ? undefined : "inactif",
+              dimmed: !i.active,
+              badge: i.active ? undefined : "inactif",
               cellules: {
-                nom: `${i.prenom} ${i.nom}`,
-                statut: STATUTS[i.statut],
-                cours: i.coursSaison,
+                nom: `${i.firstName} ${i.name}`,
+                statut: STATUSES[i.status],
+                cours: i.seasonCourses,
                 // Jamais envoyé au navigateur de l'accueil : masquer la colonne ne suffit pas.
-                ...(direction
-                  ? { tarif: `${formaterEuros(i.tarifCentimes)} ${MODES_REMUNERATION[i.modeRemuneration]}` }
-                  : {}),
+                ...(direction ? { tarif: `${formatEuros(i.rateCents)} ${PAY_MODES[i.payMode]}` } : {}),
                 email: i.email,
               },
             }))}

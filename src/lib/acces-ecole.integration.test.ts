@@ -1,8 +1,8 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { choisirEcole, contexteDepuisSession } from "./acces-ecole";
+import { chooseSchool, contextFromSession } from "./acces-ecole";
 import { auth } from "./auth";
-import { creerCompte } from "./comptes";
+import { createAccount } from "./comptes";
 
 /**
  * Connexion et choix de l'école, contre la vraie base. Données fictives,
@@ -14,44 +14,44 @@ const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
 const admin = postgres(url, { max: 1, onnotice: () => {} });
 
-const suffixe = Math.random().toString(36).slice(2, 8);
-const email = `accueil-${suffixe}@exemple.test`;
-const motDePasse = "mot-de-passe-de-test-assez-long";
+const suffix = Math.random().toString(36).slice(2, 8);
+const email = `accueil-${suffix}@exemple.test`;
+const password = "mot-de-passe-de-test-assez-long";
 let userId: string;
-let ecoleA: string; // membre actif
-let ecoleB: string; // aucun lien
-let ecoleC: string; // membre désactivé
+let schoolA: string; // membre actif
+let schoolB: string; // aucun lien
+let schoolC: string; // membre désactivé
 
-async function creerEcole(nom: string) {
-  const [e] = await admin`INSERT INTO school (name, slug) VALUES (${nom}, ${`${nom}-${suffixe}`}) RETURNING id`;
+async function createSchool(name: string) {
+  const [e] = await admin`INSERT INTO school (name, slug) VALUES (${name}, ${`${name}-${suffix}`}) RETURNING id`;
   return e.id as string;
 }
 
-async function seConnecter() {
-  const resultat = await auth.api.signInEmail({ body: { email, password: motDePasse } });
-  const [s] = await admin`SELECT id, selected_school_id FROM session WHERE token = ${resultat.token}`;
+async function signIn() {
+  const result = await auth.api.signInEmail({ body: { email, password: password } });
+  const [s] = await admin`SELECT id, selected_school_id FROM session WHERE token = ${result.token}`;
   return s as { id: string; selected_school_id: string | null };
 }
 
 beforeAll(async () => {
-  ecoleA = await creerEcole("ecole-a");
-  ecoleB = await creerEcole("ecole-b");
-  ecoleC = await creerEcole("ecole-c");
-  userId = await creerCompte({ email, nom: "Accueil Test", motDePasse });
-  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${ecoleA}, ${userId}, 'accueil')`;
-  await admin`INSERT INTO member (school_id, user_id, role, active) VALUES (${ecoleC}, ${userId}, 'direction', false)`;
+  schoolA = await createSchool("ecole-a");
+  schoolB = await createSchool("ecole-b");
+  schoolC = await createSchool("ecole-c");
+  userId = await createAccount({ email, name: "Accueil Test", password });
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${schoolA}, ${userId}, 'accueil')`;
+  await admin`INSERT INTO member (school_id, user_id, role, active) VALUES (${schoolC}, ${userId}, 'direction', false)`;
 });
 
 afterAll(async () => {
   await admin`DELETE FROM member WHERE user_id = ${userId}`;
   await admin`DELETE FROM "user" WHERE id = ${userId}`; // sessions et comptes en cascade
-  await admin`DELETE FROM school WHERE id IN (${ecoleA}, ${ecoleB}, ${ecoleC})`;
+  await admin`DELETE FROM school WHERE id IN (${schoolA}, ${schoolB}, ${schoolC})`;
   await admin.end();
 });
 
 describe("Connexion", () => {
   it("connecte un compte créé par l’école", async () => {
-    const session = await seConnecter();
+    const session = await signIn();
     expect(session.id).toBeTruthy();
     expect(session.selected_school_id).toBeNull();
   });
@@ -63,7 +63,7 @@ describe("Connexion", () => {
   it("refuse l’inscription libre", async () => {
     await expect(
       auth.api.signUpEmail({
-        body: { email: `libre-${suffixe}@exemple.test`, password: motDePasse, name: "Libre" },
+        body: { email: `libre-${suffix}@exemple.test`, password: password, name: "Libre" },
       }),
     ).rejects.toThrow();
   });
@@ -71,31 +71,31 @@ describe("Connexion", () => {
 
 describe("Choix de l’école", () => {
   it("enregistre sur la session une école dont on est membre actif", async () => {
-    const session = await seConnecter();
-    expect(await choisirEcole(session.id, userId, ecoleA)).toBe(true);
-    const [apres] = await admin`SELECT selected_school_id FROM session WHERE id = ${session.id}`;
-    expect(apres.selected_school_id).toBe(ecoleA);
-    expect(await contexteDepuisSession(userId, ecoleA)).toEqual({ userId, ecoleId: ecoleA, role: "accueil" });
+    const session = await signIn();
+    expect(await chooseSchool(session.id, userId, schoolA)).toBe(true);
+    const [after] = await admin`SELECT selected_school_id FROM session WHERE id = ${session.id}`;
+    expect(after.selected_school_id).toBe(schoolA);
+    expect(await contextFromSession(userId, schoolA)).toEqual({ userId, schoolId: schoolA, role: "accueil" });
   });
 
   it("refuse une école dont on n’est pas membre", async () => {
-    const session = await seConnecter();
-    expect(await choisirEcole(session.id, userId, ecoleB)).toBe(false);
-    const [apres] = await admin`SELECT selected_school_id FROM session WHERE id = ${session.id}`;
-    expect(apres.selected_school_id).toBeNull();
-    expect(await contexteDepuisSession(userId, ecoleB)).toBeNull();
+    const session = await signIn();
+    expect(await chooseSchool(session.id, userId, schoolB)).toBe(false);
+    const [after] = await admin`SELECT selected_school_id FROM session WHERE id = ${session.id}`;
+    expect(after.selected_school_id).toBeNull();
+    expect(await contextFromSession(userId, schoolB)).toBeNull();
   });
 
   it("refuse une école où l’accès a été désactivé", async () => {
-    const session = await seConnecter();
-    expect(await choisirEcole(session.id, userId, ecoleC)).toBe(false);
-    expect(await contexteDepuisSession(userId, ecoleC)).toBeNull();
+    const session = await signIn();
+    expect(await chooseSchool(session.id, userId, schoolC)).toBe(false);
+    expect(await contextFromSession(userId, schoolC)).toBeNull();
   });
 
   it("refuse la session d’un autre compte et un identifiant mal formé", async () => {
-    const session = await seConnecter();
-    expect(await choisirEcole(session.id, "autre-compte", ecoleA)).toBe(false);
-    expect(await choisirEcole(session.id, userId, "pas-un-uuid")).toBe(false);
-    expect(await contexteDepuisSession(userId, null)).toBeNull();
+    const session = await signIn();
+    expect(await chooseSchool(session.id, "autre-compte", schoolA)).toBe(false);
+    expect(await chooseSchool(session.id, userId, "pas-un-uuid")).toBe(false);
+    expect(await contextFromSession(userId, null)).toBeNull();
   });
 });

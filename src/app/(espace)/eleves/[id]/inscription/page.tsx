@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { avecEcole } from "@/db";
-import { lireEleve } from "@/db/eleves";
-import { danseursPayables, nomAffiche } from "@/db/personnes";
-import { coursDeLaSaison, saisonCourante } from "@/db/planning";
-import { ageAu, aujourdhuiAParis } from "@/domaine/personnes/age";
-import { exigerRole } from "@/lib/session";
-import { FormulaireInscription } from "./formulaire";
+import { withSchool } from "@/db";
+import { readStudent } from "@/db/eleves";
+import { payableStudents, nomAffiche } from "@/db/personnes";
+import { seasonCourses, currentSeason } from "@/db/planning";
+import { ageAt, todayInParis } from "@/domaine/personnes/age";
+import { requireRole } from "@/lib/session";
+import { EnrollmentForm } from "./formulaire";
 
 export const metadata: Metadata = { title: "Nouvelle inscription" };
 
@@ -15,28 +15,32 @@ export const metadata: Metadata = { title: "Nouvelle inscription" };
  * Inscription d'un élève, facturée à son payeur (« Facturé à » de sa fiche).
  * Sa fratrie, facturée à la même personne, peut être inscrite dans la foulée.
  */
-export default async function PageInscription({ params }: PageProps<"/eleves/[id]/inscription">) {
-  const { ecoleId } = await exigerRole("direction", "accueil");
+export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]/inscription">) {
+  const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const { id } = await params;
-  const aujourdhui = aujourdhuiAParis();
-  const donnees = await avecEcole(ecoleId, async (tx) => {
-    const eleve = await lireEleve(tx, id, aujourdhui);
-    if (!eleve) return null;
-    const payeurId =
-      eleve.factureA.type === "personne" ? eleve.factureA.id : eleve.factureA.type === "eleve" ? eleve.id : null;
-    const saison = await saisonCourante(tx, aujourdhui);
+  const today = todayInParis();
+  const donnees = await withSchool(schoolId, async (tx) => {
+    const student = await readStudent(tx, id, today);
+    if (!student) return null;
+    const payerId =
+      student.billedTo.type === "personne"
+        ? student.billedTo.id
+        : student.billedTo.type === "eleve"
+          ? student.id
+          : null;
+    const season = await currentSeason(tx, today);
     return {
-      eleve,
-      payeurId,
-      saison,
-      danseurs: payeurId ? await danseursPayables(tx, payeurId) : [],
-      cours: saison ? await coursDeLaSaison(tx, saison.id) : [],
+      student: student,
+      payerId: payerId,
+      season: season,
+      students: payerId ? await payableStudents(tx, payerId) : [],
+      courses: season ? await seasonCourses(tx, season.id) : [],
     };
   });
   if (!donnees) notFound();
-  const { eleve, payeurId, saison, danseurs, cours } = donnees;
-  const nom = nomAffiche(eleve);
-  const payeur = eleve.factureA.type === "personne" ? eleve.factureA.nom : nom;
+  const { student: student, payerId: payerId, season: season, students: students, courses: cours } = donnees;
+  const name = nomAffiche(student);
+  const payer = student.billedTo.type === "personne" ? student.billedTo.name : name;
 
   return (
     <section className="flex flex-col gap-4">
@@ -45,39 +49,39 @@ export default async function PageInscription({ params }: PageProps<"/eleves/[id
           Élèves
         </Link>
         <span className="text-doux"> / </span>
-        <Link href={`/eleves/${eleve.id}`} className="lien">
-          {nom}
+        <Link href={`/eleves/${student.id}`} className="lien">
+          {name}
         </Link>
         <span className="text-doux"> / Nouvelle inscription</span>
       </nav>
       <div>
-        <h1 className="titre-page">Nouvelle inscription{saison && ` ${saison.libelle}`}</h1>
-        {payeurId && (
+        <h1 className="titre-page">Nouvelle inscription{season && ` ${season.label}`}</h1>
+        {payerId && (
           <p className="text-sm text-doux">
-            Facturée à {payeur}. Pour changer, modifiez « Facturé à » sur la fiche de l’élève.
+            Facturée à {payer}. Pour changer, modifiez « Facturé à » sur la fiche de l’élève.
           </p>
         )}
       </div>
-      {!saison ? (
+      {!season ? (
         <p className="text-sm">Aucune saison n’est paramétrée.</p>
-      ) : !payeurId ? (
+      ) : !payerId ? (
         <p className="text-sm">
-          {eleve.prenom ?? nom} est mineur et n’a pas de payeur.{" "}
-          <Link href={`/eleves/${eleve.id}`} className="lien">
+          {student.firstName ?? name} est mineur et n’a pas de payeur.{" "}
+          <Link href={`/eleves/${student.id}`} className="lien">
             Indiquez à qui facturer sur sa fiche
           </Link>
           .
         </p>
       ) : (
-        <FormulaireInscription
-          payeurId={payeurId}
-          danseurs={danseurs.map((d) => ({
+        <EnrollmentForm
+          payerId={payerId}
+          students={students.map((d) => ({
             id: d.id,
-            prenom: d.prenom,
-            age: d.dateNaissance ? ageAu(d.dateNaissance, aujourdhui) : null,
+            firstName: d.firstName,
+            age: d.birthDate ? ageAt(d.birthDate, today) : null,
           }))}
-          cours={cours}
-          danseurInitial={eleve.id}
+          courses={cours}
+          initialStudent={student.id}
         />
       )}
     </section>

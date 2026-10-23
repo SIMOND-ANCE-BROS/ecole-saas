@@ -1,4 +1,4 @@
 /** Nom affiché d'une personne : raison sociale d'un professionnel, sinon prénom et nom. */
-export function nomAffiche(p: { nom: string; prenom: string | null; raisonSociale: string | null }): string {
-  return p.raisonSociale ?? [p.prenom, p.nom].filter(Boolean).join(" ");
+export function displayedName(p: { name: string; firstName: string | null; companyName: string | null }): string {
+  return p.companyName ?? [p.firstName, p.name].filter(Boolean).join(" ");
 }

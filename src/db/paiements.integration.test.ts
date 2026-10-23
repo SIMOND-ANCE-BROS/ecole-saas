@@ -1,7 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { avecEcole } from "./index";
-import { corrigerPaiement, encaisser, paiementsDe, soldeDe } from "./paiements";
+import { withSchool } from "./index";
+import { correctPayment, collect, paymentsOf, balanceOf } from "./paiements";
 
 /**
  * Encaissements (#97), comme l'application (app_user, RLS). Données fictives
@@ -13,62 +13,62 @@ const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
 const admin = postgres(url, { max: 1, onnotice: () => {} });
 
-const suffixe = Math.random().toString(36).slice(2, 8);
-const accueil = `pai-accueil-${suffixe}`;
-const AUJOURDHUI = "2026-10-21";
-let ecole: string;
-let autreEcole: string;
-let payeur: string;
-let etranger: string;
+const suffix = Math.random().toString(36).slice(2, 8);
+const accueil = `pai-accueil-${suffix}`;
+const TODAY = "2026-10-21";
+let school: string;
+let otherSchool: string;
+let payer: string;
+let foreign: string;
 
 beforeAll(async () => {
-  [{ id: ecole }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`pa-${suffixe}`}) RETURNING id`;
-  [{ id: autreEcole }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`pb-${suffixe}`}) RETURNING id`;
+  [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`pa-${suffix}`}) RETURNING id`;
+  [{ id: otherSchool }] =
+    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`pb-${suffix}`}) RETURNING id`;
   await admin`INSERT INTO "user" (id, name, email) VALUES (${accueil}, 'Accueil Test', ${`${accueil}@exemple.test`})`;
-  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${ecole}, ${accueil}, 'accueil')`;
-  [{ id: payeur }] =
-    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${ecole}, 'Martin', 'Sophie') RETURNING id`;
-  [{ id: etranger }] =
-    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${autreEcole}, 'Ailleurs', 'Paul') RETURNING id`;
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${accueil}, 'accueil')`;
+  [{ id: payer }] =
+    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Martin', 'Sophie') RETURNING id`;
+  [{ id: foreign }] =
+    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${otherSchool}, 'Ailleurs', 'Paul') RETURNING id`;
   const [s] =
-    await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${ecole}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
-  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents) VALUES (${ecole}, ${s.id}, ${payeur}, 'enfant', 'annee', 30000)`;
-  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status) VALUES (${ecole}, ${s.id}, ${payeur}, 'enfant', 'trimestre', 9000, 'abandon')`;
+    await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
+  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents) VALUES (${school}, ${s.id}, ${payer}, 'enfant', 'annee', 30000)`;
+  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status) VALUES (${school}, ${s.id}, ${payer}, 'enfant', 'trimestre', 9000, 'abandon')`;
 });
 
 afterAll(async () => {
   await admin.begin(async (t) => {
     await t`ALTER TABLE payment DISABLE TRIGGER payment_immutable`;
     await t`ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only`;
-    await t`DELETE FROM audit_log WHERE school_id IN (${ecole}, ${autreEcole})`;
-    await t`DELETE FROM payment WHERE school_id IN (${ecole}, ${autreEcole}) AND corrects_id IS NOT NULL`;
-    await t`DELETE FROM payment WHERE school_id IN (${ecole}, ${autreEcole})`;
+    await t`DELETE FROM audit_log WHERE school_id IN (${school}, ${otherSchool})`;
+    await t`DELETE FROM payment WHERE school_id IN (${school}, ${otherSchool}) AND corrects_id IS NOT NULL`;
+    await t`DELETE FROM payment WHERE school_id IN (${school}, ${otherSchool})`;
     await t`ALTER TABLE payment ENABLE TRIGGER payment_immutable`;
     await t`ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only`;
   });
   for (const t of ["enrollment", "season", "person", "member"])
-    await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [ecole, autreEcole]);
+    await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [school, otherSchool]);
   await admin`DELETE FROM "user" WHERE id = ${accueil}`;
-  await admin`DELETE FROM school WHERE id IN (${ecole}, ${autreEcole})`;
+  await admin`DELETE FROM school WHERE id IN (${school}, ${otherSchool})`;
   await admin.end();
 });
 
-const cheque = (montantCentimes: number, encaissementPrevu: string | null, reference: string) => ({
-  moyen: "cheque" as const,
-  montantCentimes,
-  date: AUJOURDHUI,
+const cheque = (amountCents: number, plannedPayment: string | null, reference: string) => ({
+  method: "cheque" as const,
+  amountCents: amountCents,
+  date: TODAY,
   reference,
-  emetteur: null,
-  encaissementPrevu,
+  issuer: null,
+  plannedPayment: plannedPayment,
 });
 
 describe("encaisser", () => {
   let ids: string[] = [];
 
   it("trois chèques datés : solde à jour, chèques à encaisser, journal tenu", async () => {
-    const r = await avecEcole(ecole, (tx) =>
-      encaisser(tx, accueil, payeur, [
+    const r = await withSchool(school, (tx) =>
+      collect(tx, accueil, payer, [
         cheque(10000, null, "0001"),
         cheque(10000, "2027-01-05", "0002"),
         cheque(10000, "2027-04-05", "0003"),
@@ -76,33 +76,33 @@ describe("encaisser", () => {
     );
     if (!r.ok) throw new Error(r.message);
     ids = r.ids;
-    expect(await avecEcole(ecole, (tx) => soldeDe(tx, payeur, AUJOURDHUI))).toEqual({
+    expect(await withSchool(school, (tx) => balanceOf(tx, payer, TODAY))).toEqual({
       du: 30000,
       paye: 30000,
-      reste: 0,
-      aEncaisser: 20000,
-      horsCalcul: { abandon: 9000 },
+      remaining: 0,
+      toCollect: 20000,
+      outsideCalculation: { abandon: 9000 },
     });
     const traces =
-      await admin`SELECT action, after->>'montant_centimes' AS montant, actor IS NOT NULL AS signe FROM audit_log WHERE school_id = ${ecole} AND target_table = 'payment'`;
+      await admin`SELECT action, after->>'montant_centimes' AS montant, actor IS NOT NULL AS signe FROM audit_log WHERE school_id = ${school} AND target_table = 'payment'`;
     expect(traces).toHaveLength(3);
     expect(traces.every((t) => t.action === "insert" && t.montant === "10000" && t.signe)).toBe(true);
   });
 
   it("refuse des espèces « à encaisser plus tard », un payeur d'une autre école, un compte non membre", async () => {
     expect(
-      await avecEcole(ecole, (tx) =>
-        encaisser(tx, accueil, payeur, [{ ...cheque(5000, "2027-01-05", ""), moyen: "especes" }]),
+      await withSchool(school, (tx) =>
+        collect(tx, accueil, payer, [{ ...cheque(5000, "2027-01-05", ""), method: "especes" }]),
       ),
     ).toEqual({
       ok: false,
       message: "Seul un chèque s’encaisse plus tard",
     });
-    expect(await avecEcole(ecole, (tx) => encaisser(tx, accueil, etranger, [cheque(5000, null, "x")]))).toEqual({
+    expect(await withSchool(school, (tx) => collect(tx, accueil, foreign, [cheque(5000, null, "x")]))).toEqual({
       ok: false,
       message: "Payeur introuvable.",
     });
-    expect(await avecEcole(ecole, (tx) => encaisser(tx, "inconnu", payeur, [cheque(5000, null, "x")]))).toEqual({
+    expect(await withSchool(school, (tx) => collect(tx, "inconnu", payer, [cheque(5000, null, "x")]))).toEqual({
       ok: false,
       message: "Accès refusé.",
     });
@@ -116,26 +116,26 @@ describe("encaisser", () => {
     await expect(admin`UPDATE payment SET tool_synced = false, amount_cents = 1 WHERE id = ${ids[0]}`).rejects.toThrow(
       /cannot be modified/,
     );
-    expect((await avecEcole(ecole, (tx) => corrigerPaiement(tx, accueil, ids[0], 4000, AUJOURDHUI))).ok).toBe(true);
-    expect(await avecEcole(ecole, (tx) => corrigerPaiement(tx, accueil, ids[0], 7000, AUJOURDHUI))).toEqual({
+    expect((await withSchool(school, (tx) => correctPayment(tx, accueil, ids[0], 4000, TODAY))).ok).toBe(true);
+    expect(await withSchool(school, (tx) => correctPayment(tx, accueil, ids[0], 7000, TODAY))).toEqual({
       ok: false,
       message: "La correction dépasse le montant encore non corrigé.",
     });
-    const lignes = await avecEcole(ecole, (tx) => paiementsDe(tx, payeur));
-    const correction = lignes.find((l) => l.corrigeId === ids[0]);
-    expect(correction).toMatchObject({ montantCentimes: -4000, moyen: "cheque", saisiPar: "Accueil Test" });
-    expect(lignes.find((l) => l.id === ids[0])?.corrigeCentimes).toBe(4000);
-    expect(await avecEcole(ecole, (tx) => corrigerPaiement(tx, accueil, correction!.id, 100, AUJOURDHUI))).toEqual({
+    const rows = await withSchool(school, (tx) => paymentsOf(tx, payer));
+    const correction = rows.find((l) => l.correctedId === ids[0]);
+    expect(correction).toMatchObject({ amountCents: -4000, method: "cheque", enteredBy: "Accueil Test" });
+    expect(rows.find((l) => l.id === ids[0])?.correctedCents).toBe(4000);
+    expect(await withSchool(school, (tx) => correctPayment(tx, accueil, correction!.id, 100, TODAY))).toEqual({
       ok: false,
       message: "Ce paiement ne peut pas être corrigé.",
     });
-    expect((await avecEcole(ecole, (tx) => soldeDe(tx, payeur, AUJOURDHUI)))?.reste).toBe(4000);
+    expect((await withSchool(school, (tx) => balanceOf(tx, payer, TODAY)))?.remaining).toBe(4000);
   });
 
   it("une autre école ne voit ni les paiements ni le solde", async () => {
-    expect(await avecEcole(autreEcole, (tx) => paiementsDe(tx, payeur))).toEqual([]);
-    expect(await avecEcole(autreEcole, (tx) => soldeDe(tx, payeur, AUJOURDHUI))).toBeNull();
-    expect(await avecEcole(autreEcole, (tx) => corrigerPaiement(tx, accueil, ids[1], 100, AUJOURDHUI))).toEqual({
+    expect(await withSchool(otherSchool, (tx) => paymentsOf(tx, payer))).toEqual([]);
+    expect(await withSchool(otherSchool, (tx) => balanceOf(tx, payer, TODAY))).toBeNull();
+    expect(await withSchool(otherSchool, (tx) => correctPayment(tx, accueil, ids[1], 100, TODAY))).toEqual({
       ok: false,
       message: "Ce paiement ne peut pas être corrigé.",
     });

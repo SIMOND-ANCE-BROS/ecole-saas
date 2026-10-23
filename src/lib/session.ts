@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { type ContexteEcole, contexteDepuisSession, type RoleMembre } from "./acces-ecole";
+import { type SchoolContext, contextFromSession, type MemberRole } from "./acces-ecole";
 import { auth } from "./auth";
 
 /**
@@ -11,26 +11,26 @@ import { auth } from "./auth";
  */
 
 /** Session valide (vérifiée en base), sinon redirection vers la connexion. */
-export const sessionCourante = cache(async () => {
-  const resultat = await auth.api.getSession({ headers: await headers() });
-  if (!resultat) redirect("/connexion");
-  return resultat;
+export const currentSession = cache(async () => {
+  const result = await auth.api.getSession({ headers: await headers() });
+  if (!result) redirect("/connexion");
+  return result;
 });
 
 /**
  * École courante, prise sur la session côté serveur et revérifiée (membre
  * actif) ; sinon redirection vers le choix de l'école. À passer à avecEcole().
  */
-export const contexteEcole = cache(async (): Promise<ContexteEcole> => {
-  const { session, user } = await sessionCourante();
-  const contexte = await contexteDepuisSession(user.id, session.selectedSchoolId);
-  if (!contexte) redirect("/ecoles");
-  return contexte;
+export const schoolContext = cache(async (): Promise<SchoolContext> => {
+  const { session, user } = await currentSession();
+  const context = await contextFromSession(user.id, session.selectedSchoolId);
+  if (!context) redirect("/ecoles");
+  return context;
 });
 
 /** École courante, à condition d'avoir l'un des rôles demandés. */
-export async function exigerRole(...roles: RoleMembre[]): Promise<ContexteEcole> {
-  const contexte = await contexteEcole();
-  if (!roles.includes(contexte.role)) redirect("/");
-  return contexte;
+export async function requireRole(...roles: MemberRole[]): Promise<SchoolContext> {
+  const context = await schoolContext();
+  if (!roles.includes(context.role)) redirect("/");
+  return context;
 }

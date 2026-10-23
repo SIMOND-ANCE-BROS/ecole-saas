@@ -1,12 +1,12 @@
 "use client";
 
 import { useActionState } from "react";
-import { type EtatConnexion, seConnecter } from "./actions";
+import { type ConnectionState, signIn } from "./actions";
 
-const etatInitial: EtatConnexion = { erreur: null, email: "" };
+const initialState: ConnectionState = { error: null, email: "" };
 
-export function FormulaireConnexion() {
-  const [etat, action, enCours] = useActionState(seConnecter, etatInitial);
+export function SignInForm() {
+  const [state, action, inProgress] = useActionState(signIn, initialState);
 
   return (
     <form action={action} className="flex flex-col gap-4" noValidate>
@@ -21,30 +21,30 @@ export function FormulaireConnexion() {
           autoComplete="username"
           required
           autoFocus
-          defaultValue={etat.email}
+          defaultValue={state.email}
           className="champ"
         />
       </div>
       <div className="flex flex-col gap-1">
-        <label htmlFor="motDePasse" className="text-sm font-medium">
+        <label htmlFor="password" className="text-sm font-medium">
           Mot de passe
         </label>
         <input
-          id="motDePasse"
-          name="motDePasse"
+          id="password"
+          name="password"
           type="password"
           autoComplete="current-password"
           required
           className="champ"
         />
       </div>
-      {etat.erreur && (
+      {state.error && (
         <p role="alert" className="text-sm text-erreur">
-          {etat.erreur}
+          {state.error}
         </p>
       )}
-      <button type="submit" disabled={enCours} className="bouton-principal">
-        {enCours ? "Connexion…" : "Se connecter"}
+      <button type="submit" disabled={inProgress} className="bouton-principal">
+        {inProgress ? "Connexion…" : "Se connecter"}
       </button>
     </form>
   );

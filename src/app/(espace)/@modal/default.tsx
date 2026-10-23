@@ -1,4 +1,4 @@
 /** Aucun panneau ouvert (chargement complet d'une page). */
-export default function Defaut() {
+export default function Default() {
   return null;
 }

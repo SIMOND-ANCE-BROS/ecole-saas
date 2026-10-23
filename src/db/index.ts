@@ -13,9 +13,9 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  * Exécute `fn` dans une transaction limitée à une école.
  * Toute requête faite avec `tx` ne voit et n'écrit que les lignes de cette école.
  */
-export function avecEcole<T>(ecoleId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+export function withSchool<T>(schoolId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.transaction(async (tx) => {
-    await tx.execute(sql`select set_config('app.school_id', ${ecoleId}, true)`);
+    await tx.execute(sql`select set_config('app.school_id', ${schoolId}, true)`);
     return fn(tx);
   });
 }
@@ -24,11 +24,11 @@ export function avecEcole<T>(ecoleId: string, fn: (tx: Tx) => Promise<T>): Promi
  * Liste les écoles où un utilisateur est membre actif, à la connexion (avant
  * d'en choisir une). Un membre désactivé n'y a plus accès.
  */
-export function ecolesDe(userId: string) {
+export function schoolsOf(userId: string) {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select set_config('app.user_id', ${userId}, true)`);
     return tx
-      .select({ id: schema.school.id, nom: schema.school.name, role: schema.member.role })
+      .select({ id: schema.school.id, name: schema.school.name, role: schema.member.role })
       .from(schema.member)
       .innerJoin(schema.school, sql`${schema.school.id} = ${schema.member.schoolId}`)
       .where(eq(schema.member.active, true))

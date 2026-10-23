@@ -2,18 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { avecEcole } from "@/db";
-import { intervenantDuJeton } from "@/db/agenda";
-import { supprimerConnexion } from "@/db/connexions-agenda";
-import { pagePersonnelle } from "@/lib/agenda-public";
+import { withSchool } from "@/db";
+import { tokenInstructor } from "@/db/agenda";
+import { deleteConnection } from "@/db/connexions-agenda";
+import { personalPage } from "@/lib/agenda-public";
 
 /** Déconnexion par l'intervenant lui-même : son lien personnel fait foi. */
-export async function deconnecterMonAgenda(ecoleId: string, jeton: string): Promise<{ message: string | null }> {
-  if (!z.uuid().safeParse(ecoleId).success) return { message: "Lien introuvable ou révoqué." };
-  const ok = await avecEcole(ecoleId, async (tx) => {
-    const i = await intervenantDuJeton(tx, jeton);
-    return i ? supprimerConnexion(tx, i.id) : false;
+export async function disconnectMyCalendar(schoolId: string, token: string): Promise<{ message: string | null }> {
+  if (!z.uuid().safeParse(schoolId).success) return { message: "Lien introuvable ou révoqué." };
+  const ok = await withSchool(schoolId, async (tx) => {
+    const i = await tokenInstructor(tx, token);
+    return i ? deleteConnection(tx, i.id) : false;
   });
-  revalidatePath(pagePersonnelle(ecoleId, jeton));
+  revalidatePath(personalPage(schoolId, token));
   return { message: ok ? null : "Aucun agenda connecté." };
 }

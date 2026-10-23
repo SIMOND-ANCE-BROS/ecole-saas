@@ -3,61 +3,61 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { aimanter, disposer, versHeure, versMinutes } from "@/domaine/planning/agenda";
-import { type Horaire, plagesOuvertes } from "@/domaine/planning/horaires";
-import { fin } from "./format";
+import { snap, arrange, toTime, toMinutes } from "@/domaine/planning/agenda";
+import { type Hours, openRanges } from "@/domaine/planning/horaires";
+import { end } from "./format";
 
 /** Hauteur d'une minute à l'écran (px) : une heure fait 64 px. */
 const PX = 64 / 60;
 /** Mouvement en dessous duquel un appui reste un clic. */
-const SEUIL = 4;
+const THRESHOLD = 4;
 
-export type Creneau = { jourSemaine: number; heureDebut: string; dureeMinutes: number };
+export type Slot = { weekday: number; startTime: string; durationMinutes: number };
 
 /** Bloc de l'agenda : un cours de la semaine type ou une séance datée. */
-export type ElementAgenda = Creneau & {
+export type CalendarElement = Slot & {
   id: string;
-  titre: string;
+  title: string;
   /** Lignes de détail (salle et intervenant, effectif…). */
-  lignes: string[];
+  rows: string[];
   /** Petite étiquette (« 1 sem. sur 2 », « déplacée »). */
-  etiquette?: string | null;
+  tag?: string | null;
   /** Mention en couleur d'alerte (« complet », « annulée »). */
-  alerte?: string | null;
+  alert?: string | null;
   /** Bloc barré et grisé (séance annulée). */
-  barre?: boolean;
+  bar?: boolean;
   href: string;
-  deplacable: boolean;
+  movable: boolean;
 };
 
 /** Colonne d'un jour ; `ferme` : libellé d'une fermeture qui couvre tout le jour. */
-export type ColonneAgenda = { jour: number; titre: string; ferme?: string | null };
+export type CalendarColumn = { day: number; title: string; closed?: string | null };
 
 /** Réponse à un déplacement : fait, refusé, ou un choix à proposer (« cette séance seulement »…). */
-export type RetourAgenda =
-  | { statut: "ok"; texte: string; alertes: string[] }
-  | { statut: "choisir"; question: string; choix: { valeur: string; libelle: string }[] }
-  | { statut: "refus"; message: string };
-type Geste =
-  | { type: "deplacer" | "etirer"; id: string; x: number; y: number; depart: Creneau; bouge: boolean }
-  | { type: "creer"; jour: number; y: number; ancre: number; bouge: boolean };
+export type CalendarResponse =
+  | { status: "ok"; texte: string; alertes: string[] }
+  | { status: "choisir"; question: string; choice: { value: string; label: string }[] }
+  | { status: "refus"; message: string };
+type Gesture =
+  | { type: "deplacer" | "etirer"; id: string; x: number; y: number; origin: Slot; bouge: boolean }
+  | { type: "creer"; day: number; y: number; anchor: number; bouge: boolean };
 /** Créneau atteint par le geste en cours. */
-type Cible = { apercu?: { id: string } & Creneau; selection?: { jour: number; debut: number; duree: number } };
+type Target = { preview?: { id: string } & Slot; selection?: { day: number; start: number; duration: number } };
 
 type Props = {
-  elements: ElementAgenda[];
-  colonnes: ColonneAgenda[];
+  elements: CalendarElement[];
+  columns: CalendarColumn[];
   /** Plage affichée, en minutes depuis minuit. */
-  debut: number;
-  fin: number;
+  start: number;
+  end: number;
   /** Horaires d'ouverture des sites affichés (#90) : tranches fermées hachurées ; vide : rien. */
-  horaires: Horaire[];
-  modifiable: boolean;
-  misEnAvant?: string;
+  hours: Hours[];
+  editable: boolean;
+  highlighted?: string;
   /** Déplace un élément ; `choix` : réponse à une question posée par un retour « choisir ». */
-  deplacer: (id: string, creneau: Creneau, choix: string | null) => Promise<RetourAgenda>;
+  move: (id: string, slot: Slot, choice: string | null) => Promise<CalendarResponse>;
   /** Créneau libre choisi (clic ou glissé) : créer un cours. */
-  creer: (jour: number, debut: number, duree: number) => void;
+  create: (day: number, start: number, duration: number) => void;
 };
 
 /**
@@ -68,246 +68,243 @@ type Props = {
  * un créneau vide propose un cours d'une heure. Au clavier, chaque bloc ouvre
  * sa fiche.
  */
-export function Agenda({
+export function Calendar({
   elements,
-  colonnes: jours,
-  debut: ouverture,
-  fin: fermeture,
-  horaires,
-  modifiable,
-  misEnAvant,
-  deplacer,
-  creer,
+  columns: days,
+  start: opening,
+  end: closure,
+  hours: hours,
+  editable: editable,
+  highlighted: highlighted,
+  move: move,
+  create: create,
 }: Props) {
   const router = useRouter();
-  const [enCours, demarrer] = useTransition();
+  const [inProgress, startTransition] = useTransition();
   /** Créneau affiché pendant un geste, puis jusqu'au rechargement des données. */
-  const [apercu, setApercu] = useState<({ id: string } & Creneau) | null>(null);
-  const [selection, setSelection] = useState<{ jour: number; debut: number; duree: number } | null>(null);
-  const [aConfirmer, setAConfirmer] = useState<{
+  const [preview, setPreview] = useState<({ id: string } & Slot) | null>(null);
+  const [selection, setSelection] = useState<{ day: number; start: number; duration: number } | null>(null);
+  const [toConfirm, setToConfirm] = useState<{
     id: string;
-    creneau: Creneau;
+    slot: Slot;
     question: string;
-    choix: { valeur: string; libelle: string }[];
+    choice: { value: string; label: string }[];
   } | null>(null);
   const [message, setMessage] = useState<{ type: "ok" | "refus"; texte: string; alertes: string[] } | null>(null);
-  const colonnes = useRef(new Map<number, HTMLDivElement>());
-  const vientDeGlisser = useRef(false);
+  const columns = useRef(new Map<number, HTMLDivElement>());
+  const justDragged = useRef(false);
 
   /** Tranches fermées d'un jour (grisées), quand des horaires sont connus. */
-  const fermees = (jour: number) => {
-    if (horaires.length === 0) return [];
-    const r: { debut: number; fin: number }[] = [];
-    let curseur = ouverture;
-    for (const p of plagesOuvertes(horaires, jour)) {
-      if (p.debut > curseur) r.push({ debut: curseur, fin: Math.min(p.debut, fermeture) });
-      curseur = Math.max(curseur, p.fin);
+  const fermees = (day: number) => {
+    if (hours.length === 0) return [];
+    const r: { start: number; end: number }[] = [];
+    let cursor = opening;
+    for (const p of openRanges(hours, day)) {
+      if (p.start > cursor) r.push({ start: cursor, end: Math.min(p.start, closure) });
+      cursor = Math.max(cursor, p.end);
     }
-    if (curseur < fermeture) r.push({ debut: curseur, fin: fermeture });
+    if (cursor < closure) r.push({ start: cursor, end: closure });
     return r;
   };
-  const affiches = elements.map((c) => (apercu?.id === c.id ? { ...c, ...apercu } : c));
-  const places = disposer(affiches);
-  const hauteur = (fermeture - ouverture) * PX;
-  const heures = Array.from({ length: (fermeture - ouverture) / 60 + 1 }, (_, i) => ouverture + i * 60);
+  const displayed = elements.map((c) => (preview?.id === c.id ? { ...c, ...preview } : c));
+  const seats = arrange(displayed);
+  const height = (closure - opening) * PX;
+  const hourMarks = Array.from({ length: (closure - opening) / 60 + 1 }, (_, i) => opening + i * 60);
 
-  const minuteA = (clientY: number, jour: number) => {
-    const rect = colonnes.current.get(jour)?.getBoundingClientRect();
-    return rect ? ouverture + (clientY - rect.top) / PX : ouverture;
+  const minuteA = (clientY: number, day: number) => {
+    const rect = columns.current.get(day)?.getBoundingClientRect();
+    return rect ? opening + (clientY - rect.top) / PX : opening;
   };
-  const jourA = (clientX: number) => {
-    for (const [jour, el] of colonnes.current) {
+  const dayA = (clientX: number) => {
+    for (const [day, el] of columns.current) {
       const r = el.getBoundingClientRect();
-      if (clientX >= r.left && clientX < r.right) return jour;
+      if (clientX >= r.left && clientX < r.right) return day;
     }
     return null;
   };
 
-  function envoyer(id: string, creneau: Creneau, choix: string | null) {
+  function send(id: string, slot: Slot, choice: string | null) {
     setMessage(null);
-    demarrer(async () => {
-      let r: RetourAgenda;
+    startTransition(async () => {
+      let r: CalendarResponse;
       try {
-        r = await deplacer(id, creneau, choix);
+        r = await move(id, slot, choice);
       } catch {
-        r = { statut: "refus", message: "Le déplacement n’a pas pu être enregistré : réessayez." };
+        r = { status: "refus", message: "Le déplacement n’a pas pu être enregistré : réessayez." };
       }
-      if (r.statut === "choisir") {
-        setAConfirmer({ id, creneau, question: r.question, choix: r.choix });
+      if (r.status === "choisir") {
+        setToConfirm({ id, slot, question: r.question, choice: r.choice });
         return;
       }
-      setAConfirmer(null);
-      if (r.statut === "refus") {
-        setApercu(null);
+      setToConfirm(null);
+      if (r.status === "refus") {
+        setPreview(null);
         setMessage({ type: "refus", texte: r.message, alertes: [] });
         return;
       }
       setMessage({ type: "ok", texte: r.texte, alertes: r.alertes });
       router.refresh();
-      setApercu(null);
+      setPreview(null);
     });
   }
 
-  function annuler() {
-    setAConfirmer(null);
-    setApercu(null);
+  function cancel() {
+    setToConfirm(null);
+    setPreview(null);
   }
 
-  const nouveau = creer;
+  const next = create;
 
   /**
    * État vivant du geste, lu par les écouteurs de la fenêtre : des
    * évènements rapprochés arrivent avant le rendu suivant, l'état React
    * serait encore celui d'avant.
    */
-  const geste = useRef<(Geste & Cible) | null>(null);
-  const [actif, setActif] = useState(false);
+  const gesture = useRef<(Gesture & Target) | null>(null);
+  const [active, setActive] = useState(false);
 
-  function commencer(g: Geste) {
-    geste.current = g;
-    setActif(true);
+  function beginGesture(g: Gesture) {
+    gesture.current = g;
+    setActive(true);
   }
 
   // Gestes sur un cours : déplacer (corps) ou étirer (bord bas).
-  function saisirCours(e: React.PointerEvent, c: ElementAgenda, type: "deplacer" | "etirer") {
-    if (!modifiable || !c.deplacable || e.button !== 0 || enCours || aConfirmer) return;
+  function enterCourse(e: React.PointerEvent, c: CalendarElement, type: "deplacer" | "etirer") {
+    if (!editable || !c.movable || e.button !== 0 || inProgress || toConfirm) return;
     e.stopPropagation();
-    vientDeGlisser.current = false;
-    commencer({
+    justDragged.current = false;
+    beginGesture({
       type,
       id: c.id,
       x: e.clientX,
       y: e.clientY,
       bouge: false,
-      depart: { jourSemaine: c.jourSemaine, heureDebut: c.heureDebut, dureeMinutes: c.dureeMinutes },
+      origin: { weekday: c.weekday, startTime: c.startTime, durationMinutes: c.durationMinutes },
     });
   }
 
   // Glisser sur un créneau vide (souris) : choisir début et durée d'un nouveau cours.
-  function saisirVide(e: React.PointerEvent, jour: number) {
-    if (!modifiable || e.button !== 0 || e.pointerType !== "mouse" || enCours || aConfirmer) return;
-    const ancre = Math.max(ouverture, Math.floor(minuteA(e.clientY, jour) / 15) * 15);
-    commencer({ type: "creer", jour, y: e.clientY, ancre, bouge: false });
+  function enterOnEmptySlot(e: React.PointerEvent, day: number) {
+    if (!editable || e.button !== 0 || e.pointerType !== "mouse" || inProgress || toConfirm) return;
+    const anchor = Math.max(opening, Math.floor(minuteA(e.clientY, day) / 15) * 15);
+    beginGesture({ type: "creer", day, y: e.clientY, anchor, bouge: false });
   }
 
-  function bouger(e: PointerEvent) {
-    const g = geste.current;
+  function trackPointer(e: PointerEvent) {
+    const g = gesture.current;
     if (!g) return;
-    g.bouge ||= Math.abs(e.clientY - g.y) > SEUIL || (g.type !== "creer" && Math.abs(e.clientX - g.x) > SEUIL);
+    g.bouge ||= Math.abs(e.clientY - g.y) > THRESHOLD || (g.type !== "creer" && Math.abs(e.clientX - g.x) > THRESHOLD);
     if (!g.bouge) return;
     if (g.type === "creer") {
-      const ici = Math.min(fermeture, Math.max(ouverture, aimanter(minuteA(e.clientY, g.jour))));
-      g.selection = { jour: g.jour, debut: Math.min(g.ancre, ici), duree: Math.max(15, Math.abs(ici - g.ancre)) };
+      const here = Math.min(closure, Math.max(opening, snap(minuteA(e.clientY, g.day))));
+      g.selection = { day: g.day, start: Math.min(g.anchor, here), duration: Math.max(15, Math.abs(here - g.anchor)) };
       setSelection(g.selection);
       return;
     }
-    const { depart } = g;
-    const decalage = aimanter((e.clientY - g.y) / PX);
+    const { origin: origin } = g;
+    const shift = snap((e.clientY - g.y) / PX);
     if (g.type === "etirer") {
-      const debut = versMinutes(depart.heureDebut);
-      g.apercu = {
+      const start = toMinutes(origin.startTime);
+      g.preview = {
         id: g.id,
-        ...depart,
-        dureeMinutes: Math.min(fermeture - debut, Math.max(15, depart.dureeMinutes + decalage)),
+        ...origin,
+        durationMinutes: Math.min(closure - start, Math.max(15, origin.durationMinutes + shift)),
       };
     } else {
-      const debut = Math.min(
-        fermeture - depart.dureeMinutes,
-        Math.max(ouverture, versMinutes(depart.heureDebut) + decalage),
-      );
-      g.apercu = {
+      const start = Math.min(closure - origin.durationMinutes, Math.max(opening, toMinutes(origin.startTime) + shift));
+      g.preview = {
         id: g.id,
-        ...depart,
-        jourSemaine: jourA(e.clientX) ?? depart.jourSemaine,
-        heureDebut: versHeure(debut),
+        ...origin,
+        weekday: dayA(e.clientX) ?? origin.weekday,
+        startTime: toTime(start),
       };
     }
-    setApercu(g.apercu);
+    setPreview(g.preview);
   }
 
-  function lacher() {
-    const g = geste.current;
+  function release() {
+    const g = gesture.current;
     if (!g) return;
-    geste.current = null;
-    setActif(false);
+    gesture.current = null;
+    setActive(false);
     if (g.type === "creer") {
       setSelection(null);
-      if (g.bouge && g.selection) nouveau(g.selection.jour, g.selection.debut, g.selection.duree);
-      else nouveau(g.jour, g.ancre, 60);
+      if (g.bouge && g.selection) next(g.selection.day, g.selection.start, g.selection.duration);
+      else next(g.day, g.anchor, 60);
       return;
     }
     if (!g.bouge) return; // simple clic : le lien ouvre la fiche
-    vientDeGlisser.current = true;
-    const a = g.apercu;
+    justDragged.current = true;
+    const a = g.preview;
     if (
       !a ||
-      (a.jourSemaine === g.depart.jourSemaine &&
-        a.heureDebut === g.depart.heureDebut &&
-        a.dureeMinutes === g.depart.dureeMinutes)
+      (a.weekday === g.origin.weekday &&
+        a.startTime === g.origin.startTime &&
+        a.durationMinutes === g.origin.durationMinutes)
     ) {
-      setApercu(null);
+      setPreview(null);
       return;
     }
-    envoyer(g.id, { jourSemaine: a.jourSemaine, heureDebut: a.heureDebut, dureeMinutes: a.dureeMinutes }, null);
+    send(g.id, { weekday: a.weekday, startTime: a.startTime, durationMinutes: a.durationMinutes }, null);
   }
 
-  function abandonner() {
-    geste.current = null;
-    setActif(false);
+  function drop() {
+    gesture.current = null;
+    setActive(false);
     setSelection(null);
-    setApercu(null);
+    setPreview(null);
   }
 
   // Le geste se suit sur toute la fenêtre : le cours change de colonne en
   // cours de route (et perd la capture du pointeur), et on peut lâcher hors
   // de la grille. Échap abandonne.
   useEffect(() => {
-    if (!actif) return;
-    const touche = (e: KeyboardEvent) => e.key === "Escape" && abandonner();
-    window.addEventListener("pointermove", bouger);
-    window.addEventListener("pointerup", lacher);
-    window.addEventListener("pointercancel", abandonner);
-    window.addEventListener("keydown", touche);
+    if (!active) return;
+    const key = (e: KeyboardEvent) => e.key === "Escape" && drop();
+    window.addEventListener("pointermove", trackPointer);
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", drop);
+    window.addEventListener("keydown", key);
     return () => {
-      window.removeEventListener("pointermove", bouger);
-      window.removeEventListener("pointerup", lacher);
-      window.removeEventListener("pointercancel", abandonner);
-      window.removeEventListener("keydown", touche);
+      window.removeEventListener("pointermove", trackPointer);
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", drop);
+      window.removeEventListener("keydown", key);
     };
   });
 
   // Appui (tactile) sur un créneau vide : un cours d'une heure à cet endroit.
-  function toucherVide(e: React.MouseEvent, jour: number) {
-    if (!modifiable || enCours || aConfirmer || e.target !== e.currentTarget) return;
+  function tapEmptySlot(e: React.MouseEvent, day: number) {
+    if (!editable || inProgress || toConfirm || e.target !== e.currentTarget) return;
     if ((e.nativeEvent as PointerEvent).pointerType === "mouse") return; // géré par saisirVide
-    nouveau(jour, Math.max(ouverture, Math.min(fermeture - 60, Math.floor(minuteA(e.clientY, jour) / 15) * 15)), 60);
+    next(day, Math.max(opening, Math.min(closure - 60, Math.floor(minuteA(e.clientY, day) / 15) * 15)), 60);
   }
 
   return (
     <div className="flex flex-col gap-3">
-      {aConfirmer && (
+      {toConfirm && (
         <div
           role="alertdialog"
           aria-labelledby="confirmer-deplacement"
           className="panneau flex flex-wrap items-center gap-3 border-accent p-3 text-sm"
         >
           <p id="confirmer-deplacement" className="flex-1">
-            {aConfirmer.question}
+            {toConfirm.question}
           </p>
           <div className="flex flex-wrap gap-2">
-            {aConfirmer.choix.map((c, i) => (
+            {toConfirm.choice.map((c, i) => (
               <button
-                key={c.valeur}
+                key={c.value}
                 type="button"
                 className={i === 0 ? "bouton-principal" : "bouton-secondaire"}
-                disabled={enCours}
-                onClick={() => envoyer(aConfirmer.id, aConfirmer.creneau, c.valeur)}
+                disabled={inProgress}
+                onClick={() => send(toConfirm.id, toConfirm.slot, c.value)}
                 autoFocus={i === 0}
               >
-                {c.libelle}
+                {c.label}
               </button>
             ))}
-            <button type="button" className="bouton-secondaire" disabled={enCours} onClick={annuler}>
+            <button type="button" className="bouton-secondaire" disabled={inProgress} onClick={cancel}>
               Annuler
             </button>
           </div>
@@ -330,7 +327,7 @@ export function Agenda({
           </div>
         )}
       </div>
-      {modifiable && (
+      {editable && (
         <p className="text-xs text-doux">
           Glissez un bloc pour le déplacer, tirez son bord bas pour changer sa durée, cliquez ou glissez sur un créneau
           libre pour créer un cours.
@@ -340,43 +337,43 @@ export function Agenda({
       <div className="panneau overflow-x-auto">
         <div
           className="grid min-w-[44rem] select-none"
-          style={{ gridTemplateColumns: `3rem repeat(${jours.length}, minmax(6.5rem, 1fr))` }}
+          style={{ gridTemplateColumns: `3rem repeat(${days.length}, minmax(6.5rem, 1fr))` }}
         >
           <div className="sticky left-0 z-20 border-b border-bordure bg-surface" />
-          {jours.map((c) => (
-            <h2 key={c.jour} className="border-b border-l border-bordure px-2 py-1.5 text-sm font-semibold">
-              {c.titre}
-              {c.ferme && <span className="block truncate text-xs font-normal text-alerte-texte">{c.ferme}</span>}
+          {days.map((c) => (
+            <h2 key={c.day} className="border-b border-l border-bordure px-2 py-1.5 text-sm font-semibold">
+              {c.title}
+              {c.closed && <span className="block truncate text-xs font-normal text-alerte-texte">{c.closed}</span>}
             </h2>
           ))}
 
-          <div className="sticky left-0 z-20 bg-surface" style={{ height: hauteur }} aria-hidden>
-            {heures.map((h) => (
+          <div className="sticky left-0 z-20 bg-surface" style={{ height: height }} aria-hidden>
+            {hourMarks.map((h) => (
               <span
                 key={h}
                 className="absolute right-1.5 -translate-y-1/2 text-xs tabular-nums text-doux"
-                style={{ top: (h - ouverture) * PX }}
+                style={{ top: (h - opening) * PX }}
               >
-                {h < fermeture && h > ouverture ? `${h / 60} h` : ""}
+                {h < closure && h > opening ? `${h / 60} h` : ""}
               </span>
             ))}
           </div>
-          {jours.map(({ jour: j, ferme }) => (
+          {days.map(({ day: j, closed: closed }) => (
             <div
               key={j}
               ref={(el) => {
-                if (el) colonnes.current.set(j, el);
-                else colonnes.current.delete(j);
+                if (el) columns.current.set(j, el);
+                else columns.current.delete(j);
               }}
-              className={`relative border-l border-bordure ${modifiable ? "cursor-cell" : ""}`}
+              className={`relative border-l border-bordure ${editable ? "cursor-cell" : ""}`}
               style={{
-                height: hauteur,
+                height: height,
                 backgroundImage: `repeating-linear-gradient(to bottom, var(--bordure) 0 1px, transparent 1px ${60 * PX}px)`,
               }}
-              onPointerDown={(e) => saisirVide(e, j)}
-              onClick={(e) => toucherVide(e, j)}
+              onPointerDown={(e) => enterOnEmptySlot(e, j)}
+              onClick={(e) => tapEmptySlot(e, j)}
             >
-              {ferme && (
+              {closed && (
                 <div
                   aria-hidden
                   className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(45deg,transparent_0_6px,var(--alerte-fond)_6px_8px)]"
@@ -384,76 +381,74 @@ export function Agenda({
               )}
               {fermees(j).map((z) => (
                 <div
-                  key={z.debut}
+                  key={z.start}
                   aria-hidden
                   title="Site fermé"
                   className="pointer-events-none absolute inset-x-0 bg-[repeating-linear-gradient(45deg,transparent_0_6px,var(--bordure)_6px_7px)] opacity-70"
-                  style={{ top: (z.debut - ouverture) * PX, height: (z.fin - z.debut) * PX }}
+                  style={{ top: (z.start - opening) * PX, height: (z.end - z.start) * PX }}
                 />
               ))}
-              {selection?.jour === j && (
+              {selection?.day === j && (
                 <div
                   className="pointer-events-none absolute inset-x-1 z-10 rounded border-2 border-dashed border-accent bg-accent-doux/60 px-1.5 text-xs font-medium"
-                  style={{ top: (selection.debut - ouverture) * PX, height: selection.duree * PX }}
+                  style={{ top: (selection.start - opening) * PX, height: selection.duration * PX }}
                 >
-                  {versHeure(selection.debut)}–{versHeure(selection.debut + selection.duree)}
+                  {toTime(selection.start)}–{toTime(selection.start + selection.duration)}
                 </div>
               )}
-              {affiches
-                .filter((c) => c.jourSemaine === j)
+              {displayed
+                .filter((c) => c.weekday === j)
                 .map((c) => {
-                  const place = places.get(c.id) ?? { colonne: 0, colonnes: 1 };
-                  const debut = versMinutes(c.heureDebut);
-                  const deplace = apercu?.id === c.id;
-                  const largeur = 100 / place.colonnes;
+                  const place = seats.get(c.id) ?? { column: 0, columns: 1 };
+                  const start = toMinutes(c.startTime);
+                  const moved = preview?.id === c.id;
+                  const width = 100 / place.columns;
                   return (
                     <div
                       key={c.id}
                       className={`absolute overflow-hidden rounded border-l-4 border-accent bg-accent-doux text-xs shadow-sm ${
-                        c.id === misEnAvant ? "ring-2 ring-accent" : ""
-                      } ${deplace ? "z-10 opacity-90 ring-2 ring-accent" : ""} ${c.barre ? "border-doux opacity-60" : ""} ${
-                        modifiable && c.deplacable ? "cursor-grab touch-none active:cursor-grabbing" : ""
+                        c.id === highlighted ? "ring-2 ring-accent" : ""
+                      } ${moved ? "z-10 opacity-90 ring-2 ring-accent" : ""} ${c.bar ? "border-doux opacity-60" : ""} ${
+                        editable && c.movable ? "cursor-grab touch-none active:cursor-grabbing" : ""
                       }`}
                       style={{
-                        top: (debut - ouverture) * PX + 1,
-                        height: Math.max(18, c.dureeMinutes * PX - 2),
-                        left: `calc(${place.colonne * largeur}% + 2px)`,
-                        width: `calc(${largeur}% - 4px)`,
+                        top: (start - opening) * PX + 1,
+                        height: Math.max(18, c.durationMinutes * PX - 2),
+                        left: `calc(${place.column * width}% + 2px)`,
+                        width: `calc(${width}% - 4px)`,
                       }}
-                      onPointerDown={(e) => saisirCours(e, c, "deplacer")}
+                      onPointerDown={(e) => enterCourse(e, c, "deplacer")}
                     >
                       <Link
                         href={c.href}
                         draggable={false}
                         className="block h-full px-1.5 py-0.5 leading-tight text-texte focus-visible:outline-2 focus-visible:outline-accent"
                         onClick={(e) => {
-                          if (vientDeGlisser.current) {
+                          if (justDragged.current) {
                             e.preventDefault();
-                            vientDeGlisser.current = false;
+                            justDragged.current = false;
                           }
                         }}
                       >
-                        <span className={`block font-semibold ${c.barre ? "line-through" : ""}`}>
-                          {c.titre}
-                          {c.alerte && <span className="font-normal text-alerte-texte"> · {c.alerte}</span>}
-                          {c.etiquette && (
-                            <span className="ml-1 rounded bg-surface px-1 font-normal text-doux">{c.etiquette}</span>
-                          )}
+                        <span className={`block font-semibold ${c.bar ? "line-through" : ""}`}>
+                          {c.title}
+                          {c.alert && <span className="font-normal text-alerte-texte"> · {c.alert}</span>}
+                          {c.tag && <span className="ml-1 rounded bg-surface px-1 font-normal text-doux">{c.tag}</span>}
                         </span>
                         <span className="block tabular-nums">
-                          {c.heureDebut}–{fin(c.heureDebut, c.dureeMinutes)}
+                          {c.startTime}–{end(c.startTime, c.durationMinutes)}
                         </span>
-                        {c.lignes.map((l) => (
+                        {c.rows.map((l) => (
                           <span key={l} className="block truncate text-doux">
                             {l}
                           </span>
                         ))}
                       </Link>
-                      {modifiable && c.deplacable && (
+                      {editable && c.movable && (
                         <div
                           aria-hidden
                           className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize"
-                          onPointerDown={(e) => saisirCours(e, c, "etirer")}
+                          onPointerDown={(e) => enterCourse(e, c, "etirer")}
                         />
                       )}
                     </div>

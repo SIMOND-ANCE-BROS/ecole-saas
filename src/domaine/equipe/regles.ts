@@ -5,30 +5,30 @@
  */
 
 export type Role = "direction" | "accueil" | "professeur";
-export type MembreEquipe = { id: string; role: Role; actif: boolean };
+export type TeamMember = { id: string; role: Role; active: boolean };
 
 /** Message de refus d'un changement de rôle ou d'activité, ou null s'il est permis. */
-export function refusChangement(
-  membres: MembreEquipe[],
-  auteurId: string,
-  cibleId: string,
-  apres: { role: Role; actif: boolean },
+export function changeRefusal(
+  members: TeamMember[],
+  authorId: string,
+  targetId: string,
+  after: { role: Role; active: boolean },
 ): string | null {
-  const cible = membres.find((m) => m.id === cibleId);
-  if (!cible) return "Ce membre n’existe plus.";
-  if (cibleId === auteurId)
+  const target = members.find((m) => m.id === targetId);
+  if (!target) return "Ce membre n’existe plus.";
+  if (targetId === authorId)
     return "Vous ne pouvez pas modifier votre propre accès : demandez à une autre personne de la direction.";
-  const directions = membres.filter((m) =>
-    m.id === cibleId ? apres.role === "direction" && apres.actif : m.role === "direction" && m.actif,
+  const directions = members.filter((m) =>
+    m.id === targetId ? after.role === "direction" && after.active : m.role === "direction" && m.active,
   ).length;
   if (directions === 0) return "Il faut au moins une personne active à la direction.";
   return null;
 }
 
 /** Mot de passe choisi par la personne : longueur seulement (une phrase de passe vaut mieux qu'un mélange imposé). */
-export function refusMotDePasse(motDePasse: string, confirmation: string): string | null {
-  if (motDePasse.length < 10) return "Choisissez au moins 10 caractères (une phrase de passe convient très bien).";
-  if (motDePasse.length > 128) return "128 caractères au plus.";
-  if (motDePasse !== confirmation) return "Les deux mots de passe ne sont pas identiques.";
+export function passwordRefusal(password: string, confirmation: string): string | null {
+  if (password.length < 10) return "Choisissez au moins 10 caractères (une phrase de passe convient très bien).";
+  if (password.length > 128) return "128 caractères au plus.";
+  if (password !== confirmation) return "Les deux mots de passe ne sont pas identiques.";
   return null;
 }

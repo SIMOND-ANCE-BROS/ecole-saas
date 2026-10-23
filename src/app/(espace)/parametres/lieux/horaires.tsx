@@ -1,39 +1,39 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { Horaire } from "@/domaine/planning/horaires";
-import { changerHoraires } from "../actions";
+import type { Hours } from "@/domaine/planning/horaires";
+import { changeHours } from "../actions";
 
-const JOURS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
-type Jour = { ouvert: boolean; ouverture: string; fermeture: string };
+const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+type Day = { open: boolean; opening: string; closure: string };
 
 /**
  * Jours et heures d'ouverture d'un site (#90) : l'agenda du planning s'y
  * limite et le formulaire de cours prévient d'un créneau qui en sort. Sans
  * aucun jour coché, le site n'impose rien.
  */
-export function HorairesSite({ siteId, nom, horaires }: { siteId: string; nom: string; horaires: Horaire[] }) {
+export function SiteHours({ siteId, name: name, hours: hours }: { siteId: string; name: string; hours: Hours[] }) {
   const initial = () =>
     Object.fromEntries(
       [1, 2, 3, 4, 5, 6, 7].map((j) => {
-        const h = horaires.find((x) => x.jourSemaine === j);
-        return [j, { ouvert: !!h, ouverture: h?.ouverture ?? "09:00", fermeture: h?.fermeture ?? "22:00" }];
+        const h = hours.find((x) => x.weekday === j);
+        return [j, { open: !!h, opening: h?.opening ?? "09:00", closure: h?.closure ?? "22:00" }];
       }),
-    ) as Record<number, Jour>;
-  const [jours, setJours] = useState(initial);
+    ) as Record<number, Day>;
+  const [days, setDays] = useState(initial);
   const [message, setMessage] = useState<{ ok: boolean; texte: string } | null>(null);
-  const [enCours, demarrer] = useTransition();
-  const maj = (j: number, v: Partial<Jour>) => setJours({ ...jours, [j]: { ...jours[j], ...v } });
-  const ouverts = Object.values(jours).filter((j) => j.ouvert).length;
+  const [inProgress, startTransition] = useTransition();
+  const updated = (j: number, v: Partial<Day>) => setDays({ ...days, [j]: { ...days[j], ...v } });
+  const open = Object.values(days).filter((j) => j.open).length;
 
   return (
-    <details className="rounded-md border border-bordure" open={horaires.length > 0 || undefined}>
+    <details className="rounded-md border border-bordure" open={hours.length > 0 || undefined}>
       <summary className="cursor-pointer px-3 py-2 font-medium">
         Horaires d’ouverture{" "}
         <span className="font-normal text-doux">
-          {horaires.length === 0
+          {hours.length === 0
             ? "— non renseignés (le planning reste libre)"
-            : `— ${horaires.length} jour${horaires.length > 1 ? "s" : ""}`}
+            : `— ${hours.length} jour${hours.length > 1 ? "s" : ""}`}
         </span>
       </summary>
       <form
@@ -41,16 +41,16 @@ export function HorairesSite({ siteId, nom, horaires }: { siteId: string; nom: s
         onSubmit={(e) => {
           e.preventDefault();
           const saisie = [1, 2, 3, 4, 5, 6, 7]
-            .filter((j) => jours[j].ouvert)
-            .map((j) => ({ jourSemaine: j, ouverture: jours[j].ouverture, fermeture: jours[j].fermeture }));
-          demarrer(async () => {
-            const r = await changerHoraires(siteId, saisie);
+            .filter((j) => days[j].open)
+            .map((j) => ({ weekday: j, opening: days[j].opening, closure: days[j].closure }));
+          startTransition(async () => {
+            const r = await changeHours(siteId, saisie);
             setMessage(r.message ? { ok: false, texte: r.message } : { ok: true, texte: "Horaires enregistrés." });
           });
         }}
       >
         <table className="text-sm">
-          <caption className="sr-only">Horaires d’ouverture de {nom}</caption>
+          <caption className="sr-only">Horaires d’ouverture de {name}</caption>
           <tbody>
             {[1, 2, 3, 4, 5, 6, 7].map((j) => (
               <tr key={j}>
@@ -58,37 +58,37 @@ export function HorairesSite({ siteId, nom, horaires }: { siteId: string; nom: s
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
-                      checked={jours[j].ouvert}
-                      onChange={(e) => maj(j, { ouvert: e.target.checked })}
+                      checked={days[j].open}
+                      onChange={(e) => updated(j, { open: e.target.checked })}
                     />
-                    {JOURS[j]}
+                    {DAYS[j]}
                   </label>
                 </td>
                 <td className="py-1">
-                  {jours[j].ouvert ? (
+                  {days[j].open ? (
                     <span className="flex items-center gap-2">
                       <label className="sr-only" htmlFor={`ouv-${siteId}-${j}`}>
-                        Ouverture le {JOURS[j].toLowerCase()}
+                        Ouverture le {DAYS[j].toLowerCase()}
                       </label>
                       <input
                         id={`ouv-${siteId}-${j}`}
                         type="time"
                         step={900}
                         className="champ"
-                        value={jours[j].ouverture}
-                        onChange={(e) => maj(j, { ouverture: e.target.value })}
+                        value={days[j].opening}
+                        onChange={(e) => updated(j, { opening: e.target.value })}
                       />
                       <span aria-hidden>–</span>
                       <label className="sr-only" htmlFor={`ferm-${siteId}-${j}`}>
-                        Fermeture le {JOURS[j].toLowerCase()}
+                        Fermeture le {DAYS[j].toLowerCase()}
                       </label>
                       <input
                         id={`ferm-${siteId}-${j}`}
                         type="time"
                         step={900}
                         className="champ"
-                        value={jours[j].fermeture}
-                        onChange={(e) => maj(j, { fermeture: e.target.value })}
+                        value={days[j].closure}
+                        onChange={(e) => updated(j, { closure: e.target.value })}
                       />
                     </span>
                   ) : (
@@ -100,20 +100,23 @@ export function HorairesSite({ siteId, nom, horaires }: { siteId: string; nom: s
           </tbody>
         </table>
         <div className="flex flex-wrap items-center gap-3">
-          <button type="submit" className="bouton-secondaire" disabled={enCours}>
-            {enCours ? "Enregistrement…" : "Enregistrer les horaires"}
+          <button type="submit" className="bouton-secondaire" disabled={inProgress}>
+            {inProgress ? "Enregistrement…" : "Enregistrer les horaires"}
           </button>
-          {ouverts > 1 && (
+          {open > 1 && (
             <button
               type="button"
               className="lien text-sm"
               onClick={() => {
-                const premier = [1, 2, 3, 4, 5, 6, 7].find((j) => jours[j].ouvert)!;
-                const { ouverture, fermeture } = jours[premier];
-                setJours(
+                const first = [1, 2, 3, 4, 5, 6, 7].find((j) => days[j].open)!;
+                const { opening: opening, closure: closure } = days[first];
+                setDays(
                   Object.fromEntries(
-                    Object.entries(jours).map(([k, v]) => [k, v.ouvert ? { ...v, ouverture, fermeture } : v]),
-                  ) as Record<number, Jour>,
+                    Object.entries(days).map(([k, v]) => [
+                      k,
+                      v.open ? { ...v, opening: opening, closure: closure } : v,
+                    ]),
+                  ) as Record<number, Day>,
                 );
               }}
             >
