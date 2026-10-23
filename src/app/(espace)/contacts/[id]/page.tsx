@@ -1,50 +1,50 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { avecEcole } from "@/db";
-import { lireContact } from "@/db/eleves";
-import { inscriptionsPayeesPar } from "@/db/inscriptions";
-import { paiementsDe, soldeDe } from "@/db/paiements";
+import { withSchool } from "@/db";
+import { readContact } from "@/db/eleves";
+import { enrollmentsPayeesBy } from "@/db/inscriptions";
+import { paymentsOf, balanceOf } from "@/db/paiements";
 import { nomAffiche } from "@/db/personnes";
-import { saisonCourante } from "@/db/planning";
-import { aujourdhuiAParis } from "@/domaine/personnes/age";
-import { exigerRole } from "@/lib/session";
-import { Bandeau, InscriptionsFacturees, Telephone } from "../../_personnes/sections";
-import { SectionPaiements } from "../../_personnes/paiements";
-import { DevenirEleve } from "./devenir-eleve";
+import { currentSeason } from "@/db/planning";
+import { todayInParis } from "@/domaine/personnes/age";
+import { requireRole } from "@/lib/session";
+import { Bandeau, FactureesEnrollments, Telephone } from "../../_personnes/sections";
+import { PaymentsSection } from "../../_personnes/paiements";
+import { BecomeStudent } from "./devenir-eleve";
 
 export const metadata: Metadata = { title: "Fiche contact" };
 
-const BANDEAUX: Record<string, string> = { cree: "Contact créé.", modifie: "Fiche enregistrée." };
+const BANNERS: Record<string, string> = { cree: "Contact créé.", modifie: "Fiche enregistrée." };
 
 /** Bandeau après un encaissement (`?encaisse=3`). */
-const encaisses = (n: unknown) => {
+const collected = (n: unknown) => {
   const k = Number(n);
   return Number.isInteger(k) && k > 0 ? `${k} règlement${k > 1 ? "s" : ""} encaissé${k > 1 ? "s" : ""}.` : undefined;
 };
 
 export default async function PageContact({ params, searchParams }: PageProps<"/contacts/[id]">) {
-  const { ecoleId, role } = await exigerRole("direction", "accueil");
+  const { schoolId: schoolId, role } = await requireRole("direction", "accueil");
   const [{ id }, { enregistre, encaisse }] = await Promise.all([params, searchParams]);
-  const aujourdhui = aujourdhuiAParis();
-  const donnees = await avecEcole(ecoleId, async (tx) => {
-    const contact = await lireContact(tx, id);
+  const today = todayInParis();
+  const donnees = await withSchool(schoolId, async (tx) => {
+    const contact = await readContact(tx, id);
     if (!contact) return null;
-    const saison = await saisonCourante(tx, aujourdhui);
+    const season = await currentSeason(tx, today);
     return {
       contact,
-      saison,
-      facturees: saison ? await inscriptionsPayeesPar(tx, contact.id, saison.id) : [],
-      solde: await soldeDe(tx, contact.id, aujourdhui),
-      paiements: await paiementsDe(tx, contact.id),
+      season: season,
+      facturees: season ? await enrollmentsPayeesBy(tx, contact.id, season.id) : [],
+      balance: await balanceOf(tx, contact.id, today),
+      payments: await paymentsOf(tx, contact.id),
     };
   });
   if (!donnees) notFound();
-  const { contact: c, saison, facturees, solde, paiements } = donnees;
-  const nom = nomAffiche(c);
-  const prenom = c.prenom ?? nom;
-  const roles = (e: (typeof c.eleves)[number]) =>
-    [e.responsable && "responsable", e.paie && "facturé", e.aPrevenir && "à prévenir"].filter(Boolean).join(", ") ||
+  const { contact: c, season: season, facturees, balance: balance, payments: payments } = donnees;
+  const name = nomAffiche(c);
+  const firstName = c.firstName ?? name;
+  const roles = (e: (typeof c.students)[number]) =>
+    [e.guardian && "responsable", e.paysFor && "facturé", e.toNotify && "à prévenir"].filter(Boolean).join(", ") ||
     "proche";
 
   return (
@@ -53,13 +53,13 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
         <Link href="/contacts" className="lien">
           Contacts
         </Link>
-        <span className="text-doux"> / {nom}</span>
+        <span className="text-doux"> / {name}</span>
       </nav>
-      <Bandeau texte={encaisses(encaisse) ?? BANDEAUX[String(enregistre)]} />
+      <Bandeau texte={collected(encaisse) ?? BANNERS[String(enregistre)]} />
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="titre-page">{nom}</h1>
+          <h1 className="titre-page">{name}</h1>
           <p className="text-sm text-doux">
             {c.type === "professionnel" ? `Organisme${c.siren ? `, SIREN ${c.siren}` : ""}` : "Particulier"}
           </p>
@@ -69,12 +69,12 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
             Modifier
           </Link>
           {c.type === "particulier" &&
-            (c.eleve ? (
+            (c.isStudent ? (
               <Link href={`/eleves/${c.id}`} className="bouton-secondaire">
                 Voir sa fiche élève
               </Link>
             ) : (
-              <DevenirEleve id={c.id} prenom={prenom} />
+              <BecomeStudent id={c.id} firstName={firstName} />
             ))}
         </div>
       </header>
@@ -85,7 +85,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
             <h2 id="coordonnees" className="text-sm font-semibold">
               Coordonnées
             </h2>
-            {c.telephone ? <Telephone numero={c.telephone} /> : <span className="text-doux">Pas de téléphone</span>}
+            {c.telephone ? <Telephone number={c.telephone} /> : <span className="text-doux">Pas de téléphone</span>}
             {c.email ? (
               <a href={`mailto:${c.email}`} className="lien break-all">
                 {c.email}
@@ -93,7 +93,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
             ) : (
               <span className="text-doux">Pas d’e-mail</span>
             )}
-            {c.adresse && <span>{c.adresse}</span>}
+            {c.address && <span>{c.address}</span>}
           </section>
         </aside>
 
@@ -109,14 +109,14 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
                 </Link>
               )}
             </div>
-            {c.eleves.length === 0 ? (
+            {c.students.length === 0 ? (
               <p className="text-sm text-doux">Rattaché à aucun élève.</p>
             ) : (
               <ul className="panneau divide-y divide-bordure text-sm">
-                {c.eleves.map((e) => (
-                  <li key={e.lienId} className="flex flex-wrap items-baseline gap-x-3 px-3 py-2">
+                {c.students.map((e) => (
+                  <li key={e.relationshipId} className="flex flex-wrap items-baseline gap-x-3 px-3 py-2">
                     <Link href={`/eleves/${e.id}`} className="lien font-medium">
-                      {e.nom}
+                      {e.name}
                     </Link>
                     <span className="text-doux">{roles(e)}</span>
                   </li>
@@ -124,14 +124,14 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
               </ul>
             )}
           </section>
-          {saison && <InscriptionsFacturees inscriptions={facturees} saison={saison.libelle} />}
-          <SectionPaiements
-            payeurId={c.id}
-            solde={solde}
-            paiements={paiements}
-            retour={`/contacts/${c.id}`}
+          {season && <FactureesEnrollments enrollments={facturees} season={season.label} />}
+          <PaymentsSection
+            payerId={c.id}
+            balance={balance}
+            payments={payments}
+            back={`/contacts/${c.id}`}
             direction={role === "direction"}
-            aujourdhui={aujourdhui}
+            today={today}
           />
         </div>
       </div>

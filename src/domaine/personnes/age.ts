@@ -1,9 +1,9 @@
 /** Âge en années révolues au jour donné (dates `YYYY-MM-DD`, sans heure). */
-export function ageAu(dateNaissance: string, jour: string): number {
-  const [anneeN, moisN, jourN] = dateNaissance.split("-").map(Number);
-  const [annee, mois, j] = jour.split("-").map(Number);
-  const avantAnniversaire = mois < moisN || (mois === moisN && j < jourN);
-  return annee - anneeN - (avantAnniversaire ? 1 : 0);
+export function ageAt(birthDate: string, day: string): number {
+  const [yearN, monthN, dayN] = birthDate.split("-").map(Number);
+  const [annee, month, j] = day.split("-").map(Number);
+  const beforeBirthday = month < monthN || (month === monthN && j < dayN);
+  return annee - yearN - (beforeBirthday ? 1 : 0);
 }
 
 const formatParis = new Intl.DateTimeFormat("en-CA", {
@@ -14,6 +14,6 @@ const formatParis = new Intl.DateTimeFormat("en-CA", {
 });
 
 /** Date du jour à Paris, `YYYY-MM-DD` (le serveur peut tourner en UTC). */
-export function aujourdhuiAParis(maintenant: Date = new Date()): string {
-  return formatParis.format(maintenant);
+export function todayInParis(now: Date = new Date()): string {
+  return formatParis.format(now);
 }

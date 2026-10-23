@@ -11,7 +11,7 @@ import { theme } from "./theme";
  * Fournisseurs de l'interface (#107) : Mantine (thème, mode sombre selon le
  * système), dates en français, messages après une action (notifications).
  */
-export function Fournisseurs({ children }: { children: ReactNode }) {
+export function Providers({ children }: { children: ReactNode }) {
   return (
     <MantineProvider theme={theme} defaultColorScheme="auto">
       <DatesProvider settings={{ locale: "fr", firstDayOfWeek: 1 }}>

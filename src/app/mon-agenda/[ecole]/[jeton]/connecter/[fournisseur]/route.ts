@@ -2,16 +2,16 @@ import { randomBytes } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import {
-  defiPkce,
-  FOURNISSEURS,
-  type Fournisseur,
-  identifiants,
-  signerEtat,
-  urlAutorisation,
+  pkceChallenge,
+  PROVIDERS,
+  type Provider,
+  credentials,
+  signState,
+  authorizationUrl,
 } from "@/connecteurs/agenda/oauth";
-import { avecEcole } from "@/db";
-import { intervenantDuJeton } from "@/db/agenda";
-import { COOKIE_OAUTH, pagePersonnelle, redirectionOAuth } from "@/lib/agenda-public";
+import { withSchool } from "@/db";
+import { tokenInstructor } from "@/db/agenda";
+import { COOKIE_OAUTH, personalPage, redirectionOAuth } from "@/lib/agenda-public";
 
 /**
  * Départ vers Google ou Microsoft depuis la page personnelle d'un intervenant.
@@ -20,31 +20,31 @@ import { COOKIE_OAUTH, pagePersonnelle, redirectionOAuth } from "@/lib/agenda-pu
  */
 export async function GET(_req: NextRequest, ctx: RouteContext<"/mon-agenda/[ecole]/[jeton]/connecter/[fournisseur]">) {
   const { ecole, jeton, fournisseur } = await ctx.params;
-  const introuvable = new Response("Lien introuvable ou révoqué.", { status: 404 });
-  if (!z.uuid().safeParse(ecole).success || !FOURNISSEURS.includes(fournisseur as Fournisseur)) return introuvable;
-  const f = fournisseur as Fournisseur;
-  const id = identifiants(f);
+  const notFound = new Response("Lien introuvable ou révoqué.", { status: 404 });
+  if (!z.uuid().safeParse(ecole).success || !PROVIDERS.includes(fournisseur as Provider)) return notFound;
+  const f = fournisseur as Provider;
+  const id = credentials(f);
   const secret = process.env.BETTER_AUTH_SECRET;
   if (!id || !secret) return new Response("Connexion à ce fournisseur non configurée.", { status: 503 });
 
-  const intervenant = await avecEcole(ecole, (tx) => intervenantDuJeton(tx, jeton));
-  if (!intervenant) return introuvable;
+  const instructor = await withSchool(ecole, (tx) => tokenInstructor(tx, jeton));
+  if (!instructor) return notFound;
 
-  const { verificateur, defi } = defiPkce();
+  const { verifier: verifier, challenge: challenge } = pkceChallenge();
   const nonce = randomBytes(16).toString("base64url");
-  const etat = signerEtat({ ecoleId: ecole, intervenantId: intervenant.id, fournisseur: f, nonce }, secret);
-  const reponse = Response.redirect(
-    urlAutorisation(f, id.identifiant, { redirection: redirectionOAuth(f), etat, defi }),
+  const state = signState({ schoolId: ecole, instructorId: instructor.id, provider: f, nonce }, secret);
+  const response = Response.redirect(
+    authorizationUrl(f, id.identifier, { redirection: redirectionOAuth(f), state, challenge: challenge }),
     302,
   );
-  const cookie = Buffer.from(JSON.stringify({ verificateur, nonce, retour: pagePersonnelle(ecole, jeton) })).toString(
+  const cookie = Buffer.from(JSON.stringify({ verifier: verifier, nonce, back: personalPage(ecole, jeton) })).toString(
     "base64url",
   );
-  const securise = redirectionOAuth(f).startsWith("https:") ? "; Secure" : "";
-  const entetes = new Headers(reponse.headers);
-  entetes.append(
+  const secured = redirectionOAuth(f).startsWith("https:") ? "; Secure" : "";
+  const requestHeaders = new Headers(response.headers);
+  requestHeaders.append(
     "Set-Cookie",
-    `${COOKIE_OAUTH}=${cookie}; Path=/api/agenda; HttpOnly; SameSite=Lax; Max-Age=600${securise}`,
+    `${COOKIE_OAUTH}=${cookie}; Path=/api/agenda; HttpOnly; SameSite=Lax; Max-Age=600${secured}`,
   );
-  return new Response(null, { status: 302, headers: entetes });
+  return new Response(null, { status: 302, headers: requestHeaders });
 }

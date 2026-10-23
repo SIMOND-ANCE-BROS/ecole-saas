@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { z } from "zod";
-import { FOURNISSEURS, identifiants, NOM_FOURNISSEUR } from "@/connecteurs/agenda/oauth";
-import { avecEcole } from "@/db";
-import { intervenantDuJeton } from "@/db/agenda";
-import { etatConnexion } from "@/db/connexions-agenda";
-import { adressePublique } from "@/lib/agenda-public";
-import { BoutonDeconnecter } from "./deconnecter";
+import { PROVIDERS, credentials, PROVIDER_NAME } from "@/connecteurs/agenda/oauth";
+import { withSchool } from "@/db";
+import { tokenInstructor } from "@/db/agenda";
+import { connectionState } from "@/db/connexions-agenda";
+import { publicAddress } from "@/lib/agenda-public";
+import { DisconnectButton } from "./deconnecter";
 
 export const metadata: Metadata = { title: "Mon agenda", robots: { index: false, follow: false } };
 
-const BANDEAUX: Record<string, { texte: string; erreur: boolean }> = {
-  connecte: { texte: "Agenda connecté : vos indisponibilités sont transmises à l’école.", erreur: false },
-  refuse: { texte: "Connexion annulée : rien n’a été transmis.", erreur: true },
-  erreur: { texte: "La connexion n’a pas abouti. Réessayez dans quelques minutes.", erreur: true },
+const BANNERS: Record<string, { texte: string; error: boolean }> = {
+  connecte: { texte: "Agenda connecté : vos indisponibilités sont transmises à l’école.", error: false },
+  refuse: { texte: "Connexion annulée : rien n’a été transmis.", error: true },
+  erreur: { texte: "La connexion n’a pas abouti. Réessayez dans quelques minutes.", error: true },
 };
-const dateHeure = new Intl.DateTimeFormat("fr-FR", {
+const dateTime = new Intl.DateTimeFormat("fr-FR", {
   day: "numeric",
   month: "long",
   hour: "2-digit",
@@ -27,31 +27,31 @@ const dateHeure = new Intl.DateTimeFormat("fr-FR", {
  * Page personnelle d'un intervenant, ouverte par son lien privé (sans compte) :
  * abonnement à ses séances et connexion de son agenda.
  */
-export default async function PageMonAgenda({ params, searchParams }: PageProps<"/mon-agenda/[ecole]/[jeton]">) {
-  const [{ ecole, jeton }, { agenda: statut }] = await Promise.all([params, searchParams]);
+export default async function MyCalendarPage({ params, searchParams }: PageProps<"/mon-agenda/[ecole]/[jeton]">) {
+  const [{ ecole, jeton }, { agenda: status }] = await Promise.all([params, searchParams]);
   if (!z.uuid().safeParse(ecole).success) notFound();
-  const donnees = await avecEcole(ecole, async (tx) => {
-    const i = await intervenantDuJeton(tx, jeton);
-    return i ? { intervenant: i, connexion: await etatConnexion(tx, i.id) } : null;
+  const donnees = await withSchool(ecole, async (tx) => {
+    const i = await tokenInstructor(tx, jeton);
+    return i ? { instructor: i, connection: await connectionState(tx, i.id) } : null;
   });
   if (!donnees) notFound();
-  const { intervenant, connexion } = donnees;
-  const ics = `${adressePublique()}/agenda/${ecole}/${jeton}.ics`;
-  const bandeau = typeof statut === "string" ? BANDEAUX[statut] : undefined;
-  const disponibles = FOURNISSEURS.filter((f) => identifiants(f));
+  const { instructor: instructor, connection: connection } = donnees;
+  const ics = `${publicAddress()}/agenda/${ecole}/${jeton}.ics`;
+  const bandeau = typeof status === "string" ? BANNERS[status] : undefined;
+  const available = PROVIDERS.filter((f) => credentials(f));
 
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-6 p-4 sm:p-8">
       <header>
-        <p className="text-sm text-doux">{intervenant.ecole}</p>
-        <h1 className="titre-page">Bonjour {intervenant.prenom}</h1>
+        <p className="text-sm text-doux">{instructor.school}</p>
+        <h1 className="titre-page">Bonjour {instructor.firstName}</h1>
         <p className="text-sm text-doux">Cette page vous est personnelle : ne partagez pas son adresse.</p>
       </header>
 
       {bandeau && (
         <p
-          role={bandeau.erreur ? "alert" : "status"}
-          className={`rounded-md px-3 py-2 text-sm ${bandeau.erreur ? "bg-alerte-fond text-alerte-texte" : "border border-accent bg-accent-doux"}`}
+          role={bandeau.error ? "alert" : "status"}
+          className={`rounded-md px-3 py-2 text-sm ${bandeau.error ? "bg-alerte-fond text-alerte-texte" : "border border-accent bg-accent-doux"}`}
         >
           {bandeau.texte}
         </p>
@@ -81,30 +81,30 @@ export default async function PageMonAgenda({ params, searchParams }: PageProps<
           Connectez votre agenda pour que l’école voie quand vous n’êtes pas disponible, sans rien d’autre : ni titre,
           ni lieu, ni participant. Cela évite qu’on vous propose un cours ou un remplacement à ces moments-là.
         </p>
-        {connexion ? (
+        {connection ? (
           <>
             <p className="font-medium">
-              Connecté à {NOM_FOURNISSEUR[connexion.fournisseur]}
-              {connexion.compte && ` (${connexion.compte})`}.
+              Connecté à {PROVIDER_NAME[connection.provider]}
+              {connection.account && ` (${connection.account})`}.
             </p>
-            {connexion.erreur ? (
-              <p className="text-alerte-texte">{connexion.erreur}</p>
+            {connection.error ? (
+              <p className="text-alerte-texte">{connection.error}</p>
             ) : (
-              connexion.derniereSynchro && (
-                <p className="text-doux">Dernière mise à jour le {dateHeure.format(connexion.derniereSynchro)}.</p>
+              connection.lastSyncedAt && (
+                <p className="text-doux">Dernière mise à jour le {dateTime.format(connection.lastSyncedAt)}.</p>
               )
             )}
-            <BoutonDeconnecter ecoleId={ecole} jeton={jeton} />
+            <DisconnectButton schoolId={ecole} token={jeton} />
           </>
-        ) : disponibles.length === 0 ? (
+        ) : available.length === 0 ? (
           <p className="text-doux">
             La connexion des agendas n’est pas encore ouverte. Prévenez l’école de vos absences.
           </p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {disponibles.map((f) => (
+            {available.map((f) => (
               <a key={f} href={`/mon-agenda/${ecole}/${jeton}/connecter/${f}`} className="bouton-secondaire">
-                Connecter {NOM_FOURNISSEUR[f]}
+                Connecter {PROVIDER_NAME[f]}
               </a>
             ))}
           </div>

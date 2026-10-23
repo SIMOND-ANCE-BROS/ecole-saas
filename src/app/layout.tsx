@@ -7,7 +7,7 @@ import "@mantine/notifications/styles.layer.css";
 import { ColorSchemeScript, mantineHtmlProps } from "@mantine/core";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Fournisseurs } from "./fournisseurs";
+import { Providers } from "./fournisseurs";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,7 +32,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <ColorSchemeScript defaultColorScheme="auto" />
       </head>
       <body className="min-h-full flex flex-col">
-        <Fournisseurs>{children}</Fournisseurs>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

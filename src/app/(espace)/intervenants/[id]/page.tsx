@@ -1,51 +1,56 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { avecEcole } from "@/db";
-import { etatAgenda } from "@/db/agenda";
-import { NOM_FOURNISSEUR } from "@/connecteurs/agenda/oauth";
-import { etatConnexion } from "@/db/connexions-agenda";
-import { listerIndisponibilites } from "@/db/disponibilites";
-import { lireIntervenant, MODES_REMUNERATION, REGIMES_TVA, STATUTS, UNITES_REMUNERATION } from "@/db/intervenants";
-import { formaterEuros } from "@/lib/montant";
-import { exigerRole } from "@/lib/session";
-import { AbonnementAgenda } from "./agenda";
-import { Indisponibilites } from "./indisponibilites";
+import { withSchool } from "@/db";
+import { calendarState } from "@/db/agenda";
+import { PROVIDER_NAME } from "@/connecteurs/agenda/oauth";
+import { connectionState } from "@/db/connexions-agenda";
+import { listUnavailabilities } from "@/db/disponibilites";
+import { readInstructor, PAY_MODES, VAT_REGIMES, STATUSES, PAY_UNITS } from "@/db/intervenants";
+import { formatEuros } from "@/lib/montant";
+import { requireRole } from "@/lib/session";
+import { CalendarSubscription } from "./agenda";
+import { Unavailabilities } from "./indisponibilites";
 
 export const metadata: Metadata = { title: "Intervenant" };
 
-export default async function PageIntervenant({ params }: PageProps<"/intervenants/[id]">) {
-  const { ecoleId } = await exigerRole("direction");
+export default async function InstructorPage({ params }: PageProps<"/intervenants/[id]">) {
+  const { schoolId: schoolId } = await requireRole("direction");
   const { id } = await params;
-  const donnees = await avecEcole(ecoleId, async (tx) => {
-    const i = await lireIntervenant(tx, id);
+  const donnees = await withSchool(schoolId, async (tx) => {
+    const i = await readInstructor(tx, id);
     return i
       ? {
-          intervenant: i,
-          agenda: await etatAgenda(tx, i.id),
-          connexion: await etatConnexion(tx, i.id),
-          indispos: await listerIndisponibilites(tx, i.id, new Date()),
+          instructor: i,
+          calendar: await calendarState(tx, i.id),
+          connection: await connectionState(tx, i.id),
+          unavailabilities: await listUnavailabilities(tx, i.id, new Date()),
         }
       : null;
   });
   if (!donnees) notFound();
-  const { intervenant, agenda, connexion, indispos } = donnees;
+  const {
+    instructor: instructor,
+    calendar: calendar,
+    connection: connection,
+    unavailabilities: unavailabilities,
+  } = donnees;
 
-  const nom = `${intervenant.prenom} ${intervenant.nom}`;
+  const name = `${instructor.firstName} ${instructor.name}`;
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
         <Link href="/intervenants" className="lien">
           Intervenants
         </Link>
-        <span className="text-doux"> / {nom}</span>
+        <span className="text-doux"> / {name}</span>
       </nav>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="titre-page">{nom}</h1>
+          <h1 className="titre-page">{name}</h1>
           <p className="text-sm text-doux">
-            {intervenant.actif ? "Actif" : "Inactif"}
-            {intervenant.estDirigeant && ", dirigeant de l’école"}
+            {instructor.active ? "Actif" : "Inactif"}
+            {instructor.isOwner && ", dirigeant de l’école"}
           </p>
         </div>
         <Link href={`/intervenants/${id}/modifier`} className="bouton-secondaire">
@@ -60,54 +65,58 @@ export default async function PageIntervenant({ params }: PageProps<"/intervenan
           <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 text-sm">
             <dt className="text-doux">E-mail</dt>
             <dd className="break-all">
-              {intervenant.email ? (
-                <a className="lien" href={`mailto:${intervenant.email}`}>
-                  {intervenant.email}
+              {instructor.email ? (
+                <a className="lien" href={`mailto:${instructor.email}`}>
+                  {instructor.email}
                 </a>
               ) : (
                 "Non renseigné"
               )}
             </dd>
             <dt className="text-doux">Statut</dt>
-            <dd>{STATUTS[intervenant.statut]}</dd>
-            {intervenant.statut !== "salarie" && (
+            <dd>{STATUSES[instructor.status]}</dd>
+            {instructor.status !== "salarie" && (
               <>
                 <dt className="text-doux">SIREN</dt>
-                <dd>{intervenant.siren || "Non renseigné"}</dd>
+                <dd>{instructor.siren || "Non renseigné"}</dd>
               </>
             )}
             <dt className="text-doux">TVA</dt>
-            <dd>{REGIMES_TVA[intervenant.regimeTva]}</dd>
+            <dd>{VAT_REGIMES[instructor.vatRegime]}</dd>
           </dl>
         </section>
         <section className="panneau p-4" aria-labelledby="remuneration">
           <h2 id="remuneration" className="mb-3 font-semibold">
             Rémunération
           </h2>
-          <p className="text-sm">{MODES_REMUNERATION[intervenant.modeRemuneration]}</p>
+          <p className="text-sm">{PAY_MODES[instructor.payMode]}</p>
           <p className="mt-2 text-xl font-semibold tabular-nums">
-            {formaterEuros(intervenant.tarifCentimes)}{" "}
-            <span className="text-sm font-normal text-doux">/ {UNITES_REMUNERATION[intervenant.modeRemuneration]}</span>
+            {formatEuros(instructor.rateCents)}{" "}
+            <span className="text-sm font-normal text-doux">/ {PAY_UNITS[instructor.payMode]}</span>
           </p>
           <p className="mt-2 text-xs text-doux">Tarif de référence. Ce montant n’est pas un relevé à payer.</p>
         </section>
       </div>
-      <Indisponibilites
-        intervenantId={intervenant.id}
-        prenom={intervenant.prenom}
-        indispos={indispos.map((i) => ({ ...i, debut: i.debut.toISOString(), fin: i.fin.toISOString() }))}
+      <Unavailabilities
+        instructorId={instructor.id}
+        firstName={instructor.firstName}
+        unavailabilities={unavailabilities.map((i) => ({
+          ...i,
+          start: i.start.toISOString(),
+          end: i.end.toISOString(),
+        }))}
       />
-      <AbonnementAgenda
-        intervenantId={intervenant.id}
-        prenom={intervenant.prenom}
-        actifDepuis={agenda?.toISOString() ?? null}
-        connexion={
-          connexion
+      <CalendarSubscription
+        instructorId={instructor.id}
+        firstName={instructor.firstName}
+        activeSince={calendar?.toISOString() ?? null}
+        connection={
+          connection
             ? {
-                fournisseur: NOM_FOURNISSEUR[connexion.fournisseur],
-                compte: connexion.compte,
-                derniereSynchro: connexion.derniereSynchro?.toISOString() ?? null,
-                erreur: connexion.erreur,
+                provider: PROVIDER_NAME[connection.provider],
+                account: connection.account,
+                lastSyncedAt: connection.lastSyncedAt?.toISOString() ?? null,
+                error: connection.error,
               }
             : null
         }

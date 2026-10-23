@@ -1,38 +1,38 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { avecEcole } from "@/db";
-import { MOYENS, type Moyen } from "@/db/paiements";
-import { journalEncaissements, listerRemises, paiementsARemettre } from "@/db/remises";
-import { MOYENS_REMISE, totaux } from "@/domaine/encaissement/remises";
-import { dateValide } from "@/domaine/planning/semaine";
-import { aujourdhuiAParis } from "@/domaine/personnes/age";
-import { formaterEuros } from "@/lib/montant";
-import { exigerRole } from "@/lib/session";
-import { ARemettre } from "./a-remettre";
+import { withSchool } from "@/db";
+import { MOYENS, type Method } from "@/db/paiements";
+import { paymentLog, listDeposits, paymentsToDeposit } from "@/db/remises";
+import { DEPOSIT_METHODS, totals } from "@/domaine/encaissement/remises";
+import { validDate } from "@/domaine/planning/semaine";
+import { todayInParis } from "@/domaine/personnes/age";
+import { formatEuros } from "@/lib/montant";
+import { requireRole } from "@/lib/session";
+import { ToDeposit } from "./a-remettre";
 
 export const metadata: Metadata = { title: "Encaissements" };
 
 const VUES = { journal: "Journal", remettre: "À remettre", remises: "Remises" } as const;
-type Vue = keyof typeof VUES;
-const jour = (iso: string) => iso.split("-").reverse().join("/");
+type View = keyof typeof VUES;
+const day = (iso: string) => iso.split("-").reverse().join("/");
 
 /** Encaissements (#98) : journal par période, paiements à remettre en banque, remises et bordereaux. */
-export default async function PageEncaissements({ searchParams }: PageProps<"/encaissements">) {
-  const { ecoleId } = await exigerRole("direction", "accueil");
+export default async function PaymentsPage({ searchParams }: PageProps<"/encaissements">) {
+  const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const p = await searchParams;
-  const vue: Vue = typeof p.vue === "string" && p.vue in VUES ? (p.vue as Vue) : "journal";
-  const aujourdhui = aujourdhuiAParis();
-  const du = dateValide(p.du) ?? `${aujourdhui.slice(0, 8)}01`;
-  const au = dateValide(p.au) ?? aujourdhui;
-  const moyen = typeof p.moyen === "string" && p.moyen in MOYENS ? (p.moyen as Moyen) : null;
+  const view: View = typeof p.vue === "string" && p.vue in VUES ? (p.vue as View) : "journal";
+  const today = todayInParis();
+  const du = validDate(p.du) ?? `${today.slice(0, 8)}01`;
+  const au = validDate(p.au) ?? today;
+  const method = typeof p.moyen === "string" && p.moyen in MOYENS ? (p.moyen as Method) : null;
 
-  const donnees = await avecEcole(ecoleId, async (tx) => ({
-    journal: vue === "journal" ? await journalEncaissements(tx, du, au, moyen) : [],
-    aRemettre: vue === "remettre" ? await paiementsARemettre(tx, aujourdhui) : null,
-    remises: vue === "remises" ? await listerRemises(tx) : [],
+  const donnees = await withSchool(schoolId, async (tx) => ({
+    journal: view === "journal" ? await paymentLog(tx, du, au, method) : [],
+    toDeposit: view === "remettre" ? await paymentsToDeposit(tx, today) : null,
+    remises: view === "remises" ? await listDeposits(tx) : [],
   }));
-  const t = totaux(donnees.journal);
-  const exporter = `/encaissements/export?${new URLSearchParams({ du, au, ...(moyen ? { moyen } : {}) })}`;
+  const t = totals(donnees.journal);
+  const exportUrl = `/encaissements/export?${new URLSearchParams({ du, au, ...(method ? { moyen: method } : {}) })}`;
 
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
@@ -43,19 +43,19 @@ export default async function PageEncaissements({ searchParams }: PageProps<"/en
         </p>
       )}
       <nav aria-label="Vues" className="flex overflow-hidden self-start rounded-md border border-bordure text-sm">
-        {(Object.keys(VUES) as Vue[]).map((v) => (
+        {(Object.keys(VUES) as View[]).map((v) => (
           <Link
             key={v}
             href={`/encaissements?vue=${v}`}
-            aria-current={vue === v ? "page" : undefined}
-            className={`px-3 py-1.5 ${vue === v ? "bg-accent text-sur-accent" : "hover:bg-accent-doux"}`}
+            aria-current={view === v ? "page" : undefined}
+            className={`px-3 py-1.5 ${view === v ? "bg-accent text-sur-accent" : "hover:bg-accent-doux"}`}
           >
             {VUES[v]}
           </Link>
         ))}
       </nav>
 
-      {vue === "journal" && (
+      {view === "journal" && (
         <>
           <form className="panneau flex flex-wrap items-end gap-3 p-3 text-sm" role="search">
             <input type="hidden" name="vue" value="journal" />
@@ -75,7 +75,7 @@ export default async function PageEncaissements({ searchParams }: PageProps<"/en
               <label htmlFor="moyen" className="text-xs text-doux">
                 Moyen
               </label>
-              <select id="moyen" name="moyen" className="champ" defaultValue={moyen ?? ""}>
+              <select id="moyen" name="moyen" className="champ" defaultValue={method ?? ""}>
                 <option value="">Tous</option>
                 {Object.entries(MOYENS).map(([k, v]) => (
                   <option key={k} value={k}>
@@ -87,19 +87,19 @@ export default async function PageEncaissements({ searchParams }: PageProps<"/en
             <button type="submit" className="bouton-secondaire">
               Afficher
             </button>
-            <a href={exporter} className="lien ml-auto pb-1.5">
+            <a href={exportUrl} className="lien ml-auto pb-1.5">
               Exporter (CSV)
             </a>
           </form>
           <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
             <div>
               <dt className="inline text-doux">Total : </dt>
-              <dd className="inline font-semibold tabular-nums">{formaterEuros(t.total)}</dd>
+              <dd className="inline font-semibold tabular-nums">{formatEuros(t.total)}</dd>
             </div>
-            {Object.entries(t.parMoyen).map(([m, c]) => (
+            {Object.entries(t.byMethod).map(([m, c]) => (
               <div key={m}>
-                <dt className="inline text-doux">{MOYENS[m as Moyen]} : </dt>
-                <dd className="inline tabular-nums">{formaterEuros(c)}</dd>
+                <dt className="inline text-doux">{MOYENS[m as Method]} : </dt>
+                <dd className="inline tabular-nums">{formatEuros(c)}</dd>
               </div>
             ))}
           </dl>
@@ -109,7 +109,7 @@ export default async function PageEncaissements({ searchParams }: PageProps<"/en
             <div className="panneau overflow-x-auto">
               <table className="tableau">
                 <caption className="sr-only">
-                  Encaissements du {jour(du)} au {jour(au)}
+                  Encaissements du {day(du)} au {day(au)}
                 </caption>
                 <thead>
                   <tr>
@@ -124,25 +124,23 @@ export default async function PageEncaissements({ searchParams }: PageProps<"/en
                 </thead>
                 <tbody>
                   {donnees.journal.map((l) => (
-                    <tr key={l.id} className={l.montantCentimes < 0 ? "text-doux" : ""}>
-                      <td className="whitespace-nowrap">{jour(l.date)}</td>
+                    <tr key={l.id} className={l.amountCents < 0 ? "text-doux" : ""}>
+                      <td className="whitespace-nowrap">{day(l.date)}</td>
                       <td>
-                        <Link href={`/personnes/${l.payeurId}`} className="lien">
-                          {l.payeur}
+                        <Link href={`/personnes/${l.payerId}`} className="lien">
+                          {l.payer}
                         </Link>
                       </td>
-                      <td>{MOYENS[l.moyen]}</td>
-                      <td>{[l.reference, l.emetteur].filter(Boolean).join(", ") || "—"}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formaterEuros(l.montantCentimes)}</td>
+                      <td>{MOYENS[l.method]}</td>
+                      <td>{[l.reference, l.issuer].filter(Boolean).join(", ") || "—"}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatEuros(l.amountCents)}</td>
                       <td className="whitespace-nowrap">
-                        {l.encaissementPrevu && l.encaissementPrevu > aujourdhui
-                          ? `le ${jour(l.encaissementPrevu)}`
-                          : "—"}
+                        {l.plannedPayment && l.plannedPayment > today ? `le ${day(l.plannedPayment)}` : "—"}
                       </td>
                       <td className="whitespace-nowrap">
-                        {l.remiseId ? (
-                          <Link href={`/encaissements/remises/${l.remiseId}`} className="lien">
-                            {jour(l.remiseDate as string)}
+                        {l.depositId ? (
+                          <Link href={`/encaissements/remises/${l.depositId}`} className="lien">
+                            {day(l.dateDeposit as string)}
                           </Link>
                         ) : (
                           "—"
@@ -157,21 +155,21 @@ export default async function PageEncaissements({ searchParams }: PageProps<"/en
         </>
       )}
 
-      {vue === "remettre" && donnees.aRemettre && (
+      {view === "remettre" && donnees.toDeposit && (
         <>
           <p className="text-sm text-doux">
             Chèques dont la date d’encaissement est arrivée, espèces et chèques vacances pas encore déposés.
           </p>
-          {MOYENS_REMISE.every((m) => donnees.aRemettre![m].length === 0) && (
+          {DEPOSIT_METHODS.every((m) => donnees.toDeposit![m].length === 0) && (
             <p className="text-sm">Rien à remettre pour l’instant.</p>
           )}
-          {MOYENS_REMISE.filter((m) => donnees.aRemettre![m].length > 0).map((m) => (
-            <ARemettre key={m} moyen={m} paiements={donnees.aRemettre![m]} aujourdhui={aujourdhui} />
+          {DEPOSIT_METHODS.filter((m) => donnees.toDeposit![m].length > 0).map((m) => (
+            <ToDeposit key={m} method={m} payments={donnees.toDeposit![m]} today={today} />
           ))}
         </>
       )}
 
-      {vue === "remises" &&
+      {view === "remises" &&
         (donnees.remises.length === 0 ? (
           <p className="text-sm text-doux">Aucune remise pour l’instant.</p>
         ) : (
@@ -191,12 +189,12 @@ export default async function PageEncaissements({ searchParams }: PageProps<"/en
                   <tr key={r.id}>
                     <td>
                       <Link href={`/encaissements/remises/${r.id}`} className="lien">
-                        {jour(r.date)}
+                        {day(r.date)}
                       </Link>
                     </td>
-                    <td>{MOYENS[r.moyen]}</td>
+                    <td>{MOYENS[r.method]}</td>
                     <td className="text-right tabular-nums">{r.nombre}</td>
-                    <td className="text-right tabular-nums">{formaterEuros(r.totalCentimes)}</td>
+                    <td className="text-right tabular-nums">{formatEuros(r.totalCents)}</td>
                   </tr>
                 ))}
               </tbody>

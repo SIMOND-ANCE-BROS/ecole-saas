@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { avecEcole } from "@/db";
-import { lireIntervenant } from "@/db/intervenants";
-import { exigerRole } from "@/lib/session";
-import { FormulaireIntervenant } from "../../formulaire";
+import { withSchool } from "@/db";
+import { readInstructor } from "@/db/intervenants";
+import { requireRole } from "@/lib/session";
+import { InstructorForm } from "../../formulaire";
 
 export const metadata: Metadata = { title: "Modifier un intervenant" };
 
-export default async function ModifierIntervenant({ params }: PageProps<"/intervenants/[id]/modifier">) {
-  const { ecoleId } = await exigerRole("direction");
+export default async function UpdateInstructor({ params }: PageProps<"/intervenants/[id]/modifier">) {
+  const { schoolId: schoolId } = await requireRole("direction");
   const { id } = await params;
-  const intervenant = await avecEcole(ecoleId, (tx) => lireIntervenant(tx, id));
-  if (!intervenant) notFound();
-  const nom = `${intervenant.prenom} ${intervenant.nom}`;
+  const instructor = await withSchool(schoolId, (tx) => readInstructor(tx, id));
+  if (!instructor) notFound();
+  const name = `${instructor.firstName} ${instructor.name}`;
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
@@ -22,12 +22,12 @@ export default async function ModifierIntervenant({ params }: PageProps<"/interv
         </Link>
         <span> / </span>
         <Link className="lien" href={`/intervenants/${id}`}>
-          {nom}
+          {name}
         </Link>
         <span className="text-doux"> / Modifier</span>
       </nav>
-      <h1 className="titre-page">Modifier {nom}</h1>
-      <FormulaireIntervenant intervenant={intervenant} />
+      <h1 className="titre-page">Modifier {name}</h1>
+      <InstructorForm instructor={instructor} />
     </section>
   );
 }

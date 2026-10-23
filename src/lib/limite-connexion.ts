@@ -12,14 +12,14 @@ import { loginAttempt } from "../db/schema";
  * Chaque tentative est enregistrée AVANT d'être comptée (pas de course entre
  * requêtes simultanées). Stockage en base, clés HMAC : rien en clair.
  */
-export const LIMITES = { parPaire: 5, parEmail: 20, parIp: 30, fenetreMinutes: 15 } as const;
+export const LIMITES = { byPair: 5, byEmail: 20, byIp: 30, windowMinutes: 15 } as const;
 
-type TypeCle = "email" | "paire" | "ip";
+type KeyType = "email" | "paire" | "ip";
 
-export function cleDeTentative(type: TypeCle, valeur: string): string {
+export function attemptKey(type: KeyType, value: string): string {
   const secret = process.env.BETTER_AUTH_SECRET;
   if (!secret) throw new Error("BETTER_AUTH_SECRET manquant");
-  return createHmac("sha256", secret).update(`${type}:${valeur.trim().toLowerCase()}`).digest("hex");
+  return createHmac("sha256", secret).update(`${type}:${value.trim().toLowerCase()}`).digest("hex");
 }
 
 /**
@@ -28,17 +28,17 @@ export function cleDeTentative(type: TypeCle, valeur: string): string {
  * (x-forwarded-for…) est falsifiable. Sans configuration : null, et la limite
  * par IP ne s'applique pas.
  */
-export function ipDeConfiance(entetes: Headers, enTete = process.env.IP_CLIENT_EN_TETE): string | null {
-  if (!enTete) return null;
-  return entetes.get(enTete)?.trim() || null;
+export function trustedIp(requestHeaders: Headers, headerName = process.env.IP_CLIENT_EN_TETE): string | null {
+  if (!headerName) return null;
+  return requestHeaders.get(headerName)?.trim() || null;
 }
 
-function cles(email: string, ip: string | null) {
-  const limites: { cle: string; max: number }[] = [
-    { cle: cleDeTentative("paire", `${email}|${ip ?? ""}`), max: LIMITES.parPaire },
-    { cle: cleDeTentative("email", email), max: LIMITES.parEmail },
+function keys(email: string, ip: string | null) {
+  const limites: { key: string; max: number }[] = [
+    { key: attemptKey("paire", `${email}|${ip ?? ""}`), max: LIMITES.byPair },
+    { key: attemptKey("email", email), max: LIMITES.byEmail },
   ];
-  if (ip) limites.push({ cle: cleDeTentative("ip", ip), max: LIMITES.parIp });
+  if (ip) limites.push({ key: attemptKey("ip", ip), max: LIMITES.byIp });
   return limites;
 }
 
@@ -48,41 +48,41 @@ function cles(email: string, ip: string | null) {
  * mot de passe ; la tentative refusée est alors retirée, pour que s'acharner
  * ne prolonge pas le blocage (il expire après la dernière tentative acceptée).
  */
-export async function enregistrerTentative(email: string, ip: string | null): Promise<boolean> {
-  const limites = cles(email, ip);
-  const inserees = await db
+export async function recordAttempt(email: string, ip: string | null): Promise<boolean> {
+  const limites = keys(email, ip);
+  const inserted = await db
     .insert(loginAttempt)
-    .values(limites.map(({ cle }) => ({ key: cle })))
+    .values(limites.map(({ key: key }) => ({ key: key })))
     .returning({ id: loginAttempt.id });
-  const comptes = await db
-    .select({ cle: loginAttempt.key, n: count() })
+  const accounts = await db
+    .select({ key: loginAttempt.key, n: count() })
     .from(loginAttempt)
     .where(
       and(
         inArray(
           loginAttempt.key,
-          limites.map((l) => l.cle),
+          limites.map((l) => l.key),
         ),
-        gt(loginAttempt.at, sql`now() - make_interval(mins => ${LIMITES.fenetreMinutes})`),
+        gt(loginAttempt.at, sql`now() - make_interval(mins => ${LIMITES.windowMinutes})`),
       ),
     )
     .groupBy(loginAttempt.key);
   // Purge au fil de l'eau : rien n'est gardé au-delà d'une journée.
   await db.delete(loginAttempt).where(lt(loginAttempt.at, sql`now() - interval '1 day'`));
-  const autorisee = limites.every(({ cle, max }) => (comptes.find((c) => c.cle === cle)?.n ?? 0) <= max);
-  if (!autorisee) {
+  const allowed = limites.every(({ key: key, max }) => (accounts.find((c) => c.key === key)?.n ?? 0) <= max);
+  if (!allowed) {
     await db.delete(loginAttempt).where(
       inArray(
         loginAttempt.id,
-        inserees.map((l) => l.id),
+        inserted.map((l) => l.id),
       ),
     );
   }
-  return autorisee;
+  return allowed;
 }
 
 /** Après une connexion réussie : l'adresse et la paire repartent de zéro (pas l'IP). */
-export async function effacerTentatives(email: string, ip: string | null): Promise<void> {
-  const [paire, adresse] = cles(email, ip);
-  await db.delete(loginAttempt).where(inArray(loginAttempt.key, [paire.cle, adresse.cle]));
+export async function clearAttempts(email: string, ip: string | null): Promise<void> {
+  const [pair, address] = keys(email, ip);
+  await db.delete(loginAttempt).where(inArray(loginAttempt.key, [pair.key, address.key]));
 }

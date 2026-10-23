@@ -9,7 +9,7 @@
  * l'application, sous sa propre RLS. Aucune donnée personnelle dans la sortie.
  */
 import postgres from "postgres";
-import { synchroniserEcole } from "../src/lib/synchro-agenda";
+import { syncSchool } from "../src/lib/synchro-agenda";
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante");
@@ -17,14 +17,14 @@ const admin = postgres(url, { max: 1, onnotice: () => {} });
 
 async function principal() {
   const ecoles = await admin`SELECT DISTINCT school_id AS id FROM calendar_connection`;
-  let reussies = 0;
-  let echouees = 0;
+  let succeeded = 0;
+  let failed = 0;
   for (const { id } of ecoles) {
-    const r = await synchroniserEcole(id);
-    reussies += r.reussies;
-    echouees += r.echouees;
+    const r = await syncSchool(id);
+    succeeded += r.succeeded;
+    failed += r.failed;
   }
-  console.log(`Agendas synchronisés : ${reussies} ; en échec : ${echouees} (écoles : ${ecoles.length}).`);
+  console.log(`Agendas synchronisés : ${succeeded} ; en échec : ${failed} (écoles : ${ecoles.length}).`);
 }
 
 // The application pool (src/db) keeps the process alive: exit explicitly.

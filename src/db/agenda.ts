@@ -1,9 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, asc, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod";
-import type { SeanceAgenda } from "../domaine/planning/ical";
+import type { CalendarLesson } from "../domaine/planning/ical";
 import type { Tx } from "./index";
-import { dureeEffective, heureEffective } from "./seances";
+import { effectiveDuration, effectiveTime } from "./seances";
 import { course, discipline, school, instructor, room, lesson, site } from "./schema";
 
 /**
@@ -13,52 +13,52 @@ import { course, discipline, school, instructor, room, lesson, site } from "./sc
  * jeton en est le secret.
  */
 
-const empreinte = (jeton: string) => createHash("sha256").update(jeton).digest("hex");
+const hash = (token: string) => createHash("sha256").update(token).digest("hex");
 
 /** Crée (ou remplace) le jeton ; l'ancien lien cesse aussitôt de fonctionner. null si l'intervenant n'existe pas. */
-export async function creerJetonAgenda(tx: Tx, intervenantId: string): Promise<string | null> {
-  if (!z.uuid().safeParse(intervenantId).success) return null;
-  const jeton = randomBytes(32).toString("base64url");
-  const lignes = await tx
+export async function createCalendarToken(tx: Tx, instructorId: string): Promise<string | null> {
+  if (!z.uuid().safeParse(instructorId).success) return null;
+  const token = randomBytes(32).toString("base64url");
+  const rows = await tx
     .update(instructor)
-    .set({ calendarTokenHash: empreinte(jeton), calendarTokenCreatedAt: sql`now()` })
-    .where(eq(instructor.id, intervenantId))
+    .set({ calendarTokenHash: hash(token), calendarTokenCreatedAt: sql`now()` })
+    .where(eq(instructor.id, instructorId))
     .returning({ id: instructor.id });
-  return lignes.length === 1 ? jeton : null;
+  return rows.length === 1 ? token : null;
 }
 
-export async function revoquerJetonAgenda(tx: Tx, intervenantId: string): Promise<boolean> {
-  if (!z.uuid().safeParse(intervenantId).success) return false;
-  const lignes = await tx
+export async function revokeCalendarToken(tx: Tx, instructorId: string): Promise<boolean> {
+  if (!z.uuid().safeParse(instructorId).success) return false;
+  const rows = await tx
     .update(instructor)
     .set({ calendarTokenHash: null, calendarTokenCreatedAt: null })
-    .where(eq(instructor.id, intervenantId))
+    .where(eq(instructor.id, instructorId))
     .returning({ id: instructor.id });
-  return lignes.length === 1;
+  return rows.length === 1;
 }
 
 /** Date de création du lien en cours, ou null s'il n'y en a pas. */
-export async function etatAgenda(tx: Tx, intervenantId: string): Promise<Date | null> {
-  if (!z.uuid().safeParse(intervenantId).success) return null;
+export async function calendarState(tx: Tx, instructorId: string): Promise<Date | null> {
+  if (!z.uuid().safeParse(instructorId).success) return null;
   const [i] = await tx
-    .select({ creeLe: instructor.calendarTokenCreatedAt })
+    .select({ createdAt: instructor.calendarTokenCreatedAt })
     .from(instructor)
-    .where(eq(instructor.id, intervenantId));
-  return i?.creeLe ?? null;
+    .where(eq(instructor.id, instructorId));
+  return i?.createdAt ?? null;
 }
 
 /** Intervenant actif au jeton donné (page personnelle de l'intervenant) ; null sinon. */
-export async function intervenantDuJeton(
+export async function tokenInstructor(
   tx: Tx,
-  jeton: string,
-): Promise<{ id: string; prenom: string; ecole: string } | null> {
-  if (!/^[A-Za-z0-9_-]{43}$/.test(jeton)) return null;
+  token: string,
+): Promise<{ id: string; firstName: string; school: string } | null> {
+  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
   const [i] = await tx
-    .select({ id: instructor.id, prenom: instructor.firstName, ecole: school.name })
+    .select({ id: instructor.id, firstName: instructor.firstName, school: school.name })
     .from(instructor)
     .innerJoin(school, eq(school.id, instructor.schoolId))
     // Un intervenant parti (inactif) ne reçoit plus rien, même avec un ancien lien.
-    .where(and(eq(instructor.calendarTokenHash, empreinte(jeton)), eq(instructor.active, true)));
+    .where(and(eq(instructor.calendarTokenHash, hash(token)), eq(instructor.active, true)));
   return i ?? null;
 }
 
@@ -67,45 +67,45 @@ export async function intervenantDuJeton(
  * remplacements ; null si le jeton est inconnu ou révoqué. Aucune donnée
  * d'élève : titre du cours et lieu seulement.
  */
-export async function lireAgenda(
+export async function readCalendar(
   tx: Tx,
-  jeton: string,
-  depuis: string,
-): Promise<{ nom: string; seances: SeanceAgenda[] } | null> {
-  const i = await intervenantDuJeton(tx, jeton);
+  token: string,
+  since: string,
+): Promise<{ name: string; lessons: CalendarLesson[] } | null> {
+  const i = await tokenInstructor(tx, token);
   if (!i) return null;
 
-  const lignes = await tx
+  const rows = await tx
     .select({
       id: lesson.id,
       date: lesson.date,
-      statut: lesson.status,
-      heureDebut: heureEffective,
-      dureeMinutes: dureeEffective,
+      status: lesson.status,
+      startTime: effectiveTime,
+      durationMinutes: effectiveDuration,
       discipline: discipline.name,
-      niveau: course.level,
-      salle: room.name,
+      level: course.level,
+      room: room.name,
       site: site.name,
-      adresse: site.address,
+      address: site.address,
     })
     .from(lesson)
     .innerJoin(course, eq(course.id, lesson.courseId))
     .innerJoin(discipline, eq(discipline.id, course.disciplineId))
     .innerJoin(room, eq(room.id, course.roomId))
     .innerJoin(site, eq(site.id, room.siteId))
-    .where(and(eq(lesson.instructorId, i.id), gte(lesson.date, depuis)))
-    .orderBy(asc(lesson.date), heureEffective);
+    .where(and(eq(lesson.instructorId, i.id), gte(lesson.date, since)))
+    .orderBy(asc(lesson.date), effectiveTime);
 
   return {
-    nom: `Cours de ${i.prenom}, ${i.ecole}`,
-    seances: lignes.map((l) => ({
+    name: `Cours de ${i.firstName}, ${i.school}`,
+    lessons: rows.map((l) => ({
       id: l.id,
       date: l.date,
-      heureDebut: l.heureDebut.slice(0, 5),
-      dureeMinutes: l.dureeMinutes,
-      titre: l.niveau ? `${l.discipline} ${l.niveau}` : l.discipline,
-      lieu: `${l.salle}, ${l.site}, ${l.adresse}`,
-      annulee: l.statut === "annulee",
+      startTime: l.startTime.slice(0, 5),
+      durationMinutes: l.durationMinutes,
+      title: l.level ? `${l.discipline} ${l.level}` : l.discipline,
+      place: `${l.room}, ${l.site}, ${l.address}`,
+      annulee: l.status === "annulee",
     })),
   };
 }

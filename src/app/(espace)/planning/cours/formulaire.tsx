@@ -2,17 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { type CoursEdite, RECURRENCES, type ReferentielPlanning, TYPES_COURS } from "@/db/cours";
-import type { CoursPlanning } from "@/db/planning";
-import { conflits } from "@/domaine/planning/chevauchement";
-import { horsHoraires } from "@/domaine/planning/horaires";
-import { enregistrerCours, type Refus, supprimer, verifierCreneau } from "./actions";
-import { Annuler } from "@/app/(espace)/_panneau/panneau";
+import { type EditedCourse, RECURRENCES, type ScheduleReferential, COURSE_TYPES } from "@/db/cours";
+import type { ScheduleCourse } from "@/db/planning";
+import { conflicts } from "@/domaine/planning/chevauchement";
+import { outsideHours } from "@/domaine/planning/horaires";
+import { saveCourse, type Refusal, remove, checkSlot } from "./actions";
+import { Cancel } from "@/app/(espace)/_panneau/panneau";
 
-const JOURS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const DUREES = [45, 60, 90, 120];
-const NOUVELLE = "nouvelle";
-const dateCourte = new Intl.DateTimeFormat("fr-FR", {
+const NEW = "nouvelle";
+const shortDate = new Intl.DateTimeFormat("fr-FR", {
   weekday: "short",
   day: "numeric",
   month: "short",
@@ -20,158 +20,167 @@ const dateCourte = new Intl.DateTimeFormat("fr-FR", {
 });
 
 type Props = {
-  cours: CoursEdite | null;
-  referentiel: ReferentielPlanning;
-  planning: CoursPlanning[];
+  course: EditedCourse | null;
+  referential: ScheduleReferential;
+  schedule: ScheduleCourse[];
   /** Jour proposé pour un nouveau cours (lien « + » d'une colonne du planning). */
-  jour?: number;
+  day?: number;
   /** Créneau proposé depuis la vue agenda. */
   heure?: string;
-  duree?: number;
+  duration?: number;
   /** Date cliquée dans le planning daté : première date si l'on choisit « à des dates précises ». */
   date?: string;
 };
 
-const entier = (v: string) => (v.trim() === "" ? null : Number(v));
+const whole = (v: string) => (v.trim() === "" ? null : Number(v));
 
-export function FormulaireCours({ cours, referentiel, planning, jour, heure, duree, date }: Props) {
-  const r = referentiel;
+export function CourseForm({
+  course: cours,
+  referential: referential,
+  schedule: schedule,
+  day: day,
+  heure,
+  duration: duration,
+  date,
+}: Props) {
+  const r = referential;
   const [v, setV] = useState({
     discipline: cours?.discipline ?? "",
-    salleId: cours?.salleId ?? r.salles[0]?.id ?? NOUVELLE,
-    nouvelleSalle: "",
-    capaciteSalle: "",
-    siteId: r.sites[0]?.id ?? NOUVELLE,
-    nouveauSite: "",
-    adresseSite: "",
-    intervenantId: cours?.intervenantId ?? r.intervenants[0]?.id ?? "",
+    roomId: cours?.roomId ?? r.salles[0]?.id ?? NEW,
+    newRoom: "",
+    roomCapacity: "",
+    siteId: r.sites[0]?.id ?? NEW,
+    newSite: "",
+    siteAddress: "",
+    instructorId: cours?.instructorId ?? r.instructors[0]?.id ?? "",
     type: cours?.type ?? "collectif",
     recurrence: cours?.recurrence ?? "hebdomadaire",
-    dateDebut: cours?.dateDebut ?? "",
-    dateFin: cours?.dateFin ?? "",
-    jourSemaine: String(cours?.jourSemaine ?? jour ?? 1),
-    heureDebut: cours?.heureDebut ?? heure ?? "17:00",
-    dureeMinutes: String(cours?.dureeMinutes ?? duree ?? 60),
+    startDate: cours?.startDate ?? "",
+    endDate: cours?.endDate ?? "",
+    weekday: String(cours?.weekday ?? day ?? 1),
+    startTime: cours?.startTime ?? heure ?? "17:00",
+    durationMinutes: String(cours?.durationMinutes ?? duration ?? 60),
     ageMin: cours?.ageMin?.toString() ?? "",
     ageMax: cours?.ageMax?.toString() ?? "",
-    niveau: cours?.niveau ?? "",
-    capaciteMax: cours?.capaciteMax?.toString() ?? "",
+    level: cours?.level ?? "",
+    maxCapacity: cours?.maxCapacity?.toString() ?? "",
   });
   // Dates d'un cours ponctuel ; une ligne vide pour commencer.
   const [dates, setDates] = useState<string[]>(cours?.dates.length ? cours.dates : [date ?? ""]);
-  const [refus, setRefus] = useState<Refus | null>(null);
-  const [envoi, demarrer] = useTransition();
-  const formulaire = useRef<HTMLFormElement>(null);
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
+  const [sending, startTransition] = useTransition();
+  const form = useRef<HTMLFormElement>(null);
   useEffect(() => {
-    if (refus) formulaire.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
-  }, [refus]);
-  const [confirmerSuppression, setConfirmer] = useState(false);
-  const maj = (champ: keyof typeof v) => (e: { target: { value: string } }) => setV({ ...v, [champ]: e.target.value });
+    if (refusal) form.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
+  }, [refusal]);
+  const [confirmDeletion, setConfirm] = useState(false);
+  const updated = (field: keyof typeof v) => (e: { target: { value: string } }) =>
+    setV({ ...v, [field]: e.target.value });
 
-  const ponctuel = v.recurrence === "dates";
-  const salleChoisie = r.salles.find((s) => s.id === v.salleId);
-  const disciplineExistante = r.disciplines.find((d) => d.nom.toLowerCase() === v.discipline.trim().toLowerCase());
+  const oneOff = v.recurrence === "dates";
+  const chosenRoom = r.salles.find((s) => s.id === v.roomId);
+  const existingDiscipline = r.disciplines.find((d) => d.name.toLowerCase() === v.discipline.trim().toLowerCase());
 
   const saisie = {
-    discipline: disciplineExistante ? { id: disciplineExistante.id } : { nom: v.discipline },
-    salle:
-      v.salleId !== NOUVELLE
-        ? { id: v.salleId }
+    discipline: existingDiscipline ? { id: existingDiscipline.id } : { name: v.discipline },
+    room:
+      v.roomId !== NEW
+        ? { id: v.roomId }
         : {
-            nom: v.nouvelleSalle,
-            capacite: entier(v.capaciteSalle),
-            site: v.siteId !== NOUVELLE ? { id: v.siteId } : { nom: v.nouveauSite, adresse: v.adresseSite },
+            name: v.newRoom,
+            capacity: whole(v.roomCapacity),
+            site: v.siteId !== NEW ? { id: v.siteId } : { name: v.newSite, address: v.siteAddress },
           },
-    intervenantId: v.intervenantId,
+    instructorId: v.instructorId,
     type: v.type,
     recurrence: v.recurrence,
-    jourSemaine: ponctuel ? null : Number(v.jourSemaine),
-    dateDebut: ponctuel || !v.dateDebut ? null : v.dateDebut,
-    dateFin: ponctuel || !v.dateFin ? null : v.dateFin,
-    dates: ponctuel ? dates.filter(Boolean) : [],
-    heureDebut: v.heureDebut,
-    dureeMinutes: Number(v.dureeMinutes),
-    ageMin: entier(v.ageMin),
-    ageMax: entier(v.ageMax),
-    niveau: v.niveau,
-    capaciteMax: entier(v.capaciteMax),
+    weekday: oneOff ? null : Number(v.weekday),
+    startDate: oneOff || !v.startDate ? null : v.startDate,
+    endDate: oneOff || !v.endDate ? null : v.endDate,
+    dates: oneOff ? dates.filter(Boolean) : [],
+    startTime: v.startTime,
+    durationMinutes: Number(v.durationMinutes),
+    ageMin: whole(v.ageMin),
+    ageMax: whole(v.ageMax),
+    level: v.level,
+    maxCapacity: whole(v.maxCapacity),
   };
 
-  const recouvrements = conflits(
+  const overlaps = conflicts(
     {
       id: cours?.id ?? null,
-      jourSemaine: saisie.jourSemaine,
-      heureDebut: v.heureDebut,
-      dureeMinutes: saisie.dureeMinutes || 0,
-      salleId: v.salleId,
-      intervenantId: v.intervenantId,
+      weekday: saisie.weekday,
+      startTime: v.startTime,
+      durationMinutes: saisie.durationMinutes || 0,
+      roomId: v.roomId,
+      instructorId: v.instructorId,
     },
-    planning,
+    schedule,
   ).map((c) => {
-    const autre = planning.find((p) => p.id === c.id)!;
-    const quand = `${autre.discipline} à ${autre.heureDebut}`;
-    if (c.salle && c.intervenant) return `${autre.salle} et ${autre.intervenant} déjà pris (${quand})`;
-    return c.salle ? `${autre.salle} déjà occupée (${quand})` : `${autre.intervenant} donne déjà un cours (${quand})`;
+    const autre = schedule.find((p) => p.id === c.id)!;
+    const when = `${autre.discipline} à ${autre.startTime}`;
+    if (c.room && c.instructor) return `${autre.room} et ${autre.instructor} déjà pris (${when})`;
+    return c.room ? `${autre.room} déjà occupée (${when})` : `${autre.instructor} donne déjà un cours (${when})`;
   });
 
   // Créneau hors des horaires d'ouverture du site de la salle (simple avertissement : un cours exceptionnel reste possible).
-  const siteDeLaSalle = r.salles.find((s) => s.id === v.salleId)?.siteId;
-  const horsOuverture =
-    !ponctuel && siteDeLaSalle && saisie.jourSemaine && saisie.dureeMinutes > 0
-      ? horsHoraires(
-          { jourSemaine: saisie.jourSemaine, heureDebut: v.heureDebut, dureeMinutes: saisie.dureeMinutes },
-          r.horaires[siteDeLaSalle] ?? [],
+  const roomSite = r.salles.find((s) => s.id === v.roomId)?.siteId;
+  const outsideOpening =
+    !oneOff && roomSite && saisie.weekday && saisie.durationMinutes > 0
+      ? outsideHours(
+          { weekday: saisie.weekday, startTime: v.startTime, durationMinutes: saisie.durationMinutes },
+          r.hours[roomSite] ?? [],
         )
       : null;
 
   // Indisponibilités de l'intervenant sur les dates à venir du créneau, vérifiées côté serveur après une pause.
-  const [datesIndispo, setDatesIndispo] = useState<string[]>([]);
-  const cle = ponctuel ? "" : `${v.intervenantId}|${v.jourSemaine}|${v.heureDebut}|${v.dureeMinutes}`;
+  const [unavailabilityDates, setUnavailabilityDates] = useState<string[]>([]);
+  const key = oneOff ? "" : `${v.instructorId}|${v.weekday}|${v.startTime}|${v.durationMinutes}`;
   useEffect(() => {
-    if (!cle) return;
-    const [intervenantId, jour, heure, duree] = cle.split("|");
-    const minuteur = setTimeout(() => {
+    if (!key) return;
+    const [instructorId, day, heure, duration] = key.split("|");
+    const timer = setTimeout(() => {
       // A failed check shows no warning rather than an unhandled error.
-      verifierCreneau(cours?.id ?? null, {
-        intervenantId,
-        jourSemaine: Number(jour),
-        heureDebut: heure,
-        dureeMinutes: Number(duree),
-      }).then(setDatesIndispo, () => setDatesIndispo([]));
+      checkSlot(cours?.id ?? null, {
+        instructorId,
+        weekday: Number(day),
+        startTime: heure,
+        durationMinutes: Number(duration),
+      }).then(setUnavailabilityDates, () => setUnavailabilityDates([]));
     }, 300);
-    return () => clearTimeout(minuteur);
-  }, [cle, cours?.id]);
-  const indispoAffichees = cle ? datesIndispo : [];
-  const intervenantChoisi = r.intervenants.find((i) => i.id === v.intervenantId);
+    return () => clearTimeout(timer);
+  }, [key, cours?.id]);
+  const displayedUnavailability = key ? unavailabilityDates : [];
+  const chosenInstructor = r.instructors.find((i) => i.id === v.instructorId);
 
-  const erreur = (champ: string) =>
-    refus?.erreurs[champ] && (
-      <p id={`${champ}-erreur`} className="text-xs text-erreur">
-        {refus.erreurs[champ]}
+  const error = (field: string) =>
+    refusal?.errors[field] && (
+      <p id={`${field}-erreur`} className="text-xs text-erreur">
+        {refusal.errors[field]}
       </p>
     );
-  const invalide = (champ: string) =>
-    refus?.erreurs[champ] ? { "aria-invalid": true, "aria-describedby": `${champ}-erreur` } : {};
-  const libelle = (pour: string, texte: string) => (
-    <label htmlFor={pour} className="text-sm font-medium">
+  const invalid = (field: string) =>
+    refusal?.errors[field] ? { "aria-invalid": true, "aria-describedby": `${field}-erreur` } : {};
+  const label = (section: string, texte: string) => (
+    <label htmlFor={section} className="text-sm font-medium">
       {texte}
     </label>
   );
 
   return (
     <form
-      ref={formulaire}
+      ref={form}
       className="flex w-full min-w-0 flex-col gap-5"
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
-        demarrer(async () => setRefus(await enregistrerCours(cours?.id ?? null, saisie)));
+        startTransition(async () => setRefusal(await saveCourse(cours?.id ?? null, saisie)));
       }}
     >
       <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
         <legend className="px-1 text-sm font-semibold">Cours</legend>
         <div className="flex flex-col gap-1">
-          {libelle("discipline", "Discipline")}
+          {label("discipline", "Discipline")}
           <input
             id="discipline"
             className="champ"
@@ -179,48 +188,48 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
             autoComplete="off"
             autoFocus={!cours}
             value={v.discipline}
-            onChange={maj("discipline")}
-            {...invalide("discipline")}
+            onChange={updated("discipline")}
+            {...invalid("discipline")}
           />
           <datalist id="disciplines">
             {r.disciplines.map((d) => (
-              <option key={d.id} value={d.nom} />
+              <option key={d.id} value={d.name} />
             ))}
           </datalist>
-          {v.discipline.trim() && !disciplineExistante ? (
+          {v.discipline.trim() && !existingDiscipline ? (
             <p className="text-xs text-doux">Nouvelle discipline : elle sera créée.</p>
           ) : (
-            erreur("discipline")
+            error("discipline")
           )}
         </div>
         <div className="flex flex-col gap-1">
-          {libelle("niveau", "Niveau (facultatif)")}
+          {label("niveau", "Niveau (facultatif)")}
           <input
             id="niveau"
             className="champ"
             autoComplete="off"
             placeholder="Débutant, Adultes…"
-            value={v.niveau}
-            onChange={maj("niveau")}
+            value={v.level}
+            onChange={updated("level")}
           />
         </div>
         <div className="flex flex-col gap-1">
-          {libelle("intervenant", "Intervenant")}
+          {label("intervenant", "Intervenant")}
           <select
             id="intervenant"
             className="champ"
-            value={v.intervenantId}
-            onChange={maj("intervenantId")}
-            {...invalide("intervenantId")}
+            value={v.instructorId}
+            onChange={updated("instructorId")}
+            {...invalid("instructorId")}
           >
-            {r.intervenants.map((i) => (
+            {r.instructors.map((i) => (
               <option key={i.id} value={i.id}>
-                {i.prenom} {i.nom}
-                {i.actif ? "" : " (inactif)"}
+                {i.firstName} {i.name}
+                {i.active ? "" : " (inactif)"}
               </option>
             ))}
           </select>
-          {r.intervenants.length === 0 && (
+          {r.instructors.length === 0 && (
             <p className="text-xs text-erreur">
               Aucun intervenant actif :{" "}
               <Link href="/intervenants/nouveau" className="lien">
@@ -231,7 +240,7 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
           )}
         </div>
         <div className="flex flex-col gap-1">
-          {libelle("type", "Type")}
+          {label("type", "Type")}
           <select
             id="type"
             className="champ"
@@ -242,7 +251,7 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
               setV({ ...v, type, recurrence: !cours && type === "stage" ? "dates" : v.recurrence });
             }}
           >
-            {Object.entries(TYPES_COURS).map(([k, l]) => (
+            {Object.entries(COURSE_TYPES).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
@@ -254,8 +263,8 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
       <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-3">
         <legend className="px-1 text-sm font-semibold">Créneau</legend>
         <div className="flex flex-col gap-1 sm:col-span-3">
-          {libelle("recurrence", "Récurrence")}
-          <select id="recurrence" className="champ sm:max-w-xs" value={v.recurrence} onChange={maj("recurrence")}>
+          {label("recurrence", "Récurrence")}
+          <select id="recurrence" className="champ sm:max-w-xs" value={v.recurrence} onChange={updated("recurrence")}>
             {Object.entries(RECURRENCES).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
@@ -263,7 +272,7 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
             ))}
           </select>
         </div>
-        {ponctuel ? (
+        {oneOff ? (
           <div className="flex flex-col gap-1 sm:col-span-3">
             <span className="text-sm font-medium" id="dates-libelle">
               Dates
@@ -280,7 +289,7 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
                     className="champ"
                     value={d}
                     onChange={(e) => setDates(dates.map((x, j) => (j === i ? e.target.value : x)))}
-                    {...(i === 0 ? invalide("dates") : {})}
+                    {...(i === 0 ? invalid("dates") : {})}
                   />
                   {dates.length > 1 && (
                     <button
@@ -298,16 +307,16 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
             <button type="button" className="lien self-start text-sm" onClick={() => setDates([...dates, ""])}>
               Ajouter une date
             </button>
-            {erreur("dates")}
+            {error("dates")}
             <p className="text-xs text-doux">
               Les dates précises ne tiennent pas compte des fermetures (un stage peut avoir lieu pendant les vacances).
             </p>
           </div>
         ) : (
           <div className="flex flex-col gap-1">
-            {libelle("jour", "Jour")}
-            <select id="jour" className="champ" value={v.jourSemaine} onChange={maj("jourSemaine")}>
-              {JOURS.slice(1).map((j, i) => (
+            {label("jour", "Jour")}
+            <select id="jour" className="champ" value={v.weekday} onChange={updated("weekday")}>
+              {DAYS.slice(1).map((j, i) => (
                 <option key={j} value={i + 1}>
                   {j}
                 </option>
@@ -316,65 +325,71 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
           </div>
         )}
         <div className="flex flex-col gap-1">
-          {libelle("heure", "Début")}
+          {label("heure", "Début")}
           <input
             id="heure"
             type="time"
             step={300}
             className="champ"
-            value={v.heureDebut}
-            onChange={maj("heureDebut")}
-            {...invalide("heureDebut")}
+            value={v.startTime}
+            onChange={updated("startTime")}
+            {...invalid("startTime")}
           />
-          {erreur("heureDebut")}
+          {error("startTime")}
         </div>
         <div className="flex flex-col gap-1">
-          {libelle("duree", "Durée (minutes)")}
+          {label("duree", "Durée (minutes)")}
           <input
             id="duree"
             type="number"
             min={5}
             step={5}
             className="champ"
-            value={v.dureeMinutes}
-            onChange={maj("dureeMinutes")}
-            {...invalide("dureeMinutes")}
+            value={v.durationMinutes}
+            onChange={updated("durationMinutes")}
+            {...invalid("durationMinutes")}
           />
           <div className="flex gap-1" role="group" aria-label="Durées courantes">
             {DUREES.map((d) => (
               <button
                 key={d}
                 type="button"
-                className={`rounded border px-1.5 text-xs ${String(d) === v.dureeMinutes ? "border-accent bg-accent-doux" : "border-bordure text-doux hover:border-accent"}`}
-                onClick={() => setV({ ...v, dureeMinutes: String(d) })}
+                className={`rounded border px-1.5 text-xs ${String(d) === v.durationMinutes ? "border-accent bg-accent-doux" : "border-bordure text-doux hover:border-accent"}`}
+                onClick={() => setV({ ...v, durationMinutes: String(d) })}
               >
                 {d}
               </button>
             ))}
           </div>
-          {erreur("dureeMinutes")}
+          {error("durationMinutes")}
         </div>
-        {!ponctuel && (
+        {!oneOff && (
           <fieldset className="flex flex-wrap items-end gap-3 sm:col-span-3">
             <legend className="mb-1 text-sm font-medium">
               Période <span className="font-normal text-doux">(facultatif : vide, toute la saison)</span>
             </legend>
             <div className="flex flex-col gap-1">
-              {libelle("date-debut", "Du")}
-              <input id="date-debut" type="date" className="champ" value={v.dateDebut} onChange={maj("dateDebut")} />
+              {label("date-debut", "Du")}
+              <input
+                id="date-debut"
+                type="date"
+                className="champ"
+                value={v.startDate}
+                onChange={updated("startDate")}
+              />
             </div>
             <div className="flex flex-col gap-1">
-              {libelle("date-fin", "Au")}
+              {label("date-fin", "Au")}
               <input
                 id="date-fin"
                 type="date"
                 className="champ"
-                value={v.dateFin}
-                onChange={maj("dateFin")}
-                {...invalide("dateFin")}
+                value={v.endDate}
+                onChange={updated("endDate")}
+                {...invalid("endDate")}
               />
             </div>
-            {erreur("dateFin")}
+            {error("endDate")}
           </fieldset>
         )}
       </fieldset>
@@ -382,72 +397,72 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
       <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
         <legend className="px-1 text-sm font-semibold">Lieu</legend>
         <div className="flex flex-col gap-1 sm:col-span-2">
-          {libelle("salle", "Salle")}
-          <select id="salle" className="champ" value={v.salleId} onChange={maj("salleId")}>
+          {label("salle", "Salle")}
+          <select id="salle" className="champ" value={v.roomId} onChange={updated("roomId")}>
             {r.salles.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.nom}, {s.site}
-                {s.capacite ? ` (${s.capacite} places)` : ""}
+                {s.name}, {s.site}
+                {s.capacity ? ` (${s.capacity} places)` : ""}
               </option>
             ))}
-            <option value={NOUVELLE}>Nouvelle salle…</option>
+            <option value={NEW}>Nouvelle salle…</option>
           </select>
-          {erreur("salle")}
+          {error("room")}
         </div>
-        {v.salleId === NOUVELLE && (
+        {v.roomId === NEW && (
           <>
             <div className="flex flex-col gap-1">
-              {libelle("nouvelle-salle", "Nom de la salle")}
+              {label("nouvelle-salle", "Nom de la salle")}
               <input
                 id="nouvelle-salle"
                 className="champ"
                 autoComplete="off"
-                value={v.nouvelleSalle}
-                onChange={maj("nouvelleSalle")}
+                value={v.newRoom}
+                onChange={updated("newRoom")}
               />
             </div>
             <div className="flex flex-col gap-1">
-              {libelle("capacite-salle", "Capacité de la salle (facultatif)")}
+              {label("capacite-salle", "Capacité de la salle (facultatif)")}
               <input
                 id="capacite-salle"
                 type="number"
                 min={1}
                 className="champ"
-                value={v.capaciteSalle}
-                onChange={maj("capaciteSalle")}
+                value={v.roomCapacity}
+                onChange={updated("roomCapacity")}
               />
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
-              {libelle("site", "Site")}
-              <select id="site" className="champ" value={v.siteId} onChange={maj("siteId")}>
+              {label("site", "Site")}
+              <select id="site" className="champ" value={v.siteId} onChange={updated("siteId")}>
                 {r.sites.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.nom}
+                    {s.name}
                   </option>
                 ))}
-                <option value={NOUVELLE}>Nouveau site…</option>
+                <option value={NEW}>Nouveau site…</option>
               </select>
             </div>
-            {v.siteId === NOUVELLE && (
+            {v.siteId === NEW && (
               <>
                 <div className="flex flex-col gap-1">
-                  {libelle("nouveau-site", "Nom du site")}
+                  {label("nouveau-site", "Nom du site")}
                   <input
                     id="nouveau-site"
                     className="champ"
                     autoComplete="off"
-                    value={v.nouveauSite}
-                    onChange={maj("nouveauSite")}
+                    value={v.newSite}
+                    onChange={updated("newSite")}
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  {libelle("adresse-site", "Adresse du site")}
+                  {label("adresse-site", "Adresse du site")}
                   <input
                     id="adresse-site"
                     className="champ"
                     autoComplete="off"
-                    value={v.adresseSite}
-                    onChange={maj("adresseSite")}
+                    value={v.siteAddress}
+                    onChange={updated("siteAddress")}
                   />
                 </div>
               </>
@@ -459,103 +474,104 @@ export function FormulaireCours({ cours, referentiel, planning, jour, heure, dur
       <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-3">
         <legend className="px-1 text-sm font-semibold">Public</legend>
         <div className="flex flex-col gap-1">
-          {libelle("age-min", "Âge minimum")}
-          <input id="age-min" type="number" min={0} className="champ" value={v.ageMin} onChange={maj("ageMin")} />
+          {label("age-min", "Âge minimum")}
+          <input id="age-min" type="number" min={0} className="champ" value={v.ageMin} onChange={updated("ageMin")} />
         </div>
         <div className="flex flex-col gap-1">
-          {libelle("age-max", "Âge maximum")}
+          {label("age-max", "Âge maximum")}
           <input
             id="age-max"
             type="number"
             min={0}
             className="champ"
             value={v.ageMax}
-            onChange={maj("ageMax")}
-            {...invalide("ageMax")}
+            onChange={updated("ageMax")}
+            {...invalid("ageMax")}
           />
-          {erreur("ageMax")}
+          {error("ageMax")}
         </div>
         <div className="flex flex-col gap-1">
-          {libelle("capacite", "Places")}
+          {label("capacite", "Places")}
           <input
             id="capacite"
             type="number"
             min={1}
             className="champ"
-            placeholder={salleChoisie?.capacite ? `${salleChoisie.capacite} (salle)` : "sans limite"}
-            value={v.capaciteMax}
-            onChange={maj("capaciteMax")}
+            placeholder={chosenRoom?.capacity ? `${chosenRoom.capacity} (salle)` : "sans limite"}
+            value={v.maxCapacity}
+            onChange={updated("maxCapacity")}
           />
         </div>
       </fieldset>
 
-      {indispoAffichees.length > 0 && (
+      {displayedUnavailability.length > 0 && (
         <div role="status" className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
           <p className="font-medium">
-            {intervenantChoisi?.prenom} est indisponible{" "}
-            {indispoAffichees.length > 1 ? `${indispoAffichees.length} fois` : "une fois"} sur ce créneau :
+            {chosenInstructor?.firstName} est indisponible{" "}
+            {displayedUnavailability.length > 1 ? `${displayedUnavailability.length} fois` : "une fois"} sur ce créneau
+            :
           </p>
           <p>
-            {indispoAffichees
+            {displayedUnavailability
               .slice(0, 6)
-              .map((d) => dateCourte.format(new Date(`${d}T00:00:00Z`)))
+              .map((d) => shortDate.format(new Date(`${d}T00:00:00Z`)))
               .join(", ")}
-            {indispoAffichees.length > 6 && "…"}
+            {displayedUnavailability.length > 6 && "…"}
           </p>
         </div>
       )}
 
-      {horsOuverture && (
+      {outsideOpening && (
         <p role="status" className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
-          {horsOuverture} Le cours reste possible.
+          {outsideOpening} Le cours reste possible.
         </p>
       )}
 
-      {recouvrements.length > 0 && (
+      {overlaps.length > 0 && (
         <div role="status" className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
           <p className="font-medium">Ce créneau est déjà occupé :</p>
           <ul className="list-disc pl-5">
-            {recouvrements.map((t) => (
+            {overlaps.map((t) => (
               <li key={t}>{t}</li>
             ))}
           </ul>
         </div>
       )}
 
-      {refus && (
+      {refusal && (
         <p tabIndex={-1} role="alert" className="text-sm text-erreur">
-          {refus.message}
+          {refusal.message}
         </p>
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-bordure pt-4">
-        <button type="submit" className="bouton-principal" disabled={envoi}>
-          {envoi ? "Enregistrement…" : cours ? "Enregistrer les modifications" : "Créer le cours"}
+        <button type="submit" className="bouton-principal" disabled={sending}>
+          {sending ? "Enregistrement…" : cours ? "Enregistrer les modifications" : "Créer le cours"}
         </button>
-        <Annuler href={cours ? `/planning/cours/${cours.id}` : "/planning"} />
+        <Cancel href={cours ? `/planning/cours/${cours.id}` : "/planning"} />
         {cours &&
-          (confirmerSuppression ? (
+          (confirmDeletion ? (
             <span className="ml-auto flex items-center gap-2 text-sm">
               Supprimer ce cours ?
               <button
                 type="button"
                 className="rounded-md border border-erreur px-3 py-1.5 text-sm font-medium text-erreur hover:bg-erreur/10 disabled:opacity-50"
-                disabled={envoi}
+                disabled={sending}
                 onClick={() =>
-                  demarrer(async () => {
-                    setRefus(await supprimer(cours.id));
-                    setConfirmer(false);
+                  startTransition(async () => {
+                    setRefusal(await remove(cours.id));
+                    setConfirm(false);
                   })
                 }
               >
                 Oui, supprimer
               </button>
-              <button type="button" className="bouton-secondaire" onClick={() => setConfirmer(false)}>
+              <button type="button" className="bouton-secondaire" onClick={() => setConfirm(false)}>
                 Non
               </button>
             </span>
           ) : (
-            <button type="button" className="lien ml-auto text-sm text-erreur" onClick={() => setConfirmer(true)}>
+            <button type="button" className="lien ml-auto text-sm text-erreur" onClick={() => setConfirm(true)}>
               Supprimer le cours
             </button>
           ))}

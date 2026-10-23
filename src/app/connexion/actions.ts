@@ -4,52 +4,52 @@ import { isAPIError } from "better-auth/api";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { ecolesDe } from "@/db";
-import { choisirEcole, idDeSession } from "@/lib/acces-ecole";
+import { schoolsOf } from "@/db";
+import { chooseSchool, idDeSession } from "@/lib/acces-ecole";
 import { auth } from "@/lib/auth";
-import { effacerTentatives, enregistrerTentative, ipDeConfiance, LIMITES } from "@/lib/limite-connexion";
+import { clearAttempts, recordAttempt, trustedIp, LIMITES } from "@/lib/limite-connexion";
 
-export type EtatConnexion = { erreur: string | null; email: string };
+export type ConnectionState = { error: string | null; email: string };
 
 const saisie = z.object({
   email: z.email(),
-  motDePasse: z.string().min(1),
+  password: z.string().min(1),
 });
 
-export async function seConnecter(_etat: EtatConnexion, formData: FormData): Promise<EtatConnexion> {
+export async function signIn(_etat: ConnectionState, formData: FormData): Promise<ConnectionState> {
   const email = String(formData.get("email") ?? "");
-  const donnees = saisie.safeParse({ email, motDePasse: formData.get("motDePasse") });
+  const donnees = saisie.safeParse({ email, password: formData.get("password") });
   if (!donnees.success) {
-    return { erreur: "Saisissez une adresse e-mail valide et votre mot de passe.", email };
+    return { error: "Saisissez une adresse e-mail valide et votre mot de passe.", email };
   }
 
-  const entetes = await headers();
+  const requestHeaders = await headers();
   // Tentative enregistrée avant la vérification du mot de passe (voir limite-connexion.ts).
-  const ip = ipDeConfiance(entetes);
-  if (!(await enregistrerTentative(donnees.data.email, ip))) {
+  const ip = trustedIp(requestHeaders);
+  if (!(await recordAttempt(donnees.data.email, ip))) {
     return {
-      erreur: `Trop de tentatives de connexion. Réessayez dans ${LIMITES.fenetreMinutes} minutes.`,
+      error: `Trop de tentatives de connexion. Réessayez dans ${LIMITES.windowMinutes} minutes.`,
       email,
     };
   }
 
-  let connexion;
+  let connection;
   try {
-    connexion = await auth.api.signInEmail({
-      body: { email: donnees.data.email, password: donnees.data.motDePasse },
-      headers: entetes,
+    connection = await auth.api.signInEmail({
+      body: { email: donnees.data.email, password: donnees.data.password },
+      headers: requestHeaders,
     });
   } catch (e) {
     // Même message pour un compte inconnu ou un mauvais mot de passe.
-    if (isAPIError(e)) return { erreur: "Adresse e-mail ou mot de passe incorrect.", email };
+    if (isAPIError(e)) return { error: "Adresse e-mail ou mot de passe incorrect.", email };
     throw e;
   }
-  await effacerTentatives(donnees.data.email, ip);
+  await clearAttempts(donnees.data.email, ip);
 
   // Une seule école : choisie d'office, sans passer par la liste.
-  const ecoles = await ecolesDe(connexion.user.id);
-  const sessionId = await idDeSession(connexion.token);
-  if (ecoles.length === 1 && sessionId && (await choisirEcole(sessionId, connexion.user.id, ecoles[0].id))) {
+  const ecoles = await schoolsOf(connection.user.id);
+  const sessionId = await idDeSession(connection.token);
+  if (ecoles.length === 1 && sessionId && (await chooseSchool(sessionId, connection.user.id, ecoles[0].id))) {
     redirect("/");
   }
   redirect("/ecoles");

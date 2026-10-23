@@ -15,7 +15,7 @@ afterAll(async () => {
   await admin.end();
 });
 
-const REQUETE_SANS_DROITS = `
+const QUERY_WITHOUT_PRIVILEGES = `
   SELECT c.relname AS objet
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
@@ -28,34 +28,34 @@ const REQUETE_SANS_DROITS = `
   ORDER BY 1
 `;
 
-async function sansDroits(sql: postgres.Sql | postgres.TransactionSql): Promise<string[]> {
-  const lignes = await sql.unsafe<{ objet: string }[]>(REQUETE_SANS_DROITS);
-  return lignes.map((l) => l.objet);
+async function withoutPrivileges(sql: postgres.Sql | postgres.TransactionSql): Promise<string[]> {
+  const rows = await sql.unsafe<{ object: string }[]>(QUERY_WITHOUT_PRIVILEGES);
+  return rows.map((l) => l.object);
 }
 
-class Annulation extends Error {
-  constructor(readonly resultat: string[]) {
+class Cancellation extends Error {
+  constructor(readonly result: string[]) {
     super("annulation volontaire");
   }
 }
 
 describe("Droits de app_user", () => {
   it("couvrent toutes les tables et séquences existantes", async () => {
-    expect(await sansDroits(admin)).toEqual([]);
+    expect(await withoutPrivileges(admin)).toEqual([]);
   });
 
   it("couvrent une table créée par une migration future", async () => {
     // Même rôle que les migrations (DATABASE_ADMIN_URL), table témoin annulée.
-    const resultat = await admin
+    const result = await admin
       .begin(async (tx) => {
         await tx.unsafe("CREATE TABLE temoin_droits (id bigserial PRIMARY KEY, school_id uuid)");
-        throw new Annulation(await sansDroits(tx));
+        throw new Cancellation(await withoutPrivileges(tx));
       })
       .catch((e: unknown) => {
-        if (e instanceof Annulation) return e.resultat;
+        if (e instanceof Cancellation) return e.result;
         throw e;
       });
 
-    expect(resultat).toEqual([]);
+    expect(result).toEqual([]);
   });
 });

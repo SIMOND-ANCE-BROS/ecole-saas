@@ -5,68 +5,68 @@
  *   npm run db:seed
  */
 import postgres from "postgres";
-import { avecEcole } from "../src/db";
-import { synchroniserSeances } from "../src/db/seances";
-import { aujourdhuiAParis } from "../src/domaine/personnes/age";
-import { creerCompte } from "../src/lib/comptes";
+import { withSchool } from "../src/db";
+import { syncLessons } from "../src/db/seances";
+import { todayInParis } from "../src/domaine/personnes/age";
+import { createAccount } from "../src/lib/comptes";
 
-const MOT_DE_PASSE = process.env.SEED_MOT_DE_PASSE ?? "demo-ecole-de-danse";
-const COMPTES = [
-  { email: "accueil@demo.test", nom: "Accueil Démo", role: "accueil" },
-  { email: "direction@demo.test", nom: "Direction Démo", role: "direction" },
+const PASSWORD = process.env.SEED_MOT_DE_PASSE ?? "demo-ecole-de-danse";
+const ACCOUNTS = [
+  { email: "accueil@demo.test", name: "Accueil Démo", role: "accueil" },
+  { email: "direction@demo.test", name: "Direction Démo", role: "direction" },
 ] as const;
 
 /** Un payeur et les danseurs dont il paie les cours. */
-type FamilleDemo = {
-  nom: string;
-  prenom?: string;
+type DemoFamily = {
+  name: string;
+  firstName?: string;
   type?: "particulier" | "professionnel";
-  raisonSociale?: string;
+  companyName?: string;
   siren?: string;
   email?: string;
   telephone?: string;
-  adresse?: string;
-  danseurs: [prenom: string, naissance: string | null][];
+  address?: string;
+  students: [prenom: string, naissance: string | null][];
 };
 
-const FAMILLES: FamilleDemo[] = [
+const FAMILIES: DemoFamily[] = [
   {
-    nom: "Lefèvre",
-    prenom: "Hélène",
+    name: "Lefèvre",
+    firstName: "Hélène",
     email: "helene.lefevre@demo.test",
     telephone: "06 12 34 56 78",
-    adresse: "12 rue des Lilas, 69100 Villeurbanne",
-    danseurs: [
+    address: "12 rue des Lilas, 69100 Villeurbanne",
+    students: [
       ["Zoé", "2015-03-10"],
       ["Noé", "2017-11-02"],
     ],
   },
   {
-    nom: "Martin",
-    prenom: "Paul",
+    name: "Martin",
+    firstName: "Paul",
     email: "paul.martin@demo.test",
     telephone: "06 98 76 54 32",
-    danseurs: [["Léa", "2014-06-21"]],
+    students: [["Léa", "2014-06-21"]],
   },
   {
-    nom: "Bernard",
-    prenom: "Émilie",
+    name: "Bernard",
+    firstName: "Émilie",
     telephone: "07 11 22 33 44",
-    danseurs: [
+    students: [
       ["Alice", "2016-01-15"],
       ["Louis", "2016-01-15"],
       ["Jules", "2019-09-30"],
     ],
   },
-  { nom: "Rivière", prenom: "Alex", email: "alex.riviere@demo.test", danseurs: [["Alex", "1996-04-05"]] },
-  { nom: "Petit", prenom: "Sarah", telephone: "06 55 44 33 22", danseurs: [["Chloé", "2013-12-24"]] },
+  { name: "Rivière", firstName: "Alex", email: "alex.riviere@demo.test", students: [["Alex", "1996-04-05"]] },
+  { name: "Petit", firstName: "Sarah", telephone: "06 55 44 33 22", students: [["Chloé", "2013-12-24"]] },
   {
-    nom: "Ateliers Démo",
+    name: "Ateliers Démo",
     type: "professionnel",
-    raisonSociale: "CSE des Ateliers Démo",
+    companyName: "CSE des Ateliers Démo",
     siren: "000000000",
     email: "cse@demo.test",
-    danseurs: [],
+    students: [],
   },
 ];
 
@@ -76,80 +76,80 @@ if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en
 const admin = postgres(url, { max: 1, onnotice: () => {} });
 
 async function principal() {
-  const [ecole] = await admin`
+  const [school] = await admin`
     INSERT INTO school (name, slug) VALUES ('École de démonstration', 'demo')
     ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
     RETURNING id`;
   await admin`
     INSERT INTO season (school_id, label, start_date, end_date)
-    VALUES (${ecole.id}, '2026-2027', '2026-09-01', '2027-06-30')
+    VALUES (${school.id}, '2026-2027', '2026-09-01', '2027-06-30')
     ON CONFLICT DO NOTHING`;
 
-  for (const compte of COMPTES) {
-    const [existant] = await admin`SELECT id FROM "user" WHERE email = ${compte.email}`;
+  for (const account of ACCOUNTS) {
+    const [existing] = await admin`SELECT id FROM "user" WHERE email = ${account.email}`;
     const userId: string =
-      existant?.id ?? (await creerCompte({ email: compte.email, nom: compte.nom, motDePasse: MOT_DE_PASSE }));
+      existing?.id ?? (await createAccount({ email: account.email, name: account.name, password: PASSWORD }));
     await admin`
-      INSERT INTO member (school_id, user_id, role) VALUES (${ecole.id}, ${userId}, ${compte.role})
+      INSERT INTO member (school_id, user_id, role) VALUES (${school.id}, ${userId}, ${account.role})
       ON CONFLICT (school_id, user_id) DO NOTHING`;
   }
 
   // Personnes fictives (aucune personne réelle), créées une seule fois. Un danseur
   // qui porte le prénom du payeur est le payeur lui-même (adulte seul).
-  const [{ n }] = await admin`SELECT count(*)::int AS n FROM person WHERE school_id = ${ecole.id}`;
+  const [{ n }] = await admin`SELECT count(*)::int AS n FROM person WHERE school_id = ${school.id}`;
   if (n === 0) {
-    for (const f of FAMILLES) {
+    for (const f of FAMILIES) {
       const [p] = await admin`
         INSERT INTO person (school_id, type, last_name, first_name, company_name, siren, email, phone, address)
-        VALUES (${ecole.id}, ${f.type ?? "particulier"}, ${f.nom}, ${f.prenom ?? null}, ${f.raisonSociale ?? null},
-                ${f.siren ?? null}, ${f.email ?? null}, ${f.telephone ?? null}, ${f.adresse ?? null})
+        VALUES (${school.id}, ${f.type ?? "particulier"}, ${f.name}, ${f.firstName ?? null}, ${f.companyName ?? null},
+                ${f.siren ?? null}, ${f.email ?? null}, ${f.telephone ?? null}, ${f.address ?? null})
         RETURNING id`;
-      for (const [prenom, naissance] of f.danseurs) {
-        if (prenom === f.prenom) {
-          await admin`UPDATE person SET birth_date = ${naissance}, is_student = true WHERE id = ${p.id}`;
+      for (const [firstName, birth] of f.students) {
+        if (firstName === f.firstName) {
+          await admin`UPDATE person SET birth_date = ${birth}, is_student = true WHERE id = ${p.id}`;
           continue;
         }
         const [d] = await admin`
           INSERT INTO person (school_id, last_name, first_name, birth_date, is_student)
-          VALUES (${ecole.id}, ${f.nom}, ${prenom}, ${naissance}, true) RETURNING id`;
+          VALUES (${school.id}, ${f.name}, ${firstName}, ${birth}, true) RETURNING id`;
         await admin`
           INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for, emergency_contact)
-          VALUES (${ecole.id}, ${p.id}, ${d.id}, 'representant_legal', true, true)`;
+          VALUES (${school.id}, ${p.id}, ${d.id}, 'representant_legal', true, true)`;
       }
     }
   }
 
   // Planning fictif : sites, salles, disciplines, professeurs, cours de la saison.
-  const [saison] = await admin`SELECT id FROM season WHERE school_id = ${ecole.id} AND label = '2026-2027'`;
-  const [{ nbCours }] = await admin`SELECT count(*)::int AS "nbCours" FROM course WHERE season_id = ${saison.id}`;
+  const [season] = await admin`SELECT id FROM season WHERE school_id = ${school.id} AND label = '2026-2027'`;
+  const [{ nbCours }] = await admin`SELECT count(*)::int AS "nbCours" FROM course WHERE season_id = ${season.id}`;
   if (nbCours === 0) {
     const sites: Record<string, string> = {};
-    for (const [nom, adresse, permanence] of [
+    for (const [name, address, permanence] of [
       ["Site Centre", "3 place de la Mairie, 69100 Villeurbanne", true],
       ["Site Nord", "40 avenue des Arts, 69100 Villeurbanne", false],
     ] as const) {
       const [s] =
-        await admin`INSERT INTO site (school_id, name, address, enrollment_desk) VALUES (${ecole.id}, ${nom}, ${adresse}, ${permanence}) RETURNING id`;
-      sites[nom] = s.id;
+        await admin`INSERT INTO site (school_id, name, address, enrollment_desk) VALUES (${school.id}, ${name}, ${address}, ${permanence}) RETURNING id`;
+      sites[name] = s.id;
     }
     const salles: Record<string, string> = {};
-    for (const [nom, site, capacite] of [
+    for (const [name, site, capacity] of [
       ["Grande salle", "Site Centre", 30],
       ["Petite salle", "Site Centre", 15],
       ["Studio", "Site Nord", 20],
     ] as const) {
       const [s] =
-        await admin`INSERT INTO room (school_id, site_id, name, capacity) VALUES (${ecole.id}, ${sites[site]}, ${nom}, ${capacite}) RETURNING id`;
-      salles[nom] = s.id;
+        await admin`INSERT INTO room (school_id, site_id, name, capacity) VALUES (${school.id}, ${sites[site]}, ${name}, ${capacity}) RETURNING id`;
+      salles[name] = s.id;
     }
     const disciplines: Record<string, string> = {};
-    for (const nom of ["Éveil", "Classique", "Jazz", "Contemporain", "Zumba", "Salsa"]) {
-      const [d] = await admin`INSERT INTO discipline (school_id, name) VALUES (${ecole.id}, ${nom})
+    for (const name of ["Éveil", "Classique", "Jazz", "Contemporain", "Zumba", "Salsa"]) {
+      const [d] = await admin`INSERT INTO discipline (school_id, name) VALUES (${school.id}, ${name})
         ON CONFLICT (school_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id`;
-      disciplines[nom] = d.id;
+      disciplines[name] = d.id;
     }
     const profs: Record<string, string> = {};
-    for (const [prenom, nom, statut, mode, tarif] of [
+    for (const [firstName, name, status, mode, tariff] of [
       ["Camille", "Durand", "micro_entreprise", "heure", 4000],
       ["Mathis", "Roux", "micro_entreprise", "cours", 3500],
       ["Inès", "Garnier", "salarie", "heure", 2800],
@@ -157,11 +157,11 @@ async function principal() {
     ] as const) {
       const [p] = await admin`
         INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
-        VALUES (${ecole.id}, ${nom}, ${prenom}, ${statut}, 'non_applicable', ${mode}, ${tarif}) RETURNING id`;
-      profs[prenom] = p.id;
+        VALUES (${school.id}, ${name}, ${firstName}, ${status}, 'non_applicable', ${mode}, ${tariff}) RETURNING id`;
+      profs[firstName] = p.id;
     }
     // [discipline, salle, prof, jour (1 = lundi), heure, durée, âge min, âge max, niveau]
-    const COURS = [
+    const COURSE = [
       ["Éveil", "Petite salle", "Inès", 3, "14:00", 45, 4, 5, null],
       ["Éveil", "Petite salle", "Inès", 6, "10:00", 45, 4, 5, null],
       ["Classique", "Grande salle", "Camille", 3, "15:00", 60, 6, 8, "Débutant"],
@@ -177,22 +177,22 @@ async function principal() {
       ["Salsa", "Studio", "Lucas", 3, "20:00", 60, 18, null, "Débutant"],
       ["Salsa", "Studio", "Lucas", 5, "20:00", 90, 18, null, "Intermédiaire"],
     ] as const;
-    for (const [d, salle, prof, jour, heure, duree, ageMin, ageMax, niveau] of COURS) {
+    for (const [d, room, teacher, day, heure, duration, ageMin, ageMax, level] of COURSE) {
       await admin`
         INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes, age_min, age_max, level)
-        VALUES (${ecole.id}, ${saison.id}, ${disciplines[d]}, ${salles[salle]}, ${profs[prof]}, ${jour}, ${heure}, ${duree}, ${ageMin}, ${ageMax}, ${niveau})`;
+        VALUES (${school.id}, ${season.id}, ${disciplines[d]}, ${salles[room]}, ${profs[teacher]}, ${day}, ${heure}, ${duration}, ${ageMin}, ${ageMax}, ${level})`;
     }
   }
 
   // Capacité des cours de démonstration : celle de leur salle, si elle n'est pas renseignée.
   await admin`
     UPDATE course SET max_capacity = s.capacity FROM room s
-    WHERE course.room_id = s.id AND course.school_id = ${ecole.id} AND course.max_capacity IS NULL`;
+    WHERE course.room_id = s.id AND course.school_id = ${school.id} AND course.max_capacity IS NULL`;
 
   // Grille tarifaire et réduction fratrie de démonstration (montants en euros).
-  const [{ nbTarifs }] = await admin`SELECT count(*)::int AS "nbTarifs" FROM tariff WHERE season_id = ${saison.id}`;
+  const [{ nbTarifs }] = await admin`SELECT count(*)::int AS "nbTarifs" FROM tariff WHERE season_id = ${season.id}`;
   if (nbTarifs === 0) {
-    const GRILLE: [publicTarif: string, combinaison: number[], trimestre: number, annee: number][] = [
+    const GRID: [publicTarif: string, combinaison: number[], trimestre: number, annee: number][] = [
       ["enfant", [45], 85, 210],
       ["enfant", [60], 110, 280],
       ["enfant", [90], 150, 380],
@@ -212,38 +212,38 @@ async function principal() {
       ["etudiant", [60], 115, 290],
       ["etudiant", [90], 155, 400],
     ];
-    for (const [publicTarif, combinaison, trimestre, annee] of GRILLE) {
-      for (const [periodicite, euros] of [
+    for (const [tariffAudience, combination, trimestre, annee] of GRID) {
+      for (const [period, euros] of [
         ["trimestre", trimestre],
         ["annee", annee],
       ] as const) {
         await admin`
           INSERT INTO tariff (school_id, season_id, audience, period, combination, price_cents)
-          VALUES (${ecole.id}, ${saison.id}, ${publicTarif}, ${periodicite}, ${`{${combinaison.join(",")}}`}::smallint[], ${euros * 100})`;
+          VALUES (${school.id}, ${season.id}, ${tariffAudience}, ${period}, ${`{${combination.join(",")}}`}::smallint[], ${euros * 100})`;
       }
     }
     await admin`
       INSERT INTO discount (school_id, season_id, code, rate_bps, min_students, audiences, combinable_with_multi_discipline)
-      VALUES (${ecole.id}, ${saison.id}, 'fratrie', 1000, 2, '{enfant}', false)`;
+      VALUES (${school.id}, ${season.id}, 'fratrie', 1000, 2, '{enfant}', false)`;
   }
 
   // Fermetures de démonstration (dates fictives) puis séances à venir, comme l'application les crée.
   const [{ nbFermetures }] =
-    await admin`SELECT count(*)::int AS "nbFermetures" FROM closure WHERE season_id = ${saison.id}`;
+    await admin`SELECT count(*)::int AS "nbFermetures" FROM closure WHERE season_id = ${season.id}`;
   if (nbFermetures === 0) {
-    for (const [libelle, debut, fin] of [
+    for (const [label, start, end] of [
       ["Vacances d’automne", "2026-10-17", "2026-11-01"],
       ["Jour férié", "2026-11-11", "2026-11-11"],
       ["Vacances de fin d’année", "2026-12-19", "2027-01-03"],
     ]) {
-      await admin`INSERT INTO closure (school_id, season_id, label, start_date, end_date) VALUES (${ecole.id}, ${saison.id}, ${libelle}, ${debut}, ${fin})`;
+      await admin`INSERT INTO closure (school_id, season_id, label, start_date, end_date) VALUES (${school.id}, ${season.id}, ${label}, ${start}, ${end})`;
     }
   }
-  const { ajoutees } = await avecEcole(ecole.id, (tx) => synchroniserSeances(tx, saison.id, aujourdhuiAParis()));
-  console.log(`Séances à venir créées : ${ajoutees}`);
+  const { added: added } = await withSchool(school.id, (tx) => syncLessons(tx, season.id, todayInParis()));
+  console.log(`Séances à venir créées : ${added}`);
 
-  console.log(`École de démonstration prête. Comptes : ${COMPTES.map((c) => c.email).join(", ")}`);
-  console.log(`Mot de passe : ${process.env.SEED_MOT_DE_PASSE ? "(SEED_MOT_DE_PASSE)" : MOT_DE_PASSE}`);
+  console.log(`École de démonstration prête. Comptes : ${ACCOUNTS.map((c) => c.email).join(", ")}`);
+  console.log(`Mot de passe : ${process.env.SEED_MOT_DE_PASSE ? "(SEED_MOT_DE_PASSE)" : PASSWORD}`);
 }
 
 // The application pool (src/db) keeps the process alive: exit explicitly.

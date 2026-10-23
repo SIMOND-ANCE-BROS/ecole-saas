@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { avecEcole } from "@/db";
-import { saisonCourante } from "@/db/planning";
-import { listerFermetures } from "@/db/seances";
-import { aujourdhuiAParis } from "@/domaine/personnes/age";
-import { exigerRole } from "@/lib/session";
-import { GestionFermetures } from "./gestion";
+import { withSchool } from "@/db";
+import { currentSeason } from "@/db/planning";
+import { listClosures } from "@/db/seances";
+import { todayInParis } from "@/domaine/personnes/age";
+import { requireRole } from "@/lib/session";
+import { ClosuresManagement } from "./gestion";
 
 export const metadata: Metadata = { title: "Fermetures" };
 
-export default async function PageFermetures() {
-  const { ecoleId } = await exigerRole("direction");
-  const { saison, fermetures } = await avecEcole(ecoleId, async (tx) => {
-    const s = await saisonCourante(tx, aujourdhuiAParis());
-    return { saison: s, fermetures: s ? await listerFermetures(tx, s.id) : [] };
+export default async function ClosuresPage() {
+  const { schoolId: schoolId } = await requireRole("direction");
+  const { season: season, closures: closures } = await withSchool(schoolId, async (tx) => {
+    const s = await currentSeason(tx, todayInParis());
+    return { season: s, closures: s ? await listClosures(tx, s.id) : [] };
   });
 
   return (
@@ -25,14 +25,14 @@ export default async function PageFermetures() {
         <span className="text-doux"> / Fermetures</span>
       </nav>
       <div>
-        <h1 className="titre-page">Fermetures {saison?.libelle}</h1>
+        <h1 className="titre-page">Fermetures {season?.label}</h1>
         <p className="text-sm text-doux">
           Vacances, jours fériés, gala : aucun cours n’a lieu ces jours-là. Les séances à venir se mettent à jour
           aussitôt ; une séance dont l’appel est fait n’est jamais retirée.
         </p>
       </div>
-      {saison ? (
-        <GestionFermetures fermetures={fermetures} debutSaison={saison.dateDebut} finSaison={saison.dateFin} />
+      {season ? (
+        <ClosuresManagement closures={closures} seasonStart={season.startDate} seasonEnd={season.endDate} />
       ) : (
         <p className="text-sm">Aucune saison n’est paramétrée.</p>
       )}

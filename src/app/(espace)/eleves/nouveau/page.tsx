@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { avecEcole } from "@/db";
-import { lirePersonne, nomAffiche } from "@/db/personnes";
-import { aujourdhuiAParis } from "@/domaine/personnes/age";
-import { exigerRole } from "@/lib/session";
-import { GuideNouvelEleve } from "./guide";
+import { withSchool } from "@/db";
+import { readPerson, nomAffiche } from "@/db/personnes";
+import { todayInParis } from "@/domaine/personnes/age";
+import { requireRole } from "@/lib/session";
+import { NewStudentGuide } from "./guide";
 
 export const metadata: Metadata = { title: "Nouvel élève" };
 
 /** `?responsable=<id>` : depuis la fiche d'un contact (« Ajouter un enfant »), le responsable est déjà choisi. */
-export default async function PageNouvelEleve({ searchParams }: PageProps<"/eleves/nouveau">) {
-  const { ecoleId } = await exigerRole("direction", "accueil");
+export default async function NewStudentPage({ searchParams }: PageProps<"/eleves/nouveau">) {
+  const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const { responsable } = await searchParams;
-  const r = typeof responsable === "string" ? await avecEcole(ecoleId, (tx) => lirePersonne(tx, responsable)) : null;
+  const r = typeof responsable === "string" ? await withSchool(schoolId, (tx) => readPerson(tx, responsable)) : null;
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
@@ -22,10 +22,7 @@ export default async function PageNouvelEleve({ searchParams }: PageProps<"/elev
         <span className="text-doux"> / Nouvel élève</span>
       </nav>
       <h1 className="titre-page">Nouvel élève</h1>
-      <GuideNouvelEleve
-        aujourdhui={aujourdhuiAParis()}
-        responsableInitial={r ? { id: r.id, nom: nomAffiche(r) } : undefined}
-      />
+      <NewStudentGuide today={todayInParis()} initialGuardian={r ? { id: r.id, name: nomAffiche(r) } : undefined} />
     </section>
   );
 }

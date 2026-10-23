@@ -1,4 +1,4 @@
 /** Accueil : aucun panneau. */
-export default function SansPanneau() {
+export default function WithoutPanel() {
   return null;
 }

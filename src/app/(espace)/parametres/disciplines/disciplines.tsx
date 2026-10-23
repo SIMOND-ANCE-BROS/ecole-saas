@@ -1,19 +1,19 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { LigneDiscipline } from "@/db/parametres";
-import { nouvelleDiscipline, renommer, retirerDiscipline } from "../actions";
+import type { DisciplineRow } from "@/db/parametres";
+import { newDiscipline, rename, removeDiscipline } from "../actions";
 
-export function Disciplines({ disciplines }: { disciplines: LigneDiscipline[] }) {
-  const [nom, setNom] = useState("");
-  const [edition, setEdition] = useState<{ id: string; nom: string } | null>(null);
+export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
+  const [name, setName] = useState("");
+  const [edition, setEdition] = useState<{ id: string; name: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [enCours, demarrer] = useTransition();
-  const agir = (action: () => Promise<{ message: string | null }>, apres?: () => void) =>
-    demarrer(async () => {
+  const [inProgress, startTransition] = useTransition();
+  const act = (action: () => Promise<{ message: string | null }>, after?: () => void) =>
+    startTransition(async () => {
       const r = await action();
       setMessage(r.message);
-      if (!r.message) apres?.();
+      if (!r.message) after?.();
     });
 
   return (
@@ -22,9 +22,9 @@ export function Disciplines({ disciplines }: { disciplines: LigneDiscipline[] })
         className="flex flex-wrap items-end gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          agir(
-            () => nouvelleDiscipline(nom),
-            () => setNom(""),
+          act(
+            () => newDiscipline(name),
+            () => setName(""),
           );
         }}
       >
@@ -36,11 +36,11 @@ export function Disciplines({ disciplines }: { disciplines: LigneDiscipline[] })
             id="nouvelle-discipline"
             className="champ"
             placeholder="Hip-hop"
-            value={nom}
-            onChange={(e) => setNom(e.target.value)}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
           />
         </div>
-        <button type="submit" className="bouton-principal" disabled={enCours || !nom.trim()}>
+        <button type="submit" className="bouton-principal" disabled={inProgress || !name.trim()}>
           Ajouter
         </button>
       </form>
@@ -60,8 +60,8 @@ export function Disciplines({ disciplines }: { disciplines: LigneDiscipline[] })
                   className="flex flex-wrap items-center gap-2"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    agir(
-                      () => renommer(d.id, edition.nom),
+                    act(
+                      () => rename(d.id, edition.name),
                       () => setEdition(null),
                     );
                   }}
@@ -73,10 +73,10 @@ export function Disciplines({ disciplines }: { disciplines: LigneDiscipline[] })
                     id={`nom-${d.id}`}
                     className="champ"
                     autoFocus
-                    value={edition.nom}
-                    onChange={(e) => setEdition({ ...edition, nom: e.target.value })}
+                    value={edition.name}
+                    onChange={(e) => setEdition({ ...edition, name: e.target.value })}
                   />
-                  <button type="submit" className="lien" disabled={enCours}>
+                  <button type="submit" className="lien" disabled={inProgress}>
                     Enregistrer
                   </button>
                   <button type="button" className="lien text-doux" onClick={() => setEdition(null)}>
@@ -84,23 +84,23 @@ export function Disciplines({ disciplines }: { disciplines: LigneDiscipline[] })
                   </button>
                 </form>
               ) : (
-                <span className="font-medium">{d.nom}</span>
+                <span className="font-medium">{d.name}</span>
               )}
               <span className="text-doux">
-                {d.cours} cours
-                {d.tarifs > 0 && `, ${d.tarifs} tarif${d.tarifs > 1 ? "s" : ""} dédié${d.tarifs > 1 ? "s" : ""}`}
+                {d.course} cours
+                {d.tariffs > 0 && `, ${d.tariffs} tarif${d.tariffs > 1 ? "s" : ""} dédié${d.tariffs > 1 ? "s" : ""}`}
               </span>
               {edition?.id !== d.id && (
                 <span className="ml-auto flex gap-3">
-                  <button type="button" className="lien" onClick={() => setEdition({ id: d.id, nom: d.nom })}>
+                  <button type="button" className="lien" onClick={() => setEdition({ id: d.id, name: d.name })}>
                     Renommer
                   </button>
-                  {d.cours === 0 && d.tarifs === 0 && (
+                  {d.course === 0 && d.tariffs === 0 && (
                     <button
                       type="button"
                       className="lien text-doux"
-                      disabled={enCours}
-                      onClick={() => agir(() => retirerDiscipline(d.id))}
+                      disabled={inProgress}
+                      onClick={() => act(() => removeDiscipline(d.id))}
                     >
                       Retirer
                     </button>

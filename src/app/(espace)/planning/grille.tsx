@@ -2,75 +2,75 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import type { CoursPlanning } from "@/db/planning";
-import type { SeancePlanning } from "@/db/seances";
-import type { Horaire } from "@/domaine/planning/horaires";
-import { ages, fin, JOURS, marqueRecurrence, recurrenceTexte } from "./format";
-import { FILTRES_VIDES, filtrerPlanning } from "./filtres";
-import { SemaineDatee } from "./semaine-datee";
-import { SemaineType } from "./semaine-type";
+import type { ScheduleCourse } from "@/db/planning";
+import type { ScheduleLesson } from "@/db/seances";
+import type { Hours } from "@/domaine/planning/horaires";
+import { ages, end, DAYS, recurrenceBadge, recurrenceText } from "./format";
+import { EMPTY_FILTERS, filterSchedule } from "./filtres";
+import { DatedWeek } from "./semaine-datee";
+import { TypicalWeek } from "./semaine-type";
 
-export type VuePlanning = "datee" | "type" | "liste";
-const VUES: Record<VuePlanning, string> = { datee: "Par semaine", type: "Semaine type", liste: "Liste" };
+export type ScheduleView = "datee" | "type" | "liste";
+const VUES: Record<ScheduleView, string> = { datee: "Par semaine", type: "Semaine type", liste: "Liste" };
 
 type Props = {
-  cours: CoursPlanning[];
+  courses: ScheduleCourse[];
   /** Direction : chaque jour propose « + » pour créer un cours. */
-  modifiable: boolean;
+  editable: boolean;
   /** Cours tout juste enregistré, signalé dans la grille. */
-  misEnAvant?: string;
+  highlighted?: string;
   /** Vue choisie (`?vue=`) : semaine datée par défaut (#90). */
-  vue: VuePlanning;
+  view: ScheduleView;
   /** Semaine datée affichée : son lundi, ses séances et ses fermetures. */
-  lundi: string;
-  aujourdhui: string;
-  seances: SeancePlanning[];
-  fermetures: { libelle: string; debut: string; fin: string }[];
+  monday: string;
+  today: string;
+  lessons: ScheduleLesson[];
+  closures: { label: string; start: string; end: string }[];
   /** Horaires d'ouverture par site (#90) : bornent l'agenda. */
-  horaires: Record<string, Horaire[]>;
+  hours: Record<string, Hours[]>;
 };
 
 /** Planning de la semaine, filtrable par discipline, site, salle et intervenant, avec l'effectif de chaque cours. */
-export function GrillePlanning({
-  cours,
-  modifiable,
-  misEnAvant,
-  vue: vueInitiale,
-  horaires,
-  lundi,
-  aujourdhui,
-  seances,
-  fermetures,
+export function ScheduleGrid({
+  courses: cours,
+  editable: editable,
+  highlighted: highlighted,
+  view: initialView,
+  hours: hours,
+  monday: monday,
+  today: today,
+  lessons: lessons,
+  closures: closures,
 }: Props) {
-  const [filtres, setFiltres] = useState(FILTRES_VIDES);
-  const [vue, setVue] = useState(vueInitiale);
-  const choisirVue = (v: VuePlanning) => {
-    setVue(v);
-    window.history.replaceState(null, "", v === "datee" ? `/planning?semaine=${lundi}` : `/planning?vue=${v}`);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [view, setView] = useState(initialView);
+  const chooseView = (v: ScheduleView) => {
+    setView(v);
+    window.history.replaceState(null, "", v === "datee" ? `/planning?semaine=${monday}` : `/planning?vue=${v}`);
   };
-  const { discipline, site, salleId, intervenantId } = filtres;
+  const { discipline, site, roomId: roomId, instructorId: instructorId } = filters;
   const disciplines = useMemo(() => [...new Set(cours.map((c) => c.discipline))].sort(), [cours]);
   const sites = useMemo(() => [...new Set(cours.map((c) => c.site))].sort(), [cours]);
   const salles = [
     ...new Map(
       cours
         .filter((c) => !site || c.site === site)
-        .map((c) => [c.salleId, { id: c.salleId, libelle: `${c.salle} · ${c.site}` }]),
+        .map((c) => [c.roomId, { id: c.roomId, label: `${c.room} · ${c.site}` }]),
     ).values(),
-  ].sort((a, b) => a.libelle.localeCompare(b.libelle, "fr"));
-  const intervenants = [...new Map(cours.map((c) => [c.intervenantId, c.intervenant])).entries()].sort((a, b) =>
+  ].sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  const instructors = [...new Map(cours.map((c) => [c.instructorId, c.instructor])).entries()].sort((a, b) =>
     a[1].localeCompare(b[1], "fr"),
   );
-  const visibles = filtrerPlanning(cours, filtres);
-  const filtresActifs = Object.values(filtres).some(Boolean);
+  const visible = filterSchedule(cours, filters);
+  const activeFilters = Object.values(filters).some(Boolean);
   // Horaires des sites affichés : le site (ou celui de la salle) filtré, sinon tous.
-  const siteFiltre = salleId
-    ? cours.find((c) => c.salleId === salleId)?.siteId
+  const filteredSite = roomId
+    ? cours.find((c) => c.roomId === roomId)?.siteId
     : site
       ? cours.find((c) => c.site === site)?.siteId
       : undefined;
-  const horairesAffiches = siteFiltre ? (horaires[siteFiltre] ?? []) : Object.values(horaires).flat();
-  const jours = [...new Set(visibles.map((c) => c.jourSemaine))].sort((a, b) => (a ?? 8) - (b ?? 8));
+  const displayedHours = filteredSite ? (hours[filteredSite] ?? []) : Object.values(hours).flat();
+  const days = [...new Set(visible.map((c) => c.weekday))].sort((a, b) => (a ?? 8) - (b ?? 8));
 
   return (
     <div className="flex flex-col gap-4">
@@ -83,7 +83,7 @@ export function GrillePlanning({
             id="filtre-discipline"
             className="champ"
             value={discipline}
-            onChange={(e) => setFiltres({ ...filtres, discipline: e.target.value })}
+            onChange={(e) => setFilters({ ...filters, discipline: e.target.value })}
           >
             <option value="">Toutes</option>
             {disciplines.map((d) => (
@@ -99,7 +99,7 @@ export function GrillePlanning({
             id="filtre-site"
             className="champ"
             value={site}
-            onChange={(e) => setFiltres({ ...filtres, site: e.target.value, salleId: "" })}
+            onChange={(e) => setFilters({ ...filters, site: e.target.value, roomId: "" })}
           >
             <option value="">Tous</option>
             {sites.map((s) => (
@@ -114,13 +114,13 @@ export function GrillePlanning({
           <select
             id="filtre-salle"
             className="champ"
-            value={salleId}
-            onChange={(e) => setFiltres({ ...filtres, salleId: e.target.value })}
+            value={roomId}
+            onChange={(e) => setFilters({ ...filters, roomId: e.target.value })}
           >
             <option value="">Toutes les salles</option>
             {salles.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.libelle}
+                {s.label}
               </option>
             ))}
           </select>
@@ -132,37 +132,37 @@ export function GrillePlanning({
           <select
             id="filtre-intervenant"
             className="champ"
-            value={intervenantId}
-            onChange={(e) => setFiltres({ ...filtres, intervenantId: e.target.value })}
+            value={instructorId}
+            onChange={(e) => setFilters({ ...filters, instructorId: e.target.value })}
           >
             <option value="">Tous les intervenants</option>
-            {intervenants.map(([id, nom]) => (
+            {instructors.map(([id, name]) => (
               <option key={id} value={id}>
-                {nom}
+                {name}
               </option>
             ))}
           </select>
         </div>
-        {filtresActifs && (
-          <button type="button" className="bouton-secondaire" onClick={() => setFiltres(FILTRES_VIDES)}>
+        {activeFilters && (
+          <button type="button" className="bouton-secondaire" onClick={() => setFilters(EMPTY_FILTERS)}>
             Réinitialiser les filtres
           </button>
         )}
         <p className="pb-1.5 text-sm text-doux" aria-live="polite">
-          {visibles.length} cours sur {cours.length}
+          {visible.length} cours sur {cours.length}
         </p>
         <div
           role="group"
           aria-label="Affichage"
           className="ml-auto flex overflow-hidden rounded-md border border-bordure text-sm"
         >
-          {(Object.keys(VUES) as VuePlanning[]).map((v) => (
+          {(Object.keys(VUES) as ScheduleView[]).map((v) => (
             <button
               key={v}
               type="button"
-              aria-pressed={vue === v}
-              className={`px-3 py-1.5 ${vue === v ? "bg-accent text-sur-accent" : "hover:bg-accent-doux"}`}
-              onClick={() => choisirVue(v)}
+              aria-pressed={view === v}
+              className={`px-3 py-1.5 ${view === v ? "bg-accent text-sur-accent" : "hover:bg-accent-doux"}`}
+              onClick={() => chooseView(v)}
             >
               {VUES[v]}
             </button>
@@ -170,113 +170,113 @@ export function GrillePlanning({
         </div>
       </div>
 
-      {visibles.length === 0 ? (
+      {visible.length === 0 ? (
         <div className="panneau flex flex-col items-start gap-3 p-5">
           <p className="text-sm text-doux">
             {cours.length === 0
               ? "Aucun cours n’est encore programmé."
               : "Aucun cours ne correspond à cette combinaison de filtres."}
           </p>
-          {filtresActifs && (
-            <button type="button" className="bouton-secondaire" onClick={() => setFiltres(FILTRES_VIDES)}>
+          {activeFilters && (
+            <button type="button" className="bouton-secondaire" onClick={() => setFilters(EMPTY_FILTERS)}>
               Afficher tous les cours
             </button>
           )}
         </div>
-      ) : vue === "datee" ? (
-        <SemaineDatee
-          seances={filtrerPlanning(seances, filtres)}
-          lundi={lundi}
-          aujourdhui={aujourdhui}
-          fermetures={fermetures}
-          horaires={horairesAffiches}
-          modifiable={modifiable}
+      ) : view === "datee" ? (
+        <DatedWeek
+          lessons={filterSchedule(lessons, filters)}
+          monday={monday}
+          today={today}
+          closures={closures}
+          hours={displayedHours}
+          editable={editable}
         />
-      ) : vue === "type" ? (
-        <SemaineType
-          cours={visibles}
+      ) : view === "type" ? (
+        <TypicalWeek
+          courses={visible}
           tous={cours}
-          modifiable={modifiable}
-          misEnAvant={misEnAvant}
-          horaires={horairesAffiches}
+          editable={editable}
+          highlighted={highlighted}
+          hours={displayedHours}
         />
       ) : (
         <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
-          {jours.map((jour) => (
-            <section key={jour ?? "stage"} aria-labelledby={`jour-${jour ?? "stage"}`} className="flex flex-col gap-2">
+          {days.map((day) => (
+            <section key={day ?? "stage"} aria-labelledby={`jour-${day ?? "stage"}`} className="flex flex-col gap-2">
               <div className="flex items-baseline justify-between border-b border-bordure pb-1">
-                <h2 id={`jour-${jour ?? "stage"}`} className="text-sm font-semibold">
-                  {jour ? JOURS[jour] : "À dates précises"}
+                <h2 id={`jour-${day ?? "stage"}`} className="text-sm font-semibold">
+                  {day ? DAYS[day] : "À dates précises"}
                 </h2>
-                {modifiable && jour && (
+                {editable && day && (
                   <Link
-                    href={`/planning/cours/nouveau?jour=${jour}`}
+                    href={`/planning/cours/nouveau?jour=${day}`}
                     className="lien -my-1 px-2 py-1 text-base"
-                    aria-label={`Nouveau cours le ${JOURS[jour].toLowerCase()}`}
+                    aria-label={`Nouveau cours le ${DAYS[day].toLowerCase()}`}
                   >
                     +
                   </Link>
                 )}
               </div>
               <ul className="flex flex-col gap-2">
-                {visibles
-                  .filter((c) => c.jourSemaine === jour)
+                {visible
+                  .filter((c) => c.weekday === day)
                   .map((c) => {
-                    const complet = c.capaciteMax !== null && c.inscrits >= c.capaciteMax;
-                    const remplissage = c.capaciteMax ? Math.min(1, c.inscrits / c.capaciteMax) : 0;
+                    const full = c.maxCapacity !== null && c.enrolled >= c.maxCapacity;
+                    const fill = c.maxCapacity ? Math.min(1, c.enrolled / c.maxCapacity) : 0;
                     return (
                       <li
                         key={c.id}
-                        className={`panneau flex flex-col gap-0.5 px-2.5 py-2 text-sm ${c.id === misEnAvant ? "border-accent ring-1 ring-accent" : ""}`}
+                        className={`panneau flex flex-col gap-0.5 px-2.5 py-2 text-sm ${c.id === highlighted ? "border-accent ring-1 ring-accent" : ""}`}
                       >
                         <div className="flex items-baseline justify-between gap-2">
                           <p className="font-medium">
                             <span className="tabular-nums">
-                              {c.heureDebut}–{fin(c.heureDebut, c.dureeMinutes)}
+                              {c.startTime}–{end(c.startTime, c.durationMinutes)}
                             </span>{" "}
                             <Link href={`/planning/cours/${c.id}`} className="lien">
                               {c.discipline}
                             </Link>
                           </p>
-                          {complet && (
+                          {full && (
                             <span className="rounded bg-alerte-fond px-1.5 text-xs font-medium text-alerte-texte">
                               Complet
                             </span>
                           )}
                         </div>
                         <p className="text-xs text-doux">
-                          {c.salle}, {c.site} — {c.intervenant}
+                          {c.room}, {c.site} — {c.instructor}
                         </p>
-                        {(c.jourSemaine === null || marqueRecurrence(c)) && (
+                        {(c.weekday === null || recurrenceBadge(c)) && (
                           <p className="text-xs text-doux">
-                            {c.jourSemaine === null ? recurrenceTexte(c) : marqueRecurrence(c)}
+                            {c.weekday === null ? recurrenceText(c) : recurrenceBadge(c)}
                           </p>
                         )}
-                        {(ages(c.ageMin, c.ageMax) || c.niveau) && (
+                        {(ages(c.ageMin, c.ageMax) || c.level) && (
                           <p className="text-xs text-doux">
-                            {[ages(c.ageMin, c.ageMax), c.niveau].filter(Boolean).join(", ")}
+                            {[ages(c.ageMin, c.ageMax), c.level].filter(Boolean).join(", ")}
                           </p>
                         )}
                         <div className="mt-1 flex items-center gap-2 text-xs">
-                          {c.capaciteMax ? (
+                          {c.maxCapacity ? (
                             <>
                               <span
                                 className="h-1.5 flex-1 overflow-hidden rounded-full bg-accent-doux"
                                 role="img"
-                                aria-label={`${c.inscrits} inscrits sur ${c.capaciteMax} places`}
+                                aria-label={`${c.enrolled} inscrits sur ${c.maxCapacity} places`}
                               >
                                 <span
-                                  className={`block h-full rounded-full ${complet ? "bg-alerte-texte" : "bg-accent"}`}
-                                  style={{ width: `${remplissage * 100}%` }}
+                                  className={`block h-full rounded-full ${full ? "bg-alerte-texte" : "bg-accent"}`}
+                                  style={{ width: `${fill * 100}%` }}
                                 />
                               </span>
                               <span className="tabular-nums text-doux">
-                                {c.inscrits} / {c.capaciteMax}
+                                {c.enrolled} / {c.maxCapacity}
                               </span>
                             </>
                           ) : (
                             <span className="text-doux">
-                              {c.inscrits} inscrit{c.inscrits > 1 ? "s" : ""}
+                              {c.enrolled} inscrit{c.enrolled > 1 ? "s" : ""}
                             </span>
                           )}
                         </div>

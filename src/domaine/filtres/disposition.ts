@@ -1,4 +1,4 @@
-import type { DefColonne } from "./filtres";
+import type { ColumnDef } from "./filtres";
 
 /**
  * Disposition des colonnes d'une liste (#89) : ordre et visibilité, choisis
@@ -9,63 +9,63 @@ import type { DefColonne } from "./filtres";
  * `nom@180`, `-age@90`.
  */
 
-export type Disposition = { id: string; visible: boolean; largeur?: number | null }[];
+export type Layout = { id: string; visible: boolean; width?: number | null }[];
 
 /** Bornes d'une largeur de colonne choisie à la souris. */
-export const LARGEUR_MIN = 60;
-export const LARGEUR_MAX = 1200;
-const borner = (l: number) => Math.round(Math.min(LARGEUR_MAX, Math.max(LARGEUR_MIN, l)));
+export const MIN_WIDTH = 60;
+export const MAX_WIDTH = 1200;
+const clamp = (l: number) => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, l)));
 
-const visibleParDefaut = (c: DefColonne) => c.parDefaut !== false;
+const visibleByDefault = (c: ColumnDef) => c.byDefault !== false;
 
 /** Disposition par défaut : ordre des définitions, colonnes `parDefaut: false` masquées. */
-export const dispositionParDefaut = (colonnes: DefColonne[]): Disposition =>
-  colonnes.map((c) => ({ id: c.id, visible: visibleParDefaut(c) }));
+export const defaultLayout = (columns: ColumnDef[]): Layout =>
+  columns.map((c) => ({ id: c.id, visible: visibleByDefault(c) }));
 
 /**
  * Disposition d'un membre : identifiants inconnus et doublons ignorés,
  * colonnes absentes ajoutées à la fin avec leur visibilité par défaut. Au
  * moins une colonne reste visible, et toujours une colonne obligatoire (le nom).
  */
-export function lireDisposition(colonnes: DefColonne[], enregistree: string[] | null | undefined): Disposition {
-  if (!enregistree) return dispositionParDefaut(colonnes);
-  const connues = new Set(colonnes.map((c) => c.id));
-  const obligatoires = new Set(colonnes.filter((c) => c.obligatoire).map((c) => c.id));
+export function readLayout(columns: ColumnDef[], saved: string[] | null | undefined): Layout {
+  if (!saved) return defaultLayout(columns);
+  const known = new Set(columns.map((c) => c.id));
+  const required = new Set(columns.filter((c) => c.required).map((c) => c.id));
   const vues = new Set<string>();
-  const d: Disposition = [];
-  for (const brut of enregistree) {
-    const masquee = brut.startsWith("-");
-    const [id, l] = (masquee ? brut.slice(1) : brut).split("@");
-    if (!connues.has(id) || vues.has(id)) continue;
+  const d: Layout = [];
+  for (const raw of saved) {
+    const hidden = raw.startsWith("-");
+    const [id, l] = (hidden ? raw.slice(1) : raw).split("@");
+    if (!known.has(id) || vues.has(id)) continue;
     vues.add(id);
-    const largeur = l && /^\d+$/.test(l) ? borner(Number(l)) : null;
-    d.push({ id, visible: !masquee || obligatoires.has(id), ...(largeur ? { largeur } : {}) });
+    const width = l && /^\d+$/.test(l) ? clamp(Number(l)) : null;
+    d.push({ id, visible: !hidden || required.has(id), ...(width ? { width } : {}) });
   }
-  for (const c of colonnes) if (!vues.has(c.id)) d.push({ id: c.id, visible: visibleParDefaut(c) });
+  for (const c of columns) if (!vues.has(c.id)) d.push({ id: c.id, visible: visibleByDefault(c) });
   if (!d.some((c) => c.visible) && d.length > 0) d[0] = { ...d[0], visible: true };
   return d;
 }
 
-export const ecrireDisposition = (d: Disposition): string[] =>
-  d.map((c) => `${c.visible ? "" : "-"}${c.id}${c.largeur ? `@${c.largeur}` : ""}`);
+export const writeLayout = (d: Layout): string[] =>
+  d.map((c) => `${c.visible ? "" : "-"}${c.id}${c.width ? `@${c.width}` : ""}`);
 
 /** Place la colonne `id` juste avant `avant` (glisser-déposer d'un en-tête) ; `avant` null : à la fin. */
-export function placer(d: Disposition, id: string, avant: string | null): Disposition {
+export function place(d: Layout, id: string, before: string | null): Layout {
   const c = d.find((x) => x.id === id);
-  if (!c || id === avant) return d;
-  const reste = d.filter((x) => x.id !== id);
-  const i = avant === null ? reste.length : reste.findIndex((x) => x.id === avant);
+  if (!c || id === before) return d;
+  const remaining = d.filter((x) => x.id !== id);
+  const i = before === null ? remaining.length : remaining.findIndex((x) => x.id === before);
   if (i === -1) return d;
-  return [...reste.slice(0, i), c, ...reste.slice(i)];
+  return [...remaining.slice(0, i), c, ...remaining.slice(i)];
 }
 
 /** Largeur choisie d'une colonne, bornée ; null : largeur automatique. */
-export function redimensionner(d: Disposition, id: string, largeur: number | null): Disposition {
-  return d.map((c) => (c.id === id ? { ...c, largeur: largeur === null ? null : borner(largeur) } : c));
+export function resize(d: Layout, id: string, width: number | null): Layout {
+  return d.map((c) => (c.id === id ? { ...c, width: width === null ? null : clamp(width) } : c));
 }
 
 /** Déplace une colonne d'un cran (-1 : vers la gauche, +1 : vers la droite). */
-export function deplacer(d: Disposition, id: string, sens: -1 | 1): Disposition {
+export function move(d: Layout, id: string, sens: -1 | 1): Layout {
   const i = d.findIndex((c) => c.id === id);
   const j = i + sens;
   if (i === -1 || j < 0 || j >= d.length) return d;
@@ -75,8 +75,8 @@ export function deplacer(d: Disposition, id: string, sens: -1 | 1): Disposition 
 }
 
 /** Affiche ou masque une colonne ; la dernière colonne visible ne peut pas être masquée. */
-export function basculer(d: Disposition, id: string): Disposition {
-  const cible = d.find((c) => c.id === id);
-  if (!cible || (cible.visible && d.filter((c) => c.visible).length === 1)) return d;
+export function toggle(d: Layout, id: string): Layout {
+  const target = d.find((c) => c.id === id);
+  if (!target || (target.visible && d.filter((c) => c.visible).length === 1)) return d;
   return d.map((c) => (c.id === id ? { ...c, visible: !c.visible } : c));
 }

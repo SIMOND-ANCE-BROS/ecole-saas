@@ -1,24 +1,24 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { avecEcole } from "@/db";
-import { lireCours, referentielPlanning } from "@/db/cours";
-import { coursDeLaSaison } from "@/db/planning";
-import { exigerRole } from "@/lib/session";
-import { FormulaireCours } from "../../formulaire";
+import { withSchool } from "@/db";
+import { readCourse, scheduleReferential } from "@/db/cours";
+import { seasonCourses } from "@/db/planning";
+import { requireRole } from "@/lib/session";
+import { CourseForm } from "../../formulaire";
 
 export const metadata: Metadata = { title: "Modifier un cours" };
 
-export default async function PageModifierCours({ params }: PageProps<"/planning/cours/[id]/modifier">) {
-  const { ecoleId } = await exigerRole("direction");
+export default async function EditCoursePage({ params }: PageProps<"/planning/cours/[id]/modifier">) {
+  const { schoolId: schoolId } = await requireRole("direction");
   const { id } = await params;
-  const donnees = await avecEcole(ecoleId, async (tx) => {
-    const cours = await lireCours(tx, id);
-    if (!cours) return null;
+  const donnees = await withSchool(schoolId, async (tx) => {
+    const course = await readCourse(tx, id);
+    if (!course) return null;
     return {
-      cours,
-      referentiel: await referentielPlanning(tx, cours.intervenantId),
-      planning: await coursDeLaSaison(tx, cours.saisonId),
+      cours: course,
+      referential: await scheduleReferential(tx, course.instructorId),
+      schedule: await seasonCourses(tx, course.seasonId),
     };
   });
   if (!donnees) notFound();
@@ -37,7 +37,7 @@ export default async function PageModifierCours({ params }: PageProps<"/planning
         <span className="text-doux"> / Modifier</span>
       </nav>
       <h1 className="titre-page">Modifier le cours : {cours.discipline}</h1>
-      <FormulaireCours cours={cours} referentiel={donnees.referentiel} planning={donnees.planning} />
+      <CourseForm course={cours} referential={donnees.referential} schedule={donnees.schedule} />
     </section>
   );
 }

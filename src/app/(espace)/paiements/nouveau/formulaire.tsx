@@ -1,32 +1,32 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Annuler } from "@/app/(espace)/_panneau/panneau";
-import { MOYENS, type Moyen } from "@/db/paiements";
-import { formaterEuros, lireEuros } from "@/lib/montant";
-import { encaisserReglements } from "../actions";
+import { Cancel } from "@/app/(espace)/_panneau/panneau";
+import { MOYENS, type Method } from "@/db/paiements";
+import { formatEuros, parseEuros } from "@/lib/montant";
+import { collectPayments } from "../actions";
 
-type Ligne = { moyen: Moyen; montant: string; reference: string; emetteur: string; encaissement: string };
-const LIGNE_VIDE: Ligne = { moyen: "cheque", montant: "", reference: "", emetteur: "", encaissement: "" };
+type Row = { method: Method; amount: string; reference: string; issuer: string; payment: string };
+const EMPTY_ROW: Row = { method: "cheque", amount: "", reference: "", issuer: "", payment: "" };
 
-type Props = { payeurId: string; payeur: string; reste: number | null; aujourdhui: string; retour: string };
+type Props = { payerId: string; payer: string; remaining: number | null; today: string; back: string };
 
 /**
  * Encaissement d'un payeur (#97) : une ligne par règlement (trois chèques
  * datés, un chèque et des espèces…), date de réception commune, total
  * comparé au reste à payer.
  */
-export function FormulaireEncaissement({ payeurId, payeur, reste, aujourdhui, retour }: Props) {
-  const [lignes, setLignes] = useState<Ligne[]>([
-    { ...LIGNE_VIDE, montant: reste && reste > 0 ? (reste / 100).toFixed(2).replace(".", ",") : "" },
+export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaining, today: today, back: back }: Props) {
+  const [rows, setRows] = useState<Row[]>([
+    { ...EMPTY_ROW, amount: remaining && remaining > 0 ? (remaining / 100).toFixed(2).replace(".", ",") : "" },
   ]);
-  const [date, setDate] = useState(aujourdhui);
+  const [date, setDate] = useState(today);
   const [message, setMessage] = useState<string | null>(null);
-  const [envoi, demarrer] = useTransition();
-  const maj = (i: number, v: Partial<Ligne>) => setLignes(lignes.map((l, j) => (j === i ? { ...l, ...v } : l)));
-  const montants = lignes.map((l) => lireEuros(l.montant));
+  const [sending, startTransition] = useTransition();
+  const updated = (i: number, v: Partial<Row>) => setRows(rows.map((l, j) => (j === i ? { ...l, ...v } : l)));
+  const montants = rows.map((l) => parseEuros(l.amount));
   const total = montants.reduce<number>((s, m) => s + (m ?? 0), 0);
-  const invalides = lignes.map((l, i) => l.montant.trim() !== "" && (montants[i] === null || montants[i] === 0));
+  const invalides = rows.map((l, i) => l.amount.trim() !== "" && (montants[i] === null || montants[i] === 0));
 
   return (
     <form
@@ -37,28 +37,28 @@ export function FormulaireEncaissement({ payeurId, payeur, reste, aujourdhui, re
           setMessage("Indiquez un montant pour chaque règlement.");
           return;
         }
-        const saisie = lignes.map((l, i) => ({
-          moyen: l.moyen,
-          montantCentimes: montants[i],
+        const saisie = rows.map((l, i) => ({
+          method: l.method,
+          amountCents: montants[i],
           date,
           reference: l.reference,
-          emetteur: l.emetteur,
-          encaissementPrevu: l.moyen === "cheque" && l.encaissement ? l.encaissement : null,
+          issuer: l.issuer,
+          plannedPayment: l.method === "cheque" && l.payment ? l.payment : null,
         }));
         setMessage(null);
-        demarrer(async () => setMessage((await encaisserReglements(payeurId, saisie, retour)).message));
+        startTransition(async () => setMessage((await collectPayments(payerId, saisie, back)).message));
       }}
     >
       <p className="text-sm">
-        Payeur : <strong>{payeur}</strong>
-        {reste !== null && (
+        Payeur : <strong>{payer}</strong>
+        {remaining !== null && (
           <span className="text-doux">
             {" "}
             —{" "}
-            {reste > 0
-              ? `reste à payer ${formaterEuros(reste)}`
-              : reste < 0
-                ? `trop-perçu ${formaterEuros(-reste)}`
+            {remaining > 0
+              ? `reste à payer ${formatEuros(remaining)}`
+              : remaining < 0
+                ? `trop-perçu ${formatEuros(-remaining)}`
                 : "à jour"}
           </span>
         )}
@@ -79,7 +79,7 @@ export function FormulaireEncaissement({ payeurId, payeur, reste, aujourdhui, re
 
       <fieldset className="flex flex-col gap-3">
         <legend className="mb-1 text-sm font-semibold">Règlements</legend>
-        {lignes.map((l, i) => (
+        {rows.map((l, i) => (
           <div key={i} className="panneau grid gap-2 p-3 sm:grid-cols-[10rem_8rem_1fr_auto] sm:items-end">
             <div className="flex flex-col gap-1">
               <label htmlFor={`moyen-${i}`} className="text-xs text-doux">
@@ -88,8 +88,8 @@ export function FormulaireEncaissement({ payeurId, payeur, reste, aujourdhui, re
               <select
                 id={`moyen-${i}`}
                 className="champ"
-                value={l.moyen}
-                onChange={(e) => maj(i, { moyen: e.target.value as Moyen })}
+                value={l.method}
+                onChange={(e) => updated(i, { method: e.target.value as Method })}
               >
                 {Object.entries(MOYENS).map(([k, v]) => (
                   <option key={k} value={k}>
@@ -106,35 +106,35 @@ export function FormulaireEncaissement({ payeurId, payeur, reste, aujourdhui, re
                 id={`montant-${i}`}
                 inputMode="decimal"
                 className="champ text-right tabular-nums"
-                value={l.montant}
-                onChange={(e) => maj(i, { montant: e.target.value })}
+                value={l.amount}
+                onChange={(e) => updated(i, { amount: e.target.value })}
                 aria-invalid={invalides[i] || undefined}
               />
             </div>
             <div className="flex flex-col gap-1">
               <label htmlFor={`reference-${i}`} className="text-xs text-doux">
-                {l.moyen === "cheque" ? "N° de chèque" : "Référence (facultatif)"}
+                {l.method === "cheque" ? "N° de chèque" : "Référence (facultatif)"}
               </label>
               <input
                 id={`reference-${i}`}
                 className="champ"
                 value={l.reference}
-                onChange={(e) => maj(i, { reference: e.target.value })}
+                onChange={(e) => updated(i, { reference: e.target.value })}
               />
             </div>
-            {lignes.length > 1 ? (
+            {rows.length > 1 ? (
               <button
                 type="button"
                 className="bouton-secondaire px-2"
                 aria-label={`Retirer le règlement ${i + 1}`}
-                onClick={() => setLignes(lignes.filter((_, j) => j !== i))}
+                onClick={() => setRows(rows.filter((_, j) => j !== i))}
               >
                 ×
               </button>
             ) : (
               <span />
             )}
-            {l.moyen === "cheque" && (
+            {l.method === "cheque" && (
               <>
                 <div className="flex flex-col gap-1 sm:col-span-2">
                   <label htmlFor={`emetteur-${i}`} className="text-xs text-doux">
@@ -143,8 +143,8 @@ export function FormulaireEncaissement({ payeurId, payeur, reste, aujourdhui, re
                   <input
                     id={`emetteur-${i}`}
                     className="champ"
-                    value={l.emetteur}
-                    onChange={(e) => maj(i, { emetteur: e.target.value })}
+                    value={l.issuer}
+                    onChange={(e) => updated(i, { issuer: e.target.value })}
                   />
                 </div>
                 <div className="flex flex-col gap-1 sm:col-span-2">
@@ -156,8 +156,8 @@ export function FormulaireEncaissement({ payeurId, payeur, reste, aujourdhui, re
                     type="date"
                     min={date}
                     className="champ"
-                    value={l.encaissement}
-                    onChange={(e) => maj(i, { encaissement: e.target.value })}
+                    value={l.payment}
+                    onChange={(e) => updated(i, { payment: e.target.value })}
                   />
                 </div>
               </>
@@ -167,11 +167,11 @@ export function FormulaireEncaissement({ payeurId, payeur, reste, aujourdhui, re
         <button
           type="button"
           className="lien self-start text-sm"
-          disabled={lignes.length >= 24}
+          disabled={rows.length >= 24}
           onClick={() =>
-            setLignes([
-              ...lignes,
-              { ...LIGNE_VIDE, moyen: lignes.at(-1)?.moyen ?? "cheque", emetteur: lignes.at(-1)?.emetteur ?? "" },
+            setRows([
+              ...rows,
+              { ...EMPTY_ROW, method: rows.at(-1)?.method ?? "cheque", issuer: rows.at(-1)?.issuer ?? "" },
             ])
           }
         >
@@ -180,9 +180,9 @@ export function FormulaireEncaissement({ payeurId, payeur, reste, aujourdhui, re
       </fieldset>
 
       <p className="text-sm" aria-live="polite">
-        Total : <strong className="tabular-nums">{formaterEuros(total)}</strong>
-        {reste !== null && reste > 0 && total !== reste && (
-          <span className="text-doux"> (reste à payer : {formaterEuros(reste)})</span>
+        Total : <strong className="tabular-nums">{formatEuros(total)}</strong>
+        {remaining !== null && remaining > 0 && total !== remaining && (
+          <span className="text-doux"> (reste à payer : {formatEuros(remaining)})</span>
         )}
       </p>
       {message && (
@@ -191,10 +191,10 @@ export function FormulaireEncaissement({ payeurId, payeur, reste, aujourdhui, re
         </p>
       )}
       <div className="flex flex-wrap gap-2 border-t border-bordure pt-4">
-        <button type="submit" className="bouton-principal" disabled={envoi || total === 0}>
-          {envoi ? "Enregistrement…" : `Encaisser ${formaterEuros(total)}`}
+        <button type="submit" className="bouton-principal" disabled={sending || total === 0}>
+          {sending ? "Enregistrement…" : `Encaisser ${formatEuros(total)}`}
         </button>
-        <Annuler href={retour} />
+        <Cancel href={back} />
       </div>
     </form>
   );

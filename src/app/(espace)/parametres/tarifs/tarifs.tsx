@@ -1,18 +1,18 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { Fratrie as RegleFratrie, LigneCarnet, LigneGrille, Periodicite, Public } from "@/db/tarifs";
-import { libelleCombinaison } from "@/domaine/tarif/calculer";
-import { formaterEuros, lireEuros } from "@/lib/montant";
-import { carnet, prixCase, regleFratrie, retirerCarnet } from "../actions";
+import type { Siblings as RegleFratrie, LessonPackRow, GridRow, Period, Public } from "@/db/tarifs";
+import { combinationLabel } from "@/domaine/tarif/calculer";
+import { formatEuros, parseEuros } from "@/lib/montant";
+import { lessonPack, cellPrice, siblingsRule, removeLessonPack } from "../actions";
 
-const PUBLICS: [Public, string][] = [
+const AUDIENCES: [Public, string][] = [
   ["enfant", "Enfant"],
   ["adulte", "Adulte"],
   ["couple", "Couple"],
   ["etudiant", "Étudiant"],
 ];
-const PERIODICITES: [Periodicite, string][] = [
+const PERIODS: [Period, string][] = [
   ["trimestre", "Trimestre"],
   ["annee", "Année"],
   ["unite", "À l’unité"],
@@ -20,48 +20,48 @@ const PERIODICITES: [Periodicite, string][] = [
 const DUREES = [30, 45, 60, 75, 90, 120];
 
 /** Centimes → saisie en euros (« 110 », « 112,50 »), sans nombre à virgule. */
-const enEuros = (c: number) => `${Math.trunc(c / 100)}${c % 100 ? `,${String(c % 100).padStart(2, "0")}` : ""}`;
+const inEuros = (c: number) => `${Math.trunc(c / 100)}${c % 100 ? `,${String(c % 100).padStart(2, "0")}` : ""}`;
 
-type Etat = "enregistre" | "erreur" | null;
+type State = "enregistre" | "erreur" | null;
 
 /** Prix d'une case, enregistré en quittant le champ (Entrée ou Tab) ; vide = pas de forfait. */
-function CellulePrix({
-  saisonId,
-  ligne,
-  periodicite,
-  libelle,
+function PriceCell({
+  seasonId: seasonId,
+  row: row,
+  period: period,
+  label: label,
 }: {
-  saisonId: string;
-  ligne: Pick<LigneGrille, "public" | "combinaison" | "disciplineId" | "prix">;
-  periodicite: Periodicite;
-  libelle: string;
+  seasonId: string;
+  row: Pick<GridRow, "audience" | "combination" | "disciplineId" | "price">;
+  period: Period;
+  label: string;
 }) {
-  const actuel = ligne.prix[periodicite];
-  const initial = actuel ? enEuros(actuel.centimes) : "";
-  const [valeur, setValeur] = useState(initial);
-  const [etat, setEtat] = useState<Etat>(null);
+  const current = row.price[period];
+  const initial = current ? inEuros(current.cents) : "";
+  const [value, setValue] = useState(initial);
+  const [state, setState] = useState<State>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [enCours, demarrer] = useTransition();
+  const [inProgress, startTransition] = useTransition();
 
-  const enregistrer = () => {
-    if (valeur.trim() === initial) return;
-    const centimes = valeur.trim() === "" ? null : lireEuros(valeur);
-    if (valeur.trim() !== "" && centimes === null) {
-      setEtat("erreur");
+  const save = () => {
+    if (value.trim() === initial) return;
+    const cents = value.trim() === "" ? null : parseEuros(value);
+    if (value.trim() !== "" && cents === null) {
+      setState("erreur");
       setMessage("Montant en euros, par exemple 110 ou 112,50");
       return;
     }
-    demarrer(async () => {
-      const r = await prixCase(saisonId, {
-        public: ligne.public,
-        combinaison: ligne.combinaison,
-        disciplineId: ligne.disciplineId,
-        periodicite,
-        prixCentimes: centimes,
+    startTransition(async () => {
+      const r = await cellPrice(seasonId, {
+        audience: row.audience,
+        combination: row.combination,
+        disciplineId: row.disciplineId,
+        period: period,
+        priceCents: cents,
       });
-      setEtat(r.message ? "erreur" : "enregistre");
+      setState(r.message ? "erreur" : "enregistre");
       setMessage(r.message);
-      if (r.message) setValeur(initial);
+      if (r.message) setValue(initial);
     });
   };
 
@@ -69,24 +69,24 @@ function CellulePrix({
     <div className="flex flex-col items-end gap-0.5">
       <div className="flex items-center gap-1">
         <input
-          aria-label={libelle}
+          aria-label={label}
           inputMode="decimal"
-          className={`champ w-24 text-right tabular-nums ${etat === "erreur" ? "border-erreur" : ""}`}
-          value={valeur}
+          className={`champ w-24 text-right tabular-nums ${state === "erreur" ? "border-erreur" : ""}`}
+          value={value}
           placeholder="—"
-          disabled={enCours}
+          disabled={inProgress}
           onChange={(e) => {
-            setValeur(e.target.value);
-            setEtat(null);
+            setValue(e.target.value);
+            setState(null);
           }}
-          onBlur={enregistrer}
+          onBlur={save}
           onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), e.currentTarget.blur())}
         />
         <span className="w-3 text-xs" aria-hidden>
-          {etat === "enregistre" ? "✓" : "€"}
+          {state === "enregistre" ? "✓" : "€"}
         </span>
       </div>
-      {actuel?.utilise && <span className="text-[11px] text-doux">déjà utilisé</span>}
+      {current?.used && <span className="text-[11px] text-doux">déjà utilisé</span>}
       {message && (
         <span role="alert" className="max-w-40 text-right text-[11px] text-erreur">
           {message}
@@ -96,60 +96,58 @@ function CellulePrix({
   );
 }
 
-export function Grille({
-  saisonId,
-  grille,
+export function Grid({
+  seasonId: seasonId,
+  grid: grid,
   disciplines,
 }: {
-  saisonId: string;
-  grille: LigneGrille[];
-  disciplines: { id: string; nom: string }[];
+  seasonId: string;
+  grid: GridRow[];
+  disciplines: { id: string; name: string }[];
 }) {
-  const [publicChoisi, setPublic] = useState<Public>("enfant");
-  const [combinaison, setCombinaison] = useState<number[]>([]);
+  const [chosenAudience, setPublic] = useState<Public>("enfant");
+  const [combination, setCombination] = useState<number[]>([]);
   const [disciplineId, setDisciplineId] = useState("");
-  const [duree, setDuree] = useState("60");
-  const [nouveauxPrix, setNouveauxPrix] = useState<Record<Periodicite, string>>({
+  const [duration, setDuration] = useState("60");
+  const [newPrices, setNewPrice] = useState<Record<Period, string>>({
     trimestre: "",
     annee: "",
     unite: "",
   });
   const [message, setMessage] = useState<string | null>(null);
-  const [enCours, demarrer] = useTransition();
-  const lignes = grille.filter((l) => l.public === publicChoisi);
+  const [inProgress, startTransition] = useTransition();
+  const rows = grid.filter((l) => l.audience === chosenAudience);
 
-  const ajouterLigne = () =>
-    demarrer(async () => {
-      const prix = PERIODICITES.flatMap(([p]) =>
-        nouveauxPrix[p].trim() ? [[p, lireEuros(nouveauxPrix[p])] as const] : [],
-      );
-      if (prix.length === 0) return setMessage("Indiquez au moins un prix.");
-      if (prix.some(([, c]) => c === null)) return setMessage("Montant en euros, par exemple 110 ou 112,50.");
-      for (const [periodicite, centimes] of prix) {
-        const r = await prixCase(saisonId, {
-          public: publicChoisi,
-          combinaison,
+  const addRow = () =>
+    startTransition(async () => {
+      const price = PERIODS.flatMap(([p]) => (newPrices[p].trim() ? [[p, parseEuros(newPrices[p])] as const] : []));
+      if (price.length === 0) return setMessage("Indiquez au moins un prix.");
+      if (price.some(([, c]) => c === null)) return setMessage("Montant en euros, par exemple 110 ou 112,50.");
+      for (const [period, cents] of price) {
+        const r = await cellPrice(seasonId, {
+          audience: chosenAudience,
+          combination: combination,
           disciplineId: disciplineId || null,
-          periodicite,
-          prixCentimes: centimes,
+          period: period,
+          priceCents: cents,
         });
         if (r.message) return setMessage(r.message);
       }
       setMessage(null);
-      setCombinaison([]);
-      setNouveauxPrix({ trimestre: "", annee: "", unite: "" });
+      setCombination([]);
+      setNewPrice({ trimestre: "", annee: "", unite: "" });
     });
 
-  const retirerLigne = (l: LigneGrille) =>
-    demarrer(async () => {
-      for (const [periodicite] of PERIODICITES) {
-        if (!l.prix[periodicite]) continue;
-        const r = await prixCase(saisonId, {
-          public: l.public,
-          combinaison: l.combinaison,
+  const removeRow = (l: GridRow) =>
+    startTransition(async () => {
+      for (const [period] of PERIODS) {
+        if (!l.price[period]) continue;
+        const r = await cellPrice(seasonId, {
+          audience: l.audience,
+          combination: l.combination,
           disciplineId: l.disciplineId,
-          periodicite,
-          prixCentimes: null,
+          period: period,
+          priceCents: null,
         });
         if (r.message) return setMessage(r.message);
       }
@@ -162,16 +160,16 @@ export function Grille({
         Grille des forfaits
       </h2>
       <div role="tablist" aria-label="Public" className="flex flex-wrap gap-1">
-        {PUBLICS.map(([p, libelle]) => (
+        {AUDIENCES.map(([p, label]) => (
           <button
             key={p}
             type="button"
             role="tab"
-            aria-selected={publicChoisi === p}
+            aria-selected={chosenAudience === p}
             className="rounded-md border border-bordure px-3 py-1.5 text-sm aria-selected:border-accent aria-selected:bg-accent-doux aria-selected:font-medium"
             onClick={() => setPublic(p)}
           >
-            {libelle} <span className="text-doux">({grille.filter((l) => l.public === p).length})</span>
+            {label} <span className="text-doux">({grid.filter((l) => l.audience === p).length})</span>
           </button>
         ))}
       </div>
@@ -181,9 +179,9 @@ export function Grille({
           <thead>
             <tr>
               <th>Cours de la semaine</th>
-              {PERIODICITES.map(([p, libelle]) => (
+              {PERIODS.map(([p, label]) => (
                 <th key={p} className="text-right">
-                  {libelle}
+                  {label}
                 </th>
               ))}
               <th>
@@ -192,43 +190,38 @@ export function Grille({
             </tr>
           </thead>
           <tbody>
-            {lignes.length === 0 && (
+            {rows.length === 0 && (
               <tr>
                 <td colSpan={5} className="text-doux">
                   Aucun forfait pour ce public : ajoutez une ligne ci-dessous.
                 </td>
               </tr>
             )}
-            {lignes.map((l) => {
-              const cle = `${l.combinaison.join("+")}|${l.disciplineId ?? ""}`;
-              const libelle = libelleCombinaison(l.combinaison);
-              const utilisee = PERIODICITES.some(([p]) => l.prix[p]?.utilise);
+            {rows.map((l) => {
+              const key = `${l.combination.join("+")}|${l.disciplineId ?? ""}`;
+              const label = combinationLabel(l.combination);
+              const used = PERIODS.some(([p]) => l.price[p]?.used);
               return (
-                <tr key={cle}>
+                <tr key={key}>
                   <td>
-                    <span className="font-medium">{libelle}</span>
+                    <span className="font-medium">{label}</span>
                     {l.discipline && (
                       <span className="ml-2 rounded bg-accent-doux px-1.5 text-xs">{l.discipline} seulement</span>
                     )}
                   </td>
-                  {PERIODICITES.map(([p, libellePeriode]) => (
-                    <td key={`${cle}-${p}-${l.prix[p]?.centimes ?? "vide"}`}>
-                      <CellulePrix
-                        saisonId={saisonId}
-                        ligne={l}
-                        periodicite={p}
-                        libelle={`${libelle}, ${libellePeriode}`}
-                      />
+                  {PERIODS.map(([p, periodLabel]) => (
+                    <td key={`${key}-${p}-${l.price[p]?.cents ?? "vide"}`}>
+                      <PriceCell seasonId={seasonId} row={l} period={p} label={`${label}, ${periodLabel}`} />
                     </td>
                   ))}
                   <td className="text-right">
-                    {!utilisee && (
+                    {!used && (
                       <button
                         type="button"
                         className="lien text-xs text-doux"
-                        disabled={enCours}
-                        onClick={() => retirerLigne(l)}
-                        aria-label={`Retirer la ligne ${libelle}`}
+                        disabled={inProgress}
+                        onClick={() => removeRow(l)}
+                        aria-label={`Retirer la ligne ${label}`}
                       >
                         Retirer
                       </button>
@@ -242,14 +235,16 @@ export function Grille({
       </div>
 
       <div className="panneau flex flex-col gap-3 p-4 text-sm">
-        <p className="font-semibold">Nouvelle ligne ({PUBLICS.find(([p]) => p === publicChoisi)?.[1].toLowerCase()})</p>
+        <p className="font-semibold">
+          Nouvelle ligne ({AUDIENCES.find(([p]) => p === chosenAudience)?.[1].toLowerCase()})
+        </p>
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col gap-1">
             <label htmlFor="duree">Cours de</label>
-            <select id="duree" className="champ" value={duree} onChange={(e) => setDuree(e.target.value)}>
+            <select id="duree" className="champ" value={duration} onChange={(e) => setDuration(e.target.value)}>
               {DUREES.map((d) => (
                 <option key={d} value={d}>
-                  {libelleCombinaison([d])}
+                  {combinationLabel([d])}
                 </option>
               ))}
             </select>
@@ -257,17 +252,17 @@ export function Grille({
           <button
             type="button"
             className="bouton-secondaire"
-            onClick={() => setCombinaison([...combinaison, Number(duree)].sort((a, b) => a - b))}
+            onClick={() => setCombination([...combination, Number(duration)].sort((a, b) => a - b))}
           >
             Ajouter ce cours
           </button>
           <span className="pb-2" aria-live="polite">
-            {combinaison.length === 0 ? (
+            {combination.length === 0 ? (
               <span className="text-doux">Aucun cours choisi.</span>
             ) : (
               <>
-                <span className="font-medium">{libelleCombinaison(combinaison)}</span>{" "}
-                <button type="button" className="lien text-xs" onClick={() => setCombinaison([])}>
+                <span className="font-medium">{combinationLabel(combination)}</span>{" "}
+                <button type="button" className="lien text-xs" onClick={() => setCombination([])}>
                   Effacer
                 </button>
               </>
@@ -286,28 +281,28 @@ export function Grille({
               <option value="">Toutes</option>
               {disciplines.map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.nom} seulement
+                  {d.name} seulement
                 </option>
               ))}
             </select>
           </div>
-          {PERIODICITES.map(([p, libelle]) => (
+          {PERIODS.map(([p, label]) => (
             <div key={p} className="flex flex-col gap-1">
-              <label htmlFor={`prix-${p}`}>{libelle} (€)</label>
+              <label htmlFor={`prix-${p}`}>{label} (€)</label>
               <input
                 id={`prix-${p}`}
                 inputMode="decimal"
                 className="champ w-28 text-right"
-                value={nouveauxPrix[p]}
-                onChange={(e) => setNouveauxPrix({ ...nouveauxPrix, [p]: e.target.value })}
+                value={newPrices[p]}
+                onChange={(e) => setNewPrice({ ...newPrices, [p]: e.target.value })}
               />
             </div>
           ))}
           <button
             type="button"
             className="bouton-principal"
-            disabled={enCours || combinaison.length === 0}
-            onClick={ajouterLigne}
+            disabled={inProgress || combination.length === 0}
+            onClick={addRow}
           >
             Ajouter la ligne
           </button>
@@ -322,40 +317,42 @@ export function Grille({
   );
 }
 
-export function Fratrie({ saisonId, fratrie }: { saisonId: string; fratrie: RegleFratrie | null }) {
+export function Siblings({
+  seasonId: seasonId,
+  siblings: siblings,
+}: {
+  seasonId: string;
+  siblings: RegleFratrie | null;
+}) {
   const [v, setV] = useState({
-    active: fratrie !== null,
-    mode: fratrie?.montantCentimes ? "montant" : "taux",
-    valeur: fratrie?.montantCentimes
-      ? enEuros(fratrie.montantCentimes)
-      : fratrie?.tauxPointsBase
-        ? enEuros(fratrie.tauxPointsBase)
-        : "10",
-    seuil: String(fratrie?.seuilDanseurs ?? 2),
-    publics: fratrie?.publics ?? (["enfant"] as Public[]),
-    cumulable: fratrie?.cumulableMultiDisciplines ?? false,
+    active: siblings !== null,
+    mode: siblings?.amountCents ? "montant" : "taux",
+    value: siblings?.amountCents ? inEuros(siblings.amountCents) : siblings?.rateBps ? inEuros(siblings.rateBps) : "10",
+    threshold: String(siblings?.minStudents ?? 2),
+    audiences: siblings?.audiences ?? (["enfant"] as Public[]),
+    combinable: siblings?.combinableWithMultiDiscipline ?? false,
   });
-  const [message, setMessage] = useState<{ texte: string; erreur: boolean } | null>(null);
-  const [enCours, demarrer] = useTransition();
+  const [message, setMessage] = useState<{ texte: string; error: boolean } | null>(null);
+  const [inProgress, startTransition] = useTransition();
 
-  const enregistrer = () =>
-    demarrer(async () => {
+  const save = () =>
+    startTransition(async () => {
       // Pourcentage saisi « 10 » ou « 12,5 » : en points de base (1000 = 10 %), sans nombre à virgule.
-      const nombre = lireEuros(v.valeur);
-      if (v.active && nombre === null) return setMessage({ texte: "Valeur invalide.", erreur: true });
-      const r = await regleFratrie(
-        saisonId,
+      const nombre = parseEuros(v.value);
+      if (v.active && nombre === null) return setMessage({ texte: "Valeur invalide.", error: true });
+      const r = await siblingsRule(
+        seasonId,
         v.active
           ? {
-              tauxPointsBase: v.mode === "taux" ? nombre : null,
-              montantCentimes: v.mode === "montant" ? nombre : null,
-              seuilDanseurs: Number(v.seuil),
-              publics: v.publics,
-              cumulableMultiDisciplines: v.cumulable,
+              rateBps: v.mode === "taux" ? nombre : null,
+              amountCents: v.mode === "montant" ? nombre : null,
+              minStudents: Number(v.threshold),
+              audiences: v.audiences,
+              combinableWithMultiDiscipline: v.combinable,
             }
           : null,
       );
-      setMessage(r.message ? { texte: r.message, erreur: true } : { texte: "Réduction enregistrée.", erreur: false });
+      setMessage(r.message ? { texte: r.message, error: true } : { texte: "Réduction enregistrée.", error: false });
     });
 
   return (
@@ -376,8 +373,8 @@ export function Fratrie({ saisonId, fratrie }: { saisonId: string; fratrie: Regl
                 id="fratrie-valeur"
                 inputMode="decimal"
                 className="champ w-24 text-right"
-                value={v.valeur}
-                onChange={(e) => setV({ ...v, valeur: e.target.value })}
+                value={v.value}
+                onChange={(e) => setV({ ...v, value: e.target.value })}
               />
             </div>
             <label className="sr-only" htmlFor="fratrie-mode">
@@ -397,8 +394,8 @@ export function Fratrie({ saisonId, fratrie }: { saisonId: string; fratrie: Regl
               <select
                 id="fratrie-seuil"
                 className="champ"
-                value={v.seuil}
-                onChange={(e) => setV({ ...v, seuil: e.target.value })}
+                value={v.threshold}
+                onChange={(e) => setV({ ...v, threshold: e.target.value })}
               >
                 {[2, 3, 4].map((n) => (
                   <option key={n} value={n}>
@@ -410,34 +407,37 @@ export function Fratrie({ saisonId, fratrie }: { saisonId: string; fratrie: Regl
           </div>
           <fieldset className="flex flex-wrap gap-x-4 gap-y-1">
             <legend className="mb-1">Pour les publics</legend>
-            {PUBLICS.map(([p, libelle]) => (
+            {AUDIENCES.map(([p, label]) => (
               <label key={p} className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={v.publics.includes(p)}
+                  checked={v.audiences.includes(p)}
                   onChange={(e) =>
-                    setV({ ...v, publics: e.target.checked ? [...v.publics, p] : v.publics.filter((x) => x !== p) })
+                    setV({
+                      ...v,
+                      audiences: e.target.checked ? [...v.audiences, p] : v.audiences.filter((x) => x !== p),
+                    })
                   }
                 />
-                {libelle}
+                {label}
               </label>
             ))}
           </fieldset>
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
-              checked={v.cumulable}
-              onChange={(e) => setV({ ...v, cumulable: e.target.checked })}
+              checked={v.combinable}
+              onChange={(e) => setV({ ...v, combinable: e.target.checked })}
             />
             Cumulable avec un forfait de plusieurs disciplines
           </label>
         </>
       )}
-      <button type="button" className="bouton-principal self-start" disabled={enCours} onClick={enregistrer}>
+      <button type="button" className="bouton-principal self-start" disabled={inProgress} onClick={save}>
         Enregistrer
       </button>
       {message && (
-        <p role={message.erreur ? "alert" : "status"} className={message.erreur ? "text-erreur" : ""}>
+        <p role={message.error ? "alert" : "status"} className={message.error ? "text-erreur" : ""}>
           {message.texte}
         </p>
       )}
@@ -445,15 +445,21 @@ export function Fratrie({ saisonId, fratrie }: { saisonId: string; fratrie: Regl
   );
 }
 
-export function Carnets({ saisonId, carnets }: { saisonId: string; carnets: LigneCarnet[] }) {
-  const [v, setV] = useState({ nbSeances: "5", personnesMax: "1", prix: "" });
+export function LessonPacks({
+  seasonId: seasonId,
+  lessonPacks: lessonPacks,
+}: {
+  seasonId: string;
+  lessonPacks: LessonPackRow[];
+}) {
+  const [v, setV] = useState({ lessonCount: "5", maxPeople: "1", price: "" });
   const [message, setMessage] = useState<string | null>(null);
-  const [enCours, demarrer] = useTransition();
-  const agir = (action: () => Promise<{ message: string | null }>, apres?: () => void) =>
-    demarrer(async () => {
+  const [inProgress, startTransition] = useTransition();
+  const act = (action: () => Promise<{ message: string | null }>, after?: () => void) =>
+    startTransition(async () => {
       const r = await action();
       setMessage(r.message);
-      if (!r.message) apres?.();
+      if (!r.message) after?.();
     });
 
   return (
@@ -461,24 +467,22 @@ export function Carnets({ saisonId, carnets }: { saisonId: string; carnets: Lign
       <h2 id="carnets" className="text-base font-semibold">
         Carnets de cours particuliers
       </h2>
-      {carnets.length === 0 ? (
+      {lessonPacks.length === 0 ? (
         <p className="text-doux">Aucun carnet pour cette saison.</p>
       ) : (
         <ul className="divide-y divide-bordure rounded-md border border-bordure">
-          {carnets.map((c) => (
+          {lessonPacks.map((c) => (
             <li key={c.id} className="flex flex-wrap items-baseline gap-x-3 px-3 py-2">
               <span className="font-medium">
-                {c.nbSeances} séance{c.nbSeances > 1 ? "s" : ""}
+                {c.lessonCount} séance{c.lessonCount > 1 ? "s" : ""}
               </span>
-              <span className="text-doux">
-                {c.personnesMax === 1 ? "1 personne" : `jusqu’à ${c.personnesMax} personnes`}
-              </span>
-              <span className="tabular-nums">{formaterEuros(c.prixCentimes)}</span>
+              <span className="text-doux">{c.maxPeople === 1 ? "1 personne" : `jusqu’à ${c.maxPeople} personnes`}</span>
+              <span className="tabular-nums">{formatEuros(c.priceCents)}</span>
               <button
                 type="button"
                 className="lien ml-auto text-xs text-doux"
-                disabled={enCours}
-                onClick={() => agir(() => retirerCarnet(c.id))}
+                disabled={inProgress}
+                onClick={() => act(() => removeLessonPack(c.id))}
               >
                 Retirer
               </button>
@@ -490,16 +494,16 @@ export function Carnets({ saisonId, carnets }: { saisonId: string; carnets: Lign
         className="flex flex-wrap items-end gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          const prix = lireEuros(v.prix);
-          if (prix === null) return setMessage("Montant en euros, par exemple 250.");
-          agir(
+          const price = parseEuros(v.price);
+          if (price === null) return setMessage("Montant en euros, par exemple 250.");
+          act(
             () =>
-              carnet(saisonId, {
-                nbSeances: Number(v.nbSeances),
-                personnesMax: Number(v.personnesMax),
-                prixCentimes: prix,
+              lessonPack(seasonId, {
+                lessonCount: Number(v.lessonCount),
+                maxPeople: Number(v.maxPeople),
+                priceCents: price,
               }),
-            () => setV({ ...v, prix: "" }),
+            () => setV({ ...v, price: "" }),
           );
         }}
       >
@@ -510,8 +514,8 @@ export function Carnets({ saisonId, carnets }: { saisonId: string; carnets: Lign
             type="number"
             min={1}
             className="champ w-20"
-            value={v.nbSeances}
-            onChange={(e) => setV({ ...v, nbSeances: e.target.value })}
+            value={v.lessonCount}
+            onChange={(e) => setV({ ...v, lessonCount: e.target.value })}
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -521,8 +525,8 @@ export function Carnets({ saisonId, carnets }: { saisonId: string; carnets: Lign
             type="number"
             min={1}
             className="champ w-20"
-            value={v.personnesMax}
-            onChange={(e) => setV({ ...v, personnesMax: e.target.value })}
+            value={v.maxPeople}
+            onChange={(e) => setV({ ...v, maxPeople: e.target.value })}
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -531,11 +535,11 @@ export function Carnets({ saisonId, carnets }: { saisonId: string; carnets: Lign
             id="carnet-prix"
             inputMode="decimal"
             className="champ w-28 text-right"
-            value={v.prix}
-            onChange={(e) => setV({ ...v, prix: e.target.value })}
+            value={v.price}
+            onChange={(e) => setV({ ...v, price: e.target.value })}
           />
         </div>
-        <button type="submit" className="bouton-secondaire" disabled={enCours}>
+        <button type="submit" className="bouton-secondaire" disabled={inProgress}>
           Enregistrer le carnet
         </button>
       </form>

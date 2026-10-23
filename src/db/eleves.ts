@@ -1,24 +1,24 @@
 import { and, asc, eq, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
-import { COLONNES_CONTACTS, COLONNES_ELEVES } from "../domaine/filtres/colonnes";
-import { FILTRE_VIDE, type Filtre, type Tri } from "../domaine/filtres/filtres";
-import { LIBELLES_STATUT_INSCRIPTION, PRIORITE_STATUT } from "../domaine/inscription/statuts";
-import { JOURS_COURTS } from "../domaine/planning/jours";
-import { aujourdhuiAParis } from "../domaine/personnes/age";
-import { conditionFiltre, ordreColonne } from "./filtres";
+import { CONTACT_COLUMNS, STUDENT_COLUMNS } from "../domaine/filtres/colonnes";
+import { EMPTY_FILTER, type Filter, type Sort } from "../domaine/filtres/filtres";
+import { ENROLLMENT_STATUS_LABELS, STATUS_PRIORITY } from "../domaine/inscription/statuts";
+import { SHORT_DAYS } from "../domaine/planning/jours";
+import { todayInParis } from "../domaine/personnes/age";
+import { filterCondition, columnOrder } from "./filtres";
 import type { Tx } from "./index";
 import {
-  ajouterLien,
-  conditionRecherche,
-  creerPersonne,
-  danseursPayables,
-  type Doublon,
-  doublonsProbables,
-  type FichePersonne,
-  lirePersonne,
-  type Resultat,
-  type SaisiePersonne,
-  saisiePersonneValide,
+  addRelationship,
+  searchCondition,
+  createPerson,
+  payableStudents,
+  type Duplicate,
+  likelyDuplicates,
+  type PersonRecord,
+  readPerson,
+  type Result,
+  type PersonInput,
+  validPersonInput,
 } from "./personnes";
 import { relationship, person } from "./schema";
 
@@ -30,108 +30,108 @@ import { relationship, person } from "./schema";
  */
 
 /** Lignes au plus dans une liste : au-delà, l'accueil affine la recherche ou filtre. */
-export const RESULTATS_MAX = 200;
-const estUuid = (v: string) => z.uuid().safeParse(v).success;
-const idCourant = sql`${person}.${sql.identifier("id")}`;
-const nomSql = (alias: string) =>
+export const MAX_RESULTS = 200;
+const isUuid = (v: string) => z.uuid().safeParse(v).success;
+const currentId = sql`${person}.${sql.identifier("id")}`;
+const sqlName = (alias: string) =>
   sql`coalesce(${sql.identifier(alias)}.company_name, concat_ws(' ', ${sql.identifier(alias)}.first_name, ${sql.identifier(alias)}.last_name))`;
 
 // ---------------------------------------------------------------------------
 // Listes
 // ---------------------------------------------------------------------------
 
-export type LigneEleve = {
+export type StudentRow = {
   id: string;
-  prenom: string | null;
-  nom: string;
-  dateNaissance: string | null;
+  firstName: string | null;
+  name: string;
+  birthDate: string | null;
   /** Téléphone de l'élève, sinon celui d'un responsable à prévenir. */
   telephone: string | null;
-  responsables: string[];
+  guardians: string[];
   /** Nom du payeur ; null quand l'élève paie lui-même (ou qu'aucun payeur n'est indiqué). */
-  factureA: string | null;
+  billedTo: string | null;
   /** E-mail de l'élève, sinon celui d'un responsable. */
   email: string | null;
   /** Cours de la saison (inscriptions actives ou à l'essai) : « Jazz lun. 17:00 ». */
-  cours: string[];
+  courses: string[];
   /** Statut d'inscription de la saison (« Inscrit », « En attente »…), null sans inscription. */
-  inscription: string | null;
+  enrollmentStatus: string | null;
   /** Personnes à prévenir : « Sophie Martin, 06 12 34 56 78 ». */
-  prevenir: string[];
+  toNotify: string[];
 };
 
 /**
  * Filtres par colonne (#87) ; `aujourdhui` (Paris) sert au calcul de l'âge,
  * `saisonId` aux colonnes « Cours suivis » et « Inscription » (#89).
  */
-export type OptionsListe = { filtre?: Filtre; tri?: Tri | null; aujourdhui?: string; saisonId?: string | null };
+export type ListOptions = { filter?: Filter; currentSort?: Sort | null; today?: string; seasonId?: string | null };
 
 // Colonnes calculées des listes : les mêmes expressions servent à l'affichage et aux filtres.
-const telephoneEleve = sql<string | null>`coalesce(${person.phone}, (
+const studentPhone = sql<string | null>`coalesce(${person.phone}, (
   SELECT r.phone FROM relationship l JOIN person r ON r.id = l.person_id
-  WHERE l.related_person_id = ${idCourant} AND l.emergency_contact AND r.phone IS NOT NULL ORDER BY r.last_name LIMIT 1))`;
-const responsablesEleve = sql<string[]>`coalesce((
-  SELECT array_agg(${nomSql("r")} ORDER BY r.first_name) FROM relationship l JOIN person r ON r.id = l.person_id
-  WHERE l.related_person_id = ${idCourant} AND l.type = 'representant_legal'), '{}')`;
-const factureAEleve = sql<string | null>`(
-  SELECT ${nomSql("r")} FROM relationship l JOIN person r ON r.id = l.person_id
-  WHERE l.related_person_id = ${idCourant} AND l.pays_for ORDER BY r.last_name LIMIT 1)`;
-const elevesDuContact = sql<string[]>`coalesce((
+  WHERE l.related_person_id = ${currentId} AND l.emergency_contact AND r.phone IS NOT NULL ORDER BY r.last_name LIMIT 1))`;
+const studentGuardians = sql<string[]>`coalesce((
+  SELECT array_agg(${sqlName("r")} ORDER BY r.first_name) FROM relationship l JOIN person r ON r.id = l.person_id
+  WHERE l.related_person_id = ${currentId} AND l.type = 'representant_legal'), '{}')`;
+const studentBilledTo = sql<string | null>`(
+  SELECT ${sqlName("r")} FROM relationship l JOIN person r ON r.id = l.person_id
+  WHERE l.related_person_id = ${currentId} AND l.pays_for ORDER BY r.last_name LIMIT 1)`;
+const contactStudents = sql<string[]>`coalesce((
   SELECT array_agg(DISTINCT coalesce(e.first_name, e.last_name)) FROM relationship l JOIN person e ON e.id = l.related_person_id
-  WHERE l.person_id = ${idCourant} AND e.is_student AND (l.type = 'representant_legal' OR l.pays_for)), '{}')`;
+  WHERE l.person_id = ${currentId} AND e.is_student AND (l.type = 'representant_legal' OR l.pays_for)), '{}')`;
 
-const emailEleve = sql<string | null>`coalesce(${person.email}, (
+const studentEmail = sql<string | null>`coalesce(${person.email}, (
   SELECT r.email FROM relationship l JOIN person r ON r.id = l.person_id
-  WHERE l.related_person_id = ${idCourant} AND l.type = 'representant_legal' AND r.email IS NOT NULL ORDER BY r.last_name LIMIT 1))`;
-const prevenirEleve = sql<string[]>`coalesce((
-  SELECT array_agg(concat_ws(', ', ${nomSql("r")}, r.phone) ORDER BY r.last_name) FROM relationship l JOIN person r ON r.id = l.person_id
-  WHERE l.related_person_id = ${idCourant} AND l.emergency_contact), '{}')`;
+  WHERE l.related_person_id = ${currentId} AND l.type = 'representant_legal' AND r.email IS NOT NULL ORDER BY r.last_name LIMIT 1))`;
+const studentToNotify = sql<string[]>`coalesce((
+  SELECT array_agg(concat_ws(', ', ${sqlName("r")}, r.phone) ORDER BY r.last_name) FROM relationship l JOIN person r ON r.id = l.person_id
+  WHERE l.related_person_id = ${currentId} AND l.emergency_contact), '{}')`;
 
 /** CASE SQL d'après une table de libellés (les libellés passent en paramètres). */
-const libelles = (valeur: SQL, table: Record<string | number, string>) =>
-  sql`CASE ${valeur} ${sql.join(
+const labels = (value: SQL, table: Record<string | number, string>) =>
+  sql`CASE ${value} ${sql.join(
     Object.entries(table).map(([k, v]) => sql`WHEN ${k} THEN ${v}`),
     sql` `,
   )} END`;
 
 /** Libellé court d'un cours `c` de discipline `d` : « Jazz lun. 17:00 ». */
-const libelleCours = () =>
-  sql`concat_ws(' ', d.name, ${libelles(sql`c.weekday::text`, Object.fromEntries(JOURS_COURTS.map((j, i) => [i, j] as const).slice(1)))}, to_char(c.start_time, 'HH24:MI'))`;
+const courseLabel = () =>
+  sql`concat_ws(' ', d.name, ${labels(sql`c.weekday::text`, Object.fromEntries(SHORT_DAYS.map((j, i) => [i, j] as const).slice(1)))}, to_char(c.start_time, 'HH24:MI'))`;
 
 /** Cours suivis cette saison (inscriptions actives ou à l'essai), triés par jour et heure. */
-function coursEleve(saisonId: string | null): SQL<string[]> {
-  if (!saisonId) return sql<string[]>`'{}'::text[]`;
+function studentCourses(seasonId: string | null): SQL<string[]> {
+  if (!seasonId) return sql<string[]>`'{}'::text[]`;
   return sql<string[]>`coalesce((
     SELECT array_agg(x.label ORDER BY x.jour NULLS LAST, x.heure) FROM (
-      SELECT DISTINCT ${libelleCours()} AS label, c.weekday AS jour, c.start_time AS heure
+      SELECT DISTINCT ${courseLabel()} AS label, c.weekday AS jour, c.start_time AS heure
       FROM enrollment_course ic
       JOIN enrollment i ON i.id = ic.enrollment_id
       JOIN course c ON c.id = ic.course_id
       JOIN discipline d ON d.id = c.discipline_id
-      WHERE ic.student_id = ${idCourant} AND i.season_id = ${saisonId} AND i.status IN ('active', 'essai')
+      WHERE ic.student_id = ${currentId} AND i.season_id = ${seasonId} AND i.status IN ('active', 'essai')
     ) x), '{}')`;
 }
 
 /** Libellés des cours de la saison, par jour et heure : les choix du bouton « Cours » de la liste (#107). */
-export async function libellesCoursSaison(tx: Tx, saisonId: string): Promise<string[]> {
-  const lignes = await tx.execute<{ label: string }>(sql`
+export async function seasonCourseLabels(tx: Tx, seasonId: string): Promise<string[]> {
+  const rows = await tx.execute<{ label: string }>(sql`
     SELECT x.label FROM (
-      SELECT DISTINCT ${libelleCours()} AS label, c.weekday AS jour, c.start_time AS heure
+      SELECT DISTINCT ${courseLabel()} AS label, c.weekday AS jour, c.start_time AS heure
       FROM course c JOIN discipline d ON d.id = c.discipline_id
-      WHERE c.season_id = ${saisonId}
+      WHERE c.season_id = ${seasonId}
     ) x ORDER BY x.jour NULLS LAST, x.heure, x.label`);
-  return lignes.map((l) => l.label);
+  return rows.map((l) => l.label);
 }
 
 /** Statut d'inscription de la saison ; le plus favorable si l'élève en a plusieurs. */
-function inscriptionEleve(saisonId: string | null): SQL<string | null> {
-  if (!saisonId) return sql<string | null>`NULL::text`;
+function studentEnrollment(seasonId: string | null): SQL<string | null> {
+  if (!seasonId) return sql<string | null>`NULL::text`;
   return sql<string | null>`(
-    SELECT ${libelles(sql`i.status::text`, LIBELLES_STATUT_INSCRIPTION)}
+    SELECT ${labels(sql`i.status::text`, ENROLLMENT_STATUS_LABELS)}
     FROM enrollment i JOIN enrollment_course ic ON ic.enrollment_id = i.id
-    WHERE ic.student_id = ${idCourant} AND i.season_id = ${saisonId}
+    WHERE ic.student_id = ${currentId} AND i.season_id = ${seasonId}
     ORDER BY array_position(${sql`ARRAY[${sql.join(
-      PRIORITE_STATUT.map((st) => sql`${st}`),
+      STATUS_PRIORITY.map((st) => sql`${st}`),
       sql`, `,
     )}]::text[]`}, i.status::text) LIMIT 1)`;
 }
@@ -141,213 +141,225 @@ function inscriptionEleve(saisonId: string | null): SQL<string | null> {
  * proches (nom, téléphone…) : on retrouve un enfant par sa mère. Les filtres
  * par colonne s'appliquent en SQL, avant la limite de la liste.
  */
-export async function listerEleves(
+export async function listStudents(
   tx: Tx,
   saisie = "",
-  { filtre = FILTRE_VIDE, tri = null, aujourdhui = aujourdhuiAParis(), saisonId = null }: OptionsListe = {},
-): Promise<LigneEleve[]> {
-  const surEleve = conditionRecherche(saisie);
-  const surProche = conditionRecherche(saisie, "r");
-  if (saisie.trim() && !surEleve) return [];
-  const valideSaison = saisonId && estUuid(saisonId) ? saisonId : null;
-  const coursSaison = coursEleve(valideSaison);
-  const statutSaison = inscriptionEleve(valideSaison);
+  {
+    filter: filter = EMPTY_FILTER,
+    currentSort: currentSort = null,
+    today: today = todayInParis(),
+    seasonId: seasonId = null,
+  }: ListOptions = {},
+): Promise<StudentRow[]> {
+  const studentCondition = searchCondition(saisie);
+  const relativeCondition = searchCondition(saisie, "r");
+  if (saisie.trim() && !studentCondition) return [];
+  const validSeasonId = seasonId && isUuid(seasonId) ? seasonId : null;
+  const seasonCourses = studentCourses(validSeasonId);
+  const seasonStatus = studentEnrollment(validSeasonId);
   const expressions = {
-    nom: { sql: nomSql("person") },
-    age: { sql: sql`date_part('year', age(${aujourdhui}::date, ${person.birthDate}))` },
-    responsables: { sql: responsablesEleve, liste: true },
-    facture: { sql: factureAEleve },
-    telephone: { sql: telephoneEleve },
+    nom: { sql: sqlName("person") },
+    age: { sql: sql`date_part('year', age(${today}::date, ${person.birthDate}))` },
+    responsables: { sql: studentGuardians, list: true },
+    facture: { sql: studentBilledTo },
+    telephone: { sql: studentPhone },
     naissance: { sql: sql`${person.birthDate}` },
-    email: { sql: emailEleve },
-    cours: { sql: coursSaison, liste: true },
-    inscription: { sql: statutSaison },
-    prevenir: { sql: prevenirEleve, liste: true },
+    email: { sql: studentEmail },
+    cours: { sql: seasonCourses, list: true },
+    inscription: { sql: seasonStatus },
+    prevenir: { sql: studentToNotify, list: true },
   };
-  const surColonnes = conditionFiltre(filtre, COLONNES_ELEVES, expressions);
-  const ordre = ordreColonne(tri, COLONNES_ELEVES, expressions);
+  const columnsCondition = filterCondition(filter, STUDENT_COLUMNS, expressions);
+  const order = columnOrder(currentSort, STUDENT_COLUMNS, expressions);
   return tx
     .select({
       id: person.id,
-      prenom: person.firstName,
-      nom: person.lastName,
-      dateNaissance: person.birthDate,
-      telephone: telephoneEleve,
-      responsables: responsablesEleve,
-      factureA: factureAEleve,
-      email: emailEleve,
-      cours: coursSaison,
-      inscription: statutSaison,
-      prevenir: prevenirEleve,
+      firstName: person.firstName,
+      name: person.lastName,
+      birthDate: person.birthDate,
+      telephone: studentPhone,
+      guardians: studentGuardians,
+      billedTo: studentBilledTo,
+      email: studentEmail,
+      courses: seasonCourses,
+      enrollmentStatus: seasonStatus,
+      toNotify: studentToNotify,
     })
     .from(person)
     .where(
       and(
         eq(person.isStudent, true),
-        surEleve
+        studentCondition
           ? or(
-              surEleve,
-              sql`EXISTS (SELECT 1 FROM relationship l JOIN person r ON r.id = l.person_id WHERE l.related_person_id = ${idCourant} AND ${surProche})`,
+              studentCondition,
+              sql`EXISTS (SELECT 1 FROM relationship l JOIN person r ON r.id = l.person_id WHERE l.related_person_id = ${currentId} AND ${relativeCondition})`,
             )
           : undefined,
-        surColonnes,
+        columnsCondition,
       ),
     )
-    .orderBy(...(ordre ? [ordre] : []), asc(person.lastName), asc(person.firstName))
-    .limit(RESULTATS_MAX);
+    .orderBy(...(order ? [order] : []), asc(person.lastName), asc(person.firstName))
+    .limit(MAX_RESULTS);
 }
 
-export type LigneContact = {
+export type ContactRow = {
   id: string;
   type: "particulier" | "professionnel";
-  nom: string;
-  prenom: string | null;
-  raisonSociale: string | null;
+  name: string;
+  firstName: string | null;
+  companyName: string | null;
   telephone: string | null;
   email: string | null;
   /** Élèves dont la personne est responsable ou pour qui elle paie. */
-  eleves: string[];
+  students: string[];
 };
 
 /** Contacts : qui n'est pas élève, ou qui est responsable ou payeur d'un élève. */
-export async function listerContacts(
+export async function listContacts(
   tx: Tx,
   saisie = "",
-  { filtre = FILTRE_VIDE, tri = null }: OptionsListe = {},
-): Promise<LigneContact[]> {
-  const condition = conditionRecherche(saisie);
+  { filter: filter = EMPTY_FILTER, currentSort: currentSort = null }: ListOptions = {},
+): Promise<ContactRow[]> {
+  const condition = searchCondition(saisie);
   if (saisie.trim() && !condition) return [];
   const expressions = {
-    nom: { sql: nomSql("person") },
-    eleves: { sql: elevesDuContact, liste: true },
+    nom: { sql: sqlName("person") },
+    eleves: { sql: contactStudents, list: true },
     telephone: { sql: sql`${person.phone}` },
     email: { sql: sql`${person.email}` },
   };
-  const surColonnes = conditionFiltre(filtre, COLONNES_CONTACTS, expressions);
-  const ordre = ordreColonne(tri, COLONNES_CONTACTS, expressions);
+  const columnsCondition = filterCondition(filter, CONTACT_COLUMNS, expressions);
+  const order = columnOrder(currentSort, CONTACT_COLUMNS, expressions);
   return tx
     .select({
       id: person.id,
       type: person.type,
-      nom: person.lastName,
-      prenom: person.firstName,
-      raisonSociale: person.companyName,
+      name: person.lastName,
+      firstName: person.firstName,
+      companyName: person.companyName,
       telephone: person.phone,
       email: person.email,
-      eleves: elevesDuContact,
+      students: contactStudents,
     })
     .from(person)
     .where(
       and(
         or(
           eq(person.isStudent, false),
-          sql`EXISTS (SELECT 1 FROM relationship l WHERE l.person_id = ${idCourant} AND (l.type = 'representant_legal' OR l.pays_for))`,
+          sql`EXISTS (SELECT 1 FROM relationship l WHERE l.person_id = ${currentId} AND (l.type = 'representant_legal' OR l.pays_for))`,
         ),
         condition ?? undefined,
-        surColonnes,
+        columnsCondition,
       ),
     )
-    .orderBy(...(ordre ? [ordre] : []), asc(person.lastName), asc(person.firstName))
-    .limit(RESULTATS_MAX);
+    .orderBy(...(order ? [order] : []), asc(person.lastName), asc(person.firstName))
+    .limit(MAX_RESULTS);
 }
 
 // ---------------------------------------------------------------------------
 // Fiches
 // ---------------------------------------------------------------------------
 
-export type ProcheEleve = {
-  lienId: string;
+export type StudentRelative = {
+  relationshipId: string;
   id: string;
-  nom: string;
+  name: string;
   telephone: string | null;
   email: string | null;
-  aPrevenir: boolean;
-  paie: boolean;
+  toNotify: boolean;
+  paysFor: boolean;
   relation: "responsable" | "conjoint" | "autre";
   /** « vers » : ce proche est <relation> de l'élève ; « de » : l'élève est <relation> de ce proche. */
   sens: "de" | "vers";
 };
 
-export type FicheEleve = Omit<FichePersonne, "liens"> & {
-  eleve: boolean;
-  responsables: ProcheEleve[];
-  autres: ProcheEleve[];
+export type StudentRecord = Omit<PersonRecord, "relationships"> & {
+  isStudent: boolean;
+  guardians: StudentRelative[];
+  otherRelationships: StudentRelative[];
   /** Qui reçoit les factures : l'élève lui-même, une personne, ou personne d'indiqué (mineur sans payeur). */
-  factureA: { type: "eleve" } | { type: "personne"; id: string; nom: string } | { type: "aucun" };
+  billedTo: { type: "eleve" } | { type: "personne"; id: string; name: string } | { type: "aucun" };
   /** Autres élèves du même payeur (réduction fratrie). */
-  fratrie: { id: string; prenom: string }[];
+  siblings: { id: string; firstName: string }[];
 };
 
-const majeur = (dateNaissance: string | null, aujourdhui: string) => {
-  if (!dateNaissance) return true;
-  const [a, m, j] = dateNaissance.split("-").map(Number);
-  const [aa, mm, jj] = aujourdhui.split("-").map(Number);
+const adult = (birthDate: string | null, today: string) => {
+  if (!birthDate) return true;
+  const [a, m, j] = birthDate.split("-").map(Number);
+  const [aa, mm, jj] = today.split("-").map(Number);
   return aa - a - (mm < m || (mm === m && jj < j) ? 1 : 0) >= 18;
 };
 
-export async function lireEleve(tx: Tx, id: string, aujourdhui: string): Promise<FicheEleve | null> {
-  const p = await lirePersonne(tx, id);
+export async function readStudent(tx: Tx, id: string, today: string): Promise<StudentRecord | null> {
+  const p = await readPerson(tx, id);
   if (!p) return null;
-  const [{ eleve }] = await tx.select({ eleve: person.isStudent }).from(person).where(eq(person.id, id));
-  const proche = (l: FichePersonne["liens"][number]): ProcheEleve => ({
-    lienId: l.id,
+  const [{ student: student }] = await tx.select({ student: person.isStudent }).from(person).where(eq(person.id, id));
+  const relative = (l: PersonRecord["relationships"][number]): StudentRelative => ({
+    relationshipId: l.id,
     id: l.autre.id,
-    nom: l.autre.nom,
+    name: l.autre.name,
     telephone: l.autre.telephone,
     email: l.autre.email,
-    aPrevenir: l.contactUrgence,
-    paie: l.paiePour,
+    toNotify: l.emergencyContact,
+    paysFor: l.paysFor,
     relation: l.type === "representant_legal" ? "responsable" : l.type,
     sens: l.sens,
   });
-  const vers = p.liens.filter((l) => l.sens === "vers");
-  const payeur = vers.find((l) => l.paiePour);
-  const factureA: FicheEleve["factureA"] = payeur
-    ? { type: "personne", id: payeur.autre.id, nom: payeur.autre.nom }
-    : majeur(p.dateNaissance, aujourdhui)
+  const to = p.relationships.filter((l) => l.sens === "vers");
+  const payer = to.find((l) => l.paysFor);
+  const billedTo: StudentRecord["billedTo"] = payer
+    ? { type: "personne", id: payer.autre.id, name: payer.autre.name }
+    : adult(p.birthDate, today)
       ? { type: "eleve" }
       : { type: "aucun" };
-  const fratrie =
-    factureA.type === "personne"
-      ? (await danseursPayables(tx, factureA.id))
-          .filter((d) => d.id !== id && d.id !== factureA.id)
-          .map((d) => ({ id: d.id, prenom: d.prenom }))
+  const siblings =
+    billedTo.type === "personne"
+      ? (await payableStudents(tx, billedTo.id))
+          .filter((d) => d.id !== id && d.id !== billedTo.id)
+          .map((d) => ({ id: d.id, firstName: d.firstName }))
       : [];
-  const { liens, ...reste } = p;
+  const { relationships: liens, ...reste } = p;
   return {
     ...reste,
-    eleve,
-    responsables: vers.filter((l) => l.type === "representant_legal").map(proche),
+    isStudent: student,
+    guardians: to.filter((l) => l.type === "representant_legal").map(relative),
     // Les autres proches, et les liens enregistrés depuis l'élève (dont il est responsable, conjoint saisi de son côté).
-    autres: liens.filter((l) => l.sens === "de" || l.type !== "representant_legal").map(proche),
-    factureA,
-    fratrie,
+    otherRelationships: liens.filter((l) => l.sens === "de" || l.type !== "representant_legal").map(relative),
+    billedTo,
+    siblings,
   };
 }
 
-export type FicheContact = Omit<FichePersonne, "liens"> & {
-  eleve: boolean;
+export type ContactRecord = Omit<PersonRecord, "relationships"> & {
+  isStudent: boolean;
   /** Élèves dont la personne est responsable, qu'elle prévient ou pour qui elle paie. */
-  eleves: { lienId: string; id: string; nom: string; responsable: boolean; paie: boolean; aPrevenir: boolean }[];
+  students: {
+    relationshipId: string;
+    id: string;
+    name: string;
+    guardian: boolean;
+    paysFor: boolean;
+    toNotify: boolean;
+  }[];
 };
 
-export async function lireContact(tx: Tx, id: string): Promise<FicheContact | null> {
-  const p = await lirePersonne(tx, id);
+export async function readContact(tx: Tx, id: string): Promise<ContactRecord | null> {
+  const p = await readPerson(tx, id);
   if (!p) return null;
-  const [{ eleve }] = await tx.select({ eleve: person.isStudent }).from(person).where(eq(person.id, id));
-  const { liens, ...reste } = p;
+  const [{ student: student }] = await tx.select({ student: person.isStudent }).from(person).where(eq(person.id, id));
+  const { relationships: liens, ...reste } = p;
   return {
     ...reste,
-    eleve,
-    eleves: liens
+    isStudent: student,
+    students: liens
       .filter((l) => l.sens === "de")
       .map((l) => ({
-        lienId: l.id,
+        relationshipId: l.id,
         id: l.autre.id,
-        nom: l.autre.nom,
-        responsable: l.type === "representant_legal",
-        paie: l.paiePour,
-        aPrevenir: l.contactUrgence,
+        name: l.autre.name,
+        guardian: l.type === "representant_legal",
+        paysFor: l.paysFor,
+        toNotify: l.emergencyContact,
       })),
   };
 }
@@ -356,85 +368,84 @@ export async function lireContact(tx: Tx, id: string): Promise<FicheContact | nu
 // Création guidée d'un élève
 // ---------------------------------------------------------------------------
 
-export const autrePersonneValide = z.union([z.object({ id: z.uuid() }), z.object({ nouveau: saisiePersonneValide })]);
+export const otherValidPerson = z.union([z.object({ id: z.uuid() }), z.object({ newPerson: validPersonInput })]);
 
-export const saisieEleveValide = z
+export const validStudentInput = z
   .object({
-    eleve: saisiePersonneValide,
-    responsable: autrePersonneValide.nullable(),
-    aPrevenir: z.boolean(),
-    facturation: z.union([
+    student: validPersonInput,
+    guardian: otherValidPerson.nullable(),
+    toNotify: z.boolean(),
+    billing: z.union([
       z.object({ type: z.literal("eleve") }),
       z.object({ type: z.literal("responsable") }),
-      z.object({ type: z.literal("autre"), payeur: autrePersonneValide }),
+      z.object({ type: z.literal("autre"), payeur: otherValidPerson }),
     ]),
   })
-  .refine((s) => s.eleve.type === "particulier", { path: ["eleve"], message: "Un élève est un particulier." })
-  .refine((s) => s.facturation.type !== "responsable" || s.responsable !== null, {
-    path: ["facturation"],
+  .refine((s) => s.student.type === "particulier", { path: ["student"], message: "Un élève est un particulier." })
+  .refine((s) => s.billing.type !== "responsable" || s.guardian !== null, {
+    path: ["billing"],
     message: "Indiquez le responsable à facturer.",
   });
 
-export type SaisieEleve = z.output<typeof saisieEleveValide>;
-export type DoublonRole = Doublon & { role: "élève" | "responsable" | "payeur" };
+export type StudentInput = z.output<typeof validStudentInput>;
+export type DuplicateWithRole = Duplicate & { role: "élève" | "responsable" | "payeur" };
 
-async function resoudre(tx: Tx, p: z.output<typeof autrePersonneValide>): Promise<string | null> {
+async function resolve(tx: Tx, p: z.output<typeof otherValidPerson>): Promise<string | null> {
   if ("id" in p) {
     const [x] = await tx.select({ id: person.id }).from(person).where(eq(person.id, p.id));
     return x?.id ?? null;
   }
-  const r = await creerPersonne(tx, p.nouveau, true);
-  return r.statut === "ok" ? r.id : null;
+  const r = await createPerson(tx, p.newPerson, true);
+  return r.status === "ok" ? r.id : null;
 }
 
 /** Erreur qui annule toute la création : rien n'est gardé à moitié. */
-export class RefusCreation extends Error {}
+export class CreationRefusal extends Error {}
 
 /**
  * Crée l'élève, son responsable (existant ou nouveau) et son payeur en une
  * seule transaction. Sans `confirme`, renvoie d'abord les doublons probables
  * de chaque nouvelle personne.
  */
-export async function creerEleve(
+export async function createStudent(
   tx: Tx,
-  saisie: SaisieEleve,
-  confirme: boolean,
-): Promise<{ statut: "ok"; id: string } | { statut: "doublons"; doublons: DoublonRole[] }> {
-  if (!confirme) {
-    const nouvelles: [DoublonRole["role"], SaisiePersonne][] = [["élève", saisie.eleve]];
-    if (saisie.responsable && "nouveau" in saisie.responsable)
-      nouvelles.push(["responsable", saisie.responsable.nouveau]);
-    if (saisie.facturation.type === "autre" && "nouveau" in saisie.facturation.payeur)
-      nouvelles.push(["payeur", saisie.facturation.payeur.nouveau]);
-    const doublons: DoublonRole[] = [];
-    for (const [role, s] of nouvelles) doublons.push(...(await doublonsProbables(tx, s)).map((d) => ({ ...d, role })));
-    if (doublons.length > 0) return { statut: "doublons", doublons };
+  saisie: StudentInput,
+  confirmed: boolean,
+): Promise<{ status: "ok"; id: string } | { status: "doublons"; duplicates: DuplicateWithRole[] }> {
+  if (!confirmed) {
+    const nextItems: [DuplicateWithRole["role"], PersonInput][] = [["élève", saisie.student]];
+    if (saisie.guardian && "newPerson" in saisie.guardian) nextItems.push(["responsable", saisie.guardian.newPerson]);
+    if (saisie.billing.type === "autre" && "newPerson" in saisie.billing.payeur)
+      nextItems.push(["payeur", saisie.billing.payeur.newPerson]);
+    const duplicates: DuplicateWithRole[] = [];
+    for (const [role, s] of nextItems) duplicates.push(...(await likelyDuplicates(tx, s)).map((d) => ({ ...d, role })));
+    if (duplicates.length > 0) return { status: "doublons", duplicates };
   }
 
-  const cree = await creerPersonne(tx, saisie.eleve, true);
-  if (cree.statut !== "ok") throw new RefusCreation("Création impossible.");
-  const id = cree.id;
+  const created = await createPerson(tx, saisie.student, true);
+  if (created.status !== "ok") throw new CreationRefusal("Création impossible.");
+  const id = created.id;
   await tx.update(person).set({ isStudent: true }).where(eq(person.id, id));
 
-  if (saisie.responsable) {
-    const responsableId = await resoudre(tx, saisie.responsable);
-    if (!responsableId) throw new RefusCreation("Responsable introuvable.");
-    const r = await ajouterLien(tx, {
-      personneId: responsableId,
-      lieAId: id,
+  if (saisie.guardian) {
+    const guardianId = await resolve(tx, saisie.guardian);
+    if (!guardianId) throw new CreationRefusal("Responsable introuvable.");
+    const r = await addRelationship(tx, {
+      personId: guardianId,
+      relatedPersonId: id,
       type: "representant_legal",
-      contactUrgence: saisie.aPrevenir,
-      paiePour: saisie.facturation.type === "responsable",
+      emergencyContact: saisie.toNotify,
+      paysFor: saisie.billing.type === "responsable",
     });
-    if (!r.ok) throw new RefusCreation(r.message);
+    if (!r.ok) throw new CreationRefusal(r.message);
   }
-  if (saisie.facturation.type === "autre") {
-    const payeurId = await resoudre(tx, saisie.facturation.payeur);
-    if (!payeurId) throw new RefusCreation("Payeur introuvable.");
-    const r = await definirFacturation(tx, id, { type: "personne", id: payeurId });
-    if (!r.ok) throw new RefusCreation(r.message);
+  if (saisie.billing.type === "autre") {
+    const payerId = await resolve(tx, saisie.billing.payeur);
+    if (!payerId) throw new CreationRefusal("Payeur introuvable.");
+    const r = await setBilling(tx, id, { type: "personne", id: payerId });
+    if (!r.ok) throw new CreationRefusal(r.message);
   }
-  return { statut: "ok", id };
+  return { status: "ok", id };
 }
 
 // ---------------------------------------------------------------------------
@@ -445,119 +456,115 @@ export async function creerEleve(
  * « Facturé à » : l'élève lui-même, ou une personne (responsable, proche,
  * organisme). Un seul payeur à la fois ; le lien est créé au besoin.
  */
-export async function definirFacturation(
+export async function setBilling(
   tx: Tx,
-  eleveId: string,
-  cible: { type: "eleve" } | { type: "personne"; id: string },
-): Promise<Resultat> {
-  if (!estUuid(eleveId) || (cible.type === "personne" && (!estUuid(cible.id) || cible.id === eleveId))) {
+  studentId: string,
+  target: { type: "eleve" } | { type: "personne"; id: string },
+): Promise<Result> {
+  if (!isUuid(studentId) || (target.type === "personne" && (!isUuid(target.id) || target.id === studentId))) {
     return { ok: false, message: "Choix de facturation invalide." };
   }
-  const [e] = await tx.select({ id: person.id }).from(person).where(eq(person.id, eleveId));
+  const [e] = await tx.select({ id: person.id }).from(person).where(eq(person.id, studentId));
   if (!e) return { ok: false, message: "Cet élève n’existe plus." };
-  await tx.update(relationship).set({ paysFor: false }).where(eq(relationship.relatedPersonId, eleveId));
-  if (cible.type === "eleve") return { ok: true, id: eleveId };
+  await tx.update(relationship).set({ paysFor: false }).where(eq(relationship.relatedPersonId, studentId));
+  if (target.type === "eleve") return { ok: true, id: studentId };
 
   const [direct] = await tx
     .select({ id: relationship.id })
     .from(relationship)
-    .where(and(eq(relationship.personId, cible.id), eq(relationship.relatedPersonId, eleveId)));
+    .where(and(eq(relationship.personId, target.id), eq(relationship.relatedPersonId, studentId)));
   if (direct) {
     await tx.update(relationship).set({ paysFor: true }).where(eq(relationship.id, direct.id));
-    return { ok: true, id: eleveId };
+    return { ok: true, id: studentId };
   }
   // Lien enregistré dans l'autre sens (conjoint saisi depuis la fiche de l'élève) : il est retourné.
   const [inverse] = await tx
     .select({ id: relationship.id })
     .from(relationship)
-    .where(and(eq(relationship.personId, eleveId), eq(relationship.relatedPersonId, cible.id)));
+    .where(and(eq(relationship.personId, studentId), eq(relationship.relatedPersonId, target.id)));
   if (inverse) {
     await tx
       .update(relationship)
-      .set({ personId: cible.id, relatedPersonId: eleveId, paysFor: true, emergencyContact: false })
+      .set({ personId: target.id, relatedPersonId: studentId, paysFor: true, emergencyContact: false })
       .where(eq(relationship.id, inverse.id));
-    return { ok: true, id: eleveId };
+    return { ok: true, id: studentId };
   }
-  const r = await ajouterLien(tx, {
-    personneId: cible.id,
-    lieAId: eleveId,
+  const r = await addRelationship(tx, {
+    personId: target.id,
+    relatedPersonId: studentId,
     type: "autre",
-    contactUrgence: false,
-    paiePour: true,
+    emergencyContact: false,
+    paysFor: true,
   });
-  return r.ok ? { ok: true, id: eleveId } : r;
+  return r.ok ? { ok: true, id: studentId } : r;
 }
 
 /** Ajoute un responsable légal (existant ou nouveau) ; un lien existant devient « responsable ». */
-export async function ajouterResponsable(
+export async function addGuardian(
   tx: Tx,
-  eleveId: string,
-  responsable: z.input<typeof autrePersonneValide>,
-  aPrevenir: boolean,
-): Promise<Resultat> {
-  const r = autrePersonneValide.safeParse(responsable);
-  if (!r.success || !estUuid(eleveId)) return { ok: false, message: "Saisie invalide." };
-  const [e] = await tx.select({ id: person.id }).from(person).where(eq(person.id, eleveId));
+  studentId: string,
+  guardian: z.input<typeof otherValidPerson>,
+  toNotify: boolean,
+): Promise<Result> {
+  const r = otherValidPerson.safeParse(guardian);
+  if (!r.success || !isUuid(studentId)) return { ok: false, message: "Saisie invalide." };
+  const [e] = await tx.select({ id: person.id }).from(person).where(eq(person.id, studentId));
   if (!e) return { ok: false, message: "Cet élève n’existe plus." };
-  const responsableId = await resoudre(tx, r.data);
-  if (!responsableId || responsableId === eleveId) return { ok: false, message: "Responsable introuvable." };
-  const [existant] = await tx
+  const guardianId = await resolve(tx, r.data);
+  if (!guardianId || guardianId === studentId) return { ok: false, message: "Responsable introuvable." };
+  const [existing] = await tx
     .select({ id: relationship.id })
     .from(relationship)
-    .where(and(eq(relationship.personId, responsableId), eq(relationship.relatedPersonId, eleveId)));
-  if (existant) {
+    .where(and(eq(relationship.personId, guardianId), eq(relationship.relatedPersonId, studentId)));
+  if (existing) {
     await tx
       .update(relationship)
-      .set({ type: "representant_legal", emergencyContact: aPrevenir })
-      .where(eq(relationship.id, existant.id));
-    return { ok: true, id: existant.id };
+      .set({ type: "representant_legal", emergencyContact: toNotify })
+      .where(eq(relationship.id, existing.id));
+    return { ok: true, id: existing.id };
   }
-  return ajouterLien(tx, {
-    personneId: responsableId,
-    lieAId: eleveId,
+  return addRelationship(tx, {
+    personId: guardianId,
+    relatedPersonId: studentId,
     type: "representant_legal",
-    contactUrgence: aPrevenir,
-    paiePour: false,
+    emergencyContact: toNotify,
+    paysFor: false,
   });
 }
 
 /** Un contact devient élève (ou cesse de l'être). */
-export async function marquerEleve(tx: Tx, id: string, eleve: boolean): Promise<Resultat> {
-  if (!estUuid(id)) return { ok: false, message: "Personne introuvable." };
-  const lignes = await tx
+export async function markStudent(tx: Tx, id: string, student: boolean): Promise<Result> {
+  if (!isUuid(id)) return { ok: false, message: "Personne introuvable." };
+  const rows = await tx
     .update(person)
-    .set({ isStudent: eleve })
+    .set({ isStudent: student })
     .where(eq(person.id, id))
     .returning({ id: person.id });
-  return lignes.length === 1 ? { ok: true, id } : { ok: false, message: "Personne introuvable." };
+  return rows.length === 1 ? { ok: true, id } : { ok: false, message: "Personne introuvable." };
 }
 
 /** « À prévenir en cas d'urgence » pour un proche de l'élève. */
-export async function changerPrevenir(tx: Tx, lienId: string, aPrevenir: boolean): Promise<Resultat> {
-  if (!estUuid(lienId)) return { ok: false, message: "Ce lien n’existe plus." };
-  const lignes = await tx
+export async function changeNotify(tx: Tx, relationshipId: string, toNotify: boolean): Promise<Result> {
+  if (!isUuid(relationshipId)) return { ok: false, message: "Ce lien n’existe plus." };
+  const rows = await tx
     .update(relationship)
-    .set({ emergencyContact: aPrevenir })
-    .where(eq(relationship.id, lienId))
+    .set({ emergencyContact: toNotify })
+    .where(eq(relationship.id, relationshipId))
     .returning({ id: relationship.id });
-  return lignes.length === 1 ? { ok: true, id: lienId } : { ok: false, message: "Ce lien n’existe plus." };
+  return rows.length === 1 ? { ok: true, id: relationshipId } : { ok: false, message: "Ce lien n’existe plus." };
 }
 
 /** Élève ou contact : sert aux anciennes adresses /personnes/<id>. null si la personne n'existe pas. */
-export async function estEleve(tx: Tx, id: string): Promise<boolean | null> {
-  if (!estUuid(id)) return null;
-  const [p] = await tx.select({ eleve: person.isStudent }).from(person).where(eq(person.id, id));
-  return p ? p.eleve : null;
+export async function isStudent(tx: Tx, id: string): Promise<boolean | null> {
+  if (!isUuid(id)) return null;
+  const [p] = await tx.select({ student: person.isStudent }).from(person).where(eq(person.id, id));
+  return p ? p.student : null;
 }
 
 /** Facturer une personne connue ou créée à l'instant (organisme, autre proche). */
-export async function facturerA(
-  tx: Tx,
-  eleveId: string,
-  payeur: z.input<typeof autrePersonneValide>,
-): Promise<Resultat> {
-  const p = autrePersonneValide.safeParse(payeur);
+export async function billTo(tx: Tx, studentId: string, payer: z.input<typeof otherValidPerson>): Promise<Result> {
+  const p = otherValidPerson.safeParse(payer);
   if (!p.success) return { ok: false, message: "Vérifiez les informations du payeur." };
-  const id = await resoudre(tx, p.data);
-  return id ? definirFacturation(tx, eleveId, { type: "personne", id }) : { ok: false, message: "Payeur introuvable." };
+  const id = await resolve(tx, p.data);
+  return id ? setBilling(tx, studentId, { type: "personne", id }) : { ok: false, message: "Payeur introuvable." };
 }

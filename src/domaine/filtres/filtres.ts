@@ -8,31 +8,31 @@
  */
 
 /** `date` : jour `YYYY-MM-DD` (date de naissance…). */
-export type TypeColonne = "texte" | "nombre" | "telephone" | "date";
+export type ColumnType = "texte" | "nombre" | "telephone" | "date";
 
-export type DefColonne = {
+export type ColumnDef = {
   id: string;
-  libelle: string;
-  type: TypeColonne;
+  label: string;
+  type: ColumnType;
   /** false : colonne proposée mais masquée tant que le membre ne l'affiche pas (#89). */
-  parDefaut?: boolean;
+  byDefault?: boolean;
   /** Nombres : alignés à droite. */
-  droite?: boolean;
+  right?: boolean;
   /** false : colonne affichée mais sans filtre (montant mis en forme…). */
-  filtrable?: boolean;
+  filterable?: boolean;
   /** Valeurs possibles : la colonne se filtre par cases à cocher (#107). La page peut en fournir (cours de la saison). */
-  choix?: readonly string[];
+  choice?: readonly string[];
   /** Colonne qui identifie la ligne (le nom) : toujours affichée, jamais masquable (#107). */
-  obligatoire?: boolean;
+  required?: boolean;
   /** false : un clic sur le titre ne trie pas. */
-  triable?: boolean;
+  sortable?: boolean;
   /** Adresse e-mail : affichée en lien `mailto:`. */
-  courriel?: boolean;
+  email?: boolean;
   /** Texte d'une cellule vide (« l’élève » pour « Facturé à »), sinon un tiret. */
-  siVide?: string;
+  ifEmpty?: string;
 };
 
-export type Operateur =
+export type Operator =
   | "contient"
   | "ne_contient_pas"
   | "est"
@@ -48,23 +48,23 @@ export type Operateur =
   | "non_vide"
   | "parmi";
 
-export type Condition = { colonne: string; operateur: Operateur; valeur: string };
+export type Condition = { column: string; operator: Operator; value: string };
 export type Mode = "et" | "ou";
-export type Filtre = { mode: Mode; conditions: Condition[] };
+export type Filter = { mode: Mode; conditions: Condition[] };
 
-export const FILTRE_VIDE: Filtre = { mode: "et", conditions: [] };
+export const EMPTY_FILTER: Filter = { mode: "et", conditions: [] };
 /** Au-delà, la barre devient illisible et la requête inutilement lourde. */
 export const CONDITIONS_MAX = 8;
 
-const TEXTE: Operateur[] = ["contient", "ne_contient_pas", "est", "n_est_pas", "commence", "vide", "non_vide", "parmi"];
-export const OPERATEURS: Record<TypeColonne, Operateur[]> = {
-  texte: TEXTE,
+const TEXT: Operator[] = ["contient", "ne_contient_pas", "est", "n_est_pas", "commence", "vide", "non_vide", "parmi"];
+export const OPERATORS: Record<ColumnType, Operator[]> = {
+  texte: TEXT,
   telephone: ["contient", "commence", "vide", "non_vide"],
   nombre: ["egal", "different", "sup", "sup_egal", "inf", "inf_egal", "vide", "non_vide"],
   date: ["egal", "inf", "sup", "inf_egal", "sup_egal", "vide", "non_vide"],
 };
 
-export const LIBELLES_OPERATEURS: Record<Operateur, string> = {
+export const OPERATOR_LABELS: Record<Operator, string> = {
   contient: "contient",
   ne_contient_pas: "ne contient pas",
   est: "est",
@@ -85,11 +85,11 @@ export const LIBELLES_OPERATEURS: Record<Operateur, string> = {
  * « parmi » (cases à cocher d'une colonne, #107) : valeurs séparées par `|`,
  * `(vide)` pour les lignes sans valeur. `Inscrit|(vide)` : inscrits ou sans inscription.
  */
-export const VIDE = "(vide)";
-export const SEPARATEUR = "|";
-export const valeursParmi = (valeur: string) => valeur.split(SEPARATEUR).filter((v) => v.trim() !== "");
+export const EMPTY = "(vide)";
+export const SEPARATOR = "|";
+export const amongValues = (value: string) => value.split(SEPARATOR).filter((v) => v.trim() !== "");
 
-const LIBELLES_DATE: Partial<Record<Operateur, string>> = {
+const DATE_LABELS: Partial<Record<Operator, string>> = {
   egal: "le",
   inf: "avant le",
   sup: "après le",
@@ -98,10 +98,10 @@ const LIBELLES_DATE: Partial<Record<Operateur, string>> = {
 };
 
 /** Libellé d'un opérateur selon le type de la colonne (« avant le » pour une date). */
-export const libelleOperateur = (o: Operateur, type: TypeColonne) =>
-  (type === "date" && LIBELLES_DATE[o]) || LIBELLES_OPERATEURS[o];
+export const operatorLabel = (o: Operator, type: ColumnType) =>
+  (type === "date" && DATE_LABELS[o]) || OPERATOR_LABELS[o];
 
-export const sansValeur = (o: Operateur) => o === "vide" || o === "non_vide";
+export const withoutValue = (o: Operator) => o === "vide" || o === "non_vide";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -110,7 +110,7 @@ export const ACCENTS = "àâäáãåéèêëíìîïóòôöõúùûüçñÿ";
 export const SANS_ACCENTS = "aaaaaaeeeeiiiiooooouuuucny";
 
 /** Minuscules sans accents, espaces réduits. */
-export function normaliserTexte(v: string): string {
+export function normalizeText(v: string): string {
   let r = "";
   for (const c of v.toLowerCase()) {
     const i = ACCENTS.indexOf(c);
@@ -119,72 +119,72 @@ export function normaliserTexte(v: string): string {
   return r.replace(/\s+/g, " ").trim();
 }
 
-export const chiffres = (v: string) => v.replace(/\D/g, "");
+export const digits = (v: string) => v.replace(/\D/g, "");
 
 /** Nombre saisi (virgule ou point) ; null si ce n'est pas un nombre. */
-export function lireNombre(v: string): number | null {
+export function readNumber(v: string): number | null {
   const t = v.trim().replace(",", ".");
   return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : null;
 }
 
 /** Valeur exploitable pour cette condition, ou null si elle doit être ignorée. */
-export function valeurNormalisee(c: Condition, type: TypeColonne): string | number | null {
-  if (sansValeur(c.operateur)) return "";
-  if (type === "nombre") return lireNombre(c.valeur);
-  if (type === "date") return DATE.test(c.valeur.trim()) ? c.valeur.trim() : null;
-  if (c.operateur === "parmi") {
-    const vs = valeursParmi(c.valeur).map((x) => (x === VIDE ? VIDE : normaliserTexte(x)));
-    return vs.length ? vs.join(SEPARATEUR) : null;
+export function normalizedValue(c: Condition, type: ColumnType): string | number | null {
+  if (withoutValue(c.operator)) return "";
+  if (type === "nombre") return readNumber(c.value);
+  if (type === "date") return DATE.test(c.value.trim()) ? c.value.trim() : null;
+  if (c.operator === "parmi") {
+    const vs = amongValues(c.value).map((x) => (x === EMPTY ? EMPTY : normalizeText(x)));
+    return vs.length ? vs.join(SEPARATOR) : null;
   }
-  const v = type === "telephone" ? chiffres(c.valeur) : normaliserTexte(c.valeur);
+  const v = type === "telephone" ? digits(c.value) : normalizeText(c.value);
   return v === "" ? null : v;
 }
 
 /** Conditions valides de l'adresse : colonne connue, opérateur adapté, valeur exploitable. */
-export function lireFiltre(
+export function readFilter(
   f: string | string[] | undefined | null,
   mode: string | string[] | undefined | null,
-  colonnes: DefColonne[],
-): Filtre {
+  columns: ColumnDef[],
+): Filter {
   const brutes = (Array.isArray(f) ? f : f ? [f] : []).slice(0, CONDITIONS_MAX);
   const conditions: Condition[] = [];
   for (const b of brutes) {
     const i = b.indexOf(".");
     const j = i === -1 ? -1 : b.indexOf(".", i + 1);
-    const colonne = i === -1 ? b : b.slice(0, i);
-    const operateur = (i === -1 ? "" : j === -1 ? b.slice(i + 1) : b.slice(i + 1, j)) as Operateur;
-    const valeur = j === -1 ? "" : b.slice(j + 1);
-    const def = colonnes.find((c) => c.id === colonne);
-    if (!def || def.filtrable === false || !OPERATEURS[def.type].includes(operateur)) continue;
-    const c = { colonne, operateur, valeur: sansValeur(operateur) ? "" : valeur };
-    if (valeurNormalisee(c, def.type) !== null) conditions.push(c);
+    const column = i === -1 ? b : b.slice(0, i);
+    const operator = (i === -1 ? "" : j === -1 ? b.slice(i + 1) : b.slice(i + 1, j)) as Operator;
+    const value = j === -1 ? "" : b.slice(j + 1);
+    const def = columns.find((c) => c.id === column);
+    if (!def || def.filterable === false || !OPERATORS[def.type].includes(operator)) continue;
+    const c = { column: column, operator: operator, value: withoutValue(operator) ? "" : value };
+    if (normalizedValue(c, def.type) !== null) conditions.push(c);
   }
   const m = Array.isArray(mode) ? mode[0] : mode;
   return { mode: m === "ou" ? "ou" : "et", conditions };
 }
 
 /** Paramètres d'adresse d'un filtre (le mode n'est écrit que s'il compte). */
-export function versParametres(filtre: Filtre): [string, string][] {
-  const p: [string, string][] = filtre.conditions.map((c) => [
+export function toParams(filter: Filter): [string, string][] {
+  const p: [string, string][] = filter.conditions.map((c) => [
     "f",
-    sansValeur(c.operateur) ? `${c.colonne}.${c.operateur}` : `${c.colonne}.${c.operateur}.${c.valeur}`,
+    withoutValue(c.operator) ? `${c.column}.${c.operator}` : `${c.column}.${c.operator}.${c.value}`,
   ]);
-  if (filtre.mode === "ou" && filtre.conditions.length > 1) p.push(["mode", "ou"]);
+  if (filter.mode === "ou" && filter.conditions.length > 1) p.push(["mode", "ou"]);
   return p;
 }
 
 /** Valeur d'une cellule : texte, nombre, liste (responsables…) ou absente. */
 export type Cellule = string | number | string[] | null | undefined;
 
-function evaluer(cellule: Cellule, c: Condition, type: TypeColonne): boolean {
-  const v = valeurNormalisee(c, type);
+function evaluate(cellule: Cellule, c: Condition, type: ColumnType): boolean {
+  const v = normalizedValue(c, type);
   if (type === "nombre") {
     const n = typeof cellule === "number" ? cellule : null;
-    if (c.operateur === "vide") return n === null;
-    if (c.operateur === "non_vide") return n !== null;
-    if (c.operateur === "different") return n !== v;
+    if (c.operator === "vide") return n === null;
+    if (c.operator === "non_vide") return n !== null;
+    if (c.operator === "different") return n !== v;
     if (n === null || typeof v !== "number") return false;
-    switch (c.operateur) {
+    switch (c.operator) {
       case "egal":
         return n === v;
       case "sup":
@@ -201,10 +201,10 @@ function evaluer(cellule: Cellule, c: Condition, type: TypeColonne): boolean {
   }
   if (type === "date") {
     const d = typeof cellule === "string" && cellule !== "" ? cellule.slice(0, 10) : null;
-    if (c.operateur === "vide") return d === null;
-    if (c.operateur === "non_vide") return d !== null;
+    if (c.operator === "vide") return d === null;
+    if (c.operator === "non_vide") return d !== null;
     if (d === null || typeof v !== "string") return false;
-    switch (c.operateur) {
+    switch (c.operator) {
       case "egal":
         return d === v;
       case "inf":
@@ -219,29 +219,29 @@ function evaluer(cellule: Cellule, c: Condition, type: TypeColonne): boolean {
         return false;
     }
   }
-  const brut = Array.isArray(cellule) ? cellule.join(", ") : cellule == null ? "" : String(cellule);
-  const t = type === "telephone" ? chiffres(brut) : normaliserTexte(brut);
-  const cible = String(v);
-  switch (c.operateur) {
+  const raw = Array.isArray(cellule) ? cellule.join(", ") : cellule == null ? "" : String(cellule);
+  const t = type === "telephone" ? digits(raw) : normalizeText(raw);
+  const target = String(v);
+  switch (c.operator) {
     case "vide":
       return t === "";
     case "non_vide":
       return t !== "";
     case "contient":
-      return t.includes(cible);
+      return t.includes(target);
     case "ne_contient_pas":
-      return !t.includes(cible);
+      return !t.includes(target);
     // Une liste « est » X si l'un de ses éléments vaut X.
     case "est":
-      return Array.isArray(cellule) ? cellule.some((e) => normaliserTexte(e) === cible) : t === cible;
+      return Array.isArray(cellule) ? cellule.some((e) => normalizeText(e) === target) : t === target;
     case "n_est_pas":
-      return Array.isArray(cellule) ? !cellule.some((e) => normaliserTexte(e) === cible) : t !== cible;
+      return Array.isArray(cellule) ? !cellule.some((e) => normalizeText(e) === target) : t !== target;
     case "commence":
-      return t.startsWith(cible);
+      return t.startsWith(target);
     case "parmi": {
-      const vs = cible.split(SEPARATEUR);
-      if (t === "") return vs.includes(VIDE);
-      return Array.isArray(cellule) ? cellule.some((e) => vs.includes(normaliserTexte(e))) : vs.includes(t);
+      const vs = target.split(SEPARATOR);
+      if (t === "") return vs.includes(EMPTY);
+      return Array.isArray(cellule) ? cellule.some((e) => vs.includes(normalizeText(e))) : vs.includes(t);
     }
     default:
       return false;
@@ -249,59 +249,55 @@ function evaluer(cellule: Cellule, c: Condition, type: TypeColonne): boolean {
 }
 
 /** Lignes qui satisfont toutes (ET) ou au moins une (OU) des conditions. */
-export function appliquerFiltre<T>(
-  lignes: T[],
-  filtre: Filtre,
-  colonnes: (DefColonne & { valeur: (l: T) => Cellule })[],
-): T[] {
-  const actives = filtre.conditions.flatMap((c) => {
-    const def = colonnes.find((d) => d.id === c.colonne);
+export function applyFilter<T>(rows: T[], filter: Filter, columns: (ColumnDef & { value: (l: T) => Cellule })[]): T[] {
+  const actives = filter.conditions.flatMap((c) => {
+    const def = columns.find((d) => d.id === c.column);
     return def ? [{ c, def }] : [];
   });
-  if (actives.length === 0) return lignes;
-  return lignes.filter((l) => {
-    const r = actives.map(({ c, def }) => evaluer(def.valeur(l), c, def.type));
-    return filtre.mode === "ou" ? r.some(Boolean) : r.every(Boolean);
+  if (actives.length === 0) return rows;
+  return rows.filter((l) => {
+    const r = actives.map(({ c, def }) => evaluate(def.value(l), c, def.type));
+    return filter.mode === "ou" ? r.some(Boolean) : r.every(Boolean);
   });
 }
 
 /** « Âge > 10 », « Responsables contient « Martin » », « Téléphone est vide » : pour les pastilles. */
-export function libelleCondition(c: Condition, colonnes: DefColonne[]): string {
-  const def = colonnes.find((d) => d.id === c.colonne);
-  const op = libelleOperateur(c.operateur, def?.type ?? "texte");
-  const nom = def?.libelle ?? c.colonne;
-  if (sansValeur(c.operateur)) return `${nom} ${op}`;
-  if (def?.type === "date") return `${nom} ${op} ${c.valeur.split("-").reverse().join("/")}`;
-  return def?.type === "nombre" ? `${nom} ${op} ${c.valeur}` : `${nom} ${op} « ${c.valeur} »`;
+export function conditionLabel(c: Condition, columns: ColumnDef[]): string {
+  const def = columns.find((d) => d.id === c.column);
+  const op = operatorLabel(c.operator, def?.type ?? "texte");
+  const name = def?.label ?? c.column;
+  if (withoutValue(c.operator)) return `${name} ${op}`;
+  if (def?.type === "date") return `${name} ${op} ${c.value.split("-").reverse().join("/")}`;
+  return def?.type === "nombre" ? `${name} ${op} ${c.value}` : `${name} ${op} « ${c.value} »`;
 }
 
 /** Tri d'une liste par une colonne (#107), dans l'adresse : `?sort=age&order=desc`. */
-export type Tri = { colonne: string; sens: "asc" | "desc" };
+export type Sort = { column: string; sens: "asc" | "desc" };
 
 /** Tri de l'adresse s'il porte sur une colonne connue et triable ; sinon null (ordre par défaut). */
-export function lireTri(
+export function readSort(
   sort: string | string[] | undefined | null,
   order: string | string[] | undefined | null,
-  colonnes: DefColonne[],
-): Tri | null {
-  const colonne = Array.isArray(sort) ? sort[0] : sort;
-  const def = colonnes.find((c) => c.id === colonne);
-  if (!def || def.triable === false) return null;
-  return { colonne: def.id, sens: (Array.isArray(order) ? order[0] : order) === "desc" ? "desc" : "asc" };
+  columns: ColumnDef[],
+): Sort | null {
+  const column = Array.isArray(sort) ? sort[0] : sort;
+  const def = columns.find((c) => c.id === column);
+  if (!def || def.sortable === false) return null;
+  return { column: def.id, sens: (Array.isArray(order) ? order[0] : order) === "desc" ? "desc" : "asc" };
 }
 
 /** Tri en mémoire, avec les règles du tri SQL : accents ignorés, nombres en ordre numérique, vides en dernier. */
-export function trierLignes<L>(lignes: L[], tri: Tri | null, valeur: (l: L, colonne: string) => Cellule): L[] {
-  if (!tri) return lignes;
-  const cle = (v: Cellule) => (Array.isArray(v) ? v.join(", ") : v);
-  const sens = tri.sens === "asc" ? 1 : -1;
-  return [...lignes].sort((a, b) => {
-    const x = cle(valeur(a, tri.colonne));
-    const y = cle(valeur(b, tri.colonne));
-    const xVide = x == null || x === "";
-    const yVide = y == null || y === "";
-    if (xVide || yVide) return xVide === yVide ? 0 : xVide ? 1 : -1;
+export function sortRows<L>(rows: L[], currentSort: Sort | null, value: (l: L, column: string) => Cellule): L[] {
+  if (!currentSort) return rows;
+  const key = (v: Cellule) => (Array.isArray(v) ? v.join(", ") : v);
+  const sens = currentSort.sens === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const x = key(value(a, currentSort.column));
+    const y = key(value(b, currentSort.column));
+    const xEmpty = x == null || x === "";
+    const yEmpty = y == null || y === "";
+    if (xEmpty || yEmpty) return xEmpty === yEmpty ? 0 : xEmpty ? 1 : -1;
     if (typeof x === "number" && typeof y === "number") return (x - y) * sens;
-    return normaliserTexte(String(x)).localeCompare(normaliserTexte(String(y)), "fr", { numeric: true }) * sens;
+    return normalizeText(String(x)).localeCompare(normalizeText(String(y)), "fr", { numeric: true }) * sens;
   });
 }

@@ -3,62 +3,57 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useId, useRef, useState, useTransition } from "react";
+import { writeColumnFilter, type ColumnFilter, readColumnFilter, columnFilterSummary } from "@/domaine/filtres/colonne";
+import type { List } from "@/domaine/filtres/colonnes";
 import {
-  ecrireFiltreColonne,
-  type FiltreColonne,
-  lireFiltreColonne,
-  resumeFiltreColonne,
-} from "@/domaine/filtres/colonne";
-import type { Liste } from "@/domaine/filtres/colonnes";
-import {
-  basculer,
-  type Disposition,
-  deplacer,
-  dispositionParDefaut,
-  ecrireDisposition,
-  lireDisposition,
-  placer,
-  redimensionner,
+  toggle,
+  type Layout,
+  move,
+  defaultLayout,
+  writeLayout,
+  readLayout,
+  place,
+  resize,
 } from "@/domaine/filtres/disposition";
-import { type DefColonne, libelleCondition, lireTri, type Tri, VIDE } from "@/domaine/filtres/filtres";
-import { enregistrerColonnes } from "./actions";
-import { type FiltreAdresse, useFiltreAdresse } from "./filtre-adresse";
+import { type ColumnDef, conditionLabel, readSort, type Sort, EMPTY } from "@/domaine/filtres/filtres";
+import { saveColumns } from "./actions";
+import { type AddressFilter, useAddressFilter } from "./filtre-adresse";
 
-export type ValeurCellule = string | number | string[] | null;
-export type LigneTableau = {
+export type CellValue = string | number | string[] | null;
+export type TableRow = {
   id: string;
   /** Lien de la colonne `lien` (fiche) ; absent : texte simple. */
   href?: string;
   /** Ligne grisée (intervenant inactif…). */
-  attenue?: boolean;
+  dimmed?: boolean;
   /** Petite étiquette après le nom (« inactif », « organisme »). */
-  marque?: string;
-  cellules: Record<string, ValeurCellule>;
+  badge?: string;
+  cellules: Record<string, CellValue>;
 };
 
 type Props = {
-  liste: Liste;
+  list: List;
   /** « les élèves » : pour les libellés accessibles. */
-  quoi: string;
-  legende: string;
-  colonnes: DefColonne[];
+  what: string;
+  caption: string;
+  columns: ColumnDef[];
   /** Disposition enregistrée du membre, ou null. */
-  disposition: string[] | null;
-  lignes: LigneTableau[];
+  layout: string[] | null;
+  rows: TableRow[];
   /** Colonne qui porte le lien vers la fiche. */
-  lien: string;
+  relationship: string;
   /** Message quand aucune ligne ne s'affiche. */
   vide: string;
   /** Affichage propre au téléphone (le tableau y est masqué). */
   mobile?: ReactNode;
   /** Valeurs à cocher fournies par la page, par colonne (cours de la saison, statuts…). */
-  choix?: Record<string, readonly string[]>;
+  choice?: Record<string, readonly string[]>;
   /** Action proposée quand la liste est vide sans filtre (« Nouvel élève »). */
-  actionVide?: ReactNode;
+  emptyAction?: ReactNode;
 };
 
 /** Au-delà, la liste des cases à cocher a son propre champ de recherche. */
-const CASES_SANS_RECHERCHE = 8;
+const CELLS_WITHOUT_SEARCH = 8;
 
 /**
  * Liste en tableau (#89, #107), pensée pour l'accueil et proche d'Excel :
@@ -69,122 +64,125 @@ const CASES_SANS_RECHERCHE = 8;
  * réordonne (mémorisé pour le membre). Filtres et tri vont dans l'adresse ;
  * la page relit et interroge le serveur.
  */
-export function TableauListe({
-  liste,
-  quoi,
-  legende,
-  colonnes,
-  disposition,
-  lignes,
-  lien,
+export function ListTable({
+  list: list,
+  what: what,
+  caption: caption,
+  columns: columns,
+  layout: layout,
+  rows: rows,
+  relationship: relationship,
   vide,
   mobile,
-  choix = {},
-  actionVide,
+  choice: choice = {},
+  emptyAction: emptyAction,
 }: Props) {
-  const f = useFiltreAdresse(colonnes);
+  const f = useAddressFilter(columns);
   const router = useRouter();
-  const chemin = usePathname();
+  const path = usePathname();
   const params = useSearchParams();
-  const [triEnCours, demarrerTri] = useTransition();
-  const tri = lireTri(params.get("sort"), params.get("order"), colonnes);
-  const [dispo, setDispo] = useState<Disposition>(() => lireDisposition(colonnes, disposition));
-  const [enregistrement, demarrer] = useTransition();
-  const [echec, setEchec] = useState(false);
-  const defs = new Map(colonnes.map((c) => [c.id, c]));
-  const visibles = dispo.filter((d) => d.visible).flatMap((d) => defs.get(d.id) ?? []);
-  const masquees = dispo.filter((d) => !d.visible).flatMap((d) => defs.get(d.id) ?? []);
-  const largeurDe = (id: string) => dispo.find((d) => d.id === id)?.largeur ?? null;
+  const [sortPending, startSort] = useTransition();
+  const currentSort = readSort(params.get("sort"), params.get("order"), columns);
+  const [availability, setAvailability] = useState<Layout>(() => readLayout(columns, layout));
+  const [saving, startTransition] = useTransition();
+  const [failure, setFailure] = useState(false);
+  const defs = new Map(columns.map((c) => [c.id, c]));
+  const visible = availability.filter((d) => d.visible).flatMap((d) => defs.get(d.id) ?? []);
+  const masquees = availability.filter((d) => !d.visible).flatMap((d) => defs.get(d.id) ?? []);
+  const widthOf = (id: string) => availability.find((d) => d.id === id)?.width ?? null;
   const style = (id: string) => {
-    const l = largeurDe(id);
+    const l = widthOf(id);
     return l ? { width: l, minWidth: l, maxWidth: l } : undefined;
   };
-  const choixDe = (d: DefColonne) => choix[d.id] ?? d.choix;
+  const choiceOf = (d: ColumnDef) => choice[d.id] ?? d.choice;
 
-  function fixerTri(suivant: Tri | null) {
+  function setSort(next: Sort | null) {
     const p = new URLSearchParams(params.toString());
     p.delete("sort");
     p.delete("order");
-    if (suivant) {
-      p.set("sort", suivant.colonne);
-      p.set("order", suivant.sens);
+    if (next) {
+      p.set("sort", next.column);
+      p.set("order", next.sens);
     }
     const texte = p.toString();
-    demarrerTri(() => router.replace(texte ? `${chemin}?${texte}` : chemin, { scroll: false }));
+    startSort(() => router.replace(texte ? `${path}?${texte}` : path, { scroll: false }));
   }
 
   /** Clic sur une ligne : ouvre la fiche, sauf sur un lien ou un bouton, ou pendant une sélection de texte. */
-  function ouvrir(e: React.MouseEvent<HTMLTableRowElement>, href: string | undefined) {
+  function open(e: React.MouseEvent<HTMLTableRowElement>, href: string | undefined) {
     if (!href || (e.target as HTMLElement).closest("a, button, input, select") || window.getSelection()?.toString())
       return;
     if (e.ctrlKey || e.metaKey) window.open(href, "_blank");
     else router.push(href);
   }
 
-  function changerDispo(d: Disposition) {
-    setDispo(d);
-    setEchec(false);
-    demarrer(async () => setEchec(!(await enregistrerColonnes(liste, ecrireDisposition(d)))));
+  function changeAvailability(d: Layout) {
+    setAvailability(d);
+    setFailure(false);
+    startTransition(async () => setFailure(!(await saveColumns(list, writeLayout(d)))));
   }
 
   // Glisser-déposer d'un en-tête (souris) ; au clavier, les flèches du menu « Colonnes ».
-  const [glissee, setGlissee] = useState<string | null>(null);
-  const [survolee, setSurvolee] = useState<string | null>(null);
+  const [dragged, setDragged] = useState<string | null>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
 
   // Largeur : on tire le bord droit d'un en-tête ; enregistrée au lâcher, double-clic pour l'automatique.
   // Pendant ce geste, l'en-tête (déplaçable) ne doit pas partir en glisser-déposer.
-  const enRedimension = useRef(false);
-  function redimensionnerA(e: React.PointerEvent<HTMLElement>, id: string) {
+  const resizing = useRef(false);
+  function startResize(e: React.PointerEvent<HTMLElement>, id: string) {
     e.preventDefault();
     e.stopPropagation();
-    enRedimension.current = true;
+    resizing.current = true;
     const th = e.currentTarget.parentElement as HTMLElement;
-    const depart = e.clientX;
-    const initiale = th.getBoundingClientRect().width;
-    let courante = dispo;
-    const bouger = (ev: PointerEvent) => {
-      courante = redimensionner(dispo, id, initiale + ev.clientX - depart);
-      setDispo(courante);
+    const origin = e.clientX;
+    const initial = th.getBoundingClientRect().width;
+    let current = availability;
+    const trackPointer = (ev: PointerEvent) => {
+      current = resize(availability, id, initial + ev.clientX - origin);
+      setAvailability(current);
     };
-    const lacher = () => {
-      enRedimension.current = false;
-      window.removeEventListener("pointermove", bouger);
-      window.removeEventListener("pointerup", lacher);
-      if (courante !== dispo) changerDispo(courante);
+    const release = () => {
+      resizing.current = false;
+      window.removeEventListener("pointermove", trackPointer);
+      window.removeEventListener("pointerup", release);
+      if (current !== availability) changeAvailability(current);
     };
-    window.addEventListener("pointermove", bouger);
-    window.addEventListener("pointerup", lacher);
+    window.addEventListener("pointermove", trackPointer);
+    window.addEventListener("pointerup", release);
   }
 
   // Pastilles des filtres actifs, colonnes masquées comprises.
-  const pastilles = colonnes.flatMap((d) => {
-    const fc = lireFiltreColonne(f.filtre, d);
-    const resume = resumeFiltreColonne(d, fc);
-    const garder = (autres: FiltreColonne["autres"]) => f.changer(ecrireFiltreColonne(f.filtre, d, { autres }));
+  const pastilles = columns.flatMap((d) => {
+    const fc = readColumnFilter(f.filter, d);
+    const summary = columnFilterSummary(d, fc);
+    const keep = (other: ColumnFilter["otherConditions"]) =>
+      f.change(writeColumnFilter(f.filter, d, { otherConditions: other }));
     return [
-      ...(resume ? [{ cle: d.id, texte: resume, retirer: () => garder(fc.autres) }] : []),
-      ...fc.autres
+      ...(summary ? [{ key: d.id, texte: summary, remove: () => keep(fc.otherConditions) }] : []),
+      ...fc.otherConditions
         .filter((c) => f.complete(c))
         .map((c, i) => ({
-          cle: `${d.id}-${i}`,
-          texte: libelleCondition(c, colonnes),
-          retirer: () =>
-            f.changer(ecrireFiltreColonne(f.filtre, d, { ...fc, autres: fc.autres.filter((x) => x !== c) })),
+          key: `${d.id}-${i}`,
+          texte: conditionLabel(c, columns),
+          remove: () =>
+            f.change(
+              writeColumnFilter(f.filter, d, { ...fc, otherConditions: fc.otherConditions.filter((x) => x !== c) }),
+            ),
         })),
     ];
   });
-  const filtre = pastilles.length > 0;
-  const toutEffacer = () => f.changer({ mode: "et", conditions: [] });
+  const filter = pastilles.length > 0;
+  const clearAll = () => f.change({ mode: "et", conditions: [] });
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex min-h-9 flex-wrap items-center gap-2 text-sm">
-        {filtre ? (
+        {filter ? (
           <>
             <ul className="flex flex-wrap gap-1.5" aria-label="Filtres actifs">
               {pastilles.map((p) => (
                 <li
-                  key={p.cle}
+                  key={p.key}
                   className="flex items-center gap-1 rounded-full border border-accent bg-accent-doux py-0.5 pr-1 pl-2.5"
                 >
                   {p.texte}
@@ -192,14 +190,14 @@ export function TableauListe({
                     type="button"
                     className="rounded-full px-1.5 hover:bg-surface"
                     aria-label={`Retirer le filtre ${p.texte}`}
-                    onClick={p.retirer}
+                    onClick={p.remove}
                   >
                     ×
                   </button>
                 </li>
               ))}
             </ul>
-            <button type="button" className="lien" onClick={toutEffacer}>
+            <button type="button" className="lien" onClick={clearAll}>
               Effacer les filtres
             </button>
           </>
@@ -210,29 +208,29 @@ export function TableauListe({
         )}
         <span className="flex items-center gap-2 sm:ml-auto">
           <span className="text-xs text-doux" role="status">
-            {f.enCours || triEnCours
+            {f.inProgress || sortPending
               ? "Mise à jour…"
-              : enregistrement
+              : saving
                 ? "Enregistrement des colonnes…"
-                : echec
+                : failure
                   ? "Disposition non enregistrée : réessayez."
                   : ""}
           </span>
           {/* Sur téléphone, des cartes : pas de colonnes à régler. */}
           <span className={mobile ? "hidden sm:inline" : ""}>
-            <Bulle
-              titre={`Colonnes de ${quoi}`}
-              bouton={masquees.length ? `Colonnes (${masquees.length} de plus)` : "Colonnes"}
-              classeBouton="bouton-secondaire"
-              largeur="w-[22rem]"
+            <Popover
+              title={`Colonnes de ${what}`}
+              button={masquees.length ? `Colonnes (${masquees.length} de plus)` : "Colonnes"}
+              buttonClass="bouton-secondaire"
+              width="w-[22rem]"
             >
-              <MenuColonnes
-                colonnes={defs}
-                dispo={dispo}
-                changer={changerDispo}
-                parDefaut={() => changerDispo(dispositionParDefaut(colonnes))}
+              <ColumnsMenu
+                columns={defs}
+                availability={availability}
+                change={changeAvailability}
+                byDefault={() => changeAvailability(defaultLayout(columns))}
               />
-            </Bulle>
+            </Popover>
           </span>
         </span>
       </div>
@@ -240,67 +238,71 @@ export function TableauListe({
       {mobile && <div className="sm:hidden">{mobile}</div>}
       <div className={`panneau overflow-x-auto ${mobile ? "hidden sm:block" : ""}`}>
         <table className="tableau">
-          <caption className="sr-only">{legende}</caption>
+          <caption className="sr-only">{caption}</caption>
           <thead>
             <tr>
-              {visibles.map((d) => (
+              {visible.map((d) => (
                 <th
                   key={d.id}
                   scope="col"
-                  aria-sort={tri?.colonne === d.id ? (tri.sens === "asc" ? "ascending" : "descending") : undefined}
+                  aria-sort={
+                    currentSort?.column === d.id ? (currentSort.sens === "asc" ? "ascending" : "descending") : undefined
+                  }
                   draggable
                   onMouseDown={(e) => {
                     // Une poignée de largeur saisie : pas de glisser-déposer natif.
                     if ((e.target as HTMLElement).dataset.poignee) e.preventDefault();
                   }}
                   style={style(d.id)}
-                  className={`relative select-none ${glissee === d.id ? "opacity-50" : ""} ${survolee === d.id && glissee !== d.id ? "shadow-[inset_3px_0_0_var(--accent)]" : ""}`}
+                  className={`relative select-none ${dragged === d.id ? "opacity-50" : ""} ${hovered === d.id && dragged !== d.id ? "shadow-[inset_3px_0_0_var(--accent)]" : ""}`}
                   onDragStart={(e) => {
-                    if (enRedimension.current) return e.preventDefault();
-                    setGlissee(d.id);
+                    if (resizing.current) return e.preventDefault();
+                    setDragged(d.id);
                     e.dataTransfer.effectAllowed = "move";
                     e.dataTransfer.setData("text/plain", d.id);
                   }}
                   onDragOver={(e) => {
-                    if (!glissee) return;
+                    if (!dragged) return;
                     e.preventDefault();
-                    setSurvolee(d.id);
+                    setHovered(d.id);
                   }}
                   onDrop={(e) => {
                     e.preventDefault();
-                    if (glissee) changerDispo(placer(dispo, glissee, d.id));
-                    setGlissee(null);
-                    setSurvolee(null);
+                    if (dragged) changeAvailability(place(availability, dragged, d.id));
+                    setDragged(null);
+                    setHovered(null);
                   }}
                   onDragEnd={() => {
-                    setGlissee(null);
-                    setSurvolee(null);
+                    setDragged(null);
+                    setHovered(null);
                   }}
                 >
-                  <MenuTitre
+                  <TitleMenu
                     def={d}
-                    choix={choixDe(d)}
+                    choice={choiceOf(d)}
                     f={f}
-                    tri={tri?.colonne === d.id ? tri.sens : null}
-                    trier={(sens) => fixerTri(sens ? { colonne: d.id, sens } : null)}
-                    masquer={visibles.length > 1 && !d.obligatoire ? () => changerDispo(basculer(dispo, d.id)) : null}
+                    currentSort={currentSort?.column === d.id ? currentSort.sens : null}
+                    sort={(sens) => setSort(sens ? { column: d.id, sens } : null)}
+                    hide={
+                      visible.length > 1 && !d.required ? () => changeAvailability(toggle(availability, d.id)) : null
+                    }
                   />
                   <span
                     aria-hidden
                     data-poignee="1"
                     title="Tirez pour changer la largeur, double-cliquez pour la largeur automatique"
                     className="absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize hover:bg-accent/40"
-                    onPointerDown={(e) => redimensionnerA(e, d.id)}
-                    onDoubleClick={() => changerDispo(redimensionner(dispo, d.id, null))}
+                    onPointerDown={(e) => startResize(e, d.id)}
+                    onDoubleClick={() => changeAvailability(resize(availability, d.id, null))}
                   />
                 </th>
               ))}
               <th scope="col" className="w-8 px-1 text-right">
-                <Bulle
-                  titre="Ajouter une colonne"
-                  libelleBouton="Ajouter une colonne"
-                  bouton="+"
-                  classeBouton="rounded px-2 py-0.5 text-base leading-none text-accent hover:bg-accent-doux"
+                <Popover
+                  title="Ajouter une colonne"
+                  buttonLabel="Ajouter une colonne"
+                  button="+"
+                  buttonClass="rounded px-2 py-0.5 text-base leading-none text-accent hover:bg-accent-doux"
                 >
                   <p className="mb-2 font-medium">Ajouter une colonne</p>
                   {masquees.length === 0 ? (
@@ -312,9 +314,9 @@ export function TableauListe({
                           <button
                             type="button"
                             className="lien"
-                            onClick={() => changerDispo(placer(basculer(dispo, c.id), c.id, null))}
+                            onClick={() => changeAvailability(place(toggle(availability, c.id), c.id, null))}
                           >
-                            {c.libelle}
+                            {c.label}
                           </button>
                         </li>
                       ))}
@@ -323,40 +325,40 @@ export function TableauListe({
                   <p className="mt-2 text-xs text-doux">
                     Pour retirer une colonne : cliquez sur son titre, puis « Masquer la colonne ».
                   </p>
-                </Bulle>
+                </Popover>
               </th>
             </tr>
           </thead>
           <tbody>
-            {lignes.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
-                <td colSpan={visibles.length + 1} className="py-6 text-center">
+                <td colSpan={visible.length + 1} className="py-6 text-center">
                   <p className="text-doux">{vide}</p>
                   <div className="mt-3 flex justify-center gap-3">
-                    {filtre ? (
-                      <button type="button" className="bouton-secondaire" onClick={toutEffacer}>
+                    {filter ? (
+                      <button type="button" className="bouton-secondaire" onClick={clearAll}>
                         Effacer les filtres
                       </button>
                     ) : (
-                      actionVide
+                      emptyAction
                     )}
                   </div>
                 </td>
               </tr>
             ) : (
-              lignes.map((l) => (
+              rows.map((l) => (
                 <tr
                   key={l.id}
-                  className={`${l.attenue ? "text-doux" : ""} ${l.href ? "cursor-pointer" : ""}`}
-                  onClick={(e) => ouvrir(e, l.href)}
+                  className={`${l.dimmed ? "text-doux" : ""} ${l.href ? "cursor-pointer" : ""}`}
+                  onClick={(e) => open(e, l.href)}
                 >
-                  {visibles.map((d) => (
+                  {visible.map((d) => (
                     <td
                       key={d.id}
                       style={style(d.id)}
-                      className={`${d.droite ? "text-right tabular-nums" : ""} ${largeurDe(d.id) ? "break-words" : ""}`}
+                      className={`${d.right ? "text-right tabular-nums" : ""} ${widthOf(d.id) ? "break-words" : ""}`}
                     >
-                      {d.id === lien ? (
+                      {d.id === relationship ? (
                         <>
                           {l.href ? (
                             <Link href={l.href} data-resultat className="lien font-medium">
@@ -365,14 +367,14 @@ export function TableauListe({
                           ) : (
                             <span className="font-medium">{texte(l.cellules[d.id])}</span>
                           )}
-                          {l.marque && (
+                          {l.badge && (
                             <span className="ml-2 rounded border border-bordure px-1.5 text-xs font-normal text-doux">
-                              {l.marque}
+                              {l.badge}
                             </span>
                           )}
                         </>
                       ) : (
-                        <Cellule def={d} valeur={l.cellules[d.id]} />
+                        <Cellule def={d} value={l.cellules[d.id]} />
                       )}
                     </td>
                   ))}
@@ -387,11 +389,11 @@ export function TableauListe({
   );
 }
 
-const texte = (v: ValeurCellule) => (Array.isArray(v) ? v.join(", ") : v == null ? "" : String(v));
+const texte = (v: CellValue) => (Array.isArray(v) ? v.join(", ") : v == null ? "" : String(v));
 
-function Cellule({ def, valeur }: { def: DefColonne; valeur: ValeurCellule }) {
-  const t = texte(valeur);
-  if (t === "") return <span className="text-doux">{def.siVide ?? "—"}</span>;
+function Cellule({ def, value: value }: { def: ColumnDef; value: CellValue }) {
+  const t = texte(value);
+  if (t === "") return <span className="text-doux">{def.ifEmpty ?? "—"}</span>;
   if (def.type === "telephone") {
     return (
       <a href={`tel:${t.replace(/\s/g, "")}`} className="lien whitespace-nowrap tabular-nums">
@@ -400,7 +402,7 @@ function Cellule({ def, valeur }: { def: DefColonne; valeur: ValeurCellule }) {
     );
   }
   if (def.type === "date") return t.slice(0, 10).split("-").reverse().join("/");
-  if (def.courriel) {
+  if (def.email) {
     return (
       <a href={`mailto:${t}`} className="lien break-all">
         {t}
@@ -414,54 +416,54 @@ function Cellule({ def, valeur }: { def: DefColonne; valeur: ValeurCellule }) {
  * Bulle native (`popover`) : au-dessus de tout, fermée par Échap ou un clic
  * ailleurs, le focus revient au bouton. Placée sous son bouton à l'ouverture.
  */
-function Bulle({
-  titre,
-  bouton,
-  classeBouton,
-  libelleBouton,
-  largeur = "w-80",
+function Popover({
+  title: title,
+  button: button,
+  buttonClass: buttonClass,
+  buttonLabel: buttonLabel,
+  width: width = "w-80",
   children,
 }: {
-  titre: string;
-  bouton: ReactNode;
-  classeBouton: string;
-  libelleBouton?: string;
-  largeur?: string;
+  title: string;
+  button: ReactNode;
+  buttonClass: string;
+  buttonLabel?: string;
+  width?: string;
   children: ReactNode;
 }) {
   const id = useId();
-  const declencheur = useRef<HTMLButtonElement>(null);
-  const bulle = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const popover = useRef<HTMLDivElement>(null);
 
-  function placer() {
-    const b = declencheur.current?.getBoundingClientRect();
-    const p = bulle.current;
+  function positionPopover() {
+    const b = trigger.current?.getBoundingClientRect();
+    const p = popover.current;
     if (!b || !p) return;
-    const gauche = Math.max(8, Math.min(b.left, window.innerWidth - p.offsetWidth - 8));
-    const haut =
+    const left = Math.max(8, Math.min(b.left, window.innerWidth - p.offsetWidth - 8));
+    const top =
       b.bottom + 4 + p.offsetHeight > window.innerHeight - 8 ? Math.max(8, b.top - 4 - p.offsetHeight) : b.bottom + 4;
-    p.style.left = `${gauche}px`;
-    p.style.top = `${haut}px`;
+    p.style.left = `${left}px`;
+    p.style.top = `${top}px`;
   }
 
   return (
     <>
-      <button ref={declencheur} type="button" popoverTarget={id} className={classeBouton} aria-label={libelleBouton}>
-        {bouton}
+      <button ref={trigger} type="button" popoverTarget={id} className={buttonClass} aria-label={buttonLabel}>
+        {button}
       </button>
       <div
-        ref={bulle}
+        ref={popover}
         id={id}
         popover="auto"
         role="dialog"
-        aria-label={titre}
-        className={`panneau fixed m-0 max-h-[70vh] max-w-[calc(100vw-1rem)] overflow-y-auto p-3 text-sm font-normal text-texte shadow-lg [inset:auto] ${largeur}`}
+        aria-label={title}
+        className={`panneau fixed m-0 max-h-[70vh] max-w-[calc(100vw-1rem)] overflow-y-auto p-3 text-sm font-normal text-texte shadow-lg [inset:auto] ${width}`}
         onToggle={(e) => {
           if (e.newState !== "open") return;
-          placer();
+          positionPopover();
           requestAnimationFrame(() => {
-            placer();
-            bulle.current?.querySelector<HTMLElement>("input, button")?.focus();
+            positionPopover();
+            popover.current?.querySelector<HTMLElement>("input, button")?.focus();
           });
         }}
       >
@@ -472,7 +474,7 @@ function Bulle({
 }
 
 /** Libellés des deux sens de tri, selon la nature de la colonne. */
-const SENS: Record<DefColonne["type"], [string, string]> = {
+const SENS: Record<ColumnDef["type"], [string, string]> = {
   texte: ["De A à Z", "De Z à A"],
   telephone: ["Croissant", "Décroissant"],
   nombre: ["Du plus petit au plus grand", "Du plus grand au plus petit"],
@@ -485,49 +487,49 @@ const SENS: Record<DefColonne["type"], [string, string]> = {
  * Le titre montre le sens du tri (▲ ▼) et un entonnoir plein si la colonne
  * est filtrée ; la flèche ▾ signale qu'on peut cliquer.
  */
-function MenuTitre({
+function TitleMenu({
   def,
-  choix,
+  choice: choice,
   f,
-  tri,
-  trier,
-  masquer,
+  currentSort: currentSort,
+  sort: sort,
+  hide: hide,
 }: {
-  def: DefColonne;
-  choix: readonly string[] | undefined;
-  f: FiltreAdresse;
-  tri: "asc" | "desc" | null;
-  trier: (sens: "asc" | "desc" | null) => void;
-  masquer: (() => void) | null;
+  def: ColumnDef;
+  choice: readonly string[] | undefined;
+  f: AddressFilter;
+  currentSort: "asc" | "desc" | null;
+  sort: (sens: "asc" | "desc" | null) => void;
+  hide: (() => void) | null;
 }) {
-  const fc = lireFiltreColonne(f.filtre, def);
-  const filtree = resumeFiltreColonne(def, fc) !== null || fc.autres.length > 0;
-  const triable = def.triable !== false;
-  const filtrable = def.filtrable !== false;
-  const changer = (maj: Partial<FiltreColonne>, differe = false) =>
-    f.changer(ecrireFiltreColonne(f.filtre, def, { ...fc, ...maj }), differe);
-  const etat = [
-    tri === "asc" ? "trié, sens croissant" : tri === "desc" ? "trié, sens décroissant" : "",
-    filtree ? "filtré" : "",
+  const fc = readColumnFilter(f.filter, def);
+  const filtered = columnFilterSummary(def, fc) !== null || fc.otherConditions.length > 0;
+  const sortable = def.sortable !== false;
+  const filterable = def.filterable !== false;
+  const change = (updated: Partial<ColumnFilter>, deferred = false) =>
+    f.change(writeColumnFilter(f.filter, def, { ...fc, ...updated }), deferred);
+  const state = [
+    currentSort === "asc" ? "trié, sens croissant" : currentSort === "desc" ? "trié, sens décroissant" : "",
+    filtered ? "filtré" : "",
   ]
     .filter(Boolean)
     .join(", ");
 
   return (
-    <Bulle
-      titre={`Trier ou filtrer « ${def.libelle} »`}
-      libelleBouton={`${def.libelle} : trier ou filtrer${etat ? ` (${etat})` : ""}`}
-      classeBouton={`-mx-1 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-1 rounded px-1 py-0.5 hover:bg-accent-doux ${def.droite ? "justify-end" : ""} ${tri || filtree ? "text-accent" : ""}`}
-      largeur="w-72"
-      bouton={
+    <Popover
+      title={`Trier ou filtrer « ${def.label} »`}
+      buttonLabel={`${def.label} : trier ou filtrer${state ? ` (${state})` : ""}`}
+      buttonClass={`-mx-1 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-1 rounded px-1 py-0.5 hover:bg-accent-doux ${def.right ? "justify-end" : ""} ${currentSort || filtered ? "text-accent" : ""}`}
+      width="w-72"
+      button={
         <>
-          <span className="truncate">{def.libelle}</span>
-          {tri && (
+          <span className="truncate">{def.label}</span>
+          {currentSort && (
             <span aria-hidden className="text-xs">
-              {tri === "asc" ? "▲" : "▼"}
+              {currentSort === "asc" ? "▲" : "▼"}
             </span>
           )}
-          {filtree && (
+          {filtered && (
             <svg aria-hidden viewBox="0 0 16 16" className="size-3.5 shrink-0" fill="currentColor">
               <path d="M2 3h12l-4.5 5.5V13l-3 1.5V8.5z" />
             </svg>
@@ -539,15 +541,15 @@ function MenuTitre({
       }
     >
       <div className="flex flex-col gap-3">
-        {triable && (
+        {sortable && (
           <div role="group" aria-label="Trier" className="flex flex-col gap-1">
             {(["asc", "desc"] as const).map((sens, i) => (
               <button
                 key={sens}
                 type="button"
-                aria-pressed={tri === sens}
-                className={`flex items-center gap-2 rounded px-2 py-1 text-left hover:bg-accent-doux ${tri === sens ? "bg-accent-doux font-medium text-accent" : ""}`}
-                onClick={() => trier(tri === sens ? null : sens)}
+                aria-pressed={currentSort === sens}
+                className={`flex items-center gap-2 rounded px-2 py-1 text-left hover:bg-accent-doux ${currentSort === sens ? "bg-accent-doux font-medium text-accent" : ""}`}
+                onClick={() => sort(currentSort === sens ? null : sens)}
               >
                 <span aria-hidden className="w-3 text-xs">
                   {sens === "asc" ? "▲" : "▼"}
@@ -557,83 +559,83 @@ function MenuTitre({
             ))}
           </div>
         )}
-        {filtrable && (
-          <div className={`flex flex-col gap-2 ${triable ? "border-t border-bordure pt-3" : ""}`}>
+        {filterable && (
+          <div className={`flex flex-col gap-2 ${sortable ? "border-t border-bordure pt-3" : ""}`}>
             <p className="font-medium">Filtrer</p>
-            <FiltreDuTitre def={def} choix={choix} fc={fc} changer={changer} />
-            {fc.autres.length > 0 && (
-              <p className="text-xs text-doux">Aussi : {fc.autres.map((c) => libelleCondition(c, [def])).join(", ")}</p>
+            <TitleFilter def={def} choice={choice} fc={fc} change={change} />
+            {fc.otherConditions.length > 0 && (
+              <p className="text-xs text-doux">
+                Aussi : {fc.otherConditions.map((c) => conditionLabel(c, [def])).join(", ")}
+              </p>
             )}
           </div>
         )}
         <div className="flex flex-wrap justify-between gap-2 border-t border-bordure pt-2 text-xs">
-          {filtree ? (
-            <button type="button" className="lien" onClick={() => f.changer(ecrireFiltreColonne(f.filtre, def, {}))}>
+          {filtered ? (
+            <button type="button" className="lien" onClick={() => f.change(writeColumnFilter(f.filter, def, {}))}>
               Effacer ce filtre
             </button>
           ) : (
             <span />
           )}
-          {masquer && (
-            <button type="button" className="lien text-doux" onClick={masquer}>
+          {hide && (
+            <button type="button" className="lien text-doux" onClick={hide}>
               Masquer la colonne
             </button>
           )}
         </div>
       </div>
-    </Bulle>
+    </Popover>
   );
 }
 
 /** Le filtre d'une colonne selon sa nature : cases à cocher, bornes, ou texte contenu. */
-function FiltreDuTitre({
+function TitleFilter({
   def,
-  choix,
+  choice: choice,
   fc,
-  changer,
+  change: change,
 }: {
-  def: DefColonne;
-  choix: readonly string[] | undefined;
-  fc: FiltreColonne;
-  changer: (maj: Partial<FiltreColonne>, differe?: boolean) => void;
+  def: ColumnDef;
+  choice: readonly string[] | undefined;
+  fc: ColumnFilter;
+  change: (updated: Partial<ColumnFilter>, deferred?: boolean) => void;
 }) {
   const id = useId();
-  const [recherche, setRecherche] = useState("");
+  const [search, setSearch] = useState("");
 
-  if (def.type === "texte" && choix) {
-    const cochees = fc.choix ?? [];
-    const basculerChoix = (v: string) =>
-      changer({ choix: cochees.includes(v) ? cochees.filter((x) => x !== v) : [...cochees, v] });
-    const libelle = (v: string) => (v === VIDE ? `(${def.siVide ?? "vide"})` : v);
+  if (def.type === "texte" && choice) {
+    const checked = fc.choice ?? [];
+    const toggleChoice = (v: string) =>
+      change({ choice: checked.includes(v) ? checked.filter((x) => x !== v) : [...checked, v] });
+    const label = (v: string) => (v === EMPTY ? `(${def.ifEmpty ?? "vide"})` : v);
     // « (aucune) » seulement pour une colonne qui peut être vide (`siVide`).
-    const toutes = def.siVide ? [...choix, VIDE] : [...choix];
-    const visibles = recherche
-      ? toutes.filter((v) => libelle(v).toLowerCase().includes(recherche.toLowerCase()))
-      : toutes;
+    const toutes = def.ifEmpty ? [...choice, EMPTY] : [...choice];
+    const visible = search ? toutes.filter((v) => label(v).toLowerCase().includes(search.toLowerCase())) : toutes;
     return (
       <>
-        {choix.length > CASES_SANS_RECHERCHE && (
+        {choice.length > CELLS_WITHOUT_SEARCH && (
           <input
             type="search"
             className="champ"
             placeholder="Chercher…"
-            aria-label={`Chercher dans « ${def.libelle} »`}
-            value={recherche}
-            onChange={(e) => setRecherche(e.target.value)}
+            aria-label={`Chercher dans « ${def.label} »`}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
         )}
         <ul className="flex max-h-60 flex-col gap-0.5 overflow-y-auto">
-          {visibles.map((v) => (
+          {visible.map((v) => (
             <li key={v}>
               <label className="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-accent-doux">
-                <input type="checkbox" checked={cochees.includes(v)} onChange={() => basculerChoix(v)} />
-                <span className={v === VIDE ? "text-doux" : ""}>{libelle(v)}</span>
+                <input type="checkbox" checked={checked.includes(v)} onChange={() => toggleChoice(v)} />
+                <span className={v === EMPTY ? "text-doux" : ""}>{label(v)}</span>
               </label>
             </li>
           ))}
         </ul>
         <p className="text-xs text-doux">
-          {cochees.length ? "Seules les valeurs cochées restent affichées." : "Cochez les valeurs à garder."}
+          {checked.length ? "Seules les valeurs cochées restent affichées." : "Cochez les valeurs à garder."}
         </p>
       </>
     );
@@ -650,7 +652,7 @@ function FiltreDuTitre({
           type={date ? "date" : "text"}
           inputMode={date ? undefined : "numeric"}
           value={fc.min}
-          onChange={(e) => changer({ min: e.target.value }, true)}
+          onChange={(e) => change({ min: e.target.value }, true)}
         />
         <label htmlFor={`${id}-max`}>{date ? "au" : "à"}</label>
         <input
@@ -659,7 +661,7 @@ function FiltreDuTitre({
           type={date ? "date" : "text"}
           inputMode={date ? undefined : "numeric"}
           value={fc.max}
-          onChange={(e) => changer({ max: e.target.value }, true)}
+          onChange={(e) => change({ max: e.target.value }, true)}
         />
       </div>
     );
@@ -668,7 +670,7 @@ function FiltreDuTitre({
   return (
     <>
       <label htmlFor={`${id}-texte`} className="sr-only">
-        {def.libelle} contient
+        {def.label} contient
       </label>
       <input
         id={`${id}-texte`}
@@ -676,32 +678,32 @@ function FiltreDuTitre({
         className="champ"
         placeholder="Contient…"
         inputMode={def.type === "telephone" ? "tel" : undefined}
-        value={fc.texte}
-        onChange={(e) => changer({ texte: e.target.value }, true)}
+        value={fc.text}
+        onChange={(e) => change({ text: e.target.value }, true)}
       />
     </>
   );
 }
 
 /** Menu « Colonnes » : afficher, masquer et déplacer les colonnes. */
-function MenuColonnes({
-  colonnes,
-  dispo,
-  changer,
-  parDefaut,
+function ColumnsMenu({
+  columns: columns,
+  availability: availability,
+  change: change,
+  byDefault: byDefault,
 }: {
-  colonnes: Map<string, DefColonne>;
-  dispo: Disposition;
-  changer: (d: Disposition) => void;
-  parDefaut: () => void;
+  columns: Map<string, ColumnDef>;
+  availability: Layout;
+  change: (d: Layout) => void;
+  byDefault: () => void;
 }) {
-  const derniere = dispo.filter((d) => d.visible).length === 1;
+  const last = availability.filter((d) => d.visible).length === 1;
   return (
     <div className="flex flex-col gap-1">
       <p className="mb-1 text-xs text-doux">Cochez les colonnes à afficher ; les flèches changent leur ordre.</p>
       <ul className="flex flex-col divide-y divide-bordure">
-        {dispo.map((d, k) => {
-          const def = colonnes.get(d.id);
+        {availability.map((d, k) => {
+          const def = columns.get(d.id);
           if (!def) return null;
           return (
             <li key={d.id} className="flex items-center gap-1 py-1.5">
@@ -709,26 +711,26 @@ function MenuColonnes({
                 <input
                   type="checkbox"
                   checked={d.visible}
-                  disabled={(d.visible && derniere) || def.obligatoire}
-                  onChange={() => changer(basculer(dispo, d.id))}
+                  disabled={(d.visible && last) || def.required}
+                  onChange={() => change(toggle(availability, d.id))}
                 />
-                {def.libelle}
+                {def.label}
               </label>
               <button
                 type="button"
                 className="rounded px-1.5 hover:bg-accent-doux disabled:opacity-30"
                 disabled={k === 0}
-                aria-label={`Monter « ${def.libelle} »`}
-                onClick={() => changer(deplacer(dispo, d.id, -1))}
+                aria-label={`Monter « ${def.label} »`}
+                onClick={() => change(move(availability, d.id, -1))}
               >
                 ↑
               </button>
               <button
                 type="button"
                 className="rounded px-1.5 hover:bg-accent-doux disabled:opacity-30"
-                disabled={k === dispo.length - 1}
-                aria-label={`Descendre « ${def.libelle} »`}
-                onClick={() => changer(deplacer(dispo, d.id, 1))}
+                disabled={k === availability.length - 1}
+                aria-label={`Descendre « ${def.label} »`}
+                onClick={() => change(move(availability, d.id, 1))}
               >
                 ↓
               </button>
@@ -736,7 +738,7 @@ function MenuColonnes({
           );
         })}
       </ul>
-      <button type="button" className="lien mt-1 self-start text-sm" onClick={parDefaut}>
+      <button type="button" className="lien mt-1 self-start text-sm" onClick={byDefault}>
         Revenir à la disposition par défaut
       </button>
     </div>

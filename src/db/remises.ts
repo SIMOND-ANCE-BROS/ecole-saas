@@ -1,8 +1,8 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { aRemettre, MOYENS_REMISE, type MoyenRemise } from "../domaine/encaissement/remises";
+import { toDeposit, DEPOSIT_METHODS, type DepositMethod } from "../domaine/encaissement/remises";
 import type { Tx } from "./index";
-import { dejaCorrige, type Moyen } from "./paiements";
+import { alreadyCorrected, type Method } from "./paiements";
 import { auditLog, member, payment, person, bankDeposit, bankDepositPayment } from "./schema";
 
 /**
@@ -11,40 +11,40 @@ import { auditLog, member, payment, person, bankDeposit, bankDepositPayment } fr
  * modifié. Toujours avec la transaction d'`avecEcole()` (RLS).
  */
 
-const ECOLE_COURANTE = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
-const estUuid = (v: string) => z.uuid().safeParse(v).success;
-const nomPayeur = sql<string>`coalesce(${person.companyName}, concat_ws(' ', ${person.firstName}, ${person.lastName}))`;
+const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
+const isUuid = (v: string) => z.uuid().safeParse(v).success;
+const payerName = sql<string>`coalesce(${person.companyName}, concat_ws(' ', ${person.firstName}, ${person.lastName}))`;
 
-export type LigneJournal = {
+export type AuditLogRow = {
   id: string;
   date: string;
-  payeurId: string;
-  payeur: string;
-  moyen: Moyen;
-  montantCentimes: number;
-  corrigeCentimes: number;
+  payerId: string;
+  payer: string;
+  method: Method;
+  amountCents: number;
+  correctedCents: number;
   reference: string | null;
-  emetteur: string | null;
-  encaissementPrevu: string | null;
-  remiseId: string | null;
-  remiseDate: string | null;
+  issuer: string | null;
+  plannedPayment: string | null;
+  depositId: string | null;
+  dateDeposit: string | null;
 };
 
-function lignes(tx: Tx) {
+function rows(tx: Tx) {
   return tx
     .select({
       id: payment.id,
       date: payment.date,
-      payeurId: payment.payerId,
-      payeur: nomPayeur,
-      moyen: payment.method,
-      montantCentimes: payment.amountCents,
-      corrigeCentimes: dejaCorrige,
+      payerId: payment.payerId,
+      payer: payerName,
+      method: payment.method,
+      amountCents: payment.amountCents,
+      correctedCents: alreadyCorrected,
       reference: payment.reference,
-      emetteur: payment.issuer,
-      encaissementPrevu: payment.depositPlannedOn,
-      remiseId: bankDepositPayment.bankDepositId,
-      remiseDate: bankDeposit.date,
+      issuer: payment.issuer,
+      plannedPayment: payment.depositPlannedOn,
+      depositId: bankDepositPayment.bankDepositId,
+      dateDeposit: bankDeposit.date,
     })
     .from(payment)
     .innerJoin(person, eq(person.id, payment.payerId))
@@ -53,40 +53,37 @@ function lignes(tx: Tx) {
 }
 
 /** Paiements reçus entre deux dates (incluses), éventuellement d'un seul moyen, du plus ancien au plus récent. */
-export async function journalEncaissements(
-  tx: Tx,
-  du: string,
-  au: string,
-  moyen: Moyen | null,
-): Promise<LigneJournal[]> {
-  return lignes(tx)
-    .where(and(sql`${payment.date} BETWEEN ${du}::date AND ${au}::date`, moyen ? eq(payment.method, moyen) : undefined))
+export async function paymentLog(tx: Tx, du: string, au: string, method: Method | null): Promise<AuditLogRow[]> {
+  return rows(tx)
+    .where(
+      and(sql`${payment.date} BETWEEN ${du}::date AND ${au}::date`, method ? eq(payment.method, method) : undefined),
+    )
     .orderBy(asc(payment.date), asc(payment.createdAt));
 }
 
 /** Chèques arrivés à échéance, espèces et chèques vacances pas encore remis, par moyen. */
-export async function paiementsARemettre(tx: Tx, aujourdhui: string): Promise<Record<MoyenRemise, LigneJournal[]>> {
-  const candidats = await lignes(tx)
+export async function paymentsToDeposit(tx: Tx, today: string): Promise<Record<DepositMethod, AuditLogRow[]>> {
+  const candidates = await rows(tx)
     .where(
       and(
-        inArray(payment.method, [...MOYENS_REMISE]),
+        inArray(payment.method, [...DEPOSIT_METHODS]),
         sql`${payment.amountCents} > 0`,
         sql`${bankDepositPayment.bankDepositId} IS NULL`,
       ),
     )
     .orderBy(asc(sql`coalesce(${payment.depositPlannedOn}, ${payment.date})`), asc(payment.createdAt));
-  return aRemettre(candidats, aujourdhui);
+  return toDeposit(candidates, today);
 }
 
-export const remiseValide = z.object({
+export const validDeposit = z.object({
   date: z.iso.date("Date invalide"),
-  moyen: z.enum(MOYENS_REMISE),
-  paiementIds: z.array(z.uuid()).min(1, "Sélectionnez au moins un paiement.").max(500),
+  method: z.enum(DEPOSIT_METHODS),
+  paymentIds: z.array(z.uuid()).min(1, "Sélectionnez au moins un paiement.").max(500),
 });
 
-export type Resultat = { ok: true; id: string } | { ok: false; message: string };
+export type Result = { ok: true; id: string } | { ok: false; message: string };
 
-async function membreDe(tx: Tx, userId: string) {
+async function memberOf(tx: Tx, userId: string) {
   const [m] = await tx
     .select({ id: member.id })
     .from(member)
@@ -95,78 +92,78 @@ async function membreDe(tx: Tx, userId: string) {
 }
 
 /** Crée une remise : chaque paiement doit être à remettre, du moyen de la remise, à la date de la remise. */
-export async function creerRemise(
+export async function createDeposit(
   tx: Tx,
   userId: string,
-  saisie: z.input<typeof remiseValide>,
-  aujourdhui: string,
-): Promise<Resultat> {
-  const r = remiseValide.safeParse(saisie);
+  saisie: z.input<typeof validDeposit>,
+  today: string,
+): Promise<Result> {
+  const r = validDeposit.safeParse(saisie);
   if (!r.success) return { ok: false, message: r.error.issues[0].message };
-  const { date, moyen, paiementIds } = r.data;
-  const ids = [...new Set(paiementIds)];
-  const choisis = await lignes(tx).where(inArray(payment.id, ids));
-  const eligibles = new Set(aRemettre(choisis, date > aujourdhui ? date : aujourdhui)[moyen].map((p) => p.id));
-  if (choisis.length !== ids.length || !ids.every((id) => eligibles.has(id))) {
+  const { date, method: method, paymentIds: paymentIds } = r.data;
+  const ids = [...new Set(paymentIds)];
+  const chosen = await rows(tx).where(inArray(payment.id, ids));
+  const eligibles = new Set(toDeposit(chosen, date > today ? date : today)[method].map((p) => p.id));
+  if (chosen.length !== ids.length || !ids.every((id) => eligibles.has(id))) {
     return {
       ok: false,
       message:
         "Un des paiements choisis n’est plus à remettre (déjà remis, corrigé, pas encore à encaisser ou d’un autre moyen).",
     };
   }
-  const qui = await membreDe(tx, userId);
-  if (!qui) return { ok: false, message: "Accès refusé." };
+  const who = await memberOf(tx, userId);
+  if (!who) return { ok: false, message: "Accès refusé." };
   const [{ id }] = await tx
     .insert(bankDeposit)
-    .values({ schoolId: ECOLE_COURANTE, date, method: moyen, createdBy: qui })
+    .values({ schoolId: CURRENT_SCHOOL, date, method: method, createdBy: who })
     .returning({ id: bankDeposit.id });
   await tx
     .insert(bankDepositPayment)
-    .values(ids.map((paiementId) => ({ schoolId: ECOLE_COURANTE, bankDepositId: id, paymentId: paiementId })));
+    .values(ids.map((paymentId) => ({ schoolId: CURRENT_SCHOOL, bankDepositId: id, paymentId: paymentId })));
   await tx.insert(auditLog).values({
-    schoolId: ECOLE_COURANTE,
-    actor: qui,
+    schoolId: CURRENT_SCHOOL,
+    actor: who,
     targetTable: "bank_deposit",
     rowId: id,
     action: "insert",
-    after: { date, moyen, paiements: ids.length },
+    after: { date, method: method, payments: ids.length },
   });
   return { ok: true, id };
 }
 
 /** Annule une remise faite par erreur (direction) : ses paiements redeviennent à remettre ; trace dans le journal. */
-export async function annulerRemise(tx: Tx, userId: string, id: string): Promise<Resultat> {
-  if (!estUuid(id)) return { ok: false, message: "Cette remise n’existe plus." };
+export async function cancelDeposit(tx: Tx, userId: string, id: string): Promise<Result> {
+  if (!isUuid(id)) return { ok: false, message: "Cette remise n’existe plus." };
   const [x] = await tx
-    .select({ date: bankDeposit.date, moyen: bankDeposit.method })
+    .select({ date: bankDeposit.date, method: bankDeposit.method })
     .from(bankDeposit)
     .where(eq(bankDeposit.id, id));
   if (!x) return { ok: false, message: "Cette remise n’existe plus." };
-  const qui = await membreDe(tx, userId);
-  if (!qui) return { ok: false, message: "Accès refusé." };
+  const who = await memberOf(tx, userId);
+  if (!who) return { ok: false, message: "Accès refusé." };
   await tx.delete(bankDeposit).where(eq(bankDeposit.id, id));
   await tx.insert(auditLog).values({
-    schoolId: ECOLE_COURANTE,
-    actor: qui,
+    schoolId: CURRENT_SCHOOL,
+    actor: who,
     targetTable: "bank_deposit",
     rowId: id,
     action: "delete",
-    before: { date: x.date, moyen: x.moyen },
+    before: { date: x.date, method: x.method },
   });
   return { ok: true, id };
 }
 
-export type LigneRemise = { id: string; date: string; moyen: MoyenRemise; nombre: number; totalCentimes: number };
+export type DepositRow = { id: string; date: string; method: DepositMethod; nombre: number; totalCents: number };
 
 /** Remises, de la plus récente à la plus ancienne. */
-export function listerRemises(tx: Tx): Promise<LigneRemise[]> {
+export function listDeposits(tx: Tx): Promise<DepositRow[]> {
   return tx
     .select({
       id: bankDeposit.id,
       date: bankDeposit.date,
-      moyen: bankDeposit.method,
+      method: bankDeposit.method,
       nombre: sql<number>`count(${bankDepositPayment.paymentId})::int`,
-      totalCentimes: sql<number>`coalesce(sum(${payment.amountCents}), 0)::int`,
+      totalCents: sql<number>`coalesce(sum(${payment.amountCents}), 0)::int`,
     })
     .from(bankDeposit)
     .leftJoin(bankDepositPayment, eq(bankDepositPayment.bankDepositId, bankDeposit.id))
@@ -176,20 +173,20 @@ export function listerRemises(tx: Tx): Promise<LigneRemise[]> {
 }
 
 /** Une remise et ses paiements (bordereau), ou null. */
-export async function lireRemise(tx: Tx, id: string): Promise<(LigneRemise & { paiements: LigneJournal[] }) | null> {
-  if (!estUuid(id)) return null;
+export async function readDeposit(tx: Tx, id: string): Promise<(DepositRow & { payments: AuditLogRow[] }) | null> {
+  if (!isUuid(id)) return null;
   const [x] = await tx
-    .select({ id: bankDeposit.id, date: bankDeposit.date, moyen: bankDeposit.method })
+    .select({ id: bankDeposit.id, date: bankDeposit.date, method: bankDeposit.method })
     .from(bankDeposit)
     .where(eq(bankDeposit.id, id));
   if (!x) return null;
-  const paiements = await lignes(tx)
+  const payments = await rows(tx)
     .where(eq(bankDepositPayment.bankDepositId, id))
     .orderBy(asc(person.lastName), asc(payment.reference));
   return {
     ...x,
-    paiements,
-    nombre: paiements.length,
-    totalCentimes: paiements.reduce((s, p) => s + p.montantCentimes, 0),
+    payments,
+    nombre: payments.length,
+    totalCents: payments.reduce((s, p) => s + p.amountCents, 0),
   };
 }

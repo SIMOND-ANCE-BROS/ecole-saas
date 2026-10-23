@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
-import { datesDuCoursSql } from "./cours";
+import { courseDatesSql } from "./cours";
 import type { Tx } from "./index";
 import { alias } from "drizzle-orm/pg-core";
 import { nomAffiche } from "./personnes";
@@ -8,52 +8,52 @@ import { course, discipline, enrollment, enrollmentCourse, instructor, person, s
 
 /** Lectures du planning, toujours avec la transaction d'`avecEcole()` (RLS). */
 
-export type Saison = { id: string; libelle: string; dateDebut: string; dateFin: string };
+export type Season = { id: string; label: string; startDate: string; endDate: string };
 
 /** Saison qui contient le jour (`YYYY-MM-DD`), sinon la plus récente ; null s'il n'y en a aucune. */
-export async function saisonCourante(tx: Tx, jour: string): Promise<Saison | null> {
+export async function currentSeason(tx: Tx, day: string): Promise<Season | null> {
   const [s] = await tx
-    .select({ id: season.id, libelle: season.label, dateDebut: season.startDate, dateFin: season.endDate })
+    .select({ id: season.id, label: season.label, startDate: season.startDate, endDate: season.endDate })
     .from(season)
-    .orderBy(sql`(${season.startDate} <= ${jour} AND ${season.endDate} >= ${jour}) DESC`, desc(season.startDate))
+    .orderBy(sql`(${season.startDate} <= ${day} AND ${season.endDate} >= ${day}) DESC`, desc(season.startDate))
     .limit(1);
   return s ?? null;
 }
 
-export type CoursPlanning = {
+export type ScheduleCourse = {
   id: string;
   /** 1 = lundi … 7 = dimanche ; null pour un stage. */
-  jourSemaine: number | null;
+  weekday: number | null;
   /** `HH:MM` */
-  heureDebut: string;
-  dureeMinutes: number;
+  startTime: string;
+  durationMinutes: number;
   disciplineId: string;
   discipline: string;
-  salleId: string;
-  salle: string;
+  roomId: string;
+  room: string;
   siteId: string;
   /** Récurrence (#90) ; `dates` : cours ponctuel, sans jour. */
   recurrence: "hebdomadaire" | "quinzaine" | "dates";
-  dateDebut: string | null;
-  dateFin: string | null;
+  startDate: string | null;
+  endDate: string | null;
   dates: string[];
   site: string;
-  intervenantId: string;
+  instructorId: string;
   /** « Prénom Nom » */
-  intervenant: string;
+  instructor: string;
   ageMin: number | null;
   ageMax: number | null;
-  niveau: string | null;
-  capaciteMax: number | null;
+  level: string | null;
+  maxCapacity: number | null;
   /** Danseurs distincts inscrits (inscriptions actives). */
-  inscrits: number;
+  enrolled: number;
 };
 
 /**
  * Effectif d'un cours, écrit avec les noms de tables : dans un `select`, Drizzle
  * n'écrit pas le nom de table devant `cours.id`, qui serait ambigu ici.
  */
-const effectif = sql<number>`(
+const effective = sql<number>`(
   SELECT count(DISTINCT ic.student_id)::int
   FROM enrollment_course ic
   JOIN enrollment i ON i.id = ic.enrollment_id AND i.status = 'active'
@@ -61,104 +61,112 @@ const effectif = sql<number>`(
 )`;
 
 /** Cours d'une saison, par jour puis par heure. */
-export function coursDeLaSaison(tx: Tx, saisonId: string): Promise<CoursPlanning[]> {
-  return lireCoursPlanning(tx, eq(course.seasonId, saisonId));
+export function seasonCourses(tx: Tx, seasonId: string): Promise<ScheduleCourse[]> {
+  return readScheduleCourse(tx, eq(course.seasonId, seasonId));
 }
 
 /** Un cours du planning, ou null s'il n'existe pas dans l'école courante. */
-export async function coursDuPlanning(tx: Tx, id: string): Promise<CoursPlanning | null> {
+export async function scheduleCourse(tx: Tx, id: string): Promise<ScheduleCourse | null> {
   if (!z.uuid().safeParse(id).success) return null;
-  const [c] = await lireCoursPlanning(tx, eq(course.id, id));
+  const [c] = await readScheduleCourse(tx, eq(course.id, id));
   return c ?? null;
 }
 
-async function lireCoursPlanning(tx: Tx, filtre: SQL): Promise<CoursPlanning[]> {
-  const lignes = await tx
+async function readScheduleCourse(tx: Tx, filter: SQL): Promise<ScheduleCourse[]> {
+  const rows = await tx
     .select({
       id: course.id,
-      jourSemaine: course.weekday,
-      heureDebut: course.startTime,
-      dureeMinutes: course.durationMinutes,
+      weekday: course.weekday,
+      startTime: course.startTime,
+      durationMinutes: course.durationMinutes,
       disciplineId: course.disciplineId,
       discipline: discipline.name,
-      salleId: course.roomId,
-      salle: room.name,
+      roomId: course.roomId,
+      room: room.name,
       siteId: site.id,
       site: site.name,
       recurrence: course.recurrence,
-      dateDebut: course.startDate,
-      dateFin: course.endDate,
-      dates: datesDuCoursSql,
-      intervenantId: course.instructorId,
-      prenom: instructor.firstName,
-      nom: instructor.lastName,
+      startDate: course.startDate,
+      endDate: course.endDate,
+      dates: courseDatesSql,
+      instructorId: course.instructorId,
+      firstName: instructor.firstName,
+      name: instructor.lastName,
       ageMin: course.ageMin,
       ageMax: course.ageMax,
-      niveau: course.level,
-      capaciteMax: course.maxCapacity,
-      inscrits: effectif,
+      level: course.level,
+      maxCapacity: course.maxCapacity,
+      enrolled: effective,
     })
     .from(course)
     .innerJoin(discipline, eq(discipline.id, course.disciplineId))
     .innerJoin(room, eq(room.id, course.roomId))
     .innerJoin(site, eq(site.id, room.siteId))
     .innerJoin(instructor, eq(instructor.id, course.instructorId))
-    .where(filtre)
+    .where(filter)
     .orderBy(sql`${course.weekday} NULLS LAST`, asc(course.startTime), asc(discipline.name));
 
-  return lignes.map(({ prenom, nom, heureDebut, ...c }) => ({
+  return rows.map(({ firstName: firstName, name: name, startTime: startTime, ...c }) => ({
     ...c,
-    heureDebut: heureDebut.slice(0, 5),
-    intervenant: `${prenom} ${nom}`,
+    startTime: startTime.slice(0, 5),
+    instructor: `${firstName} ${name}`,
   }));
 }
 
-export type Inscrit = {
-  danseurId: string;
-  prenom: string;
-  nom: string;
-  dateNaissance: string | null;
-  payeurId: string;
+export type Enrolled = {
+  studentId: string;
+  firstName: string;
+  name: string;
+  birthDate: string | null;
+  payerId: string;
   /** Nom du payeur (raison sociale pour un professionnel). */
-  payeur: string;
+  payer: string;
   telephone: string | null;
   email: string | null;
-  statut: "active" | "essai" | "liste_attente";
-  dateInscription: string;
+  status: "active" | "essai" | "liste_attente";
+  enrollmentDate: string;
 };
 
 /** Danseurs du cours en cours d'année (actifs, à l'essai, en liste d'attente), par nom puis prénom. */
-export async function inscritsDuCours(tx: Tx, coursId: string): Promise<Inscrit[]> {
-  if (!z.uuid().safeParse(coursId).success) return [];
-  const danseur = alias(person, "danseur");
-  const payeur = alias(person, "payeur");
-  const lignes = await tx
-    .selectDistinctOn([danseur.lastName, danseur.firstName, danseur.id], {
-      danseurId: danseur.id,
-      prenom: danseur.firstName,
-      nom: danseur.lastName,
-      dateNaissance: danseur.birthDate,
-      payeurId: payeur.id,
-      payeurNom: payeur.lastName,
-      payeurPrenom: payeur.firstName,
-      raisonSociale: payeur.companyName,
+export async function enrolledInCourse(tx: Tx, courseId: string): Promise<Enrolled[]> {
+  if (!z.uuid().safeParse(courseId).success) return [];
+  const student = alias(person, "danseur");
+  const payer = alias(person, "payeur");
+  const rows = await tx
+    .selectDistinctOn([student.lastName, student.firstName, student.id], {
+      studentId: student.id,
+      firstName: student.firstName,
+      name: student.lastName,
+      birthDate: student.birthDate,
+      payerId: payer.id,
+      payerName: payer.lastName,
+      payerFirstName: payer.firstName,
+      companyName: payer.companyName,
       // Téléphone du danseur, sinon celui de son payeur (un enfant n'en a souvent pas).
-      telephone: sql<string | null>`coalesce(${danseur.phone}, ${payeur.phone})`,
-      email: sql<string | null>`coalesce(${danseur.email}, ${payeur.email})`,
-      statut: sql<Inscrit["statut"]>`${enrollment.status}`,
-      dateInscription: enrollment.enrolledOn,
+      telephone: sql<string | null>`coalesce(${student.phone}, ${payer.phone})`,
+      email: sql<string | null>`coalesce(${student.email}, ${payer.email})`,
+      status: sql<Enrolled["status"]>`${enrollment.status}`,
+      enrollmentDate: enrollment.enrolledOn,
     })
     .from(enrollmentCourse)
     .innerJoin(enrollment, eq(enrollment.id, enrollmentCourse.enrollmentId))
-    .innerJoin(danseur, eq(danseur.id, enrollmentCourse.studentId))
-    .innerJoin(payeur, eq(payeur.id, enrollment.payerId))
+    .innerJoin(student, eq(student.id, enrollmentCourse.studentId))
+    .innerJoin(payer, eq(payer.id, enrollment.payerId))
     .where(
-      and(eq(enrollmentCourse.courseId, coursId), inArray(enrollment.status, ["active", "essai", "liste_attente"])),
+      and(eq(enrollmentCourse.courseId, courseId), inArray(enrollment.status, ["active", "essai", "liste_attente"])),
     )
-    .orderBy(asc(danseur.lastName), asc(danseur.firstName), asc(danseur.id), sql`${enrollment.status} = 'active' DESC`);
-  return lignes.map(({ payeurNom, payeurPrenom, raisonSociale, prenom, ...l }) => ({
-    ...l,
-    prenom: prenom ?? "",
-    payeur: nomAffiche({ nom: payeurNom, prenom: payeurPrenom, raisonSociale }),
-  }));
+    .orderBy(asc(student.lastName), asc(student.firstName), asc(student.id), sql`${enrollment.status} = 'active' DESC`);
+  return rows.map(
+    ({
+      payerName: payerName,
+      payerFirstName: payerFirstName,
+      companyName: companyName,
+      firstName: firstName,
+      ...l
+    }) => ({
+      ...l,
+      firstName: firstName ?? "",
+      payer: nomAffiche({ name: payerName, firstName: payerFirstName, companyName: companyName }),
+    }),
+  );
 }

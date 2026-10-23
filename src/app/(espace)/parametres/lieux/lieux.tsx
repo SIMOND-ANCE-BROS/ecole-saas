@@ -1,34 +1,34 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { LigneSite } from "@/db/parametres";
-import { changerSalle, changerSite, nouveauSite, nouvelleSalle, retirerSalle, retirerSite } from "../actions";
-import { HorairesSite } from "./horaires";
+import type { SiteRow } from "@/db/parametres";
+import { changeRoom, changeSite, newSite, newRoom, removeRoom, removeSite } from "../actions";
+import { SiteHours } from "./horaires";
 
-const capaciteDe = (v: string) => (v.trim() === "" ? null : Number(v));
+const capacityOf = (v: string) => (v.trim() === "" ? null : Number(v));
 
-export function Lieux({ lieux }: { lieux: LigneSite[] }) {
+export function Places({ seats: seats }: { seats: SiteRow[] }) {
   const [message, setMessage] = useState<string | null>(null);
-  const [enCours, demarrer] = useTransition();
-  const [site, setSite] = useState({ nom: "", adresse: "", permanence: false });
+  const [inProgress, startTransition] = useTransition();
+  const [site, setSite] = useState({ name: "", address: "", permanence: false });
   const [editionSite, setEditionSite] = useState<{
     id: string;
-    nom: string;
-    adresse: string;
+    name: string;
+    address: string;
     permanence: boolean;
   } | null>(null);
-  const [editionSalle, setEditionSalle] = useState<{
+  const [roomEditing, setRoomEdition] = useState<{
     id: string;
     siteId: string;
-    nom: string;
-    capacite: string;
+    name: string;
+    capacity: string;
   } | null>(null);
-  const [nouvelles, setNouvelles] = useState<Record<string, { nom: string; capacite: string }>>({});
-  const agir = (action: () => Promise<{ message: string | null }>, apres?: () => void) =>
-    demarrer(async () => {
+  const [nextItems, setNew] = useState<Record<string, { name: string; capacity: string }>>({});
+  const act = (action: () => Promise<{ message: string | null }>, after?: () => void) =>
+    startTransition(async () => {
       const r = await action();
       setMessage(r.message);
-      if (!r.message) apres?.();
+      if (!r.message) after?.();
     });
 
   return (
@@ -38,8 +38,8 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
           {message}
         </p>
       )}
-      {lieux.map((s) => {
-        const nouvelle = nouvelles[s.id] ?? { nom: "", capacite: "" };
+      {seats.map((s) => {
+        const next = nextItems[s.id] ?? { name: "", capacity: "" };
         return (
           <section key={s.id} aria-labelledby={`site-${s.id}`} className="panneau flex flex-col gap-3 p-4 text-sm">
             {editionSite?.id === s.id ? (
@@ -47,11 +47,11 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
                 className="grid gap-2 sm:grid-cols-[1fr_2fr_auto_auto] sm:items-end"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  agir(
+                  act(
                     () =>
-                      changerSite(s.id, {
-                        nom: editionSite.nom,
-                        adresse: editionSite.adresse,
+                      changeSite(s.id, {
+                        name: editionSite.name,
+                        address: editionSite.address,
                         permanence: editionSite.permanence,
                       }),
                     () => setEditionSite(null),
@@ -63,8 +63,8 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
                   <input
                     id={`site-nom-${s.id}`}
                     className="champ"
-                    value={editionSite.nom}
-                    onChange={(e) => setEditionSite({ ...editionSite, nom: e.target.value })}
+                    value={editionSite.name}
+                    onChange={(e) => setEditionSite({ ...editionSite, name: e.target.value })}
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -72,8 +72,8 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
                   <input
                     id={`site-adresse-${s.id}`}
                     className="champ"
-                    value={editionSite.adresse}
-                    onChange={(e) => setEditionSite({ ...editionSite, adresse: e.target.value })}
+                    value={editionSite.address}
+                    onChange={(e) => setEditionSite({ ...editionSite, address: e.target.value })}
                   />
                 </div>
                 <label className="flex items-center gap-2 pb-2">
@@ -85,7 +85,7 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
                   Accueil sur place
                 </label>
                 <span className="flex gap-2 pb-2">
-                  <button type="submit" className="lien" disabled={enCours}>
+                  <button type="submit" className="lien" disabled={inProgress}>
                     Enregistrer
                   </button>
                   <button type="button" className="lien text-doux" onClick={() => setEditionSite(null)}>
@@ -96,9 +96,9 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
             ) : (
               <div className="flex flex-wrap items-baseline gap-x-3">
                 <h2 id={`site-${s.id}`} className="text-base font-semibold">
-                  {s.nom}
+                  {s.name}
                 </h2>
-                <span className="text-doux">{s.adresse}</span>
+                <span className="text-doux">{s.address}</span>
                 {s.permanence && <span className="rounded bg-accent-doux px-1.5 text-xs">accueil sur place</span>}
                 <span className="ml-auto flex gap-3">
                   <button type="button" className="lien" onClick={() => setEditionSite(s)}>
@@ -108,8 +108,8 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
                     <button
                       type="button"
                       className="lien text-doux"
-                      disabled={enCours}
-                      onClick={() => agir(() => retirerSite(s.id))}
+                      disabled={inProgress}
+                      onClick={() => act(() => removeSite(s.id))}
                     >
                       Retirer
                     </button>
@@ -118,24 +118,24 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
               </div>
             )}
 
-            <HorairesSite siteId={s.id} nom={s.nom} horaires={s.horaires} />
+            <SiteHours siteId={s.id} name={s.name} hours={s.hours} />
 
             <ul className="divide-y divide-bordure rounded-md border border-bordure">
               {s.salles.map((x) =>
-                editionSalle?.id === x.id ? (
+                roomEditing?.id === x.id ? (
                   <li key={x.id} className="px-3 py-2">
                     <form
                       className="flex flex-wrap items-end gap-2"
                       onSubmit={(e) => {
                         e.preventDefault();
-                        agir(
+                        act(
                           () =>
-                            changerSalle(x.id, {
-                              siteId: editionSalle.siteId,
-                              nom: editionSalle.nom,
-                              capacite: capaciteDe(editionSalle.capacite),
+                            changeRoom(x.id, {
+                              siteId: roomEditing.siteId,
+                              name: roomEditing.name,
+                              capacity: capacityOf(roomEditing.capacity),
                             }),
-                          () => setEditionSalle(null),
+                          () => setRoomEdition(null),
                         );
                       }}
                     >
@@ -144,8 +144,8 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
                         <input
                           id={`salle-nom-${x.id}`}
                           className="champ"
-                          value={editionSalle.nom}
-                          onChange={(e) => setEditionSalle({ ...editionSalle, nom: e.target.value })}
+                          value={roomEditing.name}
+                          onChange={(e) => setRoomEdition({ ...roomEditing, name: e.target.value })}
                         />
                       </div>
                       <div className="flex flex-col gap-1">
@@ -155,62 +155,62 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
                           type="number"
                           min={1}
                           className="champ w-24"
-                          value={editionSalle.capacite}
-                          onChange={(e) => setEditionSalle({ ...editionSalle, capacite: e.target.value })}
+                          value={roomEditing.capacity}
+                          onChange={(e) => setRoomEdition({ ...roomEditing, capacity: e.target.value })}
                         />
                       </div>
-                      {lieux.length > 1 && (
+                      {seats.length > 1 && (
                         <div className="flex flex-col gap-1">
                           <label htmlFor={`salle-site-${x.id}`}>Site</label>
                           <select
                             id={`salle-site-${x.id}`}
                             className="champ"
-                            value={editionSalle.siteId}
-                            onChange={(e) => setEditionSalle({ ...editionSalle, siteId: e.target.value })}
+                            value={roomEditing.siteId}
+                            onChange={(e) => setRoomEdition({ ...roomEditing, siteId: e.target.value })}
                           >
-                            {lieux.map((l) => (
+                            {seats.map((l) => (
                               <option key={l.id} value={l.id}>
-                                {l.nom}
+                                {l.name}
                               </option>
                             ))}
                           </select>
                         </div>
                       )}
-                      <button type="submit" className="lien pb-2" disabled={enCours}>
+                      <button type="submit" className="lien pb-2" disabled={inProgress}>
                         Enregistrer
                       </button>
-                      <button type="button" className="lien pb-2 text-doux" onClick={() => setEditionSalle(null)}>
+                      <button type="button" className="lien pb-2 text-doux" onClick={() => setRoomEdition(null)}>
                         Annuler
                       </button>
                     </form>
                   </li>
                 ) : (
                   <li key={x.id} className="flex flex-wrap items-baseline gap-x-3 px-3 py-2">
-                    <span className="font-medium">{x.nom}</span>
+                    <span className="font-medium">{x.name}</span>
                     <span className="text-doux">
-                      {x.capacite ? `${x.capacite} places` : "capacité libre"}, {x.cours} cours
+                      {x.capacity ? `${x.capacity} places` : "capacité libre"}, {x.course} cours
                     </span>
                     <span className="ml-auto flex gap-3">
                       <button
                         type="button"
                         className="lien"
                         onClick={() =>
-                          setEditionSalle({
+                          setRoomEdition({
                             id: x.id,
                             siteId: s.id,
-                            nom: x.nom,
-                            capacite: x.capacite?.toString() ?? "",
+                            name: x.name,
+                            capacity: x.capacity?.toString() ?? "",
                           })
                         }
                       >
                         Modifier
                       </button>
-                      {x.cours === 0 && (
+                      {x.course === 0 && (
                         <button
                           type="button"
                           className="lien text-doux"
-                          disabled={enCours}
-                          onClick={() => agir(() => retirerSalle(x.id))}
+                          disabled={inProgress}
+                          onClick={() => act(() => removeRoom(x.id))}
                         >
                           Retirer
                         </button>
@@ -224,9 +224,9 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
                   className="flex flex-wrap items-end gap-2"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    agir(
-                      () => nouvelleSalle({ siteId: s.id, nom: nouvelle.nom, capacite: capaciteDe(nouvelle.capacite) }),
-                      () => setNouvelles({ ...nouvelles, [s.id]: { nom: "", capacite: "" } }),
+                    act(
+                      () => newRoom({ siteId: s.id, name: next.name, capacity: capacityOf(next.capacity) }),
+                      () => setNew({ ...nextItems, [s.id]: { name: "", capacity: "" } }),
                     );
                   }}
                 >
@@ -235,8 +235,8 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
                     <input
                       id={`nouvelle-salle-${s.id}`}
                       className="champ"
-                      value={nouvelle.nom}
-                      onChange={(e) => setNouvelles({ ...nouvelles, [s.id]: { ...nouvelle, nom: e.target.value } })}
+                      value={next.name}
+                      onChange={(e) => setNew({ ...nextItems, [s.id]: { ...next, name: e.target.value } })}
                     />
                   </div>
                   <div className="flex flex-col gap-1">
@@ -246,13 +246,11 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
                       type="number"
                       min={1}
                       className="champ w-24"
-                      value={nouvelle.capacite}
-                      onChange={(e) =>
-                        setNouvelles({ ...nouvelles, [s.id]: { ...nouvelle, capacite: e.target.value } })
-                      }
+                      value={next.capacity}
+                      onChange={(e) => setNew({ ...nextItems, [s.id]: { ...next, capacity: e.target.value } })}
                     />
                   </div>
-                  <button type="submit" className="bouton-secondaire" disabled={enCours || !nouvelle.nom.trim()}>
+                  <button type="submit" className="bouton-secondaire" disabled={inProgress || !next.name.trim()}>
                     Ajouter la salle
                   </button>
                 </form>
@@ -266,9 +264,9 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
         className="panneau grid gap-3 p-4 sm:grid-cols-[1fr_2fr_auto_auto] sm:items-end"
         onSubmit={(e) => {
           e.preventDefault();
-          agir(
-            () => nouveauSite(site),
-            () => setSite({ nom: "", adresse: "", permanence: false }),
+          act(
+            () => newSite(site),
+            () => setSite({ name: "", address: "", permanence: false }),
           );
         }}
       >
@@ -280,8 +278,8 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
           <input
             id="site-nom"
             className="champ"
-            value={site.nom}
-            onChange={(e) => setSite({ ...site, nom: e.target.value })}
+            value={site.name}
+            onChange={(e) => setSite({ ...site, name: e.target.value })}
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -291,8 +289,8 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
           <input
             id="site-adresse"
             className="champ"
-            value={site.adresse}
-            onChange={(e) => setSite({ ...site, adresse: e.target.value })}
+            value={site.address}
+            onChange={(e) => setSite({ ...site, address: e.target.value })}
           />
         </div>
         <label className="flex items-center gap-2 pb-2 text-sm">
@@ -303,7 +301,7 @@ export function Lieux({ lieux }: { lieux: LigneSite[] }) {
           />
           Accueil sur place
         </label>
-        <button type="submit" className="bouton-principal" disabled={enCours}>
+        <button type="submit" className="bouton-principal" disabled={inProgress}>
           Ajouter le site
         </button>
       </form>

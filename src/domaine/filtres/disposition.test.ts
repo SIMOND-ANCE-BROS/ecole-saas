@@ -1,76 +1,76 @@
 import { describe, expect, it } from "vitest";
-import { basculer, deplacer, ecrireDisposition, lireDisposition, placer, redimensionner } from "./disposition";
-import type { DefColonne } from "./filtres";
+import { toggle, move, writeLayout, readLayout, place, resize } from "./disposition";
+import type { ColumnDef } from "./filtres";
 
-const COLONNES: DefColonne[] = [
-  { id: "nom", libelle: "Élève", type: "texte" },
-  { id: "age", libelle: "Âge", type: "nombre" },
-  { id: "telephone", libelle: "Téléphone", type: "telephone" },
-  { id: "naissance", libelle: "Naissance", type: "texte", parDefaut: false },
+const COLUMNS: ColumnDef[] = [
+  { id: "nom", label: "Élève", type: "texte" },
+  { id: "age", label: "Âge", type: "nombre" },
+  { id: "telephone", label: "Téléphone", type: "telephone" },
+  { id: "naissance", label: "Naissance", type: "texte", byDefault: false },
 ];
-const vue = (d: ReturnType<typeof lireDisposition>) => ecrireDisposition(d).join(" ");
+const view = (d: ReturnType<typeof readLayout>) => writeLayout(d).join(" ");
 
 describe("lireDisposition", () => {
   it("sans préférence : ordre des définitions, colonnes optionnelles masquées", () => {
-    expect(vue(lireDisposition(COLONNES, null))).toBe("nom age telephone -naissance");
+    expect(view(readLayout(COLUMNS, null))).toBe("nom age telephone -naissance");
   });
 
   it("garde l'ordre et la visibilité choisis ; ignore inconnus et doublons", () => {
-    expect(vue(lireDisposition(COLONNES, ["telephone", "inconnue", "-age", "telephone", "naissance", "nom"]))).toBe(
+    expect(view(readLayout(COLUMNS, ["telephone", "inconnue", "-age", "telephone", "naissance", "nom"]))).toBe(
       "telephone -age naissance nom",
     );
   });
 
   it("une colonne ajoutée depuis prend sa visibilité par défaut, à la fin", () => {
-    expect(vue(lireDisposition(COLONNES, ["age", "nom"]))).toBe("age nom telephone -naissance");
+    expect(view(readLayout(COLUMNS, ["age", "nom"]))).toBe("age nom telephone -naissance");
   });
 
   it("une colonne obligatoire (le nom) reste affichée, même masquée par une ancienne préférence", () => {
-    const avecNom = COLONNES.map((c) => (c.id === "nom" ? { ...c, obligatoire: true } : c));
-    expect(vue(lireDisposition(avecNom, ["-nom@120", "age"]))).toBe("nom@120 age telephone -naissance");
+    const withName = COLUMNS.map((c) => (c.id === "nom" ? { ...c, required: true } : c));
+    expect(view(readLayout(withName, ["-nom@120", "age"]))).toBe("nom@120 age telephone -naissance");
   });
 
   it("au moins une colonne visible", () => {
-    expect(vue(lireDisposition(COLONNES, ["-nom", "-age", "-telephone", "-naissance"]))).toBe(
+    expect(view(readLayout(COLUMNS, ["-nom", "-age", "-telephone", "-naissance"]))).toBe(
       "nom -age -telephone -naissance",
     );
   });
 });
 
 describe("modifier", () => {
-  const d = lireDisposition(COLONNES, null);
+  const d = readLayout(COLUMNS, null);
   it("déplace d'un cran, sans sortir des bords", () => {
-    expect(vue(deplacer(d, "age", -1))).toBe("age nom telephone -naissance");
-    expect(vue(deplacer(d, "nom", -1))).toBe(vue(d));
-    expect(vue(deplacer(d, "naissance", 1))).toBe(vue(d));
+    expect(view(move(d, "age", -1))).toBe("age nom telephone -naissance");
+    expect(view(move(d, "nom", -1))).toBe(view(d));
+    expect(view(move(d, "naissance", 1))).toBe(view(d));
   });
 
   it("affiche et masque, sauf la dernière colonne visible", () => {
-    expect(vue(basculer(d, "naissance"))).toBe("nom age telephone naissance");
-    const seule = lireDisposition(COLONNES, ["nom", "-age", "-telephone", "-naissance"]);
-    expect(vue(basculer(seule, "nom"))).toBe(vue(seule));
+    expect(view(toggle(d, "naissance"))).toBe("nom age telephone naissance");
+    const only = readLayout(COLUMNS, ["nom", "-age", "-telephone", "-naissance"]);
+    expect(view(toggle(only, "nom"))).toBe(view(only));
   });
 });
 
 describe("largeurs et glisser-déposer (#102)", () => {
   it("lit et écrit les largeurs, bornées ; l'ancien format reste lu", () => {
-    const d = lireDisposition(COLONNES, ["nom@180", "-age@20", "telephone@9999", "naissance@abc"]);
+    const d = readLayout(COLUMNS, ["nom@180", "-age@20", "telephone@9999", "naissance@abc"]);
     expect(d).toEqual([
-      { id: "nom", visible: true, largeur: 180 },
-      { id: "age", visible: false, largeur: 60 },
-      { id: "telephone", visible: true, largeur: 1200 },
+      { id: "nom", visible: true, width: 180 },
+      { id: "age", visible: false, width: 60 },
+      { id: "telephone", visible: true, width: 1200 },
       { id: "naissance", visible: true },
     ]);
-    expect(vue(d)).toBe("nom@180 -age@60 telephone@1200 naissance");
-    expect(vue(redimensionner(d, "nom", null))).toBe("nom -age@60 telephone@1200 naissance");
-    expect(vue(redimensionner(d, "naissance", 123.6))).toBe("nom@180 -age@60 telephone@1200 naissance@124");
+    expect(view(d)).toBe("nom@180 -age@60 telephone@1200 naissance");
+    expect(view(resize(d, "nom", null))).toBe("nom -age@60 telephone@1200 naissance");
+    expect(view(resize(d, "naissance", 123.6))).toBe("nom@180 -age@60 telephone@1200 naissance@124");
   });
 
   it("place une colonne devant une autre, ou à la fin", () => {
-    const d = lireDisposition(COLONNES, null);
-    expect(vue(placer(d, "telephone", "nom"))).toBe("telephone nom age -naissance");
-    expect(vue(placer(d, "nom", null))).toBe("age telephone -naissance nom");
-    expect(vue(placer(d, "nom", "nom"))).toBe(vue(d));
-    expect(vue(placer(d, "inconnue", "nom"))).toBe(vue(d));
+    const d = readLayout(COLUMNS, null);
+    expect(view(place(d, "telephone", "nom"))).toBe("telephone nom age -naissance");
+    expect(view(place(d, "nom", null))).toBe("age telephone -naissance nom");
+    expect(view(place(d, "nom", "nom"))).toBe(view(d));
+    expect(view(place(d, "inconnue", "nom"))).toBe(view(d));
   });
 });

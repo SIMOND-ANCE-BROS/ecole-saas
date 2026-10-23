@@ -1,70 +1,70 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { avecEcole } from "@/db";
-import { lireEleve } from "@/db/eleves";
-import { inscriptionsPayeesPar } from "@/db/inscriptions";
-import { paiementsDe, soldeDe } from "@/db/paiements";
+import { withSchool } from "@/db";
+import { readStudent } from "@/db/eleves";
+import { enrollmentsPayeesBy } from "@/db/inscriptions";
+import { paymentsOf, balanceOf } from "@/db/paiements";
 import { nomAffiche } from "@/db/personnes";
-import { saisonCourante } from "@/db/planning";
-import { ageAu, aujourdhuiAParis } from "@/domaine/personnes/age";
-import { exigerRole } from "@/lib/session";
-import { SectionPaiements } from "../../_personnes/paiements";
+import { currentSeason } from "@/db/planning";
+import { ageAt, todayInParis } from "@/domaine/personnes/age";
+import { requireRole } from "@/lib/session";
+import { PaymentsSection } from "../../_personnes/paiements";
 import {
   Bandeau,
-  CoursSuivis,
+  FollowedCourses,
   Documents,
-  InscriptionsFacturees,
-  jourDe,
+  FactureesEnrollments,
+  dayOf,
   Notes,
   Telephone,
 } from "../../_personnes/sections";
-import { Facturation } from "./facturation";
-import { Proches } from "./proches";
+import { Billing } from "./facturation";
+import { Relatives } from "./proches";
 
 export const metadata: Metadata = { title: "Fiche élève" };
 
-const BANDEAUX: Record<string, string> = {
+const BANNERS: Record<string, string> = {
   cree: "Élève créé.",
   modifie: "Fiche enregistrée.",
   enregistree: "Inscription enregistrée.",
 };
 
 /** Bandeau après un encaissement (`?encaisse=3`). */
-const encaisses = (n: unknown) => {
+const collected = (n: unknown) => {
   const k = Number(n);
   return Number.isInteger(k) && k > 0 ? `${k} règlement${k > 1 ? "s" : ""} encaissé${k > 1 ? "s" : ""}.` : undefined;
 };
 
-export default async function PageEleve({ params, searchParams }: PageProps<"/eleves/[id]">) {
-  const { ecoleId, role } = await exigerRole("direction", "accueil");
+export default async function StudentPage({ params, searchParams }: PageProps<"/eleves/[id]">) {
+  const { schoolId: schoolId, role } = await requireRole("direction", "accueil");
   const [{ id }, { enregistre, inscription, encaisse }] = await Promise.all([params, searchParams]);
-  const aujourdhui = aujourdhuiAParis();
-  const donnees = await avecEcole(ecoleId, async (tx) => {
-    const eleve = await lireEleve(tx, id, aujourdhui);
-    if (!eleve) return null;
-    const saison = await saisonCourante(tx, aujourdhui);
+  const today = todayInParis();
+  const donnees = await withSchool(schoolId, async (tx) => {
+    const student = await readStudent(tx, id, today);
+    if (!student) return null;
+    const season = await currentSeason(tx, today);
     // Un élève majeur qui paie lui-même voit ici ses inscriptions facturées.
-    const paieLuiMeme = eleve.factureA.type !== "personne";
+    const paysForThemselves = student.billedTo.type !== "personne";
     return {
-      eleve,
-      saison,
-      facturees: saison ? await inscriptionsPayeesPar(tx, eleve.id, saison.id) : [],
-      solde: paieLuiMeme ? await soldeDe(tx, eleve.id, aujourdhui) : null,
-      paiements: paieLuiMeme ? await paiementsDe(tx, eleve.id) : [],
+      student: student,
+      season: season,
+      facturees: season ? await enrollmentsPayeesBy(tx, student.id, season.id) : [],
+      balance: paysForThemselves ? await balanceOf(tx, student.id, today) : null,
+      payments: paysForThemselves ? await paymentsOf(tx, student.id) : [],
     };
   });
   if (!donnees) notFound();
-  const { eleve: e, saison, facturees, solde, paiements } = donnees;
+  const { student: e, season: season, facturees, balance: balance, payments: payments } = donnees;
 
-  const nom = nomAffiche(e);
-  const prenom = e.prenom ?? nom;
-  const age = e.dateNaissance ? ageAu(e.dateNaissance, aujourdhui) : null;
-  const mineur = age !== null && age < 18;
-  const urgences = e.responsables
-    .filter((r) => r.aPrevenir)
-    .concat(e.autres.filter((a) => a.aPrevenir && a.sens === "vers"));
-  const bandeau = BANDEAUX[String(inscription ?? enregistre)];
+  const name = nomAffiche(e);
+  const firstName = e.firstName ?? name;
+  const age = e.birthDate ? ageAt(e.birthDate, today) : null;
+  const minor = age !== null && age < 18;
+  const urgences = e.guardians
+    .filter((r) => r.toNotify)
+    .concat(e.otherRelationships.filter((a) => a.toNotify && a.sens === "vers"));
+  const bandeau = BANNERS[String(inscription ?? enregistre)];
 
   return (
     <article className="flex w-full min-w-0 flex-col gap-5">
@@ -72,16 +72,16 @@ export default async function PageEleve({ params, searchParams }: PageProps<"/el
         <Link href="/eleves" className="lien">
           Élèves
         </Link>
-        <span className="text-doux"> / {nom}</span>
+        <span className="text-doux"> / {name}</span>
       </nav>
-      <Bandeau texte={encaisses(encaisse) ?? bandeau} />
+      <Bandeau texte={collected(encaisse) ?? bandeau} />
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="titre-page">{nom}</h1>
+          <h1 className="titre-page">{name}</h1>
           <p className="text-sm text-doux">
-            {e.dateNaissance ? `${age} ans, né(e) le ${jourDe(e.dateNaissance)}` : "Date de naissance non renseignée"}
-            {!e.eleve && " (contact : pas encore élève)"}
+            {e.birthDate ? `${age} ans, né(e) le ${dayOf(e.birthDate)}` : "Date de naissance non renseignée"}
+            {!e.isStudent && " (contact : pas encore élève)"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -89,7 +89,7 @@ export default async function PageEleve({ params, searchParams }: PageProps<"/el
             Modifier l’identité
           </Link>
           <Link href={`/eleves/${e.id}/inscription`} className="bouton-principal">
-            Inscrire {prenom}
+            Inscrire {firstName}
           </Link>
         </div>
       </header>
@@ -109,10 +109,10 @@ export default async function PageEleve({ params, searchParams }: PageProps<"/el
               <span className="text-doux">Personne à prévenir. Cochez « À prévenir » sur un responsable.</span>
             ) : (
               urgences.map((u) => (
-                <span key={u.lienId} className="flex flex-wrap gap-x-2">
-                  <span className="font-medium">{u.nom}</span>
+                <span key={u.relationshipId} className="flex flex-wrap gap-x-2">
+                  <span className="font-medium">{u.name}</span>
                   {u.telephone ? (
-                    <Telephone numero={u.telephone} />
+                    <Telephone number={u.telephone} />
                   ) : (
                     <span className="text-erreur">sans téléphone</span>
                   )}
@@ -120,19 +120,19 @@ export default async function PageEleve({ params, searchParams }: PageProps<"/el
               ))
             )}
           </section>
-          <Facturation
-            eleveId={e.id}
-            prenom={prenom}
-            mineur={mineur}
-            factureA={e.factureA}
-            proches={[...e.responsables, ...e.autres.filter((a) => a.sens === "vers")]}
-            fratrie={e.fratrie}
+          <Billing
+            studentId={e.id}
+            firstName={firstName}
+            minor={minor}
+            billedTo={e.billedTo}
+            relatives={[...e.guardians, ...e.otherRelationships.filter((a) => a.sens === "vers")]}
+            siblings={e.siblings}
           />
           <section aria-labelledby="coordonnees" className="panneau flex flex-col gap-1 p-4 text-sm">
             <h2 id="coordonnees" className="text-sm font-semibold">
-              Coordonnées de {prenom}
+              Coordonnées de {firstName}
             </h2>
-            {e.telephone ? <Telephone numero={e.telephone} /> : <span className="text-doux">Pas de téléphone</span>}
+            {e.telephone ? <Telephone number={e.telephone} /> : <span className="text-doux">Pas de téléphone</span>}
             {e.email ? (
               <a href={`mailto:${e.email}`} className="lien break-all">
                 {e.email}
@@ -140,33 +140,33 @@ export default async function PageEleve({ params, searchParams }: PageProps<"/el
             ) : (
               <span className="text-doux">Pas d’e-mail</span>
             )}
-            {e.adresse && <span>{e.adresse}</span>}
+            {e.address && <span>{e.address}</span>}
           </section>
         </aside>
 
         <div className="flex min-w-0 flex-col gap-5">
-          <Proches eleveId={e.id} prenom={prenom} responsables={e.responsables} autres={e.autres} />
-          <CoursSuivis cours={e.cours} />
-          {saison && <InscriptionsFacturees inscriptions={facturees} saison={saison.libelle} />}
-          {e.factureA.type === "personne" ? (
+          <Relatives studentId={e.id} firstName={firstName} guardians={e.guardians} other={e.otherRelationships} />
+          <FollowedCourses courses={e.courses} />
+          {season && <FactureesEnrollments enrollments={facturees} season={season.label} />}
+          {e.billedTo.type === "personne" ? (
             <p className="text-sm text-doux">
               Paiements : sur la fiche de{" "}
-              <Link href={`/contacts/${e.factureA.id}`} className="lien">
-                {e.factureA.nom}
+              <Link href={`/contacts/${e.billedTo.id}`} className="lien">
+                {e.billedTo.name}
               </Link>
-              , qui paie pour {prenom}.
+              , qui paie pour {firstName}.
             </p>
           ) : (
-            <SectionPaiements
-              payeurId={e.id}
-              solde={solde}
-              paiements={paiements}
-              retour={`/eleves/${e.id}`}
+            <PaymentsSection
+              payerId={e.id}
+              balance={balance}
+              payments={payments}
+              back={`/eleves/${e.id}`}
               direction={role === "direction"}
-              aujourdhui={aujourdhui}
+              today={today}
             />
           )}
-          <Documents documents={e.documents} aujourdhui={aujourdhui} />
+          <Documents documents={e.documents} today={today} />
         </div>
       </div>
     </article>

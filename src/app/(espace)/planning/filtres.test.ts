@@ -1,55 +1,55 @@
 import { describe, expect, it } from "vitest";
-import type { CoursPlanning } from "@/db/planning";
-import { FILTRES_VIDES, filtrerPlanning } from "./filtres";
+import type { ScheduleCourse } from "@/db/planning";
+import { EMPTY_FILTERS, filterSchedule } from "./filtres";
 
-const base: CoursPlanning = {
+const base: ScheduleCourse = {
   id: "cours-1",
-  jourSemaine: 1,
-  heureDebut: "18:00",
-  dureeMinutes: 60,
+  weekday: 1,
+  startTime: "18:00",
+  durationMinutes: 60,
   disciplineId: "jazz",
   discipline: "Jazz",
-  salleId: "salle-centre",
-  salle: "Salle 1",
+  roomId: "salle-centre",
+  room: "Salle 1",
   siteId: "site-centre",
   site: "Centre",
   recurrence: "hebdomadaire",
-  dateDebut: null,
-  dateFin: null,
+  startDate: null,
+  endDate: null,
   dates: [],
-  intervenantId: "prof-1",
-  intervenant: "Intervenant fictif",
+  instructorId: "prof-1",
+  instructor: "Intervenant fictif",
   ageMin: null,
   ageMax: null,
-  niveau: null,
-  capaciteMax: 20,
-  inscrits: 12,
+  level: null,
+  maxCapacity: 20,
+  enrolled: 12,
 };
-const cours = [
+const courses = [
   base,
-  { ...base, id: "cours-2", site: "Annexe", salleId: "salle-annexe", intervenantId: "prof-2" },
-  { ...base, id: "cours-3", discipline: "Classique", intervenantId: "prof-2" },
+  { ...base, id: "cours-2", site: "Annexe", roomId: "salle-annexe", instructorId: "prof-2" },
+  { ...base, id: "cours-3", discipline: "Classique", instructorId: "prof-2" },
 ];
 
 describe("filtres du planning", () => {
   it("distingue les salles de même nom sur deux sites", () => {
-    expect(filtrerPlanning(cours, { ...FILTRES_VIDES, salleId: "salle-annexe" }).map((c) => c.id)).toEqual(["cours-2"]);
+    expect(filterSchedule(courses, { ...EMPTY_FILTERS, roomId: "salle-annexe" }).map((c) => c.id)).toEqual(["cours-2"]);
   });
   it("combine site, salle, discipline et intervenant", () => {
     expect(
-      filtrerPlanning(cours, {
+      filterSchedule(courses, {
         site: "Centre",
-        salleId: "salle-centre",
+        roomId: "salle-centre",
         discipline: "Classique",
-        intervenantId: "prof-2",
+        instructorId: "prof-2",
       }).map((c) => c.id),
     ).toEqual(["cours-3"]);
   });
   it("renvoie une liste vide pour des filtres incompatibles", () => {
-    expect(filtrerPlanning(cours, { ...FILTRES_VIDES, site: "Centre", salleId: "salle-annexe" })).toEqual([]);
+    expect(filterSchedule(courses, { ...EMPTY_FILTERS, site: "Centre", roomId: "salle-annexe" })).toEqual([]);
   });
   it("retrouve tous les cours à la remise à zéro sans modifier la liste", () => {
-    expect(filtrerPlanning(cours, FILTRES_VIDES)).toEqual(cours);
-    expect(cours).toHaveLength(3);
+    expect(filterSchedule(courses, EMPTY_FILTERS)).toEqual(courses);
+    expect(courses).toHaveLength(3);
   });
 });

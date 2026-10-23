@@ -2,26 +2,26 @@ import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { avecEcole } from "@/db";
-import { lireRemise } from "@/db/remises";
+import { withSchool } from "@/db";
+import { readDeposit } from "@/db/remises";
 import { school } from "@/db/schema";
-import { formaterEuros } from "@/lib/montant";
-import { exigerRole } from "@/lib/session";
-import { AnnulerRemise, Imprimer } from "./boutons";
+import { formatEuros } from "@/lib/montant";
+import { requireRole } from "@/lib/session";
+import { CancelDeposit, Print } from "./boutons";
 
 export const metadata: Metadata = { title: "Bordereau de remise" };
 
-const jour = (iso: string) => iso.split("-").reverse().join("/");
-const DE_QUOI = { cheque: "chèques", especes: "espèces", cheque_vacances: "chèques vacances" } as const;
+const day = (iso: string) => iso.split("-").reverse().join("/");
+const DEPOSIT_KIND = { cheque: "chèques", especes: "espèces", cheque_vacances: "chèques vacances" } as const;
 
 /** Bordereau d'une remise en banque (#98), à imprimer et à joindre au dépôt. */
-export default async function PageRemise({ params, searchParams }: PageProps<"/encaissements/remises/[id]">) {
-  const { ecoleId, role } = await exigerRole("direction", "accueil");
+export default async function DepositPage({ params, searchParams }: PageProps<"/encaissements/remises/[id]">) {
+  const { schoolId: schoolId, role } = await requireRole("direction", "accueil");
   const [{ id }, { cree }] = await Promise.all([params, searchParams]);
-  const donnees = await avecEcole(ecoleId, async (tx) => {
-    const r = await lireRemise(tx, id);
-    const [e] = await tx.select({ nom: school.name }).from(school).where(eq(school.id, ecoleId));
-    return r ? { r, ecole: e?.nom ?? "" } : null;
+  const donnees = await withSchool(schoolId, async (tx) => {
+    const r = await readDeposit(tx, id);
+    const [e] = await tx.select({ name: school.name }).from(school).where(eq(school.id, schoolId));
+    return r ? { r, school: e?.name ?? "" } : null;
   });
   if (!donnees) notFound();
   const { r } = donnees;
@@ -32,7 +32,7 @@ export default async function PageRemise({ params, searchParams }: PageProps<"/e
         <Link href="/encaissements?vue=remises" className="lien">
           Encaissements
         </Link>
-        <span className="text-doux"> / Remise du {jour(r.date)}</span>
+        <span className="text-doux"> / Remise du {day(r.date)}</span>
       </nav>
       {cree && (
         <p role="status" className="rounded-md border border-accent bg-accent-doux px-3 py-2 text-sm print:hidden">
@@ -41,18 +41,18 @@ export default async function PageRemise({ params, searchParams }: PageProps<"/e
       )}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm text-doux">{donnees.ecole}</p>
+          <p className="text-sm text-doux">{donnees.school}</p>
           <h1 className="titre-page">
-            Bordereau de remise de {DE_QUOI[r.moyen]} du {jour(r.date)}
+            Bordereau de remise de {DEPOSIT_KIND[r.method]} du {day(r.date)}
           </h1>
           <p className="text-sm">
             {r.nombre} {r.nombre > 1 ? "paiements" : "paiement"}, total{" "}
-            <strong className="tabular-nums">{formaterEuros(r.totalCentimes)}</strong>
+            <strong className="tabular-nums">{formatEuros(r.totalCents)}</strong>
           </p>
         </div>
         <div className="flex flex-col items-end gap-2 print:hidden">
-          <Imprimer />
-          {role === "direction" && <AnnulerRemise id={r.id} />}
+          <Print />
+          {role === "direction" && <CancelDeposit id={r.id} />}
         </div>
       </header>
       <table className="tableau">
@@ -60,32 +60,32 @@ export default async function PageRemise({ params, searchParams }: PageProps<"/e
         <thead>
           <tr>
             <th>Payeur</th>
-            {r.moyen !== "especes" && <th>N°</th>}
-            {r.moyen === "cheque" && <th>Banque ou titulaire</th>}
+            {r.method !== "especes" && <th>N°</th>}
+            {r.method === "cheque" && <th>Banque ou titulaire</th>}
             <th>Reçu le</th>
             <th className="text-right">Montant</th>
           </tr>
         </thead>
         <tbody>
-          {r.paiements.map((p) => (
+          {r.payments.map((p) => (
             <tr key={p.id}>
-              <td>{p.payeur}</td>
-              {r.moyen !== "especes" && <td>{p.reference ?? "—"}</td>}
-              {r.moyen === "cheque" && <td>{p.emetteur ?? "—"}</td>}
-              <td className="whitespace-nowrap">{jour(p.date)}</td>
-              <td className="text-right tabular-nums whitespace-nowrap">{formaterEuros(p.montantCentimes)}</td>
+              <td>{p.payer}</td>
+              {r.method !== "especes" && <td>{p.reference ?? "—"}</td>}
+              {r.method === "cheque" && <td>{p.issuer ?? "—"}</td>}
+              <td className="whitespace-nowrap">{day(p.date)}</td>
+              <td className="text-right tabular-nums whitespace-nowrap">{formatEuros(p.amountCents)}</td>
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr>
             <td
-              colSpan={r.moyen === "cheque" ? 4 : r.moyen === "especes" ? 2 : 3}
+              colSpan={r.method === "cheque" ? 4 : r.method === "especes" ? 2 : 3}
               className="px-3 py-2 text-right font-semibold"
             >
               Total
             </td>
-            <td className="px-3 py-2 text-right font-semibold tabular-nums">{formaterEuros(r.totalCentimes)}</td>
+            <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatEuros(r.totalCents)}</td>
           </tr>
         </tfoot>
       </table>

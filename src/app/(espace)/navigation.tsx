@@ -5,19 +5,19 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useTransition } from "react";
 
 const LIENS = [
-  { href: "/", libelle: "Accueil" },
-  { href: "/eleves", libelle: "Élèves" },
-  { href: "/contacts", libelle: "Contacts" },
-  { href: "/planning", libelle: "Planning" },
-  { href: "/encaissements", libelle: "Encaissements" },
-  { href: "/intervenants", libelle: "Intervenants" },
-  { href: "/parametres", libelle: "Paramètres" },
+  { href: "/", label: "Accueil" },
+  { href: "/eleves", label: "Élèves" },
+  { href: "/contacts", label: "Contacts" },
+  { href: "/planning", label: "Planning" },
+  { href: "/encaissements", label: "Encaissements" },
+  { href: "/intervenants", label: "Intervenants" },
+  { href: "/parametres", label: "Paramètres" },
 ];
 
 /** Liens de la barre latérale ; la page courante est signalée (aria-current). */
 export function Navigation({ role }: { role: "direction" | "accueil" | "professeur" }) {
-  const chemin = usePathname();
-  const actif = (href: string) => (href === "/" ? chemin === "/" : chemin.startsWith(href));
+  const path = usePathname();
+  const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
   return (
     <nav aria-label="Navigation principale" className="flex flex-col gap-0.5">
       {LIENS.filter(
@@ -28,10 +28,10 @@ export function Navigation({ role }: { role: "direction" | "accueil" | "professe
         <Link
           key={l.href}
           href={l.href}
-          aria-current={actif(l.href) ? "page" : undefined}
+          aria-current={active(l.href) ? "page" : undefined}
           className="rounded-md border-l-[3px] border-transparent px-3 py-2.5 text-base md:py-1.5 md:text-sm text-doux hover:bg-accent-doux hover:text-texte focus-visible:outline-2 focus-visible:outline-accent aria-[current=page]:border-accent aria-[current=page]:bg-accent-doux aria-[current=page]:font-medium aria-[current=page]:text-texte"
         >
-          {l.libelle}
+          {l.label}
         </Link>
       ))}
     </nav>
@@ -39,10 +39,10 @@ export function Navigation({ role }: { role: "direction" | "accueil" | "professe
 }
 
 /** Listes où la recherche du haut cherche sur place, avec le texte d’aide du champ. */
-const LISTES: Record<string, { libelle: string; exemple: string }> = {
-  "/eleves": { libelle: "Rechercher un élève ou un parent", exemple: "Élève, parent, téléphone…" },
-  "/contacts": { libelle: "Rechercher un contact", exemple: "Contact, téléphone, e-mail…" },
-  "/intervenants": { libelle: "Rechercher un intervenant", exemple: "Nom ou e-mail de l’intervenant…" },
+const LISTES: Record<string, { label: string; example: string }> = {
+  "/eleves": { label: "Rechercher un élève ou un parent", example: "Élève, parent, téléphone…" },
+  "/contacts": { label: "Rechercher un contact", example: "Contact, téléphone, e-mail…" },
+  "/intervenants": { label: "Rechercher un intervenant", example: "Nom ou e-mail de l’intervenant…" },
 };
 
 /**
@@ -52,45 +52,45 @@ const LISTES: Record<string, { libelle: string; exemple: string }> = {
  * et tri ; ailleurs, Entrée mène aux élèves (et aux contacts liés). Flèche bas
  * pour descendre dans les résultats.
  */
-export function RechercheGlobale() {
-  const champ = useRef<HTMLInputElement>(null);
+export function GlobalSearch() {
+  const field = useRef<HTMLInputElement>(null);
   const router = useRouter();
-  const chemin = usePathname();
-  const parametres = useSearchParams();
-  const liste = LISTES[chemin];
-  const surListe = liste !== undefined;
-  const recherche = surListe ? (parametres.get("q") ?? "") : "";
-  const [enCours, naviguer] = useTransition();
+  const path = usePathname();
+  const settings = useSearchParams();
+  const list = LISTES[path];
+  const onList = list !== undefined;
+  const search = onList ? (settings.get("q") ?? "") : "";
+  const [inProgress, navigate] = useTransition();
 
   // L’URL redevient la référence une fois la navigation terminée, y compris
   // après Précédent/Suivant. Ne pas écraser la frappe pendant une transition.
   useEffect(() => {
-    if (!enCours && champ.current && champ.current.value.trim() !== recherche) champ.current.value = recherche;
-  }, [recherche, chemin, enCours]);
+    if (!inProgress && field.current && field.current.value.trim() !== search) field.current.value = search;
+  }, [search, path, inProgress]);
 
   useEffect(() => {
-    const raccourci = (e: KeyboardEvent) => {
+    const shortcut = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        champ.current?.focus();
-        champ.current?.select();
+        field.current?.focus();
+        field.current?.select();
       }
     };
-    window.addEventListener("keydown", raccourci);
-    return () => window.removeEventListener("keydown", raccourci);
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
   }, []);
 
-  const aller = (q: string, remplacer: boolean) => {
-    let cible = q.trim() ? `/eleves?q=${encodeURIComponent(q.trim())}` : "/eleves";
-    if (surListe) {
-      const p = new URLSearchParams(parametres.toString());
+  const go = (q: string, replace: boolean) => {
+    let target = q.trim() ? `/eleves?q=${encodeURIComponent(q.trim())}` : "/eleves";
+    if (onList) {
+      const p = new URLSearchParams(settings.toString());
       if (q.trim()) p.set("q", q.trim());
       else p.delete("q");
-      cible = p.size ? `${chemin}?${p}` : chemin;
+      target = p.size ? `${path}?${p}` : path;
     }
-    naviguer(() => {
-      if (remplacer) router.replace(cible, { scroll: false });
-      else router.push(cible);
+    navigate(() => {
+      if (replace) router.replace(target, { scroll: false });
+      else router.push(target);
     });
   };
 
@@ -100,37 +100,37 @@ export function RechercheGlobale() {
       className="flex w-full max-w-xl items-center gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        aller(champ.current?.value ?? "", surListe);
+        go(field.current?.value ?? "", onList);
       }}
     >
       <label htmlFor="recherche-globale" className="sr-only">
-        {liste?.libelle ?? "Rechercher un élève ou un parent"}
+        {list?.label ?? "Rechercher un élève ou un parent"}
       </label>
       <input
-        ref={champ}
+        ref={field}
         id="recherche-globale"
         type="search"
         autoComplete="off"
-        placeholder={liste?.exemple ?? "Élève, parent, téléphone…"}
+        placeholder={list?.example ?? "Élève, parent, téléphone…"}
         className="champ w-full"
-        defaultValue={recherche}
+        defaultValue={search}
         aria-describedby="etat-recherche"
-        autoFocus={surListe}
+        autoFocus={onList}
         onChange={(e) => {
-          if (surListe) aller(e.target.value, true);
+          if (onList) go(e.target.value, true);
         }}
         onKeyDown={(e) => {
-          if (e.key === "ArrowDown" && !enCours) {
-            const premier = document.querySelector<HTMLAnchorElement>("#resultats a[data-resultat]");
-            if (premier) {
+          if (e.key === "ArrowDown" && !inProgress) {
+            const first = document.querySelector<HTMLAnchorElement>("#resultats a[data-resultat]");
+            if (first) {
               e.preventDefault();
-              premier.focus();
+              first.focus();
             }
           }
         }}
       />
       <span id="etat-recherche" role="status" className="shrink-0 text-xs text-doux">
-        {enCours ? "Recherche…" : ""}
+        {inProgress ? "Recherche…" : ""}
       </span>
       <kbd className="hidden shrink-0 rounded border border-bordure px-1.5 py-0.5 text-xs text-doux sm:inline">
         Ctrl K

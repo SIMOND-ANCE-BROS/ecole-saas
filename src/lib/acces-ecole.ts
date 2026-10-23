@@ -1,12 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { db, ecolesDe } from "../db";
+import { db, schoolsOf } from "../db";
 import { session } from "../db/schema";
 
-export type RoleMembre = "direction" | "accueil" | "professeur";
+export type MemberRole = "direction" | "accueil" | "professeur";
 
 /** Ce dont une requête métier a besoin : qui, dans quelle école, avec quel rôle. */
-export type ContexteEcole = { userId: string; ecoleId: string; role: RoleMembre };
+export type SchoolContext = { userId: string; schoolId: string; role: MemberRole };
 
 const uuid = z.uuid();
 
@@ -15,37 +15,37 @@ const uuid = z.uuid();
  * membre actif et que la session lui appartient. L'identifiant proposé par le
  * navigateur n'est jamais utilisé tel quel : il doit figurer dans `ecolesDe`.
  */
-export async function choisirEcole(sessionId: string, userId: string, ecoleId: string): Promise<boolean> {
-  if (!(await appartenance(userId, ecoleId))) return false;
-  const modifiees = await db
+export async function chooseSchool(sessionId: string, userId: string, schoolId: string): Promise<boolean> {
+  if (!(await membership(userId, schoolId))) return false;
+  const modified = await db
     .update(session)
-    .set({ selectedSchoolId: ecoleId, updatedAt: new Date() })
+    .set({ selectedSchoolId: schoolId, updatedAt: new Date() })
     .where(and(eq(session.id, sessionId), eq(session.userId, userId)))
     .returning({ id: session.id });
-  return modifiees.length === 1;
+  return modified.length === 1;
 }
 
 /**
  * Contexte de l'école courante, revérifié à chaque requête : null si aucune
  * école n'est choisie ou si l'accès a été retiré depuis.
  */
-export async function contexteDepuisSession(
+export async function contextFromSession(
   userId: string,
-  ecoleChoisie: string | null | undefined,
-): Promise<ContexteEcole | null> {
-  if (!ecoleChoisie) return null;
-  const membre = await appartenance(userId, ecoleChoisie);
-  return membre ? { userId, ecoleId: ecoleChoisie, role: membre.role } : null;
+  selectedSchoolId: string | null | undefined,
+): Promise<SchoolContext | null> {
+  if (!selectedSchoolId) return null;
+  const member = await membership(userId, selectedSchoolId);
+  return member ? { userId, schoolId: selectedSchoolId, role: member.role } : null;
 }
 
 /** Identifiant de la session portant ce jeton (renvoyé par la connexion). */
-export async function idDeSession(jeton: string): Promise<string | null> {
-  const [ligne] = await db.select({ id: session.id }).from(session).where(eq(session.token, jeton));
-  return ligne?.id ?? null;
+export async function idDeSession(token: string): Promise<string | null> {
+  const [row] = await db.select({ id: session.id }).from(session).where(eq(session.token, token));
+  return row?.id ?? null;
 }
 
-async function appartenance(userId: string, ecoleId: string) {
-  if (!uuid.safeParse(ecoleId).success) return null;
-  const ecoles = await ecolesDe(userId);
-  return ecoles.find((e) => e.id === ecoleId) ?? null;
+async function membership(userId: string, schoolId: string) {
+  if (!uuid.safeParse(schoolId).success) return null;
+  const ecoles = await schoolsOf(userId);
+  return ecoles.find((e) => e.id === schoolId) ?? null;
 }

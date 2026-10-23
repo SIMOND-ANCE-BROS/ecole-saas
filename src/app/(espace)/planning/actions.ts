@@ -1,16 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { avecEcole } from "@/db";
-import { horairesParSite } from "@/db/parametres";
-import { deplacerSeance, seancesDeLaSemaine, synchroniserSeances } from "@/db/seances";
-import { conflits } from "@/domaine/planning/chevauchement";
-import { horsHoraires } from "@/domaine/planning/horaires";
-import { aujourdhuiAParis } from "@/domaine/personnes/age";
-import { jourSemaineDe, lundiDe } from "@/domaine/planning/semaine";
-import { exigerRole } from "@/lib/session";
-import type { RetourAgenda } from "./agenda";
-import { dateCourte, fin } from "./format";
+import { withSchool } from "@/db";
+import { hoursBySite } from "@/db/parametres";
+import { moveLesson, weekLessons, syncLessons } from "@/db/seances";
+import { conflicts } from "@/domaine/planning/chevauchement";
+import { outsideHours } from "@/domaine/planning/horaires";
+import { todayInParis } from "@/domaine/personnes/age";
+import { weekdayOf, mondayOf } from "@/domaine/planning/semaine";
+import { requireRole } from "@/lib/session";
+import type { CalendarResponse } from "./agenda";
+import { shortDate, end } from "./format";
 
 /**
  * Déplace une séance du planning daté (#90) : « seance » (elle seule) ou
@@ -18,51 +18,51 @@ import { dateCourte, fin } from "./format";
  * ou un intervenant déjà pris ce jour-là et un créneau hors des horaires du
  * site.
  */
-export async function deplacerUneSeance(
-  seanceId: string,
-  creneau: { date: string; heureDebut: string; dureeMinutes: number },
-  portee: "seance" | "suivantes",
-): Promise<RetourAgenda> {
-  const { ecoleId } = await exigerRole("direction");
-  const aujourdhui = aujourdhuiAParis();
-  const r = await avecEcole(ecoleId, async (tx): Promise<RetourAgenda> => {
-    const d = await deplacerSeance(tx, seanceId, creneau, portee);
-    if (d.statut === "refus") return d;
-    if (d.depuis) await synchroniserSeances(tx, d.saisonId, aujourdhui, d.depuis);
+export async function moveOneLesson(
+  lessonId: string,
+  slot: { date: string; startTime: string; durationMinutes: number },
+  scope: "seance" | "suivantes",
+): Promise<CalendarResponse> {
+  const { schoolId: schoolId } = await requireRole("direction");
+  const today = todayInParis();
+  const r = await withSchool(schoolId, async (tx): Promise<CalendarResponse> => {
+    const d = await moveLesson(tx, lessonId, slot, scope);
+    if (d.status === "refus") return d;
+    if (d.since) await syncLessons(tx, d.seasonId, today, d.since);
 
-    const semaine = await seancesDeLaSemaine(tx, lundiDe(creneau.date));
-    const jour = semaine
-      .filter((s) => s.date === creneau.date && s.statut !== "annulee")
-      .map((s) => ({ ...s, jourSemaine: jourSemaineDe(s.date) }));
-    const moi = jour.find(
-      (s) => s.coursId === semaine.find((x) => x.id === seanceId)?.coursId && s.heureDebut === creneau.heureDebut,
+    const week = await weekLessons(tx, mondayOf(slot.date));
+    const day = week
+      .filter((s) => s.date === slot.date && s.status !== "annulee")
+      .map((s) => ({ ...s, weekday: weekdayOf(s.date) }));
+    const me = day.find(
+      (s) => s.courseId === week.find((x) => x.id === lessonId)?.courseId && s.startTime === slot.startTime,
     );
     const alertes: string[] = [];
-    if (moi) {
-      for (const x of conflits(moi, jour)) {
-        const autre = jour.find((s) => s.id === x.id)!;
-        const quand = `${autre.discipline} à ${autre.heureDebut}`;
+    if (me) {
+      for (const x of conflicts(me, day)) {
+        const autre = day.find((s) => s.id === x.id)!;
+        const when = `${autre.discipline} à ${autre.startTime}`;
         alertes.push(
-          x.salle && x.intervenant
-            ? `${autre.salle} et ${autre.intervenant} déjà pris (${quand})`
-            : x.salle
-              ? `${autre.salle} déjà occupée (${quand})`
-              : `${autre.intervenant} donne déjà un cours (${quand})`,
+          x.room && x.instructor
+            ? `${autre.room} et ${autre.instructor} déjà pris (${when})`
+            : x.room
+              ? `${autre.room} déjà occupée (${when})`
+              : `${autre.instructor} donne déjà un cours (${when})`,
         );
       }
-      const hors = horsHoraires(
-        { jourSemaine: moi.jourSemaine, heureDebut: moi.heureDebut, dureeMinutes: moi.dureeMinutes },
-        (await horairesParSite(tx))[moi.siteId] ?? [],
+      const outside = outsideHours(
+        { weekday: me.weekday, startTime: me.startTime, durationMinutes: me.durationMinutes },
+        (await hoursBySite(tx))[me.siteId] ?? [],
       );
-      if (hors) alertes.push(hors);
+      if (outside) alertes.push(outside);
     }
-    const quand = `${dateCourte(creneau.date, true)} ${creneau.heureDebut}–${fin(creneau.heureDebut, creneau.dureeMinutes)}`;
+    const when = `${shortDate(slot.date, true)} ${slot.startTime}–${end(slot.startTime, slot.durationMinutes)}`;
     return {
-      statut: "ok",
+      status: "ok",
       texte:
-        portee === "seance"
-          ? `Séance déplacée au ${quand}.`
-          : `Cours déplacé à partir du ${quand} : les séances suivantes suivent.`,
+        scope === "seance"
+          ? `Séance déplacée au ${when}.`
+          : `Cours déplacé à partir du ${when} : les séances suivantes suivent.`,
       alertes,
     };
   });

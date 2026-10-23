@@ -9,33 +9,28 @@ import { member, listPreference } from "./schema";
  * colonnes revient à l'appelant (`lireDisposition`).
  */
 
-const ECOLE_COURANTE = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
+const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 
 /** Colonnes enregistrées par ce compte pour cette liste, ou null (disposition par défaut). */
-export async function lirePreference(tx: Tx, userId: string, liste: string): Promise<string[] | null> {
+export async function readPreference(tx: Tx, userId: string, list: string): Promise<string[] | null> {
   const [p] = await tx
-    .select({ colonnes: listPreference.columns })
+    .select({ columns: listPreference.columns })
     .from(listPreference)
     .innerJoin(member, eq(member.id, listPreference.memberId))
-    .where(and(eq(member.userId, userId), eq(listPreference.list, liste)));
-  return p?.colonnes ?? null;
+    .where(and(eq(member.userId, userId), eq(listPreference.list, list)));
+  return p?.columns ?? null;
 }
 
 /** Enregistre (ou remplace) la disposition ; false si le compte n'est pas membre de l'école courante. */
-export async function enregistrerPreference(
-  tx: Tx,
-  userId: string,
-  liste: string,
-  colonnes: string[],
-): Promise<boolean> {
+export async function savePreference(tx: Tx, userId: string, list: string, columns: string[]): Promise<boolean> {
   const [m] = await tx.select({ id: member.id }).from(member).where(eq(member.userId, userId));
   if (!m) return false;
   await tx
     .insert(listPreference)
-    .values({ schoolId: ECOLE_COURANTE, memberId: m.id, list: liste, columns: colonnes })
+    .values({ schoolId: CURRENT_SCHOOL, memberId: m.id, list: list, columns: columns })
     .onConflictDoUpdate({
       target: [listPreference.memberId, listPreference.list],
-      set: { columns: colonnes, updatedAt: sql`now()` },
+      set: { columns: columns, updatedAt: sql`now()` },
     });
   return true;
 }

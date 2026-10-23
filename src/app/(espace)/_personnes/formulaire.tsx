@@ -2,76 +2,77 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import type { FichePersonne } from "@/db/personnes";
-import { creerContact, modifierIdentite, type Refus } from "./actions";
-import { Annuler } from "@/app/(espace)/_panneau/panneau";
+import type { PersonRecord } from "@/db/personnes";
+import { createContact, updateIdentity, type Refusal } from "./actions";
+import { Cancel } from "@/app/(espace)/_panneau/panneau";
 
 type Props = {
   /** Personne modifiée ; null pour la création d'un contact (un élève se crée avec le formulaire guidé). */
-  personne: Omit<FichePersonne, "liens" | "cours" | "documents"> | null;
+  person: Omit<PersonRecord, "relationships" | "courses" | "documents"> | null;
   /** Fiche d'où l'on vient : élève (naissance et notes) ou contact. */
-  pour: "eleves" | "contacts";
-  nomPropose?: string;
+  section: "eleves" | "contacts";
+  proposedName?: string;
 };
 
 /** Identité et coordonnées d'un élève ou d'un contact. */
-export function FormulairePersonne({ personne, pour, nomPropose }: Props) {
+export function PersonForm({ person: person, section: section, proposedName: proposedName }: Props) {
   const [v, setV] = useState({
-    type: personne?.type ?? "particulier",
-    nom:
-      personne?.type === "professionnel"
-        ? personne.nom === personne.raisonSociale
+    type: person?.type ?? "particulier",
+    name:
+      person?.type === "professionnel"
+        ? person.name === person.companyName
           ? ""
-          : personne.nom
-        : (personne?.nom ?? nomPropose ?? ""),
-    prenom: personne?.prenom ?? "",
-    raisonSociale: personne?.raisonSociale ?? "",
-    siren: personne?.siren ?? "",
-    dateNaissance: personne?.dateNaissance ?? "",
-    telephone: personne?.telephone ?? "",
-    email: personne?.email ?? "",
-    adresse: personne?.adresse ?? "",
-    notes: personne?.notes ?? "",
+          : person.name
+        : (person?.name ?? proposedName ?? ""),
+    firstName: person?.firstName ?? "",
+    companyName: person?.companyName ?? "",
+    siren: person?.siren ?? "",
+    birthDate: person?.birthDate ?? "",
+    telephone: person?.telephone ?? "",
+    email: person?.email ?? "",
+    address: person?.address ?? "",
+    notes: person?.notes ?? "",
   });
-  const [refus, setRefus] = useState<Refus | null>(null);
-  const [envoi, demarrer] = useTransition();
-  const formulaire = useRef<HTMLFormElement>(null);
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
+  const [sending, startTransition] = useTransition();
+  const form = useRef<HTMLFormElement>(null);
   useEffect(() => {
-    if (refus) formulaire.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
-  }, [refus]);
+    if (refusal) form.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
+  }, [refusal]);
   const pro = v.type === "professionnel";
-  const maj = (champ: keyof typeof v) => (e: { target: { value: string } }) => setV({ ...v, [champ]: e.target.value });
+  const updated = (field: keyof typeof v) => (e: { target: { value: string } }) =>
+    setV({ ...v, [field]: e.target.value });
 
   const saisie = {
     ...v,
-    raisonSociale: pro ? v.raisonSociale : "",
+    companyName: pro ? v.companyName : "",
     siren: pro ? v.siren : "",
-    dateNaissance: pro ? "" : v.dateNaissance,
+    birthDate: pro ? "" : v.birthDate,
   };
-  const eleve = pour === "eleves";
-  const envoyer = (confirme: boolean) =>
-    demarrer(async () =>
-      setRefus(personne ? await modifierIdentite(personne.id, saisie, pour) : await creerContact(saisie, confirme)),
+  const student = section === "eleves";
+  const send = (confirmed: boolean) =>
+    startTransition(async () =>
+      setRefusal(person ? await updateIdentity(person.id, saisie, section) : await createContact(saisie, confirmed)),
     );
 
-  const champ = (nom: keyof typeof v, libelle: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
+  const field = (name: keyof typeof v, label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
     <div className="flex flex-col gap-1">
-      <label htmlFor={nom} className="text-sm font-medium">
-        {libelle}
+      <label htmlFor={name} className="text-sm font-medium">
+        {label}
       </label>
       <input
-        id={nom}
+        id={name}
         className="champ"
         autoComplete="off"
-        value={v[nom]}
-        onChange={maj(nom)}
-        aria-invalid={refus?.erreurs[nom] ? true : undefined}
-        aria-describedby={refus?.erreurs[nom] ? `${nom}-erreur` : undefined}
+        value={v[name]}
+        onChange={updated(name)}
+        aria-invalid={refusal?.errors[name] ? true : undefined}
+        aria-describedby={refusal?.errors[name] ? `${name}-erreur` : undefined}
         {...props}
       />
-      {refus?.erreurs[nom] && (
-        <p id={`${nom}-erreur`} className="text-xs text-erreur">
-          {refus.erreurs[nom]}
+      {refusal?.errors[name] && (
+        <p id={`${name}-erreur`} className="text-xs text-erreur">
+          {refusal.errors[name]}
         </p>
       )}
     </div>
@@ -79,15 +80,15 @@ export function FormulairePersonne({ personne, pour, nomPropose }: Props) {
 
   return (
     <form
-      ref={formulaire}
+      ref={form}
       className="flex w-full min-w-0 flex-col gap-5"
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
-        envoyer(false);
+        send(false);
       }}
     >
-      {!eleve && (
+      {!student && (
         <fieldset className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
           <legend className="px-1 text-sm font-semibold">Contact</legend>
           {(
@@ -95,15 +96,10 @@ export function FormulairePersonne({ personne, pour, nomPropose }: Props) {
               ["particulier", "Particulier"],
               ["professionnel", "Professionnel (entreprise, CSE, association)"],
             ] as const
-          ).map(([valeur, libelle]) => (
-            <label key={valeur} className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="type"
-                checked={v.type === valeur}
-                onChange={() => setV({ ...v, type: valeur })}
-              />
-              {libelle}
+          ).map(([value, label]) => (
+            <label key={value} className="flex items-center gap-2">
+              <input type="radio" name="type" checked={v.type === value} onChange={() => setV({ ...v, type: value })} />
+              {label}
             </label>
           ))}
         </fieldset>
@@ -113,71 +109,71 @@ export function FormulairePersonne({ personne, pour, nomPropose }: Props) {
         <legend className="px-1 text-sm font-semibold">Identité</legend>
         {pro ? (
           <div className="grid gap-3 sm:grid-cols-2">
-            {champ("raisonSociale", "Raison sociale", { autoFocus: !personne })}
-            {champ("siren", "SIREN", { inputMode: "numeric", placeholder: "9 chiffres" })}
-            <div className="sm:col-span-2">{champ("nom", "Contact (facultatif)")}</div>
+            {field("companyName", "Raison sociale", { autoFocus: !person })}
+            {field("siren", "SIREN", { inputMode: "numeric", placeholder: "9 chiffres" })}
+            <div className="sm:col-span-2">{field("name", "Contact (facultatif)")}</div>
           </div>
         ) : (
-          <div className={`grid gap-3 ${eleve ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
-            {champ("prenom", "Prénom", { autoFocus: !personne })}
-            {champ("nom", "Nom")}
-            {eleve && champ("dateNaissance", "Date de naissance", { type: "date" })}
+          <div className={`grid gap-3 ${student ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+            {field("firstName", "Prénom", { autoFocus: !person })}
+            {field("name", "Nom")}
+            {student && field("birthDate", "Date de naissance", { type: "date" })}
           </div>
         )}
       </fieldset>
       <fieldset className="panneau grid gap-3 p-4 sm:grid-cols-2">
         <legend className="px-1 text-sm font-semibold">Coordonnées (facultatives)</legend>
-        {champ("telephone", "Téléphone", { type: "tel", inputMode: "tel" })}
-        {champ("email", "E-mail", { type: "email" })}
-        <div className="sm:col-span-2">{champ("adresse", "Adresse (pour les factures et attestations)")}</div>
+        {field("telephone", "Téléphone", { type: "tel", inputMode: "tel" })}
+        {field("email", "E-mail", { type: "email" })}
+        <div className="sm:col-span-2">{field("address", "Adresse (pour les factures et attestations)")}</div>
       </fieldset>
 
-      {eleve && (
+      {student && (
         <div className="flex flex-col gap-1">
           <label htmlFor="notes" className="text-sm font-medium">
             Notes (santé, allergies, consignes)
           </label>
-          <textarea id="notes" rows={2} className="champ" value={v.notes} onChange={maj("notes")} />
+          <textarea id="notes" rows={2} className="champ" value={v.notes} onChange={updated("notes")} />
           <p className="text-xs text-doux">
             Visibles par l’accueil et la direction. N’y notez que ce qui est utile en cours.
           </p>
         </div>
       )}
 
-      {refus?.doublons ? (
+      {refusal?.duplicates ? (
         <div
           tabIndex={-1}
           role="alert"
           className="flex flex-col gap-2 rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte"
         >
-          <p className="font-medium">{refus.message} Vérifiez avant de créer un doublon :</p>
+          <p className="font-medium">{refusal.message} Vérifiez avant de créer un doublon :</p>
           <ul className="flex flex-col gap-0.5">
-            {refus.doublons.map((d) => (
+            {refusal.duplicates.map((d) => (
               <li key={d.id}>
                 <Link href={`/personnes/${d.id}`} className="lien" target="_blank">
-                  {d.nom}
+                  {d.name}
                 </Link>
                 {d.telephone && <span className="tabular-nums">, {d.telephone}</span>}
               </li>
             ))}
           </ul>
-          <button type="button" className="bouton-secondaire self-start" disabled={envoi} onClick={() => envoyer(true)}>
+          <button type="button" className="bouton-secondaire self-start" disabled={sending} onClick={() => send(true)}>
             Créer quand même
           </button>
         </div>
       ) : (
-        refus && (
+        refusal && (
           <p tabIndex={-1} role="alert" className="text-sm text-erreur">
-            {refus.message}
+            {refusal.message}
           </p>
         )
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-bordure pt-4">
-        <button type="submit" className="bouton-principal" disabled={envoi}>
-          {envoi ? "Enregistrement…" : personne ? "Enregistrer les modifications" : "Créer le contact"}
+        <button type="submit" className="bouton-principal" disabled={sending}>
+          {sending ? "Enregistrement…" : person ? "Enregistrer les modifications" : "Créer le contact"}
         </button>
-        <Annuler href={personne ? `/${pour}/${personne.id}` : `/${pour}`} />
+        <Cancel href={person ? `/${section}/${person.id}` : `/${section}`} />
       </div>
     </form>
   );

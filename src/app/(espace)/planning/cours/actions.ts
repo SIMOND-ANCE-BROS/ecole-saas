@@ -2,128 +2,126 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { avecEcole } from "@/db";
-import { creerCours, deplacerCours, lireCours, modifierCours, saisieCoursValide, supprimerCours } from "@/db/cours";
-import { conflitsCreneau } from "@/db/disponibilites";
-import { horairesParSite } from "@/db/parametres";
-import { coursDeLaSaison, saisonCourante } from "@/db/planning";
-import { synchroniserSeances } from "@/db/seances";
-import { conflits } from "@/domaine/planning/chevauchement";
-import { horsHoraires } from "@/domaine/planning/horaires";
-import { JOURS_COURTS } from "@/domaine/planning/jours";
-import { aujourdhuiAParis } from "@/domaine/personnes/age";
-import { exigerRole } from "@/lib/session";
+import { withSchool } from "@/db";
+import { createCourse, moveCourse, readCourse, updateCourse, validCourseInput, deleteCourse } from "@/db/cours";
+import { slotConflicts } from "@/db/disponibilites";
+import { hoursBySite } from "@/db/parametres";
+import { seasonCourses, currentSeason } from "@/db/planning";
+import { syncLessons } from "@/db/seances";
+import { conflicts } from "@/domaine/planning/chevauchement";
+import { outsideHours } from "@/domaine/planning/horaires";
+import { SHORT_DAYS } from "@/domaine/planning/jours";
+import { todayInParis } from "@/domaine/personnes/age";
+import { requireRole } from "@/lib/session";
 
-export type Refus = { message: string; erreurs: Partial<Record<string, string>> };
+export type Refusal = { message: string; errors: Partial<Record<string, string>> };
 
 /** Crée (id null) ou modifie un cours de la saison courante ; réservé à la direction. */
-export async function enregistrerCours(id: string | null, saisie: unknown): Promise<Refus> {
-  const { ecoleId } = await exigerRole("direction");
-  const donnees = saisieCoursValide.safeParse(saisie);
+export async function saveCourse(id: string | null, saisie: unknown): Promise<Refusal> {
+  const { schoolId: schoolId } = await requireRole("direction");
+  const donnees = validCourseInput.safeParse(saisie);
   if (!donnees.success) {
-    const erreurs: Refus["erreurs"] = {};
-    for (const p of donnees.error.issues) erreurs[String(p.path[0])] ??= p.message;
-    return { message: "Vérifiez les champs signalés.", erreurs };
+    const errors: Refusal["errors"] = {};
+    for (const p of donnees.error.issues) errors[String(p.path[0])] ??= p.message;
+    return { message: "Vérifiez les champs signalés.", errors };
   }
-  const aujourdhui = aujourdhuiAParis();
-  const resultat = await avecEcole(ecoleId, async (tx) => {
-    const saisonId = id !== null ? (await lireCours(tx, id))?.saisonId : (await saisonCourante(tx, aujourdhui))?.id;
-    if (!saisonId)
+  const today = todayInParis();
+  const result = await withSchool(schoolId, async (tx) => {
+    const seasonId = id !== null ? (await readCourse(tx, id))?.seasonId : (await currentSeason(tx, today))?.id;
+    if (!seasonId)
       return {
         ok: false as const,
         message: id !== null ? "Ce cours n’existe plus." : "Aucune saison n’est paramétrée.",
       };
-    const r = id !== null ? await modifierCours(tx, id, donnees.data) : await creerCours(tx, saisonId, donnees.data);
+    const r = id !== null ? await updateCourse(tx, id, donnees.data) : await createCourse(tx, seasonId, donnees.data);
     // Séances à venir recalculées dans la même transaction (jour changé, nouveau cours…).
-    if (r.ok) await synchroniserSeances(tx, saisonId, aujourdhui);
+    if (r.ok) await syncLessons(tx, seasonId, today);
     return r;
   });
-  if (!resultat.ok) return { message: resultat.message, erreurs: {} };
-  redirect(id === null ? `/planning?enregistre=${resultat.id}` : `/planning/cours/${resultat.id}?modifie=1`);
+  if (!result.ok) return { message: result.message, errors: {} };
+  redirect(id === null ? `/planning?enregistre=${result.id}` : `/planning/cours/${result.id}?modifie=1`);
 }
 
-export async function supprimer(id: string): Promise<Refus> {
-  const { ecoleId } = await exigerRole("direction");
-  const resultat = await avecEcole(ecoleId, (tx) => supprimerCours(tx, id));
-  if (!resultat.ok) return { message: resultat.message, erreurs: {} };
+export async function remove(id: string): Promise<Refusal> {
+  const { schoolId: schoolId } = await requireRole("direction");
+  const result = await withSchool(schoolId, (tx) => deleteCourse(tx, id));
+  if (!result.ok) return { message: result.message, errors: {} };
   redirect("/planning?supprime=1");
 }
 
 /** Dates à venir où l'intervenant choisi serait indisponible sur ce créneau (pendant la saisie). */
-export async function verifierCreneau(
-  coursId: string | null,
-  creneau: { intervenantId: string; jourSemaine: number; heureDebut: string; dureeMinutes: number },
+export async function checkSlot(
+  courseId: string | null,
+  slot: { instructorId: string; weekday: number; startTime: string; durationMinutes: number },
 ): Promise<string[]> {
-  const { ecoleId } = await exigerRole("direction");
-  const aujourdhui = aujourdhuiAParis();
-  return avecEcole(ecoleId, async (tx) => {
-    const saisonId = coursId ? (await lireCours(tx, coursId))?.saisonId : (await saisonCourante(tx, aujourdhui))?.id;
-    return saisonId ? conflitsCreneau(tx, { ...creneau, saisonId }, aujourdhui) : [];
+  const { schoolId: schoolId } = await requireRole("direction");
+  const today = todayInParis();
+  return withSchool(schoolId, async (tx) => {
+    const seasonId = courseId ? (await readCourse(tx, courseId))?.seasonId : (await currentSeason(tx, today))?.id;
+    return seasonId ? slotConflicts(tx, { ...slot, seasonId }, today) : [];
   });
 }
 
-export type RetourDeplacement =
-  | { statut: "ok"; alertes: string[] }
-  | { statut: "confirmer"; inscrits: number }
-  | { statut: "refus"; message: string };
+export type MoveResponse =
+  | { status: "ok"; alertes: string[] }
+  | { status: "confirmer"; enrolled: number }
+  | { status: "refus"; message: string };
 
-const dateCourte = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
+const shortDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
 
 /**
  * Glisser-déposer de la vue agenda : nouveau jour, heure ou durée. Les séances
  * à venir suivent ; le résultat signale salle ou intervenant déjà pris et les
  * indisponibilités de l'intervenant sur ce créneau.
  */
-export async function deplacer(coursId: string, creneau: unknown, confirme: boolean): Promise<RetourDeplacement> {
-  const { ecoleId } = await exigerRole("direction");
-  const aujourdhui = aujourdhuiAParis();
-  const r = await avecEcole(ecoleId, async (tx) => {
-    const d = await deplacerCours(tx, coursId, creneau as Parameters<typeof deplacerCours>[2], confirme);
-    if (d.statut !== "ok") return d;
-    const c = await lireCours(tx, coursId);
-    if (!c) return { statut: "refus" as const, message: "Ce cours n’existe plus." };
-    await synchroniserSeances(tx, c.saisonId, aujourdhui);
-    const planning = await coursDeLaSaison(tx, c.saisonId);
-    const moi = planning.find((p) => p.id === coursId);
-    const alertes = moi
-      ? conflits(moi, planning).map((x) => {
-          const autre = planning.find((p) => p.id === x.id)!;
-          const quand = `${autre.discipline}, ${JOURS_COURTS[autre.jourSemaine ?? 0]} ${autre.heureDebut}`;
-          if (x.salle && x.intervenant) return `${autre.salle} et ${autre.intervenant} déjà pris (${quand})`;
-          return x.salle
-            ? `${autre.salle} déjà occupée (${quand})`
-            : `${autre.intervenant} donne déjà un cours (${quand})`;
+export async function move(courseId: string, slot: unknown, confirmed: boolean): Promise<MoveResponse> {
+  const { schoolId: schoolId } = await requireRole("direction");
+  const today = todayInParis();
+  const r = await withSchool(schoolId, async (tx) => {
+    const d = await moveCourse(tx, courseId, slot as Parameters<typeof moveCourse>[2], confirmed);
+    if (d.status !== "ok") return d;
+    const c = await readCourse(tx, courseId);
+    if (!c) return { status: "refus" as const, message: "Ce cours n’existe plus." };
+    await syncLessons(tx, c.seasonId, today);
+    const schedule = await seasonCourses(tx, c.seasonId);
+    const me = schedule.find((p) => p.id === courseId);
+    const alertes = me
+      ? conflicts(me, schedule).map((x) => {
+          const autre = schedule.find((p) => p.id === x.id)!;
+          const when = `${autre.discipline}, ${SHORT_DAYS[autre.weekday ?? 0]} ${autre.startTime}`;
+          if (x.room && x.instructor) return `${autre.room} et ${autre.instructor} déjà pris (${when})`;
+          return x.room ? `${autre.room} déjà occupée (${when})` : `${autre.instructor} donne déjà un cours (${when})`;
         })
       : [];
-    if (moi && c.jourSemaine) {
-      const hors = horsHoraires(
-        { jourSemaine: c.jourSemaine, heureDebut: c.heureDebut, dureeMinutes: c.dureeMinutes },
-        (await horairesParSite(tx))[moi.siteId] ?? [],
+    if (me && c.weekday) {
+      const outside = outsideHours(
+        { weekday: c.weekday, startTime: c.startTime, durationMinutes: c.durationMinutes },
+        (await hoursBySite(tx))[me.siteId] ?? [],
       );
-      if (hors) alertes.push(hors);
+      if (outside) alertes.push(outside);
     }
-    if (c.jourSemaine) {
-      const dates = await conflitsCreneau(
+    if (c.weekday) {
+      const dates = await slotConflicts(
         tx,
         {
-          saisonId: c.saisonId,
-          intervenantId: c.intervenantId,
-          jourSemaine: c.jourSemaine,
-          heureDebut: c.heureDebut,
-          dureeMinutes: c.dureeMinutes,
+          seasonId: c.seasonId,
+          instructorId: c.instructorId,
+          weekday: c.weekday,
+          startTime: c.startTime,
+          durationMinutes: c.durationMinutes,
         },
-        aujourdhui,
+        today,
       );
       if (dates.length > 0) {
         alertes.push(
           `Intervenant indisponible le ${dates
             .slice(0, 4)
-            .map((x) => dateCourte.format(new Date(`${x}T00:00:00Z`)))
+            .map((x) => shortDate.format(new Date(`${x}T00:00:00Z`)))
             .join(", ")}${dates.length > 4 ? "…" : ""}`,
         );
       }
     }
-    return { statut: "ok" as const, alertes };
+    return { status: "ok" as const, alertes };
   });
   revalidatePath("/planning");
   return r;

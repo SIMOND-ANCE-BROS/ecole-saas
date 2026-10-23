@@ -1,17 +1,17 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { calculerTarif } from "../domaine/tarif/calculer";
+import { computeTariff } from "../domaine/tarif/calculer";
 import type {
-  CoursChoisi,
-  DemandeInscription,
-  LigneTarif,
-  Periodicite,
+  ChosenCourse,
+  EnrollmentRequest,
+  TariffRow,
+  Period,
   Public,
-  RegleReduction,
-  ResultatInscription,
+  DiscountRule,
+  EnrollmentResult,
 } from "../domaine/tarif/types";
 import type { Tx } from "./index";
-import { danseursPayables } from "./personnes";
+import { payableStudents } from "./personnes";
 import { course, discipline, enrollment, enrollmentCourse, person, discount, tariff } from "./schema";
 
 /**
@@ -20,207 +20,208 @@ import { course, discipline, enrollment, enrollmentCourse, person, discount, tar
  * transaction d'`avecEcole()` : la RLS limite tout à l'école courante.
  */
 
-export type SaisieInscription = {
-  danseurIds: string[];
-  public: Public;
-  periodicite: Periodicite;
-  coursIds: string[];
+export type EnrollmentInput = {
+  studentIds: string[];
+  audience: Public;
+  period: Period;
+  courseIds: string[];
 };
 
-const NOUVELLE = "nouvelle";
+const NEW = "nouvelle";
 const uuid = z.uuid();
 
-export async function chargerGrille(tx: Tx, saisonId: string): Promise<LigneTarif[]> {
+export async function loadGrid(tx: Tx, seasonId: string): Promise<TariffRow[]> {
   return tx
     .select({
       id: tariff.id,
-      public: tariff.audience,
-      periodicite: tariff.period,
-      combinaison: tariff.combination,
+      audience: tariff.audience,
+      period: tariff.period,
+      combination: tariff.combination,
       disciplineId: tariff.disciplineId,
-      prixCentimes: tariff.priceCents,
+      priceCents: tariff.priceCents,
     })
     .from(tariff)
-    .where(eq(tariff.seasonId, saisonId));
+    .where(eq(tariff.seasonId, seasonId));
 }
 
-export async function chargerReductions(tx: Tx, saisonId: string): Promise<RegleReduction[]> {
+export async function loadDiscounts(tx: Tx, seasonId: string): Promise<DiscountRule[]> {
   return tx
     .select({
       code: discount.code,
-      tauxPointsBase: discount.rateBps,
-      montantCentimes: discount.amountCents,
-      seuilDanseurs: discount.minStudents,
-      publics: discount.audiences,
-      cumulableMultiDisciplines: discount.combinableWithMultiDiscipline,
+      rateBps: discount.rateBps,
+      amountCents: discount.amountCents,
+      minStudents: discount.minStudents,
+      audiences: discount.audiences,
+      combinableWithMultiDiscipline: discount.combinableWithMultiDiscipline,
     })
     .from(discount)
-    .where(eq(discount.seasonId, saisonId));
+    .where(eq(discount.seasonId, seasonId));
 }
 
-type Existante = DemandeInscription & { remiseEnregistree: number };
+type Existing = EnrollmentRequest & { savedDeposit: number };
 
 /** Inscriptions actives du payeur pour la saison, sous la forme attendue par le moteur. */
-async function inscriptionsExistantes(tx: Tx, payeurId: string, saisonId: string): Promise<Existante[]> {
-  const lignes = await tx
+async function existingEnrollments(tx: Tx, payerId: string, seasonId: string): Promise<Existing[]> {
+  const rows = await tx
     .select({
       id: enrollment.id,
-      public: enrollment.audience,
-      periodicite: enrollment.period,
-      remise: enrollment.discountCents,
+      audience: enrollment.audience,
+      period: enrollment.period,
+      deposit: enrollment.discountCents,
     })
     .from(enrollment)
-    .where(and(eq(enrollment.payerId, payeurId), eq(enrollment.seasonId, saisonId), eq(enrollment.status, "active")));
-  if (lignes.length === 0) return [];
+    .where(and(eq(enrollment.payerId, payerId), eq(enrollment.seasonId, seasonId), eq(enrollment.status, "active")));
+  if (rows.length === 0) return [];
 
-  const liens = await tx
+  const relationships = await tx
     .select({
-      inscriptionId: enrollmentCourse.enrollmentId,
-      danseurId: enrollmentCourse.studentId,
-      coursId: enrollmentCourse.courseId,
+      enrollmentId: enrollmentCourse.enrollmentId,
+      studentId: enrollmentCourse.studentId,
+      courseId: enrollmentCourse.courseId,
       disciplineId: course.disciplineId,
-      dureeMinutes: course.durationMinutes,
+      durationMinutes: course.durationMinutes,
     })
     .from(enrollmentCourse)
     .innerJoin(course, eq(course.id, enrollmentCourse.courseId))
     .where(
       inArray(
         enrollmentCourse.enrollmentId,
-        lignes.map((l) => l.id),
+        rows.map((l) => l.id),
       ),
     );
 
-  return lignes.map((l) => {
-    const siens = liens.filter((x) => x.inscriptionId === l.id);
-    const coursUniques = new Map(
-      siens.map((x) => [x.coursId, { disciplineId: x.disciplineId, dureeMinutes: x.dureeMinutes }]),
+  return rows.map((l) => {
+    const own = relationships.filter((x) => x.enrollmentId === l.id);
+    const uniqueCourses = new Map(
+      own.map((x) => [x.courseId, { disciplineId: x.disciplineId, durationMinutes: x.durationMinutes }]),
     );
     return {
       reference: l.id,
-      danseurIds: [...new Set(siens.map((x) => x.danseurId))],
-      public: l.public,
-      periodicite: l.periodicite,
-      cours: [...coursUniques.values()],
-      remiseEnregistree: l.remise,
+      studentIds: [...new Set(own.map((x) => x.studentId))],
+      audience: l.audience,
+      period: l.period,
+      courses: [...uniqueCourses.values()],
+      savedDeposit: l.deposit,
     };
   });
 }
 
 /** Danseurs du payeur et cours de la saison réellement choisis ; sinon le motif du refus. */
-async function valider(
+async function validate(
   tx: Tx,
-  payeurId: string,
-  saisonId: string,
-  saisie: SaisieInscription,
-): Promise<string | CoursChoisi[]> {
-  const danseurIds = [...new Set(saisie.danseurIds)];
-  const coursIds = [...new Set(saisie.coursIds)];
-  if (saisie.public === "couple" && danseurIds.length !== 2) return "Un couple réunit deux danseurs.";
-  if (saisie.public !== "couple" && danseurIds.length !== 1)
+  payerId: string,
+  seasonId: string,
+  saisie: EnrollmentInput,
+): Promise<string | ChosenCourse[]> {
+  const studentIds = [...new Set(saisie.studentIds)];
+  const courseIds = [...new Set(saisie.courseIds)];
+  if (saisie.audience === "couple" && studentIds.length !== 2) return "Un couple réunit deux danseurs.";
+  if (saisie.audience !== "couple" && studentIds.length !== 1)
     return "Une inscription individuelle concerne un seul danseur.";
-  if (![...danseurIds, ...coursIds].every((id) => uuid.safeParse(id).success)) return "Saisie invalide.";
+  if (![...studentIds, ...courseIds].every((id) => uuid.safeParse(id).success)) return "Saisie invalide.";
 
-  const payables = new Set((await danseursPayables(tx, payeurId)).map((d) => d.id));
-  if (!danseurIds.every((id) => payables.has(id)))
+  const payables = new Set((await payableStudents(tx, payerId)).map((d) => d.id));
+  if (!studentIds.every((id) => payables.has(id)))
     return "Cette personne ne paie pas pour ce danseur : ajoutez le lien « paie pour » sur sa fiche.";
 
-  if (coursIds.length === 0) return [];
-  const choisis = await tx
-    .select({ disciplineId: course.disciplineId, dureeMinutes: course.durationMinutes })
+  if (courseIds.length === 0) return [];
+  const chosen = await tx
+    .select({ disciplineId: course.disciplineId, durationMinutes: course.durationMinutes })
     .from(course)
-    .where(and(inArray(course.id, coursIds), eq(course.seasonId, saisonId)));
-  if (choisis.length !== coursIds.length) return "Un des cours ne fait pas partie de la saison.";
-  return choisis;
+    .where(and(inArray(course.id, courseIds), eq(course.seasonId, seasonId)));
+  if (chosen.length !== courseIds.length) return "Un des cours ne fait pas partie de la saison.";
+  return chosen;
 }
 
 /** Une inscription déjà enregistrée dont la remise changerait avec la nouvelle (ex. fratrie). */
-export type ImpactExistante = {
+export type ExistingImpact = {
   reference: string;
-  danseurs: string;
-  remiseEnregistree: number;
-  remiseRecalculee: number;
+  students: string;
+  savedDeposit: number;
+  recalculatedDiscount: number;
 };
 
-export type Apercu =
-  { statut: "invalide"; message: string } | { statut: "ok"; nouvelle: ResultatInscription; autres: ImpactExistante[] };
+export type Preview =
+  | { status: "invalide"; message: string }
+  | { status: "ok"; newEnrollment: EnrollmentResult; existingImpacts: ExistingImpact[] };
 
 /** Prix de la nouvelle inscription, calculé avec la grille, les réductions et les autres inscriptions du payeur. */
-export async function apercuInscription(
+export async function enrollmentPreview(
   tx: Tx,
-  payeurId: string,
-  saisonId: string,
-  saisie: SaisieInscription,
-): Promise<Apercu> {
-  const coursChoisis = await valider(tx, payeurId, saisonId, saisie);
-  if (typeof coursChoisis === "string") return { statut: "invalide", message: coursChoisis };
+  payerId: string,
+  seasonId: string,
+  saisie: EnrollmentInput,
+): Promise<Preview> {
+  const chosenCourses = await validate(tx, payerId, seasonId, saisie);
+  if (typeof chosenCourses === "string") return { status: "invalide", message: chosenCourses };
 
-  const grille = await chargerGrille(tx, saisonId);
-  const reductions = await chargerReductions(tx, saisonId);
-  const existantes = await inscriptionsExistantes(tx, payeurId, saisonId);
-  const resultat = calculerTarif({
-    grille,
-    reductions,
-    inscriptions: [
-      ...existantes,
+  const grid = await loadGrid(tx, seasonId);
+  const discounts = await loadDiscounts(tx, seasonId);
+  const existing = await existingEnrollments(tx, payerId, seasonId);
+  const result = computeTariff({
+    grid,
+    discounts,
+    enrollments: [
+      ...existing,
       {
-        reference: NOUVELLE,
-        danseurIds: saisie.danseurIds,
-        public: saisie.public,
-        periodicite: saisie.periodicite,
-        cours: coursChoisis,
+        reference: NEW,
+        studentIds: saisie.studentIds,
+        audience: saisie.audience,
+        period: saisie.period,
+        courses: chosenCourses,
       },
     ],
   });
 
-  const prenoms = new Map((await danseursPayables(tx, payeurId)).map((d) => [d.id, d.prenom]));
-  const autres = existantes.flatMap((e): ImpactExistante[] => {
-    const r = resultat.inscriptions.find((i) => i.reference === e.reference);
-    const remiseRecalculee = r?.statut === "ok" ? r.remiseCentimes : e.remiseEnregistree;
-    if (remiseRecalculee === e.remiseEnregistree) return [];
-    const danseurs = e.danseurIds.map((id) => prenoms.get(id) ?? "?").join(" et ");
-    return [{ reference: e.reference, danseurs, remiseEnregistree: e.remiseEnregistree, remiseRecalculee }];
+  const firstNames = new Map((await payableStudents(tx, payerId)).map((d) => [d.id, d.firstName]));
+  const other = existing.flatMap((e): ExistingImpact[] => {
+    const r = result.enrollments.find((i) => i.reference === e.reference);
+    const recalculatedDiscount = r?.status === "ok" ? r.discountCents : e.savedDeposit;
+    if (recalculatedDiscount === e.savedDeposit) return [];
+    const students = e.studentIds.map((id) => firstNames.get(id) ?? "?").join(" et ");
+    return [{ reference: e.reference, students, savedDeposit: e.savedDeposit, recalculatedDiscount }];
   });
 
-  return { statut: "ok", nouvelle: resultat.inscriptions.find((i) => i.reference === NOUVELLE)!, autres };
+  return { status: "ok", newEnrollment: result.enrollments.find((i) => i.reference === NEW)!, existingImpacts: other };
 }
 
 /** Enregistre l'inscription au prix recalculé ici (jamais celui envoyé par le navigateur). */
-export async function enregistrerInscription(
+export async function saveEnrollment(
   tx: Tx,
-  payeurId: string,
-  saisonId: string,
-  saisie: SaisieInscription,
+  payerId: string,
+  seasonId: string,
+  saisie: EnrollmentInput,
 ): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
-  const apercu = await apercuInscription(tx, payeurId, saisonId, saisie);
-  if (apercu.statut === "invalide") return { ok: false, message: apercu.message };
-  const r = apercu.nouvelle;
-  if (r.statut === "erreur") return { ok: false, message: r.erreur.message };
+  const preview = await enrollmentPreview(tx, payerId, seasonId, saisie);
+  if (preview.status === "invalide") return { ok: false, message: preview.message };
+  const r = preview.newEnrollment;
+  if (r.status === "erreur") return { ok: false, message: r.error.message };
 
   const [{ id }] = await tx
     .insert(enrollment)
     .values({
       schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid`,
-      payerId: payeurId,
-      seasonId: saisonId,
-      tariffId: r.ligneTarifId,
-      audience: saisie.public,
-      period: saisie.periodicite,
-      grossPriceCents: r.prixBrutCentimes,
-      discountCents: r.remiseCentimes,
-      discounts: r.reductions.filter((d) => d.statut === "appliquee").map((d) => d.code),
+      payerId: payerId,
+      seasonId: seasonId,
+      tariffId: r.tariffRowId,
+      audience: saisie.audience,
+      period: saisie.period,
+      grossPriceCents: r.grossPriceCents,
+      discountCents: r.discountCents,
+      discounts: r.discounts.filter((d) => d.status === "appliquee").map((d) => d.code),
     })
     .returning({ id: enrollment.id });
 
-  const danseurIds = [...new Set(saisie.danseurIds)];
-  const coursIds = [...new Set(saisie.coursIds)];
-  if (coursIds.length > 0) {
+  const studentIds = [...new Set(saisie.studentIds)];
+  const courseIds = [...new Set(saisie.courseIds)];
+  if (courseIds.length > 0) {
     await tx.insert(enrollmentCourse).values(
-      danseurIds.flatMap((danseurId) =>
-        coursIds.map((coursId) => ({
+      studentIds.flatMap((studentId) =>
+        courseIds.map((courseId) => ({
           schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid`,
           enrollmentId: id,
-          studentId: danseurId,
-          courseId: coursId,
+          studentId: studentId,
+          courseId: courseId,
         })),
       ),
     );
@@ -228,34 +229,34 @@ export async function enregistrerInscription(
   return { ok: true, id };
 }
 
-export type InscriptionPayee = {
+export type PaidEnrollment = {
   id: string;
-  danseurs: string;
-  public: Public;
-  periodicite: Periodicite;
-  cours: string[];
-  prixNetCentimes: number;
+  students: string;
+  audience: Public;
+  period: Period;
+  courses: string[];
+  netPriceCents: number;
 };
 
 /** Inscriptions actives payées par une personne pour la saison, triées par danseur. */
-export async function inscriptionsPayeesPar(tx: Tx, payeurId: string, saisonId: string): Promise<InscriptionPayee[]> {
-  const lignes = await tx
+export async function enrollmentsPayeesBy(tx: Tx, payerId: string, seasonId: string): Promise<PaidEnrollment[]> {
+  const rows = await tx
     .select({
       id: enrollment.id,
-      public: enrollment.audience,
-      periodicite: enrollment.period,
-      prixNetCentimes: enrollment.netPriceCents,
+      audience: enrollment.audience,
+      period: enrollment.period,
+      netPriceCents: enrollment.netPriceCents,
     })
     .from(enrollment)
-    .where(and(eq(enrollment.payerId, payeurId), eq(enrollment.seasonId, saisonId), eq(enrollment.status, "active")));
-  if (lignes.length === 0) return [];
+    .where(and(eq(enrollment.payerId, payerId), eq(enrollment.seasonId, seasonId), eq(enrollment.status, "active")));
+  if (rows.length === 0) return [];
 
-  const liens = await tx
+  const relationships = await tx
     .select({
-      inscriptionId: enrollmentCourse.enrollmentId,
-      prenom: sql<string>`coalesce(${person.firstName}, ${person.lastName})`,
+      enrollmentId: enrollmentCourse.enrollmentId,
+      firstName: sql<string>`coalesce(${person.firstName}, ${person.lastName})`,
       discipline: discipline.name,
-      jour: course.weekday,
+      day: course.weekday,
       heure: course.startTime,
     })
     .from(enrollmentCourse)
@@ -265,29 +266,27 @@ export async function inscriptionsPayeesPar(tx: Tx, payeurId: string, saisonId: 
     .where(
       inArray(
         enrollmentCourse.enrollmentId,
-        lignes.map((l) => l.id),
+        rows.map((l) => l.id),
       ),
     )
     .orderBy(asc(course.weekday), asc(course.startTime));
 
-  const JOURS = ["", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."];
-  return lignes
+  const DAYS = ["", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."];
+  return rows
     .map((l) => {
-      const siens = liens.filter((x) => x.inscriptionId === l.id);
+      const own = relationships.filter((x) => x.enrollmentId === l.id);
       return {
         id: l.id,
-        public: l.public,
-        periodicite: l.periodicite,
-        prixNetCentimes: l.prixNetCentimes ?? 0,
-        danseurs: [...new Set(siens.map((x) => x.prenom))].sort().join(" et "),
-        cours: [
+        audience: l.audience,
+        period: l.period,
+        netPriceCents: l.netPriceCents ?? 0,
+        students: [...new Set(own.map((x) => x.firstName))].sort().join(" et "),
+        courses: [
           ...new Set(
-            siens.map((x) =>
-              `${x.discipline} ${x.jour ? JOURS[x.jour] : ""} ${x.heure.slice(0, 5)}`.replace("  ", " "),
-            ),
+            own.map((x) => `${x.discipline} ${x.day ? DAYS[x.day] : ""} ${x.heure.slice(0, 5)}`.replace("  ", " ")),
           ),
         ],
       };
     })
-    .sort((a, b) => a.danseurs.localeCompare(b.danseurs, "fr"));
+    .sort((a, b) => a.students.localeCompare(b.students, "fr"));
 }
