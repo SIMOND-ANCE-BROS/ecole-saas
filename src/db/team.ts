@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
-import { changeRefusal, type Role } from "../domain/team/rules";
+import { changeRefusal, ROLE_VALUES, type Role } from "../domain/team/rules";
 import type { Tx } from "./index";
 import { school, invitation, auditLog, member, user } from "./schema";
 
@@ -157,7 +157,7 @@ export async function updateMember(
   memberId: string,
   after: { role: Role; active: boolean },
 ): Promise<Result> {
-  if (!isUuid(memberId) || !(after.role in ROLES)) return { ok: false, message: "Ce membre n’existe plus." };
+  if (!isUuid(memberId) || !ROLE_VALUES.includes(after.role)) return { ok: false, message: "Ce membre n’existe plus." };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
   const team = await tx.select({ id: member.id, role: member.role, active: member.active }).from(member);
