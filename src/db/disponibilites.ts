@@ -4,7 +4,7 @@ import { conflits, type Indisponibilite, intervalleSeance, remplacantsLibres } f
 import { datesDesSeances } from "../domaine/planning/seances";
 import type { Tx } from "./index";
 import { dureeEffective, heureEffective } from "./seances";
-import { cours, discipline, fermeture, indisponibilite, intervenant, saison, seance } from "./schema";
+import { course, discipline, closure, unavailability, instructor, season, lesson } from "./schema";
 
 /**
  * Indisponibilités des intervenants, conflits avec les séances et remplaçants
@@ -28,15 +28,15 @@ export function listerIndisponibilites(tx: Tx, intervenantId: string, depuis: Da
   if (!estUuid(intervenantId)) return Promise.resolve([]);
   return tx
     .select({
-      id: indisponibilite.id,
-      debut: indisponibilite.debut,
-      fin: indisponibilite.fin,
-      origine: indisponibilite.origine,
-      libelle: indisponibilite.libelle,
+      id: unavailability.id,
+      debut: unavailability.startsAt,
+      fin: unavailability.endsAt,
+      origine: unavailability.source,
+      libelle: unavailability.label,
     })
-    .from(indisponibilite)
-    .where(and(eq(indisponibilite.intervenantId, intervenantId), gt(indisponibilite.fin, depuis)))
-    .orderBy(asc(indisponibilite.debut));
+    .from(unavailability)
+    .where(and(eq(unavailability.instructorId, intervenantId), gt(unavailability.endsAt, depuis)))
+    .orderBy(asc(unavailability.startsAt));
 }
 
 /** Indisponibilité saisie par la direction. */
@@ -47,18 +47,19 @@ export async function ajouterIndisponibilite(
 ): Promise<Resultat> {
   if (!estUuid(intervenantId)) return { ok: false, message: "Intervenant introuvable." };
   if (!(saisie.fin > saisie.debut)) return { ok: false, message: "La fin doit suivre le début." };
-  const [i] = await tx.select({ id: intervenant.id }).from(intervenant).where(eq(intervenant.id, intervenantId));
+  const [i] = await tx.select({ id: instructor.id }).from(instructor).where(eq(instructor.id, intervenantId));
   if (!i) return { ok: false, message: "Intervenant introuvable." };
   const [{ id }] = await tx
-    .insert(indisponibilite)
+    .insert(unavailability)
     .values({
-      ...saisie,
-      libelle: saisie.libelle?.trim() || null,
-      intervenantId,
-      origine: "saisie",
-      ecoleId: ECOLE_COURANTE,
+      startsAt: saisie.debut,
+      endsAt: saisie.fin,
+      label: saisie.libelle?.trim() || null,
+      instructorId: intervenantId,
+      source: "saisie",
+      schoolId: ECOLE_COURANTE,
     })
-    .returning({ id: indisponibilite.id });
+    .returning({ id: unavailability.id });
   return { ok: true, id };
 }
 
@@ -67,9 +68,9 @@ export async function supprimerIndisponibilite(tx: Tx, id: string): Promise<Resu
   const refus = { ok: false as const, message: "Cette indisponibilité n’existe plus ou vient d’un agenda." };
   if (!estUuid(id)) return refus;
   const lignes = await tx
-    .delete(indisponibilite)
-    .where(and(eq(indisponibilite.id, id), eq(indisponibilite.origine, "saisie")))
-    .returning({ id: indisponibilite.id });
+    .delete(unavailability)
+    .where(and(eq(unavailability.id, id), eq(unavailability.source, "saisie")))
+    .returning({ id: unavailability.id });
   return lignes.length === 1 ? { ok: true, id } : refus;
 }
 
@@ -85,20 +86,26 @@ export async function remplacerIndisponibilitesAgenda(
   plages: { debut: Date; fin: Date }[],
 ): Promise<number> {
   await tx
-    .delete(indisponibilite)
+    .delete(unavailability)
     .where(
       and(
-        eq(indisponibilite.intervenantId, intervenantId),
-        ne(indisponibilite.origine, "saisie"),
-        lt(indisponibilite.debut, fenetre.fin),
-        gt(indisponibilite.fin, fenetre.debut),
+        eq(unavailability.instructorId, intervenantId),
+        ne(unavailability.source, "saisie"),
+        lt(unavailability.startsAt, fenetre.fin),
+        gt(unavailability.endsAt, fenetre.debut),
       ),
     );
   const valides = plages.filter((p) => p.fin > p.debut);
   if (valides.length > 0) {
-    await tx
-      .insert(indisponibilite)
-      .values(valides.map((p) => ({ ...p, intervenantId, origine, ecoleId: ECOLE_COURANTE })));
+    await tx.insert(unavailability).values(
+      valides.map((p) => ({
+        startsAt: p.debut,
+        endsAt: p.fin,
+        instructorId: intervenantId,
+        source: origine,
+        schoolId: ECOLE_COURANTE,
+      })),
+    );
   }
   return valides.length;
 }
@@ -107,13 +114,13 @@ export async function remplacerIndisponibilitesAgenda(
 async function indisposEntre(tx: Tx, debut: Date, fin: Date, intervenantIds?: string[]): Promise<Indisponibilite[]> {
   if (intervenantIds && intervenantIds.length === 0) return [];
   return tx
-    .select({ intervenantId: indisponibilite.intervenantId, debut: indisponibilite.debut, fin: indisponibilite.fin })
-    .from(indisponibilite)
+    .select({ intervenantId: unavailability.instructorId, debut: unavailability.startsAt, fin: unavailability.endsAt })
+    .from(unavailability)
     .where(
       and(
-        lt(indisponibilite.debut, fin),
-        gt(indisponibilite.fin, debut),
-        intervenantIds ? inArray(indisponibilite.intervenantId, intervenantIds) : undefined,
+        lt(unavailability.startsAt, fin),
+        gt(unavailability.endsAt, debut),
+        intervenantIds ? inArray(unavailability.instructorId, intervenantIds) : undefined,
       ),
     );
 }
@@ -138,14 +145,14 @@ export async function conflitsCreneau(
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(saisie.heureDebut) || !(saisie.dureeMinutes > 0)) return [];
   if (!Number.isInteger(saisie.jourSemaine) || saisie.jourSemaine < 1 || saisie.jourSemaine > 7) return [];
   const [s] = await tx
-    .select({ debut: saison.dateDebut, fin: saison.dateFin })
-    .from(saison)
-    .where(eq(saison.id, saisie.saisonId));
+    .select({ debut: season.startDate, fin: season.endDate })
+    .from(season)
+    .where(eq(season.id, saisie.saisonId));
   if (!s) return [];
   const fermetures = await tx
-    .select({ debut: fermeture.debut, fin: fermeture.fin })
-    .from(fermeture)
-    .where(eq(fermeture.saisonId, saisie.saisonId));
+    .select({ debut: closure.startDate, fin: closure.endDate })
+    .from(closure)
+    .where(eq(closure.seasonId, saisie.saisonId));
   const dates = datesDesSeances({
     debut: s.debut > aujourdhui ? s.debut : aujourdhui,
     fin: s.fin,
@@ -170,16 +177,16 @@ export async function seancesEnConflit(tx: Tx, coursId: string, aujourdhui: stri
   if (!estUuid(coursId)) return new Set();
   const lignes = await tx
     .select({
-      id: seance.id,
-      date: seance.date,
+      id: lesson.id,
+      date: lesson.date,
       heureDebut: heureEffective,
       dureeMinutes: dureeEffective,
-      intervenantId: seance.intervenantId,
+      intervenantId: lesson.instructorId,
     })
-    .from(seance)
-    .innerJoin(cours, eq(cours.id, seance.coursId))
-    .where(and(eq(seance.coursId, coursId), gte(seance.date, aujourdhui), eq(seance.statut, "prevue")))
-    .orderBy(asc(seance.date));
+    .from(lesson)
+    .innerJoin(course, eq(course.id, lesson.courseId))
+    .where(and(eq(lesson.courseId, coursId), gte(lesson.date, aujourdhui), eq(lesson.status, "prevue")))
+    .orderBy(asc(lesson.date));
   if (lignes.length === 0) return new Set();
   const seances = lignes.map((l) => ({ ...l, heureDebut: l.heureDebut.slice(0, 5) }));
   const { debut, fin } = periode(seances.map((s) => s.date));
@@ -206,47 +213,47 @@ export async function disponibilitesSeance(
   if (!estUuid(seanceId)) return null;
   const [s] = await tx
     .select({
-      id: seance.id,
-      date: seance.date,
+      id: lesson.id,
+      date: lesson.date,
       heureDebut: heureEffective,
       dureeMinutes: dureeEffective,
-      intervenantId: seance.intervenantId,
-      discipline: discipline.nom,
-      saisonId: cours.saisonId,
+      intervenantId: lesson.instructorId,
+      discipline: discipline.name,
+      saisonId: course.seasonId,
     })
-    .from(seance)
-    .innerJoin(cours, eq(cours.id, seance.coursId))
-    .innerJoin(discipline, eq(discipline.id, cours.disciplineId))
-    .where(eq(seance.id, seanceId));
+    .from(lesson)
+    .innerJoin(course, eq(course.id, lesson.courseId))
+    .innerJoin(discipline, eq(discipline.id, course.disciplineId))
+    .where(eq(lesson.id, seanceId));
   if (!s) return null;
   const cible = { ...s, heureDebut: s.heureDebut.slice(0, 5) };
   const [debut, fin] = intervalleSeance(cible);
 
   const actifs = await tx
     .select({
-      id: intervenant.id,
-      prenom: intervenant.prenom,
-      nom: intervenant.nom,
+      id: instructor.id,
+      prenom: instructor.firstName,
+      nom: instructor.lastName,
       disciplines: sql<string[]>`coalesce((
         SELECT array_agg(DISTINCT d.name) FROM course c JOIN discipline d ON d.id = c.discipline_id
-        WHERE c.instructor_id = ${intervenant}.${sql.identifier("id")} AND c.season_id = ${s.saisonId}
+        WHERE c.instructor_id = ${instructor}.${sql.identifier("id")} AND c.season_id = ${s.saisonId}
       ), '{}')`,
     })
-    .from(intervenant)
-    .where(eq(intervenant.actif, true))
-    .orderBy(asc(intervenant.prenom), asc(intervenant.nom));
+    .from(instructor)
+    .where(eq(instructor.active, true))
+    .orderBy(asc(instructor.firstName), asc(instructor.lastName));
 
   const memeJour = await tx
     .select({
-      id: seance.id,
-      date: seance.date,
+      id: lesson.id,
+      date: lesson.date,
       heureDebut: heureEffective,
       dureeMinutes: dureeEffective,
-      intervenantId: seance.intervenantId,
+      intervenantId: lesson.instructorId,
     })
-    .from(seance)
-    .innerJoin(cours, eq(cours.id, seance.coursId))
-    .where(and(eq(seance.date, s.date), ne(seance.statut, "annulee")));
+    .from(lesson)
+    .innerJoin(course, eq(course.id, lesson.courseId))
+    .where(and(eq(lesson.date, s.date), ne(lesson.status, "annulee")));
   const indispos = await indisposEntre(tx, new Date(debut), new Date(fin));
 
   const noms = new Map(actifs.map((a) => [a.id, `${a.prenom} ${a.nom}`]));

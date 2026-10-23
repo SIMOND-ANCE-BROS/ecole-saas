@@ -28,10 +28,10 @@ export function ecolesDe(userId: string) {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select set_config('app.user_id', ${userId}, true)`);
     return tx
-      .select({ id: schema.ecole.id, nom: schema.ecole.nom, role: schema.membre.role })
-      .from(schema.membre)
-      .innerJoin(schema.ecole, sql`${schema.ecole.id} = ${schema.membre.ecoleId}`)
-      .where(eq(schema.membre.actif, true))
-      .orderBy(schema.ecole.nom);
+      .select({ id: schema.school.id, nom: schema.school.name, role: schema.member.role })
+      .from(schema.member)
+      .innerJoin(schema.school, sql`${schema.school.id} = ${schema.member.schoolId}`)
+      .where(eq(schema.member.active, true))
+      .orderBy(schema.school.name);
   });
 }

@@ -2,7 +2,7 @@ import { asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { supprimerConnexion } from "./connexions-agenda";
 import type { Tx } from "./index";
-import { intervenant } from "./schema";
+import { instructor } from "./schema";
 
 /** Intervenants (professeurs), toujours avec la transaction d'`avecEcole()` (RLS). */
 
@@ -42,45 +42,59 @@ export const saisieIntervenantValide = z.object({
 export type SaisieIntervenant = z.output<typeof saisieIntervenantValide>;
 export type Intervenant = SaisieIntervenant & { id: string };
 
+/** Instructor columns from the form input. */
+const ligneIntervenant = (s: SaisieIntervenant) => ({
+  firstName: s.prenom,
+  lastName: s.nom,
+  email: s.email,
+  status: s.statut,
+  siren: s.siren,
+  vatRegime: s.regimeTva,
+  isOwner: s.estDirigeant,
+  payMode: s.modeRemuneration,
+  rateCents: s.tarifCentimes,
+  active: s.actif,
+});
+
 const colonnes = {
-  id: intervenant.id,
-  prenom: intervenant.prenom,
-  nom: intervenant.nom,
-  email: intervenant.email,
-  statut: intervenant.statut,
-  siren: intervenant.siren,
-  regimeTva: intervenant.regimeTva,
-  estDirigeant: intervenant.estDirigeant,
-  modeRemuneration: intervenant.modeRemuneration,
-  tarifCentimes: intervenant.tarifCentimes,
-  actif: intervenant.actif,
+  id: instructor.id,
+  prenom: instructor.firstName,
+  nom: instructor.lastName,
+  email: instructor.email,
+  statut: instructor.status,
+  siren: instructor.siren,
+  regimeTva: instructor.vatRegime,
+  estDirigeant: instructor.isOwner,
+  modeRemuneration: instructor.payMode,
+  tarifCentimes: instructor.rateCents,
+  actif: instructor.active,
 };
 
 /** Cours d'une saison donnés par l'intervenant (titulaire du cours). */
 const coursSaison = (saisonId: string) => sql<number>`(
   SELECT count(*)::int FROM course c
-  WHERE c.instructor_id = ${intervenant}.${sql.identifier("id")} AND c.season_id = ${saisonId}
+  WHERE c.instructor_id = ${instructor}.${sql.identifier("id")} AND c.season_id = ${saisonId}
 )`;
 
 /** Actifs d'abord, puis par nom et prénom. */
 export function listerIntervenants(tx: Tx, saisonId: string): Promise<(Intervenant & { coursSaison: number })[]> {
   return tx
     .select({ ...colonnes, coursSaison: coursSaison(saisonId) })
-    .from(intervenant)
-    .orderBy(desc(intervenant.actif), asc(intervenant.nom), asc(intervenant.prenom));
+    .from(instructor)
+    .orderBy(desc(instructor.active), asc(instructor.lastName), asc(instructor.firstName));
 }
 
 export async function lireIntervenant(tx: Tx, id: string): Promise<Intervenant | null> {
   if (!z.uuid().safeParse(id).success) return null;
-  const [i] = await tx.select(colonnes).from(intervenant).where(eq(intervenant.id, id));
+  const [i] = await tx.select(colonnes).from(instructor).where(eq(instructor.id, id));
   return i ?? null;
 }
 
 export async function creerIntervenant(tx: Tx, saisie: SaisieIntervenant): Promise<string> {
   const [{ id }] = await tx
-    .insert(intervenant)
-    .values({ ...saisie, ecoleId: sql`nullif(current_setting('app.school_id', true), '')::uuid` })
-    .returning({ id: intervenant.id });
+    .insert(instructor)
+    .values({ ...ligneIntervenant(saisie), schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid` })
+    .returning({ id: instructor.id });
   return id;
 }
 
@@ -88,12 +102,12 @@ export async function creerIntervenant(tx: Tx, saisie: SaisieIntervenant): Promi
 export async function modifierIntervenant(tx: Tx, id: string, saisie: SaisieIntervenant): Promise<boolean> {
   if (!z.uuid().safeParse(id).success) return false;
   // Désactiver un intervenant coupe aussi son abonnement et son agenda connecté.
-  const coupure = saisie.actif ? {} : { jetonAgendaHash: null, jetonAgendaCreeLe: null };
+  const coupure = saisie.actif ? {} : { calendarTokenHash: null, calendarTokenCreatedAt: null };
   const lignes = await tx
-    .update(intervenant)
-    .set({ ...saisie, ...coupure })
-    .where(eq(intervenant.id, id))
-    .returning({ id: intervenant.id });
+    .update(instructor)
+    .set({ ...ligneIntervenant(saisie), ...coupure })
+    .where(eq(instructor.id, id))
+    .returning({ id: instructor.id });
   if (lignes.length === 1 && !saisie.actif) await supprimerConnexion(tx, id);
   return lignes.length === 1;
 }

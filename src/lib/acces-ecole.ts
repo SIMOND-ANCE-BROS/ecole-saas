@@ -19,7 +19,7 @@ export async function choisirEcole(sessionId: string, userId: string, ecoleId: s
   if (!(await appartenance(userId, ecoleId))) return false;
   const modifiees = await db
     .update(session)
-    .set({ ecoleChoisie: ecoleId, updatedAt: new Date() })
+    .set({ selectedSchoolId: ecoleId, updatedAt: new Date() })
     .where(and(eq(session.id, sessionId), eq(session.userId, userId)))
     .returning({ id: session.id });
   return modifiees.length === 1;

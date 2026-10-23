@@ -23,7 +23,7 @@ export const auth = betterAuth({
   session: {
     additionalFields: {
       // Fixée côté serveur seulement (choisirEcole), jamais par le navigateur.
-      ecoleChoisie: { type: "string", required: false, input: false },
+      selectedSchoolId: { type: "string", required: false, input: false },
     },
   },
   // Doit rester le dernier plugin : pose les cookies depuis les server actions.

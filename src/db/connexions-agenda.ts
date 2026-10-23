@@ -2,7 +2,7 @@ import { and, eq, gt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Fournisseur } from "../connecteurs/agenda/oauth";
 import type { Tx } from "./index";
-import { connexionAgenda, indisponibilite, intervenant } from "./schema";
+import { calendarConnection, unavailability, instructor } from "./schema";
 
 /** Agendas connectés des intervenants, toujours avec la transaction d'`avecEcole()` (RLS). */
 
@@ -27,16 +27,17 @@ export async function enregistrerConnexion(
 ): Promise<boolean> {
   if (!estUuid(intervenantId)) return false;
   const [i] = await tx
-    .select({ id: intervenant.id })
-    .from(intervenant)
-    .where(and(eq(intervenant.id, intervenantId), eq(intervenant.actif, true)));
+    .select({ id: instructor.id })
+    .from(instructor)
+    .where(and(eq(instructor.id, intervenantId), eq(instructor.active, true)));
   if (!i) return false;
+  const colonnes = { provider: c.fournisseur, account: c.compte, encryptedToken: c.jetonChiffre };
   await tx
-    .insert(connexionAgenda)
-    .values({ ...c, intervenantId, ecoleId: ECOLE_COURANTE })
+    .insert(calendarConnection)
+    .values({ ...colonnes, instructorId: intervenantId, schoolId: ECOLE_COURANTE })
     .onConflictDoUpdate({
-      target: connexionAgenda.intervenantId,
-      set: { ...c, derniereSynchro: null, erreur: null, creeLe: sql`now()` },
+      target: calendarConnection.instructorId,
+      set: { ...colonnes, lastSyncedAt: null, error: null, createdAt: sql`now()` },
     });
   return true;
 }
@@ -45,13 +46,13 @@ export async function etatConnexion(tx: Tx, intervenantId: string): Promise<Etat
   if (!estUuid(intervenantId)) return null;
   const [c] = await tx
     .select({
-      fournisseur: connexionAgenda.fournisseur,
-      compte: connexionAgenda.compte,
-      derniereSynchro: connexionAgenda.derniereSynchro,
-      erreur: connexionAgenda.erreur,
+      fournisseur: calendarConnection.provider,
+      compte: calendarConnection.account,
+      derniereSynchro: calendarConnection.lastSyncedAt,
+      erreur: calendarConnection.error,
     })
-    .from(connexionAgenda)
-    .where(eq(connexionAgenda.intervenantId, intervenantId));
+    .from(calendarConnection)
+    .where(eq(calendarConnection.instructorId, intervenantId));
   return c ?? null;
 }
 
@@ -59,19 +60,19 @@ export async function etatConnexion(tx: Tx, intervenantId: string): Promise<Etat
 export async function lireConnexion(tx: Tx, intervenantId: string) {
   if (!estUuid(intervenantId)) return null;
   const [c] = await tx
-    .select({ fournisseur: connexionAgenda.fournisseur, jetonChiffre: connexionAgenda.jetonChiffre })
-    .from(connexionAgenda)
-    .innerJoin(intervenant, eq(intervenant.id, connexionAgenda.intervenantId))
-    .where(and(eq(connexionAgenda.intervenantId, intervenantId), eq(intervenant.actif, true)));
+    .select({ fournisseur: calendarConnection.provider, jetonChiffre: calendarConnection.encryptedToken })
+    .from(calendarConnection)
+    .innerJoin(instructor, eq(instructor.id, calendarConnection.instructorId))
+    .where(and(eq(calendarConnection.instructorId, intervenantId), eq(instructor.active, true)));
   return c ?? null;
 }
 
 export async function intervenantsConnectes(tx: Tx): Promise<string[]> {
   const lignes = await tx
-    .select({ id: connexionAgenda.intervenantId })
-    .from(connexionAgenda)
-    .innerJoin(intervenant, eq(intervenant.id, connexionAgenda.intervenantId))
-    .where(eq(intervenant.actif, true));
+    .select({ id: calendarConnection.instructorId })
+    .from(calendarConnection)
+    .innerJoin(instructor, eq(instructor.id, calendarConnection.instructorId))
+    .where(eq(instructor.active, true));
   return lignes.map((c) => c.id);
 }
 
@@ -82,29 +83,29 @@ export async function noterSynchro(
   r: { erreur: string | null; jetonChiffre?: string },
 ): Promise<void> {
   await tx
-    .update(connexionAgenda)
+    .update(calendarConnection)
     .set({
-      erreur: r.erreur,
-      ...(r.erreur ? {} : { derniereSynchro: sql`now()` }),
-      ...(r.jetonChiffre ? { jetonChiffre: r.jetonChiffre } : {}),
+      error: r.erreur,
+      ...(r.erreur ? {} : { lastSyncedAt: sql`now()` }),
+      ...(r.jetonChiffre ? { encryptedToken: r.jetonChiffre } : {}),
     })
-    .where(eq(connexionAgenda.intervenantId, intervenantId));
+    .where(eq(calendarConnection.instructorId, intervenantId));
 }
 
 /** Déconnecte l'agenda et retire les plages à venir qui en venaient (les saisies restent). */
 export async function supprimerConnexion(tx: Tx, intervenantId: string): Promise<boolean> {
   if (!estUuid(intervenantId)) return false;
   const lignes = await tx
-    .delete(connexionAgenda)
-    .where(eq(connexionAgenda.intervenantId, intervenantId))
-    .returning({ id: connexionAgenda.id });
+    .delete(calendarConnection)
+    .where(eq(calendarConnection.instructorId, intervenantId))
+    .returning({ id: calendarConnection.id });
   await tx
-    .delete(indisponibilite)
+    .delete(unavailability)
     .where(
       and(
-        eq(indisponibilite.intervenantId, intervenantId),
-        ne(indisponibilite.origine, "saisie"),
-        gt(indisponibilite.fin, sql`now()`),
+        eq(unavailability.instructorId, intervenantId),
+        ne(unavailability.source, "saisie"),
+        gt(unavailability.endsAt, sql`now()`),
       ),
     );
   return lignes.length === 1;

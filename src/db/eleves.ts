@@ -20,7 +20,7 @@ import {
   type SaisiePersonne,
   saisiePersonneValide,
 } from "./personnes";
-import { lien, personne } from "./schema";
+import { relationship, person } from "./schema";
 
 /**
  * Élèves et contacts (#77) : la même table `personne`, présentée en clair.
@@ -32,7 +32,7 @@ import { lien, personne } from "./schema";
 /** Lignes au plus dans une liste : au-delà, l'accueil affine la recherche ou filtre. */
 export const RESULTATS_MAX = 200;
 const estUuid = (v: string) => z.uuid().safeParse(v).success;
-const idCourant = sql`${personne}.${sql.identifier("id")}`;
+const idCourant = sql`${person}.${sql.identifier("id")}`;
 const nomSql = (alias: string) =>
   sql`coalesce(${sql.identifier(alias)}.company_name, concat_ws(' ', ${sql.identifier(alias)}.first_name, ${sql.identifier(alias)}.last_name))`;
 
@@ -67,7 +67,7 @@ export type LigneEleve = {
 export type OptionsListe = { filtre?: Filtre; tri?: Tri | null; aujourdhui?: string; saisonId?: string | null };
 
 // Colonnes calculées des listes : les mêmes expressions servent à l'affichage et aux filtres.
-const telephoneEleve = sql<string | null>`coalesce(${personne.telephone}, (
+const telephoneEleve = sql<string | null>`coalesce(${person.phone}, (
   SELECT r.phone FROM relationship l JOIN person r ON r.id = l.person_id
   WHERE l.related_person_id = ${idCourant} AND l.emergency_contact AND r.phone IS NOT NULL ORDER BY r.last_name LIMIT 1))`;
 const responsablesEleve = sql<string[]>`coalesce((
@@ -80,7 +80,7 @@ const elevesDuContact = sql<string[]>`coalesce((
   SELECT array_agg(DISTINCT coalesce(e.first_name, e.last_name)) FROM relationship l JOIN person e ON e.id = l.related_person_id
   WHERE l.person_id = ${idCourant} AND e.is_student AND (l.type = 'representant_legal' OR l.pays_for)), '{}')`;
 
-const emailEleve = sql<string | null>`coalesce(${personne.email}, (
+const emailEleve = sql<string | null>`coalesce(${person.email}, (
   SELECT r.email FROM relationship l JOIN person r ON r.id = l.person_id
   WHERE l.related_person_id = ${idCourant} AND l.type = 'representant_legal' AND r.email IS NOT NULL ORDER BY r.last_name LIMIT 1))`;
 const prevenirEleve = sql<string[]>`coalesce((
@@ -154,11 +154,11 @@ export async function listerEleves(
   const statutSaison = inscriptionEleve(valideSaison);
   const expressions = {
     nom: { sql: nomSql("person") },
-    age: { sql: sql`date_part('year', age(${aujourdhui}::date, ${personne.dateNaissance}))` },
+    age: { sql: sql`date_part('year', age(${aujourdhui}::date, ${person.birthDate}))` },
     responsables: { sql: responsablesEleve, liste: true },
     facture: { sql: factureAEleve },
     telephone: { sql: telephoneEleve },
-    naissance: { sql: sql`${personne.dateNaissance}` },
+    naissance: { sql: sql`${person.birthDate}` },
     email: { sql: emailEleve },
     cours: { sql: coursSaison, liste: true },
     inscription: { sql: statutSaison },
@@ -168,10 +168,10 @@ export async function listerEleves(
   const ordre = ordreColonne(tri, COLONNES_ELEVES, expressions);
   return tx
     .select({
-      id: personne.id,
-      prenom: personne.prenom,
-      nom: personne.nom,
-      dateNaissance: personne.dateNaissance,
+      id: person.id,
+      prenom: person.firstName,
+      nom: person.lastName,
+      dateNaissance: person.birthDate,
       telephone: telephoneEleve,
       responsables: responsablesEleve,
       factureA: factureAEleve,
@@ -180,10 +180,10 @@ export async function listerEleves(
       inscription: statutSaison,
       prevenir: prevenirEleve,
     })
-    .from(personne)
+    .from(person)
     .where(
       and(
-        eq(personne.eleve, true),
+        eq(person.isStudent, true),
         surEleve
           ? or(
               surEleve,
@@ -193,7 +193,7 @@ export async function listerEleves(
         surColonnes,
       ),
     )
-    .orderBy(...(ordre ? [ordre] : []), asc(personne.nom), asc(personne.prenom))
+    .orderBy(...(ordre ? [ordre] : []), asc(person.lastName), asc(person.firstName))
     .limit(RESULTATS_MAX);
 }
 
@@ -220,34 +220,34 @@ export async function listerContacts(
   const expressions = {
     nom: { sql: nomSql("person") },
     eleves: { sql: elevesDuContact, liste: true },
-    telephone: { sql: sql`${personne.telephone}` },
-    email: { sql: sql`${personne.email}` },
+    telephone: { sql: sql`${person.phone}` },
+    email: { sql: sql`${person.email}` },
   };
   const surColonnes = conditionFiltre(filtre, COLONNES_CONTACTS, expressions);
   const ordre = ordreColonne(tri, COLONNES_CONTACTS, expressions);
   return tx
     .select({
-      id: personne.id,
-      type: personne.type,
-      nom: personne.nom,
-      prenom: personne.prenom,
-      raisonSociale: personne.raisonSociale,
-      telephone: personne.telephone,
-      email: personne.email,
+      id: person.id,
+      type: person.type,
+      nom: person.lastName,
+      prenom: person.firstName,
+      raisonSociale: person.companyName,
+      telephone: person.phone,
+      email: person.email,
       eleves: elevesDuContact,
     })
-    .from(personne)
+    .from(person)
     .where(
       and(
         or(
-          eq(personne.eleve, false),
+          eq(person.isStudent, false),
           sql`EXISTS (SELECT 1 FROM relationship l WHERE l.person_id = ${idCourant} AND (l.type = 'representant_legal' OR l.pays_for))`,
         ),
         condition ?? undefined,
         surColonnes,
       ),
     )
-    .orderBy(...(ordre ? [ordre] : []), asc(personne.nom), asc(personne.prenom))
+    .orderBy(...(ordre ? [ordre] : []), asc(person.lastName), asc(person.firstName))
     .limit(RESULTATS_MAX);
 }
 
@@ -288,7 +288,7 @@ const majeur = (dateNaissance: string | null, aujourdhui: string) => {
 export async function lireEleve(tx: Tx, id: string, aujourdhui: string): Promise<FicheEleve | null> {
   const p = await lirePersonne(tx, id);
   if (!p) return null;
-  const [{ eleve }] = await tx.select({ eleve: personne.eleve }).from(personne).where(eq(personne.id, id));
+  const [{ eleve }] = await tx.select({ eleve: person.isStudent }).from(person).where(eq(person.id, id));
   const proche = (l: FichePersonne["liens"][number]): ProcheEleve => ({
     lienId: l.id,
     id: l.autre.id,
@@ -334,7 +334,7 @@ export type FicheContact = Omit<FichePersonne, "liens"> & {
 export async function lireContact(tx: Tx, id: string): Promise<FicheContact | null> {
   const p = await lirePersonne(tx, id);
   if (!p) return null;
-  const [{ eleve }] = await tx.select({ eleve: personne.eleve }).from(personne).where(eq(personne.id, id));
+  const [{ eleve }] = await tx.select({ eleve: person.isStudent }).from(person).where(eq(person.id, id));
   const { liens, ...reste } = p;
   return {
     ...reste,
@@ -380,7 +380,7 @@ export type DoublonRole = Doublon & { role: "élève" | "responsable" | "payeur"
 
 async function resoudre(tx: Tx, p: z.output<typeof autrePersonneValide>): Promise<string | null> {
   if ("id" in p) {
-    const [x] = await tx.select({ id: personne.id }).from(personne).where(eq(personne.id, p.id));
+    const [x] = await tx.select({ id: person.id }).from(person).where(eq(person.id, p.id));
     return x?.id ?? null;
   }
   const r = await creerPersonne(tx, p.nouveau, true);
@@ -414,7 +414,7 @@ export async function creerEleve(
   const cree = await creerPersonne(tx, saisie.eleve, true);
   if (cree.statut !== "ok") throw new RefusCreation("Création impossible.");
   const id = cree.id;
-  await tx.update(personne).set({ eleve: true }).where(eq(personne.id, id));
+  await tx.update(person).set({ isStudent: true }).where(eq(person.id, id));
 
   if (saisie.responsable) {
     const responsableId = await resoudre(tx, saisie.responsable);
@@ -453,29 +453,29 @@ export async function definirFacturation(
   if (!estUuid(eleveId) || (cible.type === "personne" && (!estUuid(cible.id) || cible.id === eleveId))) {
     return { ok: false, message: "Choix de facturation invalide." };
   }
-  const [e] = await tx.select({ id: personne.id }).from(personne).where(eq(personne.id, eleveId));
+  const [e] = await tx.select({ id: person.id }).from(person).where(eq(person.id, eleveId));
   if (!e) return { ok: false, message: "Cet élève n’existe plus." };
-  await tx.update(lien).set({ paiePour: false }).where(eq(lien.lieAId, eleveId));
+  await tx.update(relationship).set({ paysFor: false }).where(eq(relationship.relatedPersonId, eleveId));
   if (cible.type === "eleve") return { ok: true, id: eleveId };
 
   const [direct] = await tx
-    .select({ id: lien.id })
-    .from(lien)
-    .where(and(eq(lien.personneId, cible.id), eq(lien.lieAId, eleveId)));
+    .select({ id: relationship.id })
+    .from(relationship)
+    .where(and(eq(relationship.personId, cible.id), eq(relationship.relatedPersonId, eleveId)));
   if (direct) {
-    await tx.update(lien).set({ paiePour: true }).where(eq(lien.id, direct.id));
+    await tx.update(relationship).set({ paysFor: true }).where(eq(relationship.id, direct.id));
     return { ok: true, id: eleveId };
   }
   // Lien enregistré dans l'autre sens (conjoint saisi depuis la fiche de l'élève) : il est retourné.
   const [inverse] = await tx
-    .select({ id: lien.id })
-    .from(lien)
-    .where(and(eq(lien.personneId, eleveId), eq(lien.lieAId, cible.id)));
+    .select({ id: relationship.id })
+    .from(relationship)
+    .where(and(eq(relationship.personId, eleveId), eq(relationship.relatedPersonId, cible.id)));
   if (inverse) {
     await tx
-      .update(lien)
-      .set({ personneId: cible.id, lieAId: eleveId, paiePour: true, contactUrgence: false })
-      .where(eq(lien.id, inverse.id));
+      .update(relationship)
+      .set({ personId: cible.id, relatedPersonId: eleveId, paysFor: true, emergencyContact: false })
+      .where(eq(relationship.id, inverse.id));
     return { ok: true, id: eleveId };
   }
   const r = await ajouterLien(tx, {
@@ -497,19 +497,19 @@ export async function ajouterResponsable(
 ): Promise<Resultat> {
   const r = autrePersonneValide.safeParse(responsable);
   if (!r.success || !estUuid(eleveId)) return { ok: false, message: "Saisie invalide." };
-  const [e] = await tx.select({ id: personne.id }).from(personne).where(eq(personne.id, eleveId));
+  const [e] = await tx.select({ id: person.id }).from(person).where(eq(person.id, eleveId));
   if (!e) return { ok: false, message: "Cet élève n’existe plus." };
   const responsableId = await resoudre(tx, r.data);
   if (!responsableId || responsableId === eleveId) return { ok: false, message: "Responsable introuvable." };
   const [existant] = await tx
-    .select({ id: lien.id })
-    .from(lien)
-    .where(and(eq(lien.personneId, responsableId), eq(lien.lieAId, eleveId)));
+    .select({ id: relationship.id })
+    .from(relationship)
+    .where(and(eq(relationship.personId, responsableId), eq(relationship.relatedPersonId, eleveId)));
   if (existant) {
     await tx
-      .update(lien)
-      .set({ type: "representant_legal", contactUrgence: aPrevenir })
-      .where(eq(lien.id, existant.id));
+      .update(relationship)
+      .set({ type: "representant_legal", emergencyContact: aPrevenir })
+      .where(eq(relationship.id, existant.id));
     return { ok: true, id: existant.id };
   }
   return ajouterLien(tx, {
@@ -524,7 +524,11 @@ export async function ajouterResponsable(
 /** Un contact devient élève (ou cesse de l'être). */
 export async function marquerEleve(tx: Tx, id: string, eleve: boolean): Promise<Resultat> {
   if (!estUuid(id)) return { ok: false, message: "Personne introuvable." };
-  const lignes = await tx.update(personne).set({ eleve }).where(eq(personne.id, id)).returning({ id: personne.id });
+  const lignes = await tx
+    .update(person)
+    .set({ isStudent: eleve })
+    .where(eq(person.id, id))
+    .returning({ id: person.id });
   return lignes.length === 1 ? { ok: true, id } : { ok: false, message: "Personne introuvable." };
 }
 
@@ -532,17 +536,17 @@ export async function marquerEleve(tx: Tx, id: string, eleve: boolean): Promise<
 export async function changerPrevenir(tx: Tx, lienId: string, aPrevenir: boolean): Promise<Resultat> {
   if (!estUuid(lienId)) return { ok: false, message: "Ce lien n’existe plus." };
   const lignes = await tx
-    .update(lien)
-    .set({ contactUrgence: aPrevenir })
-    .where(eq(lien.id, lienId))
-    .returning({ id: lien.id });
+    .update(relationship)
+    .set({ emergencyContact: aPrevenir })
+    .where(eq(relationship.id, lienId))
+    .returning({ id: relationship.id });
   return lignes.length === 1 ? { ok: true, id: lienId } : { ok: false, message: "Ce lien n’existe plus." };
 }
 
 /** Élève ou contact : sert aux anciennes adresses /personnes/<id>. null si la personne n'existe pas. */
 export async function estEleve(tx: Tx, id: string): Promise<boolean | null> {
   if (!estUuid(id)) return null;
-  const [p] = await tx.select({ eleve: personne.eleve }).from(personne).where(eq(personne.id, id));
+  const [p] = await tx.select({ eleve: person.isStudent }).from(person).where(eq(person.id, id));
   return p ? p.eleve : null;
 }
 

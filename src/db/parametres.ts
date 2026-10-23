@@ -2,7 +2,7 @@ import { and, asc, desc, eq, ne, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Horaire } from "../domaine/planning/horaires";
 import type { Tx } from "./index";
-import { cours, discipline, horaireSite, saison, salle, site } from "./schema";
+import { course, discipline, siteHours, season, room, site } from "./schema";
 
 /**
  * Paramètres de l'école (#80) : saisons, disciplines, sites et salles. Tout ce
@@ -30,18 +30,18 @@ export type LigneSaison = {
 };
 
 export function listerSaisons(tx: Tx): Promise<LigneSaison[]> {
-  const id = sql`${saison}.${sql.identifier("id")}`;
+  const id = sql`${season}.${sql.identifier("id")}`;
   return tx
     .select({
-      id: saison.id,
-      libelle: saison.libelle,
-      dateDebut: saison.dateDebut,
-      dateFin: saison.dateFin,
+      id: season.id,
+      libelle: season.label,
+      dateDebut: season.startDate,
+      dateFin: season.endDate,
       cours: compte(sql`SELECT count(*) FROM course c WHERE c.season_id = ${id}`),
       tarifs: compte(sql`SELECT count(*) FROM tariff t WHERE t.season_id = ${id}`),
     })
-    .from(saison)
-    .orderBy(desc(saison.dateDebut));
+    .from(season)
+    .orderBy(desc(season.startDate));
 }
 
 export const saisieSaisonValide = z
@@ -52,17 +52,24 @@ export const saisieSaisonValide = z
   })
   .refine((s) => s.dateFin > s.dateDebut, { path: ["dateFin"], message: "La fin doit suivre le début." });
 
+/** Season columns from the form input. */
+const ligneSaison = (s: z.output<typeof saisieSaisonValide>) => ({
+  label: s.libelle,
+  startDate: s.dateDebut,
+  endDate: s.dateFin,
+});
+
 async function controlerSaison(tx: Tx, s: z.output<typeof saisieSaisonValide>, sauf?: string): Promise<string | null> {
-  const autre = sauf ? ne(saison.id, sauf) : undefined;
+  const autre = sauf ? ne(season.id, sauf) : undefined;
   const [doublon] = await tx
-    .select({ id: saison.id })
-    .from(saison)
-    .where(and(eq(saison.libelle, s.libelle), autre));
+    .select({ id: season.id })
+    .from(season)
+    .where(and(eq(season.label, s.libelle), autre));
   if (doublon) return "Une saison porte déjà ce libellé.";
   const [chevauche] = await tx
-    .select({ libelle: saison.libelle })
-    .from(saison)
-    .where(and(sql`${saison.dateDebut} <= ${s.dateFin}`, sql`${saison.dateFin} >= ${s.dateDebut}`, autre));
+    .select({ libelle: season.label })
+    .from(season)
+    .where(and(sql`${season.startDate} <= ${s.dateFin}`, sql`${season.endDate} >= ${s.dateDebut}`, autre));
   return chevauche ? `Ces dates chevauchent la saison ${chevauche.libelle}.` : null;
 }
 
@@ -81,15 +88,15 @@ export async function creerSaison(
   if (refus) return { ok: false, message: refus };
   if (reprendreDe) {
     const [ref] = estUuid(reprendreDe)
-      ? await tx.select({ id: saison.id }).from(saison).where(eq(saison.id, reprendreDe))
+      ? await tx.select({ id: season.id }).from(season).where(eq(season.id, reprendreDe))
       : [];
     if (!ref) return { ok: false, message: "Saison de référence introuvable." };
   }
 
   const [{ id }] = await tx
-    .insert(saison)
-    .values({ ...s.data, ecoleId: ECOLE_COURANTE })
-    .returning({ id: saison.id });
+    .insert(season)
+    .values({ ...ligneSaison(s.data), schoolId: ECOLE_COURANTE })
+    .returning({ id: season.id });
   if (reprendreDe) {
     await tx.execute(sql`
       INSERT INTO tariff (school_id, season_id, audience, period, combination, discipline_id, price_cents)
@@ -115,7 +122,7 @@ export async function modifierSaison(
   if (!estUuid(id)) return { ok: false, message: "Cette saison n’existe plus." };
   const refus = await controlerSaison(tx, s.data, id);
   if (refus) return { ok: false, message: refus };
-  const lignes = await tx.update(saison).set(s.data).where(eq(saison.id, id)).returning({ id: saison.id });
+  const lignes = await tx.update(season).set(ligneSaison(s.data)).where(eq(season.id, id)).returning({ id: season.id });
   return lignes.length === 1 ? { ok: true, id } : { ok: false, message: "Cette saison n’existe plus." };
 }
 
@@ -130,19 +137,19 @@ export function listerDisciplines(tx: Tx): Promise<LigneDiscipline[]> {
   return tx
     .select({
       id: discipline.id,
-      nom: discipline.nom,
+      nom: discipline.name,
       cours: compte(sql`SELECT count(*) FROM course c WHERE c.discipline_id = ${id}`),
       tarifs: compte(sql`SELECT count(*) FROM tariff t WHERE t.discipline_id = ${id}`),
     })
     .from(discipline)
-    .orderBy(asc(discipline.nom));
+    .orderBy(asc(discipline.name));
 }
 
 async function nomDisciplinePris(tx: Tx, nom: string, sauf?: string): Promise<boolean> {
   const [x] = await tx
     .select({ id: discipline.id })
     .from(discipline)
-    .where(and(sql`lower(${discipline.nom}) = lower(${nom})`, sauf ? ne(discipline.id, sauf) : undefined));
+    .where(and(sql`lower(${discipline.name}) = lower(${nom})`, sauf ? ne(discipline.id, sauf) : undefined));
   return Boolean(x);
 }
 
@@ -152,7 +159,7 @@ export async function creerDiscipline(tx: Tx, nom: string): Promise<Resultat> {
   if (await nomDisciplinePris(tx, n.data)) return { ok: false, message: "Cette discipline existe déjà." };
   const [{ id }] = await tx
     .insert(discipline)
-    .values({ nom: n.data, ecoleId: ECOLE_COURANTE })
+    .values({ name: n.data, schoolId: ECOLE_COURANTE })
     .returning({ id: discipline.id });
   return { ok: true, id };
 }
@@ -164,7 +171,7 @@ export async function renommerDiscipline(tx: Tx, id: string, nom: string): Promi
   if (await nomDisciplinePris(tx, n.data, id)) return { ok: false, message: "Cette discipline existe déjà." };
   const lignes = await tx
     .update(discipline)
-    .set({ nom: n.data })
+    .set({ name: n.data })
     .where(eq(discipline.id, id))
     .returning({ id: discipline.id });
   return lignes.length === 1 ? { ok: true, id } : { ok: false, message: "Cette discipline n’existe plus." };
@@ -201,20 +208,20 @@ export type LigneSite = {
 
 export async function listerLieux(tx: Tx): Promise<LigneSite[]> {
   const sites = await tx
-    .select({ id: site.id, nom: site.nom, adresse: site.adresse, permanence: site.permanence })
+    .select({ id: site.id, nom: site.name, adresse: site.address, permanence: site.enrollmentDesk })
     .from(site)
-    .orderBy(asc(site.nom));
-  const idSalle = sql`${salle}.${sql.identifier("id")}`;
+    .orderBy(asc(site.name));
+  const idSalle = sql`${room}.${sql.identifier("id")}`;
   const salles = await tx
     .select({
-      id: salle.id,
-      siteId: salle.siteId,
-      nom: salle.nom,
-      capacite: salle.capacite,
+      id: room.id,
+      siteId: room.siteId,
+      nom: room.name,
+      capacite: room.capacity,
       cours: compte(sql`SELECT count(*) FROM course c WHERE c.room_id = ${idSalle}`),
     })
-    .from(salle)
-    .orderBy(asc(salle.nom));
+    .from(room)
+    .orderBy(asc(room.name));
   const horaires = await horairesParSite(tx);
   return sites.map((s) => ({
     ...s,
@@ -231,12 +238,19 @@ export const saisieSiteValide = z.object({
   permanence: z.boolean(),
 });
 
+/** Site columns from the form input. */
+const ligneSite = (s: z.output<typeof saisieSiteValide>) => ({
+  name: s.nom,
+  address: s.adresse,
+  enrollmentDesk: s.permanence,
+});
+
 export async function creerSite(tx: Tx, saisie: z.input<typeof saisieSiteValide>): Promise<Resultat> {
   const s = saisieSiteValide.safeParse(saisie);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   const [{ id }] = await tx
     .insert(site)
-    .values({ ...s.data, ecoleId: ECOLE_COURANTE })
+    .values({ ...ligneSite(s.data), schoolId: ECOLE_COURANTE })
     .returning({ id: site.id });
   return { ok: true, id };
 }
@@ -245,16 +259,16 @@ export async function modifierSite(tx: Tx, id: string, saisie: z.input<typeof sa
   const s = saisieSiteValide.safeParse(saisie);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   if (!estUuid(id)) return { ok: false, message: "Ce site n’existe plus." };
-  const lignes = await tx.update(site).set(s.data).where(eq(site.id, id)).returning({ id: site.id });
+  const lignes = await tx.update(site).set(ligneSite(s.data)).where(eq(site.id, id)).returning({ id: site.id });
   return lignes.length === 1 ? { ok: true, id } : { ok: false, message: "Ce site n’existe plus." };
 }
 
 /** Refusé tant que le site a des salles. */
 export async function supprimerSite(tx: Tx, id: string): Promise<Resultat> {
   if (!estUuid(id)) return { ok: false, message: "Ce site n’existe plus." };
-  const [s] = await tx.select({ nom: site.nom }).from(site).where(eq(site.id, id));
+  const [s] = await tx.select({ nom: site.name }).from(site).where(eq(site.id, id));
   if (!s) return { ok: false, message: "Ce site n’existe plus." };
-  const [x] = await tx.select({ id: salle.id }).from(salle).where(eq(salle.siteId, id)).limit(1);
+  const [x] = await tx.select({ id: room.id }).from(room).where(eq(room.siteId, id)).limit(1);
   if (x) return { ok: false, message: `${s.nom} a encore des salles : retirez-les d’abord.` };
   await tx.delete(site).where(eq(site.id, id));
   return { ok: true, id };
@@ -264,13 +278,13 @@ export async function supprimerSite(tx: Tx, id: string): Promise<Resultat> {
 export async function horairesParSite(tx: Tx): Promise<Record<string, Horaire[]>> {
   const lignes = await tx
     .select({
-      siteId: horaireSite.siteId,
-      jourSemaine: horaireSite.jourSemaine,
-      ouverture: horaireSite.ouverture,
-      fermeture: horaireSite.fermeture,
+      siteId: siteHours.siteId,
+      jourSemaine: siteHours.weekday,
+      ouverture: siteHours.opensAt,
+      fermeture: siteHours.closesAt,
     })
-    .from(horaireSite)
-    .orderBy(asc(horaireSite.jourSemaine));
+    .from(siteHours)
+    .orderBy(asc(siteHours.weekday));
   const r: Record<string, Horaire[]> = {};
   for (const l of lignes)
     (r[l.siteId] ??= []).push({
@@ -299,9 +313,17 @@ export async function enregistrerHoraires(
   if (!estUuid(siteId)) return { ok: false, message: "Ce site n’existe plus." };
   const [s] = await tx.select({ id: site.id }).from(site).where(eq(site.id, siteId));
   if (!s) return { ok: false, message: "Ce site n’existe plus." };
-  await tx.delete(horaireSite).where(eq(horaireSite.siteId, siteId));
+  await tx.delete(siteHours).where(eq(siteHours.siteId, siteId));
   if (h.data.length > 0)
-    await tx.insert(horaireSite).values(h.data.map((x) => ({ ...x, siteId, ecoleId: ECOLE_COURANTE })));
+    await tx.insert(siteHours).values(
+      h.data.map((x) => ({
+        weekday: x.jourSemaine,
+        opensAt: x.ouverture,
+        closesAt: x.fermeture,
+        siteId,
+        schoolId: ECOLE_COURANTE,
+      })),
+    );
   return { ok: true, id: siteId };
 }
 
@@ -311,15 +333,18 @@ export const saisieSalleValide = z.object({
   capacite: z.int().min(1).max(1000).nullable(),
 });
 
+/** Room columns from the form input. */
+const ligneSalle = (s: z.output<typeof saisieSalleValide>) => ({ siteId: s.siteId, name: s.nom, capacity: s.capacite });
+
 export async function creerSalle(tx: Tx, saisie: z.input<typeof saisieSalleValide>): Promise<Resultat> {
   const s = saisieSalleValide.safeParse(saisie);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   const [x] = await tx.select({ id: site.id }).from(site).where(eq(site.id, s.data.siteId));
   if (!x) return { ok: false, message: "Site introuvable." };
   const [{ id }] = await tx
-    .insert(salle)
-    .values({ ...s.data, ecoleId: ECOLE_COURANTE })
-    .returning({ id: salle.id });
+    .insert(room)
+    .values({ ...ligneSalle(s.data), schoolId: ECOLE_COURANTE })
+    .returning({ id: room.id });
   return { ok: true, id };
 }
 
@@ -329,17 +354,17 @@ export async function modifierSalle(tx: Tx, id: string, saisie: z.input<typeof s
   if (!estUuid(id)) return { ok: false, message: "Cette salle n’existe plus." };
   const [x] = await tx.select({ id: site.id }).from(site).where(eq(site.id, s.data.siteId));
   if (!x) return { ok: false, message: "Site introuvable." };
-  const lignes = await tx.update(salle).set(s.data).where(eq(salle.id, id)).returning({ id: salle.id });
+  const lignes = await tx.update(room).set(ligneSalle(s.data)).where(eq(room.id, id)).returning({ id: room.id });
   return lignes.length === 1 ? { ok: true, id } : { ok: false, message: "Cette salle n’existe plus." };
 }
 
 /** Refusé tant qu'un cours (de n'importe quelle saison) a lieu dans la salle. */
 export async function supprimerSalle(tx: Tx, id: string): Promise<Resultat> {
   if (!estUuid(id)) return { ok: false, message: "Cette salle n’existe plus." };
-  const [s] = await tx.select({ nom: salle.nom }).from(salle).where(eq(salle.id, id));
+  const [s] = await tx.select({ nom: room.name }).from(room).where(eq(room.id, id));
   if (!s) return { ok: false, message: "Cette salle n’existe plus." };
-  const [c] = await tx.select({ id: cours.id }).from(cours).where(eq(cours.salleId, id)).limit(1);
+  const [c] = await tx.select({ id: course.id }).from(course).where(eq(course.roomId, id)).limit(1);
   if (c) return { ok: false, message: `Des cours ont lieu dans ${s.nom} : déplacez-les d’abord.` };
-  await tx.delete(salle).where(eq(salle.id, id));
+  await tx.delete(room).where(eq(room.id, id));
   return { ok: true, id };
 }
