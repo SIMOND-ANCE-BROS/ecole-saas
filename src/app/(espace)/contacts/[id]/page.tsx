@@ -2,16 +2,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
-import { readContact } from "@/db/eleves";
-import { enrollmentsPayeesBy } from "@/db/inscriptions";
-import { paymentsOf, balanceOf } from "@/db/paiements";
-import { nomAffiche } from "@/db/personnes";
-import { currentSeason } from "@/db/planning";
-import { todayInParis } from "@/domaine/personnes/age";
+import { readContact } from "@/db/students";
+import { enrollmentsPayeesBy } from "@/db/enrollments";
+import { paymentsOf, balanceOf } from "@/db/payments";
+import { nomAffiche } from "@/db/people";
+import { currentSeason } from "@/db/schedule";
+import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
-import { Bandeau, FactureesEnrollments, Telephone } from "../../_personnes/sections";
-import { PaymentsSection } from "../../_personnes/paiements";
-import { BecomeStudent } from "./devenir-eleve";
+import { Bandeau, FactureesEnrollments, Telephone } from "../../_people/sections";
+import { PaymentsSection } from "../../_people/payments-section";
+import { BecomeStudent } from "./become-student";
 
 export const metadata: Metadata = { title: "Fiche contact" };
 

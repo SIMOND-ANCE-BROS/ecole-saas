@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
-import { scheduleCourse, enrolledInCourse } from "@/db/planning";
-import { conflictingLessons } from "@/db/disponibilites";
-import { courseLessons } from "@/db/seances";
-import { ageAt, todayInParis } from "@/domaine/personnes/age";
+import { scheduleCourse, enrolledInCourse } from "@/db/schedule";
+import { conflictingLessons } from "@/db/unavailabilities";
+import { courseLessons } from "@/db/lessons";
+import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { ages, end, recurrenceText } from "../../format";
-import { PrintButton } from "./imprimer";
+import { PrintButton } from "./print-button";
 
 export const metadata: Metadata = { title: "Cours" };
 

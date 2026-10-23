@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { withSchool } from "@/db";
-import { hoursBySite } from "@/db/parametres";
-import { seasonCourses, currentSeason } from "@/db/planning";
-import { closuresBetween, weekLessons } from "@/db/seances";
-import { addDays, validDate, mondayOf } from "@/domaine/planning/semaine";
-import { todayInParis } from "@/domaine/personnes/age";
+import { hoursBySite } from "@/db/settings";
+import { seasonCourses, currentSeason } from "@/db/schedule";
+import { closuresBetween, weekLessons } from "@/db/lessons";
+import { addDays, validDate, mondayOf } from "@/domain/schedule/week";
+import { todayInParis } from "@/domain/people/age";
 import { schoolContext } from "@/lib/session";
-import { ScheduleGrid } from "./grille";
+import { ScheduleGrid } from "./grid";
 
 export const metadata: Metadata = { title: "Planning" };
 

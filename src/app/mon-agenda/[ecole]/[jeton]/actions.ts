@@ -3,9 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { withSchool } from "@/db";
-import { tokenInstructor } from "@/db/agenda";
-import { deleteConnection } from "@/db/connexions-agenda";
-import { personalPage } from "@/lib/agenda-public";
+import { tokenInstructor } from "@/db/calendar";
+import { deleteConnection } from "@/db/calendar-connections";
+import { personalPage } from "@/lib/public-calendar";
 
 /** Déconnexion par l'intervenant lui-même : son lien personnel fait foi. */
 export async function disconnectMyCalendar(schoolId: string, token: string): Promise<{ message: string | null }> {

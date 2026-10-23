@@ -2,15 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { withSchool } from "@/db";
-import { listInstructors, PAY_MODES, STATUSES } from "@/db/intervenants";
+import { listInstructors, PAY_MODES, STATUSES } from "@/db/instructors";
 import { readPreference } from "@/db/preferences";
-import { currentSeason } from "@/db/planning";
-import { INSTRUCTOR_COLUMNS } from "@/domaine/filtres/colonnes";
-import { applyFilter, type Cellule, readFilter, readSort, normalizeText, sortRows } from "@/domaine/filtres/filtres";
-import { todayInParis } from "@/domaine/personnes/age";
-import { formatEuros } from "@/lib/montant";
+import { currentSeason } from "@/db/schedule";
+import { INSTRUCTOR_COLUMNS } from "@/domain/filters/columns";
+import { applyFilter, type Cellule, readFilter, readSort, normalizeText, sortRows } from "@/domain/filters/filters";
+import { todayInParis } from "@/domain/people/age";
+import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
-import { ListTable } from "../_filtres/tableau-liste";
+import { ListTable } from "../_filters/list-table";
 
 export const metadata: Metadata = { title: "Intervenants" };
 

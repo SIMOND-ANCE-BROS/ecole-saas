@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { ageAt } from "@/domaine/personnes/age";
-import { type Choice, PersonChoice, toInput } from "../../_personnes/choix-personne";
+import { ageAt } from "@/domain/people/age";
+import { type Choice, PersonChoice, toInput } from "../../_people/person-choice";
 import { createStudentFromGuide, type StudentRefusal } from "../actions";
-import { Cancel } from "@/app/(espace)/_panneau/panneau";
+import { Cancel } from "@/app/(espace)/_panel/panel";
 
 type Billing = "eleve" | "responsable" | "autre";
 

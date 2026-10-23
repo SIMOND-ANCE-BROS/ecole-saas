@@ -10,13 +10,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Project conventions
 
-- Multi-school SaaS: every business table carries `school_id`; isolation relies on Row Level Security (`migrations/0001_rls.sql`, ADR 0001). Every business query goes through `avecEcole()` (`src/db/index.ts`).
+- Multi-school SaaS: every business table carries `school_id`; isolation relies on Row Level Security (`migrations/0001_rls.sql`, ADR 0001). Every business query goes through `withSchool()` (`src/db/index.ts`).
 - No "family" entity: people (`personne`, → `person`) and relationships between them (`lien`, → `relationship`: legal guardian, partner, other; flags "pays for" and "emergency contact"). An adult on their own is their own payer. The siblings discount applies to students of the same payer (#67). The interface talks about students (`personne.eleve`), contacts, guardians, « à prévenir » and « Facturé à »: never an abstract "link" (#77).
-- Amounts in integer cents (`*_cents` columns), rates in basis points. Use `src/lib/montant.ts`; never floating-point numbers for money.
+- Amounts in integer cents (`*_cents` columns), rates in basis points. Use `src/lib/money.ts`; never floating-point numbers for money.
 - The invoice number comes from the school's invoicing tool (Pennylane, Abby, Shine): never generate it here.
 - Payments and the audit log are immutable: fix with a reverse entry.
 - Nothing school-specific is hard-coded: tariffs, discounts, VAT mentions are data.
-- **Language**: code, database, comments, tests, commits, issues and PRs in **English** (domain lexicon in `CLAUDE.md` §3); everything the end user sees, the PR section « Pour l’accueil et la direction » and the URLs in **French**. French code still present is renamed module by module (#114); never add new French identifiers.
+- **Language**: code, database, comments, tests, commits, issues and PRs in **English** (domain lexicon in `CLAUDE.md` §3); everything the end user sees, the PR section « Pour l’accueil et la direction » and the URLs in **French**. French comments and enum values still present are translated under #114; list column ids, URL parameters and their values stay French (data); never add new French identifiers.
 - TypeScript strict, no `any`. Mantine for every UI control, Tailwind for layout only (`DESIGN.md`).
 
 # Issues, branches and PRs (mandatory)

@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
-import { scheduleReferential } from "@/db/cours";
-import { lessonAvailabilities } from "@/db/disponibilites";
-import { readAttendance } from "@/db/seances";
-import { ageAt } from "@/domaine/personnes/age";
+import { scheduleReferential } from "@/db/courses";
+import { lessonAvailabilities } from "@/db/unavailabilities";
+import { readAttendance } from "@/db/lessons";
+import { ageAt } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { end } from "../../format";
-import { AttendanceRecord } from "./fiche";
+import { AttendanceRecord } from "./attendance-record";
 
 export const metadata: Metadata = { title: "Appel" };
 

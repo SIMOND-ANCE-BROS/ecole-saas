@@ -3,15 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { withSchool } from "@/db";
-import { createCourse, moveCourse, readCourse, updateCourse, validCourseInput, deleteCourse } from "@/db/cours";
-import { slotConflicts } from "@/db/disponibilites";
-import { hoursBySite } from "@/db/parametres";
-import { seasonCourses, currentSeason } from "@/db/planning";
-import { syncLessons } from "@/db/seances";
-import { conflicts } from "@/domaine/planning/chevauchement";
-import { outsideHours } from "@/domaine/planning/horaires";
-import { SHORT_DAYS } from "@/domaine/planning/jours";
-import { todayInParis } from "@/domaine/personnes/age";
+import { createCourse, moveCourse, readCourse, updateCourse, validCourseInput, deleteCourse } from "@/db/courses";
+import { slotConflicts } from "@/db/unavailabilities";
+import { hoursBySite } from "@/db/settings";
+import { seasonCourses, currentSeason } from "@/db/schedule";
+import { syncLessons } from "@/db/lessons";
+import { conflicts } from "@/domain/schedule/overlap";
+import { outsideHours } from "@/domain/schedule/hours";
+import { SHORT_DAYS } from "@/domain/schedule/days";
+import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 
 export type Refusal = { message: string; errors: Partial<Record<string, string>> };

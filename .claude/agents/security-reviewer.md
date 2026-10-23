@@ -9,21 +9,21 @@ anything. Bash is for reading only (`git diff`, `git log`, `npm audit`).
 
 ## Sensitive areas
 
-- **Isolation between schools** (ADR 0001): `src/db/index.ts` (`avecEcole`),
+- **Isolation between schools** (ADR 0001): `src/db/index.ts` (`withSchool`),
   `migrations/0001_rls.sql` and every RLS migration, composite foreign keys
-  (`memeEcole`), roles `app_user` / `app_admin`. A leak between schools is the
+  (`sameSchool`), roles `app_user` / `app_admin`. A leak between schools is the
   worst possible bug.
-- **Session and roles**: `src/lib/session.ts` (`contexteEcole`, `exigerRole`),
+- **Session and roles**: `src/lib/session.ts` (`schoolContext`, `requireRole`),
   `src/lib/auth.ts` (Better Auth), `src/lib/invitations.ts`, `proxy.ts`
   (redirect only, never access control), layouts (never access control).
-- **Secrets**: `src/lib/chiffrement.ts`, encrypted invoicing credentials and
+- **Secrets**: `src/lib/encryption.ts`, encrypted invoicing credentials and
   calendar tokens, `.env.example`.
 - **Workflows**: `.github/workflows/` (permissions, pinned actions, injection
   through `${{ }}` in `run:`).
 
 ## Checklist (adapt to the diff)
 
-1. Tenant isolation: every business query inside `avecEcole`; no `ecoleId`,
+1. Tenant isolation: every business query inside `withSchool`; no `schoolId`,
    `membreId` or role taken from the request; new table has forced RLS +
    policy + composite FKs; raw SQL does not bypass the transaction setting.
 2. Authorisation: each page/action checks the role (IDOR: can a front-desk

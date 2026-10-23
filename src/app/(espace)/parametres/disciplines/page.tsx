@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { withSchool } from "@/db";
-import { listDisciplines } from "@/db/parametres";
+import { listDisciplines } from "@/db/settings";
 import { requireRole } from "@/lib/session";
-import { SettingsHeader } from "../entete";
+import { SettingsHeader } from "../settings-header";
 import { Disciplines } from "./disciplines";
 
 export const metadata: Metadata = { title: "Disciplines" };

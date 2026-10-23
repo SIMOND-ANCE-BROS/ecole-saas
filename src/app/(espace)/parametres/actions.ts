@@ -15,8 +15,8 @@ import {
   deleteDiscipline,
   deleteRoom,
   deleteSite,
-} from "@/db/parametres";
-import { saveLessonPack, saveSiblings, savePrice, deleteLessonPack } from "@/db/tarifs";
+} from "@/db/settings";
+import { saveLessonPack, saveSiblings, savePrice, deleteLessonPack } from "@/db/tariffs";
 import { requireRole } from "@/lib/session";
 
 type Back = { message: string | null };

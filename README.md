@@ -34,8 +34,8 @@ npm run dev
 
 - `src/db/schema.ts` : modèle de données multi-école.
 - `migrations/0001_rls.sql` : isolation entre écoles (Row Level Security), paiements et journal inaltérables.
-- `src/db/index.ts` : `avecEcole(ecoleId, tx => …)` limite une transaction à une école.
-- `src/lib/montant.ts` : calculs monétaires en centimes.
+- `src/db/index.ts` : `withSchool(schoolId, tx => …)` limite une transaction à une école.
+- `src/lib/money.ts` : calculs monétaires en centimes.
 
 Rôles PostgreSQL : `app_user` pour l'application (soumis à la RLS), `app_admin` pour la création d'écoles et le support (`BYPASSRLS`), propriétaire de la base pour les migrations.
 

@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
-import { readStudent } from "@/db/eleves";
-import { payableStudents, nomAffiche } from "@/db/personnes";
-import { seasonCourses, currentSeason } from "@/db/planning";
-import { ageAt, todayInParis } from "@/domaine/personnes/age";
+import { readStudent } from "@/db/students";
+import { payableStudents, nomAffiche } from "@/db/people";
+import { seasonCourses, currentSeason } from "@/db/schedule";
+import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
-import { EnrollmentForm } from "./formulaire";
+import { EnrollmentForm } from "./enrollment-form";
 
 export const metadata: Metadata = { title: "Nouvelle inscription" };
 

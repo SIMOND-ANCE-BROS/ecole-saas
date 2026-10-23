@@ -5,7 +5,7 @@ import { withSchool } from "@/db";
 import { school } from "@/db/schema";
 import { schoolContext, currentSession } from "@/lib/session";
 import { signOut } from "./actions";
-import { Frame } from "./cadre";
+import { Frame } from "./frame";
 import { Navigation, GlobalSearch } from "./navigation";
 
 const ROLE_LABEL = { direction: "Direction", accueil: "Accueil", professeur: "Professeur" } as const;

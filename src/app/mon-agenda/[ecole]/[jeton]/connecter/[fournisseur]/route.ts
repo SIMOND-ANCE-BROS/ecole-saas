@@ -8,10 +8,10 @@ import {
   credentials,
   signState,
   authorizationUrl,
-} from "@/connecteurs/agenda/oauth";
+} from "@/connectors/calendar/oauth";
 import { withSchool } from "@/db";
-import { tokenInstructor } from "@/db/agenda";
-import { COOKIE_OAUTH, personalPage, redirectionOAuth } from "@/lib/agenda-public";
+import { tokenInstructor } from "@/db/calendar";
+import { COOKIE_OAUTH, personalPage, redirectionOAuth } from "@/lib/public-calendar";
 
 /**
  * Départ vers Google ou Microsoft depuis la page personnelle d'un intervenant.

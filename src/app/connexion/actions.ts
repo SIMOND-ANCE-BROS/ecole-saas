@@ -5,9 +5,9 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { schoolsOf } from "@/db";
-import { chooseSchool, idDeSession } from "@/lib/acces-ecole";
+import { chooseSchool, idDeSession } from "@/lib/school-access";
 import { auth } from "@/lib/auth";
-import { clearAttempts, recordAttempt, trustedIp, LIMITES } from "@/lib/limite-connexion";
+import { clearAttempts, recordAttempt, trustedIp, LIMITES } from "@/lib/sign-in-limit";
 
 export type ConnectionState = { error: string | null; email: string };
 

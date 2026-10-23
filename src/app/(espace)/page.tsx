@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { withSchool } from "@/db";
-import { seasonCourses, currentSeason } from "@/db/planning";
-import { dayLessons } from "@/db/seances";
-import { seasonFigures, lastEnrollments } from "@/db/tableau-de-bord";
-import { todayInParis } from "@/domaine/personnes/age";
-import { formatEuros } from "@/lib/montant";
+import { seasonCourses, currentSeason } from "@/db/schedule";
+import { dayLessons } from "@/db/lessons";
+import { seasonFigures, lastEnrollments } from "@/db/dashboard";
+import { todayInParis } from "@/domain/people/age";
+import { formatEuros } from "@/lib/money";
 import { schoolContext, currentSession } from "@/lib/session";
 
 const DAYS = ["", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];

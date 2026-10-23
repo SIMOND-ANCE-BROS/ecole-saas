@@ -2,17 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { withSchool } from "@/db";
-import { seasonCourseLabels, listContacts, listStudents, MAX_RESULTS } from "@/db/eleves";
-import { currentSeason } from "@/db/planning";
+import { seasonCourseLabels, listContacts, listStudents, MAX_RESULTS } from "@/db/students";
+import { currentSeason } from "@/db/schedule";
 import { readPreference } from "@/db/preferences";
-import { nomAffiche } from "@/db/personnes";
-import { STUDENT_COLUMNS } from "@/domaine/filtres/colonnes";
-import { readFilter, readSort } from "@/domaine/filtres/filtres";
-import { ageAt, todayInParis } from "@/domaine/personnes/age";
+import { nomAffiche } from "@/db/people";
+import { STUDENT_COLUMNS } from "@/domain/filters/columns";
+import { readFilter, readSort } from "@/domain/filters/filters";
+import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
-import { ListTable } from "../_filtres/tableau-liste";
-import { NavigableResults } from "../_personnes/resultats";
-import { Telephone } from "../_personnes/sections";
+import { ListTable } from "../_filters/list-table";
+import { NavigableResults } from "../_people/navigable-results";
+import { Telephone } from "../_people/sections";
 
 export const metadata: Metadata = { title: "Élèves" };
 

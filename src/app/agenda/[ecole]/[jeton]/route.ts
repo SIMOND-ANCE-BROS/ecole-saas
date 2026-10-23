@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { withSchool } from "@/db";
-import { readCalendar } from "@/db/agenda";
-import { icsCalendar } from "@/domaine/planning/ical";
+import { readCalendar } from "@/db/calendar";
+import { icsCalendar } from "@/domain/schedule/ical";
 
 /** Historique gardé dans l'agenda de l'intervenant. */
 const PAST_DAYS = 60;

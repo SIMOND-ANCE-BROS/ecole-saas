@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { withSchool } from "@/db";
-import { isStudent } from "@/db/eleves";
+import { isStudent } from "@/db/students";
 import { requireRole } from "@/lib/session";
 
 /** Ancienne adresse d'une personne : renvoie vers sa fiche élève ou contact. */

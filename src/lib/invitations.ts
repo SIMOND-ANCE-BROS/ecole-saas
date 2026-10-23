@@ -1,8 +1,8 @@
 import { withSchool } from "../db";
-import { type OpenedLink, resetLink, readRelationship, SHARED, consumeLink } from "../db/equipe";
-import { passwordRefusal } from "../domaine/equipe/regles";
+import { type OpenedLink, resetLink, readRelationship, SHARED, consumeLink } from "../db/team";
+import { passwordRefusal } from "../domain/team/rules";
 import { auth } from "./auth";
-import { createAccount } from "./comptes";
+import { createAccount } from "./accounts";
 
 /**
  * Acceptation d'un lien d'invitation ou de réinitialisation (#104), ouvert

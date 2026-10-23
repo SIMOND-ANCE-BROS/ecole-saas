@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { type SchoolContext, contextFromSession, type MemberRole } from "./acces-ecole";
+import { type SchoolContext, contextFromSession, type MemberRole } from "./school-access";
 import { auth } from "./auth";
 
 /**

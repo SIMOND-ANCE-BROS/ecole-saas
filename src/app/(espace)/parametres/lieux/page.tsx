@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { withSchool } from "@/db";
-import { listPlaces } from "@/db/parametres";
+import { listPlaces } from "@/db/settings";
 import { requireRole } from "@/lib/session";
-import { SettingsHeader } from "../entete";
-import { Places } from "./lieux";
+import { SettingsHeader } from "../settings-header";
+import { Places } from "./places";
 
 export const metadata: Metadata = { title: "Sites et salles" };
 

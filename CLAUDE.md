@@ -22,7 +22,7 @@ Reference for every agent working on this project. Read it in full before coding
 | PR section « Pour l’accueil et la direction »                          | **French**, written for the school                    |
 | URLs (Next route folders such as `src/app/(espace)/eleves`)            | **French**: they are user-visible                     |
 
-The database is in English since migration `0027_english_names` (#114). TypeScript code written before this rule is still in French; it is renamed module by module (#114). New code is written in English, using the lexicon below, even next to French code.
+The database (`0027_english_names`), TypeScript identifiers and file names are in English (#114). Still being translated (#114): code comments and database enum values. Some keys stay French on purpose because they are data, not code: list column ids, URL parameters and their values (`?enregistre=cree`), route folders. Never translate one of them on one side only. New code is written in English, using the lexicon below.
 
 ## 3. Domain lexicon (French → English)
 
@@ -67,7 +67,7 @@ Use these names in code and database. User-facing text keeps the French word.
 | indisponibilité, connexion agenda                                                               | `unavailability`, `calendar_connection`                                               |                                                                                                                                                             |
 | préférence de liste                                                                             | `list_preference`                                                                     |                                                                                                                                                             |
 
-Core helpers after the rename: `avecEcole()` → `withSchool()`, `ecolesDe()` → `schoolsOf()`, `contexteEcole()` → `schoolContext()`, `exigerRole()` → `requireRole()`, `memeEcole()` → `sameSchool()`, RLS policy `school_isolation` → `school_isolation`, `src/lib/montant.ts` → `src/lib/money.ts`, `src/domaine/` → `src/domain/`.
+Names before the rename (#114), for reading old issues and PRs: `avecEcole()` → `withSchool()`, `ecolesDe()` → `schoolsOf()`, `contexteEcole()` → `schoolContext()`, `exigerRole()` → `requireRole()`, `memeEcole()` → `sameSchool()`, RLS policy `isolation_ecole` → `school_isolation`, `src/lib/montant.ts` → `src/lib/money.ts`, `src/domaine/` → `src/domain/`, `src/connecteurs/` → `src/connectors/`.
 
 A missing term is added here in the same PR that introduces it.
 
@@ -119,11 +119,11 @@ Git hooks are versioned in `.githooks/` and enabled by `npm install` (`prepare` 
 src/
   app/                       Next routes (pages, server actions) – thin, no business logic; folder names are French URLs
   db/schema.ts               data model (source of truth)
-  db/index.ts                connection + avecEcole() / ecolesDe()
-  domaine/<module>/          PURE business logic + tests (→ src/domain/ after #114)
-  connecteurs/facturation/   common interface + one implementation per tool (→ src/connectors/invoicing/)
+  db/index.ts                connection + withSchool() / schoolsOf()
+  domain/<module>/           PURE business logic + tests
+  connectors/                one folder per external service (calendar; invoicing to come): common interface + one implementation per tool
   jobs/                      background jobs (invoicing sync, lesson generation)
-  lib/                       cross-cutting utilities (montant.ts…)
+  lib/                       cross-cutting utilities (money.ts…)
 migrations/                  drizzle-kit migrations + custom SQL migrations (RLS)
 docs/adr/                    architecture decision records
 DESIGN.md                    interface rules
@@ -137,17 +137,17 @@ DESIGN.md                    interface rules
 
 **Multi-school and security** (ADR 0001)
 
-- Every business query goes through `avecEcole(ecoleId, tx => …)`. Never use `db` directly for business data.
+- Every business query goes through `withSchool(schoolId, tx => …)`. Never use `db` directly for business data.
 - Every new business table carries `school_id` **and** gets, in a SQL migration, `ENABLE` + `FORCE ROW LEVEL SECURITY` and the `school_isolation` policy (model in `migrations/0001_rls.sql`, which only covers tables existing when it was written).
-- `app_user` privileges on new tables and sequences are granted automatically (default privileges, `migrations/0006_droits_par_defaut.sql`, guard `src/db/droits.integration.test.ts`); RLS still has to be added every time.
-- Every reference between two business tables is a composite foreign key `(school_id, x_id)`: `memeEcole(t, column, target)` in `src/db/schema.ts`, the target declaring `cibleMemeEcole(t)`. Never a plain `.references()` between business tables: foreign-key checks ignore RLS. Guard: `src/db/cles-etrangeres.integration.test.ts`.
+- `app_user` privileges on new tables and sequences are granted automatically (default privileges, `migrations/0006_droits_par_defaut.sql`, guard `src/db/privileges.integration.test.ts`); RLS still has to be added every time.
+- Every reference between two business tables is a composite foreign key `(school_id, x_id)`: `sameSchool(t, column, target)` in `src/db/schema.ts`, the target declaring `sameSchoolTarget(t)`. Never a plain `.references()` between business tables: foreign-key checks ignore RLS. Guard: `src/db/foreign-keys.integration.test.ts`.
 - The `app_admin` role (BYPASSRLS) is for administration scripts only, never application code.
 - `ecoleId` always comes from the server-side session, never from a browser parameter.
-- Every protected page and server action calls `contexteEcole()` or `exigerRole()` (`src/lib/session.ts`), then `avecEcole(ecoleId, …)`. Never access control in a layout (not re-run on navigation) nor in `proxy.ts` (optimistic redirect only).
+- Every protected page and server action calls `schoolContext()` or `requireRole()` (`src/lib/session.ts`), then `withSchool(schoolId, …)`. Never access control in a layout (not re-run on navigation) nor in `proxy.ts` (optimistic redirect only).
 
 **Money and dates**
 
-- Amounts in **integer cents** (`*_cents` columns; TypeScript `*Centimes` until its module is renamed), rates in **basis points** (1000 = 10 %). Use `src/lib/montant.ts`. No floating-point number for money, no `parseFloat` on an amount.
+- Amounts in **integer cents** (`*_cents` columns, `*Cents` in TypeScript), rates in **basis points** (1000 = 10 %). Use `src/lib/money.ts`. No floating-point number for money, no `parseFloat` on an amount.
 - Dates without time (`date`) are `YYYY-MM-DD` strings; `Europe/Paris` time zone for any day computation.
 
 **Data**
@@ -192,7 +192,7 @@ DESIGN.md                    interface rules
 - **Conventional commits** in English, imperative: `feat(enrollment): compute the siblings discount`, `fix(lists): keep the sort when searching`. Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`, `security`. The squash-merged PR title follows the same format.
 - **Ask before** adding a dependency. Exact pinned versions, published at least 14 days ago. No dependency for what fits in a few lines.
   - **Security exception**: a release fixing a high or critical advisory that affects us may be installed before 14 days, after reading the advisory and the changelog, with the owner's approval, in a dedicated `fix/` PR that cites the advisory (first case: Next.js 16.4.2, #126).
-- Do not modify `migrations/0001_rls.sql`, the immutability triggers or `avecEcole()` without saying so explicitly.
+- Do not modify `migrations/0001_rls.sql`, the immutability triggers or `withSchool()` without saying so explicitly.
 - When an architecture decision changes, update this file and add an ADR (`docs/adr/`) in the same PR.
 
 **Definition of done** (before asking for a merge)
@@ -209,12 +209,12 @@ Rules in `DESIGN.md`. In short:
 - Built for the front-desk PC first: keyboard-friendly forms, instant person search, few clicks for an enrollment.
 - Mantine components everywhere (ADR 0003); Tailwind only for layout. Custom control classes (`.champ`, `.bouton-principal`…) are being removed (#115).
 - Lists work like Excel autofilters: each column header sorts and filters; one search bar at the top (Ctrl K).
-- Forms and course records: a real page, also opened as a **side panel** over the current page (intercepted route in `src/app/(espace)/@modal/(.)…`, component `Panneau` in `_panneau/panneau.tsx`). The cancel button is `<Annuler href=…>` (back navigation inside a panel).
+- Forms and course records: a real page, also opened as a **side panel** over the current page (intercepted route in `src/app/(espace)/@modal/(.)…`, component `Panel` in `_panel/panel.tsx`). The cancel button is `<Cancel href=…>` (back navigation inside a panel).
 - Accessible: labels on every field, sufficient contrast, dark mode.
 
 ## 12. What not to do
 
-- Don't query business data with `db` outside `avecEcole()`; don't use `app_admin` in application code.
+- Don't query business data with `db` outside `withSchool()`; don't use `app_admin` in application code.
 - Don't take `ecoleId` (or any tenant id) from the browser.
 - Don't put access control in a layout or in `proxy.ts`.
 - Don't hard-code a price, discount, VAT mention or anything school-specific.

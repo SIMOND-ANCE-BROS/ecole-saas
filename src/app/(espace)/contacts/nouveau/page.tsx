@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/session";
-import { PersonForm } from "../../_personnes/formulaire";
+import { PersonForm } from "../../_people/person-form";
 
 export const metadata: Metadata = { title: "Nouveau contact" };
 

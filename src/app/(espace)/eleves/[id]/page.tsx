@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
-import { readStudent } from "@/db/eleves";
-import { enrollmentsPayeesBy } from "@/db/inscriptions";
-import { paymentsOf, balanceOf } from "@/db/paiements";
-import { nomAffiche } from "@/db/personnes";
-import { currentSeason } from "@/db/planning";
-import { ageAt, todayInParis } from "@/domaine/personnes/age";
+import { readStudent } from "@/db/students";
+import { enrollmentsPayeesBy } from "@/db/enrollments";
+import { paymentsOf, balanceOf } from "@/db/payments";
+import { nomAffiche } from "@/db/people";
+import { currentSeason } from "@/db/schedule";
+import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
-import { PaymentsSection } from "../../_personnes/paiements";
+import { PaymentsSection } from "../../_people/payments-section";
 import {
   Bandeau,
   FollowedCourses,
@@ -18,9 +18,9 @@ import {
   dayOf,
   Notes,
   Telephone,
-} from "../../_personnes/sections";
-import { Billing } from "./facturation";
-import { Relatives } from "./proches";
+} from "../../_people/sections";
+import { Billing } from "./billing";
+import { Relatives } from "./relatives";
 
 export const metadata: Metadata = { title: "Fiche élève" };
 

@@ -18,9 +18,9 @@ READ-ONLY: never modify anything. Bash is for reading only (`git diff`, `git log
    passed to client components, secrets sent to the browser), behaviour
    regressions.
 3. Then the conventions (`CLAUDE.md`, `AGENTS.md`, `DESIGN.md`):
-   - Business data only through `avecEcole()`; `ecoleId` from the session;
-     `contexteEcole()`/`exigerRole()` in every protected page and action.
-   - Money in integer cents, rates in basis points, `src/lib/montant.ts`.
+   - Business data only through `withSchool()`; `schoolId` from the session;
+     `schoolContext()`/`requireRole()` in every protected page and action.
+   - Money in integer cents, rates in basis points, `src/lib/money.ts`.
    - Dates as `YYYY-MM-DD`, `Europe/Paris`.
    - Business logic pure in the domain folder, with tests; routes thin.
    - Zod on every external input; server actions return `{ ok, message }`.

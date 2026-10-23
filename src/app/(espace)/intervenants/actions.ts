@@ -5,15 +5,15 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { withSchool } from "@/db";
-import { createCalendarToken, revokeCalendarToken } from "@/db/agenda";
-import { deleteConnection } from "@/db/connexions-agenda";
-import { addUnavailability, deleteUnavailability } from "@/db/disponibilites";
-import { createInstructor, updateInstructor, validInstructorInput } from "@/db/intervenants";
-import { instantParis } from "@/domaine/planning/disponibilite";
-import { personalPage } from "@/lib/agenda-public";
-import { parseEuros } from "@/lib/montant";
+import { createCalendarToken, revokeCalendarToken } from "@/db/calendar";
+import { deleteConnection } from "@/db/calendar-connections";
+import { addUnavailability, deleteUnavailability } from "@/db/unavailabilities";
+import { createInstructor, updateInstructor, validInstructorInput } from "@/db/instructors";
+import { instantParis } from "@/domain/schedule/availability";
+import { personalPage } from "@/lib/public-calendar";
+import { parseEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
-import { syncCalendar } from "@/lib/synchro-agenda";
+import { syncCalendar } from "@/lib/calendar-sync";
 
 export type FormState = {
   /** Incrémenté à chaque refus : le formulaire est remonté avec la saisie renvoyée. */
