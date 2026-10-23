@@ -12,7 +12,7 @@ import { ecole, invitation, journal, membre, user } from "./schema";
  * d'`avecEcole()` (RLS).
  */
 
-const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uuid`;
+const ECOLE_COURANTE = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const estUuid = (v: string) => z.uuid().safeParse(v).success;
 const empreinte = (jeton: string) => createHash("sha256").update(jeton).digest("hex");
 const nouveauJeton = () => randomBytes(32).toString("base64url");
@@ -166,7 +166,7 @@ export async function modifierMembre(
   await tx.insert(journal).values({
     ecoleId: ECOLE_COURANTE,
     qui,
-    tableCible: "membre",
+    tableCible: "member",
     ligneId: membreId,
     action: "update",
     avant: { role: avant.role, actif: avant.actif },

@@ -34,7 +34,7 @@ export const RESULTATS_MAX = 200;
 const estUuid = (v: string) => z.uuid().safeParse(v).success;
 const idCourant = sql`${personne}.${sql.identifier("id")}`;
 const nomSql = (alias: string) =>
-  sql`coalesce(${sql.identifier(alias)}.raison_sociale, concat_ws(' ', ${sql.identifier(alias)}.prenom, ${sql.identifier(alias)}.nom))`;
+  sql`coalesce(${sql.identifier(alias)}.company_name, concat_ws(' ', ${sql.identifier(alias)}.first_name, ${sql.identifier(alias)}.last_name))`;
 
 // ---------------------------------------------------------------------------
 // Listes
@@ -68,24 +68,24 @@ export type OptionsListe = { filtre?: Filtre; tri?: Tri | null; aujourdhui?: str
 
 // Colonnes calculées des listes : les mêmes expressions servent à l'affichage et aux filtres.
 const telephoneEleve = sql<string | null>`coalesce(${personne.telephone}, (
-  SELECT r.telephone FROM lien l JOIN personne r ON r.id = l.personne_id
-  WHERE l.lie_a_id = ${idCourant} AND l.contact_urgence AND r.telephone IS NOT NULL ORDER BY r.nom LIMIT 1))`;
+  SELECT r.phone FROM relationship l JOIN person r ON r.id = l.person_id
+  WHERE l.related_person_id = ${idCourant} AND l.emergency_contact AND r.phone IS NOT NULL ORDER BY r.last_name LIMIT 1))`;
 const responsablesEleve = sql<string[]>`coalesce((
-  SELECT array_agg(${nomSql("r")} ORDER BY r.prenom) FROM lien l JOIN personne r ON r.id = l.personne_id
-  WHERE l.lie_a_id = ${idCourant} AND l.type = 'representant_legal'), '{}')`;
+  SELECT array_agg(${nomSql("r")} ORDER BY r.first_name) FROM relationship l JOIN person r ON r.id = l.person_id
+  WHERE l.related_person_id = ${idCourant} AND l.type = 'representant_legal'), '{}')`;
 const factureAEleve = sql<string | null>`(
-  SELECT ${nomSql("r")} FROM lien l JOIN personne r ON r.id = l.personne_id
-  WHERE l.lie_a_id = ${idCourant} AND l.paie_pour ORDER BY r.nom LIMIT 1)`;
+  SELECT ${nomSql("r")} FROM relationship l JOIN person r ON r.id = l.person_id
+  WHERE l.related_person_id = ${idCourant} AND l.pays_for ORDER BY r.last_name LIMIT 1)`;
 const elevesDuContact = sql<string[]>`coalesce((
-  SELECT array_agg(DISTINCT coalesce(e.prenom, e.nom)) FROM lien l JOIN personne e ON e.id = l.lie_a_id
-  WHERE l.personne_id = ${idCourant} AND e.eleve AND (l.type = 'representant_legal' OR l.paie_pour)), '{}')`;
+  SELECT array_agg(DISTINCT coalesce(e.first_name, e.last_name)) FROM relationship l JOIN person e ON e.id = l.related_person_id
+  WHERE l.person_id = ${idCourant} AND e.is_student AND (l.type = 'representant_legal' OR l.pays_for)), '{}')`;
 
 const emailEleve = sql<string | null>`coalesce(${personne.email}, (
-  SELECT r.email FROM lien l JOIN personne r ON r.id = l.personne_id
-  WHERE l.lie_a_id = ${idCourant} AND l.type = 'representant_legal' AND r.email IS NOT NULL ORDER BY r.nom LIMIT 1))`;
+  SELECT r.email FROM relationship l JOIN person r ON r.id = l.person_id
+  WHERE l.related_person_id = ${idCourant} AND l.type = 'representant_legal' AND r.email IS NOT NULL ORDER BY r.last_name LIMIT 1))`;
 const prevenirEleve = sql<string[]>`coalesce((
-  SELECT array_agg(concat_ws(', ', ${nomSql("r")}, r.telephone) ORDER BY r.nom) FROM lien l JOIN personne r ON r.id = l.personne_id
-  WHERE l.lie_a_id = ${idCourant} AND l.contact_urgence), '{}')`;
+  SELECT array_agg(concat_ws(', ', ${nomSql("r")}, r.phone) ORDER BY r.last_name) FROM relationship l JOIN person r ON r.id = l.person_id
+  WHERE l.related_person_id = ${idCourant} AND l.emergency_contact), '{}')`;
 
 /** CASE SQL d'après une table de libellés (les libellés passent en paramètres). */
 const libelles = (valeur: SQL, table: Record<string | number, string>) =>
@@ -96,44 +96,44 @@ const libelles = (valeur: SQL, table: Record<string | number, string>) =>
 
 /** Libellé court d'un cours `c` de discipline `d` : « Jazz lun. 17:00 ». */
 const libelleCours = () =>
-  sql`concat_ws(' ', d.nom, ${libelles(sql`c.jour_semaine::text`, Object.fromEntries(JOURS_COURTS.map((j, i) => [i, j] as const).slice(1)))}, to_char(c.heure_debut, 'HH24:MI'))`;
+  sql`concat_ws(' ', d.name, ${libelles(sql`c.weekday::text`, Object.fromEntries(JOURS_COURTS.map((j, i) => [i, j] as const).slice(1)))}, to_char(c.start_time, 'HH24:MI'))`;
 
 /** Cours suivis cette saison (inscriptions actives ou à l'essai), triés par jour et heure. */
 function coursEleve(saisonId: string | null): SQL<string[]> {
   if (!saisonId) return sql<string[]>`'{}'::text[]`;
   return sql<string[]>`coalesce((
-    SELECT array_agg(x.libelle ORDER BY x.jour NULLS LAST, x.heure) FROM (
-      SELECT DISTINCT ${libelleCours()} AS libelle, c.jour_semaine AS jour, c.heure_debut AS heure
-      FROM inscription_cours ic
-      JOIN inscription i ON i.id = ic.inscription_id
-      JOIN cours c ON c.id = ic.cours_id
+    SELECT array_agg(x.label ORDER BY x.jour NULLS LAST, x.heure) FROM (
+      SELECT DISTINCT ${libelleCours()} AS label, c.weekday AS jour, c.start_time AS heure
+      FROM enrollment_course ic
+      JOIN enrollment i ON i.id = ic.enrollment_id
+      JOIN course c ON c.id = ic.course_id
       JOIN discipline d ON d.id = c.discipline_id
-      WHERE ic.danseur_id = ${idCourant} AND i.saison_id = ${saisonId} AND i.statut IN ('active', 'essai')
+      WHERE ic.student_id = ${idCourant} AND i.season_id = ${saisonId} AND i.status IN ('active', 'essai')
     ) x), '{}')`;
 }
 
 /** Libellés des cours de la saison, par jour et heure : les choix du bouton « Cours » de la liste (#107). */
 export async function libellesCoursSaison(tx: Tx, saisonId: string): Promise<string[]> {
-  const lignes = await tx.execute<{ libelle: string }>(sql`
-    SELECT x.libelle FROM (
-      SELECT DISTINCT ${libelleCours()} AS libelle, c.jour_semaine AS jour, c.heure_debut AS heure
-      FROM cours c JOIN discipline d ON d.id = c.discipline_id
-      WHERE c.saison_id = ${saisonId}
-    ) x ORDER BY x.jour NULLS LAST, x.heure, x.libelle`);
-  return lignes.map((l) => l.libelle);
+  const lignes = await tx.execute<{ label: string }>(sql`
+    SELECT x.label FROM (
+      SELECT DISTINCT ${libelleCours()} AS label, c.weekday AS jour, c.start_time AS heure
+      FROM course c JOIN discipline d ON d.id = c.discipline_id
+      WHERE c.season_id = ${saisonId}
+    ) x ORDER BY x.jour NULLS LAST, x.heure, x.label`);
+  return lignes.map((l) => l.label);
 }
 
 /** Statut d'inscription de la saison ; le plus favorable si l'élève en a plusieurs. */
 function inscriptionEleve(saisonId: string | null): SQL<string | null> {
   if (!saisonId) return sql<string | null>`NULL::text`;
   return sql<string | null>`(
-    SELECT ${libelles(sql`i.statut::text`, LIBELLES_STATUT_INSCRIPTION)}
-    FROM inscription i JOIN inscription_cours ic ON ic.inscription_id = i.id
-    WHERE ic.danseur_id = ${idCourant} AND i.saison_id = ${saisonId}
+    SELECT ${libelles(sql`i.status::text`, LIBELLES_STATUT_INSCRIPTION)}
+    FROM enrollment i JOIN enrollment_course ic ON ic.enrollment_id = i.id
+    WHERE ic.student_id = ${idCourant} AND i.season_id = ${saisonId}
     ORDER BY array_position(${sql`ARRAY[${sql.join(
       PRIORITE_STATUT.map((st) => sql`${st}`),
       sql`, `,
-    )}]::text[]`}, i.statut::text) LIMIT 1)`;
+    )}]::text[]`}, i.status::text) LIMIT 1)`;
 }
 
 /**
@@ -153,7 +153,7 @@ export async function listerEleves(
   const coursSaison = coursEleve(valideSaison);
   const statutSaison = inscriptionEleve(valideSaison);
   const expressions = {
-    nom: { sql: nomSql("personne") },
+    nom: { sql: nomSql("person") },
     age: { sql: sql`date_part('year', age(${aujourdhui}::date, ${personne.dateNaissance}))` },
     responsables: { sql: responsablesEleve, liste: true },
     facture: { sql: factureAEleve },
@@ -187,7 +187,7 @@ export async function listerEleves(
         surEleve
           ? or(
               surEleve,
-              sql`EXISTS (SELECT 1 FROM lien l JOIN personne r ON r.id = l.personne_id WHERE l.lie_a_id = ${idCourant} AND ${surProche})`,
+              sql`EXISTS (SELECT 1 FROM relationship l JOIN person r ON r.id = l.person_id WHERE l.related_person_id = ${idCourant} AND ${surProche})`,
             )
           : undefined,
         surColonnes,
@@ -218,7 +218,7 @@ export async function listerContacts(
   const condition = conditionRecherche(saisie);
   if (saisie.trim() && !condition) return [];
   const expressions = {
-    nom: { sql: nomSql("personne") },
+    nom: { sql: nomSql("person") },
     eleves: { sql: elevesDuContact, liste: true },
     telephone: { sql: sql`${personne.telephone}` },
     email: { sql: sql`${personne.email}` },
@@ -241,7 +241,7 @@ export async function listerContacts(
       and(
         or(
           eq(personne.eleve, false),
-          sql`EXISTS (SELECT 1 FROM lien l WHERE l.personne_id = ${idCourant} AND (l.type = 'representant_legal' OR l.paie_pour))`,
+          sql`EXISTS (SELECT 1 FROM relationship l WHERE l.person_id = ${idCourant} AND (l.type = 'representant_legal' OR l.pays_for))`,
         ),
         condition ?? undefined,
         surColonnes,

@@ -16,7 +16,7 @@ if (!url) throw new Error("DATABASE_ADMIN_URL manquante");
 const admin = postgres(url, { max: 1, onnotice: () => {} });
 
 async function principal() {
-  const ecoles = await admin`SELECT DISTINCT ecole_id AS id FROM connexion_agenda`;
+  const ecoles = await admin`SELECT DISTINCT school_id AS id FROM calendar_connection`;
   let reussies = 0;
   let echouees = 0;
   for (const { id } of ecoles) {

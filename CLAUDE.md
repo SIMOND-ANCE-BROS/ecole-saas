@@ -22,7 +22,7 @@ Reference for every agent working on this project. Read it in full before coding
 | PR section « Pour l’accueil et la direction »                          | **French**, written for the school                    |
 | URLs (Next route folders such as `src/app/(espace)/eleves`)            | **French**: they are user-visible                     |
 
-Code written before this rule is still in French; it is renamed module by module (#114). New code is written in English, using the lexicon below, even next to French code.
+The database is in English since migration `0027_english_names` (#114). TypeScript code written before this rule is still in French; it is renamed module by module (#114). New code is written in English, using the lexicon below, even next to French code.
 
 ## 3. Domain lexicon (French → English)
 
@@ -67,7 +67,7 @@ Use these names in code and database. User-facing text keeps the French word.
 | indisponibilité, connexion agenda                                                               | `unavailability`, `calendar_connection`                                               |                                                                                                                                                             |
 | préférence de liste                                                                             | `list_preference`                                                                     |                                                                                                                                                             |
 
-Core helpers after the rename: `avecEcole()` → `withSchool()`, `ecolesDe()` → `schoolsOf()`, `contexteEcole()` → `schoolContext()`, `exigerRole()` → `requireRole()`, `memeEcole()` → `sameSchool()`, RLS policy `isolation_ecole` → `school_isolation`, `src/lib/montant.ts` → `src/lib/money.ts`, `src/domaine/` → `src/domain/`.
+Core helpers after the rename: `avecEcole()` → `withSchool()`, `ecolesDe()` → `schoolsOf()`, `contexteEcole()` → `schoolContext()`, `exigerRole()` → `requireRole()`, `memeEcole()` → `sameSchool()`, RLS policy `school_isolation` → `school_isolation`, `src/lib/montant.ts` → `src/lib/money.ts`, `src/domaine/` → `src/domain/`.
 
 A missing term is added here in the same PR that introduces it.
 
@@ -138,16 +138,16 @@ DESIGN.md                    interface rules
 **Multi-school and security** (ADR 0001)
 
 - Every business query goes through `avecEcole(ecoleId, tx => …)`. Never use `db` directly for business data.
-- Every new business table carries `ecole_id` **and** gets, in a SQL migration, `ENABLE` + `FORCE ROW LEVEL SECURITY` and the `isolation_ecole` policy (model in `migrations/0001_rls.sql`, which only covers tables existing when it was written).
+- Every new business table carries `school_id` **and** gets, in a SQL migration, `ENABLE` + `FORCE ROW LEVEL SECURITY` and the `school_isolation` policy (model in `migrations/0001_rls.sql`, which only covers tables existing when it was written).
 - `app_user` privileges on new tables and sequences are granted automatically (default privileges, `migrations/0006_droits_par_defaut.sql`, guard `src/db/droits.integration.test.ts`); RLS still has to be added every time.
-- Every reference between two business tables is a composite foreign key `(ecole_id, x_id)`: `memeEcole(t, column, target)` in `src/db/schema.ts`, the target declaring `cibleMemeEcole(t)`. Never a plain `.references()` between business tables: foreign-key checks ignore RLS. Guard: `src/db/cles-etrangeres.integration.test.ts`.
+- Every reference between two business tables is a composite foreign key `(school_id, x_id)`: `memeEcole(t, column, target)` in `src/db/schema.ts`, the target declaring `cibleMemeEcole(t)`. Never a plain `.references()` between business tables: foreign-key checks ignore RLS. Guard: `src/db/cles-etrangeres.integration.test.ts`.
 - The `app_admin` role (BYPASSRLS) is for administration scripts only, never application code.
 - `ecoleId` always comes from the server-side session, never from a browser parameter.
 - Every protected page and server action calls `contexteEcole()` or `exigerRole()` (`src/lib/session.ts`), then `avecEcole(ecoleId, …)`. Never access control in a layout (not re-run on navigation) nor in `proxy.ts` (optimistic redirect only).
 
 **Money and dates**
 
-- Amounts in **integer cents** (`*_centimes`, `*_cents` after the rename), rates in **basis points** (1000 = 10 %). Use `src/lib/montant.ts`. No floating-point number for money, no `parseFloat` on an amount.
+- Amounts in **integer cents** (`*_cents` columns; TypeScript `*Centimes` until its module is renamed), rates in **basis points** (1000 = 10 %). Use `src/lib/montant.ts`. No floating-point number for money, no `parseFloat` on an amount.
 - Dates without time (`date`) are `YYYY-MM-DD` strings; `Europe/Paris` time zone for any day computation.
 
 **Data**
@@ -160,7 +160,7 @@ DESIGN.md                    interface rules
 **Personal data (minors)**
 
 - Never write personal data to logs (names, phone numbers, health); log technical ids only.
-- Invoicing tool credentials are stored encrypted (`connecteur_facturation.identifiants_chiffres`), never in clear, never in the repository.
+- Invoicing tool credentials are stored encrypted (`invoicing_connector.encrypted_credentials`), never in clear, never in the repository.
 - No secret in code: environment variables, and `.env.example` kept up to date.
 - Issues and PRs are public to the organisation: fictitious data only, no secret names.
 
@@ -183,7 +183,7 @@ DESIGN.md                    interface rules
 - Every domain function has Vitest tests, written **before or with** the code. Top priority: tariff engine, discounts, installment plans, instructor statements.
 - Cover real edge cases: three siblings, couple + discount, dropping out mid-term, instructor replacement, cents left over from a split.
 - Security behaviour (RLS, immutability) is tested against a real PostgreSQL database, never mocks.
-- Guard in place: `src/db/rls.integration.test.ts` fails if a table carrying `ecole_id` lacks forced RLS with the `isolation_ecole` policy. Files `*.integration.test.ts` run with `npm run test:integration` and in CI.
+- Guard in place: `src/db/rls.integration.test.ts` fails if a table carrying `school_id` lacks forced RLS with the `school_isolation` policy. Files `*.integration.test.ts` run with `npm run test:integration` and in CI.
 - A test must be able to fail: assert the behaviour, not the implementation; no snapshot of a whole page.
 
 ## 10. Way of working

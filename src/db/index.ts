@@ -15,7 +15,7 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  */
 export function avecEcole<T>(ecoleId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.transaction(async (tx) => {
-    await tx.execute(sql`select set_config('app.ecole_id', ${ecoleId}, true)`);
+    await tx.execute(sql`select set_config('app.school_id', ${ecoleId}, true)`);
     return fn(tx);
   });
 }

@@ -14,9 +14,9 @@ export async function chiffresSaison(tx: Tx, saisonId: string): Promise<Chiffres
       inscriptions: sql<number>`count(*)::int`,
       totalNetCentimes: sql<number>`coalesce(sum(${inscription.prixNetCentimes}), 0)::int`,
       danseurs: sql<number>`(
-        SELECT count(DISTINCT ic.danseur_id)::int FROM inscription_cours ic
-        JOIN inscription i ON i.id = ic.inscription_id
-        WHERE i.saison_id = ${saisonId} AND i.statut = 'active'
+        SELECT count(DISTINCT ic.student_id)::int FROM enrollment_course ic
+        JOIN enrollment i ON i.id = ic.enrollment_id
+        WHERE i.season_id = ${saisonId} AND i.status = 'active'
       )`,
     })
     .from(inscription)
@@ -44,9 +44,9 @@ export async function dernieresInscriptions(tx: Tx, saisonId: string, nombre = 8
       raisonSociale: personne.raisonSociale,
       prixNetCentimes: inscription.prixNetCentimes,
       danseurs: sql<string | null>`(
-        SELECT string_agg(DISTINCT coalesce(d.prenom, d.nom), ' et ') FROM inscription_cours ic
-        JOIN personne d ON d.id = ic.danseur_id
-        WHERE ic.inscription_id = ${inscription}.${sql.identifier("id")}
+        SELECT string_agg(DISTINCT coalesce(d.first_name, d.last_name), ' et ') FROM enrollment_course ic
+        JOIN person d ON d.id = ic.student_id
+        WHERE ic.enrollment_id = ${inscription}.${sql.identifier("id")}
       )`,
     })
     .from(inscription)

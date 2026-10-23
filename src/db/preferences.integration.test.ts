@@ -16,18 +16,19 @@ let ecole: string;
 let autreEcole: string;
 
 beforeAll(async () => {
-  [{ id: ecole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École A', ${`pa-${suffixe}`}) RETURNING id`;
-  [{ id: autreEcole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École B', ${`pb-${suffixe}`}) RETURNING id`;
+  [{ id: ecole }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`pa-${suffixe}`}) RETURNING id`;
+  [{ id: autreEcole }] =
+    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`pb-${suffixe}`}) RETURNING id`;
   for (const id of [accueil, direction])
     await admin`INSERT INTO "user" (id, name, email) VALUES (${id}, 'Test', ${`${id}@exemple.test`})`;
-  await admin`INSERT INTO membre (ecole_id, user_id, role) VALUES (${ecole}, ${accueil}, 'accueil'), (${ecole}, ${direction}, 'direction'), (${autreEcole}, ${accueil}, 'direction')`;
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${ecole}, ${accueil}, 'accueil'), (${ecole}, ${direction}, 'direction'), (${autreEcole}, ${accueil}, 'direction')`;
 });
 
 afterAll(async () => {
-  await admin`DELETE FROM preference_liste WHERE ecole_id IN (${ecole}, ${autreEcole})`;
-  await admin`DELETE FROM membre WHERE ecole_id IN (${ecole}, ${autreEcole})`;
+  await admin`DELETE FROM list_preference WHERE school_id IN (${ecole}, ${autreEcole})`;
+  await admin`DELETE FROM member WHERE school_id IN (${ecole}, ${autreEcole})`;
   await admin`DELETE FROM "user" WHERE id IN (${accueil}, ${direction})`;
-  await admin`DELETE FROM ecole WHERE id IN (${ecole}, ${autreEcole})`;
+  await admin`DELETE FROM school WHERE id IN (${ecole}, ${autreEcole})`;
   await admin.end();
 });
 
@@ -45,7 +46,7 @@ describe("préférences de colonnes", () => {
     expect(await avecEcole(ecole, (tx) => lirePreference(tx, direction, "eleves"))).toEqual(["telephone"]);
     expect(await avecEcole(ecole, (tx) => lirePreference(tx, accueil, "contacts"))).toBeNull();
     expect(await avecEcole(autreEcole, (tx) => lirePreference(tx, accueil, "eleves"))).toEqual(["facture"]);
-    const [{ n }] = await admin`SELECT count(*)::int AS n FROM preference_liste WHERE ecole_id = ${ecole}`;
+    const [{ n }] = await admin`SELECT count(*)::int AS n FROM list_preference WHERE school_id = ${ecole}`;
     expect(n).toBe(2);
   });
 

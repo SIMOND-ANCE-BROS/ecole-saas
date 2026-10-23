@@ -11,7 +11,7 @@ import { carnet, inscription, journal, membre, paiement, personne, user } from "
  * la transaction d'`avecEcole()` (RLS).
  */
 
-const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uuid`;
+const ECOLE_COURANTE = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const estUuid = (v: string) => z.uuid().safeParse(v).success;
 
 export const MOYENS = {
@@ -60,7 +60,7 @@ export type Resultat = { ok: true; ids: string[] } | { ok: false; message: strin
  * table : dans un `select`, Drizzle l'écrirait seul, et il désignerait alors
  * la ligne de la sous-requête.
  */
-export const dejaCorrige = sql<number>`coalesce((SELECT -sum(c.montant_centimes) FROM paiement c WHERE c.corrige_id = ${paiement}.${sql.identifier("id")}), 0)::int`;
+export const dejaCorrige = sql<number>`coalesce((SELECT -sum(c.amount_cents) FROM payment c WHERE c.corrects_id = ${paiement}.${sql.identifier("id")}), 0)::int`;
 
 /** Membre de l'école courante qui saisit (pour `saisi_par` et le journal). */
 async function membreDe(tx: Tx, userId: string): Promise<string | null> {
@@ -74,7 +74,7 @@ async function membreDe(tx: Tx, userId: string): Promise<string | null> {
 async function tracer(tx: Tx, qui: string, id: string, apres: Record<string, unknown>) {
   await tx
     .insert(journal)
-    .values({ ecoleId: ECOLE_COURANTE, qui, tableCible: "paiement", ligneId: id, action: "insert", apres });
+    .values({ ecoleId: ECOLE_COURANTE, qui, tableCible: "payment", ligneId: id, action: "insert", apres });
 }
 
 /** Enregistre un ou plusieurs règlements d'un payeur (trois chèques datés, chèque + espèces…). */

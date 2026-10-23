@@ -24,9 +24,9 @@ type Ids = { ecole: string; saison: string };
 async function avecSaison(fn: (tx: postgres.TransactionSql, ids: Ids) => Promise<void>) {
   await admin
     .begin(async (tx) => {
-      const [ecole] = await tx`INSERT INTO ecole (nom, slug) VALUES ('École test', 'ecole-test') RETURNING id`;
+      const [ecole] = await tx`INSERT INTO school (name, slug) VALUES ('École test', 'ecole-test') RETURNING id`;
       const [saison] = await tx`
-        INSERT INTO saison (ecole_id, libelle, date_debut, date_fin)
+        INSERT INTO season (school_id, label, start_date, end_date)
         VALUES (${ecole.id}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
       await fn(tx, { ecole: ecole.id, saison: saison.id });
       throw new Annulation();
@@ -43,7 +43,7 @@ function insererTarif(
   disciplineId: string | null = null,
 ) {
   return tx`
-    INSERT INTO tarif (ecole_id, saison_id, public, periodicite, combinaison, discipline_id, prix_centimes)
+    INSERT INTO tariff (school_id, season_id, audience, period, combination, discipline_id, price_cents)
     VALUES (${ids.ecole}, ${ids.saison}, 'enfant', 'trimestre', ${combinaison}::smallint[], ${disciplineId}, 11000)`;
 }
 
@@ -52,7 +52,7 @@ describe("tarif", () => {
     await avecSaison(async (tx, ids) => {
       await insererTarif(tx, ids, [45, 60]);
       await expect(tx.savepoint((sp) => insererTarif(sp, ids, [45, 60]))).rejects.toMatchObject({
-        constraint_name: "tarif_case_unique",
+        constraint_name: "tariff_cell_unique",
       });
     });
   });
@@ -61,14 +61,14 @@ describe("tarif", () => {
     await avecSaison(async (tx, ids) => {
       await insererTarif(tx, ids, [45, 45, 60]);
       await insererTarif(tx, ids, [60, 90]);
-      const [{ n }] = await tx`SELECT count(*)::int AS n FROM tarif WHERE saison_id = ${ids.saison}`;
+      const [{ n }] = await tx`SELECT count(*)::int AS n FROM tariff WHERE season_id = ${ids.saison}`;
       expect(n).toBe(2);
     });
   });
 
   it("accepte une ligne réservée à une discipline à côté de la ligne générale", async () => {
     await avecSaison(async (tx, ids) => {
-      const [zumba] = await tx`INSERT INTO discipline (ecole_id, nom) VALUES (${ids.ecole}, 'Zumba') RETURNING id`;
+      const [zumba] = await tx`INSERT INTO discipline (school_id, name) VALUES (${ids.ecole}, 'Zumba') RETURNING id`;
       await insererTarif(tx, ids, [60, 60]);
       await insererTarif(tx, ids, [60, 60], zumba.id);
     });
@@ -76,10 +76,10 @@ describe("tarif", () => {
 
   it("refuse une discipline d’une autre école", async () => {
     await avecSaison(async (tx, ids) => {
-      const [autre] = await tx`INSERT INTO ecole (nom, slug) VALUES ('Autre école', 'autre-ecole') RETURNING id`;
-      const [etrangere] = await tx`INSERT INTO discipline (ecole_id, nom) VALUES (${autre.id}, 'Zumba') RETURNING id`;
+      const [autre] = await tx`INSERT INTO school (name, slug) VALUES ('Autre école', 'autre-ecole') RETURNING id`;
+      const [etrangere] = await tx`INSERT INTO discipline (school_id, name) VALUES (${autre.id}, 'Zumba') RETURNING id`;
       await expect(tx.savepoint((sp) => insererTarif(sp, ids, [60, 60], etrangere.id))).rejects.toMatchObject({
-        constraint_name: "tarif_discipline_meme_ecole_fk",
+        constraint_name: "tariff_discipline_same_school_fk",
       });
     });
   });
@@ -88,7 +88,7 @@ describe("tarif", () => {
     await avecSaison(async (tx, ids) => {
       for (const combinaison of [[], [0, 60]]) {
         await expect(tx.savepoint((sp) => insererTarif(sp, ids, combinaison))).rejects.toMatchObject({
-          constraint_name: "tarif_combinaison",
+          constraint_name: "tariff_combination",
         });
       }
     });

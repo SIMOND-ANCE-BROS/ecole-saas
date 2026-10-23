@@ -77,11 +77,11 @@ const admin = postgres(url, { max: 1, onnotice: () => {} });
 
 async function principal() {
   const [ecole] = await admin`
-    INSERT INTO ecole (nom, slug) VALUES ('École de démonstration', 'demo')
-    ON CONFLICT (slug) DO UPDATE SET nom = EXCLUDED.nom
+    INSERT INTO school (name, slug) VALUES ('École de démonstration', 'demo')
+    ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
     RETURNING id`;
   await admin`
-    INSERT INTO saison (ecole_id, libelle, date_debut, date_fin)
+    INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${ecole.id}, '2026-2027', '2026-09-01', '2027-06-30')
     ON CONFLICT DO NOTHING`;
 
@@ -90,38 +90,38 @@ async function principal() {
     const userId: string =
       existant?.id ?? (await creerCompte({ email: compte.email, nom: compte.nom, motDePasse: MOT_DE_PASSE }));
     await admin`
-      INSERT INTO membre (ecole_id, user_id, role) VALUES (${ecole.id}, ${userId}, ${compte.role})
-      ON CONFLICT (ecole_id, user_id) DO NOTHING`;
+      INSERT INTO member (school_id, user_id, role) VALUES (${ecole.id}, ${userId}, ${compte.role})
+      ON CONFLICT (school_id, user_id) DO NOTHING`;
   }
 
   // Personnes fictives (aucune personne réelle), créées une seule fois. Un danseur
   // qui porte le prénom du payeur est le payeur lui-même (adulte seul).
-  const [{ n }] = await admin`SELECT count(*)::int AS n FROM personne WHERE ecole_id = ${ecole.id}`;
+  const [{ n }] = await admin`SELECT count(*)::int AS n FROM person WHERE school_id = ${ecole.id}`;
   if (n === 0) {
     for (const f of FAMILLES) {
       const [p] = await admin`
-        INSERT INTO personne (ecole_id, type, nom, prenom, raison_sociale, siren, email, telephone, adresse)
+        INSERT INTO person (school_id, type, last_name, first_name, company_name, siren, email, phone, address)
         VALUES (${ecole.id}, ${f.type ?? "particulier"}, ${f.nom}, ${f.prenom ?? null}, ${f.raisonSociale ?? null},
                 ${f.siren ?? null}, ${f.email ?? null}, ${f.telephone ?? null}, ${f.adresse ?? null})
         RETURNING id`;
       for (const [prenom, naissance] of f.danseurs) {
         if (prenom === f.prenom) {
-          await admin`UPDATE personne SET date_naissance = ${naissance}, eleve = true WHERE id = ${p.id}`;
+          await admin`UPDATE person SET birth_date = ${naissance}, is_student = true WHERE id = ${p.id}`;
           continue;
         }
         const [d] = await admin`
-          INSERT INTO personne (ecole_id, nom, prenom, date_naissance, eleve)
+          INSERT INTO person (school_id, last_name, first_name, birth_date, is_student)
           VALUES (${ecole.id}, ${f.nom}, ${prenom}, ${naissance}, true) RETURNING id`;
         await admin`
-          INSERT INTO lien (ecole_id, personne_id, lie_a_id, type, paie_pour, contact_urgence)
+          INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for, emergency_contact)
           VALUES (${ecole.id}, ${p.id}, ${d.id}, 'representant_legal', true, true)`;
       }
     }
   }
 
   // Planning fictif : sites, salles, disciplines, professeurs, cours de la saison.
-  const [saison] = await admin`SELECT id FROM saison WHERE ecole_id = ${ecole.id} AND libelle = '2026-2027'`;
-  const [{ nbCours }] = await admin`SELECT count(*)::int AS "nbCours" FROM cours WHERE saison_id = ${saison.id}`;
+  const [saison] = await admin`SELECT id FROM season WHERE school_id = ${ecole.id} AND label = '2026-2027'`;
+  const [{ nbCours }] = await admin`SELECT count(*)::int AS "nbCours" FROM course WHERE season_id = ${saison.id}`;
   if (nbCours === 0) {
     const sites: Record<string, string> = {};
     for (const [nom, adresse, permanence] of [
@@ -129,7 +129,7 @@ async function principal() {
       ["Site Nord", "40 avenue des Arts, 69100 Villeurbanne", false],
     ] as const) {
       const [s] =
-        await admin`INSERT INTO site (ecole_id, nom, adresse, permanence) VALUES (${ecole.id}, ${nom}, ${adresse}, ${permanence}) RETURNING id`;
+        await admin`INSERT INTO site (school_id, name, address, enrollment_desk) VALUES (${ecole.id}, ${nom}, ${adresse}, ${permanence}) RETURNING id`;
       sites[nom] = s.id;
     }
     const salles: Record<string, string> = {};
@@ -139,13 +139,13 @@ async function principal() {
       ["Studio", "Site Nord", 20],
     ] as const) {
       const [s] =
-        await admin`INSERT INTO salle (ecole_id, site_id, nom, capacite) VALUES (${ecole.id}, ${sites[site]}, ${nom}, ${capacite}) RETURNING id`;
+        await admin`INSERT INTO room (school_id, site_id, name, capacity) VALUES (${ecole.id}, ${sites[site]}, ${nom}, ${capacite}) RETURNING id`;
       salles[nom] = s.id;
     }
     const disciplines: Record<string, string> = {};
     for (const nom of ["Éveil", "Classique", "Jazz", "Contemporain", "Zumba", "Salsa"]) {
-      const [d] = await admin`INSERT INTO discipline (ecole_id, nom) VALUES (${ecole.id}, ${nom})
-        ON CONFLICT (ecole_id, nom) DO UPDATE SET nom = EXCLUDED.nom RETURNING id`;
+      const [d] = await admin`INSERT INTO discipline (school_id, name) VALUES (${ecole.id}, ${nom})
+        ON CONFLICT (school_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id`;
       disciplines[nom] = d.id;
     }
     const profs: Record<string, string> = {};
@@ -156,7 +156,7 @@ async function principal() {
       ["Lucas", "Faure", "societe", "heure", 4500],
     ] as const) {
       const [p] = await admin`
-        INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
+        INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
         VALUES (${ecole.id}, ${nom}, ${prenom}, ${statut}, 'non_applicable', ${mode}, ${tarif}) RETURNING id`;
       profs[prenom] = p.id;
     }
@@ -179,18 +179,18 @@ async function principal() {
     ] as const;
     for (const [d, salle, prof, jour, heure, duree, ageMin, ageMax, niveau] of COURS) {
       await admin`
-        INSERT INTO cours (ecole_id, saison_id, discipline_id, salle_id, intervenant_id, jour_semaine, heure_debut, duree_minutes, age_min, age_max, niveau)
+        INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes, age_min, age_max, level)
         VALUES (${ecole.id}, ${saison.id}, ${disciplines[d]}, ${salles[salle]}, ${profs[prof]}, ${jour}, ${heure}, ${duree}, ${ageMin}, ${ageMax}, ${niveau})`;
     }
   }
 
   // Capacité des cours de démonstration : celle de leur salle, si elle n'est pas renseignée.
   await admin`
-    UPDATE cours SET capacite_max = s.capacite FROM salle s
-    WHERE cours.salle_id = s.id AND cours.ecole_id = ${ecole.id} AND cours.capacite_max IS NULL`;
+    UPDATE course SET max_capacity = s.capacity FROM room s
+    WHERE course.room_id = s.id AND course.school_id = ${ecole.id} AND course.max_capacity IS NULL`;
 
   // Grille tarifaire et réduction fratrie de démonstration (montants en euros).
-  const [{ nbTarifs }] = await admin`SELECT count(*)::int AS "nbTarifs" FROM tarif WHERE saison_id = ${saison.id}`;
+  const [{ nbTarifs }] = await admin`SELECT count(*)::int AS "nbTarifs" FROM tariff WHERE season_id = ${saison.id}`;
   if (nbTarifs === 0) {
     const GRILLE: [publicTarif: string, combinaison: number[], trimestre: number, annee: number][] = [
       ["enfant", [45], 85, 210],
@@ -218,25 +218,25 @@ async function principal() {
         ["annee", annee],
       ] as const) {
         await admin`
-          INSERT INTO tarif (ecole_id, saison_id, public, periodicite, combinaison, prix_centimes)
+          INSERT INTO tariff (school_id, season_id, audience, period, combination, price_cents)
           VALUES (${ecole.id}, ${saison.id}, ${publicTarif}, ${periodicite}, ${`{${combinaison.join(",")}}`}::smallint[], ${euros * 100})`;
       }
     }
     await admin`
-      INSERT INTO reduction (ecole_id, saison_id, code, taux_points_base, seuil_danseurs, publics, cumulable_multi_disciplines)
+      INSERT INTO discount (school_id, season_id, code, rate_bps, min_students, audiences, combinable_with_multi_discipline)
       VALUES (${ecole.id}, ${saison.id}, 'fratrie', 1000, 2, '{enfant}', false)`;
   }
 
   // Fermetures de démonstration (dates fictives) puis séances à venir, comme l'application les crée.
   const [{ nbFermetures }] =
-    await admin`SELECT count(*)::int AS "nbFermetures" FROM fermeture WHERE saison_id = ${saison.id}`;
+    await admin`SELECT count(*)::int AS "nbFermetures" FROM closure WHERE season_id = ${saison.id}`;
   if (nbFermetures === 0) {
     for (const [libelle, debut, fin] of [
       ["Vacances d’automne", "2026-10-17", "2026-11-01"],
       ["Jour férié", "2026-11-11", "2026-11-11"],
       ["Vacances de fin d’année", "2026-12-19", "2027-01-03"],
     ]) {
-      await admin`INSERT INTO fermeture (ecole_id, saison_id, libelle, debut, fin) VALUES (${ecole.id}, ${saison.id}, ${libelle}, ${debut}, ${fin})`;
+      await admin`INSERT INTO closure (school_id, season_id, label, start_date, end_date) VALUES (${ecole.id}, ${saison.id}, ${libelle}, ${debut}, ${fin})`;
     }
   }
   const { ajoutees } = await avecEcole(ecole.id, (tx) => synchroniserSeances(tx, saison.id, aujourdhuiAParis()));

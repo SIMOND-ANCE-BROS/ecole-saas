@@ -6,7 +6,7 @@ import { connexionAgenda, indisponibilite, intervenant } from "./schema";
 
 /** Agendas connectés des intervenants, toujours avec la transaction d'`avecEcole()` (RLS). */
 
-const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uuid`;
+const ECOLE_COURANTE = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const estUuid = (v: string) => z.uuid().safeParse(v).success;
 
 export type EtatConnexion = {

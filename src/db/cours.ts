@@ -13,7 +13,7 @@ export const TYPES_COURS = {
   stage: "Stage",
 } as const;
 
-const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uuid`;
+const ECOLE_COURANTE = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const nomCourt = z.string().trim().min(1).max(100);
 const entierOuNul = (min: number, max: number) => z.int().min(min).max(max).nullable();
 const dateOuNulle = z.iso.date("Date invalide").nullable();
@@ -102,7 +102,7 @@ export type CoursEdite = {
 
 /** Dates d'un cours ponctuel, triées (texte `YYYY-MM-DD`). */
 export const datesDuCoursSql = sql<string[]>`coalesce((
-  SELECT array_agg(cd.date::text ORDER BY cd.date) FROM cours_date cd WHERE cd.cours_id = ${cours}.${sql.identifier("id")}), '{}')`;
+  SELECT array_agg(cd.date::text ORDER BY cd.date) FROM course_date cd WHERE cd.course_id = ${cours}.${sql.identifier("id")}), '{}')`;
 
 export async function lireCours(tx: Tx, id: string): Promise<CoursEdite | null> {
   if (!z.uuid().safeParse(id).success) return null;
@@ -330,7 +330,7 @@ export async function deplacerCours(
     const [{ n }] = await tx
       .select({ n: sql<number>`count(DISTINCT ${inscriptionCours.danseurId})::int` })
       .from(inscriptionCours)
-      .innerJoin(sql`inscription i`, sql`i.id = ${inscriptionCours.inscriptionId} AND i.statut IN ('active', 'essai')`)
+      .innerJoin(sql`enrollment i`, sql`i.id = ${inscriptionCours.inscriptionId} AND i.status IN ('active', 'essai')`)
       .where(eq(inscriptionCours.coursId, id));
     if (n > 0) return { statut: "confirmer", inscrits: n };
   }

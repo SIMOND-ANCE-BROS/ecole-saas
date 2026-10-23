@@ -11,7 +11,7 @@ import { cours, discipline, fermeture, indisponibilite, intervenant, saison, sea
  * libres. Toujours avec la transaction d'`avecEcole()` (RLS).
  */
 
-const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uuid`;
+const ECOLE_COURANTE = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const estUuid = (v: string) => z.uuid().safeParse(v).success;
 export type Resultat = { ok: true; id: string } | { ok: false; message: string };
 
@@ -228,8 +228,8 @@ export async function disponibilitesSeance(
       prenom: intervenant.prenom,
       nom: intervenant.nom,
       disciplines: sql<string[]>`coalesce((
-        SELECT array_agg(DISTINCT d.nom) FROM cours c JOIN discipline d ON d.id = c.discipline_id
-        WHERE c.intervenant_id = ${intervenant}.${sql.identifier("id")} AND c.saison_id = ${s.saisonId}
+        SELECT array_agg(DISTINCT d.name) FROM course c JOIN discipline d ON d.id = c.discipline_id
+        WHERE c.instructor_id = ${intervenant}.${sql.identifier("id")} AND c.season_id = ${s.saisonId}
       ), '{}')`,
     })
     .from(intervenant)

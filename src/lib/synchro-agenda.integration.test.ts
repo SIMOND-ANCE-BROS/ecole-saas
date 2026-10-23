@@ -26,9 +26,9 @@ beforeAll(async () => {
   process.env.CLE_CHIFFREMENT = randomBytes(32).toString("base64");
   process.env.MICROSOFT_CLIENT_ID = "client-test";
   process.env.MICROSOFT_CLIENT_SECRET = "secret-test";
-  [{ id: ecole }] = await admin`INSERT INTO ecole (nom, slug) VALUES ('École A', ${`sy-${suffixe}`}) RETURNING id`;
+  [{ id: ecole }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`sy-${suffixe}`}) RETURNING id`;
   [{ id: camille }] =
-    await admin`INSERT INTO intervenant (ecole_id, nom, prenom, statut, regime_tva, mode_remuneration, tarif_centimes)
+    await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
     VALUES (${ecole}, 'Durand', 'Camille', 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`;
   await avecEcole(ecole, (tx) =>
     enregistrerConnexion(tx, camille, {
@@ -37,15 +37,15 @@ beforeAll(async () => {
       jetonChiffre: chiffrer("rafraichissement-1"),
     }),
   );
-  await admin`INSERT INTO indisponibilite (ecole_id, intervenant_id, debut, fin, origine, libelle)
+  await admin`INSERT INTO unavailability (school_id, instructor_id, starts_at, ends_at, source, label)
     VALUES (${ecole}, ${camille}, '2099-11-10T09:00:00Z', '2099-11-10T10:00:00Z', 'saisie', 'Rendez-vous')`;
 });
 
 afterAll(async () => {
-  for (const t of ["indisponibilite", "connexion_agenda", "intervenant"]) {
-    await admin.unsafe(`DELETE FROM ${t} WHERE ecole_id = $1`, [ecole]);
+  for (const t of ["unavailability", "calendar_connection", "instructor"]) {
+    await admin.unsafe(`DELETE FROM ${t} WHERE school_id = $1`, [ecole]);
   }
-  await admin`DELETE FROM ecole WHERE id = ${ecole}`;
+  await admin`DELETE FROM school WHERE id = ${ecole}`;
   await admin.end();
 });
 
@@ -53,8 +53,8 @@ const plagesDe = () => avecEcole(ecole, (tx) => listerIndisponibilites(tx, camil
 
 describe("synchroniserAgenda", () => {
   it("garde le jeton chiffré en base, jamais en clair", async () => {
-    const [{ jeton_chiffre }] =
-      await admin`SELECT jeton_chiffre FROM connexion_agenda WHERE intervenant_id = ${camille}`;
+    const [{ encrypted_token: jeton_chiffre }] =
+      await admin`SELECT encrypted_token FROM calendar_connection WHERE instructor_id = ${camille}`;
     expect(jeton_chiffre).not.toContain("rafraichissement-1");
     expect(dechiffrer(jeton_chiffre)).toBe("rafraichissement-1");
   });
@@ -78,8 +78,8 @@ describe("synchroniserAgenda", () => {
       "microsoft 2026-11-04T15:00:00.000Z",
       "saisie 2099-11-10T09:00:00.000Z",
     ]);
-    const [{ jeton_chiffre }] =
-      await admin`SELECT jeton_chiffre FROM connexion_agenda WHERE intervenant_id = ${camille}`;
+    const [{ encrypted_token: jeton_chiffre }] =
+      await admin`SELECT encrypted_token FROM calendar_connection WHERE instructor_id = ${camille}`;
     expect(dechiffrer(jeton_chiffre)).toBe("rafraichissement-2");
     expect(await avecEcole(ecole, (tx) => etatConnexion(tx, camille))).toMatchObject({
       compte: "camille@exemple.test",
@@ -137,7 +137,7 @@ describe("synchroniserAgenda", () => {
       ),
     ).toBe(false);
     // Même une ligne restée en base (restauration) est ignorée.
-    await admin`INSERT INTO connexion_agenda (ecole_id, intervenant_id, fournisseur, jeton_chiffre) VALUES (${ecole}, ${camille}, 'microsoft', ${chiffrer("r")})`;
+    await admin`INSERT INTO calendar_connection (school_id, instructor_id, provider, encrypted_token) VALUES (${ecole}, ${camille}, 'microsoft', ${chiffrer("r")})`;
     expect(await synchroniserAgenda(ecole, camille, fetch, MAINTENANT)).toEqual({
       ok: false,
       message: "Aucun agenda connecté.",

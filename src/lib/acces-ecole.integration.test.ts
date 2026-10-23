@@ -23,14 +23,14 @@ let ecoleB: string; // aucun lien
 let ecoleC: string; // membre désactivé
 
 async function creerEcole(nom: string) {
-  const [e] = await admin`INSERT INTO ecole (nom, slug) VALUES (${nom}, ${`${nom}-${suffixe}`}) RETURNING id`;
+  const [e] = await admin`INSERT INTO school (name, slug) VALUES (${nom}, ${`${nom}-${suffixe}`}) RETURNING id`;
   return e.id as string;
 }
 
 async function seConnecter() {
   const resultat = await auth.api.signInEmail({ body: { email, password: motDePasse } });
-  const [s] = await admin`SELECT id, ecole_choisie FROM session WHERE token = ${resultat.token}`;
-  return s as { id: string; ecole_choisie: string | null };
+  const [s] = await admin`SELECT id, selected_school_id FROM session WHERE token = ${resultat.token}`;
+  return s as { id: string; selected_school_id: string | null };
 }
 
 beforeAll(async () => {
@@ -38,14 +38,14 @@ beforeAll(async () => {
   ecoleB = await creerEcole("ecole-b");
   ecoleC = await creerEcole("ecole-c");
   userId = await creerCompte({ email, nom: "Accueil Test", motDePasse });
-  await admin`INSERT INTO membre (ecole_id, user_id, role) VALUES (${ecoleA}, ${userId}, 'accueil')`;
-  await admin`INSERT INTO membre (ecole_id, user_id, role, actif) VALUES (${ecoleC}, ${userId}, 'direction', false)`;
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${ecoleA}, ${userId}, 'accueil')`;
+  await admin`INSERT INTO member (school_id, user_id, role, active) VALUES (${ecoleC}, ${userId}, 'direction', false)`;
 });
 
 afterAll(async () => {
-  await admin`DELETE FROM membre WHERE user_id = ${userId}`;
+  await admin`DELETE FROM member WHERE user_id = ${userId}`;
   await admin`DELETE FROM "user" WHERE id = ${userId}`; // sessions et comptes en cascade
-  await admin`DELETE FROM ecole WHERE id IN (${ecoleA}, ${ecoleB}, ${ecoleC})`;
+  await admin`DELETE FROM school WHERE id IN (${ecoleA}, ${ecoleB}, ${ecoleC})`;
   await admin.end();
 });
 
@@ -53,7 +53,7 @@ describe("Connexion", () => {
   it("connecte un compte créé par l’école", async () => {
     const session = await seConnecter();
     expect(session.id).toBeTruthy();
-    expect(session.ecole_choisie).toBeNull();
+    expect(session.selected_school_id).toBeNull();
   });
 
   it("refuse un mauvais mot de passe", async () => {
@@ -73,16 +73,16 @@ describe("Choix de l’école", () => {
   it("enregistre sur la session une école dont on est membre actif", async () => {
     const session = await seConnecter();
     expect(await choisirEcole(session.id, userId, ecoleA)).toBe(true);
-    const [apres] = await admin`SELECT ecole_choisie FROM session WHERE id = ${session.id}`;
-    expect(apres.ecole_choisie).toBe(ecoleA);
+    const [apres] = await admin`SELECT selected_school_id FROM session WHERE id = ${session.id}`;
+    expect(apres.selected_school_id).toBe(ecoleA);
     expect(await contexteDepuisSession(userId, ecoleA)).toEqual({ userId, ecoleId: ecoleA, role: "accueil" });
   });
 
   it("refuse une école dont on n’est pas membre", async () => {
     const session = await seConnecter();
     expect(await choisirEcole(session.id, userId, ecoleB)).toBe(false);
-    const [apres] = await admin`SELECT ecole_choisie FROM session WHERE id = ${session.id}`;
-    expect(apres.ecole_choisie).toBeNull();
+    const [apres] = await admin`SELECT selected_school_id FROM session WHERE id = ${session.id}`;
+    expect(apres.selected_school_id).toBeNull();
     expect(await contexteDepuisSession(userId, ecoleB)).toBeNull();
   });
 

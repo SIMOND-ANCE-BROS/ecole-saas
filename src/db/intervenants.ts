@@ -58,8 +58,8 @@ const colonnes = {
 
 /** Cours d'une saison donnés par l'intervenant (titulaire du cours). */
 const coursSaison = (saisonId: string) => sql<number>`(
-  SELECT count(*)::int FROM cours c
-  WHERE c.intervenant_id = ${intervenant}.${sql.identifier("id")} AND c.saison_id = ${saisonId}
+  SELECT count(*)::int FROM course c
+  WHERE c.instructor_id = ${intervenant}.${sql.identifier("id")} AND c.season_id = ${saisonId}
 )`;
 
 /** Actifs d'abord, puis par nom et prénom. */
@@ -79,7 +79,7 @@ export async function lireIntervenant(tx: Tx, id: string): Promise<Intervenant |
 export async function creerIntervenant(tx: Tx, saisie: SaisieIntervenant): Promise<string> {
   const [{ id }] = await tx
     .insert(intervenant)
-    .values({ ...saisie, ecoleId: sql`nullif(current_setting('app.ecole_id', true), '')::uuid` })
+    .values({ ...saisie, ecoleId: sql`nullif(current_setting('app.school_id', true), '')::uuid` })
     .returning({ id: intervenant.id });
   return id;
 }

@@ -9,7 +9,7 @@ import { membre, preferenceListe } from "./schema";
  * colonnes revient à l'appelant (`lireDisposition`).
  */
 
-const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uuid`;
+const ECOLE_COURANTE = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 
 /** Colonnes enregistrées par ce compte pour cette liste, ou null (disposition par défaut). */
 export async function lirePreference(tx: Tx, userId: string, liste: string): Promise<string[] | null> {

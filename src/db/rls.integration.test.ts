@@ -2,8 +2,8 @@ import postgres from "postgres";
 import { afterAll, describe, expect, it } from "vitest";
 
 /**
- * Garde-fou : toute table du schéma public portant `ecole_id` doit avoir la
- * Row Level Security activée ET forcée, et une politique `isolation_ecole`
+ * Garde-fou : toute table du schéma public portant `school_id` doit avoir la
+ * Row Level Security activée ET forcée, et une politique `school_isolation`
  * valable pour toutes les commandes.
  *
  * Exécuté contre la vraie base (npm run test:integration), après les migrations.
@@ -28,8 +28,8 @@ const REQUETE_TABLES_ECOLE = `
          coalesce(p.polcmd = '*', false) AS politique_toutes_commandes
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
-  JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'ecole_id' AND NOT a.attisdropped
-  LEFT JOIN pg_policy p ON p.polrelid = c.oid AND p.polname = 'isolation_ecole'
+  JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'school_id' AND NOT a.attisdropped
+  LEFT JOIN pg_policy p ON p.polrelid = c.oid AND p.polname = 'school_isolation'
   WHERE c.relkind IN ('r', 'p')
   ORDER BY c.relname
 `;
@@ -39,8 +39,8 @@ function defauts(tables: TableEcole[]): string[] {
     const manques = [
       !t.rls_activee && "RLS non activée (ENABLE ROW LEVEL SECURITY)",
       !t.rls_forcee && "RLS non forcée (FORCE ROW LEVEL SECURITY)",
-      !t.politique && "politique isolation_ecole absente",
-      t.politique && !t.politique_toutes_commandes && "isolation_ecole ne couvre pas toutes les commandes",
+      !t.politique && "politique school_isolation absente",
+      t.politique && !t.politique_toutes_commandes && "school_isolation ne couvre pas toutes les commandes",
     ].filter(Boolean);
     return manques.length ? [`${t.table} : ${manques.join(", ")}`] : [];
   });
@@ -67,19 +67,19 @@ afterAll(async () => {
 });
 
 describe("Row Level Security", () => {
-  it("protège toutes les tables portant ecole_id", async () => {
+  it("protège toutes les tables portant school_id", async () => {
     const tables = await app.unsafe<TableEcole[]>(REQUETE_TABLES_ECOLE);
 
     // Base vide ou migrations non appliquées : le test ne doit pas passer à vide.
-    expect(tables.length, "aucune table avec ecole_id : migrations appliquées ?").toBeGreaterThan(0);
+    expect(tables.length, "aucune table avec school_id : migrations appliquées ?").toBeGreaterThan(0);
     expect(defauts(tables)).toEqual([]);
   });
 
-  it("détecte une table portant ecole_id sans RLS", async () => {
+  it("détecte une table portant school_id sans RLS", async () => {
     // Vérifie le garde-fou lui-même : une table oubliée doit être signalée.
     const erreurs = await admin
       .begin(async (tx) => {
-        await tx.unsafe("CREATE TABLE garde_fou_temoin (id int, ecole_id uuid)");
+        await tx.unsafe("CREATE TABLE garde_fou_temoin (id int, school_id uuid)");
         throw new Annulation(defauts(await tx.unsafe<TableEcole[]>(REQUETE_TABLES_ECOLE)));
       })
       .catch((e: unknown) => {
@@ -90,7 +90,7 @@ describe("Row Level Security", () => {
     // Seule la table témoin compte ici : un vrai défaut est signalé par le test précédent.
     expect(erreurs.filter((e) => e.startsWith("garde_fou_temoin "))).toEqual([
       "garde_fou_temoin : RLS non activée (ENABLE ROW LEVEL SECURITY), " +
-        "RLS non forcée (FORCE ROW LEVEL SECURITY), politique isolation_ecole absente",
+        "RLS non forcée (FORCE ROW LEVEL SECURITY), politique school_isolation absente",
     ]);
   });
 });

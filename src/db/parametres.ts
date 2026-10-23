@@ -10,7 +10,7 @@ import { cours, discipline, horaireSite, saison, salle, site } from "./schema";
  * la transaction d'`avecEcole()` (RLS).
  */
 
-const ECOLE_COURANTE = sql`nullif(current_setting('app.ecole_id', true), '')::uuid`;
+const ECOLE_COURANTE = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const estUuid = (v: string) => z.uuid().safeParse(v).success;
 export type Resultat = { ok: true; id: string } | { ok: false; message: string };
 const nomValide = z.string().trim().min(1, "Nom obligatoire").max(100);
@@ -37,8 +37,8 @@ export function listerSaisons(tx: Tx): Promise<LigneSaison[]> {
       libelle: saison.libelle,
       dateDebut: saison.dateDebut,
       dateFin: saison.dateFin,
-      cours: compte(sql`SELECT count(*) FROM cours c WHERE c.saison_id = ${id}`),
-      tarifs: compte(sql`SELECT count(*) FROM tarif t WHERE t.saison_id = ${id}`),
+      cours: compte(sql`SELECT count(*) FROM course c WHERE c.season_id = ${id}`),
+      tarifs: compte(sql`SELECT count(*) FROM tariff t WHERE t.season_id = ${id}`),
     })
     .from(saison)
     .orderBy(desc(saison.dateDebut));
@@ -92,15 +92,15 @@ export async function creerSaison(
     .returning({ id: saison.id });
   if (reprendreDe) {
     await tx.execute(sql`
-      INSERT INTO tarif (ecole_id, saison_id, public, periodicite, combinaison, discipline_id, prix_centimes)
-      SELECT ecole_id, ${id}, public, periodicite, combinaison, discipline_id, prix_centimes FROM tarif WHERE saison_id = ${reprendreDe}`);
+      INSERT INTO tariff (school_id, season_id, audience, period, combination, discipline_id, price_cents)
+      SELECT school_id, ${id}, audience, period, combination, discipline_id, price_cents FROM tariff WHERE season_id = ${reprendreDe}`);
     await tx.execute(sql`
-      INSERT INTO reduction (ecole_id, saison_id, code, taux_points_base, montant_centimes, non_cumulable_avec, seuil_danseurs, publics, cumulable_multi_disciplines)
-      SELECT ecole_id, ${id}, code, taux_points_base, montant_centimes, non_cumulable_avec, seuil_danseurs, publics, cumulable_multi_disciplines
-      FROM reduction WHERE saison_id = ${reprendreDe}`);
+      INSERT INTO discount (school_id, season_id, code, rate_bps, amount_cents, not_combinable_with, min_students, audiences, combinable_with_multi_discipline)
+      SELECT school_id, ${id}, code, rate_bps, amount_cents, not_combinable_with, min_students, audiences, combinable_with_multi_discipline
+      FROM discount WHERE season_id = ${reprendreDe}`);
     await tx.execute(sql`
-      INSERT INTO tarif_carnet (ecole_id, saison_id, nb_seances, personnes_max, prix_centimes)
-      SELECT ecole_id, ${id}, nb_seances, personnes_max, prix_centimes FROM tarif_carnet WHERE saison_id = ${reprendreDe}`);
+      INSERT INTO lesson_pack_tariff (school_id, season_id, lesson_count, max_people, price_cents)
+      SELECT school_id, ${id}, lesson_count, max_people, price_cents FROM lesson_pack_tariff WHERE season_id = ${reprendreDe}`);
   }
   return { ok: true, id };
 }
@@ -131,8 +131,8 @@ export function listerDisciplines(tx: Tx): Promise<LigneDiscipline[]> {
     .select({
       id: discipline.id,
       nom: discipline.nom,
-      cours: compte(sql`SELECT count(*) FROM cours c WHERE c.discipline_id = ${id}`),
-      tarifs: compte(sql`SELECT count(*) FROM tarif t WHERE t.discipline_id = ${id}`),
+      cours: compte(sql`SELECT count(*) FROM course c WHERE c.discipline_id = ${id}`),
+      tarifs: compte(sql`SELECT count(*) FROM tariff t WHERE t.discipline_id = ${id}`),
     })
     .from(discipline)
     .orderBy(asc(discipline.nom));
@@ -211,7 +211,7 @@ export async function listerLieux(tx: Tx): Promise<LigneSite[]> {
       siteId: salle.siteId,
       nom: salle.nom,
       capacite: salle.capacite,
-      cours: compte(sql`SELECT count(*) FROM cours c WHERE c.salle_id = ${idSalle}`),
+      cours: compte(sql`SELECT count(*) FROM course c WHERE c.room_id = ${idSalle}`),
     })
     .from(salle)
     .orderBy(asc(salle.nom));

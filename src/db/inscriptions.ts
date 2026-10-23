@@ -201,7 +201,7 @@ export async function enregistrerInscription(
   const [{ id }] = await tx
     .insert(inscription)
     .values({
-      ecoleId: sql`nullif(current_setting('app.ecole_id', true), '')::uuid`,
+      ecoleId: sql`nullif(current_setting('app.school_id', true), '')::uuid`,
       payeurId,
       saisonId,
       tarifId: r.ligneTarifId,
@@ -219,7 +219,7 @@ export async function enregistrerInscription(
     await tx.insert(inscriptionCours).values(
       danseurIds.flatMap((danseurId) =>
         coursIds.map((coursId) => ({
-          ecoleId: sql`nullif(current_setting('app.ecole_id', true), '')::uuid`,
+          ecoleId: sql`nullif(current_setting('app.school_id', true), '')::uuid`,
           inscriptionId: id,
           danseurId,
           coursId,
