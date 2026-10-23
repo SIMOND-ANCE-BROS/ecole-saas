@@ -27,7 +27,7 @@ import { type AddressFilter, useAddressFilter } from "./address-filter";
 export type CellValue = string | number | string[] | null;
 export type TableRow = {
   id: string;
-  /** Record link for the column named by `relationship`; absent: plain text. */
+  /** Record link for the column named by `linkColumn`; absent: plain text. */
   href?: string;
   /** Greyed-out row (inactive instructor…). */
   dimmed?: boolean;
@@ -163,12 +163,12 @@ export function ListTable({
     const keep = (other: ColumnFilter["otherConditions"]) =>
       f.change(writeColumnFilter(f.filter, d, { otherConditions: other }));
     return [
-      ...(summary ? [{ key: d.id, texte: summary, remove: () => keep(fc.otherConditions) }] : []),
+      ...(summary ? [{ key: d.id, text: summary, remove: () => keep(fc.otherConditions) }] : []),
       ...fc.otherConditions
         .filter((c) => f.complete(c))
         .map((c, i) => ({
           key: `${d.id}-${i}`,
-          texte: conditionLabel(c, columns),
+          text: conditionLabel(c, columns),
           remove: () =>
             f.change(
               writeColumnFilter(f.filter, d, { ...fc, otherConditions: fc.otherConditions.filter((x) => x !== c) }),
@@ -190,11 +190,11 @@ export function ListTable({
                   key={p.key}
                   className="flex items-center gap-1 rounded-full border border-accent bg-accent-doux py-0.5 pr-1 pl-2.5"
                 >
-                  {p.texte}
+                  {p.text}
                   <button
                     type="button"
                     className="rounded-full px-1.5 hover:bg-surface"
-                    aria-label={`Retirer le filtre ${p.texte}`}
+                    aria-label={`Retirer le filtre ${p.text}`}
                     onClick={p.remove}
                   >
                     ×
