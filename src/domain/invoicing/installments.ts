@@ -3,19 +3,19 @@ import { split } from "../../lib/money";
 export type ScheduleRequest = {
   amountCents: number;
   installmentCount: number;
-  /** Date de la première échéance, `YYYY-MM-DD`. */
+  /** Date of the first installment, `YYYY-MM-DD`. */
   firstDate: string;
-  /** Écart entre deux échéances, en mois (1 par défaut). */
+  /** Gap between two installments, in months (1 by default). */
   monthInterval?: number;
 };
 
 export type Installment = { rank: number; plannedDate: string; amountCents: number };
 
 /**
- * Découpe un montant en échéances. Nombre, première date et intervalle sont
- * des paramètres (propres à chaque école) ; les centimes restants vont sur la
- * première échéance (`repartir`). Chaque date est calculée depuis la première,
- * ramenée au dernier jour du mois si besoin.
+ * Splits an amount into installments. Count, first date and interval are
+ * parameters (specific to each school); the leftover cents go on the first
+ * installment (`split`). Each date is computed from the first one, brought
+ * back to the last day of the month if needed.
  */
 export function computeSchedule(request: ScheduleRequest): Installment[] {
   const {
@@ -39,7 +39,7 @@ export function computeSchedule(request: ScheduleRequest): Installment[] {
   }));
 }
 
-/** `YYYY-MM-DD` + n mois, ramené au dernier jour du mois (31 janvier + 1 → 28 ou 29 février). */
+/** `YYYY-MM-DD` + n months, brought back to the last day of the month (31 January + 1 → 28 or 29 February). */
 export function addMonths(date: string, month: number): string {
   const { annee, month: m, day: day } = readDate(date);
   const index = annee * 12 + (m - 1) + month;
@@ -59,7 +59,7 @@ function readDate(date: string) {
 }
 
 function daysInMonth(annee: number, month: number): number {
-  // Jour 0 du mois suivant = dernier jour du mois, en UTC pour éviter tout effet de fuseau.
+  // Day 0 of the next month = last day of the month, in UTC to avoid any time zone effect.
   return new Date(Date.UTC(annee, month, 0)).getUTCDate();
 }
 

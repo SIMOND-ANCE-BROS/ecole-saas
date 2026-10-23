@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { becomeStudent } from "../../eleves/actions";
 
-/** Un parent qui prend aussi des cours : il rejoint la liste des élèves. */
+/** A parent who also takes courses: they join the student list. */
 export function BecomeStudent({ id, firstName: firstName }: { id: string; firstName: string }) {
   const [message, setMessage] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();

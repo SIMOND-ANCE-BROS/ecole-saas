@@ -16,7 +16,7 @@ const VUES = { journal: "Journal", remettre: "À remettre", remises: "Remises" }
 type View = keyof typeof VUES;
 const day = (iso: string) => iso.split("-").reverse().join("/");
 
-/** Encaissements (#98) : journal par période, paiements à remettre en banque, remises et bordereaux. */
+/** Payments (#98): log by period, payments to deposit at the bank, bank deposits and deposit slips. */
 export default async function PaymentsPage({ searchParams }: PageProps<"/encaissements">) {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const p = await searchParams;

@@ -3,15 +3,15 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-/** Connexion avec le rôle `app_user`, soumis à la Row Level Security. */
+/** Connection with the `app_user` role, subject to Row Level Security. */
 const client = postgres(process.env.DATABASE_URL!);
 export const db = drizzle(client, { schema });
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
- * Exécute `fn` dans une transaction limitée à une école.
- * Toute requête faite avec `tx` ne voit et n'écrit que les lignes de cette école.
+ * Runs `fn` in a transaction restricted to one school.
+ * Every query made with `tx` sees and writes only that school's rows.
  */
 export function withSchool<T>(schoolId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.transaction(async (tx) => {
@@ -21,8 +21,8 @@ export function withSchool<T>(schoolId: string, fn: (tx: Tx) => Promise<T>): Pro
 }
 
 /**
- * Liste les écoles où un utilisateur est membre actif, à la connexion (avant
- * d'en choisir une). Un membre désactivé n'y a plus accès.
+ * Lists the schools where a user is an active member, at sign-in (before
+ * choosing one). A deactivated member no longer has access.
  */
 export function schoolsOf(userId: string) {
   return db.transaction(async (tx) => {

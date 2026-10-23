@@ -15,22 +15,22 @@ const VUES: Record<ScheduleView, string> = { datee: "Par semaine", type: "Semain
 
 type Props = {
   courses: ScheduleCourse[];
-  /** Direction : chaque jour propose « + » pour créer un cours. */
+  /** Management: each day offers « + » to create a course. */
   editable: boolean;
-  /** Cours tout juste enregistré, signalé dans la grille. */
+  /** Course just saved, highlighted in the grid. */
   highlighted?: string;
-  /** Vue choisie (`?vue=`) : semaine datée par défaut (#90). */
+  /** Chosen view (`?vue=`): dated week by default (#90). */
   view: ScheduleView;
-  /** Semaine datée affichée : son lundi, ses séances et ses fermetures. */
+  /** Displayed dated week: its Monday, its lessons and its closures. */
   monday: string;
   today: string;
   lessons: ScheduleLesson[];
   closures: { label: string; start: string; end: string }[];
-  /** Horaires d'ouverture par site (#90) : bornent l'agenda. */
+  /** Opening hours per site (#90): they bound the calendar. */
   hours: Record<string, Hours[]>;
 };
 
-/** Planning de la semaine, filtrable par discipline, site, salle et intervenant, avec l'effectif de chaque cours. */
+/** Weekly schedule, filterable by discipline, site, room and instructor, with the headcount of each course. */
 export function ScheduleGrid({
   courses: cours,
   editable: editable,
@@ -63,7 +63,7 @@ export function ScheduleGrid({
   );
   const visible = filterSchedule(cours, filters);
   const activeFilters = Object.values(filters).some(Boolean);
-  // Horaires des sites affichés : le site (ou celui de la salle) filtré, sinon tous.
+  // Opening hours of the displayed sites: the filtered site (or the filtered room's site), otherwise all.
   const filteredSite = roomId
     ? cours.find((c) => c.roomId === roomId)?.siteId
     : site

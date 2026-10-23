@@ -4,7 +4,7 @@ import { createCalendarToken, calendarState, readCalendar, revokeCalendarToken }
 import { readInstructor, updateInstructor } from "./instructors";
 import { withSchool } from "./index";
 
-/** Abonnement iCal d'un intervenant, comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
+/** An instructor's iCal subscription, as the app does (app_user, RLS). Fictitious data deleted at the end. */
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
@@ -104,7 +104,7 @@ describe("abonnement iCal", () => {
     await withSchool(school, (tx) => updateInstructor(tx, ines, { ...saisie, active: false }));
     expect(await withSchool(school, (tx) => calendarState(tx, ines))).toBeNull();
 
-    // Même si l'empreinte revenait (restauration de sauvegarde), un inactif ne lit rien.
+    // Even if the hash came back (backup restore), an inactive instructor reads nothing.
     const [{ empreinte }] = await admin`SELECT encode(sha256(${token}::bytea), 'hex') AS empreinte`;
     await admin`UPDATE instructor SET calendar_token_hash = ${empreinte} WHERE id = ${ines}`;
     expect(await withSchool(school, (tx) => readCalendar(tx, token, "2026-10-20"))).toBeNull();

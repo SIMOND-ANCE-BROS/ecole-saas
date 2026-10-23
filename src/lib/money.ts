@@ -1,9 +1,9 @@
 /**
- * Montants en centimes entiers, taux en points de base (10000 = 100 %).
- * Ne jamais manipuler d'euros en nombre à virgule.
+ * Amounts in integer cents, rates in basis points (10000 = 100 %).
+ * Never handle euros as floating-point numbers.
  */
 
-/** Applique un taux et arrondit au centime le plus proche (arrondi commercial). */
+/** Applies a rate and rounds to the nearest cent (round half away from zero). */
 export function applyRate(cents: number, basisPoints: number): number {
   if (!Number.isInteger(cents) || !Number.isInteger(basisPoints)) {
     throw new TypeError("Montant et taux doivent être des entiers");
@@ -12,7 +12,7 @@ export function applyRate(cents: number, basisPoints: number): number {
   return Math.sign(raw) * Math.round(Math.abs(raw));
 }
 
-/** Répartit un montant en n échéances ; le reste des centimes va sur la première. */
+/** Splits an amount into n installments; the leftover cents go on the first one. */
 export function split(cents: number, n: number): number[] {
   if (!Number.isInteger(cents) || !Number.isInteger(n) || n < 1) {
     throw new TypeError("Montant entier et nombre d'échéances ≥ 1 attendus");
@@ -30,8 +30,8 @@ export function formatEuros(cents: number): string {
 }
 
 /**
- * Saisie en euros (« 40 », « 40,50 », « 1 234,56 € ») → centimes entiers, sans
- * passer par un nombre à virgule ; null si la saisie n'est pas un montant positif.
+ * Input in euros (« 40 », « 40,50 », « 1 234,56 € ») → integer cents, without
+ * going through a floating-point number; null if the input is not a positive amount.
  */
 export function parseEuros(saisie: string): number | null {
   const m = /^(\d+)(?:[,.](\d{1,2}))?$/.exec(saisie.replace(/[\s €]/g, ""));

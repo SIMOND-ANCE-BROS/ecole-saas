@@ -11,7 +11,7 @@ export function Print() {
   );
 }
 
-/** Annulation d'une remise faite par erreur (direction), après confirmation. */
+/** Cancellation of a bank deposit made by mistake (management), after confirmation. */
 export function CancelDeposit({ id }: { id: string }) {
   const [confirm, setConfirm] = useState(false);
   const [message, setMessage] = useState<string | null>(null);

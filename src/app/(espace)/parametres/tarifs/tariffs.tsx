@@ -19,12 +19,12 @@ const PERIODS: [Period, string][] = [
 ];
 const DUREES = [30, 45, 60, 75, 90, 120];
 
-/** Centimes → saisie en euros (« 110 », « 112,50 »), sans nombre à virgule. */
+/** Cents → euro input (« 110 », « 112,50 »), without floating-point numbers. */
 const inEuros = (c: number) => `${Math.trunc(c / 100)}${c % 100 ? `,${String(c % 100).padStart(2, "0")}` : ""}`;
 
 type State = "enregistre" | "erreur" | null;
 
-/** Prix d'une case, enregistré en quittant le champ (Entrée ou Tab) ; vide = pas de forfait. */
+/** Price of a cell, saved when leaving the field (Enter or Tab); empty = no package. */
 function PriceCell({
   seasonId: seasonId,
   row: row,
@@ -337,7 +337,7 @@ export function Siblings({
 
   const save = () =>
     startTransition(async () => {
-      // Pourcentage saisi « 10 » ou « 12,5 » : en points de base (1000 = 10 %), sans nombre à virgule.
+      // Percentage entered as « 10 » or « 12,5 »: in basis points (1000 = 10 %), without floating-point numbers.
       const nombre = parseEuros(v.value);
       if (v.active && nombre === null) return setMessage({ texte: "Valeur invalide.", error: true });
       const r = await siblingsRule(

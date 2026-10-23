@@ -23,12 +23,12 @@ type Props = {
   course: EditedCourse | null;
   referential: ScheduleReferential;
   schedule: ScheduleCourse[];
-  /** Jour proposé pour un nouveau cours (lien « + » d'une colonne du planning). */
+  /** Day suggested for a new course (« + » link of a schedule column). */
   day?: number;
-  /** Créneau proposé depuis la vue agenda. */
+  /** Slot suggested from the calendar view. */
   heure?: string;
   duration?: number;
-  /** Date cliquée dans le planning daté : première date si l'on choisit « à des dates précises ». */
+  /** Date clicked in the dated schedule: first date if « à des dates précises » is chosen. */
   date?: string;
 };
 
@@ -65,7 +65,7 @@ export function CourseForm({
     level: cours?.level ?? "",
     maxCapacity: cours?.maxCapacity?.toString() ?? "",
   });
-  // Dates d'un cours ponctuel ; une ligne vide pour commencer.
+  // Dates of a one-off course; one empty row to start with.
   const [dates, setDates] = useState<string[]>(cours?.dates.length ? cours.dates : [date ?? ""]);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const [sending, startTransition] = useTransition();
@@ -123,7 +123,7 @@ export function CourseForm({
     return c.room ? `${autre.room} déjà occupée (${when})` : `${autre.instructor} donne déjà un cours (${when})`;
   });
 
-  // Créneau hors des horaires d'ouverture du site de la salle (simple avertissement : un cours exceptionnel reste possible).
+  // Slot outside the opening hours of the room's site (warning only: an exceptional course is still allowed).
   const roomSite = r.salles.find((s) => s.id === v.roomId)?.siteId;
   const outsideOpening =
     !oneOff && roomSite && saisie.weekday && saisie.durationMinutes > 0
@@ -133,7 +133,7 @@ export function CourseForm({
         )
       : null;
 
-  // Indisponibilités de l'intervenant sur les dates à venir du créneau, vérifiées côté serveur après une pause.
+  // Instructor unavailabilities on the slot's upcoming dates, checked server-side after a pause.
   const [unavailabilityDates, setUnavailabilityDates] = useState<string[]>([]);
   const key = oneOff ? "" : `${v.instructorId}|${v.weekday}|${v.startTime}|${v.durationMinutes}`;
   useEffect(() => {
@@ -247,7 +247,7 @@ export function CourseForm({
             value={v.type}
             onChange={(e) => {
               const type = e.target.value as typeof v.type;
-              // Un nouveau stage a en général des dates précises.
+              // A new workshop usually has specific dates.
               setV({ ...v, type, recurrence: !cours && type === "stage" ? "dates" : v.recurrence });
             }}
           >

@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: "Fiche contact" };
 
 const BANNERS: Record<string, string> = { cree: "Contact créé.", modifie: "Fiche enregistrée." };
 
-/** Bandeau après un encaissement (`?encaisse=3`). */
+/** Banner after a payment (`?encaisse=3`). */
 const collected = (n: unknown) => {
   const k = Number(n);
   return Number.isInteger(k) && k > 0 ? `${k} règlement${k > 1 ? "s" : ""} encaissé${k > 1 ? "s" : ""}.` : undefined;

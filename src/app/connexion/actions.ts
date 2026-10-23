@@ -24,7 +24,7 @@ export async function signIn(_etat: ConnectionState, formData: FormData): Promis
   }
 
   const requestHeaders = await headers();
-  // Tentative enregistrée avant la vérification du mot de passe (voir sign-in-limit.ts).
+  // Attempt recorded before the password check (see sign-in-limit.ts).
   const ip = trustedIp(requestHeaders);
   if (!(await recordAttempt(donnees.data.email, ip))) {
     return {
@@ -40,13 +40,13 @@ export async function signIn(_etat: ConnectionState, formData: FormData): Promis
       headers: requestHeaders,
     });
   } catch (e) {
-    // Même message pour un compte inconnu ou un mauvais mot de passe.
+    // Same message for an unknown account or a wrong password.
     if (isAPIError(e)) return { error: "Adresse e-mail ou mot de passe incorrect.", email };
     throw e;
   }
   await clearAttempts(donnees.data.email, ip);
 
-  // Une seule école : choisie d'office, sans passer par la liste.
+  // A single school: chosen automatically, without going through the list.
   const ecoles = await schoolsOf(connection.user.id);
   const sessionId = await idDeSession(connection.token);
   if (ecoles.length === 1 && sessionId && (await chooseSchool(sessionId, connection.user.id, ecoles[0].id))) {

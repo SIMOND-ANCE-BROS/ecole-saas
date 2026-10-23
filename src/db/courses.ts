@@ -4,7 +4,7 @@ import type { Tx } from "./index";
 import { hoursBySite } from "./settings";
 import { course, courseDate, discipline, enrollmentCourse, instructor, attendance, room, lesson, site } from "./schema";
 
-/** Édition du planning (cours, disciplines, salles), toujours avec la transaction d'`withSchool()` (RLS). */
+/** Schedule editing (courses, disciplines, rooms), always within the `withSchool()` transaction (RLS). */
 
 export const COURSE_TYPES = {
   collectif: "Collectif",
@@ -18,7 +18,7 @@ const shortName = z.string().trim().min(1).max(100);
 const integerOrNull = (min: number, max: number) => z.int().min(min).max(max).nullable();
 const dateOrNull = z.iso.date("Date invalide").nullable();
 
-/** Récurrences proposées (#90). */
+/** Offered recurrences (#90). */
 export const RECURRENCES = {
   hebdomadaire: "Chaque semaine",
   quinzaine: "Une semaine sur deux",
@@ -90,7 +90,7 @@ export type EditedCourse = {
   weekday: number | null;
   startDate: string | null;
   endDate: string | null;
-  /** Dates d'un cours ponctuel, triées. */
+  /** Dates of a one-off course, sorted. */
   dates: string[];
   startTime: string;
   durationMinutes: number;
@@ -100,7 +100,7 @@ export type EditedCourse = {
   maxCapacity: number | null;
 };
 
-/** Dates d'un cours ponctuel, triées (texte `YYYY-MM-DD`). */
+/** Dates of a one-off course, sorted (text `YYYY-MM-DD`). */
 export const courseDatesSql = sql<string[]>`coalesce((
   SELECT array_agg(cd.date::text ORDER BY cd.date) FROM course_date cd WHERE cd.course_id = ${course}.${sql.identifier("id")}), '{}')`;
 
@@ -133,7 +133,7 @@ export async function readCourse(tx: Tx, id: string): Promise<EditedCourse | nul
   return c ? { ...c, startTime: c.startTime.slice(0, 5) } : null;
 }
 
-/** Choix proposés dans le formulaire de cours. `inclure` : intervenant à garder même inactif. */
+/** Choices offered in the course form. `include`: instructor to keep even if inactive. */
 export async function scheduleReferential(tx: Tx, include?: string) {
   const [disciplines, salles, sites, instructors] = [
     await tx.select({ id: discipline.id, name: discipline.name }).from(discipline).orderBy(asc(discipline.name)),
@@ -154,12 +154,12 @@ export async function scheduleReferential(tx: Tx, include?: string) {
       .where(include ? or(eq(instructor.active, true), eq(instructor.id, include)) : eq(instructor.active, true))
       .orderBy(asc(instructor.firstName), asc(instructor.lastName)),
   ];
-  // Horaires d'ouverture par site (#90) : le formulaire prévient d'un créneau qui en sort.
+  // Opening hours per site (#90): the form warns about a slot that falls outside them.
   return { disciplines, salles, sites, instructors: instructors, hours: await hoursBySite(tx) };
 }
 export type ScheduleReferential = Awaited<ReturnType<typeof scheduleReferential>>;
 
-/** Discipline choisie, ou retrouvée par son nom (sans tenir compte de la casse), sinon créée. */
+/** Chosen discipline, or found by its name (case-insensitive), otherwise created. */
 async function resolveDiscipline(tx: Tx, d: CourseInput["discipline"]): Promise<string | null> {
   if ("id" in d) {
     const [x] = await tx.select({ id: discipline.id }).from(discipline).where(eq(discipline.id, d.id));
@@ -178,7 +178,7 @@ async function resolveDiscipline(tx: Tx, d: CourseInput["discipline"]): Promise<
   return n.id;
 }
 
-/** Salle choisie, ou créée avec son site (existant ou nouveau). */
+/** Chosen room, or created with its site (existing or new). */
 async function resolveRoom(tx: Tx, s: CourseInput["room"]): Promise<string | null> {
   if ("id" in s) {
     const [x] = await tx.select({ id: room.id }).from(room).where(eq(room.id, s.id));
@@ -202,7 +202,7 @@ async function resolveRoom(tx: Tx, s: CourseInput["room"]): Promise<string | nul
   return n.id;
 }
 
-/** Résout discipline, salle et intervenant ; un intervenant inactif n'est accepté que s'il est `garde`. */
+/** Resolves discipline, room and instructor; an inactive instructor is accepted only if it is `guard`. */
 async function values(tx: Tx, saisie: CourseInput, guard?: string) {
   const [i] = await tx
     .select({ id: instructor.id })
@@ -229,7 +229,7 @@ async function values(tx: Tx, saisie: CourseInput, guard?: string) {
     level: level,
     maxCapacity: maxCapacity,
   } = saisie;
-  // Dates précises : ni jour ni période ; cours régulier : pas de dates.
+  // Specific dates: neither day nor period; regular course: no dates.
   const oneOff = recurrence === "dates";
   const weekday = oneOff ? null : saisie.weekday;
   const [startDate, endDate] = oneOff ? [null, null] : [saisie.startDate, saisie.endDate];
@@ -280,7 +280,7 @@ export async function updateCourse(tx: Tx, id: string, saisie: CourseInput): Pro
   if (!r.ok) return r;
   await tx.update(course).set(r.values).where(eq(course.id, id));
   await replaceDates(tx, id, r.dates);
-  // Nouveau titulaire : il reprend les séances à venir de l'ancien, pas celles d'un remplaçant.
+  // New main instructor: takes over the old one's upcoming lessons, not those of a substitute.
   if (r.values.instructorId !== existing.instructorId) {
     await tx
       .update(lesson)
@@ -297,7 +297,7 @@ export async function updateCourse(tx: Tx, id: string, saisie: CourseInput): Pro
   return { ok: true, id };
 }
 
-/** Refusée dès qu'une inscription, quel que soit son statut, porte sur le cours. */
+/** Refused as soon as an enrollment, whatever its status, concerns the course. */
 export async function deleteCourse(tx: Tx, id: string): Promise<Result> {
   if (!(await readCourse(tx, id))) return { ok: false, message: "Ce cours n’existe plus." };
   const [{ n }] = await tx
@@ -329,9 +329,9 @@ export type MoveResult =
   { status: "ok"; id: string } | { status: "confirmer"; enrolled: number } | { status: "refus"; message: string };
 
 /**
- * Déplace (jour, heure) ou étire (durée) un cours depuis la vue agenda. Si des
- * élèves y sont inscrits (actifs ou à l'essai), il faut d'abord confirmer.
- * Les séances à venir sont recalculées par l'appelant (synchroniserSeances).
+ * Moves (day, time) or stretches (duration) a course from the calendar view. If
+ * students are enrolled (active or on trial), it must be confirmed first.
+ * Upcoming lessons are recomputed by the caller (syncLessons).
  */
 export async function moveCourse(
   tx: Tx,

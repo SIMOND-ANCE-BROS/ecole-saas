@@ -1,12 +1,12 @@
 /**
- * Synchronise les agendas connectés de toutes les écoles (tâche planifiée,
- * par exemple toutes les heures) :
+ * Synchronises the connected calendars of all schools (scheduled task,
+ * for example every hour):
  *
  *   npm run calendars:sync
  *
- * Script d'administration : la connexion propriétaire sert seulement à lister
- * les écoles qui ont un agenda connecté ; chaque école est ensuite traitée par
- * l'application, sous sa propre RLS. Aucune donnée personnelle dans la sortie.
+ * Administration script: the owner connection is only used to list
+ * the schools that have a connected calendar; each school is then processed by
+ * the application, under its own RLS. No personal data in the output.
  */
 import postgres from "postgres";
 import { syncSchool } from "../src/lib/calendar-sync";

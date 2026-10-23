@@ -10,9 +10,9 @@ import { move } from "./cours/actions";
 import { end, DAYS, recurrenceBadge, recurrenceText } from "./format";
 
 type Props = {
-  /** Cours visibles (filtres appliqués). */
+  /** Visible courses (filters applied). */
   courses: ScheduleCourse[];
-  /** Tous les cours de la saison : plage horaire stable quels que soient les filtres. */
+  /** All courses of the season: a time range that stays stable whatever the filters. */
   tous: ScheduleCourse[];
   editable: boolean;
   highlighted?: string;
@@ -20,9 +20,9 @@ type Props = {
 };
 
 /**
- * Semaine type de la saison (#79) : les cours réguliers à leur jour et leur
- * heure ; déplacer un cours change le cours (et ses séances à venir). Les
- * cours à dates précises sont listés dessous.
+ * Typical week of the season (#79): recurring courses at their day and
+ * time; moving a course changes the course (and its upcoming lessons).
+ * Courses on specific dates are listed below.
  */
 export function TypicalWeek({
   courses: cours,

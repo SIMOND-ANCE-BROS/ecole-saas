@@ -11,7 +11,7 @@ import { PaymentForm } from "./payment-form";
 
 export const metadata: Metadata = { title: "Encaisser" };
 
-/** Encaissement pour un payeur (`?payeur=`), ouvert aussi en panneau depuis sa fiche. */
+/** Payment for a payer (`?payeur=`), also opened as a side panel from their record. */
 export default async function CollectPaymentPage({ searchParams }: PageProps<"/paiements/nouveau">) {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const { payeur } = await searchParams;

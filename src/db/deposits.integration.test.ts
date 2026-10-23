@@ -5,10 +5,10 @@ import { correctPayment, collect } from "./payments";
 import { cancelDeposit, createDeposit, paymentLog, readDeposit, listDeposits, paymentsToDeposit } from "./deposits";
 
 /**
- * Remises en banque et journal des encaissements (#98), comme l'application
- * (app_user, RLS). Données fictives supprimées à la fin ; paiements et
- * journal étant inaltérables, le nettoyage désactive leurs triggers le temps
- * d'une transaction d'administration.
+ * Bank deposits and payments log (#98), as the application runs it
+ * (app_user, RLS). Fictitious data deleted at the end; payments and the
+ * audit log being immutable, the cleanup disables their triggers for the
+ * duration of an administration transaction.
  */
 
 const url = process.env.DATABASE_ADMIN_URL;
@@ -135,7 +135,7 @@ describe("remises en banque", () => {
         createDeposit(tx, direction, { date: TODAY, method: "cheque", paymentIds: [ids.differe] }, TODAY),
       ),
     ).toEqual(refusal);
-    // Une remise datée du jour d'encaissement prévu accepte le chèque différé.
+    // A deposit dated on the planned cashing day accepts the post-dated cheque.
     expect(
       (
         await withSchool(school, (tx) =>
@@ -169,7 +169,7 @@ describe("remises en banque", () => {
       ),
     ).toEqual(["2027-01-05 cheque 1 10000", "2026-10-21 cheque 1 10000"]);
     const j = await withSchool(school, (tx) => paymentLog(tx, TODAY, TODAY, null));
-    expect(j).toHaveLength(6); // cinq règlements et une correction
+    expect(j).toHaveLength(6); // five payments and one correction
     expect(j.find((x) => x.id === ids.cheque)?.dateDeposit).toBe(TODAY);
     expect(await withSchool(school, (tx) => paymentLog(tx, TODAY, TODAY, "especes"))).toHaveLength(1);
   });

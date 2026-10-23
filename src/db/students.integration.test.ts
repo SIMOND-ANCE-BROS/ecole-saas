@@ -14,7 +14,7 @@ import {
 import { withSchool } from "./index";
 import type { PersonInput } from "./people";
 
-/** Élèves et contacts (#77), comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
+/** Students and contacts (#77), as the application runs them (app_user, RLS). Fictitious data deleted at the end. */
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
@@ -188,7 +188,7 @@ describe("modifications depuis la fiche", () => {
       ok: true,
       id: zoe,
     });
-    expect((await record(zoe))?.billedTo).toEqual({ type: "aucun" }); // mineure sans payeur : signalé
+    expect((await record(zoe))?.billedTo).toEqual({ type: "aucun" }); // minor without a payer: flagged
     await withSchool(school, (tx) => setBilling(tx, zoe, { type: "personne", id: helene }));
     expect((await record(zoe))?.billedTo).toMatchObject({ type: "personne", id: helene });
   });

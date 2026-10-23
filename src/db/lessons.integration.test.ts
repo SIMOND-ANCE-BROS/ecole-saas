@@ -19,7 +19,7 @@ import {
   syncLessons,
 } from "./lessons";
 
-/** Séances, fermetures et appel, comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
+/** Lessons, closures and attendance, as the app does (app_user, RLS). Fictitious data deleted at the end. */
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
@@ -29,13 +29,13 @@ const suffix = Math.random().toString(36).slice(2, 8);
 let school: string;
 let otherSchool: string;
 let season: string;
-let wednesday: string; // cours du mercredi 17:00
+let wednesday: string; // Wednesday 17:00 course
 let camille: string;
 let ines: string;
 let inactive: string;
 const students: Record<string, string> = {};
 
-const TODAY = "2026-10-19"; // un lundi
+const TODAY = "2026-10-19"; // a Monday
 
 beforeAll(async () => {
   [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`sa-${suffix}`}) RETURNING id`;
@@ -220,7 +220,7 @@ describe("remplacement et annulation", () => {
       ok: false,
       message: "Cette séance est annulée.",
     });
-    // Une séance annulée n'est ni recréée ni retirée par la synchronisation.
+    // A cancelled lesson is neither recreated nor removed by the synchronisation.
     await sync();
     expect((await lessons())[1]).toMatchObject({ id: prevue.id, status: "annulee" });
   });
@@ -276,7 +276,7 @@ describe("cours et séances", () => {
     );
     expect(r.ok).toBe(true);
     const after = await lessons();
-    // Séance faite (Camille) inchangée ; séances prévues de Camille passées à Inès.
+    // Lesson taught (Camille) unchanged; Camille's planned lessons handed to Inès.
     expect(after[0].instructor).toBe(before[0].instructor);
     expect(after.filter((s) => s.status === "prevue").every((s) => s.instructor === "Inès Prof")).toBe(true);
   });
@@ -357,7 +357,7 @@ describe("récurrences (#90)", () => {
     expect(await datesDe(stage)).toEqual(["2026-10-26", "2026-11-21"]);
     expect((await withSchool(school, (tx) => readCourse(tx, stage)))?.dates).toEqual(["2026-10-26", "2026-11-21"]);
 
-    // Le stage passe à une seule date : la séance retirée disparaît.
+    // The workshop goes down to a single date: the removed lesson disappears.
     await withSchool(school, async (tx) => {
       const c = await readCourse(tx, stage);
       if (!c) throw new Error("stage introuvable");
@@ -480,10 +480,10 @@ describe("planning daté : déplacer une séance (#90)", () => {
       await admin`SELECT weekday, to_char(start_time, 'HH24:MI') AS h, duration_minutes FROM course WHERE id = ${monday}`;
     expect(c).toMatchObject({ weekday: 2, h: "18:30", duration_minutes: 90 });
     const after = await list();
-    // Avant le pivot : toujours le lundi, heure d'origine figée (sauf la séance déjà déplacée).
+    // Before the pivot: still Monday, original time frozen (except the lesson already moved).
     for (const x of after.filter((x) => (x.prevue ?? x.date) < pivot.date))
       expect(x.heure === "10:00" || x.heure === "11:30").toBe(true);
-    // À partir du pivot : le mardi, à l'heure du cours ; le remplaçant de la séance suivante est gardé.
+    // From the pivot on: Tuesday, at the course time; the substitute of the next lesson is kept.
     const following = after.filter((x) => x.date > pivot.date);
     expect(following.every((x) => new Date(`${x.date}T00:00:00Z`).getUTCDay() === 2 && x.heure === null)).toBe(true);
     expect(after.find((x) => x.id === then.id)?.teacher).toBe(ines);

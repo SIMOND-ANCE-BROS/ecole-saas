@@ -18,19 +18,19 @@ import {
 } from "./schema";
 
 /**
- * Séances (occurrences datées des cours), fermetures et appel. Toujours avec
- * la transaction d'`withSchool()` (RLS).
+ * Lessons (dated occurrences of courses), closures and attendance. Always within
+ * the `withSchool()` transaction (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const isUuid = (v: string) => z.uuid().safeParse(v).success;
 export type Result = { ok: true; id: string } | { ok: false; message: string };
 
-/** Danseurs qui figurent à l'appel : inscrits ou à l'essai, jamais en liste d'attente. */
+/** Students on the attendance sheet: active or on trial, never on the waitlist. */
 const ATTENDANCE_STATUSES = ["active", "essai"] as const;
 
 // ---------------------------------------------------------------------------
-// Fermetures
+// Closures
 // ---------------------------------------------------------------------------
 
 export type Closure = { id: string; label: string; start: string; end: string };
@@ -74,23 +74,23 @@ export async function deleteClosure(tx: Tx, id: string): Promise<Result> {
 }
 
 // ---------------------------------------------------------------------------
-// Génération
+// Generation
 // ---------------------------------------------------------------------------
 
-/** Heure (texte `HH:MM:SS`) et durée effectives d'une séance : les siennes si elle a été déplacée (#90), sinon celles du cours. */
+/** Effective time (text `HH:MM:SS`) and duration of a lesson: its own if it was moved (#90), otherwise the course's. */
 export const effectiveTime = sql<string>`coalesce(${lesson.startTime}, ${course.startTime})::text`;
 export const effectiveDuration = sql<number>`coalesce(${lesson.durationMinutes}, ${course.durationMinutes})`;
 
 const withAttendance = sql`EXISTS (SELECT 1 FROM attendance p WHERE p.lesson_id = ${lesson}.${sql.identifier("id")})`;
 
 /**
- * Met les séances à venir de la saison en accord avec les cours et les
- * fermetures : crée celles qui manquent (titulaire du cours) et retire les
- * séances prévues devenues sans objet. Le passé, les séances annulées et
- * celles dont l'appel est fait ne sont jamais touchés. Une séance déplacée
- * (#90) se repère à sa date d'origine (`date_prevue`) : elle n'est ni recréée
- * à cette date, ni retirée. `depuis` : ne régénérer qu'à partir de cette date
- * (déplacement d'une séance « et des suivantes »).
+ * Brings the season's upcoming lessons in line with the courses and the
+ * closures: creates the missing ones (course's main instructor) and removes
+ * planned lessons that no longer apply. The past, cancelled lessons and
+ * those whose attendance is taken are never touched. A moved lesson
+ * (#90) is identified by its original date (`planned_date`): it is neither recreated
+ * on that date nor removed. `since`: only regenerate from that date on
+ * (moving a lesson « et des suivantes »).
  */
 export async function syncLessons(
   tx: Tx,
@@ -122,7 +122,7 @@ export async function syncLessons(
     .innerJoin(course, eq(course.id, courseDate.courseId))
     .where(eq(course.seasonId, seasonId));
 
-  // Toute la saison, puis à partir de `debut` : l'alternance « une semaine sur deux » se cale sur la première date.
+  // The whole season, then from `start` on: the « une semaine sur deux » alternation is aligned on the first date.
   const expected = tous.flatMap((c) => {
     const r: Recurrence =
       c.recurrence === "dates"
@@ -177,7 +177,7 @@ export async function syncLessons(
 }
 
 // ---------------------------------------------------------------------------
-// Lectures
+// Reads
 // ---------------------------------------------------------------------------
 
 const attendanceCount = (present: boolean) => sql<number>`(
@@ -193,7 +193,7 @@ export type CourseLesson = {
   absents: number;
 };
 
-/** Séances d'un cours, par date. */
+/** Lessons of a course, by date. */
 export async function courseLessons(tx: Tx, courseId: string): Promise<CourseLesson[]> {
   if (!isUuid(courseId)) return [];
   const rows = await tx
@@ -226,7 +226,7 @@ export type DayLesson = {
   doneAttendance: boolean;
 };
 
-/** Séances d'une journée, par heure : pour lancer l'appel depuis l'accueil. */
+/** Lessons of a day, by time: to take attendance from the front desk. */
 export async function dayLessons(tx: Tx, date: string): Promise<DayLesson[]> {
   const rows = await tx
     .select({
@@ -275,12 +275,12 @@ export type Attendance = {
     birthDate: string | null;
     notes: string | null;
     status: (typeof ATTENDANCE_STATUSES)[number];
-    /** null tant que l'appel n'est pas fait pour ce danseur. */
+    /** null until attendance is taken for this student. */
     present: boolean | null;
   }[];
 };
 
-/** Fiche d'appel d'une séance ; null si elle n'existe pas dans l'école courante. */
+/** Attendance sheet of a lesson; null if it does not exist in the current school. */
 export async function readAttendance(tx: Tx, lessonId: string): Promise<Attendance | null> {
   if (!isUuid(lessonId)) return null;
   const [s] = await tx
@@ -329,12 +329,12 @@ export async function readAttendance(tx: Tx, lessonId: string): Promise<Attendan
 }
 
 // ---------------------------------------------------------------------------
-// Écritures
+// Writes
 // ---------------------------------------------------------------------------
 
 export const validAttendance = z.array(z.object({ studentId: z.uuid(), present: z.boolean() })).max(200);
 
-/** Enregistre ou corrige l'appel ; la séance passe « effectuée ». */
+/** Records or corrects attendance; the lesson becomes « effectuée ». */
 export async function saveAttendance(
   tx: Tx,
   lessonId: string,
@@ -369,7 +369,7 @@ export async function saveAttendance(
   return { ok: true, id: lessonId };
 }
 
-/** Remplaçant (ou retour du titulaire) pour une séance ; intervenant actif seulement. */
+/** Substitute (or return of the main instructor) for a lesson; active instructor only. */
 export async function changeInstructor(tx: Tx, lessonId: string, instructorId: string): Promise<Result> {
   if (!isUuid(lessonId) || !isUuid(instructorId)) return { ok: false, message: "Saisie invalide." };
   const [i] = await tx
@@ -385,7 +385,7 @@ export async function changeInstructor(tx: Tx, lessonId: string, instructorId: s
   return rows.length === 1 ? { ok: true, id: lessonId } : { ok: false, message: "Cette séance n’existe plus." };
 }
 
-/** Annule une séance dont l'appel n'est pas fait ; elle reste visible, barrée. */
+/** Cancels a lesson whose attendance is not taken; it stays visible, struck through. */
 export async function cancelLesson(tx: Tx, lessonId: string): Promise<Result> {
   const attendanceSheet = await readAttendance(tx, lessonId);
   if (!attendanceSheet) return { ok: false, message: "Cette séance n’existe plus." };
@@ -395,7 +395,7 @@ export async function cancelLesson(tx: Tx, lessonId: string): Promise<Result> {
   return { ok: true, id: lessonId };
 }
 
-/** Rétablit une séance annulée. */
+/** Restores a cancelled lesson. */
 export async function restoreLesson(tx: Tx, lessonId: string): Promise<Result> {
   if (!isUuid(lessonId)) return { ok: false, message: "Cette séance n’existe plus." };
   const rows = await tx
@@ -407,10 +407,10 @@ export async function restoreLesson(tx: Tx, lessonId: string): Promise<Result> {
 }
 
 // ---------------------------------------------------------------------------
-// Planning daté (#90)
+// Dated schedule (#90)
 // ---------------------------------------------------------------------------
 
-/** Heure et durée effectives d'une séance : les siennes si elle a été déplacée, sinon celles du cours. */
+/** Effective time and duration of a lesson: its own if it was moved, otherwise the course's. */
 const lessonTime = sql<string>`to_char(coalesce(${lesson.startTime}, ${course.startTime}), 'HH24:MI')`;
 const lessonDuration = sql<number>`coalesce(${lesson.durationMinutes}, ${course.durationMinutes})`;
 
@@ -421,7 +421,7 @@ export type ScheduleLesson = {
   startTime: string;
   durationMinutes: number;
   status: "prevue" | "effectuee" | "annulee";
-  /** Déplacée individuellement (autre date ou autre heure que prévu). */
+  /** Moved individually (other date or other time than planned). */
   moved: boolean;
   recurrence: "hebdomadaire" | "quinzaine" | "dates";
   discipline: string;
@@ -429,7 +429,7 @@ export type ScheduleLesson = {
   room: string;
   siteId: string;
   site: string;
-  /** Intervenant de la séance (remplaçant éventuel). */
+  /** Instructor of the lesson (substitute, if any). */
   instructorId: string;
   instructor: string;
   substitution: boolean;
@@ -437,7 +437,7 @@ export type ScheduleLesson = {
   maxCapacity: number | null;
 };
 
-/** Séances de la semaine qui commence le lundi `lundi`, toutes saisons confondues, par date et heure. */
+/** Lessons of the week starting on Monday `monday`, across all seasons, by date and time. */
 export async function weekLessons(tx: Tx, monday: string): Promise<ScheduleLesson[]> {
   const sunday = sql`(${monday}::date + 6)`;
   const rows = await tx
@@ -448,7 +448,7 @@ export async function weekLessons(tx: Tx, monday: string): Promise<ScheduleLesso
       startTime: lessonTime,
       durationMinutes: lessonDuration,
       status: lesson.status,
-      // Déplacée elle-même (pas seulement figée avant un changement du cours) : elle garde sa date d'origine.
+      // Moved itself (not merely frozen before a course change): it keeps its original date.
       moved: sql<boolean>`${lesson.plannedDate} IS NOT NULL`,
       recurrence: course.recurrence,
       discipline: discipline.name,
@@ -476,7 +476,7 @@ export async function weekLessons(tx: Tx, monday: string): Promise<ScheduleLesso
   return rows.map(({ firstName: firstName, name: name, ...l }) => ({ ...l, instructor: `${firstName} ${name}` }));
 }
 
-/** Fermetures (toutes saisons) qui touchent la période. */
+/** Closures (all seasons) that touch the period. */
 export function closuresBetween(
   tx: Tx,
   start: string,
@@ -503,11 +503,11 @@ const shift = (iso: string, days: number) =>
   new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 
 /**
- * Déplace une séance (#90). « seance » : elle seule change (le cours reste) ;
- * « suivantes » : le cours prend le nouveau créneau à partir de cette séance,
- * les séances précédentes gardent leur heure (figée), les suivantes passent
- * au nouveau jour en gardant leur intervenant (remplacement). L'appelant
- * resynchronise ensuite les séances à partir de `depuis`.
+ * Moves a lesson (#90). « seance »: only it changes (the course stays);
+ * « suivantes »: the course takes the new slot from this lesson on,
+ * earlier lessons keep their (frozen) time, later ones move
+ * to the new day keeping their instructor (replacement). The caller
+ * then resyncs the lessons from `since` on.
  */
 export async function moveLesson(
   tx: Tx,
@@ -558,7 +558,7 @@ export async function moveLesson(
     }
     const sameSlot = startTime === s.courseTime && durationMinutes === s.courseDuration;
     if (s.recurrence === "dates") {
-      // Cours ponctuel : la date fait partie du cours lui-même.
+      // One-off course: the date is part of the course itself.
       if (date !== s.date) {
         await tx.delete(courseDate).where(and(eq(courseDate.courseId, s.courseId), eq(courseDate.date, s.date)));
         await tx
@@ -575,7 +575,7 @@ export async function moveLesson(
         .update(lesson)
         .set({
           date,
-          // Revenue à son créneau d'origine : plus déplacée.
+          // Back to its original slot: no longer moved.
           plannedDate: date === reference && sameSlot ? null : reference,
           startTime: sameSlot ? null : startTime,
           durationMinutes: sameSlot ? null : durationMinutes,
@@ -588,7 +588,7 @@ export async function moveLesson(
   if (s.recurrence === "dates")
     return { status: "refus", message: "Un cours à dates précises se déplace séance par séance." };
   const newDay = isoDay(date);
-  // 1. Les séances d'avant gardent l'ancien créneau.
+  // 1. Earlier lessons keep the old slot.
   await tx
     .update(lesson)
     .set({
@@ -598,12 +598,12 @@ export async function moveLesson(
     .where(
       and(eq(lesson.courseId, s.courseId), sql`coalesce(${lesson.plannedDate}, ${lesson.date}) < ${reference}::date`),
     );
-  // 2. Le cours prend le nouveau créneau.
+  // 2. The course takes the new slot.
   await tx
     .update(course)
     .set({ weekday: newDay, startTime: startTime, durationMinutes: durationMinutes })
     .where(eq(course.id, s.courseId));
-  // 3. Les séances suivantes encore modifiables passent au nouveau jour de leur semaine, sans heure propre.
+  // 3. Later lessons that can still be changed move to the new day of their week, without their own time.
   const following = await tx
     .select({ id: lesson.id, reference: sql<string>`coalesce(${lesson.plannedDate}, ${lesson.date})::text` })
     .from(lesson)

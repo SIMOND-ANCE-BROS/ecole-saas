@@ -66,7 +66,7 @@ describe("agendaIcs", () => {
   });
 
   it("replie les lignes au-delà de 75 octets sans couper un caractère accentué", () => {
-    const title = "é".repeat(60); // 120 octets en UTF-8
+    const title = "é".repeat(60); // 120 bytes in UTF-8
     const l = rows(icsCalendar({ ...base, lessons: [{ ...base.lessons[0], title }] }));
     const start = l.findIndex((x) => x.startsWith("SUMMARY:"));
     const collapsed = [

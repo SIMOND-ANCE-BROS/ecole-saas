@@ -30,7 +30,7 @@ const BANNERS: Record<string, string> = {
   enregistree: "Inscription enregistrée.",
 };
 
-/** Bandeau après un encaissement (`?encaisse=3`). */
+/** Banner after a payment (`?encaisse=3`). */
 const collected = (n: unknown) => {
   const k = Number(n);
   return Number.isInteger(k) && k > 0 ? `${k} règlement${k > 1 ? "s" : ""} encaissé${k > 1 ? "s" : ""}.` : undefined;
@@ -44,7 +44,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
     const student = await readStudent(tx, id, today);
     if (!student) return null;
     const season = await currentSeason(tx, today);
-    // Un élève majeur qui paie lui-même voit ici ses inscriptions facturées.
+    // An adult student who pays for themself sees their invoiced enrollments here.
     const paysForThemselves = student.billedTo.type !== "personne";
     return {
       student: student,

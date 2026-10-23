@@ -2,15 +2,15 @@ import { dayBounds, type CalendarCourse, toMinutes } from "./calendar";
 import { DAY_NAMES } from "./days";
 
 /**
- * Jours et heures d'ouverture des sites (#90). Un site sans horaire saisi
- * n'impose rien : l'agenda garde alors sa semaine du lundi au samedi et sa
- * plage calculée d'après les cours.
+ * Opening days and hours of the sites (#90). A site without entered hours
+ * imposes nothing: the calendar then keeps its Monday-to-Saturday week and
+ * its range computed from the courses.
  */
 
-/** Ouverture d'un jour : heures `HH:MM`, jour 1 = lundi … 7 = dimanche. */
+/** Opening of a day: `HH:MM` times, day 1 = Monday … 7 = Sunday. */
 export type Hours = { weekday: number; opening: string; closure: string };
 
-/** Plages ouvertes d'un jour (en minutes), fusionnées quand plusieurs sites se chevauchent. */
+/** Open ranges of a day (in minutes), merged when several sites overlap. */
 export function openRanges(hours: Hours[], day: number): { start: number; end: number }[] {
   const ranges = hours
     .filter((h) => h.weekday === day)
@@ -26,9 +26,9 @@ export function openRanges(hours: Hours[], day: number): { start: number; end: n
 }
 
 /**
- * Cadre de l'agenda pour les horaires des sites affichés : jours ouverts (plus
- * ceux où un cours existe déjà), plage de la plus tôt ouverture à la plus
- * tardive fermeture, élargie aux cours qui en sortent, en heures pleines.
+ * Calendar frame for the hours of the displayed sites: open days (plus those
+ * where a course already exists), range from the earliest opening to the
+ * latest closing, widened to courses that fall outside it, in full hours.
  */
 export function calendarFrame(
   hours: Hours[],
@@ -51,8 +51,8 @@ export function calendarFrame(
 }
 
 /**
- * Message si un créneau hebdomadaire sort des horaires de son site ; null s'il
- * y entre, ou si le site n'a pas d'horaires (rien à vérifier).
+ * Message if a weekly slot falls outside its site's hours; null if it fits,
+ * or if the site has no hours (nothing to check).
  */
 export function outsideHours(
   slot: { weekday: number; startTime: string; durationMinutes: number },

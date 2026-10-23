@@ -24,7 +24,7 @@ type Props = {
   payerId: string;
   students: { id: string; firstName: string; age: number | null }[];
   courses: ScheduleCourse[];
-  /** Danseur choisi d'avance (bouton « Inscrire » de sa fiche). */
+  /** Student chosen in advance (« Inscrire » button on their record). */
   initialStudent?: string;
 };
 
@@ -63,7 +63,7 @@ export function EnrollmentForm({
     [payerId, studentIds, chosenAudience, period, courseIds],
   );
 
-  // Aucun prix d’une sélection précédente n’est présenté comme le prix courant.
+  // No price from a previous selection is shown as the current price.
   useEffect(() => {
     if (saisie.studentIds.length === 0 || saisie.courseIds.length === 0) return;
     return deferredQuery(
@@ -83,14 +83,14 @@ export function EnrollmentForm({
   const next = result?.status === "ok" ? result.newEnrollment : null;
   const canSave = next?.status === "ok" && !calculation && !sending;
 
-  // Cours adaptés à l'âge du ou des danseurs choisis d'abord ; les autres restent sélectionnables.
+  // Courses suited to the chosen student(s)' age first; the others remain selectable.
   const chosenAges = students.filter((d) => studentIds.includes(d.id) && d.age !== null).map((d) => d.age as number);
   const adapted = (c: ScheduleCourse) =>
     chosenAges.length === 0 ||
     chosenAges.every((a) => (c.ageMin === null || a >= c.ageMin) && (c.ageMax === null || a <= c.ageMax));
   const sortedCourses = [...visibleCourses.filter(adapted), ...visibleCourses.filter((c) => !adapted(c))];
 
-  // Cours choisis qui se chevauchent le même jour.
+  // Chosen courses that overlap on the same day.
   const chosen = cours.filter((c) => courseIds.includes(c.id));
   const overlappingCourses = chosen.flatMap((a, i) =>
     chosen

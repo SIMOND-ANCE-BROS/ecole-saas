@@ -7,7 +7,7 @@ import { tokenInstructor } from "@/db/calendar-feed";
 import { deleteConnection } from "@/db/calendar-connections";
 import { personalPage } from "@/lib/public-calendar";
 
-/** Déconnexion par l'intervenant lui-même : son lien personnel fait foi. */
+/** Disconnection by the instructor themself: their personal link is the proof. */
 export async function disconnectMyCalendar(schoolId: string, token: string): Promise<{ message: string | null }> {
   if (!z.uuid().safeParse(schoolId).success) return { message: "Lien introuvable ou révoqué." };
   const ok = await withSchool(schoolId, async (tx) => {

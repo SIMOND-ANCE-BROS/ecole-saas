@@ -28,7 +28,7 @@ export default async function AttendancePage({ params }: PageProps<"/planning/se
     const { instructors: instructors } = await scheduleReferential(tx, attendance.instructorId);
     const availability = await lessonAvailabilities(tx, attendance.id);
     const ranking = new Map(availability?.substitutes.map((r, rank) => [r.id, { ...r, rank: rank }]));
-    // Intervenant de la séance d'abord, puis remplaçants libres, puis les autres avec leur motif.
+    // The lesson's instructor first, then available substitutes, then the others with their reason.
     const options = instructors
       .map((i) => {
         const r = ranking.get(i.id);

@@ -5,15 +5,15 @@ import { session } from "../db/schema";
 
 export type MemberRole = "direction" | "accueil" | "professeur";
 
-/** Ce dont une requête métier a besoin : qui, dans quelle école, avec quel rôle. */
+/** What a business query needs: who, in which school, with which role. */
 export type SchoolContext = { userId: string; schoolId: string; role: MemberRole };
 
 const uuid = z.uuid();
 
 /**
- * Enregistre l'école choisie sur la session, seulement si l'utilisateur en est
- * membre actif et que la session lui appartient. L'identifiant proposé par le
- * navigateur n'est jamais utilisé tel quel : il doit figurer dans `schoolsOf`.
+ * Saves the chosen school on the session, only if the user is an active
+ * member of it and the session belongs to them. The id offered by the
+ * browser is never used as is: it must appear in `schoolsOf`.
  */
 export async function chooseSchool(sessionId: string, userId: string, schoolId: string): Promise<boolean> {
   if (!(await membership(userId, schoolId))) return false;
@@ -26,8 +26,8 @@ export async function chooseSchool(sessionId: string, userId: string, schoolId: 
 }
 
 /**
- * Contexte de l'école courante, revérifié à chaque requête : null si aucune
- * école n'est choisie ou si l'accès a été retiré depuis.
+ * Context of the current school, re-checked on every request: null if no
+ * school is chosen or if access has been revoked since.
  */
 export async function contextFromSession(
   userId: string,
@@ -38,7 +38,7 @@ export async function contextFromSession(
   return member ? { userId, schoolId: selectedSchoolId, role: member.role } : null;
 }
 
-/** Identifiant de la session portant ce jeton (renvoyé par la connexion). */
+/** Id of the session carrying this token (returned by sign-in). */
 export async function idDeSession(token: string): Promise<string | null> {
   const [row] = await db.select({ id: session.id }).from(session).where(eq(session.token, token));
   return row?.id ?? null;

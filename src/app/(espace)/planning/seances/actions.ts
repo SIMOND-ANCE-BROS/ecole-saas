@@ -18,7 +18,7 @@ import { requireRole } from "@/lib/session";
 type Back = { message: string | null };
 const back = (r: { ok: true } | { ok: false; message: string }): Back => ({ message: r.ok ? null : r.message });
 
-/** Appel d'une séance : accueil et direction. */
+/** Attendance of a lesson: front desk and management. */
 export async function doAttendance(lessonId: string, attendances: unknown): Promise<Back> {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const r = await withSchool(schoolId, (tx) => saveAttendance(tx, lessonId, attendances as never));
@@ -40,7 +40,7 @@ export async function cancel(lessonId: string, annulee: boolean): Promise<Back> 
   return back(r);
 }
 
-/** Fermetures de la saison courante : direction ; les séances à venir suivent aussitôt. */
+/** Closures of the current season: management; upcoming lessons follow at once. */
 async function withCurrentSeason(action: (seasonId: string) => Parameters<typeof withSchool>[1]): Promise<Back> {
   const { schoolId: schoolId } = await requireRole("direction");
   const today = todayInParis();
@@ -63,7 +63,7 @@ export async function reopen(closureId: string): Promise<Back> {
   return withCurrentSeason(() => (tx) => deleteClosure(tx, closureId));
 }
 
-/** Recalcule les séances à venir (après un import, ou au premier usage). */
+/** Recomputes the upcoming lessons (after an import, or on first use). */
 export async function updateLessons(): Promise<Back> {
   return withCurrentSeason(() => async () => ({ ok: true }));
 }

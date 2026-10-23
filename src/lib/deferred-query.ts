@@ -1,6 +1,6 @@
 /**
- * Attend la fin de la frappe et ignore les réponses périmées. La fonction
- * renvoyée annule le minuteur et la publication, pas la requête réseau lancée.
+ * Waits for typing to end and ignores stale responses. The returned function
+ * cancels the timer and the publication, not the network request in flight.
  */
 export function deferredQuery<T>(
   load: () => Promise<T>,

@@ -5,27 +5,27 @@ import { db } from "../db";
 import { account, session, user, verification } from "../db/schema";
 
 /**
- * Authentification (Better Auth) : e-mail et mot de passe, sessions en base.
- * Pas d'inscription libre : les comptes sont créés par l'école (`creerCompte`).
- * Secret et URL : BETTER_AUTH_SECRET, BETTER_AUTH_URL (voir .env.example).
+ * Authentication (Better Auth): e-mail and password, sessions in the database.
+ * No open sign-up: accounts are created by the school (`createAccount`).
+ * Secret and URL: BETTER_AUTH_SECRET, BETTER_AUTH_URL (see .env.example).
  */
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema: { user, session, account, verification } }),
   emailAndPassword: { enabled: true, disableSignUp: true },
-  // Origines acceptées en plus de BETTER_AUTH_URL (ex. accès par l'IP du poste en local).
+  // Origins accepted in addition to BETTER_AUTH_URL (e.g. access by the machine's IP locally).
   trustedOrigins: (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
     .split(",")
     .map((o) => o.trim())
     .filter(Boolean),
-  // Porte d'entrée unique : la connexion passe par la server action, qui limite
-  // les tentatives (sign-in-limit.ts). La route HTTP publique est fermée.
+  // Single entry point: sign-in goes through the server action, which limits
+  // attempts (sign-in-limit.ts). The public HTTP route is closed.
   disabledPaths: ["/sign-in/email"],
   session: {
     additionalFields: {
-      // Fixée côté serveur seulement (choisirEcole), jamais par le navigateur.
+      // Set server-side only (chooseSchool), never by the browser.
       selectedSchoolId: { type: "string", required: false, input: false },
     },
   },
-  // Doit rester le dernier plugin : pose les cookies depuis les server actions.
+  // Must stay the last plugin: sets cookies from server actions.
   plugins: [nextCookies()],
 });

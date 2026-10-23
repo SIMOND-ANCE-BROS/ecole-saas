@@ -1,13 +1,13 @@
 /**
- * Règles de l'équipe d'une école (#104) : on ne modifie pas son propre accès
- * (pas de verrouillage par erreur) et il reste toujours au moins une personne
- * active à la direction, seule à pouvoir gérer l'équipe.
+ * Rules for a school's team (#104): nobody changes their own access (no
+ * accidental lock-out) and there is always at least one active person in
+ * management, the only role able to manage the team.
  */
 
 export type Role = "direction" | "accueil" | "professeur";
 export type TeamMember = { id: string; role: Role; active: boolean };
 
-/** Message de refus d'un changement de rôle ou d'activité, ou null s'il est permis. */
+/** Refusal message for a change of role or active status, or null if it is allowed. */
 export function changeRefusal(
   members: TeamMember[],
   authorId: string,
@@ -25,7 +25,7 @@ export function changeRefusal(
   return null;
 }
 
-/** Mot de passe choisi par la personne : longueur seulement (une phrase de passe vaut mieux qu'un mélange imposé). */
+/** Password chosen by the person: length only (a passphrase beats an imposed mix of characters). */
 export function passwordRefusal(password: string, confirmation: string): string | null {
   if (password.length < 10) return "Choisissez au moins 10 caractères (une phrase de passe convient très bien).";
   if (password.length > 128) return "128 caractères au plus.";

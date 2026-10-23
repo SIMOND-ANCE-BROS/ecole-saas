@@ -1,7 +1,7 @@
 /**
- * Dates des séances d'un cours hebdomadaire. Les jours fériés ne sont pas
- * déduits automatiquement : l'école les saisit comme fermetures, au même
- * titre que les vacances, car chaque école décide d'ouvrir ou non.
+ * Lesson dates of a weekly course. Public holidays are not deducted
+ * automatically: the school enters them as closures, just like holidays,
+ * because each school decides whether to open or not.
  */
 
 export type Period = { start: string; end: string };
@@ -10,7 +10,7 @@ const ONE_DAY = 86_400_000;
 const toDay = (iso: string) => Date.parse(`${iso}T00:00:00Z`);
 const toIso = (t: number) => new Date(t).toISOString().slice(0, 10);
 
-/** Dates `YYYY-MM-DD` du `jourSemaine` (1 = lundi … 7 = dimanche) entre `debut` et `fin` inclus, hors fermetures. */
+/** `YYYY-MM-DD` dates of `weekday` (1 = Monday … 7 = Sunday) between `start` and `end` inclusive, closures excluded. */
 export function lessonDates({
   start: start,
   end: end,
@@ -28,20 +28,19 @@ export function lessonDates({
 }
 
 /**
- * Récurrence d'un cours (#90) : chaque semaine ou une semaine sur deux, sur
- * toute la saison ou une période (`dateDebut`, `dateFin`), ou à des dates
- * précises (stage, cours exceptionnel).
+ * Recurrence of a course (#90): every week or every other week, over the
+ * whole season or a period (`startDate`, `endDate`), or on specific dates
+ * (workshop, one-off course).
  */
 export type Recurrence =
   | { type: "hebdomadaire" | "quinzaine"; weekday: number; startDate: string | null; endDate: string | null }
   | { type: "dates"; dates: string[] };
 
 /**
- * Dates des séances d'un cours dans la saison. Une fermeture supprime la
- * séance d'un cours régulier sans décaler l'alternance d'un cours « une
- * semaine sur deux » (calée sur sa première date). Les dates précises ne
- * tiennent pas compte des fermetures : un stage a souvent lieu pendant les
- * vacances.
+ * Lesson dates of a course in the season. A closure removes the lesson of a
+ * regular course without shifting the alternation of an "every other week"
+ * course (anchored on its first date). Specific dates ignore closures: a
+ * workshop often takes place during the holidays.
  */
 export function courseDates(r: Recurrence, season: Period, closures: Period[]): string[] {
   if (r.type === "dates") return [...new Set(r.dates)].filter((d) => season.start <= d && d <= season.end).sort();

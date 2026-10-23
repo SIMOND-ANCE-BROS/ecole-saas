@@ -7,7 +7,7 @@ import { changeSeason, newSeason } from "../actions";
 const date = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const day = (iso: string) => date.format(new Date(`${iso}T00:00:00Z`));
 
-/** Proposition pour la saison suivante : un an après la plus récente. */
+/** Suggestion for the next season: one year after the most recent one. */
 function next(seasons: SeasonRow[]) {
   const last = seasons[0];
   if (!last) return { label: "", startDate: "", endDate: "" };

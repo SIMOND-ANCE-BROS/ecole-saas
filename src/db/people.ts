@@ -15,16 +15,16 @@ import {
 } from "./schema";
 
 /**
- * Personnes (danseurs, parents, conjoints, payeurs professionnels) et liens
- * entre elles. Toujours avec la transaction de `withSchool()` : la RLS limite
- * lectures et écritures à l'école courante.
+ * People (students, parents, partners, professional payers) and relationships
+ * between them. Always within the `withSchool()` transaction: RLS limits
+ * reads and writes to the current school.
  */
 
 const MINIMUM_LENGTH = 2;
 const MAX_RESULTS = 50;
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 
-/** Minuscules sans accents, côté base (sans extension) et côté saisie. */
+/** Lowercase without accents, on the database side (no extension) and on the input side. */
 const ACCENTS = "àâäáãéèêëíìîïóòôöõúùûüçñ";
 const SANS_ACCENTS = "aaaaaeeeeiiiiooooouuuucn";
 const normalizeColumn = (column: AnyColumn) =>
@@ -34,7 +34,7 @@ function normalize(saisie: string): string {
   return saisie.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
 
-/** Échappe les jokers de LIKE (%, _, \) d'une saisie. */
+/** Escapes the LIKE wildcards (%, _, \) of an input. */
 function contient(texte: string): string {
   return `%${texte.replace(/[\\%_]/g, "\\$&")}%`;
 }
@@ -45,12 +45,12 @@ const phoneDigits = sql`regexp_replace(coalesce(${person.phone}, ''), '[^0-9]', 
 export { displayedName as nomAffiche };
 
 // ---------------------------------------------------------------------------
-// Recherche et liste
+// Search and list
 // ---------------------------------------------------------------------------
 
 /**
- * Personnes liées, dans les deux sens, écrites avec les noms de tables : dans
- * un `select`, Drizzle n'écrit pas le nom de table devant `personne.id`.
+ * Related people, in both directions, written with the table names: in
+ * a `select`, Drizzle does not write the table name before `person.id`.
  */
 const currentId = sql`${person}.${sql.identifier("id")}`;
 const liees = sql<string[]>`coalesce((
@@ -80,18 +80,18 @@ export type PersonResult = {
   birthDate: string | null;
   email: string | null;
   telephone: string | null;
-  /** Noms des personnes liées, triés. */
+  /** Names of the related people, sorted. */
   liees: string[];
 };
 
 /**
- * Recherche par nom, prénom, raison sociale, e-mail ou téléphone (chiffres
- * seuls, espaces ignorés). Insensible aux accents et à la casse.
+ * Search by last name, first name, company name, e-mail or phone (digits
+ * only, spaces ignored). Accent- and case-insensitive.
  */
 /**
- * Condition « la personne `alias` correspond à la saisie » : nom, prénom (dans
- * les deux ordres), raison sociale, e-mail, téléphone (chiffres seuls), sans
- * accents ni majuscules ; null si la saisie est trop courte.
+ * Condition "person `alias` matches the input": last name, first name (in
+ * both orders), company name, e-mail, phone (digits only), ignoring
+ * accents and case; null if the input is too short.
  */
 export function searchCondition(saisie: string, alias = "person"): SQL | null {
   const texte = normalize(saisie);
@@ -115,7 +115,7 @@ export function searchCondition(saisie: string, alias = "person"): SQL | null {
   return or(...conditions) ?? null;
 }
 
-/** Recherche dans toutes les personnes de l'école (voir conditionRecherche). */
+/** Search among all the school's people (see searchCondition). */
 export async function searchPeople(tx: Tx, saisie: string): Promise<PersonResult[]> {
   const condition = searchCondition(saisie);
   if (!condition) return [];
@@ -127,13 +127,13 @@ export async function searchPeople(tx: Tx, saisie: string): Promise<PersonResult
     .limit(MAX_RESULTS);
 }
 
-/** Toutes les personnes de l'école, par nom (sans recherche saisie). */
+/** All the school's people, by name (no search input). */
 export function listPeople(tx: Tx, limit = 200): Promise<PersonResult[]> {
   return tx.select(resultColumns).from(person).orderBy(asc(person.lastName), asc(person.firstName)).limit(limit);
 }
 
 // ---------------------------------------------------------------------------
-// Fiche
+// Record
 // ---------------------------------------------------------------------------
 
 export const RELATIONSHIP_TYPES = ["representant_legal", "conjoint", "autre"] as const;
@@ -141,9 +141,9 @@ export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number];
 
 export type RelationshipItem = {
   id: string;
-  /** L'autre personne du lien. */
+  /** The other person of the relationship. */
   autre: { id: string; name: string; telephone: string | null; email: string | null };
-  /** « de » : la personne de la fiche est <type> de l'autre ; « vers » : l'autre est <type> d'elle. */
+  /** « de »: the record's person is <type> of the other; « vers »: the other is <type> of them. */
   sens: "de" | "vers";
   type: RelationshipType;
   emergencyContact: boolean;
@@ -163,7 +163,7 @@ export type PersonRecord = {
   address: string | null;
   notes: string | null;
   relationships: RelationshipItem[];
-  /** Cours suivis comme danseur, saison la plus récente d'abord. */
+  /** Courses attended as a student, most recent season first. */
   courses: {
     id: string;
     season: string;
@@ -173,14 +173,14 @@ export type PersonRecord = {
     startTime: string;
     status: (typeof enrollment.status.enumValues)[number];
     payerId: string;
-    /** Appels faits pour ce danseur dans ce cours. */
+    /** Attendance taken for this student in this course. */
     presents: number;
     absents: number;
   }[];
   documents: { type: (typeof studentDocument.type.enumValues)[number]; granted: boolean; validUntil: string | null }[];
 };
 
-/** Présences ou absences d'un danseur aux séances du cours de la ligne. */
+/** A student's presences or absences at the lessons of the row's course. */
 const attendances = (studentId: string, present: boolean) => sql<number>`(
   SELECT count(*)::int FROM attendance p JOIN lesson s ON s.id = p.lesson_id
   WHERE s.course_id = ${course}.${sql.identifier("id")} AND p.student_id = ${studentId} AND p.present = ${present}
@@ -272,8 +272,8 @@ export async function readPerson(tx: Tx, id: string): Promise<PersonRecord | nul
 }
 
 /**
- * Danseurs qu'un payeur peut inscrire : lui-même s'il est élève, et
- * les personnes pour qui il paie (lien « paie pour »). Par prénom.
+ * Students a payer can enroll: themselves if they are a student, and
+ * the people they pay for (relationship « paie pour »). By first name.
  */
 export async function payableStudents(
   tx: Tx,
@@ -285,7 +285,7 @@ export async function payableStudents(
     .from(person)
     .where(
       or(
-        // Le payeur lui-même seulement s'il est élève : un parent qui paie n'est pas proposé à l'inscription.
+        // The payer themselves only if they are a student: a paying parent is not offered for enrollment.
         and(eq(person.id, payerId), eq(person.isStudent, true)),
         sql`EXISTS (SELECT 1 FROM relationship l WHERE l.person_id = ${payerId} AND l.related_person_id = ${currentId} AND l.pays_for)`,
       ),
@@ -294,7 +294,7 @@ export async function payableStudents(
   return rows.map((l) => ({ ...l, firstName: l.firstName ?? l.name }));
 }
 
-/** Personnes qui paient pour un danseur (lien « paie pour »). */
+/** People who pay for a student (relationship « paie pour »). */
 export async function payersOf(tx: Tx, studentId: string): Promise<{ id: string; name: string }[]> {
   if (!z.uuid().safeParse(studentId).success) return [];
   const payers = await tx
@@ -307,7 +307,7 @@ export async function payersOf(tx: Tx, studentId: string): Promise<{ id: string;
 }
 
 // ---------------------------------------------------------------------------
-// Écritures
+// Writes
 // ---------------------------------------------------------------------------
 
 const optionalText = (max: number) =>
@@ -354,7 +354,7 @@ export type PersonInput = z.output<typeof validPersonInput>;
 export type Duplicate = { id: string; name: string; telephone: string | null };
 export type Result = { ok: true; id: string } | { ok: false; message: string };
 
-/** Un professionnel sans contact nommé prend sa raison sociale comme nom ; pas de naissance pour lui. */
+/** A professional without a named contact takes their company name as name; no birth date for them. */
 const personValues = (f: PersonInput) => ({
   type: f.type,
   lastName: f.name || f.companyName || "",
@@ -368,7 +368,7 @@ const personValues = (f: PersonInput) => ({
   notes: f.notes,
 });
 
-/** Personnes déjà connues avec le même téléphone, le même e-mail, les mêmes nom et prénom ou la même raison sociale. */
+/** People already known with the same phone, e-mail, same last and first names or same company name. */
 export async function likelyDuplicates(tx: Tx, f: PersonInput): Promise<Duplicate[]> {
   const conditions: SQL[] = [];
   if (f.telephone && digits(f.telephone).length >= 6) conditions.push(sql`${phoneDigits} = ${digits(f.telephone)}`);
@@ -396,13 +396,13 @@ export async function likelyDuplicates(tx: Tx, f: PersonInput): Promise<Duplicat
 
 export type NewRelationship = { type: RelationshipType; emergencyContact: boolean; paysFor: boolean };
 
-/** Annule la transaction de création quand le lien demandé est refusé. */
+/** Rolls back the creation transaction when the requested relationship is refused. */
 export class RelationshipRefusal extends Error {}
 
 /**
- * Crée une personne, éventuellement liée d'emblée à une autre (`de` : qui est
- * <type> de qui ; « nouvelle » désigne la personne créée). Sans `confirme`,
- * renvoie d'abord les doublons probables.
+ * Creates a person, optionally linked straight away to another (`de`: who is
+ * <type> of whom; « nouvelle » means the created person). Without `confirmed`,
+ * first returns the likely duplicates.
  */
 export async function createPerson(
   tx: Tx,
@@ -446,7 +446,7 @@ export const validRelationship = z.object({
   paysFor: z.boolean(),
 });
 
-/** Lie deux personnes de l'école ; un seul lien par paire, quel que soit le sens. */
+/** Links two people of the school; a single relationship per pair, whatever the direction. */
 export async function addRelationship(tx: Tx, saisie: z.input<typeof validRelationship>): Promise<Result> {
   const l = validRelationship.safeParse(saisie);
   if (!l.success) return { ok: false, message: "Lien invalide." };
@@ -481,7 +481,7 @@ export async function addRelationship(tx: Tx, saisie: z.input<typeof validRelati
   return { ok: true, id };
 }
 
-/** Change le type ou les drapeaux d'un lien, sans en changer le sens. */
+/** Changes the type or flags of a relationship, without changing its direction. */
 export async function updateRelationship(tx: Tx, id: string, saisie: NewRelationship): Promise<Result> {
   const refusal = { ok: false as const, message: "Ce lien n’existe plus." };
   if (!z.uuid().safeParse(id).success) return refusal;

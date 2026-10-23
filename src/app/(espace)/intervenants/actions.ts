@@ -16,7 +16,7 @@ import { requireRole } from "@/lib/session";
 import { syncCalendar } from "@/lib/calendar-sync";
 
 export type FormState = {
-  /** Incrémenté à chaque refus : le formulaire est remonté avec la saisie renvoyée. */
+  /** Incremented on each rejection: the form is remounted with the returned input. */
   attempt: number;
   errors: Partial<Record<string, string>>;
   values: Record<string, string> | null;
@@ -24,7 +24,7 @@ export type FormState = {
 
 const texte = (f: FormData, name: string) => String(f.get(name) ?? "");
 
-/** Crée (id null) ou modifie un intervenant ; réservé à la direction. */
+/** Creates (null id) or updates an instructor; management only. */
 export async function saveInstructor(id: string | null, state: FormState, f: FormData): Promise<FormState> {
   const { schoolId: schoolId } = await requireRole("direction");
   const values = Object.fromEntries(
@@ -56,7 +56,7 @@ export async function saveInstructor(id: string | null, state: FormState, f: For
   redirect(`/intervenants?enregistre=${result}`);
 }
 
-/** Adresse publique de l'application, prise sur la requête (derrière un proxy : en-têtes X-Forwarded-*). */
+/** Public address of the application, taken from the request (behind a proxy: X-Forwarded-* headers). */
 async function source(): Promise<string> {
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
@@ -64,7 +64,7 @@ async function source(): Promise<string> {
   return `${protocol}://${host}`;
 }
 
-/** Crée ou remplace le lien d'abonnement à l'agenda ; l'adresse n'est montrée qu'une fois. */
+/** Creates or replaces the calendar subscription link; the address is shown only once. */
 export async function createCalendarLink(
   instructorId: string,
 ): Promise<{ url: string; page: string } | { message: string }> {
@@ -93,7 +93,7 @@ const unavailabilityInput = z
   })
   .refine((s) => (s.de === "") === (s.a === ""), "Indiquez les deux heures, ou aucune pour des journées entières.");
 
-/** Journées entières (sans heures) ou plage horaire, en heure de Paris. */
+/** Whole days (no times) or a time range, in Paris time. */
 export async function addUnavailabilityAction(
   instructorId: string,
   saisie: unknown,

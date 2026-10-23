@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "Bordereau de remise" };
 const day = (iso: string) => iso.split("-").reverse().join("/");
 const DEPOSIT_KIND = { cheque: "chèques", especes: "espèces", cheque_vacances: "chèques vacances" } as const;
 
-/** Bordereau d'une remise en banque (#98), à imprimer et à joindre au dépôt. */
+/** Deposit slip of a bank deposit (#98), to print and enclose with the deposit. */
 export default async function DepositPage({ params, searchParams }: PageProps<"/encaissements/remises/[id]">) {
   const { schoolId: schoolId, role } = await requireRole("direction", "accueil");
   const [{ id }, { cree }] = await Promise.all([params, searchParams]);

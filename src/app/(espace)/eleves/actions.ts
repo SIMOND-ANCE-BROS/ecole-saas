@@ -26,7 +26,7 @@ export type StudentRefusal = {
 type Back = { message: string | null };
 const back = (r: { ok: true } | { ok: false; message: string }): Back => ({ message: r.ok ? null : r.message });
 
-/** Élève, responsable et payeur en une seule saisie ; sans `confirme`, renvoie d'abord les doublons probables. */
+/** Student, guardian and payer in a single entry; without `confirmed`, first returns the likely duplicates. */
 export async function createStudentFromGuide(saisie: unknown, confirmed: boolean): Promise<StudentRefusal> {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const s = validStudentInput.safeParse(saisie);
@@ -53,7 +53,7 @@ export async function invoice(
   return back(r);
 }
 
-/** Facturer une personne connue ou créée à l'instant (organisme, autre proche). */
+/** Invoice a known person or one just created (organisation, other relative). */
 export async function billNewPerson(studentId: string, payer: unknown): Promise<Back> {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const r = await withSchool(schoolId, (tx) => billTo(tx, studentId, payer as never));
@@ -82,7 +82,7 @@ export async function removeRelative(studentId: string, relationshipId: string):
   return back(r);
 }
 
-/** Un contact (un parent qui danse aussi) devient élève. */
+/** A contact (a parent who also dances) becomes a student. */
 export async function becomeStudent(id: string): Promise<Back> {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const r = await withSchool(schoolId, (tx) => markStudent(tx, id, true));

@@ -1,4 +1,4 @@
-/** Libellés des statuts d'inscription, communs aux fiches, aux listes et aux filtres (SQL compris). */
+/** Enrollment status labels, shared by records, lists and filters (SQL included). */
 export const ENROLLMENT_STATUS_LABELS = {
   active: "Inscrit",
   essai: "À l’essai",
@@ -9,5 +9,5 @@ export const ENROLLMENT_STATUS_LABELS = {
 
 export type EnrollmentStatus = keyof typeof ENROLLMENT_STATUS_LABELS;
 
-/** Ordre de priorité quand un élève a plusieurs inscriptions dans la saison. */
+/** Priority order when a student has several enrollments in the season. */
 export const STATUS_PRIORITY: EnrollmentStatus[] = ["active", "essai", "liste_attente", "abandon", "terminee"];

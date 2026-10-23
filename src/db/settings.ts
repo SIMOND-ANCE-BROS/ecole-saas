@@ -5,9 +5,9 @@ import type { Tx } from "./index";
 import { course, discipline, siteHours, season, room, site } from "./schema";
 
 /**
- * Paramètres de l'école (#80) : saisons, disciplines, sites et salles. Tout ce
- * qui est propre à une école se saisit ici, jamais dans le code. Toujours avec
- * la transaction d'`withSchool()` (RLS).
+ * School settings (#80): seasons, disciplines, sites and rooms. Everything
+ * specific to a school is entered here, never in code. Always within
+ * the `withSchool()` transaction (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
@@ -17,7 +17,7 @@ const validName = z.string().trim().min(1, "Nom obligatoire").max(100);
 const account = (query: SQL) => sql<number>`(${query})::int`;
 
 // ---------------------------------------------------------------------------
-// Saisons
+// Seasons
 // ---------------------------------------------------------------------------
 
 export type SeasonRow = {
@@ -74,8 +74,8 @@ async function checkSeason(tx: Tx, s: z.output<typeof validSeasonInput>, except?
 }
 
 /**
- * Crée une saison ; avec `reprendreDe`, recopie la grille tarifaire, les
- * réductions et les carnets de cette saison (les prix restent à revoir).
+ * Creates a season; with `copyFrom`, copies that season's tariff grid,
+ * discounts and lesson packs (prices still to be reviewed).
  */
 export async function createSeason(
   tx: Tx,
@@ -173,7 +173,7 @@ export async function renameDiscipline(tx: Tx, id: string, name: string): Promis
   return rows.length === 1 ? { ok: true, id } : { ok: false, message: "Cette discipline n’existe plus." };
 }
 
-/** Refusé tant qu'un cours ou un tarif l'utilise. */
+/** Refused while a course or a tariff uses it. */
 export async function deleteDiscipline(tx: Tx, id: string): Promise<Result> {
   if (!isUuid(id)) return { ok: false, message: "Cette discipline n’existe plus." };
   const d = (await listDisciplines(tx)).find((x) => x.id === id);
@@ -189,7 +189,7 @@ export async function deleteDiscipline(tx: Tx, id: string): Promise<Result> {
 }
 
 // ---------------------------------------------------------------------------
-// Sites et salles
+// Sites and rooms
 // ---------------------------------------------------------------------------
 
 export type RoomRow = { id: string; name: string; capacity: number | null; course: number };
@@ -259,7 +259,7 @@ export async function updateSite(tx: Tx, id: string, saisie: z.input<typeof vali
   return rows.length === 1 ? { ok: true, id } : { ok: false, message: "Ce site n’existe plus." };
 }
 
-/** Refusé tant que le site a des salles. */
+/** Refused while the site has rooms. */
 export async function deleteSite(tx: Tx, id: string): Promise<Result> {
   if (!isUuid(id)) return { ok: false, message: "Ce site n’existe plus." };
   const [s] = await tx.select({ name: site.name }).from(site).where(eq(site.id, id));
@@ -270,7 +270,7 @@ export async function deleteSite(tx: Tx, id: string): Promise<Result> {
   return { ok: true, id };
 }
 
-/** Horaires de chaque site, par identifiant de site (jours dans l'ordre). */
+/** Opening hours of each site, by site id (days in order). */
 export async function hoursBySite(tx: Tx): Promise<Record<string, Hours[]>> {
   const rows = await tx
     .select({
@@ -298,7 +298,7 @@ export const validHours = z
   .refine((h) => new Set(h.map((x) => x.weekday)).size === h.length, "Un même jour est saisi deux fois.")
   .refine((h) => h.every((x) => x.closure > x.opening), "L’heure de fermeture doit suivre l’ouverture.");
 
-/** Remplace les horaires d'un site ; une liste vide retire toute contrainte d'horaires. */
+/** Replaces a site's opening hours; an empty list removes any opening-hours constraint. */
 export async function saveHours(tx: Tx, siteId: string, saisie: z.input<typeof validHours>): Promise<Result> {
   const h = validHours.safeParse(saisie);
   if (!h.success) return { ok: false, message: h.error.issues[0].message };
@@ -350,7 +350,7 @@ export async function updateRoom(tx: Tx, id: string, saisie: z.input<typeof vali
   return rows.length === 1 ? { ok: true, id } : { ok: false, message: "Cette salle n’existe plus." };
 }
 
-/** Refusé tant qu'un cours (de n'importe quelle saison) a lieu dans la salle. */
+/** Refused while a course (of any season) takes place in the room. */
 export async function deleteRoom(tx: Tx, id: string): Promise<Result> {
   if (!isUuid(id)) return { ok: false, message: "Cette salle n’existe plus." };
   const [s] = await tx.select({ name: room.name }).from(room).where(eq(room.id, id));

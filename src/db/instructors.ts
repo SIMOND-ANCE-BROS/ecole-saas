@@ -4,7 +4,7 @@ import { deleteConnection } from "./calendar-connections";
 import type { Tx } from "./index";
 import { instructor } from "./schema";
 
-/** Intervenants (professeurs), toujours avec la transaction d'`withSchool()` (RLS). */
+/** Instructors (teachers), always within the `withSchool()` transaction (RLS). */
 
 export const STATUSES = { micro_entreprise: "Micro-entreprise", societe: "Société", salarie: "Salarié" } as const;
 export const VAT_REGIMES = {
@@ -17,7 +17,7 @@ export const PAY_MODES = {
   cours: "au cours",
   forfait_mensuel: "forfait mensuel",
 } as const;
-/** Unité du tarif selon le mode de rémunération. */
+/** Rate unit according to the pay mode. */
 export const PAY_UNITS = { heure: "heure", cours: "cours", forfait_mensuel: "mois" } as const;
 
 const keys = <T extends object>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
@@ -70,13 +70,13 @@ const columns = {
   active: instructor.active,
 };
 
-/** Cours d'une saison donnés par l'intervenant (titulaire du cours). */
+/** Courses of a season taught by the instructor (main instructor of the course). */
 const seasonCourses = (seasonId: string) => sql<number>`(
   SELECT count(*)::int FROM course c
   WHERE c.instructor_id = ${instructor}.${sql.identifier("id")} AND c.season_id = ${seasonId}
 )`;
 
-/** Actifs d'abord, puis par nom et prénom. */
+/** Active first, then by last and first name. */
 export function listInstructors(tx: Tx, seasonId: string): Promise<(Instructor & { seasonCourses: number })[]> {
   return tx
     .select({ ...columns, seasonCourses: seasonCourses(seasonId) })
@@ -98,10 +98,10 @@ export async function createInstructor(tx: Tx, saisie: InstructorInput): Promise
   return id;
 }
 
-/** false si l'intervenant n'existe pas dans l'école courante. */
+/** false if the instructor does not exist in the current school. */
 export async function updateInstructor(tx: Tx, id: string, saisie: InstructorInput): Promise<boolean> {
   if (!z.uuid().safeParse(id).success) return false;
-  // Désactiver un intervenant coupe aussi son abonnement et son agenda connecté.
+  // Deactivating an instructor also cuts off their subscription and connected calendar.
   const cutoff = saisie.active ? {} : { calendarTokenHash: null, calendarTokenCreatedAt: null };
   const rows = await tx
     .update(instructor)

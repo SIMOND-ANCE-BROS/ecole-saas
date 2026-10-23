@@ -4,15 +4,15 @@ import { connectesInstructors, readConnection, recordSync } from "../db/calendar
 import { replaceCalendarUnavailabilities } from "../db/unavailabilities";
 import { encrypt, decrypt } from "./encryption";
 
-/** Fenêtre lue dans les agendas : de la veille à quatre mois. */
+/** Window read from calendars: from the day before to four months ahead. */
 const BEFORE = 1;
 const AFTER = 120;
 const DAY = 86_400_000;
 
 /**
- * Lit les plages occupées de l'agenda connecté d'un intervenant et remplace
- * ses indisponibilités venues de cet agenda. Les appels réseau ont lieu hors
- * transaction ; aucune donnée personnelle dans les messages d'erreur.
+ * Reads the busy ranges of an instructor's connected calendar and replaces
+ * their unavailabilities that came from this calendar. Network calls happen
+ * outside the transaction; no personal data in error messages.
  */
 export async function syncCalendar(
   schoolId: string,
@@ -57,7 +57,7 @@ export async function syncCalendar(
   }
 }
 
-/** Tous les agendas connectés d'une école (tâche de fond). */
+/** All connected calendars of a school (background job). */
 export async function syncSchool(
   schoolId: string,
   query: typeof fetch = fetch,

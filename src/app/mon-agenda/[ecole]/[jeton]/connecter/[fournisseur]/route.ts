@@ -14,9 +14,9 @@ import { tokenInstructor } from "@/db/calendar-feed";
 import { COOKIE_OAUTH, personalPage, redirectionOAuth } from "@/lib/public-calendar";
 
 /**
- * Départ vers Google ou Microsoft depuis la page personnelle d'un intervenant.
- * Le vérificateur PKCE et l'adresse de retour restent dans un cookie httpOnly ;
- * l'état signé lie la réponse à cet intervenant et à cette école.
+ * Departure to Google or Microsoft from an instructor's personal page.
+ * The PKCE verifier and the return URL stay in an httpOnly cookie;
+ * the signed state ties the response to this instructor and this school.
  */
 export async function GET(_req: NextRequest, ctx: RouteContext<"/mon-agenda/[ecole]/[jeton]/connecter/[fournisseur]">) {
   const { ecole, jeton, fournisseur } = await ctx.params;

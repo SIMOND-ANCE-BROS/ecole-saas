@@ -11,7 +11,7 @@ import {
 } from "./courses";
 import { withSchool } from "./index";
 
-/** Édition du planning, comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
+/** Schedule editing, as the application runs it (app_user, RLS). Fictitious data deleted at the end. */
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");

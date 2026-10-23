@@ -12,7 +12,7 @@ import {
   deleteLessonPack,
 } from "./tariffs";
 
-/** Grille tarifaire, fratrie et carnets saisis (#80), comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
+/** Tariff grid, siblings and lesson packs (#80), as the app does (app_user, RLS). Fake data deleted at the end. */
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
@@ -46,7 +46,7 @@ beforeAll(async () => {
   [{ id: zumbaCourse }] =
     await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
     VALUES (${school}, ${season}, ${zumba}, ${room.id}, ${p.id}, 1, '19:00', 60) RETURNING id`;
-  // Payée par un tiers (lien « paie pour ») : indépendant de la façon dont l'élève elle-même est marquée.
+  // Paid for by a third party (relationship « paie pour »): independent of how the student herself is flagged.
   [{ id: ines }] =
     await admin`INSERT INTO person (school_id, last_name, first_name, birth_date) VALUES (${school}, 'Moreau', 'Inès', '1992-07-14') RETURNING id`;
   [{ id: payer }] =
@@ -107,7 +107,7 @@ describe("grille", () => {
       period: "trimestre",
       priceCents: 8500,
     });
-    // Correction d'un prix : la case est mise à jour, pas dupliquée.
+    // Correcting a price: the cell is updated, not duplicated.
     await price({
       audience: "adulte",
       combination: [60],
@@ -170,7 +170,7 @@ describe("grille", () => {
       ok: false,
       message: "Ce prix sert déjà à des inscriptions : modifiez-le plutôt que de le retirer.",
     });
-    // Changer son prix reste possible : l'inscription garde le sien.
+    // Changing its price is still possible: the enrollment keeps its own.
     expect(
       (
         await price({

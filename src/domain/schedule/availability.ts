@@ -1,12 +1,12 @@
 /**
- * Disponibilité des intervenants : conflits entre séances et indisponibilités,
- * remplaçants libres. Fonctions pures ; les heures de cours sont des heures de
- * Paris, les indisponibilités des instants.
+ * Instructor availability: conflicts between lessons and unavailabilities,
+ * free substitutes. Pure functions; course times are Paris times,
+ * unavailabilities are instants.
  */
 
 const MINUTE = 60_000;
 
-/** Décalage de Paris par rapport à UTC (en minutes) à un instant donné. */
+/** Paris offset from UTC (in minutes) at a given instant. */
 function parisShift(instant: number): number {
   const parties = Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {
@@ -25,11 +25,11 @@ function parisShift(instant: number): number {
   return Math.round((asUtc - instant) / MINUTE);
 }
 
-/** Instant (millisecondes) d'une heure de Paris `HH:MM` un jour `YYYY-MM-DD`. */
+/** Instant (milliseconds) of a Paris time `HH:MM` on a day `YYYY-MM-DD`. */
 export function instantParis(date: string, heure: string): number {
   const [a, m, j] = date.split("-").map(Number);
   const naive = Date.UTC(a, m - 1, j, Number(heure.slice(0, 2)), Number(heure.slice(3, 5)));
-  // Deux passes : le décalage peut changer entre l'heure naïve et l'heure réelle.
+  // Two passes: the offset may change between the naive time and the real time.
   const first = naive - parisShift(naive) * MINUTE;
   return naive - parisShift(first) * MINUTE;
 }
@@ -50,7 +50,7 @@ export function lessonInterval(s: Pick<DatedLesson, "date" | "startTime" | "dura
 
 const overlaps = ([a1, a2]: [number, number], [b1, b2]: [number, number]) => a1 < b2 && b1 < a2;
 
-/** Séances dont l'intervenant est indisponible pendant tout ou partie du créneau. */
+/** Lessons whose instructor is unavailable during all or part of the slot. */
 export function conflicts(
   lessons: DatedLesson[],
   unavailabilities: Unavailability[],
@@ -65,9 +65,9 @@ export function conflicts(
 }
 
 /**
- * Remplaçants possibles pour une séance, sauf son intervenant : libres d'abord
- * (ni indisponibles, ni pris par une autre séance au même moment), puis ceux
- * qui enseignent déjà la discipline, puis l'ordre donné.
+ * Possible substitutes for a lesson, except its instructor: free ones first
+ * (neither unavailable nor busy with another lesson at the same time), then
+ * those who already teach the discipline, then the given order.
  */
 export function freeSubstitutes(
   target: DatedLesson & { discipline: string },

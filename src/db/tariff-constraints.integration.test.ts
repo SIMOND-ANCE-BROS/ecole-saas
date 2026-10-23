@@ -2,10 +2,10 @@ import postgres from "postgres";
 import { afterAll, describe, expect, it } from "vitest";
 
 /**
- * Contraintes de la grille tarifaire : une case (saison × public × périodicité
- * × combinaison × discipline) n'existe qu'une fois, y compris pour les lignes
- * « toutes disciplines » (discipline NULL), et une combinaison n'est jamais vide.
- * Chaque test travaille dans une transaction annulée.
+ * Tariff grid constraints: a cell (season × audience × periodicity
+ * × combination × discipline) exists only once, including for
+ * « toutes disciplines » rows (NULL discipline), and a combination is never empty.
+ * Each test works in a rolled-back transaction.
  */
 
 const url = process.env.DATABASE_ADMIN_URL;
@@ -20,7 +20,7 @@ class Cancellation extends Error {}
 
 type Ids = { school: string; season: string };
 
-/** Exécute `fn` sur une école et une saison fictives, puis annule tout. */
+/** Runs `fn` on a fictitious school and season, then rolls everything back. */
 async function withSeason(fn: (tx: postgres.TransactionSql, ids: Ids) => Promise<void>) {
   await admin
     .begin(async (tx) => {

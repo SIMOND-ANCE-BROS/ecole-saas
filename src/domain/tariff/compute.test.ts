@@ -9,7 +9,7 @@ const JAZZ = "discipline-jazz";
 const SALSA = "discipline-salsa";
 
 let n = 0;
-/** Inscription d'un danseur ; cours en minutes, discipline classique par défaut. */
+/** A student's enrollment; courses in minutes, classical discipline by default. */
 function enrollment(
   partial: Partial<Omit<EnrollmentRequest, "courses">> & { course?: readonly (ChosenCourse | number)[] },
 ): EnrollmentRequest {
@@ -120,7 +120,7 @@ describe("inscriptions impossibles à tarifer", () => {
     expect(error.error.message).toBe(
       "Aucun forfait « enfant » au trimestre pour 45 min + 45 min : prix à saisir par l’accueil.",
     );
-    // Totaux des seules inscriptions tarifées ; l'enfant à saisir compte pour la fratrie de l'autre.
+    // Totals of the priced enrollments only; the child priced by hand counts for the other's siblings discount.
     expect(result).toMatchObject({
       full: false,
       grossTotalCents: 11000,

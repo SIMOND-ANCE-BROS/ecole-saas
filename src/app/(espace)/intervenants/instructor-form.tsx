@@ -7,7 +7,7 @@ import { Cancel } from "@/app/(espace)/_panel/panel";
 
 type Mode = keyof typeof PAY_UNITS;
 
-/** Montant en centimes → saisie en euros (« 40 », « 40,50 »), sans nombre à virgule. */
+/** Amount in cents → euro input (« 40 », « 40,50 »), without floating-point numbers. */
 const inEuros = (c: number) => `${Math.trunc(c / 100)}${c % 100 ? `,${String(c % 100).padStart(2, "0")}` : ""}`;
 
 function toValues(i: Instructor | null): Record<string, string> {
@@ -32,7 +32,7 @@ export function InstructorForm({ instructor: instructor }: { instructor: Instruc
     errors: {},
     values: null,
   });
-  // Remonté après chaque refus pour reprendre la saisie renvoyée par le serveur.
+  // Remounted after each rejection to restore the input returned by the server.
   return (
     <Champs
       key={state.attempt}
@@ -62,7 +62,7 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
   const e = state.errors;
   const form = useRef<HTMLFormElement>(null);
 
-  // Après un refus, le curseur va sur le premier champ en erreur.
+  // After a rejection, focus goes to the first field in error.
   useEffect(() => {
     if (state.attempt > 0) form.current?.querySelector<HTMLElement>("[aria-invalid]")?.focus();
   }, [state.attempt]);

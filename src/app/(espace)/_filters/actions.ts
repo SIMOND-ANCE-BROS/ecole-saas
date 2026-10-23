@@ -12,12 +12,12 @@ const saisie = z.object({
   columns: z.array(z.string().max(40)).max(40),
 });
 
-/** Mémorise l'ordre et la visibilité des colonnes d'une liste pour le membre connecté (#89). */
+/** Saves the order and visibility of a list's columns for the signed-in member (#89). */
 export async function saveColumns(list: unknown, columns: unknown): Promise<boolean> {
   const { schoolId: schoolId, userId } = await schoolContext();
   const v = saisie.safeParse({ list: list, columns: columns });
   if (!v.success) return false;
-  // Normalisée : colonnes connues seulement, au moins une visible.
+  // Normalised: known columns only, at least one visible.
   const own = writeLayout(readLayout(LISTES[v.data.list], v.data.columns));
   return withSchool(schoolId, (tx) => savePreference(tx, userId, v.data.list, own));
 }

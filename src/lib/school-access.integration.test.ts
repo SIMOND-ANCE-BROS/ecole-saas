@@ -5,9 +5,9 @@ import { auth } from "./auth";
 import { createAccount } from "./accounts";
 
 /**
- * Connexion et choix de l'école, contre la vraie base. Données fictives,
- * supprimées à la fin (les écritures de Better Auth ne sont pas annulables
- * dans une transaction de test).
+ * Sign-in and school choice, against the real database. Fictitious data,
+ * deleted at the end (Better Auth's writes cannot be rolled back in a test
+ * transaction).
  */
 
 const url = process.env.DATABASE_ADMIN_URL;
@@ -18,9 +18,9 @@ const suffix = Math.random().toString(36).slice(2, 8);
 const email = `accueil-${suffix}@exemple.test`;
 const password = "mot-de-passe-de-test-assez-long";
 let userId: string;
-let schoolA: string; // membre actif
-let schoolB: string; // aucun lien
-let schoolC: string; // membre désactivé
+let schoolA: string; // active member
+let schoolB: string; // no link
+let schoolC: string; // deactivated member
 
 async function createSchool(name: string) {
   const [e] = await admin`INSERT INTO school (name, slug) VALUES (${name}, ${`${name}-${suffix}`}) RETURNING id`;
@@ -44,7 +44,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await admin`DELETE FROM member WHERE user_id = ${userId}`;
-  await admin`DELETE FROM "user" WHERE id = ${userId}`; // sessions et comptes en cascade
+  await admin`DELETE FROM "user" WHERE id = ${userId}`; // sessions and accounts cascade
   await admin`DELETE FROM school WHERE id IN (${schoolA}, ${schoolB}, ${schoolC})`;
   await admin.end();
 });

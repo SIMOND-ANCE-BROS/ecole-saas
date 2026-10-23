@@ -11,7 +11,7 @@ import {
 } from "./unavailabilities";
 import { withSchool } from "./index";
 
-/** Indisponibilités, conflits et remplaçants, comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
+/** Unavailabilities, conflicts and substitutes, as the app does (app_user, RLS). Fictitious data deleted at the end. */
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
@@ -50,7 +50,7 @@ beforeAll(async () => {
   ines = await teacher(school, "Inès");
   lucas = await teacher(school, "Lucas");
   foreign = await teacher(otherSchool, "Ailleurs");
-  // Jazz le mercredi 17:00 (Camille) ; Zumba le mercredi 17:30 (Lucas, qui enseigne aussi le jazz ailleurs dans la saison).
+  // Jazz on Wednesday 17:00 (Camille); Zumba on Wednesday 17:30 (Lucas, who also teaches jazz elsewhere in the season).
   [{ id: jazz }] =
     await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
     VALUES (${school}, ${season}, ${d.id}, ${room.id}, ${camille}, 3, '17:00', 60) RETURNING id`;
@@ -74,7 +74,7 @@ afterAll(async () => {
   await admin.end();
 });
 
-const instant = (iso: string) => new Date(iso); // instants écrits avec leur décalage
+const instant = (iso: string) => new Date(iso); // instants written with their offset
 
 describe("indisponibilités saisies", () => {
   it("ajoute et liste une indisponibilité ; refuse une fin avant le début", async () => {
@@ -146,7 +146,7 @@ describe("remplaçants", () => {
   it("dit que le titulaire est indisponible et classe les remplaçants", async () => {
     const d = await withSchool(school, (tx) => lessonAvailabilities(tx, lessons["2026-11-04"]));
     expect(d?.unavailable).toBe(true);
-    // Inès est libre ; Lucas enseigne le jazz mais donne la Zumba à 17:30.
+    // Inès is free; Lucas teaches jazz but gives Zumba at 17:30.
     expect(d?.substitutes.map((r) => `${r.name} ${r.free} ${r.pattern} ${r.taught}`)).toEqual([
       "Inès Prof true null false",
       "Lucas Prof false autre séance true",
@@ -167,7 +167,7 @@ describe("synchronisation d’un agenda", () => {
     await withSchool(school, (tx) =>
       replaceCalendarUnavailabilities(tx, ines, "google", window, [
         { start: instant("2026-11-18T16:00:00+01:00"), end: instant("2026-11-18T18:00:00+01:00") },
-        { start: instant("2026-11-20T10:00:00+01:00"), end: instant("2026-11-20T09:00:00+01:00") }, // invalide, ignorée
+        { start: instant("2026-11-20T10:00:00+01:00"), end: instant("2026-11-20T09:00:00+01:00") }, // invalid, ignored
       ]),
     );
     await withSchool(school, (tx) =>
@@ -182,7 +182,7 @@ describe("synchronisation d’un agenda", () => {
       ok: false,
       message: "Cette indisponibilité n’existe plus ou vient d’un agenda.",
     });
-    // L'indisponibilité saisie de Camille est toujours là.
+    // Camille's manually entered unavailability is still there.
     expect(
       await withSchool(school, (tx) => listUnavailabilities(tx, camille, instant("2026-10-19T00:00:00+02:00"))),
     ).toHaveLength(1);

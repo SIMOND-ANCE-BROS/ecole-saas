@@ -14,7 +14,7 @@ const LIENS = [
   { href: "/parametres", label: "Paramètres" },
 ];
 
-/** Liens de la barre latérale ; la page courante est signalée (aria-current). */
+/** Sidebar links; the current page is flagged (aria-current). */
 export function Navigation({ role }: { role: "direction" | "accueil" | "professeur" }) {
   const path = usePathname();
   const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
@@ -38,7 +38,7 @@ export function Navigation({ role }: { role: "direction" | "accueil" | "professe
   );
 }
 
-/** Listes où la recherche du haut cherche sur place, avec le texte d’aide du champ. */
+/** Lists where the top search filters in place, with the field's help text. */
 const LISTES: Record<string, { label: string; example: string }> = {
   "/eleves": { label: "Rechercher un élève ou un parent", example: "Élève, parent, téléphone…" },
   "/contacts": { label: "Rechercher un contact", example: "Contact, téléphone, e-mail…" },
@@ -46,11 +46,11 @@ const LISTES: Record<string, { label: string; example: string }> = {
 };
 
 /**
- * La seule recherche de l’application (#107), accessible partout ; Ctrl K (ou
- * Cmd K) y place le curseur. Sur une liste (élèves, contacts, intervenants),
- * elle filtre cette liste pendant la frappe, en gardant filtres de colonnes
- * et tri ; ailleurs, Entrée mène aux élèves (et aux contacts liés). Flèche bas
- * pour descendre dans les résultats.
+ * The application's only search (#107), available everywhere; Ctrl K (or
+ * Cmd K) puts the cursor in it. On a list (students, contacts, instructors),
+ * it filters that list while typing, keeping column filters and sort;
+ * elsewhere, Enter leads to the students (and related contacts). Down arrow
+ * to move into the results.
  */
 export function GlobalSearch() {
   const field = useRef<HTMLInputElement>(null);
@@ -62,8 +62,8 @@ export function GlobalSearch() {
   const search = onList ? (settings.get("q") ?? "") : "";
   const [inProgress, navigate] = useTransition();
 
-  // L’URL redevient la référence une fois la navigation terminée, y compris
-  // après Précédent/Suivant. Ne pas écraser la frappe pendant une transition.
+  // The URL becomes the reference again once navigation is over, including
+  // after Back/Forward. Don't overwrite typing during a transition.
   useEffect(() => {
     if (!inProgress && field.current && field.current.value.trim() !== search) field.current.value = search;
   }, [search, path, inProgress]);

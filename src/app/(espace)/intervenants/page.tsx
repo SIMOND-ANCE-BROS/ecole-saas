@@ -31,9 +31,9 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
     };
   });
   const direction = role === "direction";
-  // Le tarif des intervenants n'est montré qu'à la direction.
+  // The instructors' rate is shown to management only.
   const columns = direction ? INSTRUCTOR_COLUMNS : INSTRUCTOR_COLUMNS.filter((c) => c.id !== "tarif");
-  // Liste complète déjà chargée (quelques intervenants) : filtrage en mémoire, mêmes règles qu'en SQL.
+  // Full list already loaded (a few instructors): in-memory filtering, same rules as in SQL.
   const filter = readFilter(f, mode, INSTRUCTOR_COLUMNS);
   const values: Record<string, (i: (typeof instructors)[number]) => Cellule> = {
     nom: (i) => `${i.firstName} ${i.name}`,
@@ -43,7 +43,7 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
   };
   const visible = sortRows(
     applyFilter(
-      // Recherche du haut (Ctrl K) : nom ou e-mail.
+      // Top search bar (Ctrl K): name or e-mail.
       instructors.filter((i) => !saisie || normalizeText(`${i.firstName} ${i.name} ${i.email ?? ""}`).includes(saisie)),
       filter,
       columns.map((c) => ({ ...c, value: values[c.id] ?? (() => null) })),
@@ -105,7 +105,7 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
                 nom: `${i.firstName} ${i.name}`,
                 statut: STATUSES[i.status],
                 cours: i.seasonCourses,
-                // Jamais envoyé au navigateur de l'accueil : masquer la colonne ne suffit pas.
+                // Never sent to the front desk's browser: hiding the column is not enough.
                 ...(direction ? { tarif: `${formatEuros(i.rateCents)} ${PAY_MODES[i.payMode]}` } : {}),
                 email: i.email,
               },

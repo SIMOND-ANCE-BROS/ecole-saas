@@ -21,7 +21,7 @@ export type FormInput = z.infer<typeof validInput>;
 const NO_SEASON_MESSAGE = "Aucune saison n’est paramétrée.";
 const WITHOUT_SEASON: Preview = { status: "invalide", message: NO_SEASON_MESSAGE };
 
-/** Aperçu du prix, recalculé côté serveur à chaque changement de la saisie. */
+/** Price preview, recomputed on the server on every change to the input. */
 export async function preview(saisie: FormInput): Promise<Preview> {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const donnees = validInput.safeParse(saisie);
@@ -33,7 +33,7 @@ export async function preview(saisie: FormInput): Promise<Preview> {
   });
 }
 
-/** Enregistre l'inscription ; en cas de refus, renvoie le message à afficher. */
+/** Saves the enrollment; when refused, returns the message to display. */
 export async function enroll(saisie: FormInput): Promise<{ message: string }> {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const donnees = validInput.safeParse(saisie);

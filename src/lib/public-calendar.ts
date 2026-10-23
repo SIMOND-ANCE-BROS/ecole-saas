@@ -1,9 +1,9 @@
 import type { Provider } from "../connectors/calendar/oauth";
 
 /**
- * Adresses publiques de l'agenda d'un intervenant. La redirection OAuth doit
- * être identique à celle déclarée chez Google et Microsoft : elle part de
- * BETTER_AUTH_URL (adresse publique de l'application), pas de la requête.
+ * Public URLs of an instructor's calendar. The OAuth redirect must be
+ * identical to the one declared at Google and Microsoft: it is built from
+ * BETTER_AUTH_URL (the application's public URL), not from the request.
  */
 export const publicAddress = () => (process.env.BETTER_AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
 export const redirectionOAuth = (f: Provider) => `${publicAddress()}/api/agenda/retour/${f}`;

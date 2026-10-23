@@ -10,8 +10,8 @@ describe("instantParis", () => {
   });
 
   it("tient compte des jours de changement d’heure", () => {
-    expect(iso(instantParis("2026-03-29", "10:00"))).toBe("2026-03-29T08:00:00.000Z"); // passage à l'heure d'été
-    expect(iso(instantParis("2026-10-25", "10:00"))).toBe("2026-10-25T09:00:00.000Z"); // retour à l'heure d'hiver
+    expect(iso(instantParis("2026-03-29", "10:00"))).toBe("2026-03-29T08:00:00.000Z"); // switch to summer time
+    expect(iso(instantParis("2026-10-25", "10:00"))).toBe("2026-10-25T09:00:00.000Z"); // back to winter time
   });
 });
 
@@ -39,7 +39,7 @@ describe("conflits", () => {
   it("trouve les séances d’un intervenant qui chevauchent ses indisponibilités, bornes exclues", () => {
     const lessons = [
       lesson("a", "2026-11-04", "17:00", "camille"), // 16:00–17:00 UTC
-      lesson("b", "2026-11-04", "18:00", "camille"), // 17:00–18:00 UTC : commence quand l'indisponibilité finit
+      lesson("b", "2026-11-04", "18:00", "camille"), // 17:00–18:00 UTC: starts when the unavailability ends
       lesson("c", "2026-11-04", "17:00", "ines"),
     ];
     const unavailabilities = [unavailability("camille", "2026-11-04T15:30:00Z", "2026-11-04T17:00:00Z")];

@@ -16,7 +16,7 @@ import { Telephone } from "../_people/sections";
 
 export const metadata: Metadata = { title: "Élèves" };
 
-/** Élèves de l'école ; une recherche montre aussi les contacts qui correspondent (parent, payeur). */
+/** The school's students; a search also shows the matching contacts (parent, payer). */
 export default async function StudentsPage({ searchParams }: PageProps<"/eleves">) {
   const { schoolId: schoolId, userId } = await requireRole("direction", "accueil");
   const { q, f, mode, sort, order } = await searchParams;
@@ -70,7 +70,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
       </div>
 
       <NavigableResults>
-        {/* useSearchParams exige une frontière Suspense. */}
+        {/* useSearchParams requires a Suspense boundary. */}
         <Suspense>
           <ListTable
             list="eleves"

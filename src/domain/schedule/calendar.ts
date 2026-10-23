@@ -1,7 +1,7 @@
 /**
- * Mise en page du planning en vue agenda : axe horaire commun, cours placés à
- * leur heure, cours simultanés côte à côte. Fonctions pures, en minutes
- * depuis minuit (heure de Paris des cours).
+ * Layout of the schedule in calendar view: shared time axis, courses placed
+ * at their time, simultaneous courses side by side. Pure functions, in
+ * minutes since midnight (Paris time of the courses).
  */
 
 export type CalendarCourse = { id: string; weekday: number | null; startTime: string; durationMinutes: number };
@@ -10,10 +10,10 @@ export const toMinutes = (heure: string) => Number(heure.slice(0, 2)) * 60 + Num
 export const toTime = (minutes: number) =>
   `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 
-/** Arrondi au pas le plus proche (quart d'heure par défaut). */
+/** Rounds to the nearest step (quarter of an hour by default). */
 export const snap = (minutes: number, pas = 15) => Math.round(minutes / pas) * pas;
 
-/** Plage horaire affichée : de l'heure pleine avant le premier cours à celle après le dernier ; 9 h–21 h sans cours. */
+/** Displayed time range: from the full hour before the first course to the one after the last; 9:00–21:00 without courses. */
 export function dayBounds(courses: CalendarCourse[]): { start: number; end: number } {
   const weekly = courses.filter((c) => c.weekday !== null);
   if (weekly.length === 0) return { start: 9 * 60, end: 21 * 60 };
@@ -23,9 +23,9 @@ export function dayBounds(courses: CalendarCourse[]): { start: number; end: numb
 }
 
 /**
- * Colonne de chaque cours dans sa journée : les cours qui se chevauchent
- * forment un groupe partagé en autant de colonnes que nécessaire ; un cours
- * prend la première colonne libre à son heure.
+ * Column of each course within its day: overlapping courses form a group
+ * split into as many columns as needed; a course takes the first column
+ * free at its time.
  */
 export function arrange(courses: CalendarCourse[]): Map<string, { column: number; columns: number }> {
   const result = new Map<string, { column: number; columns: number }>();

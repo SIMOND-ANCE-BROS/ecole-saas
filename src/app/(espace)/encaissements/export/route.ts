@@ -6,7 +6,7 @@ import { validDate } from "@/domain/schedule/week";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 
-/** Export CSV du journal des encaissements (`?du=&au=&moyen=`), pour la comptabilité (#98). */
+/** CSV export of the payment log (`?du=&au=&moyen=`), for the accounts (#98). */
 export async function GET(query: Request) {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");
   const p = new URL(query.url).searchParams;

@@ -12,8 +12,8 @@ import { EnrollmentForm } from "./enrollment-form";
 export const metadata: Metadata = { title: "Nouvelle inscription" };
 
 /**
- * Inscription d'un élève, facturée à son payeur (« Facturé à » de sa fiche).
- * Sa fratrie, facturée à la même personne, peut être inscrite dans la foulée.
+ * Enrollment of a student, invoiced to their payer (« Facturé à » on their record).
+ * Their siblings, invoiced to the same person, can be enrolled right after.
  */
 export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]/inscription">) {
   const { schoolId: schoolId } = await requireRole("direction", "accueil");

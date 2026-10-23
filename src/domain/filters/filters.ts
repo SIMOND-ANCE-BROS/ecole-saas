@@ -1,34 +1,34 @@
 /**
- * Filtres par colonne des listes (élèves, contacts, intervenants) : lecture
- * et écriture dans l'adresse, et évaluation en mémoire. La traduction SQL
- * (`src/db/filters.ts`) applique exactement les mêmes règles.
+ * Per-column filters of the lists (students, contacts, instructors): reading
+ * and writing in the URL, and in-memory evaluation. The SQL translation
+ * (`src/db/filters.ts`) applies exactly the same rules.
  *
- * Adresse : `?f=colonne.operateur.valeur` (répété) et `mode=ou` ; la valeur
- * peut contenir des points, seuls les deux premiers séparent.
+ * URL: `?f=column.operator.value` (repeated) and `mode=ou`; the value may
+ * contain dots, only the first two separate.
  */
 
-/** `date` : jour `YYYY-MM-DD` (date de naissance…). */
+/** `date`: day `YYYY-MM-DD` (date of birth…). */
 export type ColumnType = "texte" | "nombre" | "telephone" | "date";
 
 export type ColumnDef = {
   id: string;
   label: string;
   type: ColumnType;
-  /** false : colonne proposée mais masquée tant que le membre ne l'affiche pas (#89). */
+  /** false: column offered but hidden until the member shows it (#89). */
   byDefault?: boolean;
-  /** Nombres : alignés à droite. */
+  /** Numbers: right-aligned. */
   right?: boolean;
-  /** false : colonne affichée mais sans filtre (montant mis en forme…). */
+  /** false: column displayed but not filterable (formatted amount…). */
   filterable?: boolean;
-  /** Valeurs possibles : la colonne se filtre par cases à cocher (#107). La page peut en fournir (cours de la saison). */
+  /** Possible values: the column is filtered by checkboxes (#107). The page may supply them (season's courses). */
   choice?: readonly string[];
-  /** Colonne qui identifie la ligne (le nom) : toujours affichée, jamais masquable (#107). */
+  /** Column that identifies the row (the name): always displayed, never hideable (#107). */
   required?: boolean;
-  /** false : un clic sur le titre ne trie pas. */
+  /** false: clicking the header does not sort. */
   sortable?: boolean;
-  /** Adresse e-mail : affichée en lien `mailto:`. */
+  /** E-mail address: displayed as a `mailto:` link. */
   email?: boolean;
-  /** Texte d'une cellule vide (« l’élève » pour « Facturé à »), sinon un tiret. */
+  /** Text of an empty cell (« l’élève » for « Facturé à »), otherwise a dash. */
   ifEmpty?: string;
 };
 
@@ -53,7 +53,7 @@ export type Mode = "et" | "ou";
 export type Filter = { mode: Mode; conditions: Condition[] };
 
 export const EMPTY_FILTER: Filter = { mode: "et", conditions: [] };
-/** Au-delà, la barre devient illisible et la requête inutilement lourde. */
+/** Beyond this, the bar becomes unreadable and the query needlessly heavy. */
 export const CONDITIONS_MAX = 8;
 
 const TEXT: Operator[] = ["contient", "ne_contient_pas", "est", "n_est_pas", "commence", "vide", "non_vide", "parmi"];
@@ -82,8 +82,8 @@ export const OPERATOR_LABELS: Record<Operator, string> = {
 };
 
 /**
- * « parmi » (cases à cocher d'une colonne, #107) : valeurs séparées par `|`,
- * `(vide)` pour les lignes sans valeur. `Inscrit|(vide)` : inscrits ou sans inscription.
+ * « parmi » (a column's checkboxes, #107): values separated by `|`,
+ * `(vide)` for rows without a value. `Inscrit|(vide)`: enrolled or without enrollment.
  */
 export const EMPTY = "(vide)";
 export const SEPARATOR = "|";
@@ -97,7 +97,7 @@ const DATE_LABELS: Partial<Record<Operator, string>> = {
   sup_egal: "depuis le",
 };
 
-/** Libellé d'un opérateur selon le type de la colonne (« avant le » pour une date). */
+/** An operator's label according to the column type (« avant le » for a date). */
 export const operatorLabel = (o: Operator, type: ColumnType) =>
   (type === "date" && DATE_LABELS[o]) || OPERATOR_LABELS[o];
 
@@ -105,11 +105,11 @@ export const withoutValue = (o: Operator) => o === "vide" || o === "non_vide";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Correspondances d'accents, partagées avec la traduction SQL (`translate`). */
+/** Accent mappings, shared with the SQL translation (`translate`). */
 export const ACCENTS = "àâäáãåéèêëíìîïóòôöõúùûüçñÿ";
 export const SANS_ACCENTS = "aaaaaaeeeeiiiiooooouuuucny";
 
-/** Minuscules sans accents, espaces réduits. */
+/** Lower case without accents, collapsed whitespace. */
 export function normalizeText(v: string): string {
   let r = "";
   for (const c of v.toLowerCase()) {
@@ -121,13 +121,13 @@ export function normalizeText(v: string): string {
 
 export const digits = (v: string) => v.replace(/\D/g, "");
 
-/** Nombre saisi (virgule ou point) ; null si ce n'est pas un nombre. */
+/** Number as typed (comma or dot); null if it is not a number. */
 export function readNumber(v: string): number | null {
   const t = v.trim().replace(",", ".");
   return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : null;
 }
 
-/** Valeur exploitable pour cette condition, ou null si elle doit être ignorée. */
+/** Usable value for this condition, or null if it must be ignored. */
 export function normalizedValue(c: Condition, type: ColumnType): string | number | null {
   if (withoutValue(c.operator)) return "";
   if (type === "nombre") return readNumber(c.value);
@@ -140,7 +140,7 @@ export function normalizedValue(c: Condition, type: ColumnType): string | number
   return v === "" ? null : v;
 }
 
-/** Conditions valides de l'adresse : colonne connue, opérateur adapté, valeur exploitable. */
+/** Valid URL conditions: known column, suitable operator, usable value. */
 export function readFilter(
   f: string | string[] | undefined | null,
   mode: string | string[] | undefined | null,
@@ -163,7 +163,7 @@ export function readFilter(
   return { mode: m === "ou" ? "ou" : "et", conditions };
 }
 
-/** Paramètres d'adresse d'un filtre (le mode n'est écrit que s'il compte). */
+/** URL parameters of a filter (the mode is written only when it matters). */
 export function toParams(filter: Filter): [string, string][] {
   const p: [string, string][] = filter.conditions.map((c) => [
     "f",
@@ -173,7 +173,7 @@ export function toParams(filter: Filter): [string, string][] {
   return p;
 }
 
-/** Valeur d'une cellule : texte, nombre, liste (responsables…) ou absente. */
+/** A cell's value: text, number, list (guardians…) or missing. */
 export type Cellule = string | number | string[] | null | undefined;
 
 function evaluate(cellule: Cellule, c: Condition, type: ColumnType): boolean {
@@ -231,7 +231,7 @@ function evaluate(cellule: Cellule, c: Condition, type: ColumnType): boolean {
       return t.includes(target);
     case "ne_contient_pas":
       return !t.includes(target);
-    // Une liste « est » X si l'un de ses éléments vaut X.
+    // A list "is" X if one of its items equals X.
     case "est":
       return Array.isArray(cellule) ? cellule.some((e) => normalizeText(e) === target) : t === target;
     case "n_est_pas":
@@ -248,7 +248,7 @@ function evaluate(cellule: Cellule, c: Condition, type: ColumnType): boolean {
   }
 }
 
-/** Lignes qui satisfont toutes (ET) ou au moins une (OU) des conditions. */
+/** Rows that satisfy all (AND) or at least one (OR) of the conditions. */
 export function applyFilter<T>(rows: T[], filter: Filter, columns: (ColumnDef & { value: (l: T) => Cellule })[]): T[] {
   const actives = filter.conditions.flatMap((c) => {
     const def = columns.find((d) => d.id === c.column);
@@ -261,7 +261,7 @@ export function applyFilter<T>(rows: T[], filter: Filter, columns: (ColumnDef & 
   });
 }
 
-/** « Âge > 10 », « Responsables contient « Martin » », « Téléphone est vide » : pour les pastilles. */
+/** « Âge > 10 », « Responsables contient « Martin » », « Téléphone est vide »: for the chips. */
 export function conditionLabel(c: Condition, columns: ColumnDef[]): string {
   const def = columns.find((d) => d.id === c.column);
   const op = operatorLabel(c.operator, def?.type ?? "texte");
@@ -271,10 +271,10 @@ export function conditionLabel(c: Condition, columns: ColumnDef[]): string {
   return def?.type === "nombre" ? `${name} ${op} ${c.value}` : `${name} ${op} « ${c.value} »`;
 }
 
-/** Tri d'une liste par une colonne (#107), dans l'adresse : `?sort=age&order=desc`. */
+/** Sorting a list by a column (#107), in the URL: `?sort=age&order=desc`. */
 export type Sort = { column: string; sens: "asc" | "desc" };
 
-/** Tri de l'adresse s'il porte sur une colonne connue et triable ; sinon null (ordre par défaut). */
+/** The URL's sort if it targets a known, sortable column; otherwise null (default order). */
 export function readSort(
   sort: string | string[] | undefined | null,
   order: string | string[] | undefined | null,
@@ -286,7 +286,7 @@ export function readSort(
   return { column: def.id, sens: (Array.isArray(order) ? order[0] : order) === "desc" ? "desc" : "asc" };
 }
 
-/** Tri en mémoire, avec les règles du tri SQL : accents ignorés, nombres en ordre numérique, vides en dernier. */
+/** In-memory sort, with the SQL sort's rules: accents ignored, numbers in numeric order, empty values last. */
 export function sortRows<L>(rows: L[], currentSort: Sort | null, value: (l: L, column: string) => Cellule): L[] {
   if (!currentSort) return rows;
   const key = (v: Cellule) => (Array.isArray(v) ? v.join(", ") : v);

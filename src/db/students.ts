@@ -23,13 +23,13 @@ import {
 import { relationship, person } from "./schema";
 
 /**
- * Élèves et contacts (#77) : la même table `personne`, présentée en clair.
- * Un élève a des responsables, des personnes à prévenir et un payeur
- * (« facturé à ») ; un contact est un parent, un payeur ou un organisme.
- * Toujours avec la transaction d'`withSchool()` (RLS).
+ * Students and contacts (#77): the same `person` table, presented plainly.
+ * A student has guardians, emergency contacts and a payer
+ * (« facturé à »); a contact is a parent, a payer or an organisation.
+ * Always within the `withSchool()` transaction (RLS).
  */
 
-/** Lignes au plus dans une liste : au-delà, l'accueil affine la recherche ou filtre. */
+/** Maximum rows in a list: beyond that, the front desk refines the search or filters. */
 export const MAX_RESULTS = 200;
 const isUuid = (v: string) => z.uuid().safeParse(v).success;
 const currentId = sql`${person}.${sql.identifier("id")}`;
@@ -37,7 +37,7 @@ const sqlName = (alias: string) =>
   sql`coalesce(${sql.identifier(alias)}.company_name, concat_ws(' ', ${sql.identifier(alias)}.first_name, ${sql.identifier(alias)}.last_name))`;
 
 // ---------------------------------------------------------------------------
-// Listes
+// Lists
 // ---------------------------------------------------------------------------
 
 export type StudentRow = {
@@ -45,28 +45,28 @@ export type StudentRow = {
   firstName: string | null;
   name: string;
   birthDate: string | null;
-  /** Téléphone de l'élève, sinon celui d'un responsable à prévenir. */
+  /** Student's phone, otherwise that of a guardian to contact. */
   telephone: string | null;
   guardians: string[];
-  /** Nom du payeur ; null quand l'élève paie lui-même (ou qu'aucun payeur n'est indiqué). */
+  /** Payer's name; null when the student pays for themselves (or no payer is set). */
   billedTo: string | null;
-  /** E-mail de l'élève, sinon celui d'un responsable. */
+  /** Student's e-mail, otherwise that of a guardian. */
   email: string | null;
-  /** Cours de la saison (inscriptions actives ou à l'essai) : « Jazz lun. 17:00 ». */
+  /** Courses of the season (active or trial enrollments): « Jazz lun. 17:00 ». */
   courses: string[];
-  /** Statut d'inscription de la saison (« Inscrit », « En attente »…), null sans inscription. */
+  /** Enrollment status for the season (« Inscrit », « En attente »…), null without an enrollment. */
   enrollmentStatus: string | null;
-  /** Personnes à prévenir : « Sophie Martin, 06 12 34 56 78 ». */
+  /** Emergency contacts: « Sophie Martin, 06 12 34 56 78 ». */
   toNotify: string[];
 };
 
 /**
- * Filtres par colonne (#87) ; `aujourdhui` (Paris) sert au calcul de l'âge,
- * `saisonId` aux colonnes « Cours suivis » et « Inscription » (#89).
+ * Column filters (#87); `today` (Paris) is used to compute the age,
+ * `seasonId` for the « Cours suivis » and « Inscription » columns (#89).
  */
 export type ListOptions = { filter?: Filter; currentSort?: Sort | null; today?: string; seasonId?: string | null };
 
-// Colonnes calculées des listes : les mêmes expressions servent à l'affichage et aux filtres.
+// Computed list columns: the same expressions serve for display and for filters.
 const studentPhone = sql<string | null>`coalesce(${person.phone}, (
   SELECT r.phone FROM relationship l JOIN person r ON r.id = l.person_id
   WHERE l.related_person_id = ${currentId} AND l.emergency_contact AND r.phone IS NOT NULL ORDER BY r.last_name LIMIT 1))`;
@@ -87,18 +87,18 @@ const studentToNotify = sql<string[]>`coalesce((
   SELECT array_agg(concat_ws(', ', ${sqlName("r")}, r.phone) ORDER BY r.last_name) FROM relationship l JOIN person r ON r.id = l.person_id
   WHERE l.related_person_id = ${currentId} AND l.emergency_contact), '{}')`;
 
-/** CASE SQL d'après une table de libellés (les libellés passent en paramètres). */
+/** SQL CASE from a label table (labels go through parameters). */
 const labels = (value: SQL, table: Record<string | number, string>) =>
   sql`CASE ${value} ${sql.join(
     Object.entries(table).map(([k, v]) => sql`WHEN ${k} THEN ${v}`),
     sql` `,
   )} END`;
 
-/** Libellé court d'un cours `c` de discipline `d` : « Jazz lun. 17:00 ». */
+/** Short label of a course `c` of discipline `d`: « Jazz lun. 17:00 ». */
 const courseLabel = () =>
   sql`concat_ws(' ', d.name, ${labels(sql`c.weekday::text`, Object.fromEntries(SHORT_DAYS.map((j, i) => [i, j] as const).slice(1)))}, to_char(c.start_time, 'HH24:MI'))`;
 
-/** Cours suivis cette saison (inscriptions actives ou à l'essai), triés par jour et heure. */
+/** Courses attended this season (active or trial enrollments), sorted by day and time. */
 function studentCourses(seasonId: string | null): SQL<string[]> {
   if (!seasonId) return sql<string[]>`'{}'::text[]`;
   return sql<string[]>`coalesce((
@@ -112,7 +112,7 @@ function studentCourses(seasonId: string | null): SQL<string[]> {
     ) x), '{}')`;
 }
 
-/** Libellés des cours de la saison, par jour et heure : les choix du bouton « Cours » de la liste (#107). */
+/** Labels of the season's courses, by day and time: the choices of the list's « Cours » button (#107). */
 export async function seasonCourseLabels(tx: Tx, seasonId: string): Promise<string[]> {
   const rows = await tx.execute<{ label: string }>(sql`
     SELECT x.label FROM (
@@ -123,7 +123,7 @@ export async function seasonCourseLabels(tx: Tx, seasonId: string): Promise<stri
   return rows.map((l) => l.label);
 }
 
-/** Statut d'inscription de la saison ; le plus favorable si l'élève en a plusieurs. */
+/** Enrollment status for the season; the most favourable if the student has several. */
 function studentEnrollment(seasonId: string | null): SQL<string | null> {
   if (!seasonId) return sql<string | null>`NULL::text`;
   return sql<string | null>`(
@@ -137,9 +137,9 @@ function studentEnrollment(seasonId: string | null): SQL<string | null> {
 }
 
 /**
- * Élèves de l'école, par nom. La recherche porte sur l'élève et sur ses
- * proches (nom, téléphone…) : on retrouve un enfant par sa mère. Les filtres
- * par colonne s'appliquent en SQL, avant la limite de la liste.
+ * Students of the school, by name. The search covers the student and their
+ * relatives (name, phone…): a child can be found through their mother. Column
+ * filters apply in SQL, before the list limit.
  */
 export async function listStudents(
   tx: Tx,
@@ -210,11 +210,11 @@ export type ContactRow = {
   companyName: string | null;
   telephone: string | null;
   email: string | null;
-  /** Élèves dont la personne est responsable ou pour qui elle paie. */
+  /** Students for whom the person is a guardian or whom they pay for. */
   students: string[];
 };
 
-/** Contacts : qui n'est pas élève, ou qui est responsable ou payeur d'un élève. */
+/** Contacts: whoever is not a student, or is a guardian or payer of a student. */
 export async function listContacts(
   tx: Tx,
   saisie = "",
@@ -257,7 +257,7 @@ export async function listContacts(
 }
 
 // ---------------------------------------------------------------------------
-// Fiches
+// Records
 // ---------------------------------------------------------------------------
 
 export type StudentRelative = {
@@ -269,7 +269,7 @@ export type StudentRelative = {
   toNotify: boolean;
   paysFor: boolean;
   relation: "responsable" | "conjoint" | "autre";
-  /** « vers » : ce proche est <relation> de l'élève ; « de » : l'élève est <relation> de ce proche. */
+  /** « vers »: this relative is <relation> of the student; « de »: the student is <relation> of this relative. */
   sens: "de" | "vers";
 };
 
@@ -277,9 +277,9 @@ export type StudentRecord = Omit<PersonRecord, "relationships"> & {
   isStudent: boolean;
   guardians: StudentRelative[];
   otherRelationships: StudentRelative[];
-  /** Qui reçoit les factures : l'élève lui-même, une personne, ou personne d'indiqué (mineur sans payeur). */
+  /** Who receives the invoices: the student themselves, a person, or nobody set (minor without a payer). */
   billedTo: { type: "eleve" } | { type: "personne"; id: string; name: string } | { type: "aucun" };
-  /** Autres élèves du même payeur (réduction fratrie). */
+  /** Other students of the same payer (siblings discount). */
   siblings: { id: string; firstName: string }[];
 };
 
@@ -323,7 +323,7 @@ export async function readStudent(tx: Tx, id: string, today: string): Promise<St
     ...reste,
     isStudent: student,
     guardians: to.filter((l) => l.type === "representant_legal").map(relative),
-    // Les autres proches, et les liens enregistrés depuis l'élève (dont il est responsable, conjoint saisi de son côté).
+    // The other relatives, and the relationships entered from the student (guardian of, partner entered on their side).
     otherRelationships: liens.filter((l) => l.sens === "de" || l.type !== "representant_legal").map(relative),
     billedTo,
     siblings,
@@ -332,7 +332,7 @@ export async function readStudent(tx: Tx, id: string, today: string): Promise<St
 
 export type ContactRecord = Omit<PersonRecord, "relationships"> & {
   isStudent: boolean;
-  /** Élèves dont la personne est responsable, qu'elle prévient ou pour qui elle paie. */
+  /** Students for whom the person is a guardian, whom they are an emergency contact for or whom they pay for. */
   students: {
     relationshipId: string;
     id: string;
@@ -365,7 +365,7 @@ export async function readContact(tx: Tx, id: string): Promise<ContactRecord | n
 }
 
 // ---------------------------------------------------------------------------
-// Création guidée d'un élève
+// Guided creation of a student
 // ---------------------------------------------------------------------------
 
 export const otherValidPerson = z.union([z.object({ id: z.uuid() }), z.object({ newPerson: validPersonInput })]);
@@ -399,13 +399,13 @@ async function resolve(tx: Tx, p: z.output<typeof otherValidPerson>): Promise<st
   return r.status === "ok" ? r.id : null;
 }
 
-/** Erreur qui annule toute la création : rien n'est gardé à moitié. */
+/** Error that rolls back the whole creation: nothing is kept half-done. */
 export class CreationRefusal extends Error {}
 
 /**
- * Crée l'élève, son responsable (existant ou nouveau) et son payeur en une
- * seule transaction. Sans `confirme`, renvoie d'abord les doublons probables
- * de chaque nouvelle personne.
+ * Creates the student, their guardian (existing or new) and their payer in a
+ * single transaction. Without `confirmed`, first returns the likely duplicates
+ * of each new person.
  */
 export async function createStudent(
   tx: Tx,
@@ -449,12 +449,12 @@ export async function createStudent(
 }
 
 // ---------------------------------------------------------------------------
-// Modifications depuis la fiche élève
+// Changes from the student record
 // ---------------------------------------------------------------------------
 
 /**
- * « Facturé à » : l'élève lui-même, ou une personne (responsable, proche,
- * organisme). Un seul payeur à la fois ; le lien est créé au besoin.
+ * « Facturé à »: the student themselves, or a person (guardian, relative,
+ * organisation). A single payer at a time; the relationship is created if needed.
  */
 export async function setBilling(
   tx: Tx,
@@ -477,7 +477,7 @@ export async function setBilling(
     await tx.update(relationship).set({ paysFor: true }).where(eq(relationship.id, direct.id));
     return { ok: true, id: studentId };
   }
-  // Lien enregistré dans l'autre sens (conjoint saisi depuis la fiche de l'élève) : il est retourné.
+  // Relationship recorded in the other direction (partner entered from the student's record): it is reversed.
   const [inverse] = await tx
     .select({ id: relationship.id })
     .from(relationship)
@@ -499,7 +499,7 @@ export async function setBilling(
   return r.ok ? { ok: true, id: studentId } : r;
 }
 
-/** Ajoute un responsable légal (existant ou nouveau) ; un lien existant devient « responsable ». */
+/** Adds a legal guardian (existing or new); an existing relationship becomes « responsable ». */
 export async function addGuardian(
   tx: Tx,
   studentId: string,
@@ -532,7 +532,7 @@ export async function addGuardian(
   });
 }
 
-/** Un contact devient élève (ou cesse de l'être). */
+/** A contact becomes a student (or stops being one). */
 export async function markStudent(tx: Tx, id: string, student: boolean): Promise<Result> {
   if (!isUuid(id)) return { ok: false, message: "Personne introuvable." };
   const rows = await tx
@@ -543,7 +543,7 @@ export async function markStudent(tx: Tx, id: string, student: boolean): Promise
   return rows.length === 1 ? { ok: true, id } : { ok: false, message: "Personne introuvable." };
 }
 
-/** « À prévenir en cas d'urgence » pour un proche de l'élève. */
+/** « À prévenir en cas d'urgence » for a relative of the student. */
 export async function changeNotify(tx: Tx, relationshipId: string, toNotify: boolean): Promise<Result> {
   if (!isUuid(relationshipId)) return { ok: false, message: "Ce lien n’existe plus." };
   const rows = await tx
@@ -554,14 +554,14 @@ export async function changeNotify(tx: Tx, relationshipId: string, toNotify: boo
   return rows.length === 1 ? { ok: true, id: relationshipId } : { ok: false, message: "Ce lien n’existe plus." };
 }
 
-/** Élève ou contact : sert aux anciennes adresses /personnes/<id>. null si la personne n'existe pas. */
+/** Student or contact: serves the old /personnes/<id> URLs. null if the person does not exist. */
 export async function isStudent(tx: Tx, id: string): Promise<boolean | null> {
   if (!isUuid(id)) return null;
   const [p] = await tx.select({ student: person.isStudent }).from(person).where(eq(person.id, id));
   return p ? p.student : null;
 }
 
-/** Facturer une personne connue ou créée à l'instant (organisme, autre proche). */
+/** Bill a known person or one just created (organisation, other relative). */
 export async function billTo(tx: Tx, studentId: string, payer: z.input<typeof otherValidPerson>): Promise<Result> {
   const p = otherValidPerson.safeParse(payer);
   if (!p.success) return { ok: false, message: "Vérifiez les informations du payeur." };

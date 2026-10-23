@@ -8,7 +8,7 @@ import { formatEuros } from "@/lib/money";
 import { schoolContext, currentSession } from "@/lib/session";
 
 const DAYS = ["", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
-/** Seuil à partir duquel un cours est signalé « presque complet ». */
+/** Threshold from which a course is flagged « presque complet ». */
 const ALMOST_FULL_RATE = 0.8;
 
 export default async function FrontDesk() {

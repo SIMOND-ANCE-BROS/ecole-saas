@@ -1,52 +1,52 @@
 /**
- * Moteur de tarif : types d'entrée et de sortie.
- * Tout ce qui est propre à une école (grille, réductions) arrive en entrée.
- * Montants en centimes, taux en points de base (1000 = 10 %).
+ * Tariff engine: input and output types.
+ * Everything specific to a school (tariff grid, discounts) comes as input.
+ * Amounts in cents, rates in basis points (1000 = 10 %).
  */
 
 export type Public = "enfant" | "adulte" | "couple" | "etudiant";
 export type Period = "trimestre" | "annee" | "unite";
 
-/** Une case de la grille (table `tarif`). */
+/** One cell of the tariff grid (table `tariff`). */
 export type TariffRow = {
   id: string;
   audience: Public;
   period: Period;
-  /** Durées des cours de la semaine, en minutes, dans n'importe quel ordre. */
+  /** Durations of the week's courses, in minutes, in any order. */
   combination: readonly number[];
-  /** Forfait réservé à une discipline ; null = toutes disciplines. */
+  /** Package reserved for one discipline; null = all disciplines. */
   disciplineId: string | null;
   priceCents: number;
 };
 
-/** Une règle de réduction (table `reduction`). Seul le code « fratrie » est connu du moteur. */
+/** A discount rule (table `discount`). Only the code "fratrie" is known to the engine. */
 export type DiscountRule = {
   code: string;
-  /** Exactement l'un des deux : un taux, ou un montant fixe. */
+  /** Exactly one of the two: a rate, or a fixed amount. */
   rateBps: number | null;
   amountCents: number | null;
-  /** Nombre minimal de danseurs éligibles du même payeur. */
+  /** Minimum number of eligible students of the same payer. */
   minStudents: number;
-  /** Publics éligibles ; vide = tous. */
+  /** Eligible audiences; empty = all. */
   audiences: readonly Public[];
-  /** false : écartée sur un forfait dont les cours relèvent d'au moins 2 disciplines. */
+  /** false: rejected on a package whose courses belong to at least 2 disciplines. */
   combinableWithMultiDiscipline: boolean;
 };
 
 export type ChosenCourse = { disciplineId: string; durationMinutes: number };
 
-/** Une inscription demandée par le payeur pour la saison. */
+/** An enrollment requested by the payer for the season. */
 export type EnrollmentRequest = {
-  /** Identifiant fourni par l'appelant, renvoyé tel quel dans le résultat. */
+  /** Id supplied by the caller, returned as is in the result. */
   reference: string;
-  /** Un danseur, ou deux pour un couple. */
+  /** One student, or two for a couple. */
   studentIds: readonly string[];
   audience: Public;
   period: Period;
   courses: readonly ChosenCourse[];
 };
 
-/** Toutes les inscriptions d'un même payeur pour une saison, avec la grille de l'école. */
+/** All enrollments of the same payer for a season, with the school's tariff grid. */
 export type TariffRequest = {
   grid: readonly TariffRow[];
   discounts: readonly DiscountRule[];
@@ -56,9 +56,9 @@ export type TariffRequest = {
 export type DiscountDetail = {
   code: string;
   status: "appliquee" | "ecartee";
-  /** 0 si écartée. */
+  /** 0 if rejected. */
   amountCents: number;
-  /** Explication pour l'accueil. */
+  /** Explanation for the front desk. */
   pattern: string;
 };
 
@@ -72,7 +72,7 @@ export type EnrollmentResult =
       reference: string;
       status: "ok";
       tariffRowId: string;
-      /** Ex. « 45 min + 1 h 00 » */
+      /** E.g. « 45 min + 1 h 00 » */
       packageLabel: string;
       grossPriceCents: number;
       discounts: DiscountDetail[];
@@ -82,14 +82,14 @@ export type EnrollmentResult =
   | { reference: string; status: "erreur"; error: TariffError };
 
 // ---------------------------------------------------------------------------
-// Carnets de cours particuliers
+// Private lesson packs
 // ---------------------------------------------------------------------------
 
-/** Une case de la grille des carnets (table `tarif_carnet`). */
+/** One cell of the lesson pack grid (table `lesson_pack_tariff`). */
 export type LessonPackTariffRow = {
   id: string;
   lessonCount: number;
-  /** La ligne vaut pour « jusqu'à N personnes » ; la tranche commence après la ligne inférieure. */
+  /** The row applies "up to N people"; the bracket starts after the row below. */
   maxPeople: number;
   priceCents: number;
 };
@@ -100,7 +100,7 @@ export type LessonPackResult =
   | {
       status: "ok";
       lessonPackTariffRowId: string;
-      /** Ex. « Carnet de 5 cours · 1 à 2 personnes » */
+      /** E.g. « Carnet de 5 cours · 1 à 2 personnes » */
       label: string;
       priceCents: number;
     }
@@ -108,10 +108,10 @@ export type LessonPackResult =
 
 export type TariffResult = {
   enrollments: EnrollmentResult[];
-  /** Totaux des seules inscriptions tarifées. */
+  /** Totals of the priced enrollments only. */
   grossTotalCents: number;
   totalDiscountCents: number;
   netTotalCents: number;
-  /** false si au moins une inscription n'a pas pu être tarifée. */
+  /** false if at least one enrollment could not be priced. */
   full: boolean;
 };

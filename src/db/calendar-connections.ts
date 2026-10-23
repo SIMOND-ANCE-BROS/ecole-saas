@@ -4,7 +4,7 @@ import type { Provider } from "../connectors/calendar/oauth";
 import type { Tx } from "./index";
 import { calendarConnection, unavailability, instructor } from "./schema";
 
-/** Agendas connectés des intervenants, toujours avec la transaction d'`withSchool()` (RLS). */
+/** Instructors' connected calendars, always within the `withSchool()` transaction (RLS). */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const isUuid = (v: string) => z.uuid().safeParse(v).success;
@@ -17,8 +17,8 @@ export type ConnectionState = {
 };
 
 /**
- * Enregistre (ou remplace) l'agenda connecté d'un intervenant actif ; le jeton
- * arrive déjà chiffré. false si l'intervenant n'existe pas ou n'est plus actif.
+ * Saves (or replaces) an active instructor's connected calendar; the token
+ * arrives already encrypted. false if the instructor does not exist or is no longer active.
  */
 export async function saveConnection(
   tx: Tx,
@@ -56,7 +56,7 @@ export async function connectionState(tx: Tx, instructorId: string): Promise<Con
   return c ?? null;
 }
 
-/** Pour la synchronisation seulement : jeton chiffré compris. */
+/** For synchronisation only: includes the encrypted token. */
 export async function readConnection(tx: Tx, instructorId: string) {
   if (!isUuid(instructorId)) return null;
   const [c] = await tx
@@ -76,7 +76,7 @@ export async function connectesInstructors(tx: Tx): Promise<string[]> {
   return rows.map((c) => c.id);
 }
 
-/** Résultat d'une synchronisation ; un jeton renouvelé par le fournisseur remplace l'ancien. */
+/** Result of a synchronisation; a token renewed by the provider replaces the old one. */
 export async function recordSync(
   tx: Tx,
   instructorId: string,
@@ -92,7 +92,7 @@ export async function recordSync(
     .where(eq(calendarConnection.instructorId, instructorId));
 }
 
-/** Déconnecte l'agenda et retire les plages à venir qui en venaient (les saisies restent). */
+/** Disconnects the calendar and removes the upcoming slots that came from it (manual entries remain). */
 export async function deleteConnection(tx: Tx, instructorId: string): Promise<boolean> {
   if (!isUuid(instructorId)) return false;
   const rows = await tx

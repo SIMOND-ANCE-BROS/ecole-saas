@@ -1,9 +1,9 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 /**
- * Chiffrement des secrets stockés en base (jetons d'agenda, identifiants des
- * outils de facturation) : AES-256-GCM, clé de 32 octets en base64 dans
- * CLE_CHIFFREMENT, jamais dans le dépôt. Format : v1.<iv>.<tag>.<données>.
+ * Encryption of secrets stored in the database (calendar tokens, invoicing
+ * tool credentials): AES-256-GCM, 32-byte key in base64 in CLE_CHIFFREMENT,
+ * never in the repository. Format: v1.<iv>.<tag>.<data>.
  */
 
 function key(): Buffer {

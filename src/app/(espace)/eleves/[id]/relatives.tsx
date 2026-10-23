@@ -19,7 +19,7 @@ function nature(p: StudentRelative, firstName: string): string {
   return p.relation === "responsable" ? "Responsable légal" : p.relation === "conjoint" ? "Conjoint" : "Proche";
 }
 
-/** Responsables et proches de l'élève : à prévenir, retirer, ajouter un responsable. */
+/** The student's guardians and relatives: « à prévenir », remove, add a guardian. */
 export function Relatives({ studentId: studentId, firstName: firstName, guardians: guardians, other: other }: Props) {
   const [addition, setAddition] = useState(false);
   const [choice, setChoice] = useState<Choice | null>(null);

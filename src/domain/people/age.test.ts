@@ -19,9 +19,9 @@ describe("ageAu", () => {
 
 describe("aujourdhuiAParis", () => {
   it("donne la date du jour à Paris, pas en UTC", () => {
-    // 23 h 30 UTC le 19 octobre = 1 h 30 le 20 octobre à Paris (heure d’été).
+    // 23:30 UTC on 19 October = 01:30 on 20 October in Paris (summer time).
     expect(todayInParis(new Date("2026-10-19T23:30:00Z"))).toBe("2026-10-20");
-    // 23 h 30 UTC le 19 décembre = 0 h 30 le 20 décembre à Paris (heure d’hiver).
+    // 23:30 UTC on 19 December = 00:30 on 20 December in Paris (winter time).
     expect(todayInParis(new Date("2026-12-19T23:30:00Z"))).toBe("2026-12-20");
     expect(todayInParis(new Date("2026-12-19T22:30:00Z"))).toBe("2026-12-19");
   });

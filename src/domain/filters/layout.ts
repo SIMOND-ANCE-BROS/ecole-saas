@@ -1,31 +1,30 @@
 import type { ColumnDef } from "./filters";
 
 /**
- * Disposition des colonnes d'une liste (#89) : ordre et visibilité, choisis
- * par chaque membre. Enregistrée comme la liste de toutes les colonnes dans
- * l'ordre, les masquées préfixées par « - » : une colonne ajoutée plus tard
- * au logiciel garde ainsi sa visibilité par défaut au lieu de passer pour
- * masquée. Une largeur choisie s'écrit après « @ », en pixels (#102) :
- * `nom@180`, `-age@90`.
+ * Column layout of a list (#89): order and visibility, chosen by each
+ * member. Saved as the list of all columns in order, hidden ones prefixed
+ * with "-": a column added to the software later thus keeps its default
+ * visibility instead of passing for hidden. A chosen width is written after
+ * "@", in pixels (#102): `nom@180`, `-age@90`.
  */
 
 export type Layout = { id: string; visible: boolean; width?: number | null }[];
 
-/** Bornes d'une largeur de colonne choisie à la souris. */
+/** Bounds of a column width chosen with the mouse. */
 export const MIN_WIDTH = 60;
 export const MAX_WIDTH = 1200;
 const clamp = (l: number) => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, l)));
 
 const visibleByDefault = (c: ColumnDef) => c.byDefault !== false;
 
-/** Disposition par défaut : ordre des définitions, colonnes `parDefaut: false` masquées. */
+/** Default layout: definition order, `byDefault: false` columns hidden. */
 export const defaultLayout = (columns: ColumnDef[]): Layout =>
   columns.map((c) => ({ id: c.id, visible: visibleByDefault(c) }));
 
 /**
- * Disposition d'un membre : identifiants inconnus et doublons ignorés,
- * colonnes absentes ajoutées à la fin avec leur visibilité par défaut. Au
- * moins une colonne reste visible, et toujours une colonne obligatoire (le nom).
+ * A member's layout: unknown ids and duplicates ignored, missing columns
+ * added at the end with their default visibility. At least one column stays
+ * visible, and a required column (the name) always does.
  */
 export function readLayout(columns: ColumnDef[], saved: string[] | null | undefined): Layout {
   if (!saved) return defaultLayout(columns);
@@ -49,7 +48,7 @@ export function readLayout(columns: ColumnDef[], saved: string[] | null | undefi
 export const writeLayout = (d: Layout): string[] =>
   d.map((c) => `${c.visible ? "" : "-"}${c.id}${c.width ? `@${c.width}` : ""}`);
 
-/** Place la colonne `id` juste avant `avant` (glisser-déposer d'un en-tête) ; `avant` null : à la fin. */
+/** Puts column `id` just before `before` (header drag and drop); `before` null: at the end. */
 export function place(d: Layout, id: string, before: string | null): Layout {
   const c = d.find((x) => x.id === id);
   if (!c || id === before) return d;
@@ -59,12 +58,12 @@ export function place(d: Layout, id: string, before: string | null): Layout {
   return [...remaining.slice(0, i), c, ...remaining.slice(i)];
 }
 
-/** Largeur choisie d'une colonne, bornée ; null : largeur automatique. */
+/** A column's chosen width, clamped; null: automatic width. */
 export function resize(d: Layout, id: string, width: number | null): Layout {
   return d.map((c) => (c.id === id ? { ...c, width: width === null ? null : clamp(width) } : c));
 }
 
-/** Déplace une colonne d'un cran (-1 : vers la gauche, +1 : vers la droite). */
+/** Moves a column one step (-1: to the left, +1: to the right). */
 export function move(d: Layout, id: string, sens: -1 | 1): Layout {
   const i = d.findIndex((c) => c.id === id);
   const j = i + sens;
@@ -74,7 +73,7 @@ export function move(d: Layout, id: string, sens: -1 | 1): Layout {
   return r;
 }
 
-/** Affiche ou masque une colonne ; la dernière colonne visible ne peut pas être masquée. */
+/** Shows or hides a column; the last visible column cannot be hidden. */
 export function toggle(d: Layout, id: string): Layout {
   const target = d.find((c) => c.id === id);
   if (!target || (target.visible && d.filter((c) => c.visible).length === 1)) return d;

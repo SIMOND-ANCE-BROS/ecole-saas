@@ -11,7 +11,7 @@ import { LessonPacks, Siblings, Grid } from "./tariffs";
 
 export const metadata: Metadata = { title: "Tarifs et réductions" };
 
-/** `?saison=<id>` : la saison affichée, par défaut la saison courante. */
+/** `?saison=<id>`: the displayed season, the current season by default. */
 export default async function TariffsPage({ searchParams }: PageProps<"/parametres/tarifs">) {
   const { schoolId: schoolId } = await requireRole("direction");
   const { saison: chosen } = await searchParams;

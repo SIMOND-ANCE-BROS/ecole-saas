@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-/** Fil d'Ariane et titre d'une rubrique des paramètres. */
+/** Breadcrumb and title of a settings section. */
 export function SettingsHeader({ title: title, help: help }: { title: string; help: string }) {
   return (
     <>

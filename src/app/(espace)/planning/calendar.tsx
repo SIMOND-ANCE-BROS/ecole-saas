@@ -7,33 +7,33 @@ import { snap, arrange, toTime, toMinutes } from "@/domain/schedule/calendar";
 import { type Hours, openRanges } from "@/domain/schedule/hours";
 import { end } from "./format";
 
-/** Hauteur d'une minute à l'écran (px) : une heure fait 64 px. */
+/** On-screen height of one minute (px): an hour is 64 px. */
 const PX = 64 / 60;
-/** Mouvement en dessous duquel un appui reste un clic. */
+/** Movement below which a press stays a click. */
 const THRESHOLD = 4;
 
 export type Slot = { weekday: number; startTime: string; durationMinutes: number };
 
-/** Bloc de l'agenda : un cours de la semaine type ou une séance datée. */
+/** Calendar block: a course of the typical week or a dated lesson. */
 export type CalendarElement = Slot & {
   id: string;
   title: string;
-  /** Lignes de détail (salle et intervenant, effectif…). */
+  /** Detail lines (room and instructor, headcount…). */
   rows: string[];
-  /** Petite étiquette (« 1 sem. sur 2 », « déplacée »). */
+  /** Small label (« 1 sem. sur 2 », « déplacée »). */
   tag?: string | null;
-  /** Mention en couleur d'alerte (« complet », « annulée »). */
+  /** Note in the alert colour (« complet », « annulée »). */
   alert?: string | null;
-  /** Bloc barré et grisé (séance annulée). */
+  /** Struck-through, greyed-out block (cancelled lesson). */
   bar?: boolean;
   href: string;
   movable: boolean;
 };
 
-/** Colonne d'un jour ; `ferme` : libellé d'une fermeture qui couvre tout le jour. */
+/** Column of one day; `closed`: label of a closure covering the whole day. */
 export type CalendarColumn = { day: number; title: string; closed?: string | null };
 
-/** Réponse à un déplacement : fait, refusé, ou un choix à proposer (« cette séance seulement »…). */
+/** Response to a move: done, refused, or a choice to offer (« cette séance seulement »…). */
 export type CalendarResponse =
   | { status: "ok"; texte: string; alertes: string[] }
   | { status: "choisir"; question: string; choice: { value: string; label: string }[] }
@@ -41,32 +41,32 @@ export type CalendarResponse =
 type Gesture =
   | { type: "deplacer" | "etirer"; id: string; x: number; y: number; origin: Slot; bouge: boolean }
   | { type: "creer"; day: number; y: number; anchor: number; bouge: boolean };
-/** Créneau atteint par le geste en cours. */
+/** Slot reached by the gesture in progress. */
 type Target = { preview?: { id: string } & Slot; selection?: { day: number; start: number; duration: number } };
 
 type Props = {
   elements: CalendarElement[];
   columns: CalendarColumn[];
-  /** Plage affichée, en minutes depuis minuit. */
+  /** Displayed range, in minutes since midnight. */
   start: number;
   end: number;
-  /** Horaires d'ouverture des sites affichés (#90) : tranches fermées hachurées ; vide : rien. */
+  /** Opening hours of the displayed sites (#90): closed periods hatched; empty: nothing. */
   hours: Hours[];
   editable: boolean;
   highlighted?: string;
-  /** Déplace un élément ; `choix` : réponse à une question posée par un retour « choisir ». */
+  /** Moves an element; `choice`: answer to a question asked by a « choisir » response. */
   move: (id: string, slot: Slot, choice: string | null) => Promise<CalendarResponse>;
-  /** Créneau libre choisi (clic ou glissé) : créer un cours. */
+  /** Free slot chosen (click or drag): create a course. */
   create: (day: number, start: number, duration: number) => void;
 };
 
 /**
- * Agenda en colonnes (jours), sur un axe horaire commun : semaine type des
- * cours ou semaine datée des séances (#79, #90). Direction : glisser un bloc
- * le déplace (jour et heure, au quart d'heure), tirer son bord bas change sa
- * durée, glisser sur un créneau vide crée un cours ; un clic ou un appui sur
- * un créneau vide propose un cours d'une heure. Au clavier, chaque bloc ouvre
- * sa fiche.
+ * Calendar in columns (days) on a shared time axis: typical week of the
+ * courses or dated week of the lessons (#79, #90). Management: dragging a block
+ * moves it (day and time, to the quarter hour), pulling its bottom edge changes
+ * its length, dragging over an empty slot creates a course; a click or a tap on
+ * an empty slot offers a one-hour course. With the keyboard, each block opens
+ * its record.
  */
 export function Calendar({
   elements,
@@ -81,7 +81,7 @@ export function Calendar({
 }: Props) {
   const router = useRouter();
   const [inProgress, startTransition] = useTransition();
-  /** Créneau affiché pendant un geste, puis jusqu'au rechargement des données. */
+  /** Slot shown during a gesture, then until the data reloads. */
   const [preview, setPreview] = useState<({ id: string } & Slot) | null>(null);
   const [selection, setSelection] = useState<{ day: number; start: number; duration: number } | null>(null);
   const [toConfirm, setToConfirm] = useState<{
@@ -94,7 +94,7 @@ export function Calendar({
   const columns = useRef(new Map<number, HTMLDivElement>());
   const justDragged = useRef(false);
 
-  /** Tranches fermées d'un jour (grisées), quand des horaires sont connus. */
+  /** Closed periods of a day (greyed out), when opening hours are known. */
   const fermees = (day: number) => {
     if (hours.length === 0) return [];
     const r: { start: number; end: number }[] = [];
@@ -156,9 +156,9 @@ export function Calendar({
   const next = create;
 
   /**
-   * État vivant du geste, lu par les écouteurs de la fenêtre : des
-   * évènements rapprochés arrivent avant le rendu suivant, l'état React
-   * serait encore celui d'avant.
+   * Live state of the gesture, read by the window listeners: events in
+   * quick succession arrive before the next render, so the React state
+   * would still be the previous one.
    */
   const gesture = useRef<(Gesture & Target) | null>(null);
   const [active, setActive] = useState(false);
@@ -168,7 +168,7 @@ export function Calendar({
     setActive(true);
   }
 
-  // Gestes sur un cours : déplacer (corps) ou étirer (bord bas).
+  // Gestures on a course: move (body) or stretch (bottom edge).
   function enterCourse(e: React.PointerEvent, c: CalendarElement, type: "deplacer" | "etirer") {
     if (!editable || !c.movable || e.button !== 0 || inProgress || toConfirm) return;
     e.stopPropagation();
@@ -183,7 +183,7 @@ export function Calendar({
     });
   }
 
-  // Glisser sur un créneau vide (souris) : choisir début et durée d'un nouveau cours.
+  // Drag over an empty slot (mouse): choose the start and length of a new course.
   function enterOnEmptySlot(e: React.PointerEvent, day: number) {
     if (!editable || e.button !== 0 || e.pointerType !== "mouse" || inProgress || toConfirm) return;
     const anchor = Math.max(opening, Math.floor(minuteA(e.clientY, day) / 15) * 15);
@@ -233,7 +233,7 @@ export function Calendar({
       else next(g.day, g.anchor, 60);
       return;
     }
-    if (!g.bouge) return; // simple clic : le lien ouvre la fiche
+    if (!g.bouge) return; // plain click: the link opens the record
     justDragged.current = true;
     const a = g.preview;
     if (
@@ -255,9 +255,9 @@ export function Calendar({
     setPreview(null);
   }
 
-  // Le geste se suit sur toute la fenêtre : le cours change de colonne en
-  // cours de route (et perd la capture du pointeur), et on peut lâcher hors
-  // de la grille. Échap abandonne.
+  // The gesture is tracked over the whole window: the course changes column
+  // along the way (and loses the pointer capture), and it can be dropped
+  // outside the grid. Escape cancels.
   useEffect(() => {
     if (!active) return;
     const key = (e: KeyboardEvent) => e.key === "Escape" && drop();
@@ -273,10 +273,10 @@ export function Calendar({
     };
   });
 
-  // Appui (tactile) sur un créneau vide : un cours d'une heure à cet endroit.
+  // (Touch) tap on an empty slot: a one-hour course at that spot.
   function tapEmptySlot(e: React.MouseEvent, day: number) {
     if (!editable || inProgress || toConfirm || e.target !== e.currentTarget) return;
-    if ((e.nativeEvent as PointerEvent).pointerType === "mouse") return; // géré par saisirVide
+    if ((e.nativeEvent as PointerEvent).pointerType === "mouse") return; // handled by enterOnEmptySlot
     next(day, Math.max(opening, Math.min(closure - 60, Math.floor(minuteA(e.clientY, day) / 15) * 15)), 60);
   }
 

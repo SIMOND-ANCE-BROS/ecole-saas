@@ -7,7 +7,7 @@ import { ageAt } from "../domain/people/age";
 import { type StudentRow, seasonCourseLabels, listContacts, listStudents } from "./students";
 import { withSchool } from "./index";
 
-/** Filtres par colonne traduits en SQL (#87), comme l'application (app_user, RLS). Données fictives supprimées à la fin. */
+/** Column filters translated to SQL (#87), as the app does (app_user, RLS). Fictitious data deleted at the end. */
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
@@ -37,25 +37,25 @@ beforeAll(async () => {
   const relationship = (de: string, to: string, type: string, paysFor = false, emergency = false) =>
     admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for, emergency_contact) VALUES (${school}, ${de}, ${to}, ${type}, ${paysFor}, ${emergency})`;
 
-  // Léa, 8 ans : sa mère est responsable, paie et se prévient (son téléphone s'affiche pour Léa).
+  // Léa, 8: her mother is her guardian, pays and is the emergency contact (her phone is shown for Léa).
   const lea = await person(school, "Martin", "Léa", { birth: "2018-03-01", student: true });
   const sophie = await person(school, "Martin", "Sophie", {
     telephone: "06 12 34 56 78",
     email: "sophie@exemple.test",
   });
   await relationship(sophie, lea, "representant_legal", true, true);
-  // Hugo, 12 ans : ni responsable ni payeur.
+  // Hugo, 12: neither guardian nor payer.
   const hugo = await person(school, "Bernard", "Hugo", {
     birth: "2014-01-10",
     telephone: "07 11 22 33 44",
     student: true,
   });
-  // Inès, sans date de naissance : deux responsables, payée par un CSE.
+  // Inès, no date of birth: two guardians, paid for by a CSE.
   const ines = await person(school, "Moreau", "Inès", { student: true });
   await relationship(await person(school, "Moreau", "Paul"), ines, "representant_legal");
   await relationship(await person(school, "Petit", "Anne"), ines, "representant_legal");
   await relationship(await person(school, "CSE", null, { societe: "CSE Ateliers" }), ines, "autre", true);
-  // Saison : Léa inscrite au jazz du lundi 17:00, Hugo en liste d'attente sur le même cours, Inès sans inscription.
+  // Season: Léa enrolled in Monday 17:00 jazz, Hugo on the waitlist for the same course, Inès not enrolled.
   [{ id: season }] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   const [d] = await admin`INSERT INTO discipline (school_id, name) VALUES (${school}, 'Jazz') RETURNING id`;
@@ -78,7 +78,7 @@ beforeAll(async () => {
       VALUES (${school}, ${season}, ${payer}, 'enfant', 'trimestre', 10000, ${status}) RETURNING id`;
     await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${school}, ${i.id}, ${student}, ${jazz.id})`;
   }
-  // Une Léa dans une autre école : jamais visible.
+  // A Léa in another school: never visible.
   await person(otherSchool, "Ailleurs", "Léa", { birth: "2018-03-01", student: true });
 });
 
@@ -209,7 +209,7 @@ describe("colonnes ajoutées (#89)", () => {
       enrollmentStatus: "Inscrit",
       toNotify: ["Sophie Martin, 06 12 34 56 78"],
     });
-    // La liste d'attente n'est pas un cours suivi.
+    // The waitlist is not a course attended.
     expect(rows.find((e) => e.firstName === "Hugo")).toMatchObject({ courses: [], enrollmentStatus: "En attente" });
     expect(rows.find((e) => e.firstName === "Inès")).toMatchObject({
       courses: [],

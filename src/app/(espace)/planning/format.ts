@@ -1,8 +1,8 @@
-/** Mise en forme des créneaux, commune au planning et au détail d'un cours. */
+/** Slot formatting, shared by the schedule and the course detail. */
 
 export const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
-/** Heure de fin `HH:MM` d'un créneau. */
+/** End time `HH:MM` of a slot. */
 export function end(heure: string, duration: number): string {
   const [h, m] = heure.split(":").map(Number);
   const total = h * 60 + m + duration;
@@ -25,7 +25,7 @@ const shortDay = new Intl.DateTimeFormat("fr-FR", {
 });
 const date = (iso: string) => new Date(`${iso}T00:00:00Z`);
 
-/** Date courte : « 26 oct. » (avec le jour : « lun. 26 oct. »). */
+/** Short date: « 26 oct. » (with the weekday: « lun. 26 oct. »). */
 export const shortDate = (iso: string, withDay = false) => (withDay ? shortDay : monthDay).format(date(iso));
 
 type WithRecurrence = {
@@ -50,7 +50,7 @@ export function recurrenceText(c: WithRecurrence): string {
   return base;
 }
 
-/** Étiquette courte d'un bloc de l'agenda : rien pour un cours de chaque semaine, toute la saison. */
+/** Short label of a calendar block: nothing for a weekly course running the whole season. */
 export function recurrenceBadge(c: WithRecurrence): string | null {
   const parts = [
     c.recurrence === "quinzaine" ? "1 sem. sur 2" : null,

@@ -76,9 +76,9 @@ describe("datesDuCours (#90)", () => {
 
   it("une semaine sur deux : alternance calée sur la première date, non décalée par une fermeture", () => {
     const quinzaine = { type: "quinzaine", weekday: 1, startDate: null, endDate: null } as const;
-    // Lundis de la saison : 7, 14, 21, 28 sept., 5, 12, 19, 26 oct. ; une sur deux à partir du 7.
+    // Mondays of the season: 7, 14, 21, 28 Sept., 5, 12, 19, 26 Oct.; every other one from the 7th.
     expect(courseDates(quinzaine, SEASON, [])).toEqual(["2026-09-07", "2026-09-21", "2026-10-05", "2026-10-19"]);
-    // Fermeture du 19 octobre : la séance saute, les autres gardent leur semaine.
+    // Closure on 19 October: the lesson is skipped, the others keep their week.
     expect(courseDates(quinzaine, SEASON, ALL_SAINTS)).toEqual(["2026-09-07", "2026-09-21", "2026-10-05"]);
     expect(courseDates({ ...quinzaine, startDate: "2026-09-14" }, SEASON, [])).toEqual([
       "2026-09-14",

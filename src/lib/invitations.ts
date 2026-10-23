@@ -5,10 +5,10 @@ import { auth } from "./auth";
 import { createAccount } from "./accounts";
 
 /**
- * Acceptation d'un lien d'invitation ou de réinitialisation (#104), ouvert
- * sans être connecté : le jeton (dans l'adresse) en est la seule preuve. Le
- * compte (global, Better Auth) est créé ou mis à jour, puis l'appartenance à
- * l'école est enregistrée sous RLS.
+ * Accepting an invitation or reset link (#104), opened without being signed
+ * in: the token (in the URL) is the only proof. The account (global, Better
+ * Auth) is created or updated, then the school membership is recorded under
+ * RLS.
  */
 
 export type LinkInput = { name: string; password: string; confirmation: string; currentPassword: string };
@@ -17,7 +17,7 @@ export type LinkResult = { ok: true; type: OpenedLink["type"]; email: string } |
 const EXPIRE =
   "Ce lien n’est plus valable (déjà utilisé, révoqué ou expiré). Demandez-en un nouveau à la direction de l’école.";
 
-/** Le lien, et si un compte existe déjà pour son e-mail (qui doit alors confirmer son mot de passe actuel). */
+/** The link, and whether an account already exists for its e-mail (which must then confirm its current password). */
 export async function openLink(
   schoolId: string,
   token: string,
@@ -43,7 +43,7 @@ export async function acceptLink(schoolId: string, token: string, saisie: LinkIn
   } else {
     const existing = await ctx.internalAdapter.findUserByEmail(link.email);
     if (existing) {
-      // Déjà un compte (dans une autre école) : il prouve qu'il en est le titulaire.
+      // Already an account (in another school): the user proves they own it.
       const credential = await ctx.internalAdapter.findCredentialAccount(existing.user.id);
       const bon = credential?.password
         ? await ctx.password.verify({ password: saisie.currentPassword, hash: credential.password })
@@ -55,26 +55,26 @@ export async function acceptLink(schoolId: string, token: string, saisie: LinkIn
       if (refusal) return { ok: false, message: refusal };
       const name = saisie.name.trim() || link.name || link.email;
       if (name.length > 100) return { ok: false, message: "Nom trop long." };
-      // Relu juste avant la création : un lien utilisé entre-temps ne crée pas de compte orphelin.
+      // Re-read just before creation: a link used in the meantime does not create an orphan account.
       if (!(await withSchool(schoolId, (tx) => readRelationship(tx, token, new Date()))))
         return { ok: false, message: EXPIRE };
       userId = await createAccount({ email: link.email, name, password: saisie.password, emailVerified: false });
     }
   }
 
-  // Vérification et marquage dans la même transaction, juste avant de changer le mot de passe.
+  // Check and mark in the same transaction, just before changing the password.
   const used = await withSchool(schoolId, (tx) => consumeLink(tx, link, userId));
   if (used === "partage") return { ok: false, message: SHARED };
   if (used !== "ok") return { ok: false, message: EXPIRE };
   if (link.type === "reinitialisation") {
     await ctx.internalAdapter.updatePassword(userId, await ctx.password.hash(saisie.password));
-    // Les sessions ouvertes avec l'ancien mot de passe sont fermées.
+    // Sessions opened with the old password are closed.
     await ctx.internalAdapter.deleteUserSessions(userId);
   }
   return { ok: true, type: link.type, email: link.email };
 }
 
-/** Lien de réinitialisation pour un membre (direction) ; refusé pour un compte qui sert aussi dans une autre école. */
+/** Reset link for a member (management); refused for an account also used in another school. */
 export function createResetLink(schoolId: string, userId: string, memberId: string) {
   return withSchool(schoolId, (tx) => resetLink(tx, userId, memberId, new Date()));
 }

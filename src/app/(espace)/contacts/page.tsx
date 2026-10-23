@@ -13,7 +13,7 @@ import { NavigableResults } from "../_people/navigable-results";
 
 export const metadata: Metadata = { title: "Contacts" };
 
-/** Parents, payeurs et organismes (CSE, entreprises). */
+/** Parents, payers and organisations (CSE, companies). */
 export default async function PageContacts({ searchParams }: PageProps<"/contacts">) {
   const { schoolId: schoolId, userId } = await requireRole("direction", "accueil");
   const { q, f, mode, sort, order } = await searchParams;

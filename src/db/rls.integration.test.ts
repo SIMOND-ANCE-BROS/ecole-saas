@@ -2,14 +2,14 @@ import postgres from "postgres";
 import { afterAll, describe, expect, it } from "vitest";
 
 /**
- * Garde-fou : toute table du schéma public portant `school_id` doit avoir la
- * Row Level Security activée ET forcée, et une politique `school_isolation`
- * valable pour toutes les commandes.
+ * Guard: every table of the public schema carrying `school_id` must have
+ * Row Level Security enabled AND forced, and a `school_isolation` policy
+ * valid for all commands.
  *
- * Exécuté contre la vraie base (npm run test:integration), après les migrations.
- * On lit le catalogue (pg_class, pg_attribute, pg_policy) et non
- * information_schema : ce dernier masque les tables sur lesquelles le rôle
- * n'a aucun droit, précisément le cas d'une table oubliée.
+ * Run against the real database (npm run test:integration), after the migrations.
+ * We read the catalog (pg_class, pg_attribute, pg_policy) and not
+ * information_schema: the latter hides the tables on which the role
+ * has no privilege, precisely the case of a forgotten table.
  */
 
 type SchoolTable = {
@@ -60,7 +60,7 @@ function connection(variable: "DATABASE_URL" | "DATABASE_ADMIN_URL") {
   return postgres(url, { max: 1, onnotice: () => {} });
 }
 
-/** Lancée pour annuler la transaction du test témoin tout en renvoyant son résultat. */
+/** Thrown to roll back the probe test's transaction while returning its result. */
 class Cancellation extends Error {
   constructor(readonly result: string[]) {
     super("annulation volontaire");
@@ -78,13 +78,13 @@ describe("Row Level Security", () => {
   it("protège toutes les tables portant school_id", async () => {
     const tables = await app.unsafe<SchoolTable[]>(SCHOOL_TABLES_QUERY);
 
-    // Base vide ou migrations non appliquées : le test ne doit pas passer à vide.
+    // Empty database or migrations not applied: the test must not pass vacuously.
     expect(tables.length, "aucune table avec school_id : migrations appliquées ?").toBeGreaterThan(0);
     expect(defects(tables)).toEqual([]);
   });
 
   it("détecte une table portant school_id sans RLS", async () => {
-    // Vérifie le garde-fou lui-même : une table oubliée doit être signalée.
+    // Checks the guard itself: a forgotten table must be reported.
     const errors = await admin
       .begin(async (tx) => {
         await tx.unsafe("CREATE TABLE garde_fou_temoin (id int, school_id uuid)");
@@ -95,7 +95,7 @@ describe("Row Level Security", () => {
         throw e;
       });
 
-    // Seule la table témoin compte ici : un vrai défaut est signalé par le test précédent.
+    // Only the probe table counts here: a real defect is reported by the previous test.
     expect(errors.filter((e) => e.startsWith("garde_fou_temoin "))).toEqual([
       "garde_fou_temoin : RLS non activée (ENABLE ROW LEVEL SECURITY), " +
         "RLS non forcée (FORCE ROW LEVEL SECURITY), politique school_isolation absente",

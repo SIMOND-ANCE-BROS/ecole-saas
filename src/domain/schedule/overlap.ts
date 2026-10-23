@@ -1,7 +1,7 @@
-/** Recouvrement de créneaux hebdomadaires (cours réguliers ; un stage n'a pas de jour). */
+/** Overlap of weekly slots (regular courses; a workshop has no weekday). */
 
 export type Slot = {
-  /** 1 = lundi … 7 = dimanche ; null pour un stage. */
+  /** 1 = Monday … 7 = Sunday; null for a workshop. */
   weekday: number | null;
   /** `HH:MM` */
   startTime: string;
@@ -18,7 +18,7 @@ export function overlaps(a: Slot, b: Slot): boolean {
 
 type PlacedCourse = Slot & { id: string | null; roomId: string; instructorId: string };
 
-/** Cours qui occupent déjà la même salle ou le même intervenant sur le créneau de `cible`. */
+/** Courses already using the same room or the same instructor in the slot of `target`. */
 export function conflicts(target: PlacedCourse, existing: PlacedCourse[]) {
   return existing
     .filter((c) => c.id !== target.id && overlaps(target, c))

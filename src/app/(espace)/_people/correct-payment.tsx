@@ -6,8 +6,8 @@ import { formatEuros, parseEuros } from "@/lib/money";
 import { correct } from "../paiements/actions";
 
 /**
- * Correction d'un paiement (direction) : un paiement ne se modifie pas, on
- * saisit un paiement négatif, au plus du montant encore non corrigé.
+ * Correcting a payment (management): a payment is never modified, a negative
+ * payment is entered instead, at most the amount not yet corrected.
  */
 export function CorrectPayment({
   paymentId: paymentId,

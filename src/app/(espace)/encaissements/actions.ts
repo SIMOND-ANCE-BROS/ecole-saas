@@ -7,7 +7,7 @@ import { cancelDeposit, createDeposit } from "@/db/deposits";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 
-/** Crée une remise (accueil et direction) puis ouvre son bordereau. */
+/** Creates a bank deposit (front desk and management) then opens its deposit slip. */
 export async function deposit(saisie: unknown): Promise<{ message: string }> {
   const { schoolId: schoolId, userId } = await requireRole("direction", "accueil");
   const r = await withSchool(schoolId, (tx) => createDeposit(tx, userId, saisie as never, todayInParis()));
@@ -16,7 +16,7 @@ export async function deposit(saisie: unknown): Promise<{ message: string }> {
   redirect(`/encaissements/remises/${r.id}?cree=1`);
 }
 
-/** Annule une remise faite par erreur : direction seulement. */
+/** Cancels a bank deposit made by mistake: management only. */
 export async function cancel(id: string): Promise<{ message: string }> {
   const { schoolId: schoolId, userId } = await requireRole("direction");
   const r = await withSchool(schoolId, (tx) => cancelDeposit(tx, userId, id));
