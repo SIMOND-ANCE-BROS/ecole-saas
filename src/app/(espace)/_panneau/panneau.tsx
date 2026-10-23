@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, type ReactNode, use, useEffect, useRef } from "react";
+import { createContext, type ReactNode, use, useEffect, useRef, useState } from "react";
 
 /** Vrai à l'intérieur d'un panneau : « Annuler » y revient en arrière au lieu de naviguer. */
 const DansPanneau = createContext(false);
@@ -14,10 +14,20 @@ type Props = { titre: string; children: ReactNode };
  * d'origine reste derrière, l'adresse est celle de la page complète. Se ferme
  * par « Fermer », Échap, un clic à côté ou le bouton Retour ; le focus revient
  * là où il était.
+ *
+ * A parallel slot keeps its content on a client navigation to a route it does
+ * not intercept (redirect after saving, link): the panel hides itself once the
+ * pathname differs from the one it opened on. No catch-all slot page, which
+ * strict route matching would apply to pages outside `(espace)` (#135).
  */
-export function Panneau({ titre, children }: Props) {
-  const router = useRouter();
+export function Panneau(props: Props) {
   const chemin = usePathname();
+  const [ouvertSur] = useState(chemin);
+  return chemin === ouvertSur ? <Dialogue {...props} chemin={chemin} /> : null;
+}
+
+function Dialogue({ titre, children, chemin }: Props & { chemin: string }) {
+  const router = useRouter();
   const dialogue = useRef<HTMLDialogElement>(null);
   /** Élément qui avait le focus avant l'ouverture (noté une seule fois : l'effet peut être rejoué). */
   const avant = useRef<HTMLElement | null>(null);
