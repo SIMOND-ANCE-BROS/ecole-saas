@@ -24,7 +24,7 @@
     "better-auth": "1.7.7",
     "dayjs": "1.11.23",
     "drizzle-orm": "0.45.3",
-    "next": "16.3.8",
+    "next": "16.4.2",
     "postgres": "3.4.9",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -37,7 +37,7 @@
     "@types/react-dom": "19.3.0",
     "drizzle-kit": "0.31.11",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.3.8",
+    "eslint-config-next": "16.4.2",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vitest": "4.1.11"
