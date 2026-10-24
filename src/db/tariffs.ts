@@ -177,7 +177,7 @@ export const validSiblings = z
     rateBps: z.int().min(1).max(10000).nullable(),
     amountCents: z.int().min(1).max(10_000_00).nullable(),
     minStudents: z.int().min(2).max(10),
-    audiences: z.array(z.enum(AUDIENCES)),
+    audiences: z.array(z.enum(AUDIENCES)).max(AUDIENCES.length),
     combinableWithMultiDiscipline: z.boolean(),
   })
   .refine(
