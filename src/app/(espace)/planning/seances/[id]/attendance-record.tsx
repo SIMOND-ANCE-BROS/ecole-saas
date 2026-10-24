@@ -21,7 +21,7 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [inProgress, startTransition] = useTransition();
   const rows = useRef<(HTMLLIElement | null)[]>([]);
-  const annulee = attendance.status === "annulee";
+  const annulee = attendance.status === "cancelled";
 
   const unmarked = attendance.students.filter((d) => attendances[d.id] === null).length;
   const presents = attendance.students.filter((d) => attendances[d.id] === true).length;

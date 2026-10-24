@@ -104,7 +104,7 @@ export async function deleteConnection(tx: Tx, instructorId: string): Promise<bo
     .where(
       and(
         eq(unavailability.instructorId, instructorId),
-        ne(unavailability.source, "saisie"),
+        ne(unavailability.source, "manual"),
         gt(unavailability.endsAt, sql`now()`),
       ),
     );

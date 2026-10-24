@@ -52,13 +52,13 @@ export function DatedWeek({
       `${s.enrolled}${s.maxCapacity ? ` / ${s.maxCapacity}` : ""} inscrit${s.enrolled > 1 ? "s" : ""}`,
     ],
     tag:
-      [s.moved && "déplacée", s.recurrence === "dates" && "ponctuel", s.recurrence === "quinzaine" && "1 sem. sur 2"]
+      [s.moved && "déplacée", s.recurrence === "dates" && "ponctuel", s.recurrence === "biweekly" && "1 sem. sur 2"]
         .filter(Boolean)
         .join(", ") || null,
-    alert: s.status === "annulee" ? "annulée" : s.substitution ? "remplacement" : null,
-    bar: s.status === "annulee",
+    alert: s.status === "cancelled" ? "annulée" : s.substitution ? "remplacement" : null,
+    bar: s.status === "cancelled",
     href: `/planning/seances/${s.id}`,
-    movable: s.status === "prevue",
+    movable: s.status === "planned",
   }));
   const { days: days, start: start, end: dayEnd } = calendarFrame(hours, elements);
   const closedOn = (date: string) => closures.find((f) => f.start <= date && date <= f.end)?.label ?? null;

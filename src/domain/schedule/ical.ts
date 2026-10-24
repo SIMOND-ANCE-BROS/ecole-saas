@@ -13,7 +13,7 @@ export type CalendarLesson = {
   durationMinutes: number;
   title: string;
   place: string;
-  annulee: boolean;
+  cancelled: boolean;
 };
 
 const TIME_ZONE = "Europe/Paris";
@@ -106,7 +106,7 @@ export function icsCalendar({
       `DTEND;TZID=${TIME_ZONE}:${local(s.date, s.startTime, s.durationMinutes)}`,
       `SUMMARY:${escape(s.title)}`,
       `LOCATION:${escape(s.place)}`,
-      `STATUS:${s.annulee ? "CANCELLED" : "CONFIRMED"}`,
+      `STATUS:${s.cancelled ? "CANCELLED" : "CONFIRMED"}`,
       "TRANSP:OPAQUE",
       "END:VEVENT",
     ]),

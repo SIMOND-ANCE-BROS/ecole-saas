@@ -105,7 +105,7 @@ export async function readCalendar(
       durationMinutes: l.durationMinutes,
       title: l.level ? `${l.discipline} ${l.level}` : l.discipline,
       place: `${l.room}, ${l.site}, ${l.address}`,
-      annulee: l.status === "annulee",
+      cancelled: l.status === "cancelled",
     })),
   };
 }

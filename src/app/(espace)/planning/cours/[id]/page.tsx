@@ -153,15 +153,15 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
               <li key={s.id}>
                 <Link
                   href={`/planning/seances/${s.id}`}
-                  className={`flex flex-col rounded-md border px-2.5 py-1 hover:border-accent ${inConflict.has(s.id) ? "border-alerte-texte bg-alerte-fond" : s.date === today ? "border-accent bg-accent-doux" : "border-bordure"} ${s.status === "annulee" ? "text-doux line-through" : ""}`}
+                  className={`flex flex-col rounded-md border px-2.5 py-1 hover:border-accent ${inConflict.has(s.id) ? "border-alerte-texte bg-alerte-fond" : s.date === today ? "border-accent bg-accent-doux" : "border-bordure"} ${s.status === "cancelled" ? "text-doux line-through" : ""}`}
                 >
                   <span className="tabular-nums">{lessonDate.format(new Date(`${s.date}T00:00:00Z`))}</span>
                   <span className="text-xs text-doux">
                     {inConflict.has(s.id)
                       ? "prof indisponible"
-                      : s.status === "annulee"
+                      : s.status === "cancelled"
                         ? "annulée"
-                        : s.status === "effectuee"
+                        : s.status === "done"
                           ? `${s.presents} présent${s.presents > 1 ? "s" : ""}${s.absents ? `, ${s.absents} abs.` : ""}`
                           : s.date <= today
                             ? "appel à faire"

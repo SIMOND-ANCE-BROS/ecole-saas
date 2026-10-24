@@ -56,7 +56,7 @@ describe("datesDuCours (#90)", () => {
   const SEASON = { start: "2026-09-01", end: "2026-10-31" };
   const ALL_SAINTS = [{ start: "2026-10-17", end: "2026-11-01" }];
   const weekly = (weekday: number, startDate: string | null = null, endDate: string | null = null) =>
-    ({ type: "hebdomadaire", weekday: weekday, startDate: startDate, endDate: endDate }) as const;
+    ({ type: "weekly", weekday: weekday, startDate: startDate, endDate: endDate }) as const;
 
   it("chaque semaine : comme avant, hors fermetures", () => {
     expect(courseDates(weekly(1), SEASON, ALL_SAINTS)).toEqual(
@@ -75,7 +75,7 @@ describe("datesDuCours (#90)", () => {
   });
 
   it("une semaine sur deux : alternance calée sur la première date, non décalée par une fermeture", () => {
-    const quinzaine = { type: "quinzaine", weekday: 1, startDate: null, endDate: null } as const;
+    const quinzaine = { type: "biweekly", weekday: 1, startDate: null, endDate: null } as const;
     // Mondays of the season: 7, 14, 21, 28 Sept., 5, 12, 19, 26 Oct.; every other one from the 7th.
     expect(courseDates(quinzaine, SEASON, [])).toEqual(["2026-09-07", "2026-09-21", "2026-10-05", "2026-10-19"]);
     // Closure on 19 October: the lesson is skipped, the others keep their week.

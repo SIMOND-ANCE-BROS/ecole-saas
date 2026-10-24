@@ -44,14 +44,14 @@ export const documentType = pgEnum("document_type", [
   "image_rights",
   "other",
 ]);
-export const instructorStatus = pgEnum("instructor_status", ["micro_entreprise", "societe", "salarie"]);
-export const vatRegime = pgEnum("vat_regime", ["franchise_293b", "assujetti", "non_applicable"]);
-export const payMode = pgEnum("pay_mode", ["heure", "cours", "forfait_mensuel"]);
-export const courseType = pgEnum("course_type", ["collectif", "particulier", "competition", "stage"]);
-export const lessonStatus = pgEnum("lesson_status", ["prevue", "effectuee", "annulee"]);
+export const instructorStatus = pgEnum("instructor_status", ["sole_trader", "company", "employee"]);
+export const vatRegime = pgEnum("vat_regime", ["franchise_293b", "vat_registered", "not_applicable"]);
+export const payMode = pgEnum("pay_mode", ["hourly", "per_lesson", "monthly_flat"]);
+export const courseType = pgEnum("course_type", ["group", "private", "competition", "workshop"]);
+export const lessonStatus = pgEnum("lesson_status", ["planned", "done", "cancelled"]);
 /** Every week, every other week, or on specific dates (#90). */
-export const courseRecurrence = pgEnum("course_recurrence", ["hebdomadaire", "quinzaine", "dates"]);
-export const unavailabilitySource = pgEnum("unavailability_source", ["saisie", "google", "microsoft"]);
+export const courseRecurrence = pgEnum("course_recurrence", ["weekly", "biweekly", "dates"]);
+export const unavailabilitySource = pgEnum("unavailability_source", ["manual", "google", "microsoft"]);
 export const calendarProvider = pgEnum("calendar_provider", ["google", "microsoft"]);
 export const tariffAudience = pgEnum("tariff_audience", ["enfant", "adulte", "couple", "etudiant"]);
 export const period = pgEnum("period", ["trimestre", "annee", "unite"]);
@@ -93,7 +93,7 @@ export const school = pgTable("school", {
   slug: text("slug").notNull().unique(), // subdomain: ribas.monapp.fr
   companyName: text("company_name"),
   siren: char("siren", { length: 9 }),
-  vatRegime: vatRegime("vat_regime").notNull().default("non_applicable"),
+  vatRegime: vatRegime("vat_regime").notNull().default("not_applicable"),
   vatMention: text("vat_mention"), // e.g. « TVA non applicable, art. 293 B du CGI »
   timeZone: text("time_zone").notNull().default("Europe/Paris"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -396,7 +396,7 @@ export const unavailability = pgTable(
     instructorId: uuid("instructor_id").notNull(),
     startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
     endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
-    source: unavailabilitySource("source").notNull().default("saisie"),
+    source: unavailabilitySource("source").notNull().default("manual"),
     label: text("label"), // manual entry only
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -449,11 +449,11 @@ export const course = pgTable(
     disciplineId: uuid("discipline_id").notNull(),
     roomId: uuid("room_id").notNull(),
     instructorId: uuid("instructor_id").notNull(),
-    type: courseType("type").notNull().default("collectif"),
+    type: courseType("type").notNull().default("group"),
     level: text("level"),
     ageMin: smallint("age_min"),
     ageMax: smallint("age_max"),
-    recurrence: courseRecurrence("recurrence").notNull().default("hebdomadaire"),
+    recurrence: courseRecurrence("recurrence").notNull().default("weekly"),
     weekday: smallint("weekday"), // 1 = Monday; NULL for specific dates (table course_date)
     // Limited period of a regular course within the season; NULL: from the start, until the end.
     startDate: date("start_date"),
@@ -499,7 +499,7 @@ export const lesson = pgTable(
     // Time and duration specific to the lesson (moved, or frozen before a slot change); NULL: the course's.
     startTime: time("start_time"),
     durationMinutes: integer("duration_minutes"),
-    status: lessonStatus("status").notNull().default("prevue"),
+    status: lessonStatus("status").notNull().default("planned"),
     instructorId: uuid("instructor_id").notNull(), // possible substitute
   },
   (t) => [

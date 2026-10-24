@@ -15,10 +15,10 @@ function toValues(i: Instructor | null): Record<string, string> {
     firstName: i?.firstName ?? "",
     name: i?.name ?? "",
     email: i?.email ?? "",
-    status: i?.status ?? "micro_entreprise",
+    status: i?.status ?? "sole_trader",
     siren: i?.siren ?? "",
     vatRegime: i?.vatRegime ?? "franchise_293b",
-    payMode: i?.payMode ?? "heure",
+    payMode: i?.payMode ?? "hourly",
     tariff: i ? inEuros(i.rateCents) : "",
     isOwner: i?.isOwner ? "on" : "",
     active: !i || i.active ? "on" : "",
@@ -130,7 +130,7 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
             ))}
           </select>
         </div>
-        {status !== "salarie" ? (
+        {status !== "employee" ? (
           field("siren", "SIREN (facultatif)", { inputMode: "numeric", autoComplete: "off", placeholder: "9 chiffres" })
         ) : (
           <input type="hidden" name="siren" value="" />

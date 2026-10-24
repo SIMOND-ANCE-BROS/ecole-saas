@@ -151,14 +151,14 @@ async function principal() {
     }
     const profs: Record<string, string> = {};
     for (const [firstName, name, status, mode, tariff] of [
-      ["Camille", "Durand", "micro_entreprise", "heure", 4000],
-      ["Mathis", "Roux", "micro_entreprise", "cours", 3500],
-      ["Inès", "Garnier", "salarie", "heure", 2800],
-      ["Lucas", "Faure", "societe", "heure", 4500],
+      ["Camille", "Durand", "sole_trader", "hourly", 4000],
+      ["Mathis", "Roux", "sole_trader", "per_lesson", 3500],
+      ["Inès", "Garnier", "employee", "hourly", 2800],
+      ["Lucas", "Faure", "company", "hourly", 4500],
     ] as const) {
       const [p] = await admin`
         INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
-        VALUES (${school.id}, ${name}, ${firstName}, ${status}, 'non_applicable', ${mode}, ${tariff}) RETURNING id`;
+        VALUES (${school.id}, ${name}, ${firstName}, ${status}, 'not_applicable', ${mode}, ${tariff}) RETURNING id`;
       profs[firstName] = p.id;
     }
     // [discipline, room, teacher, day (1 = Monday), time, duration, min age, max age, level]

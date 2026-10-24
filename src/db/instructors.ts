@@ -6,19 +6,19 @@ import { instructor } from "./schema";
 
 /** Instructors (teachers), always within the `withSchool()` transaction (RLS). */
 
-export const STATUSES = { micro_entreprise: "Micro-entreprise", societe: "Société", salarie: "Salarié" } as const;
+export const STATUSES = { sole_trader: "Micro-entreprise", company: "Société", employee: "Salarié" } as const;
 export const VAT_REGIMES = {
   franchise_293b: "Franchise en base (293 B)",
-  assujetti: "Assujetti à la TVA",
-  non_applicable: "Non applicable",
+  vat_registered: "Assujetti à la TVA",
+  not_applicable: "Non applicable",
 } as const;
 export const PAY_MODES = {
-  heure: "à l’heure",
-  cours: "au cours",
-  forfait_mensuel: "forfait mensuel",
+  hourly: "à l’heure",
+  per_lesson: "au cours",
+  monthly_flat: "forfait mensuel",
 } as const;
 /** Rate unit according to the pay mode. */
-export const PAY_UNITS = { heure: "heure", cours: "cours", forfait_mensuel: "mois" } as const;
+export const PAY_UNITS = { hourly: "heure", per_lesson: "cours", monthly_flat: "mois" } as const;
 
 const keys = <T extends object>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
 

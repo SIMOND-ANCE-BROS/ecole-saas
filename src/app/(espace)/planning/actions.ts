@@ -32,7 +32,7 @@ export async function moveOneLesson(
 
     const week = await weekLessons(tx, mondayOf(slot.date));
     const day = week
-      .filter((s) => s.date === slot.date && s.status !== "annulee")
+      .filter((s) => s.date === slot.date && s.status !== "cancelled")
       .map((s) => ({ ...s, weekday: weekdayOf(s.date) }));
     const me = day.find(
       (s) => s.courseId === week.find((x) => x.id === lessonId)?.courseId && s.startTime === slot.startTime,

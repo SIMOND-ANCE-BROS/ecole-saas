@@ -33,7 +33,7 @@ export type ScheduleCourse = {
   room: string;
   siteId: string;
   /** Recurrence (#90); `dates`: one-off course, without a day. */
-  recurrence: "hebdomadaire" | "quinzaine" | "dates";
+  recurrence: "weekly" | "biweekly" | "dates";
   startDate: string | null;
   endDate: string | null;
   dates: string[];

@@ -167,7 +167,7 @@ export async function syncLessons(
     .filter(
       (e) =>
         e.reference >= start &&
-        e.status === "prevue" &&
+        e.status === "planned" &&
         !e.attendanceSheet &&
         !wanted.has(`${e.courseId} ${e.reference}`),
     )
@@ -187,7 +187,7 @@ const attendanceCount = (present: boolean) => sql<number>`(
 export type CourseLesson = {
   id: string;
   date: string;
-  status: "prevue" | "effectuee" | "annulee";
+  status: "planned" | "done" | "cancelled";
   instructor: string;
   presents: number;
   absents: number;
@@ -344,7 +344,7 @@ export async function saveAttendance(
   if (!rows.success) return { ok: false, message: "Saisie invalide." };
   const attendanceSheet = await readAttendance(tx, lessonId);
   if (!attendanceSheet) return { ok: false, message: "Cette séance n’existe plus." };
-  if (attendanceSheet.status === "annulee") return { ok: false, message: "Cette séance est annulée." };
+  if (attendanceSheet.status === "cancelled") return { ok: false, message: "Cette séance est annulée." };
   const expected = new Set(attendanceSheet.students.map((d) => d.id));
   if (!rows.data.every((l) => expected.has(l.studentId)))
     return { ok: false, message: "Un des danseurs ne suit pas ce cours." };
@@ -365,7 +365,7 @@ export async function saveAttendance(
         set: { present: sql`excluded.present` },
       });
   }
-  await tx.update(lesson).set({ status: "effectuee" }).where(eq(lesson.id, lessonId));
+  await tx.update(lesson).set({ status: "done" }).where(eq(lesson.id, lessonId));
   return { ok: true, id: lessonId };
 }
 
@@ -391,7 +391,7 @@ export async function cancelLesson(tx: Tx, lessonId: string): Promise<Result> {
   if (!attendanceSheet) return { ok: false, message: "Cette séance n’existe plus." };
   if (attendanceSheet.students.some((d) => d.present !== null))
     return { ok: false, message: "L’appel de cette séance est déjà fait." };
-  await tx.update(lesson).set({ status: "annulee" }).where(eq(lesson.id, lessonId));
+  await tx.update(lesson).set({ status: "cancelled" }).where(eq(lesson.id, lessonId));
   return { ok: true, id: lessonId };
 }
 
@@ -400,8 +400,8 @@ export async function restoreLesson(tx: Tx, lessonId: string): Promise<Result> {
   if (!isUuid(lessonId)) return { ok: false, message: "Cette séance n’existe plus." };
   const rows = await tx
     .update(lesson)
-    .set({ status: "prevue" })
-    .where(and(eq(lesson.id, lessonId), eq(lesson.status, "annulee")))
+    .set({ status: "planned" })
+    .where(and(eq(lesson.id, lessonId), eq(lesson.status, "cancelled")))
     .returning({ id: lesson.id });
   return rows.length === 1 ? { ok: true, id: lessonId } : { ok: false, message: "Cette séance n’est pas annulée." };
 }
@@ -420,10 +420,10 @@ export type ScheduleLesson = {
   date: string;
   startTime: string;
   durationMinutes: number;
-  status: "prevue" | "effectuee" | "annulee";
+  status: "planned" | "done" | "cancelled";
   /** Moved individually (other date or other time than planned). */
   moved: boolean;
-  recurrence: "hebdomadaire" | "quinzaine" | "dates";
+  recurrence: "weekly" | "biweekly" | "dates";
   discipline: string;
   roomId: string;
   room: string;
@@ -542,7 +542,7 @@ export async function moveLesson(
     .innerJoin(season, eq(season.id, course.seasonId))
     .where(eq(lesson.id, id));
   if (!s) return { status: "refus", message: "Cette séance n’existe plus." };
-  if (s.status !== "prevue" || s.attendanceSheet)
+  if (s.status !== "planned" || s.attendanceSheet)
     return { status: "refus", message: "Cette séance est annulée ou son appel est fait : elle ne se déplace plus." };
   if (date < s.seasonStart || date > s.seasonEnd)
     return { status: "refus", message: "Cette date est en dehors de la saison." };
@@ -610,7 +610,7 @@ export async function moveLesson(
     .where(
       and(
         eq(lesson.courseId, s.courseId),
-        eq(lesson.status, "prevue"),
+        eq(lesson.status, "planned"),
         sql`coalesce(${lesson.plannedDate}, ${lesson.date}) >= ${reference}::date`,
         sql`NOT ${withAttendance}`,
       ),

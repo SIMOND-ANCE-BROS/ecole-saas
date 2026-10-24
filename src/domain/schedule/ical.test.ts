@@ -12,7 +12,7 @@ const base = {
       durationMinutes: 45,
       title: "Éveil",
       place: "Petite salle, Site Centre, 3 place de la Mairie",
-      annulee: false,
+      cancelled: false,
     },
   ],
 };
@@ -53,7 +53,7 @@ describe("agendaIcs", () => {
     const l = rows(
       icsCalendar({
         ...base,
-        lessons: [{ ...base.lessons[0], startTime: "23:30", durationMinutes: 90, annulee: true }],
+        lessons: [{ ...base.lessons[0], startTime: "23:30", durationMinutes: 90, cancelled: true }],
       }),
     );
     expect(l).toContain("STATUS:CANCELLED");

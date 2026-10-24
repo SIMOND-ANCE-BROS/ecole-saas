@@ -30,7 +30,7 @@ beforeAll(async () => {
   const teacher = async (firstName: string) =>
     (
       await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
-        VALUES (${school}, 'Prof', ${firstName}, 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`
+        VALUES (${school}, 'Prof', ${firstName}, 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`
     )[0].id as string;
   camille = await teacher("Camille");
   ines = await teacher("Inès");
@@ -38,10 +38,10 @@ beforeAll(async () => {
     await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes, level)
     VALUES (${school}, ${season.id}, ${d.id}, ${room.id}, ${camille}, 3, '17:00', 60, 'Débutant') RETURNING id`;
   await admin`INSERT INTO lesson (school_id, course_id, date, instructor_id, status) VALUES
-    (${school}, ${c.id}, '2026-10-14', ${camille}, 'effectuee'),
-    (${school}, ${c.id}, '2026-11-04', ${camille}, 'prevue'),
-    (${school}, ${c.id}, '2026-11-18', ${ines}, 'prevue'),
-    (${school}, ${c.id}, '2026-11-25', ${camille}, 'annulee')`;
+    (${school}, ${c.id}, '2026-10-14', ${camille}, 'done'),
+    (${school}, ${c.id}, '2026-11-04', ${camille}, 'planned'),
+    (${school}, ${c.id}, '2026-11-18', ${ines}, 'planned'),
+    (${school}, ${c.id}, '2026-11-25', ${camille}, 'cancelled')`;
 });
 
 afterAll(async () => {
@@ -64,7 +64,7 @@ describe("abonnement iCal", () => {
 
     const calendar = await withSchool(school, (tx) => readCalendar(tx, token as string, "2026-10-20"));
     expect(calendar?.name).toBe("Cours de Camille, École A");
-    expect(calendar?.lessons.map((s) => `${s.date} ${s.title} ${s.annulee}`)).toEqual([
+    expect(calendar?.lessons.map((s) => `${s.date} ${s.title} ${s.cancelled}`)).toEqual([
       "2026-11-04 Jazz Débutant false",
       "2026-11-25 Jazz Débutant true",
     ]);

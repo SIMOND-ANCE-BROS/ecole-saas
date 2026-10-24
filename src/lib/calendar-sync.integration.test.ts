@@ -29,7 +29,7 @@ beforeAll(async () => {
   [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`sy-${suffix}`}) RETURNING id`;
   [{ id: camille }] =
     await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
-    VALUES (${school}, 'Durand', 'Camille', 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`;
+    VALUES (${school}, 'Durand', 'Camille', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
   await withSchool(school, (tx) =>
     saveConnection(tx, camille, {
       provider: "microsoft",
@@ -38,7 +38,7 @@ beforeAll(async () => {
     }),
   );
   await admin`INSERT INTO unavailability (school_id, instructor_id, starts_at, ends_at, source, label)
-    VALUES (${school}, ${camille}, '2099-11-10T09:00:00Z', '2099-11-10T10:00:00Z', 'saisie', 'Rendez-vous')`;
+    VALUES (${school}, ${camille}, '2099-11-10T09:00:00Z', '2099-11-10T10:00:00Z', 'manual', 'Rendez-vous')`;
 });
 
 afterAll(async () => {
@@ -76,7 +76,7 @@ describe("synchroniserAgenda", () => {
     expect(await syncCalendar(school, camille, fakeFetch, NOW)).toEqual({ ok: true, ranges: 1 });
     expect((await rangesOf()).map((i) => `${i.source} ${i.start.toISOString()}`)).toEqual([
       "microsoft 2026-11-04T15:00:00.000Z",
-      "saisie 2099-11-10T09:00:00.000Z",
+      "manual 2099-11-10T09:00:00.000Z",
     ]);
     const [{ encrypted_token: jeton_chiffre }] =
       await admin`SELECT encrypted_token FROM calendar_connection WHERE instructor_id = ${camille}`;
@@ -109,7 +109,7 @@ describe("synchroniserAgenda", () => {
 
   it("déconnecte l’agenda ; la saisie reste", async () => {
     expect(await withSchool(school, (tx) => deleteConnection(tx, camille))).toBe(true);
-    expect((await rangesOf()).some((i) => i.source === "saisie")).toBe(true);
+    expect((await rangesOf()).some((i) => i.source === "manual")).toBe(true);
     expect(await syncCalendar(school, camille, fetch, NOW)).toEqual({
       ok: false,
       message: "Aucun agenda connecté.",

@@ -83,9 +83,9 @@ export default async function FrontDesk() {
         </h2>
         {ofDay.length > 0 && (
           <p className="text-sm text-doux">
-            {ofDay.filter((s) => s.status !== "annulee" && !s.doneAttendance).length} appel(s) à faire ·{" "}
-            {ofDay.filter((s) => s.status !== "annulee" && s.doneAttendance).length} fait(s) ·{" "}
-            {ofDay.filter((s) => s.status === "annulee").length} séance(s) annulée(s)
+            {ofDay.filter((s) => s.status !== "cancelled" && !s.doneAttendance).length} appel(s) à faire ·{" "}
+            {ofDay.filter((s) => s.status !== "cancelled" && s.doneAttendance).length} fait(s) ·{" "}
+            {ofDay.filter((s) => s.status === "cancelled").length} séance(s) annulée(s)
           </p>
         )}
         {ofDay.length === 0 ? (
@@ -95,10 +95,10 @@ export default async function FrontDesk() {
             {ofDay.map((s) => (
               <li
                 key={s.id}
-                className={`flex flex-wrap items-baseline gap-x-3 px-3 py-2 ${s.status === "annulee" ? "text-doux" : ""}`}
+                className={`flex flex-wrap items-baseline gap-x-3 px-3 py-2 ${s.status === "cancelled" ? "text-doux" : ""}`}
               >
                 <span className="w-12 tabular-nums">{s.startTime}</span>
-                <span className={`font-medium ${s.status === "annulee" ? "line-through" : ""}`}>
+                <span className={`font-medium ${s.status === "cancelled" ? "line-through" : ""}`}>
                   {s.discipline}
                   {s.level && ` ${s.level}`}
                 </span>
@@ -107,9 +107,9 @@ export default async function FrontDesk() {
                 </span>
                 <Link
                   href={`/planning/seances/${s.id}`}
-                  className={`ml-auto ${s.doneAttendance || s.status === "annulee" ? "lien text-doux" : "bouton-secondaire"}`}
+                  className={`ml-auto ${s.doneAttendance || s.status === "cancelled" ? "lien text-doux" : "bouton-secondaire"}`}
                 >
-                  {s.status === "annulee" ? "Annulée" : s.doneAttendance ? "Appel fait" : "Faire l’appel"}
+                  {s.status === "cancelled" ? "Annulée" : s.doneAttendance ? "Appel fait" : "Faire l’appel"}
                 </Link>
               </li>
             ))}
