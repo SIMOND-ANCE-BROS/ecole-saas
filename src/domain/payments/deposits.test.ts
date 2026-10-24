@@ -16,8 +16,8 @@ const p = (
   ...extra,
 });
 
-describe("aRemettre", () => {
-  it("chèques arrivés à échéance, espèces et chèques vacances, pas encore remis", () => {
+describe("toDeposit", () => {
+  it("cheques past their date, cash and holiday vouchers, not yet deposited", () => {
     const r = toDeposit(
       [
         p("a", "cheque", 10000),
@@ -35,7 +35,7 @@ describe("aRemettre", () => {
     expect(r.holiday_voucher.map((x) => x.id)).toEqual(["e"]);
   });
 
-  it("ni les corrections, ni un chèque entièrement corrigé ; un chèque corrigé en partie reste à remettre", () => {
+  it("neither corrections nor a fully corrected cheque; a partly corrected cheque is still to deposit", () => {
     const r = toDeposit(
       [
         p("a", "cheque", -10000),
@@ -48,15 +48,15 @@ describe("aRemettre", () => {
   });
 });
 
-it("totaux par moyen, corrections comprises", () => {
+it("totals per payment method, corrections included", () => {
   expect(totals([p("a", "cheque", 10000), p("b", "cheque", -4000), p("c", "cash", 2050)])).toEqual({
     total: 8050,
     byMethod: { cheque: 6000, cash: 2050 },
   });
 });
 
-describe("versCsv", () => {
-  it("séparateur « ; », montants à virgule, dates françaises, BOM", () => {
+describe("toCsv", () => {
+  it("« ; » separator, comma amounts, French dates, BOM", () => {
     const csv = toCsv([
       {
         date: "2026-10-21",
@@ -85,7 +85,7 @@ describe("versCsv", () => {
     expect(rows[2]).toBe('21/10/2026;"Petit; Anne";Chèque;-40,00;Correction;;;22/10/2026');
   });
 
-  it("une cellule texte n'est jamais lue comme une formule", () => {
+  it("a text cell is never read as a formula", () => {
     const csv = toCsv([
       {
         date: "2026-10-21",

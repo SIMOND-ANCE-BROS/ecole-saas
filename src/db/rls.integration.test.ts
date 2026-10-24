@@ -75,7 +75,7 @@ afterAll(async () => {
 });
 
 describe("Row Level Security", () => {
-  it("protège toutes les tables portant school_id", async () => {
+  it("protects every table carrying school_id", async () => {
     const tables = await app.unsafe<SchoolTable[]>(SCHOOL_TABLES_QUERY);
 
     // Empty database or migrations not applied: the test must not pass vacuously.
@@ -83,7 +83,7 @@ describe("Row Level Security", () => {
     expect(defects(tables)).toEqual([]);
   });
 
-  it("détecte une table portant school_id sans RLS", async () => {
+  it("detects a table carrying school_id without RLS", async () => {
     // Checks the guard itself: a forgotten table must be reported.
     const errors = await admin
       .begin(async (tx) => {
@@ -102,7 +102,7 @@ describe("Row Level Security", () => {
     ]);
   });
 
-  it("détecte une politique school_isolation qui lit un autre réglage que app.school_id", async () => {
+  it("detects a school_isolation policy reading a setting other than app.school_id", async () => {
     // A policy with the right name but a stale setting (e.g. app.ecole_id after a rename) must be reported.
     const errors = await admin
       .begin(async (tx) => {

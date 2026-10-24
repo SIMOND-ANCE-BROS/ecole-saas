@@ -63,10 +63,10 @@ const cheque = (amountCents: number, plannedPayment: string | null, reference: s
   plannedPayment: plannedPayment,
 });
 
-describe("encaisser", () => {
+describe("collect", () => {
   let ids: string[] = [];
 
-  it("trois chèques datés : solde à jour, chèques à encaisser, journal tenu", async () => {
+  it("three dated cheques: balance up to date, cheques to cash, audit log kept", async () => {
     const r = await withSchool(school, (tx) =>
       collect(tx, frontDesk, payer, [
         cheque(10000, null, "0001"),
@@ -89,7 +89,7 @@ describe("encaisser", () => {
     expect(traces.every((t) => t.action === "insert" && t.montant === "10000" && t.signe)).toBe(true);
   });
 
-  it("refuse des espèces « à encaisser plus tard », un payeur d'une autre école, un compte non membre", async () => {
+  it("rejects cash « à encaisser plus tard », a payer from another school, a non-member account", async () => {
     expect(
       await withSchool(school, (tx) =>
         collect(tx, frontDesk, payer, [{ ...cheque(5000, "2027-01-05", ""), method: "cash" }]),
@@ -108,7 +108,7 @@ describe("encaisser", () => {
     });
   });
 
-  it("un paiement ne se modifie ni ne se supprime (trigger) ; on corrige par un paiement négatif", async () => {
+  it("a payment can be neither updated nor deleted (trigger); it is fixed with a negative payment", async () => {
     await expect(admin`UPDATE payment SET amount_cents = 1 WHERE id = ${ids[0]}`).rejects.toThrow(/cannot be modified/);
     await expect(admin`DELETE FROM payment WHERE id = ${ids[0]}`).rejects.toThrow(/cannot be deleted/);
     // Only exception: the invoicing tool sync flag.
@@ -132,7 +132,7 @@ describe("encaisser", () => {
     expect((await withSchool(school, (tx) => balanceOf(tx, payer, TODAY)))?.remaining).toBe(4000);
   });
 
-  it("une autre école ne voit ni les paiements ni le solde", async () => {
+  it("another school sees neither the payments nor the balance", async () => {
     expect(await withSchool(otherSchool, (tx) => paymentsOf(tx, payer))).toEqual([]);
     expect(await withSchool(otherSchool, (tx) => balanceOf(tx, payer, TODAY))).toBeNull();
     expect(await withSchool(otherSchool, (tx) => correctPayment(tx, frontDesk, ids[1], 100, TODAY))).toEqual({

@@ -37,36 +37,36 @@ afterAll(async () => {
   await admin.end();
 });
 
-describe("Limitation des tentatives de connexion", () => {
-  it("bloque une adresse e-mail depuis une même IP au-delà de la limite de la paire", async () => {
+describe("Sign-in attempt limiting", () => {
+  it("blocks an e-mail address from the same IP beyond the pair limit", async () => {
     expect(await tentatives(email("cible"), ip(1), LIMITS.byPair + 2)).toBe(LIMITS.byPair);
   });
 
-  it("laisse la vraie personne se connecter depuis une autre IP (pas de blocage du compte d’autrui)", async () => {
+  it("lets the real person sign in from another IP (no locking out someone else's account)", async () => {
     await tentatives(email("victime"), ip(2), LIMITS.byPair + 3);
     expect(await recordAttempt(email("victime"), ip(9))).toBe(true);
   });
 
-  it("borne malgré tout le nombre total d’essais sur une même adresse", async () => {
+  it("still caps the total number of attempts on the same address", async () => {
     let allowed = 0;
     for (let i = 0; i < LIMITS.byEmail + 5; i++) allowed += await tentatives(email("globale"), ip(100 + (i % 50)), 1);
     expect(allowed).toBe(LIMITS.byEmail);
   });
 
-  it("bloque une IP qui balaye beaucoup d’adresses", async () => {
+  it("blocks an IP that sweeps many addresses", async () => {
     let allowed = 0;
     for (let i = 0; i < LIMITS.byIp + 3; i++) allowed += await tentatives(email(`balayage-${i}`), ip(3), 1);
     expect(allowed).toBe(LIMITS.byIp);
   });
 
-  it("résiste aux tentatives simultanées", async () => {
+  it("withstands concurrent attempts", async () => {
     addresses.push(email("course"));
     ips.push(ip(4));
     const results = await Promise.all(Array.from({ length: 10 }, () => recordAttempt(email("course"), ip(4))));
     expect(results.filter(Boolean).length).toBeLessThanOrEqual(LIMITS.byPair);
   });
 
-  it("ne prolonge pas le blocage quand on s’acharne (les tentatives refusées ne comptent pas)", async () => {
+  it("does not extend the block on persistent retries (refused attempts do not count)", async () => {
     await tentatives(email("acharne"), ip(10), LIMITS.byPair + 20);
     const [{ n }] = await admin`
       SELECT count(*)::int AS n FROM login_attempt
@@ -74,18 +74,18 @@ describe("Limitation des tentatives de connexion", () => {
     expect(n).toBe(LIMITS.byPair);
   });
 
-  it("efface les tentatives de l’adresse après une connexion réussie", async () => {
+  it("clears the address's attempts after a successful sign-in", async () => {
     await tentatives(email("oubli"), ip(5), LIMITS.byPair);
     expect(await recordAttempt(email("oubli"), ip(5))).toBe(false);
     await clearAttempts(email("oubli"), ip(5));
     expect(await recordAttempt(email("oubli"), ip(5))).toBe(true);
   });
 
-  it("sans IP de confiance, applique la limite de la paire à l’adresse seule", async () => {
+  it("without a trusted IP, applies the pair limit to the address alone", async () => {
     expect(await tentatives(email("sans-ip"), null, LIMITS.byPair + 1)).toBe(LIMITS.byPair);
   });
 
-  it("ne compte plus les tentatives sorties de la fenêtre", async () => {
+  it("stops counting attempts outside the window", async () => {
     await tentatives(email("ancienne"), ip(7), LIMITS.byPair);
     await admin`
       UPDATE login_attempt SET at = now() - make_interval(mins => ${LIMITS.windowMinutes + 1})
@@ -93,28 +93,28 @@ describe("Limitation des tentatives de connexion", () => {
     expect(await recordAttempt(email("ancienne"), ip(7))).toBe(true);
   });
 
-  it("ne stocke ni l’adresse e-mail ni l’IP en clair", async () => {
+  it("stores neither the e-mail address nor the IP in clear", async () => {
     const rows = await admin`SELECT key FROM login_attempt WHERE key = ${attemptKey("email", email("cible"))}`;
     expect(rows.length).toBeGreaterThan(0);
     expect(rows[0].key).not.toContain("@");
   });
 });
 
-describe("IP du client", () => {
+describe("Client IP", () => {
   const requestHeaders = new Headers({ "x-forwarded-for": "6.6.6.6", "x-real-ip": "198.51.100.7" });
 
-  it("ignore les en-têtes fournis par le client tant qu’aucun proxy de confiance n’est configuré", () => {
+  it("ignores client-supplied headers as long as no trusted proxy is configured", () => {
     expect(trustedIp(requestHeaders, undefined)).toBeNull();
   });
 
-  it("lit uniquement l’en-tête posé par le proxy de confiance", () => {
+  it("reads only the header set by the trusted proxy", () => {
     expect(trustedIp(requestHeaders, "x-real-ip")).toBe("198.51.100.7");
     expect(trustedIp(new Headers(), "x-real-ip")).toBeNull();
   });
 });
 
-describe("Porte d’entrée unique", () => {
-  it("ferme la connexion par la route HTTP de Better Auth (seule la server action limitée reste)", async () => {
+describe("Single entry point", () => {
+  it("closes sign-in through the Better Auth HTTP route (only the rate-limited server action remains)", async () => {
     const response = await auth.handler(
       new Request("http://localhost:3000/api/auth/sign-in/email", {
         method: "POST",

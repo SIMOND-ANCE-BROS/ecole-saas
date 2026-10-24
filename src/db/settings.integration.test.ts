@@ -59,8 +59,8 @@ afterAll(async () => {
   await admin.end();
 });
 
-describe("saisons", () => {
-  it("crée une saison, refuse un libellé pris, des dates inversées ou qui chevauchent", async () => {
+describe("seasons", () => {
+  it("creates a season, rejects a taken label, reversed or overlapping dates", async () => {
     const r = await withSchool(school, (tx) =>
       createSeason(tx, { label: "2026-2027", startDate: "2026-09-01", endDate: "2027-06-30" }, null),
     );
@@ -92,7 +92,7 @@ describe("saisons", () => {
     });
   });
 
-  it("reprend la grille, les réductions et les carnets de la saison précédente", async () => {
+  it("copies the tariff grid, discounts and lesson packs from the previous season", async () => {
     await admin`INSERT INTO tariff (school_id, season_id, audience, period, combination, price_cents)
       VALUES (${school}, ${season2026}, 'child', 'quarter', '{60}', 11000), (${school}, ${season2026}, 'adult', 'year', '{60,90}', 61500)`;
     await admin`INSERT INTO discount (school_id, season_id, code, rate_bps, min_students, audiences, combinable_with_multi_discipline)
@@ -117,7 +117,7 @@ describe("saisons", () => {
     ]);
   });
 
-  it("modifie les dates d’une saison, sans chevaucher l’autre", async () => {
+  it("updates a season's dates without overlapping the other one", async () => {
     const entry = { label: "2026-2027", startDate: "2026-08-25", endDate: "2027-07-05" };
     expect((await withSchool(school, (tx) => updateSeason(tx, season2026, entry))).ok).toBe(true);
     expect(await withSchool(school, (tx) => updateSeason(tx, season2026, { ...entry, endDate: "2027-09-15" }))).toEqual(
@@ -130,7 +130,7 @@ describe("saisons", () => {
 });
 
 describe("disciplines", () => {
-  it("crée, refuse un doublon sans tenir compte de la casse, renomme", async () => {
+  it("creates, rejects a case-insensitive duplicate, renames", async () => {
     const r = await withSchool(school, (tx) => createDiscipline(tx, "Jazz"));
     jazz = r.ok ? r.id : "";
     expect(await withSchool(school, (tx) => createDiscipline(tx, " jazz "))).toEqual({
@@ -151,8 +151,8 @@ describe("disciplines", () => {
   });
 });
 
-describe("sites et salles", () => {
-  it("crée un site et ses salles, les liste, modifie une salle", async () => {
+describe("sites and rooms", () => {
+  it("creates a site and its rooms, lists them, updates a room", async () => {
     const s = await withSchool(school, (tx) =>
       createSite(tx, { name: "Centre", address: "1 rue Test", permanence: true }),
     );
@@ -175,7 +175,7 @@ describe("sites et salles", () => {
     ]);
   });
 
-  it("refuse de retirer une salle qui a des cours, un site qui a des salles, une discipline utilisée", async () => {
+  it("refuses to remove a room with courses, a site with rooms, or a discipline in use", async () => {
     const [p] =
       await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
       VALUES (${school}, 'Prof', 'Camille', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
@@ -195,7 +195,7 @@ describe("sites et salles", () => {
     });
   });
 
-  it("retire une salle inutilisée, refuse une salle ou un site d’une autre école", async () => {
+  it("removes an unused room, rejects a room or site from another school", async () => {
     const annex = (await withSchool(school, (tx) => listPlaces(tx)))[0].salles.find((s) => s.name === "Annexe")
       ?.id as string;
     expect(await withSchool(school, (tx) => deleteRoom(tx, annex))).toEqual({ ok: true, id: annex });
@@ -212,8 +212,8 @@ describe("sites et salles", () => {
   });
 });
 
-describe("horaires des sites (#90)", () => {
-  it("enregistre, remplace et relit les horaires d'un site", async () => {
+describe("site opening hours (#90)", () => {
+  it("saves, replaces and reads back a site's opening hours", async () => {
     const week = [1, 2, 3, 4, 5].map((j) => ({ weekday: j, opening: "16:30", closure: "22:00" }));
     expect(await withSchool(school, (tx) => saveHours(tx, center, week))).toEqual({ ok: true, id: center });
     await withSchool(school, (tx) => saveHours(tx, center, [{ weekday: 6, opening: "09:00", closure: "13:00" }]));
@@ -223,7 +223,7 @@ describe("horaires des sites (#90)", () => {
     expect((await withSchool(school, (tx) => listPlaces(tx))).find((l) => l.id === center)?.hours).toHaveLength(1);
   });
 
-  it("refuse un jour en double, une fermeture avant l'ouverture, un site d'une autre école", async () => {
+  it("rejects a duplicate day, a closing time before opening, and a site from another school", async () => {
     expect(
       await withSchool(school, (tx) =>
         saveHours(tx, center, [

@@ -12,8 +12,8 @@ const promise = <T>() => {
   return { pending, resolve: resolveIt, reject: rejectIt };
 };
 
-describe("aperçu différé lié à la saisie courante", () => {
-  it("ne lance pas un calcul annulé pendant la frappe", async () => {
+describe("deferred preview tied to the current input", () => {
+  it("does not run a computation cancelled while typing", async () => {
     vi.useFakeTimers();
     const load = vi.fn(async () => 100);
     const cancel = deferredQuery(load, vi.fn(), vi.fn());
@@ -22,7 +22,7 @@ describe("aperçu différé lié à la saisie courante", () => {
     expect(load).not.toHaveBeenCalled();
   });
 
-  it("ignore une ancienne réponse arrivée après le nouveau prix", async () => {
+  it("ignores an old response arriving after the new price", async () => {
     vi.useFakeTimers();
     const old = promise<number>();
     const next = promise<number>();
@@ -39,7 +39,7 @@ describe("aperçu différé lié à la saisie courante", () => {
     expect(display.mock.calls).toEqual([[16500]]);
   });
 
-  it("signale un échec pour proposer une nouvelle tentative", async () => {
+  it("reports a failure to offer a retry", async () => {
     vi.useFakeTimers();
     const error = vi.fn();
     deferredQuery(
@@ -53,7 +53,7 @@ describe("aperçu différé lié à la saisie courante", () => {
     expect(error).toHaveBeenCalledOnce();
   });
 
-  it("ignore un échec après changement de saisie ou départ de la page", async () => {
+  it("ignores a failure after the input changed or the page was left", async () => {
     vi.useFakeTimers();
     const old = promise<number>();
     const error = vi.fn();

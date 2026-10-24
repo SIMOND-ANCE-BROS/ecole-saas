@@ -7,27 +7,27 @@ const slot = (weekday: number | null, startTime: string, durationMinutes: number
   durationMinutes: durationMinutes,
 });
 
-describe("seChevauchent", () => {
-  it("détecte deux créneaux qui se recouvrent le même jour", () => {
+describe("overlaps", () => {
+  it("detects two slots overlapping on the same day", () => {
     expect(overlaps(slot(3, "17:00", 60), slot(3, "17:30", 60))).toBe(true);
   });
-  it("accepte deux créneaux qui se suivent", () => {
+  it("accepts two back-to-back slots", () => {
     expect(overlaps(slot(3, "17:00", 60), slot(3, "18:00", 60))).toBe(false);
   });
-  it("ignore un autre jour et les stages", () => {
+  it("ignores another day and workshops", () => {
     expect(overlaps(slot(3, "17:00", 60), slot(4, "17:00", 60))).toBe(false);
     expect(overlaps(slot(null, "17:00", 60), slot(null, "17:00", 60))).toBe(false);
   });
 });
 
-describe("conflits", () => {
+describe("conflicts", () => {
   const existing = [
     { id: "a", ...slot(3, "17:00", 60), roomId: "studio", instructorId: "camille" },
     { id: "b", ...slot(3, "17:30", 60), roomId: "grande", instructorId: "ines" },
     { id: "c", ...slot(3, "17:15", 30), roomId: "studio", instructorId: "ines" },
   ];
 
-  it("signale la salle et l’intervenant déjà pris, sans le cours lui-même", () => {
+  it("reports the room and instructor already taken, excluding the course itself", () => {
     const target = { id: "c", ...slot(3, "17:15", 30), roomId: "studio", instructorId: "ines" };
     expect(conflicts(target, existing)).toEqual([
       { id: "a", room: true, instructor: false },
@@ -35,7 +35,7 @@ describe("conflits", () => {
     ]);
   });
 
-  it("ne signale rien sans recouvrement", () => {
+  it("reports nothing without overlap", () => {
     expect(
       conflicts({ id: null, ...slot(1, "17:00", 60), roomId: "studio", instructorId: "camille" }, existing),
     ).toEqual([]);

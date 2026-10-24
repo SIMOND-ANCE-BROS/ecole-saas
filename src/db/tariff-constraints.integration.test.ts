@@ -47,8 +47,8 @@ function insertTariff(
     VALUES (${ids.school}, ${ids.season}, 'child', 'quarter', ${combination}::smallint[], ${disciplineId}, 11000)`;
 }
 
-describe("tarif", () => {
-  it("refuse deux lignes « toutes disciplines » identiques", async () => {
+describe("tariff", () => {
+  it("rejects two identical all-disciplines rows", async () => {
     await withSeason(async (tx, ids) => {
       await insertTariff(tx, ids, [45, 60]);
       await expect(tx.savepoint((sp) => insertTariff(sp, ids, [45, 60]))).rejects.toMatchObject({
@@ -57,7 +57,7 @@ describe("tarif", () => {
     });
   });
 
-  it("distingue deux combinaisons de même durée totale", async () => {
+  it("distinguishes two combinations with the same total duration", async () => {
     await withSeason(async (tx, ids) => {
       await insertTariff(tx, ids, [45, 45, 60]);
       await insertTariff(tx, ids, [60, 90]);
@@ -66,7 +66,7 @@ describe("tarif", () => {
     });
   });
 
-  it("accepte une ligne réservée à une discipline à côté de la ligne générale", async () => {
+  it("accepts a discipline-specific row next to the general row", async () => {
     await withSeason(async (tx, ids) => {
       const [zumba] = await tx`INSERT INTO discipline (school_id, name) VALUES (${ids.school}, 'Zumba') RETURNING id`;
       await insertTariff(tx, ids, [60, 60]);
@@ -74,7 +74,7 @@ describe("tarif", () => {
     });
   });
 
-  it("refuse une discipline d’une autre école", async () => {
+  it("rejects a discipline from another school", async () => {
     await withSeason(async (tx, ids) => {
       const [autre] = await tx`INSERT INTO school (name, slug) VALUES ('Autre école', 'autre-ecole') RETURNING id`;
       const [foreign] = await tx`INSERT INTO discipline (school_id, name) VALUES (${autre.id}, 'Zumba') RETURNING id`;
@@ -84,7 +84,7 @@ describe("tarif", () => {
     });
   });
 
-  it("refuse une combinaison vide ou une durée nulle", async () => {
+  it("rejects an empty combination or a zero duration", async () => {
     await withSeason(async (tx, ids) => {
       for (const combination of [[], [0, 60]]) {
         await expect(tx.savepoint((sp) => insertTariff(sp, ids, combination))).rejects.toMatchObject({

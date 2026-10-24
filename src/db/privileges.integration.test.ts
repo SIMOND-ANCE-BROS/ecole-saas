@@ -39,12 +39,12 @@ class Cancellation extends Error {
   }
 }
 
-describe("Droits de app_user", () => {
-  it("couvrent toutes les tables et séquences existantes", async () => {
+describe("app_user privileges", () => {
+  it("cover every existing table and sequence", async () => {
     expect(await withoutPrivileges(admin)).toEqual([]);
   });
 
-  it("couvrent une table créée par une migration future", async () => {
+  it("cover a table created by a future migration", async () => {
     // Same role as the migrations (DATABASE_ADMIN_URL), rolled-back probe table.
     const result = await admin
       .begin(async (tx) => {

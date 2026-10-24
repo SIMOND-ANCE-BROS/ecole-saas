@@ -49,18 +49,18 @@ afterAll(async () => {
   await admin.end();
 });
 
-describe("Connexion", () => {
-  it("connecte un compte créé par l’école", async () => {
+describe("Sign-in", () => {
+  it("signs in an account created by the school", async () => {
     const session = await signIn();
     expect(session.id).toBeTruthy();
     expect(session.selected_school_id).toBeNull();
   });
 
-  it("refuse un mauvais mot de passe", async () => {
+  it("rejects a wrong password", async () => {
     await expect(auth.api.signInEmail({ body: { email, password: "pas-le-bon-mot-de-passe" } })).rejects.toThrow();
   });
 
-  it("refuse l’inscription libre", async () => {
+  it("rejects open sign-up", async () => {
     await expect(
       auth.api.signUpEmail({
         body: { email: `libre-${suffix}@exemple.test`, password: password, name: "Libre" },
@@ -69,8 +69,8 @@ describe("Connexion", () => {
   });
 });
 
-describe("Choix de l’école", () => {
-  it("enregistre sur la session une école dont on est membre actif", async () => {
+describe("School choice", () => {
+  it("stores on the session a school the user is an active member of", async () => {
     const session = await signIn();
     expect(await chooseSchool(session.id, userId, schoolA)).toBe(true);
     const [after] = await admin`SELECT selected_school_id FROM session WHERE id = ${session.id}`;
@@ -78,7 +78,7 @@ describe("Choix de l’école", () => {
     expect(await contextFromSession(userId, schoolA)).toEqual({ userId, schoolId: schoolA, role: "front_desk" });
   });
 
-  it("refuse une école dont on n’est pas membre", async () => {
+  it("rejects a school the user is not a member of", async () => {
     const session = await signIn();
     expect(await chooseSchool(session.id, userId, schoolB)).toBe(false);
     const [after] = await admin`SELECT selected_school_id FROM session WHERE id = ${session.id}`;
@@ -86,13 +86,13 @@ describe("Choix de l’école", () => {
     expect(await contextFromSession(userId, schoolB)).toBeNull();
   });
 
-  it("refuse une école où l’accès a été désactivé", async () => {
+  it("rejects a school where access was deactivated", async () => {
     const session = await signIn();
     expect(await chooseSchool(session.id, userId, schoolC)).toBe(false);
     expect(await contextFromSession(userId, schoolC)).toBeNull();
   });
 
-  it("refuse la session d’un autre compte et un identifiant mal formé", async () => {
+  it("rejects another account's session and a malformed id", async () => {
     const session = await signIn();
     expect(await chooseSchool(session.id, "autre-compte", schoolA)).toBe(false);
     expect(await chooseSchool(session.id, userId, "pas-un-uuid")).toBe(false);

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { lessonDates, courseDates } from "./lessons";
 
-describe("datesDesSeances", () => {
-  it("donne chaque mercredi de la période, bornes comprises", () => {
+describe("lessonDates", () => {
+  it("gives every Wednesday of the period, bounds included", () => {
     expect(lessonDates({ start: "2026-09-02", end: "2026-09-30", weekday: 3, closures: [] })).toEqual([
       "2026-09-02",
       "2026-09-09",
@@ -12,21 +12,21 @@ describe("datesDesSeances", () => {
     ]);
   });
 
-  it("commence au premier jour voulu après le début", () => {
+  it("starts on the first wanted weekday after the start", () => {
     expect(lessonDates({ start: "2026-09-01", end: "2026-09-14", weekday: 1, closures: [] })).toEqual([
       "2026-09-07",
       "2026-09-14",
     ]);
   });
 
-  it("gère le dimanche (7)", () => {
+  it("handles Sunday (7)", () => {
     expect(lessonDates({ start: "2026-09-01", end: "2026-09-13", weekday: 7, closures: [] })).toEqual([
       "2026-09-06",
       "2026-09-13",
     ]);
   });
 
-  it("saute les fermetures, bornes comprises", () => {
+  it("skips closures, bounds included", () => {
     const allSaints = { start: "2026-10-17", end: "2026-11-01" };
     const armistice = { start: "2026-11-11", end: "2026-11-11" };
     expect(
@@ -34,7 +34,7 @@ describe("datesDesSeances", () => {
     ).toEqual(["2026-10-14", "2026-11-04", "2026-11-18"]);
   });
 
-  it("passe le changement d’heure et d’année sans décalage", () => {
+  it("crosses the clock change and the new year without shifting", () => {
     expect(lessonDates({ start: "2026-10-20", end: "2026-11-03", weekday: 2, closures: [] })).toEqual([
       "2026-10-20",
       "2026-10-27",
@@ -47,24 +47,24 @@ describe("datesDesSeances", () => {
     ]);
   });
 
-  it("ne donne rien pour une période vide ou inversée", () => {
+  it("gives nothing for an empty or reversed period", () => {
     expect(lessonDates({ start: "2026-10-01", end: "2026-09-01", weekday: 3, closures: [] })).toEqual([]);
   });
 });
 
-describe("datesDuCours (#90)", () => {
+describe("courseDates (#90)", () => {
   const SEASON = { start: "2026-09-01", end: "2026-10-31" };
   const ALL_SAINTS = [{ start: "2026-10-17", end: "2026-11-01" }];
   const weekly = (weekday: number, startDate: string | null = null, endDate: string | null = null) =>
     ({ type: "weekly", weekday: weekday, startDate: startDate, endDate: endDate }) as const;
 
-  it("chaque semaine : comme avant, hors fermetures", () => {
+  it("weekly: as before, outside closures", () => {
     expect(courseDates(weekly(1), SEASON, ALL_SAINTS)).toEqual(
       lessonDates({ ...SEASON, weekday: 1, closures: ALL_SAINTS }),
     );
   });
 
-  it("période limitée : seulement entre les deux dates, et dans la saison", () => {
+  it("limited period: only between the two dates, and within the season", () => {
     expect(courseDates(weekly(3, "2026-09-20", "2026-10-07"), SEASON, [])).toEqual([
       "2026-09-23",
       "2026-09-30",
@@ -74,7 +74,7 @@ describe("datesDuCours (#90)", () => {
     expect(courseDates(weekly(3, "2026-10-10", "2026-10-01"), SEASON, [])).toEqual([]);
   });
 
-  it("une semaine sur deux : alternance calée sur la première date, non décalée par une fermeture", () => {
+  it("every other week: alternation set on the first date, not shifted by a closure", () => {
     const quinzaine = { type: "biweekly", weekday: 1, startDate: null, endDate: null } as const;
     // Mondays of the season: 7, 14, 21, 28 Sept., 5, 12, 19, 26 Oct.; every other one from the 7th.
     expect(courseDates(quinzaine, SEASON, [])).toEqual(["2026-09-07", "2026-09-21", "2026-10-05", "2026-10-19"]);
@@ -88,7 +88,7 @@ describe("datesDuCours (#90)", () => {
     ]);
   });
 
-  it("dates précises : triées, sans doublon, dans la saison, même pendant une fermeture", () => {
+  it("specific dates: sorted, without duplicates, within the season, even during a closure", () => {
     expect(
       courseDates(
         { type: "dates", dates: ["2026-10-24", "2026-09-12", "2026-10-24", "2027-01-05"] },

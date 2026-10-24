@@ -132,28 +132,28 @@ afterAll(async () => {
 
 const search = (q: string) => withSchool(school, (tx) => searchPeople(tx, q));
 
-describe("rechercherPersonnes", () => {
-  it("trouve par nom sans accents, avec les personnes liées, sans l’autre école", async () => {
+describe("searchPeople", () => {
+  it("finds by name ignoring accents, with related people, without the other school", async () => {
     const r = await search("lefevre");
     expect(r.map((p) => p.firstName)).toEqual(["Hélène", "Noé", "Zoé"]);
     expect(r[0].liees).toEqual(["Noé Lefèvre", "Zoé Lefèvre"]);
     expect(r[2].liees).toEqual(["Hélène Lefèvre"]);
   });
 
-  it("trouve par « prénom nom », raison sociale et téléphone sans espaces", async () => {
+  it('finds by "first last" name, company name and phone without spaces', async () => {
     expect((await search("zoe lefe")).map((p) => p.id)).toEqual([zoe]);
     expect((await search("ateliers")).map((p) => p.id)).toEqual([cse]);
     expect((await search("0612345678")).map((p) => p.id)).toEqual([helene]);
   });
 
-  it("ne cherche pas en dessous de deux caractères, et liste toute l’école sinon", async () => {
+  it("does not search below two characters, and lists the whole school otherwise", async () => {
     expect(await search("z")).toEqual([]);
     expect(await withSchool(school, (tx) => listPeople(tx))).toHaveLength(5);
   });
 });
 
-describe("lirePersonne", () => {
-  it("donne les liens dans les deux sens, les cours et les documents", async () => {
+describe("readPerson", () => {
+  it("returns relationships in both directions, courses and documents", async () => {
     const z = await withSchool(school, (tx) => readPerson(tx, zoe));
     expect(z).toMatchObject({ firstName: "Zoé", birthDate: "2015-03-10", notes: "Asthme" });
     expect(z?.relationships).toEqual([
@@ -186,14 +186,14 @@ describe("lirePersonne", () => {
     expect(h?.relationships.map((l) => `${l.autre.name} ${l.sens}`)).toEqual(["Noé Lefèvre de", "Zoé Lefèvre de"]);
   });
 
-  it("ne lit pas une personne d’une autre école, ni un identifiant invalide", async () => {
+  it("does not read a person from another school, nor an invalid id", async () => {
     expect(await withSchool(school, (tx) => readPerson(tx, foreign))).toBeNull();
     expect(await withSchool(school, (tx) => readPerson(tx, "pas-un-uuid"))).toBeNull();
   });
 });
 
-describe("danseursPayables et payeursDe", () => {
-  it("un parent inscrit ceux pour qui il paie, et lui-même seulement s’il est élève", async () => {
+describe("payableStudents and payersOf", () => {
+  it("a parent enrolls those they pay for, and themselves only if they are a student", async () => {
     expect((await withSchool(school, (tx) => payableStudents(tx, helene))).map((d) => d.firstName)).toEqual([
       "Noé",
       "Zoé",
@@ -207,19 +207,19 @@ describe("danseursPayables et payeursDe", () => {
     await admin`UPDATE person SET is_student = false WHERE id = ${helene}`;
   });
 
-  it("un professionnel n’inscrit que ceux pour qui il paie ; un adulte seul s’inscrit lui-même", async () => {
+  it("an organisation enrolls only those it pays for; an adult on their own enrolls themselves", async () => {
     expect((await withSchool(school, (tx) => payableStudents(tx, cse))).map((d) => d.id)).toEqual([alex]);
     expect((await withSchool(school, (tx) => payableStudents(tx, alex))).map((d) => d.id)).toEqual([alex]);
   });
 
-  it("donne les payeurs d’un danseur", async () => {
+  it("returns a student's payers", async () => {
     expect(await withSchool(school, (tx) => payersOf(tx, alex))).toEqual([{ id: cse, name: "CSE Ateliers" }]);
     expect(await withSchool(school, (tx) => payersOf(tx, helene))).toEqual([]);
   });
 });
 
-describe("creerPersonne et modifierPersonne", () => {
-  it("crée un danseur seul, puis le modifie", async () => {
+describe("createPerson and updatePerson", () => {
+  it("creates a student on their own, then updates them", async () => {
     const r = await withSchool(school, (tx) =>
       createPerson(
         tx,
@@ -243,7 +243,7 @@ describe("creerPersonne et modifierPersonne", () => {
     });
   });
 
-  it("signale un doublon probable (téléphone sans espaces), puis crée si l’on confirme", async () => {
+  it("flags a likely duplicate (phone without spaces), then creates on confirmation", async () => {
     const julie = { ...vide, name: "Petit", firstName: "Julie", telephone: "0612345678" };
     expect(await withSchool(school, (tx) => createPerson(tx, julie, false))).toEqual({
       status: "doublons",
@@ -252,7 +252,7 @@ describe("creerPersonne et modifierPersonne", () => {
     expect((await withSchool(school, (tx) => createPerson(tx, julie, true))).status).toBe("ok");
   });
 
-  it("crée une personne déjà liée : un enfant dont Hélène paie les cours", async () => {
+  it("creates an already related person: a child whose classes Hélène pays for", async () => {
     const r = await withSchool(school, (tx) =>
       createPerson(tx, { ...vide, name: "Lefèvre", firstName: "Lou", birthDate: "2021-05-04" }, false, {
         otherId: helene,
@@ -270,7 +270,7 @@ describe("creerPersonne et modifierPersonne", () => {
     });
   });
 
-  it("enregistre un professionnel sous sa raison sociale, sans prénom ni naissance", async () => {
+  it("saves an organisation under its company name, without first name or birth date", async () => {
     const r = await withSchool(school, (tx) =>
       createPerson(
         tx,
@@ -296,8 +296,8 @@ describe("creerPersonne et modifierPersonne", () => {
   });
 });
 
-describe("liens", () => {
-  it("refuse un second lien entre deux personnes, quel que soit le sens, et un lien vers soi-même", async () => {
+describe("relationships", () => {
+  it("rejects a second relationship between two people in either direction, and a relationship to oneself", async () => {
     const base = { type: "other" as const, emergencyContact: false, paysFor: false };
     expect(
       await withSchool(school, (tx) => addRelationship(tx, { ...base, personId: zoe, relatedPersonId: helene })),
@@ -313,7 +313,7 @@ describe("liens", () => {
     });
   });
 
-  it("refuse un lien vers une personne d’une autre école", async () => {
+  it("rejects a relationship to a person from another school", async () => {
     expect(
       await withSchool(school, (tx) =>
         addRelationship(tx, {
@@ -327,7 +327,7 @@ describe("liens", () => {
     ).toEqual({ ok: false, message: "Personne introuvable." });
   });
 
-  it("ajoute, modifie puis supprime un lien", async () => {
+  it("adds, updates then deletes a relationship", async () => {
     const r = await withSchool(school, (tx) =>
       addRelationship(tx, {
         personId: alex,

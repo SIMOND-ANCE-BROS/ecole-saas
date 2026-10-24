@@ -3,8 +3,8 @@ import { recurrenceBadge, recurrenceText } from "./format";
 
 const c = { recurrence: "weekly" as const, weekday: 1, startDate: null, endDate: null, dates: [] };
 
-describe("recurrenceTexte", () => {
-  it("décrit chaque récurrence", () => {
+describe("recurrenceText", () => {
+  it("describes each recurrence", () => {
     expect(recurrenceText(c)).toBe("Chaque lundi");
     expect(recurrenceText({ ...c, recurrence: "biweekly", weekday: 3 })).toBe("Un mercredi sur deux");
     expect(recurrenceText({ ...c, startDate: "2026-11-01", endDate: "2026-11-17" })).toBe(
@@ -16,7 +16,7 @@ describe("recurrenceTexte", () => {
     );
   });
 
-  it("étiquette de l'agenda seulement si ce n'est pas « chaque semaine, toute la saison »", () => {
+  it("calendar badge only when it is not « chaque semaine, toute la saison »", () => {
     expect(recurrenceBadge(c)).toBeNull();
     expect(recurrenceBadge({ ...c, recurrence: "biweekly" })).toBe("1 sem. sur 2");
     expect(recurrenceBadge({ ...c, startDate: "2026-11-01" })).toBe("1 nov. → …");

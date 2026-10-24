@@ -52,8 +52,8 @@ afterAll(async () => {
   await admin.end();
 });
 
-describe("abonnement iCal", () => {
-  it("crée un jeton dont seule l’empreinte est gardée, et donne les séances à venir sans le remplacement", async () => {
+describe("iCal subscription", () => {
+  it("creates a token of which only the hash is kept, and gives the upcoming lessons without the substituted one", async () => {
     const token = await withSchool(school, (tx) => createCalendarToken(tx, camille));
     expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
     const [{ calendar_token_hash: jeton_agenda_hash }] =
@@ -75,14 +75,14 @@ describe("abonnement iCal", () => {
     });
   });
 
-  it("donne au remplaçant la séance qu’il assure", async () => {
+  it("gives the substitute the lesson they teach", async () => {
     const token = await withSchool(school, (tx) => createCalendarToken(tx, ines));
     expect(
       (await withSchool(school, (tx) => readCalendar(tx, token as string, "2026-10-20")))?.lessons.map((s) => s.date),
     ).toEqual(["2026-11-18"]);
   });
 
-  it("refuse un jeton d’une autre école, un jeton inconnu, et un jeton remplacé ou révoqué", async () => {
+  it("rejects a token from another school, an unknown token, and a replaced or revoked token", async () => {
     const old = (await withSchool(school, (tx) => createCalendarToken(tx, camille))) as string;
     expect(await withSchool(otherSchool, (tx) => readCalendar(tx, old, "2026-10-20"))).toBeNull();
     expect(await withSchool(school, (tx) => readCalendar(tx, "x".repeat(43), "2026-10-20"))).toBeNull();
@@ -95,7 +95,7 @@ describe("abonnement iCal", () => {
     expect(await withSchool(school, (tx) => calendarState(tx, camille))).toBeNull();
   });
 
-  it("coupe le lien d’un intervenant désactivé, même remis en base à la main", async () => {
+  it("cuts off the link of a deactivated instructor, even when restored by hand in the database", async () => {
     const token = (await withSchool(school, (tx) => createCalendarToken(tx, ines))) as string;
     const record = await withSchool(school, (tx) => readInstructor(tx, ines));
     if (!record) throw new Error("intervenant introuvable");

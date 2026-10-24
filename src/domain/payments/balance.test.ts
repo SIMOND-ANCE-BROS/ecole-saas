@@ -3,8 +3,8 @@ import { payerBalance } from "./balance";
 
 const TODAY = "2026-10-21";
 
-describe("soldePayeur", () => {
-  it("dû = inscriptions actives et terminées + carnets ; reste = dû − payé", () => {
+describe("payerBalance", () => {
+  it("due = active and ended enrollments + lesson packs; remaining = due − paid", () => {
     const s = payerBalance(
       [
         { status: "active", netPriceCents: 32_000 },
@@ -17,7 +17,7 @@ describe("soldePayeur", () => {
     expect(s).toEqual({ du: 54_050, paye: 20_000, remaining: 34_050, toCollect: 0, outsideCalculation: {} });
   });
 
-  it("trois chèques datés : tous comptés payés, ceux à venir signalés à encaisser", () => {
+  it("three dated cheques: all counted as paid, future ones flagged as to cash", () => {
     const s = payerBalance(
       [{ status: "active", netPriceCents: 30_000 }],
       [],
@@ -31,7 +31,7 @@ describe("soldePayeur", () => {
     expect(s).toMatchObject({ paye: 30_000, remaining: 0, toCollect: 20_000 });
   });
 
-  it("une correction (paiement négatif) réduit le payé ; un chèque arrivé à échéance n'est plus « à encaisser »", () => {
+  it("a correction (negative payment) reduces the paid amount; a cheque past its date is no longer « à encaisser »", () => {
     const s = payerBalance(
       [{ status: "active", netPriceCents: 15_000 }],
       [],
@@ -45,7 +45,7 @@ describe("soldePayeur", () => {
     expect(s).toMatchObject({ paye: 15_000, remaining: 0, toCollect: 0 });
   });
 
-  it("abandon, essai et liste d'attente restent hors du calcul, mais visibles (#99)", () => {
+  it("dropped, trial and waitlist stay out of the computation, but visible (#99)", () => {
     const s = payerBalance(
       [
         { status: "dropped", netPriceCents: 20_000 },

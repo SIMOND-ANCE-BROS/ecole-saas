@@ -99,17 +99,17 @@ afterAll(async () => {
 
 const toDeposit = () => withSchool(school, (tx) => paymentsToDeposit(tx, TODAY));
 
-describe("remises en banque", () => {
+describe("bank deposits", () => {
   let chequesDeposit: string;
 
-  it("à remettre : chèque arrivé à échéance et espèces ; ni carte, ni chèque différé, ni chèque entièrement corrigé", async () => {
+  it("to deposit: due cheque and cash; no card, no post-dated cheque, no fully reversed cheque", async () => {
     const r = await toDeposit();
     expect(r.cheque.map((p) => p.id)).toEqual([ids.cheque]);
     expect(r.cash.map((p) => p.id)).toEqual([ids.especes]);
     expect(r.holiday_voucher).toEqual([]);
   });
 
-  it("crée une remise de chèques ; refuse un chèque déjà remis, un autre moyen, un chèque pas encore à encaisser", async () => {
+  it("creates a cheque deposit; rejects an already deposited cheque, another payment method, a cheque not yet due", async () => {
     const r = await withSchool(school, (tx) =>
       createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [ids.cheque] }, TODAY),
     );
@@ -146,7 +146,7 @@ describe("remises en banque", () => {
     expect((await toDeposit()).cheque).toEqual([]);
   });
 
-  it("un paiement ne peut figurer que dans une seule remise (contrainte en base)", async () => {
+  it("a payment can belong to only one deposit (database constraint)", async () => {
     const [{ id: autre }] =
       await admin`INSERT INTO bank_deposit (school_id, date, method) VALUES (${school}, ${TODAY}, 'cheque') RETURNING id`;
     await expect(
@@ -155,7 +155,7 @@ describe("remises en banque", () => {
     await admin`DELETE FROM bank_deposit WHERE id = ${autre}`;
   });
 
-  it("bordereau, liste et journal des encaissements", async () => {
+  it("deposit slip, list and payments journal", async () => {
     const b = await withSchool(school, (tx) => readDeposit(tx, chequesDeposit));
     expect(b).toMatchObject({
       method: "cheque",
@@ -174,14 +174,14 @@ describe("remises en banque", () => {
     expect(await withSchool(school, (tx) => paymentLog(tx, TODAY, TODAY, "cash"))).toHaveLength(1);
   });
 
-  it("annuler une remise rend ses chèques à remettre et laisse une trace", async () => {
+  it("cancelling a deposit makes its cheques depositable again and leaves a trace", async () => {
     expect((await withSchool(school, (tx) => cancelDeposit(tx, director, chequesDeposit))).ok).toBe(true);
     expect((await toDeposit()).cheque.map((p) => p.id)).toEqual([ids.cheque]);
     const [t] = await admin`SELECT action FROM audit_log WHERE row_id = ${chequesDeposit} AND action = 'delete'`;
     expect(t?.action).toBe("delete");
   });
 
-  it("une autre école ne voit rien et ne peut pas remettre ces paiements", async () => {
+  it("another school sees nothing and cannot deposit these payments", async () => {
     expect(await withSchool(otherSchool, (tx) => listDeposits(tx))).toEqual([]);
     expect((await withSchool(otherSchool, (tx) => paymentsToDeposit(tx, TODAY))).cheque).toEqual([]);
     expect(

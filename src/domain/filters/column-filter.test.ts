@@ -16,8 +16,8 @@ const COURSE: ColumnDef = { id: "cours", label: "Cours", type: "texte" };
 const COLUMNS = [ENROLLMENT, AGE, BIRTH, NAME, COURSE];
 const vide: Filter = { mode: "et", conditions: [] };
 
-describe("filtre d'une colonne (menu du titre)", () => {
-  it("s'écrit en conditions de l'adresse et se relit à l'identique", () => {
+describe("column filter (header menu)", () => {
+  it("is written as URL conditions and read back unchanged", () => {
     let f = writeColumnFilter(vide, ENROLLMENT, { choice: ["Inscrit", EMPTY] });
     f = writeColumnFilter(f, AGE, { min: "3", max: "17" });
     f = writeColumnFilter(f, NAME, { text: "mart" });
@@ -36,7 +36,7 @@ describe("filtre d'une colonne (menu du titre)", () => {
     expect(readColumnFilter(reread, ENROLLMENT).choice).toEqual(["Inscrit", EMPTY]);
   });
 
-  it("remplace les conditions de sa colonne seulement ; vider retire le filtre ; repasse en ET", () => {
+  it("replaces only its own column's conditions; clearing removes the filter; switches back to AND", () => {
     const f = writeColumnFilter(
       {
         mode: "ou",
@@ -51,12 +51,12 @@ describe("filtre d'une colonne (menu du titre)", () => {
     expect(f).toEqual({ mode: "et", conditions: [{ column: "nom", operator: "contient", value: "a" }] });
   });
 
-  it("garde à part une condition que le menu ne sait pas montrer (ancien lien)", () => {
+  it("keeps aside a condition the menu cannot show (old link)", () => {
     const f: Filter = { mode: "et", conditions: [{ column: "nom", operator: "commence", value: "l" }] };
     expect(readColumnFilter(f, NAME)).toMatchObject({ text: "", otherConditions: [{ operator: "commence" }] });
   });
 
-  it("résume le filtre pour sa pastille", () => {
+  it("summarises the filter for its badge", () => {
     const r = (def: ColumnDef, f: Filter) => columnFilterSummary(def, readColumnFilter(f, def));
     expect(r(ENROLLMENT, writeColumnFilter(vide, ENROLLMENT, { choice: ["Inscrit", EMPTY] }))).toBe(
       "Inscription : Inscrit, aucune",
@@ -69,7 +69,7 @@ describe("filtre d'une colonne (menu du titre)", () => {
   });
 });
 
-describe("cases à cocher et bornes, en mémoire", () => {
+describe("checkboxes and bounds, in memory", () => {
   const rows = [
     { nom: "Léa", inscription: "Inscrit", cours: ["Jazz lun. 17:00"], age: 8, naissance: "2018-03-01" },
     { nom: "Hugo", inscription: "En attente", cours: [], age: 12, naissance: "2014-01-10" },
@@ -82,13 +82,13 @@ describe("cases à cocher et bornes, en mémoire", () => {
   const names = (def: ColumnDef, fc: Parameters<typeof writeColumnFilter>[2]) =>
     applyFilter(rows, writeColumnFilter(vide, def, fc), cols).map((l) => l.nom);
 
-  it("parmi : une valeur cochée, la case « vide », un élément d'une liste ; accents et majuscules ignorés", () => {
+  it("among: a checked value, the « vide » box, an element of a list; ignores accents and case", () => {
     expect(names(ENROLLMENT, { choice: ["inscrit", EMPTY] })).toEqual(["Léa", "Inès"]);
     expect(names(COURSE, { choice: ["Classique mer. 14:00"] })).toEqual(["Inès"]);
     expect(names(COURSE, { choice: [EMPTY] })).toEqual(["Hugo"]);
   });
 
-  it("bornes incluses d'un nombre et d'une date", () => {
+  it("inclusive bounds for a number and a date", () => {
     expect(names(AGE, { min: "8", max: "12" })).toEqual(["Léa", "Hugo"]);
     expect(names(BIRTH, { min: "2014-01-10", max: "2018-03-01" })).toEqual(["Léa", "Hugo"]);
     expect(names(BIRTH, { max: "2014-01-10" })).toEqual(["Hugo"]);

@@ -19,7 +19,7 @@ const response = (status: number, json: unknown) =>
 const jwt = (load: object) => `x.${Buffer.from(JSON.stringify(load)).toString("base64url")}.y`;
 
 describe("configuration", () => {
-  it("ne propose un fournisseur que s’il est configuré", () => {
+  it("offers a provider only when it is configured", () => {
     expect(credentials("google", { GOOGLE_CLIENT_ID: "a", GOOGLE_CLIENT_SECRET: "b" })).toEqual({
       identifier: "a",
       secret: "b",
@@ -27,7 +27,7 @@ describe("configuration", () => {
     expect(credentials("microsoft", { MICROSOFT_CLIENT_ID: "a" })).toBeNull();
   });
 
-  it("construit l’adresse d’autorisation avec PKCE et des portées minimales", () => {
+  it("builds the authorization URL with PKCE and minimal scopes", () => {
     const { challenge: challenge } = pkceChallenge();
     const url = new URL(
       authorizationUrl("google", "client", {
@@ -51,10 +51,10 @@ describe("configuration", () => {
   });
 });
 
-describe("état signé", () => {
+describe("signed state", () => {
   const e = { schoolId: "e1", instructorId: "i1", provider: "google" as const, nonce: "n" };
 
-  it("vérifie un état valide, refuse un état modifié, signé autrement ou expiré", () => {
+  it("accepts a valid state, rejects a tampered, differently signed or expired one", () => {
     const state = signState(e, "s", 1_000);
     expect(verifyState(state, "s", 2_000)).toMatchObject(e);
     expect(verifyState(state, "autre", 2_000)).toBeNull();
@@ -66,8 +66,8 @@ describe("état signé", () => {
   });
 });
 
-describe("jetons", () => {
-  it("échange le code contre un accès durable et lit le compte", async () => {
+describe("tokens", () => {
+  it("exchanges the code for lasting access and reads the account", async () => {
     let body = "";
     const r = await exchangeCode(
       "google",
@@ -87,13 +87,13 @@ describe("jetons", () => {
     expect(body).toContain("grant_type=authorization_code");
   });
 
-  it("signale un accès retiré (invalid_grant)", async () => {
+  it("reports revoked access (invalid_grant)", async () => {
     await expect(
       refresh("microsoft", id, "r", async () => response(400, { error: "invalid_grant" })),
     ).rejects.toBeInstanceOf(AccessRemoved);
   });
 
-  it("garde le nouveau jeton de rafraîchissement donné par Microsoft", async () => {
+  it("keeps the new refresh token given by Microsoft", async () => {
     expect(
       await refresh("microsoft", id, "r", async () => response(200, { access_token: "a", refresh_token: "r2" })),
     ).toEqual({
@@ -103,8 +103,8 @@ describe("jetons", () => {
   });
 });
 
-describe("plages occupées", () => {
-  it("lit la réponse free/busy de Google", () => {
+describe("busy ranges", () => {
+  it("reads Google's free/busy response", () => {
     expect(
       googleRanges({
         calendars: { primary: { busy: [{ start: "2026-11-04T15:00:00Z", end: "2026-11-04T17:00:00Z" }] } },
@@ -113,7 +113,7 @@ describe("plages occupées", () => {
     expect(googleRanges({})).toEqual([]);
   });
 
-  it("garde les événements Microsoft occupés et non annulés, en UTC", () => {
+  it("keeps busy, non-cancelled Microsoft events, in UTC", () => {
     const json = {
       value: [
         {
@@ -145,7 +145,7 @@ describe("plages occupées", () => {
     ]);
   });
 
-  it("suit les pages de Microsoft et envoie le jeton d’accès", async () => {
+  it("follows Microsoft's pages and sends the access token", async () => {
     const attendances: string[] = [];
     const ev = (day: string) => ({
       start: { dateTime: `2026-11-${day}T10:00:00` },

@@ -76,8 +76,8 @@ afterAll(async () => {
   await admin.end();
 });
 
-describe("grille", () => {
-  it("enregistre des prix, trie la combinaison, distingue une ligne réservée à une discipline", async () => {
+describe("tariff grid", () => {
+  it("saves prices, sorts the combination, distinguishes a row restricted to one discipline", async () => {
     await price({
       audience: "adult",
       combination: [60],
@@ -130,7 +130,7 @@ describe("grille", () => {
     ]);
   });
 
-  it("le moteur de tarif utilise le prix saisi", async () => {
+  it("the tariff engine uses the entered price", async () => {
     const r = await withSchool(school, (tx) =>
       enrollmentPreview(tx, payer, season, {
         studentIds: [ines],
@@ -142,7 +142,7 @@ describe("grille", () => {
     expect(r).toMatchObject({ status: "ok", newEnrollment: { status: "ok", grossPriceCents: 12500 } });
   });
 
-  it("retire une case libre, refuse de retirer une case déjà utilisée par une inscription", async () => {
+  it("removes an unused cell, refuses to remove a cell already used by an enrollment", async () => {
     expect(
       (
         await price({
@@ -188,7 +188,7 @@ describe("grille", () => {
     expect(row?.price.quarter).toMatchObject({ cents: 13000, used: true });
   });
 
-  it("refuse une combinaison vide, une discipline ou une saison d’une autre école", async () => {
+  it("rejects an empty combination, and a discipline or season from another school", async () => {
     expect(
       await price({
         audience: "adult",
@@ -219,8 +219,8 @@ describe("grille", () => {
   });
 });
 
-describe("fratrie et carnets", () => {
-  it("enregistre, modifie et retire la règle fratrie ; refuse taux et montant à la fois", async () => {
+describe("siblings and lesson packs", () => {
+  it("saves, updates and removes the siblings rule; rejects both a rate and an amount", async () => {
     const rule = {
       rateBps: 1000,
       amountCents: null,
@@ -242,7 +242,7 @@ describe("fratrie et carnets", () => {
     expect(await withSchool(school, (tx) => readSiblings(tx, season))).toBeNull();
   });
 
-  it("crée, met à jour et retire un carnet", async () => {
+  it("creates, updates and removes a lesson pack", async () => {
     const r = await withSchool(school, (tx) =>
       saveLessonPack(tx, season, { lessonCount: 5, maxPeople: 1, priceCents: 25000 }),
     );

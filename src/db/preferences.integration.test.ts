@@ -32,12 +32,12 @@ afterAll(async () => {
   await admin.end();
 });
 
-describe("préférences de colonnes", () => {
-  it("sans préférence : null", async () => {
+describe("column preferences", () => {
+  it("without a preference: null", async () => {
     expect(await withSchool(school, (tx) => readPreference(tx, frontDesk, "eleves"))).toBeNull();
   });
 
-  it("enregistre puis remplace, sans toucher aux autres membres, listes ou écoles", async () => {
+  it("saves then replaces, without touching other members, lists or schools", async () => {
     await withSchool(school, (tx) => savePreference(tx, frontDesk, "eleves", ["age", "-nom"]));
     await withSchool(school, (tx) => savePreference(tx, frontDesk, "eleves", ["nom", "age"]));
     await withSchool(school, (tx) => savePreference(tx, director, "eleves", ["telephone"]));
@@ -50,7 +50,7 @@ describe("préférences de colonnes", () => {
     expect(n).toBe(2);
   });
 
-  it("refuse un compte qui n'est pas membre de l'école courante", async () => {
+  it("rejects an account that is not a member of the current school", async () => {
     expect(await withSchool(otherSchool, (tx) => savePreference(tx, director, "eleves", ["nom"]))).toBe(false);
   });
 });
