@@ -16,7 +16,7 @@ describe("recurrenceText", () => {
     );
   });
 
-  it("calendar badge only when it is not « chaque semaine, toute la saison »", () => {
+  it("recurrenceBadge only when it is not « chaque semaine, toute la saison »", () => {
     expect(recurrenceBadge(c)).toBeNull();
     expect(recurrenceBadge({ ...c, recurrence: "biweekly" })).toBe("1 sem. sur 2");
     expect(recurrenceBadge({ ...c, startDate: "2026-11-01" })).toBe("1 nov. → …");

@@ -155,7 +155,7 @@ describe("bank deposits", () => {
     await admin`DELETE FROM bank_deposit WHERE id = ${autre}`;
   });
 
-  it("deposit slip, list and payments journal", async () => {
+  it("deposit slip, list and payment log", async () => {
     const b = await withSchool(school, (tx) => readDeposit(tx, chequesDeposit));
     expect(b).toMatchObject({
       method: "cheque",

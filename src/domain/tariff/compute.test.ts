@@ -72,7 +72,7 @@ describe("package selection (Ribas grid)", () => {
     expect(ok(r).grossPriceCents).toBe(75500);
   });
 
-  it("prices a student", () => {
+  it("prices the student (university) rate", () => {
     const [r] = ribas(enrollment({ audience: "student", period: "year", course: [60] })).enrollments;
     expect(ok(r).grossPriceCents).toBe(29000);
   });
@@ -129,7 +129,7 @@ describe("enrollments that cannot be priced", () => {
     });
   });
 
-  it("reports a student on two courses (missing from the grid)", () => {
+  it("reports a student-rate enrollment on two courses (missing from the grid)", () => {
     const [r] = ribas(enrollment({ audience: "student", course: [60, 60] })).enrollments;
     expect(r).toMatchObject({ status: "erreur", error: { code: "combinaison_absente" } });
   });
