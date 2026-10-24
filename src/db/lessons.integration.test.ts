@@ -104,14 +104,14 @@ const lessons = () => withSchool(school, (tx) => courseLessons(tx, wednesday));
 const dates = async () => (await lessons()).map((s) => s.date);
 const sync = () => withSchool(school, (tx) => syncLessons(tx, season, TODAY));
 
-describe("fermetures et génération des séances", () => {
-  it("génère les mercredis à venir de la saison, sans le passé, puis ne duplique rien", async () => {
+describe("closures and lesson generation", () => {
+  it("generates the season's upcoming Wednesdays, not past ones, then duplicates nothing", async () => {
     expect(await sync()).toEqual({ added: 6, removed: 0 });
     expect(await dates()).toEqual(["2026-10-21", "2026-10-28", "2026-11-04", "2026-11-11", "2026-11-18", "2026-11-25"]);
     expect(await sync()).toEqual({ added: 0, removed: 0 });
   });
 
-  it("refuse une fermeture dont la fin précède le début", async () => {
+  it("rejects a closure that ends before it starts", async () => {
     expect(
       await withSchool(school, (tx) =>
         addClosure(tx, season, { label: "Erreur", start: "2026-11-02", end: "2026-11-01" }),
@@ -122,7 +122,7 @@ describe("fermetures et génération des séances", () => {
     });
   });
 
-  it("retire les séances d’une fermeture, puis les remet quand elle est supprimée", async () => {
+  it("removes the lessons of a closure, then restores them when it is deleted", async () => {
     const r = await withSchool(school, (tx) =>
       addClosure(tx, season, { label: "Toussaint", start: "2026-10-17", end: "2026-11-01" }),
     );
@@ -136,8 +136,8 @@ describe("fermetures et génération des séances", () => {
   });
 });
 
-describe("appel", () => {
-  it("liste les danseurs inscrits et à l’essai, sans liste d’attente ni abandon", async () => {
+describe("attendance", () => {
+  it("lists active and trial students, without waitlisted or dropped ones", async () => {
     const [s] = await lessons();
     const attendance = await withSchool(school, (tx) => readAttendance(tx, s.id));
     expect(attendance).toMatchObject({
@@ -153,7 +153,7 @@ describe("appel", () => {
     ]);
   });
 
-  it("enregistre l’appel, le corrige, et marque la séance effectuée", async () => {
+  it("records attendance, corrects it, and marks the lesson as done", async () => {
     const [s] = await lessons();
     const lea = students["Léa"];
     const zoe = students["Zoé"];
@@ -177,7 +177,7 @@ describe("appel", () => {
     expect((await lessons())[0]).toMatchObject({ presents: 2, absents: 0 });
   });
 
-  it("refuse un danseur absent de la liste d’appel", async () => {
+  it("rejects a student missing from the attendance list", async () => {
     const [s] = await lessons();
     expect(
       await withSchool(school, (tx) => saveAttendance(tx, s.id, [{ studentId: students["Jules"], present: true }])),
@@ -187,7 +187,7 @@ describe("appel", () => {
     });
   });
 
-  it("ne retire jamais une séance dont l’appel est fait", async () => {
+  it("never removes a lesson whose attendance has been taken", async () => {
     await withSchool(school, (tx) =>
       addClosure(tx, season, { label: "Grève", start: "2026-10-21", end: "2026-10-21" }),
     );
@@ -196,8 +196,8 @@ describe("appel", () => {
   });
 });
 
-describe("remplacement et annulation", () => {
-  it("met un remplaçant actif sur une séance, refuse un inactif", async () => {
+describe("replacement and cancellation", () => {
+  it("assigns an active substitute to a lesson, rejects an inactive one", async () => {
     const s = (await lessons())[1];
     expect(await withSchool(school, (tx) => changeInstructor(tx, s.id, ines))).toEqual({ ok: true, id: s.id });
     expect((await withSchool(school, (tx) => readAttendance(tx, s.id)))?.instructorId).toBe(ines);
@@ -207,7 +207,7 @@ describe("remplacement et annulation", () => {
     });
   });
 
-  it("annule une séance sans appel, refuse si l’appel est fait, et refuse l’appel d’une séance annulée", async () => {
+  it("cancels a lesson without attendance, refuses once attendance is taken, and rejects attendance on a cancelled lesson", async () => {
     const [done, prevue] = await lessons();
     expect(await withSchool(school, (tx) => cancelLesson(tx, done.id))).toEqual({
       ok: false,
@@ -225,7 +225,7 @@ describe("remplacement et annulation", () => {
     expect((await lessons())[1]).toMatchObject({ id: prevue.id, status: "cancelled" });
   });
 
-  it("donne les séances du jour, sans celles d’une autre école", async () => {
+  it("returns today's lessons, without those of another school", async () => {
     const day = await withSchool(school, (tx) => dayLessons(tx, "2026-11-04"));
     expect(day.map((s) => `${s.startTime} ${s.discipline} ${s.doneAttendance}`)).toEqual(["17:00 Jazz false"]);
     expect(await withSchool(otherSchool, (tx) => dayLessons(tx, "2026-11-04"))).toEqual([]);
@@ -233,8 +233,8 @@ describe("remplacement et annulation", () => {
   });
 });
 
-describe("cours et séances", () => {
-  it("un nouveau titulaire reprend les séances prévues de l’ancien, pas celles d’un remplaçant", async () => {
+describe("courses and lessons", () => {
+  it("a new regular instructor takes over the previous one's planned lessons, not a substitute's", async () => {
     const before = await lessons();
     const course = await withSchool(school, (tx) => readCourse(tx, wednesday));
     if (!course) throw new Error("cours introuvable");
@@ -281,7 +281,7 @@ describe("cours et séances", () => {
     expect(after.filter((s) => s.status === "planned").every((s) => s.instructor === "Inès Prof")).toBe(true);
   });
 
-  it("refuse de supprimer un cours dont l’appel a été fait", async () => {
+  it("refuses to delete a course whose attendance has been taken", async () => {
     await admin`DELETE FROM enrollment_course WHERE course_id = ${wednesday}`;
     expect(await withSchool(school, (tx) => deleteCourse(tx, wednesday))).toEqual({
       ok: false,
@@ -290,13 +290,13 @@ describe("cours et séances", () => {
   });
 });
 
-describe("récurrences (#90)", () => {
+describe("recurrences (#90)", () => {
   const datesDe = async (courseId: string) =>
     (await admin`SELECT date::text AS date FROM lesson WHERE course_id = ${courseId} ORDER BY date`).map(
       (r) => r.date as string,
     );
 
-  it("une semaine sur deux, sur une période, et à dates précises (vacances comprises)", async () => {
+  it("every other week, over a period, and on specific dates (holidays included)", async () => {
     const template = await withSchool(school, (tx) => readCourse(tx, wednesday));
     if (!template) throw new Error("cours introuvable");
     const base = {
@@ -400,7 +400,7 @@ describe("récurrences (#90)", () => {
   });
 });
 
-describe("planning daté : déplacer une séance (#90)", () => {
+describe("dated schedule: moving a lesson (#90)", () => {
   let monday: string;
   const list = async () =>
     (
@@ -432,7 +432,7 @@ describe("planning daté : déplacer une séance (#90)", () => {
     await sync();
   });
 
-  it("cette séance seulement : elle change de jour et d'heure, sans être recréée à sa date d'origine", async () => {
+  it("this lesson only: it changes day and time without being recreated on its original date", async () => {
     const before = await list();
     const target = before[1];
     expect(
@@ -450,7 +450,7 @@ describe("planning daté : déplacer une séance (#90)", () => {
     expect(week.find((x) => x.id === target.id)).toMatchObject({ startTime: "11:30", moved: true });
   });
 
-  it("refuse une date déjà prise par le cours, hors saison, ou une séance annulée", async () => {
+  it("rejects a date already taken by the course, outside the season, or a cancelled lesson", async () => {
     const [a, b] = await list();
     expect(await move(a.id, { date: b.date, startTime: "10:00", durationMinutes: 60 }, "seance")).toEqual({
       status: "refus",
@@ -466,7 +466,7 @@ describe("planning daté : déplacer une séance (#90)", () => {
     );
   });
 
-  it("cette séance et les suivantes : le cours change, les précédentes gardent leur heure, le remplaçant reste", async () => {
+  it("this lesson and the following ones: the course changes, earlier lessons keep their time, the substitute stays", async () => {
     const before = await list();
     const [, , pivot, then] = before;
     await withSchool(school, (tx) => changeInstructor(tx, then.id, ines));

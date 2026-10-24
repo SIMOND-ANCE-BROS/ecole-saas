@@ -65,8 +65,8 @@ afterAll(async () => {
   await admin.end();
 });
 
-describe("création guidée", () => {
-  it("crée une mineure avec un nouveau responsable, à prévenir et facturé", async () => {
+describe("guided creation", () => {
+  it("creates a minor with a new guardian, emergency contact and payer", async () => {
     zoe = idDe(
       await create({
         student: person({ name: "Lefèvre", firstName: "Zoé", birthDate: "2015-03-10" }),
@@ -90,7 +90,7 @@ describe("création guidée", () => {
     });
   });
 
-  it("signale le responsable déjà connu, puis rattache le frère au même payeur : fratrie", async () => {
+  it("flags the already known guardian, then links the brother to the same payer: siblings", async () => {
     const noe = {
       student: person({ name: "Lefèvre", firstName: "Noé", birthDate: "2017-11-02" }),
       guardian: { newPerson: person({ name: "Lefèvre", firstName: "Hélène", telephone: "0612345678" }) },
@@ -103,7 +103,7 @@ describe("création guidée", () => {
     expect((await record(zoe))?.siblings.map((f) => f.firstName)).toEqual(["Noé"]);
   });
 
-  it("crée un adulte seul, qui paie lui-même, et signale un mineur sans payeur", async () => {
+  it("creates an adult on their own who pays for themselves, and flags a minor without a payer", async () => {
     const ines = idDe(
       await create({
         student: person({ name: "Moreau", firstName: "Inès", birthDate: "1992-07-14" }),
@@ -124,7 +124,7 @@ describe("création guidée", () => {
     expect((await record(lou))?.billedTo).toEqual({ type: "aucun" });
   });
 
-  it("facture un organisme créé dans la foulée", async () => {
+  it("bills an organisation created on the fly", async () => {
     const paul = idDe(
       await create({
         student: person({ name: "Durand", firstName: "Paul", birthDate: "1980-01-01" }),
@@ -140,7 +140,7 @@ describe("création guidée", () => {
     expect((await withSchool(school, (tx) => listContacts(tx, "ateliers"))).map((c) => c.students)).toEqual([["Paul"]]);
   });
 
-  it("n’enregistre rien quand une partie est refusée (responsable d’une autre école)", async () => {
+  it("saves nothing when one part is rejected (guardian from another school)", async () => {
     const [{ before }] = await admin`SELECT count(*)::int AS before FROM person WHERE school_id = ${school}`;
     await expect(
       create(
@@ -159,8 +159,8 @@ describe("création guidée", () => {
   });
 });
 
-describe("listes", () => {
-  it("liste les élèves avec responsables et payeur, et retrouve un enfant par le téléphone de sa mère", async () => {
+describe("lists", () => {
+  it("lists students with guardians and payer, and finds a child by their mother's phone", async () => {
     const students = await withSchool(school, (tx) => listStudents(tx));
     expect(students.map((e) => e.firstName)).toEqual(["Paul", "Noé", "Zoé", "Inès", "Lou"]);
     expect(students.find((e) => e.firstName === "Zoé")).toMatchObject({
@@ -175,15 +175,15 @@ describe("listes", () => {
     expect(await withSchool(school, (tx) => listStudents(tx, "x"))).toEqual([]);
   });
 
-  it("liste les contacts sans les élèves, ni ceux d’une autre école", async () => {
+  it("lists contacts without students, nor those of another school", async () => {
     const contacts = await withSchool(school, (tx) => listContacts(tx));
     expect(contacts.map((c) => c.companyName ?? c.firstName)).toEqual(["CSE Ateliers", "Hélène"]);
     expect(contacts.find((c) => c.firstName === "Hélène")?.students.sort()).toEqual(["Noé", "Zoé"]);
   });
 });
 
-describe("modifications depuis la fiche", () => {
-  it("change le payeur : l’élève elle-même, puis à nouveau sa mère", async () => {
+describe("changes from the person record", () => {
+  it("changes the payer: the student herself, then her mother again", async () => {
     expect(await withSchool(school, (tx) => setBilling(tx, zoe, { type: "eleve" }))).toEqual({
       ok: true,
       id: zoe,
@@ -193,7 +193,7 @@ describe("modifications depuis la fiche", () => {
     expect((await record(zoe))?.billedTo).toMatchObject({ type: "personne", id: helene });
   });
 
-  it("retourne un lien saisi dans l’autre sens pour en faire le payeur", async () => {
+  it("reverses a relationship entered the other way round to make them the payer", async () => {
     const [{ id: conjoint }] =
       await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Moreau', 'Sam') RETURNING id`;
     const [{ id: ines }] = await admin`SELECT id FROM person WHERE school_id = ${school} AND first_name = 'Inès'`;
@@ -204,7 +204,7 @@ describe("modifications depuis la fiche", () => {
     expect(f?.otherRelationships).toMatchObject([{ name: "Sam Moreau", relation: "partner", paysFor: true }]);
   });
 
-  it("fait d’un proche existant un responsable, et refuse un responsable d’une autre école", async () => {
+  it("makes an existing relative a guardian, and rejects a guardian from another school", async () => {
     const [{ id: lou }] = await admin`SELECT id FROM person WHERE school_id = ${school} AND first_name = 'Lou'`;
     expect((await withSchool(school, (tx) => addGuardian(tx, lou, { id: helene }, true))).ok).toBe(true);
     expect((await record(lou))?.guardians).toMatchObject([{ id: helene, toNotify: true, paysFor: false }]);
@@ -214,7 +214,7 @@ describe("modifications depuis la fiche", () => {
     });
   });
 
-  it("ne lit pas un élève d’une autre école", async () => {
+  it("does not read a student from another school", async () => {
     expect(await withSchool(otherSchool, (tx) => readStudent(tx, zoe, TODAY))).toBeNull();
   });
 });

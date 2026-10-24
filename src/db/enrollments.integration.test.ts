@@ -99,14 +99,14 @@ const preview = (entry: ReturnType<typeof enfant>) =>
 const save = (entry: ReturnType<typeof enfant>) =>
   withSchool(ids.ecole, (tx) => saveEnrollment(tx, ids.payeur, ids.saison, entry));
 
-describe("Inscription", () => {
-  it("donne un aperçu du prix pour un premier enfant, sans fratrie", async () => {
+describe("Enrollment", () => {
+  it("previews the price for a first child, without siblings discount", async () => {
     const a = await preview(enfant([ids.zoe], [ids.jazz60]));
     if (a.status !== "ok") throw new Error(a.message);
     expect(a.newEnrollment).toMatchObject({ status: "ok", grossPriceCents: 11000, netPriceCents: 11000 });
   });
 
-  it("enregistre l’inscription au prix recalculé côté serveur", async () => {
+  it("saves the enrollment at the price recomputed on the server", async () => {
     const r = await save(enfant([ids.zoe], [ids.jazz60]));
     if (!r.ok) throw new Error(r.message);
     const [row] =
@@ -126,7 +126,7 @@ describe("Inscription", () => {
     expect(linkedCourses).toEqual([{ student_id: ids.zoe, course_id: ids.jazz60 }]);
   });
 
-  it("applique la fratrie avec l’inscription déjà enregistrée, et le signale pour elle", async () => {
+  it("applies the siblings discount with the already saved enrollment, and flags it for that one", async () => {
     const a = await preview(enfant([ids.noe], [ids.jazz60]));
     if (a.status !== "ok") throw new Error(a.message);
     expect(a.newEnrollment).toMatchObject({ grossPriceCents: 11000, discountCents: 1100, netPriceCents: 9900 });
@@ -134,14 +134,14 @@ describe("Inscription", () => {
     expect(a.existingImpacts[0]).toMatchObject({ students: "Zoé", savedDeposit: 0, recalculatedDiscount: 1100 });
   });
 
-  it("enregistre le second enfant avec la fratrie (deux cours de la même discipline)", async () => {
+  it("saves the second child with the siblings discount (two courses of the same discipline)", async () => {
     const r = await save(enfant([ids.noe], [ids.jazz45, ids.jazz60]));
     if (!r.ok) throw new Error(r.message);
     const [row] = await admin`SELECT gross_price_cents, discount_cents, discounts FROM enrollment WHERE id = ${r.id}`;
     expect(row).toMatchObject({ gross_price_cents: 16500, discount_cents: 1650, discounts: ["fratrie"] });
   });
 
-  it("liste les inscriptions payées par la personne pour la saison", async () => {
+  it("lists the enrollments paid by the person for the season", async () => {
     const list = await withSchool(ids.ecole, (tx) => enrollmentsPaidBy(tx, ids.payeur, ids.saison));
     expect(list.map((i) => [i.students, i.netPriceCents])).toEqual([
       ["Noé", 14850],
@@ -150,21 +150,21 @@ describe("Inscription", () => {
   });
 });
 
-describe("Refus", () => {
-  it("refuse un danseur d’un autre payeur", async () => {
+describe("Rejections", () => {
+  it("rejects a student of another payer", async () => {
     expect(await save(enfant([ids.etranger], [ids.jazz60]))).toMatchObject({ ok: false });
   });
 
-  it("refuse un cours d’une autre saison", async () => {
+  it("rejects a course from another season", async () => {
     expect(await save(enfant([ids.zoe], [ids.autreSaison60]))).toMatchObject({ ok: false });
   });
 
-  it("refuse un couple à un seul danseur", async () => {
+  it("rejects a couple with a single student", async () => {
     const r = await save({ ...enfant([ids.zoe], [ids.jazz60]), audience: "couple" as never });
     expect(r).toMatchObject({ ok: false, message: "Un couple réunit deux danseurs." });
   });
 
-  it("refuse une combinaison absente de la grille, sans rien enregistrer", async () => {
+  it("rejects a combination missing from the grid, without saving anything", async () => {
     const [{ before }] = await admin`SELECT count(*)::int AS before FROM enrollment WHERE school_id = ${ids.ecole}`;
     const r = await save(enfant([ids.zoe], [ids.jazz60, ids.classique60, ids.jazz45]));
     expect(r).toMatchObject({ ok: false });
@@ -175,13 +175,13 @@ describe("Refus", () => {
   });
 });
 
-describe("Tableau de bord et effectifs", () => {
-  it("compte les inscriptions, les danseurs et le montant de la saison", async () => {
+describe("Dashboard and headcounts", () => {
+  it("counts the season's enrollments, students and total amount", async () => {
     const digits = await withSchool(ids.ecole, (tx) => seasonFigures(tx, ids.saison));
     expect(digits).toEqual({ enrollments: 2, students: 2, netTotalCents: 11000 + 14850 });
   });
 
-  it("liste les dernières inscriptions, la plus récente d’abord", async () => {
+  it("lists the latest enrollments, most recent first", async () => {
     const dernieres = await withSchool(ids.ecole, (tx) => lastEnrollments(tx, ids.saison));
     expect(dernieres.map((d) => [d.students, d.payer, d.netPriceCents])).toEqual([
       ["Noé", "Test Famille", 14850],
@@ -189,7 +189,7 @@ describe("Tableau de bord et effectifs", () => {
     ]);
   });
 
-  it("donne l’effectif de chaque cours", async () => {
+  it("gives the headcount of each course", async () => {
     const courses = await withSchool(ids.ecole, (tx) => seasonCourses(tx, ids.saison));
     const effective = Object.fromEntries(courses.map((c) => [c.id, c.enrolled]));
     expect(effective).toEqual({ [ids.jazz60]: 2, [ids.jazz45]: 1, [ids.classique60]: 0 });

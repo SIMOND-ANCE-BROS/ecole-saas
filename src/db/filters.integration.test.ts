@@ -118,15 +118,15 @@ const sorted = async (sort: string, order: string) =>
     )
   ).map((e) => e.firstName);
 
-describe("tri et boutons de filtre (#107)", () => {
-  it("trie par une colonne, les vides en dernier dans les deux sens", async () => {
+describe("sorting and filter buttons (#107)", () => {
+  it("sorts by a column, with empty values last in both directions", async () => {
     expect(await sorted("age", "asc")).toEqual(["Léa", "Hugo", "Inès"]);
     expect(await sorted("age", "desc")).toEqual(["Hugo", "Léa", "Inès"]);
     expect(await sorted("nom", "desc")).toEqual(["Léa", "Inès", "Hugo"]);
     expect(await sorted("responsables", "asc")).toEqual(["Inès", "Léa", "Hugo"]);
   });
 
-  it("cases à cocher (statut, cours, « vide ») et bornes, comme en mémoire", async () => {
+  it("checkboxes (status, course, « vide ») and bounds, as in memory", async () => {
     const def = (id: string) => STUDENT_COLUMNS.find((c) => c.id === id)!;
     const par = (id: string, fc: Parameters<typeof writeColumnFilter>[2]) =>
       students(toParams(writeColumnFilter(EMPTY_FILTER, def(id), fc)).map(([, v]) => v));
@@ -141,40 +141,40 @@ describe("tri et boutons de filtre (#107)", () => {
   });
 });
 
-describe("élèves", () => {
-  it("nom, accents ignorés, sans voir l'autre école", async () => {
+describe("students", () => {
+  it("name, ignoring accents, without seeing the other school", async () => {
     expect(await students(["nom.contient.LEA"])).toEqual(["Léa"]);
   });
 
-  it("âge : comparaison, et vide sans date de naissance", async () => {
+  it("age: comparison, and empty without a birth date", async () => {
     expect(await students(["age.sup.10"])).toEqual(["Hugo"]);
     expect(await students(["age.vide"])).toEqual(["Inès"]);
     expect(await students(["age.different.8"])).toEqual(["Hugo", "Inès"]);
   });
 
-  it("responsables : un élément de la liste, ou liste vide", async () => {
+  it("guardians: one item of the list, or an empty list", async () => {
     expect(await students(["responsables.est.anne petit"])).toEqual(["Inès"]);
     expect(await students(["responsables.vide"])).toEqual(["Hugo"]);
   });
 
-  it("facturé à et téléphone (celui du responsable à prévenir compte)", async () => {
+  it("billed to and phone (the emergency-contact guardian's phone counts)", async () => {
     expect(await students(["facture.contient.ateliers"])).toEqual(["Inès"]);
     expect(await students(["facture.vide"])).toEqual(["Hugo"]);
     expect(await students(["telephone.contient.12 34"])).toEqual(["Léa"]);
     expect(await students(["telephone.vide"])).toEqual(["Inès"]);
   });
 
-  it("OU et ET", async () => {
+  it("OR and AND", async () => {
     expect(await students(["nom.commence.hugo", "age.vide"], "ou")).toEqual(["Hugo", "Inès"]);
     expect(await students(["nom.commence.hugo", "age.vide"])).toEqual([]);
   });
 
-  it("une apostrophe ou un % restent de simples caractères", async () => {
+  it("an apostrophe or a % stays a plain character", async () => {
     expect(await students(["nom.contient.o'brien"])).toEqual([]);
     expect(await students(["nom.contient.%"])).toEqual([]);
   });
 
-  it("SQL et évaluation en mémoire donnent le même résultat", async () => {
+  it("SQL and in-memory evaluation give the same result", async () => {
     const toutes = await withSchool(school, (tx) => listStudents(tx, "", { today: TODAY }));
     const columns = STUDENT_COLUMNS.map((c) => ({
       ...c,
@@ -199,8 +199,8 @@ describe("élèves", () => {
   });
 });
 
-describe("colonnes ajoutées (#89)", () => {
-  it("valeurs : e-mail du responsable, cours de la saison, statut, personnes à prévenir", async () => {
+describe("added columns (#89)", () => {
+  it("values: guardian e-mail, season courses, status, emergency contacts", async () => {
     const rows = await withSchool(school, (tx) => listStudents(tx, "", { today: TODAY, seasonId: season }));
     const lea = rows.find((e) => e.firstName === "Léa");
     expect(lea).toMatchObject({
@@ -218,7 +218,7 @@ describe("colonnes ajoutées (#89)", () => {
     });
   });
 
-  it("filtres sur ces colonnes", async () => {
+  it("filters on these columns", async () => {
     expect(await students(["cours.contient.jazz"])).toEqual(["Léa"]);
     expect(await students(["inscription.est.en attente"])).toEqual(["Hugo"]);
     expect(await students(["inscription.vide"])).toEqual(["Inès"]);
@@ -228,14 +228,14 @@ describe("colonnes ajoutées (#89)", () => {
     expect(await students(["prevenir.contient.06 12"])).toEqual(["Léa"]);
   });
 
-  it("sans saison : ni cours ni inscription", async () => {
+  it("without a season: no course and no enrollment", async () => {
     const rows = await withSchool(school, (tx) => listStudents(tx, "", { today: TODAY }));
     expect(rows.every((e) => e.courses.length === 0 && e.enrollmentStatus === null)).toBe(true);
   });
 });
 
 describe("contacts", () => {
-  it("élèves suivis, nom d'organisme, e-mail renseigné", async () => {
+  it("related students, organisation name, e-mail filled in", async () => {
     expect(await contacts(["eleves.contient.lea"])).toEqual(["Sophie"]);
     expect(await contacts(["nom.contient.ateliers"])).toEqual(["CSE Ateliers"]);
     expect(await contacts(["email.non_vide"])).toEqual(["Sophie"]);

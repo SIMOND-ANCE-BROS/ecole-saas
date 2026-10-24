@@ -7,17 +7,17 @@ const TEAM: TeamMember[] = [
   { id: "front_desk", role: "front_desk", active: true },
 ];
 
-describe("refusChangement", () => {
-  it("permet de changer le rôle ou l'activité d'un autre membre", () => {
+describe("changeRefusal", () => {
+  it("allows changing another member's role or activity", () => {
     expect(changeRefusal(TEAM, "diana", "front_desk", { role: "director", active: true })).toBeNull();
     expect(changeRefusal(TEAM, "diana", "anthony", { role: "director", active: false })).toBeNull();
   });
 
-  it("refuse de modifier son propre accès", () => {
+  it("refuses to change one's own access", () => {
     expect(changeRefusal(TEAM, "diana", "diana", { role: "front_desk", active: true })).toMatch(/propre accès/);
   });
 
-  it("refuse de retirer la dernière personne active de la direction", () => {
+  it("refuses to remove the last active director", () => {
     const only: TeamMember[] = [TEAM[0], { ...TEAM[1], active: false }, TEAM[2]];
     expect(changeRefusal(only, "front_desk", "diana", { role: "front_desk", active: true })).toBe(
       "Il faut au moins une personne active à la direction.",
@@ -31,7 +31,7 @@ describe("refusChangement", () => {
   });
 });
 
-it("refusMotDePasse : longueur et confirmation", () => {
+it("passwordRefusal: length and confirmation", () => {
   expect(passwordRefusal("court", "court")).toMatch(/10 caractères/);
   expect(passwordRefusal("une phrase de passe", "une phrase de pass")).toMatch(/identiques/);
   expect(passwordRefusal("une phrase de passe", "une phrase de passe")).toBeNull();

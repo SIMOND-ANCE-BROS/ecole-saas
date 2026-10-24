@@ -10,50 +10,50 @@ const COLUMNS: ColumnDef[] = [
 ];
 const view = (d: ReturnType<typeof readLayout>) => writeLayout(d).join(" ");
 
-describe("lireDisposition", () => {
-  it("sans préférence : ordre des définitions, colonnes optionnelles masquées", () => {
+describe("readLayout", () => {
+  it("without a preference: definition order, optional columns hidden", () => {
     expect(view(readLayout(COLUMNS, null))).toBe("nom age telephone -naissance");
   });
 
-  it("garde l'ordre et la visibilité choisis ; ignore inconnus et doublons", () => {
+  it("keeps the chosen order and visibility; ignores unknown ids and duplicates", () => {
     expect(view(readLayout(COLUMNS, ["telephone", "inconnue", "-age", "telephone", "naissance", "nom"]))).toBe(
       "telephone -age naissance nom",
     );
   });
 
-  it("une colonne ajoutée depuis prend sa visibilité par défaut, à la fin", () => {
+  it("a column added since then gets its default visibility, at the end", () => {
     expect(view(readLayout(COLUMNS, ["age", "nom"]))).toBe("age nom telephone -naissance");
   });
 
-  it("une colonne obligatoire (le nom) reste affichée, même masquée par une ancienne préférence", () => {
+  it("a required column (the name) stays shown, even when hidden by an old preference", () => {
     const withName = COLUMNS.map((c) => (c.id === "nom" ? { ...c, required: true } : c));
     expect(view(readLayout(withName, ["-nom@120", "age"]))).toBe("nom@120 age telephone -naissance");
   });
 
-  it("au moins une colonne visible", () => {
+  it("at least one visible column", () => {
     expect(view(readLayout(COLUMNS, ["-nom", "-age", "-telephone", "-naissance"]))).toBe(
       "nom -age -telephone -naissance",
     );
   });
 });
 
-describe("modifier", () => {
+describe("edit", () => {
   const d = readLayout(COLUMNS, null);
-  it("déplace d'un cran, sans sortir des bords", () => {
+  it("moves one step, without going past the edges", () => {
     expect(view(move(d, "age", -1))).toBe("age nom telephone -naissance");
     expect(view(move(d, "nom", -1))).toBe(view(d));
     expect(view(move(d, "naissance", 1))).toBe(view(d));
   });
 
-  it("affiche et masque, sauf la dernière colonne visible", () => {
+  it("shows and hides, except the last visible column", () => {
     expect(view(toggle(d, "naissance"))).toBe("nom age telephone naissance");
     const only = readLayout(COLUMNS, ["nom", "-age", "-telephone", "-naissance"]);
     expect(view(toggle(only, "nom"))).toBe(view(only));
   });
 });
 
-describe("largeurs et glisser-déposer (#102)", () => {
-  it("lit et écrit les largeurs, bornées ; l'ancien format reste lu", () => {
+describe("widths and drag and drop (#102)", () => {
+  it("reads and writes widths, within bounds; the old format is still read", () => {
     const d = readLayout(COLUMNS, ["nom@180", "-age@20", "telephone@9999", "naissance@abc"]);
     expect(d).toEqual([
       { id: "nom", visible: true, width: 180 },
@@ -66,7 +66,7 @@ describe("largeurs et glisser-déposer (#102)", () => {
     expect(view(resize(d, "naissance", 123.6))).toBe("nom@180 -age@60 telephone@1200 naissance@124");
   });
 
-  it("place une colonne devant une autre, ou à la fin", () => {
+  it("places a column before another one, or at the end", () => {
     const d = readLayout(COLUMNS, null);
     expect(view(place(d, "telephone", "nom"))).toBe("telephone nom age -naissance");
     expect(view(place(d, "nom", null))).toBe("age telephone -naissance nom");

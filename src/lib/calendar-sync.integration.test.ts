@@ -51,15 +51,15 @@ afterAll(async () => {
 
 const rangesOf = () => withSchool(school, (tx) => listUnavailabilities(tx, camille, NOW));
 
-describe("synchroniserAgenda", () => {
-  it("garde le jeton chiffré en base, jamais en clair", async () => {
+describe("syncCalendar", () => {
+  it("keeps the token encrypted in the database, never in clear", async () => {
     const [{ encrypted_token: jeton_chiffre }] =
       await admin`SELECT encrypted_token FROM calendar_connection WHERE instructor_id = ${camille}`;
     expect(jeton_chiffre).not.toContain("fake-r1");
     expect(decrypt(jeton_chiffre)).toBe("fake-r1");
   });
 
-  it("enregistre les plages occupées, garde la saisie, et prend le jeton renouvelé", async () => {
+  it("saves busy ranges, keeps manual entries, and takes the renewed token", async () => {
     const attendances: string[] = [];
     const fakeFetch: typeof fetch = async (u, init) => {
       attendances.push(String(u));
@@ -88,7 +88,7 @@ describe("synchroniserAgenda", () => {
     expect(attendances).toHaveLength(2);
   });
 
-  it("note un accès retiré sans perdre les plages déjà lues", async () => {
+  it("records revoked access without losing ranges already read", async () => {
     const r = await syncCalendar(school, camille, async () => response(400, { error: "invalid_grant" }), NOW);
     expect(r).toEqual({ ok: false, message: "Accès à l’agenda retiré ou expiré : reconnecter l’agenda." });
     expect((await withSchool(school, (tx) => connectionState(tx, camille)))?.error).toBe(
@@ -97,7 +97,7 @@ describe("synchroniserAgenda", () => {
     expect(await rangesOf()).toHaveLength(2);
   });
 
-  it("ne révèle rien d’une panne du fournisseur", async () => {
+  it("reveals nothing about a provider outage", async () => {
     const panne: typeof fetch = async () => {
       throw new Error("ECONNRESET camille@exemple.test");
     };
@@ -107,7 +107,7 @@ describe("synchroniserAgenda", () => {
     });
   });
 
-  it("déconnecte l’agenda ; la saisie reste", async () => {
+  it("disconnects the calendar; manual entries remain", async () => {
     expect(await withSchool(school, (tx) => deleteConnection(tx, camille))).toBe(true);
     expect((await rangesOf()).some((i) => i.source === "manual")).toBe(true);
     expect(await syncCalendar(school, camille, fetch, NOW)).toEqual({
@@ -116,7 +116,7 @@ describe("synchroniserAgenda", () => {
     });
   });
 
-  it("n’enregistre ni ne synchronise l’agenda d’un intervenant désactivé, et efface sa connexion", async () => {
+  it("neither saves nor syncs the calendar of a deactivated instructor, and deletes its connection", async () => {
     await withSchool(school, (tx) =>
       saveConnection(tx, camille, { provider: "microsoft", account: null, encryptedToken: encrypt("r") }),
     );

@@ -48,12 +48,12 @@ class Cancellation extends Error {
   }
 }
 
-describe("Clés étrangères entre écoles", () => {
-  it("associent toujours school_id à school_id", async () => {
+describe("Foreign keys across schools", () => {
+  it("always pair school_id with school_id", async () => {
     expect(await defects(admin)).toEqual([]);
   });
 
-  it("détecte une clé étrangère simple entre deux tables d’école", async () => {
+  it("detects a plain foreign key between two school tables", async () => {
     // Checks the guard itself, on rolled-back probe tables.
     const result = await admin
       .begin(async (tx) => {

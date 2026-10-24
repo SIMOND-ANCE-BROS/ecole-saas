@@ -38,60 +38,60 @@ function ok(r: EnrollmentResult) {
 
 const siblings = (r: EnrollmentResult) => ok(r).discounts.find((d) => d.code === "fratrie");
 
-describe("choix du forfait (grille Ribas)", () => {
-  it("tarife un enfant à 1 h 00 par semaine au trimestre", () => {
+describe("package selection (Ribas grid)", () => {
+  it("prices a child at 1 h 00 per week, quarterly", () => {
     const [r] = ribas(enrollment({ course: [60] })).enrollments;
     expect(ok(r)).toMatchObject({ grossPriceCents: 11000, packageLabel: "1 h 00", netPriceCents: 11000 });
   });
 
-  it("ignore l’ordre de saisie des cours", () => {
+  it("ignores the order in which courses are entered", () => {
     const [r] = ribas(enrollment({ course: [60, 45] })).enrollments;
     expect(ok(r)).toMatchObject({ grossPriceCents: 16500, packageLabel: "45 min + 1 h 00" });
   });
 
-  it("distingue deux combinaisons de même durée totale (2 h 30)", () => {
+  it("tells apart two combinations with the same total duration (2 h 30)", () => {
     const [a, b] = ribas(enrollment({ course: [45, 45, 60] }), enrollment({ course: [60, 90] })).enrollments;
     expect(ok(a).grossPriceCents).toBe(19500);
     expect(ok(b).grossPriceCents).toBe(22000);
   });
 
-  it("applique la périodicité annuelle", () => {
+  it("applies the yearly periodicity", () => {
     const [r] = ribas(enrollment({ course: [90, 90], period: "year" })).enrollments;
     expect(ok(r).grossPriceCents).toBe(64500);
   });
 
-  it("tarife un adulte sur 3 cours", () => {
+  it("prices an adult on 3 courses", () => {
     const [r] = ribas(enrollment({ audience: "adult", course: [60, 90, 60] })).enrollments;
     expect(ok(r)).toMatchObject({ grossPriceCents: 28500, packageLabel: "1 h 00 + 1 h 00 + 1 h 30" });
   });
 
-  it("tarife un couple au prix du couple", () => {
+  it("prices a couple at the couple rate", () => {
     const [r] = ribas(
       enrollment({ audience: "couple", studentIds: ["a", "b"], period: "year", course: [90] }),
     ).enrollments;
     expect(ok(r).grossPriceCents).toBe(75500);
   });
 
-  it("tarife un étudiant", () => {
+  it("prices the student (university) rate", () => {
     const [r] = ribas(enrollment({ audience: "student", period: "year", course: [60] })).enrollments;
     expect(ok(r).grossPriceCents).toBe(29000);
   });
 
-  it("tarife un cours à l’unité", () => {
+  it("prices a drop-in lesson", () => {
     const [r] = ribas(enrollment({ audience: "adult", period: "single", course: [90] })).enrollments;
     expect(ok(r).grossPriceCents).toBe(2000);
   });
 });
 
-describe("forfait réservé à une discipline", () => {
+describe("package restricted to one discipline", () => {
   const zumba = (duration: number) => ({ disciplineId: ZUMBA, durationMinutes: duration });
 
-  it("prend la ligne Zumba quand tous les cours sont de la Zumba", () => {
+  it("uses the Zumba row when every course is Zumba", () => {
     const [r] = ribas(enrollment({ audience: "adult", period: "year", course: [zumba(60), zumba(60)] })).enrollments;
     expect(ok(r).grossPriceCents).toBe(43000);
   });
 
-  it("prend la ligne générale quand les disciplines sont mélangées", () => {
+  it("uses the general row when disciplines are mixed", () => {
     const [r] = ribas(
       enrollment({
         audience: "adult",
@@ -102,14 +102,14 @@ describe("forfait réservé à une discipline", () => {
     expect(ok(r).grossPriceCents).toBe(52000);
   });
 
-  it("revient à la ligne générale si la discipline n’a pas de ligne pour cette périodicité", () => {
+  it("falls back to the general row when the discipline has no row for this periodicity", () => {
     const [r] = ribas(enrollment({ audience: "adult", course: [zumba(60), zumba(60)] })).enrollments;
     expect(ok(r).grossPriceCents).toBe(20500);
   });
 });
 
-describe("inscriptions impossibles à tarifer", () => {
-  it("signale une combinaison absente de la grille, sans bloquer les autres", () => {
+describe("enrollments that cannot be priced", () => {
+  it("reports a combination missing from the grid, without blocking the others", () => {
     const result = ribas(enrollment({ course: [45, 45] }), enrollment({ course: [60] }));
     expect(result.enrollments[0]).toMatchObject({
       status: "erreur",
@@ -129,19 +129,19 @@ describe("inscriptions impossibles à tarifer", () => {
     });
   });
 
-  it("signale un étudiant sur deux cours (absent de la grille)", () => {
+  it("reports a student-rate enrollment on two courses (missing from the grid)", () => {
     const [r] = ribas(enrollment({ audience: "student", course: [60, 60] })).enrollments;
     expect(r).toMatchObject({ status: "erreur", error: { code: "combinaison_absente" } });
   });
 
-  it("signale une inscription sans cours", () => {
+  it("reports an enrollment without courses", () => {
     const [r] = ribas(enrollment({ course: [] })).enrollments;
     expect(r).toMatchObject({ status: "erreur", error: { code: "aucun_cours" } });
   });
 });
 
-describe("réduction fratrie (Ribas : -10 % dès 2 enfants, non cumulable avec 2 disciplines)", () => {
-  it("applique -10 % à chacun de deux enfants", () => {
+describe("siblings discount (Ribas: -10 % from 2 children, not combinable with 2 disciplines)", () => {
+  it("applies -10 % to each of two children", () => {
     const result = ribas(enrollment({ course: [60] }), enrollment({ course: [45] }));
     const [a, b] = result.enrollments;
     expect(siblings(a)).toEqual({
@@ -159,7 +159,7 @@ describe("réduction fratrie (Ribas : -10 % dès 2 enfants, non cumulable avec 2
     });
   });
 
-  it("l’écarte pour un enfant seul", () => {
+  it("leaves it out for a single child", () => {
     const [r] = ribas(enrollment({ course: [60] })).enrollments;
     expect(siblings(r)).toEqual({
       code: "fratrie",
@@ -170,25 +170,25 @@ describe("réduction fratrie (Ribas : -10 % dès 2 enfants, non cumulable avec 2
     expect(ok(r).netPriceCents).toBe(11000);
   });
 
-  it("l’applique aux trois enfants d’une fratrie de trois", () => {
+  it("applies it to all three children of three siblings", () => {
     const result = ribas(enrollment({}), enrollment({}), enrollment({}));
     expect(result.enrollments.map((r) => siblings(r)?.status)).toEqual(["appliquee", "appliquee", "appliquee"]);
     expect(siblings(result.enrollments[2])?.pattern).toBe("3 enfants du même payeur : -10 %");
     expect(result.netTotalCents).toBe(3 * 9900);
   });
 
-  it("ne compte pas un adulte du même payeur, et l’écarte pour lui", () => {
+  it("does not count an adult of the same payer, and leaves it out for them", () => {
     const [enfant, adulte] = ribas(enrollment({}), enrollment({ audience: "adult" })).enrollments;
     expect(siblings(enfant)?.status).toBe("ecartee");
     expect(siblings(adulte)).toMatchObject({ status: "ecartee", pattern: "Réservée au public enfant" });
   });
 
-  it("l’écarte pour un couple", () => {
+  it("leaves it out for a couple", () => {
     const [r] = ribas(enrollment({ audience: "couple", studentIds: ["a", "b"] })).enrollments;
     expect(siblings(r)?.status).toBe("ecartee");
   });
 
-  it("l’écarte sur un forfait 2 disciplines, mais l’enfant compte pour ses frères et sœurs", () => {
+  it("leaves it out on a 2-discipline package, but the child counts for their siblings", () => {
     const [twoDisciplines, sibling] = ribas(
       enrollment({
         course: [
@@ -208,7 +208,7 @@ describe("réduction fratrie (Ribas : -10 % dès 2 enfants, non cumulable avec 2
     expect(siblings(sibling)?.status).toBe("appliquee");
   });
 
-  it("l’applique à deux cours de la même discipline", () => {
+  it("applies it to two courses of the same discipline", () => {
     const [twoJazzCourses] = ribas(
       enrollment({
         course: [
@@ -221,19 +221,19 @@ describe("réduction fratrie (Ribas : -10 % dès 2 enfants, non cumulable avec 2
     expect(siblings(twoJazzCourses)?.status).toBe("appliquee");
   });
 
-  it("compte une seule fois un enfant inscrit deux fois", () => {
+  it("counts a child enrolled twice only once", () => {
     const [t1, t2] = ribas(enrollment({ studentIds: ["x"] }), enrollment({ studentIds: ["x"] })).enrollments;
     expect(siblings(t1)?.status).toBe("ecartee");
     expect(siblings(t2)?.status).toBe("ecartee");
   });
 
-  it("compte un enfant dont le forfait est à saisir à la main", () => {
+  it("counts a child whose package is entered by hand", () => {
     const [, sibling] = ribas(enrollment({ course: [45, 45] }), enrollment({})).enrollments;
     expect(siblings(sibling)?.status).toBe("appliquee");
   });
 });
 
-describe("rien n’est propre à une école", () => {
+describe("nothing is specific to one school", () => {
   const grid: TariffRow[] = [
     { id: "a", audience: "adult", period: "year", combination: [75], disciplineId: null, priceCents: 12345 },
     { id: "b", audience: "adult", period: "single", combination: [75], disciplineId: null, priceCents: 1500 },
@@ -249,7 +249,7 @@ describe("rien n’est propre à une école", () => {
   });
   const adulte = (period: "year" | "single" = "year") => enrollment({ audience: "adult", period, course: [75] });
 
-  it("arrondit chaque réduction au centime, et le total est la somme des lignes", () => {
+  it("rounds each discount to the cent, and the total is the sum of the lines", () => {
     const result = computeTariff({
       grid,
       discounts: [rule({ rateBps: 1000, minStudents: 2 })],
@@ -260,7 +260,7 @@ describe("rien n’est propre à une école", () => {
     expect(siblings(result.enrollments[0])?.pattern).toBe("2 danseurs du même payeur : -10 %");
   });
 
-  it("applique un montant fixe, plafonné au prix", () => {
+  it("applies a fixed amount, capped at the price", () => {
     const [yearly, unite] = computeTariff({
       grid,
       discounts: [rule({ amountCents: 2000 })],
@@ -271,7 +271,7 @@ describe("rien n’est propre à une école", () => {
     expect(ok(unite)).toMatchObject({ discountCents: 1500, netPriceCents: 0 });
   });
 
-  it("écarte un type de réduction inconnu du moteur", () => {
+  it("leaves out a discount type unknown to the engine", () => {
     const [r] = computeTariff({
       grid,
       discounts: [rule({ code: "parrainage", rateBps: 500 })],
@@ -287,7 +287,7 @@ describe("rien n’est propre à une école", () => {
     ]);
   });
 
-  it("refuse une réduction qui n’a ni taux ni montant, ou les deux", () => {
+  it("rejects a discount with neither rate nor amount, or both", () => {
     const calculation = (r: DiscountRule) => () => computeTariff({ grid, discounts: [r], enrollments: [adulte()] });
     expect(calculation(rule({}))).toThrow("Réduction « fratrie » : renseigner un taux ou un montant, pas les deux");
     expect(calculation(rule({ rateBps: 1000, amountCents: 500 }))).toThrow(TypeError);

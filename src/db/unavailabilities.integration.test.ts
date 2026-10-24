@@ -76,8 +76,8 @@ afterAll(async () => {
 
 const instant = (iso: string) => new Date(iso); // instants written with their offset
 
-describe("indisponibilités saisies", () => {
-  it("ajoute et liste une indisponibilité ; refuse une fin avant le début", async () => {
+describe("manually entered unavailabilities", () => {
+  it("adds and lists an unavailability; rejects an end before the start", async () => {
     expect(
       await withSchool(school, (tx) =>
         addUnavailability(tx, camille, {
@@ -101,7 +101,7 @@ describe("indisponibilités saisies", () => {
     expect(list).toMatchObject([{ source: "manual", label: "Stage" }]);
   });
 
-  it("refuse un intervenant d’une autre école", async () => {
+  it("rejects an instructor from another school", async () => {
     expect(
       await withSchool(school, (tx) =>
         addUnavailability(tx, foreign, {
@@ -114,8 +114,8 @@ describe("indisponibilités saisies", () => {
   });
 });
 
-describe("conflits", () => {
-  it("signale les dates à venir d’un créneau hebdomadaire pendant une indisponibilité", async () => {
+describe("conflicts", () => {
+  it("flags the upcoming dates of a weekly slot during an unavailability", async () => {
     const dates = await withSchool(school, (tx) =>
       slotConflicts(
         tx,
@@ -135,15 +135,15 @@ describe("conflits", () => {
     ).toEqual([]);
   });
 
-  it("signale les séances prévues du cours touchées", async () => {
+  it("flags the affected planned lessons of the course", async () => {
     expect([...(await withSchool(school, (tx) => conflictingLessons(tx, jazz, TODAY)))]).toEqual([
       lessons["2026-11-04"],
     ]);
   });
 });
 
-describe("remplaçants", () => {
-  it("dit que le titulaire est indisponible et classe les remplaçants", async () => {
+describe("substitutes", () => {
+  it("reports the regular instructor as unavailable and ranks the substitutes", async () => {
     const d = await withSchool(school, (tx) => lessonAvailabilities(tx, lessons["2026-11-04"]));
     expect(d?.unavailable).toBe(true);
     // Inès is free; Lucas teaches jazz but gives Zumba at 17:30.
@@ -156,13 +156,13 @@ describe("remplaçants", () => {
     );
   });
 
-  it("ne lit pas une séance d’une autre école", async () => {
+  it("does not read a lesson from another school", async () => {
     expect(await withSchool(otherSchool, (tx) => lessonAvailabilities(tx, lessons["2026-11-04"]))).toBeNull();
   });
 });
 
-describe("synchronisation d’un agenda", () => {
-  it("remplace les plages lues sur la fenêtre, sans toucher aux indisponibilités saisies", async () => {
+describe("calendar sync", () => {
+  it("replaces the ranges read within the window, without touching manually entered unavailabilities", async () => {
     const window = { start: instant("2026-11-01T00:00:00+01:00"), end: instant("2026-12-01T00:00:00+01:00") };
     await withSchool(school, (tx) =>
       replaceCalendarUnavailabilities(tx, ines, "google", window, [

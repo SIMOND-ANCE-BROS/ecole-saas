@@ -31,11 +31,11 @@ const courses = [
   { ...base, id: "cours-3", discipline: "Classique", instructorId: "prof-2" },
 ];
 
-describe("filtres du planning", () => {
-  it("distingue les salles de même nom sur deux sites", () => {
+describe("schedule filters", () => {
+  it("tells apart rooms with the same name on two sites", () => {
     expect(filterSchedule(courses, { ...EMPTY_FILTERS, roomId: "salle-annexe" }).map((c) => c.id)).toEqual(["cours-2"]);
   });
-  it("combine site, salle, discipline et intervenant", () => {
+  it("combines site, room, discipline and instructor", () => {
     expect(
       filterSchedule(courses, {
         site: "Centre",
@@ -45,10 +45,10 @@ describe("filtres du planning", () => {
       }).map((c) => c.id),
     ).toEqual(["cours-3"]);
   });
-  it("renvoie une liste vide pour des filtres incompatibles", () => {
+  it("returns an empty list for incompatible filters", () => {
     expect(filterSchedule(courses, { ...EMPTY_FILTERS, site: "Centre", roomId: "salle-annexe" })).toEqual([]);
   });
-  it("retrouve tous les cours à la remise à zéro sans modifier la liste", () => {
+  it("finds every course again on reset without changing the list", () => {
     expect(filterSchedule(courses, EMPTY_FILTERS)).toEqual(courses);
     expect(courses).toHaveLength(3);
   });

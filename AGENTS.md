@@ -16,7 +16,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - The invoice number comes from the school's invoicing tool (Pennylane, Abby, Shine): never generate it here.
 - Payments and the audit log are immutable: fix with a reverse entry.
 - Nothing school-specific is hard-coded: tariffs, discounts, VAT mentions are data.
-- **Language**: code, database, comments, tests, commits, issues and PRs in **English** (domain lexicon in `CLAUDE.md` §3); everything the end user sees, the PR section « Pour l’accueil et la direction » and the URLs in **French**. French comments and enum values still present are translated under #114; list column ids, URL parameters and their values stay French (data); never add new French identifiers.
+- **Language**: code, database, comments, tests, commits, issues and PRs in **English** (domain lexicon in `CLAUDE.md` §3); everything the end user sees, the PR section « Pour l’accueil et la direction » and the URLs in **French**. French identifiers still present are translated under #114; list column ids, URL parameters and their values stay French (data); never add new French identifiers.
 - TypeScript strict, no `any`. Mantine for every UI control, Tailwind for layout only (`DESIGN.md`).
 
 # Issues, branches and PRs (mandatory)

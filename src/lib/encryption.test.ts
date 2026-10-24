@@ -6,8 +6,8 @@ beforeEach(() => {
   process.env.CLE_CHIFFREMENT = randomBytes(32).toString("base64");
 });
 
-describe("chiffrement", () => {
-  it("chiffre et déchiffre, avec un résultat différent à chaque fois", () => {
+describe("encryption", () => {
+  it("encrypts and decrypts, with a different result each time", () => {
     const a = encrypt("jeton secret é");
     const b = encrypt("jeton secret é");
     expect(a).not.toBe(b);
@@ -15,7 +15,7 @@ describe("chiffrement", () => {
     expect(decrypt(a)).toBe("jeton secret é");
   });
 
-  it("refuse un texte altéré ou une autre clé", () => {
+  it("rejects altered text or another key", () => {
     const c = encrypt("jeton");
     const [v, iv, tag, donnees] = c.split(".");
     const tampered = [v, iv, tag, donnees.slice(0, -2) + (donnees.endsWith("A") ? "BB" : "AA")].join(".");
@@ -24,7 +24,7 @@ describe("chiffrement", () => {
     expect(() => decrypt(c)).toThrow();
   });
 
-  it("refuse une clé absente ou de mauvaise taille", () => {
+  it("rejects a missing key or one of the wrong size", () => {
     process.env.CLE_CHIFFREMENT = "";
     expect(() => encrypt("x")).toThrow("CLE_CHIFFREMENT");
     process.env.CLE_CHIFFREMENT = randomBytes(16).toString("base64");

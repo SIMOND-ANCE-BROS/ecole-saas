@@ -68,27 +68,27 @@ afterAll(async () => {
   await admin.end();
 });
 
-describe("saisonCourante", () => {
-  it("prend la saison qui contient le jour", async () => {
+describe("currentSeason", () => {
+  it("picks the season containing the day", async () => {
     expect(await withSchool(school, (tx) => currentSeason(tx, "2026-10-19"))).toMatchObject({
       id: season2026,
       label: "2026-2027",
     });
   });
 
-  it("prend la plus récente quand aucune ne contient le jour (été)", async () => {
+  it("picks the most recent one when none contains the day (summer)", async () => {
     expect((await withSchool(school, (tx) => currentSeason(tx, "2028-08-01")))?.id).toBe(season2027);
   });
 
-  it("renvoie null sans saison", async () => {
+  it("returns null without a season", async () => {
     const [{ id }] = await admin`INSERT INTO school (name, slug) VALUES ('Vide', ${`pv-${suffix}`}) RETURNING id`;
     expect(await withSchool(id, (tx) => currentSeason(tx, "2026-10-19"))).toBeNull();
     await admin`DELETE FROM school WHERE id = ${id}`;
   });
 });
 
-describe("coursDeLaSaison", () => {
-  it("liste les cours de la saison, par jour puis par heure, sans ceux d’une autre école", async () => {
+describe("seasonCourses", () => {
+  it("lists the season's courses by day then time, without those of another school", async () => {
     const courses = await withSchool(school, (tx) => seasonCourses(tx, season2026));
     expect(courses.map((c) => `${c.weekday} ${c.startTime} ${c.discipline}`)).toEqual([
       "1 18:30 Classique",
@@ -107,8 +107,8 @@ describe("coursDeLaSaison", () => {
   });
 });
 
-describe("coursDuPlanning et inscritsDuCours", () => {
-  it("lit un cours et ses danseurs actifs, à l’essai ou en attente, sans les abandons", async () => {
+describe("scheduleCourse and enrolledInCourse", () => {
+  it("reads a course and its active, trial or waitlisted students, without dropped ones", async () => {
     const [jazz] = await admin`SELECT c.id FROM course c JOIN discipline d ON d.id = c.discipline_id
       WHERE c.school_id = ${school} AND d.name = 'Jazz'`;
     const [p] =
@@ -148,7 +148,7 @@ describe("coursDuPlanning et inscritsDuCours", () => {
     });
   });
 
-  it("ne lit pas le cours d’une autre école, ni ses inscrits", async () => {
+  it("does not read a course from another school, nor its enrolled students", async () => {
     const [salsa] = await admin`SELECT id FROM course WHERE school_id = ${otherSchool}`;
     expect(await withSchool(school, (tx) => scheduleCourse(tx, salsa.id))).toBeNull();
     expect(await withSchool(school, (tx) => enrolledInCourse(tx, salsa.id))).toEqual([]);

@@ -4,19 +4,19 @@ import { conflicts, instantParis, lessonInterval, freeSubstitutes } from "./avai
 const iso = (t: number) => new Date(t).toISOString();
 
 describe("instantParis", () => {
-  it("convertit une heure de Paris en instant, été comme hiver", () => {
+  it("converts a Paris time into an instant, in summer and winter", () => {
     expect(iso(instantParis("2026-07-01", "18:00"))).toBe("2026-07-01T16:00:00.000Z");
     expect(iso(instantParis("2026-12-01", "18:00"))).toBe("2026-12-01T17:00:00.000Z");
   });
 
-  it("tient compte des jours de changement d’heure", () => {
+  it("accounts for daylight saving time change days", () => {
     expect(iso(instantParis("2026-03-29", "10:00"))).toBe("2026-03-29T08:00:00.000Z"); // switch to summer time
     expect(iso(instantParis("2026-10-25", "10:00"))).toBe("2026-10-25T09:00:00.000Z"); // back to winter time
   });
 });
 
-describe("intervalleSeance", () => {
-  it("donne début et fin d’une séance", () => {
+describe("lessonInterval", () => {
+  it("gives the start and end of a lesson", () => {
     const [start, end] = lessonInterval({ date: "2026-11-04", startTime: "14:00", durationMinutes: 45 });
     expect([iso(start), iso(end)]).toEqual(["2026-11-04T13:00:00.000Z", "2026-11-04T13:45:00.000Z"]);
   });
@@ -35,8 +35,8 @@ const unavailability = (instructorId: string, start: string, end: string) => ({
   end: new Date(end),
 });
 
-describe("conflits", () => {
-  it("trouve les séances d’un intervenant qui chevauchent ses indisponibilités, bornes exclues", () => {
+describe("conflicts", () => {
+  it("finds an instructor's lessons overlapping their unavailabilities, bounds excluded", () => {
     const lessons = [
       lesson("a", "2026-11-04", "17:00", "camille"), // 16:00–17:00 UTC
       lesson("b", "2026-11-04", "18:00", "camille"), // 17:00–18:00 UTC: starts when the unavailability ends
@@ -47,7 +47,7 @@ describe("conflits", () => {
   });
 });
 
-describe("remplacantsLibres", () => {
+describe("freeSubstitutes", () => {
   const instructors = [
     { id: "camille", disciplines: ["Jazz"] },
     { id: "ines", disciplines: ["Éveil"] },
@@ -55,7 +55,7 @@ describe("remplacantsLibres", () => {
     { id: "mathis", disciplines: ["Jazz"] },
   ];
 
-  it("classe libres d’abord, ceux qui enseignent la discipline en tête, et donne le motif des autres", () => {
+  it("ranks free instructors first, those teaching the discipline on top, and gives the others' reason", () => {
     const target = { ...lesson("s", "2026-11-04", "17:00", "camille"), discipline: "Jazz" };
     const other = [lesson("x", "2026-11-04", "17:30", "lucas")];
     const unavailabilities = [unavailability("mathis", "2026-11-04T00:00:00Z", "2026-11-05T00:00:00Z")];

@@ -53,21 +53,21 @@ afterAll(async () => {
   await admin.end();
 });
 
-describe("creerIntervenant et lireIntervenant", () => {
-  it("enregistre l’intervenant dans l’école courante", async () => {
+describe("createInstructor and readInstructor", () => {
+  it("saves the instructor in the current school", async () => {
     const id = await withSchool(school, (tx) => createInstructor(tx, camille));
     expect(await withSchool(school, (tx) => readInstructor(tx, id))).toEqual({ id, ...camille });
     const [{ school_id }] = await admin`SELECT school_id FROM instructor WHERE id = ${id}`;
     expect(school_id).toBe(school);
   });
 
-  it("ne lit pas un intervenant d’une autre école", async () => {
+  it("does not read an instructor from another school", async () => {
     expect(await withSchool(school, (tx) => readInstructor(tx, foreign))).toBeNull();
   });
 });
 
-describe("modifierIntervenant", () => {
-  it("modifie et désactive", async () => {
+describe("updateInstructor", () => {
+  it("updates and deactivates", async () => {
     const id = await withSchool(school, (tx) =>
       createInstructor(tx, { ...camille, firstName: "Inès", name: "Garnier" }),
     );
@@ -79,15 +79,15 @@ describe("modifierIntervenant", () => {
     });
   });
 
-  it("ne modifie pas un intervenant d’une autre école", async () => {
+  it("does not update an instructor from another school", async () => {
     expect(await withSchool(school, (tx) => updateInstructor(tx, foreign, camille))).toBe(false);
     const [{ last_name: name }] = await admin`SELECT last_name FROM instructor WHERE id = ${foreign}`;
     expect(name).toBe("Ailleurs");
   });
 });
 
-describe("listerIntervenants", () => {
-  it("liste les actifs d’abord, par nom, avec leurs cours de la saison", async () => {
+describe("listInstructors", () => {
+  it("lists active instructors first, by name, with their courses of the season", async () => {
     const [{ id: lucas }] = await admin`
       INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
       VALUES (${school}, 'Faure', 'Lucas', 'company', 'vat_registered', 'per_lesson', 3500) RETURNING id`;
@@ -109,8 +109,8 @@ describe("listerIntervenants", () => {
   });
 });
 
-describe("identifiant invalide", () => {
-  it("lit et modifie sans erreur SQL", async () => {
+describe("invalid id", () => {
+  it("reads and updates without an SQL error", async () => {
     expect(await withSchool(school, (tx) => readInstructor(tx, "pas-un-uuid"))).toBeNull();
     expect(await withSchool(school, (tx) => updateInstructor(tx, "pas-un-uuid", camille))).toBe(false);
   });

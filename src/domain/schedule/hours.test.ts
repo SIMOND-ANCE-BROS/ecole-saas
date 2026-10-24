@@ -12,8 +12,8 @@ const course = (weekday: number | null, startTime: string, durationMinutes = 60)
   durationMinutes: durationMinutes,
 });
 
-describe("cadreAgenda", () => {
-  it("sans horaires : du lundi au samedi, plage d'après les cours (comportement d'avant)", () => {
+describe("calendarFrame", () => {
+  it("without opening hours: Monday to Saturday, range from the courses (previous behaviour)", () => {
     expect(calendarFrame([], [course(7, "10:00")])).toEqual({
       days: [1, 2, 3, 4, 5, 6, 7],
       start: 9 * 60,
@@ -21,11 +21,11 @@ describe("cadreAgenda", () => {
     });
   });
 
-  it("jours ouverts des sites et plage de la première ouverture à la dernière fermeture", () => {
+  it("open days of the sites and range from the earliest opening to the latest closing", () => {
     expect(calendarFrame([...ROLLET, ...AMIS], [])).toEqual({ days: [1, 2, 3, 4, 5, 6], start: 9 * 60, end: 22 * 60 });
   });
 
-  it("élargi à un cours existant hors horaires (jour ou heure), arrondi à l'heure", () => {
+  it("widened to an existing course outside opening hours (day or time), rounded to the hour", () => {
     expect(calendarFrame(AMIS, [course(7, "08:15", 30), course(3, "18:00", 75)])).toEqual({
       days: [3, 7],
       start: 8 * 60,
@@ -34,20 +34,20 @@ describe("cadreAgenda", () => {
   });
 });
 
-describe("plagesOuvertes", () => {
-  it("fusionne les plages de plusieurs sites qui se chevauchent", () => {
+describe("openRanges", () => {
+  it("merges overlapping ranges of several sites", () => {
     expect(openRanges([...ROLLET, ...AMIS], 3)).toEqual([{ start: 600, end: 1320 }]);
     expect(openRanges(ROLLET, 7)).toEqual([]);
   });
 });
 
-describe("horsHoraires", () => {
-  it("rien à dire dans les horaires, ou sans horaires", () => {
+describe("outsideHours", () => {
+  it("nothing to report within opening hours, or without opening hours", () => {
     expect(outsideHours({ weekday: 1, startTime: "17:00", durationMinutes: 60 }, ROLLET)).toBeNull();
     expect(outsideHours({ weekday: 7, startTime: "03:00", durationMinutes: 60 }, [])).toBeNull();
   });
 
-  it("jour fermé, ou créneau qui dépasse", () => {
+  it("closed day, or slot running over", () => {
     expect(outsideHours({ weekday: 7, startTime: "10:00", durationMinutes: 60 }, ROLLET)).toBe(
       "Le site est fermé le dimanche.",
     );

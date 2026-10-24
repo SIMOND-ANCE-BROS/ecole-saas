@@ -19,8 +19,8 @@ const base = {
 
 const rows = (ics: string) => ics.split("\r\n");
 
-describe("agendaIcs", () => {
-  it("produit un calendrier RFC 5545 avec fins de ligne CRLF et le fuseau de Paris", () => {
+describe("icsCalendar", () => {
+  it("produces an RFC 5545 calendar with CRLF line endings and the Paris time zone", () => {
     const ics = icsCalendar(base);
     expect(ics.endsWith("END:VCALENDAR\r\n")).toBe(true);
     expect(ics.includes("\n") && !ics.replace(/\r\n/g, "").includes("\n")).toBe(true);
@@ -36,7 +36,7 @@ describe("agendaIcs", () => {
     expect(l).toContain("X-WR-CALNAME:Cours de Camille\\, École de démonstration");
   });
 
-  it("décrit chaque séance : identifiant stable, horaires locaux, lieu échappé", () => {
+  it("describes each lesson: stable id, local times, escaped location", () => {
     const l = rows(icsCalendar(base));
     expect(l).toContain("UID:seance-s1@ecole-saas");
     expect(l).toContain("DTSTAMP:20261020T080000Z");
@@ -49,7 +49,7 @@ describe("agendaIcs", () => {
     );
   });
 
-  it("marque une séance annulée, et passe minuit sans erreur", () => {
+  it("marks a cancelled lesson, and crosses midnight without error", () => {
     const l = rows(
       icsCalendar({
         ...base,
@@ -60,12 +60,12 @@ describe("agendaIcs", () => {
     expect(l).toContain("DTEND;TZID=Europe/Paris:20261105T010000");
   });
 
-  it("échappe les points-virgules, barres obliques inverses et retours à la ligne", () => {
+  it("escapes semicolons, backslashes and line breaks", () => {
     const l = rows(icsCalendar({ ...base, lessons: [{ ...base.lessons[0], title: "Jazz; niveau 2\\3\nadultes" }] }));
     expect(l).toContain("SUMMARY:Jazz\; niveau 2\\\\3\\nadultes");
   });
 
-  it("replie les lignes au-delà de 75 octets sans couper un caractère accentué", () => {
+  it("folds lines beyond 75 bytes without splitting an accented character", () => {
     const title = "é".repeat(60); // 120 bytes in UTF-8
     const l = rows(icsCalendar({ ...base, lessons: [{ ...base.lessons[0], title }] }));
     const start = l.findIndex((x) => x.startsWith("SUMMARY:"));

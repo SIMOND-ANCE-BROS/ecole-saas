@@ -92,8 +92,8 @@ afterAll(async () => {
   await admin.end();
 });
 
-describe("creerCours", () => {
-  it("crée le cours et la discipline nouvelle, puis le relit", async () => {
+describe("createCourse", () => {
+  it("creates the course and the new discipline, then reads it back", async () => {
     const r = await withSchool(school, (tx) => createCourse(tx, season, base));
     expect(r.ok).toBe(true);
     const id = r.ok ? r.id : "";
@@ -111,13 +111,13 @@ describe("creerCours", () => {
     expect(n).toBe(1);
   });
 
-  it("réutilise une discipline existante, sans tenir compte de la casse", async () => {
+  it("reuses an existing discipline, case-insensitively", async () => {
     await withSchool(school, (tx) => createCourse(tx, season, { ...base, discipline: { name: " jazz " }, weekday: 5 }));
     const [{ n }] = await admin`SELECT count(*)::int AS n FROM discipline WHERE school_id = ${school}`;
     expect(n).toBe(1);
   });
 
-  it("crée une salle et un site à la volée", async () => {
+  it("creates a room and a site on the fly", async () => {
     const r = await withSchool(school, (tx) =>
       createCourse(tx, season, {
         ...base,
@@ -130,19 +130,19 @@ describe("creerCours", () => {
     expect(s).toMatchObject({ capacity: 12, site: "Nord" });
   });
 
-  it("refuse une salle d’une autre école", async () => {
+  it("rejects a room from another school", async () => {
     const r = await withSchool(school, (tx) => createCourse(tx, season, { ...base, room: { id: foreignRoom } }));
     expect(r).toEqual({ ok: false, message: "Salle introuvable." });
   });
 
-  it("refuse un intervenant inactif pour un nouveau cours", async () => {
+  it("rejects an inactive instructor for a new course", async () => {
     const r = await withSchool(school, (tx) => createCourse(tx, season, { ...base, instructorId: inactiveTeacher }));
     expect(r).toEqual({ ok: false, message: "Intervenant introuvable ou inactif." });
   });
 });
 
-describe("modifierCours", () => {
-  it("modifie l’horaire et la capacité", async () => {
+describe("updateCourse", () => {
+  it("updates the time and capacity", async () => {
     const r = await withSchool(school, (tx) => createCourse(tx, season, base));
     const id = r.ok ? r.id : "";
     const m = await withSchool(school, (tx) =>
@@ -155,7 +155,7 @@ describe("modifierCours", () => {
     });
   });
 
-  it("garde un intervenant devenu inactif s’il était déjà sur le cours", async () => {
+  it("keeps an instructor who became inactive if already on the course", async () => {
     const r = await withSchool(school, (tx) => createCourse(tx, season, base));
     const id = r.ok ? r.id : "";
     await admin`UPDATE course SET instructor_id = ${inactiveTeacher} WHERE id = ${id}`;
@@ -165,21 +165,21 @@ describe("modifierCours", () => {
     expect(m.ok).toBe(true);
   });
 
-  it("ne modifie pas un cours inconnu", async () => {
+  it("does not update an unknown course", async () => {
     const m = await withSchool(otherSchool, (tx) => updateCourse(tx, "00000000-0000-4000-8000-000000000000", base));
     expect(m).toEqual({ ok: false, message: "Ce cours n’existe plus." });
   });
 });
 
-describe("supprimerCours", () => {
-  it("supprime un cours sans inscrit", async () => {
+describe("deleteCourse", () => {
+  it("deletes a course without enrolled students", async () => {
     const r = await withSchool(school, (tx) => createCourse(tx, season, base));
     const id = r.ok ? r.id : "";
     expect(await withSchool(school, (tx) => deleteCourse(tx, id))).toEqual({ ok: true, id });
     expect(await withSchool(school, (tx) => readCourse(tx, id))).toBeNull();
   });
 
-  it("refuse de supprimer un cours avec des inscrits", async () => {
+  it("refuses to delete a course with enrolled students", async () => {
     const r = await withSchool(school, (tx) => createCourse(tx, season, base));
     const id = r.ok ? r.id : "";
     const [p] = await admin`INSERT INTO person (school_id, last_name) VALUES (${school}, 'Martin') RETURNING id`;
@@ -196,8 +196,8 @@ describe("supprimerCours", () => {
   });
 });
 
-describe("referentielPlanning", () => {
-  it("donne disciplines, salles avec leur site et intervenants actifs de l’école", async () => {
+describe("scheduleReferential", () => {
+  it("returns the school's disciplines, rooms with their site, and active instructors", async () => {
     const r = await withSchool(school, (tx) => scheduleReferential(tx));
     expect(r.salles).toContainEqual({ id: room, name: "Studio", site: "Centre", siteId: site, capacity: 20 });
     expect(r.salles.map((s) => s.id)).not.toContain(foreignRoom);
@@ -207,8 +207,8 @@ describe("referentielPlanning", () => {
   });
 });
 
-describe("deplacerCours (vue agenda)", () => {
-  it("déplace et étire un cours sans inscrit", async () => {
+describe("moveCourse (calendar view)", () => {
+  it("moves and stretches a course without enrolled students", async () => {
     const r = await withSchool(school, (tx) => createCourse(tx, season, base));
     const id = r.ok ? r.id : "";
     expect(
@@ -223,7 +223,7 @@ describe("deplacerCours (vue agenda)", () => {
     });
   });
 
-  it("demande confirmation quand des élèves sont inscrits, puis déplace", async () => {
+  it("asks for confirmation when students are enrolled, then moves", async () => {
     const r = await withSchool(school, (tx) => createCourse(tx, season, base));
     const id = r.ok ? r.id : "";
     const [p] = await admin`INSERT INTO person (school_id, last_name) VALUES (${school}, 'Payeur') RETURNING id`;
@@ -243,7 +243,7 @@ describe("deplacerCours (vue agenda)", () => {
     expect((await withSchool(school, (tx) => readCourse(tx, id)))?.weekday).toBe(5);
   });
 
-  it("refuse un cours qui finirait après minuit, un stage, et un cours d’une autre école", async () => {
+  it("rejects a course ending after midnight, a workshop, and a course from another school", async () => {
     const r = await withSchool(school, (tx) => createCourse(tx, season, base));
     const id = r.ok ? r.id : "";
     expect(

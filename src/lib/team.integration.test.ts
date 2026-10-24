@@ -71,7 +71,7 @@ const entry = (
 describe("invitation", () => {
   let token: string;
 
-  it("invite : le lien s'ouvre, une seule invitation par e-mail, jeton jamais stocké en clair", async () => {
+  it("invite: the link opens, one invitation per e-mail, token never stored in clear", async () => {
     const r1 = await withSchool(school, (tx) =>
       invite(tx, diana, { email: newMemberEmail, name: "Accueil", role: "front_desk" }, new Date()),
     );
@@ -98,7 +98,7 @@ describe("invitation", () => {
     expect(await withSchool(school, (tx) => pendingInvitations(tx, new Date()))).toHaveLength(1);
   });
 
-  it("refuse un mot de passe trop court, puis crée le compte ; le lien ne sert qu'une fois", async () => {
+  it("rejects a too-short password, then creates the account; the link works only once", async () => {
     expect(await acceptLink(school, token, entry("court"))).toMatchObject({ ok: false });
     expect(await acceptLink(school, token, entry(PASSWORD))).toEqual({
       ok: true,
@@ -110,7 +110,7 @@ describe("invitation", () => {
     expect(await member(newMemberEmail)).toMatchObject({ role: "front_desk", active: true, name: "Accueil Nouvelle" });
   });
 
-  it("un compte existant confirme son mot de passe actuel pour rejoindre l'école", async () => {
+  it("an existing account confirms its current password to join the school", async () => {
     const r = await withSchool(school, (tx) =>
       invite(tx, diana, { email: teacherEmail, name: "Prof", role: "director" }, new Date()),
     );
@@ -124,7 +124,7 @@ describe("invitation", () => {
     expect(await member(teacherEmail)).toMatchObject({ role: "director", active: true });
   });
 
-  it("refuse d'inviter une personne déjà dans l'équipe ; une invitation révoquée ou expirée ne s'ouvre plus", async () => {
+  it("refuses to invite someone already on the team; a revoked or expired invitation no longer opens", async () => {
     expect(
       await withSchool(school, (tx) =>
         invite(tx, diana, { email: emailDiana, name: "Diana", role: "front_desk" }, new Date()),
@@ -147,8 +147,8 @@ describe("invitation", () => {
   });
 });
 
-describe("rôles et accès", () => {
-  it("change l'accès d'un autre membre, refuse de toucher à son propre accès, trace dans le journal", async () => {
+describe("roles and access", () => {
+  it("changes another member's access, refuses to touch one's own access, records it in the audit log", async () => {
     const frontDesk = await member(newMemberEmail);
     expect(
       (await withSchool(school, (tx) => updateMember(tx, diana, frontDesk.id, { role: "front_desk", active: false })))
@@ -162,7 +162,7 @@ describe("rôles et accès", () => {
     expect(t).toEqual({ before: "true", after: "false" });
   });
 
-  it("seule la direction gère l'équipe, même sans passer par la page", async () => {
+  it("only directors manage the team, even bypassing the page", async () => {
     const p = await member(teacherEmail);
     // Diana moves the teacher to the front desk: she stays in management, that is allowed.
     expect(
@@ -186,8 +186,8 @@ describe("rôles et accès", () => {
   });
 });
 
-describe("réinitialisation du mot de passe", () => {
-  it("refusée pour un compte qui sert aussi dans une autre école", async () => {
+describe("password reset", () => {
+  it("refused for an account also used in another school", async () => {
     const p = await member(teacherEmail);
     expect(await createResetLink(school, diana, p.id)).toEqual({
       ok: false,
@@ -195,7 +195,7 @@ describe("réinitialisation du mot de passe", () => {
     });
   });
 
-  it("le lien remplace le mot de passe et ferme les sessions ouvertes", async () => {
+  it("the link replaces the password and closes open sessions", async () => {
     const n = await member(newMemberEmail);
     await connect(newMemberEmail, PASSWORD);
     const [{ n: before }] = await admin`SELECT count(*)::int AS n FROM session WHERE user_id = ${n.userId}`;
@@ -218,7 +218,7 @@ describe("réinitialisation du mot de passe", () => {
     expect(email_verified).toBe(false);
   });
 
-  it("un lien créé puis devenu dangereux (compte ajouté, même désactivé, à une autre école) est refusé à l'usage", async () => {
+  it("a link that became unsafe after creation (account added to another school, even deactivated) is refused on use", async () => {
     const n = await member(newMemberEmail);
     const r = await createResetLink(school, diana, n.id);
     if (!r.ok) throw new Error(r.message);
@@ -230,7 +230,7 @@ describe("réinitialisation du mot de passe", () => {
     expect(await createResetLink(school, diana, n.id)).toMatchObject({ ok: false });
   });
 
-  it("une autre école ne voit ni les membres ni les invitations de celle-ci", async () => {
+  it("another school sees neither the members nor the invitations of this one", async () => {
     expect((await withSchool(otherSchool, (tx) => listMembers(tx))).some((m) => m.email === emailDiana)).toBe(false);
     expect(await withSchool(otherSchool, (tx) => pendingInvitations(tx, new Date()))).toEqual([]);
   });

@@ -22,7 +22,7 @@ Reference for every agent working on this project. Read it in full before coding
 | PR section « Pour l’accueil et la direction »                          | **French**, written for the school                    |
 | URLs (Next route folders such as `src/app/(espace)/eleves`)            | **French**: they are user-visible                     |
 
-The database (`0027_english_names`), file names, TypeScript identifiers and code comments are in English (#114). Still being translated (#114): database enum values and test titles. Environment variables `CLE_CHIFFREMENT` and `IP_CLIENT_EN_TETE` keep their names until deployments are updated. Some keys stay French on purpose because they are data, not code: list column ids, URL parameters and their values (`?enregistre=cree`), route folders. Never translate one of them on one side only. New code is written in English, using the lexicon below.
+The database (`0027_english_names`, enum values in `0028`–`0031`), file names, TypeScript identifiers, code comments and test titles are in English (#114). Still being translated (#114): a few internal discriminants and property names (tariff engine statuses, `billedTo` and the guide billing choice, `DepositRow.nombre`, some SQL aliases) and data keys (discount code `fratrie`, audit-log JSON keys such as `montant_centimes`). Environment variables `CLE_CHIFFREMENT` and `IP_CLIENT_EN_TETE` keep their names until deployments are updated. Some keys stay French on purpose because they are data, not code: list column ids, URL parameters and their values (`?enregistre=cree`), route folders. Never translate one of them on one side only. New code is written in English, using the lexicon below.
 
 ## 3. Domain lexicon (French → English)
 
