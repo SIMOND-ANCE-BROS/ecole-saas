@@ -27,7 +27,7 @@ let otherSchool: string;
 let foreign: string;
 
 const person = (champs: Partial<PersonInput>): PersonInput => ({
-  type: "particulier",
+  type: "individual",
   name: "",
   firstName: null,
   companyName: null,
@@ -132,7 +132,7 @@ describe("création guidée", () => {
         toNotify: false,
         billing: {
           type: "autre",
-          payeur: { newPerson: person({ type: "professionnel", companyName: "CSE Ateliers", siren: "123456789" }) },
+          payeur: { newPerson: person({ type: "organisation", companyName: "CSE Ateliers", siren: "123456789" }) },
         },
       }),
     );
@@ -197,11 +197,11 @@ describe("modifications depuis la fiche", () => {
     const [{ id: conjoint }] =
       await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Moreau', 'Sam') RETURNING id`;
     const [{ id: ines }] = await admin`SELECT id FROM person WHERE school_id = ${school} AND first_name = 'Inès'`;
-    await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type) VALUES (${school}, ${ines}, ${conjoint}, 'conjoint')`;
+    await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type) VALUES (${school}, ${ines}, ${conjoint}, 'partner')`;
     await withSchool(school, (tx) => setBilling(tx, ines, { type: "personne", id: conjoint }));
     const f = await record(ines);
     expect(f?.billedTo).toMatchObject({ type: "personne", name: "Sam Moreau" });
-    expect(f?.otherRelationships).toMatchObject([{ name: "Sam Moreau", relation: "conjoint", paysFor: true }]);
+    expect(f?.otherRelationships).toMatchObject([{ name: "Sam Moreau", relation: "partner", paysFor: true }]);
   });
 
   it("fait d’un proche existant un responsable, et refuse un responsable d’une autre école", async () => {

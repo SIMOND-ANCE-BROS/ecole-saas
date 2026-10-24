@@ -33,7 +33,7 @@ let foreign: string;
 let jazz: string;
 
 const vide: PersonInput = {
-  type: "particulier",
+  type: "individual",
   name: "",
   firstName: null,
   companyName: null,
@@ -81,15 +81,15 @@ beforeAll(async () => {
   });
   await admin`UPDATE person SET is_student = true WHERE id = ${alex}`;
   cse = await insert(school, {
-    type: "professionnel",
+    type: "organisation",
     last_name: "CSE Ateliers",
     company_name: "CSE Ateliers",
     siren: "123456789",
   });
   foreign = await insert(otherSchool, { last_name: "Lefèvre", first_name: "Inconnue", phone: "0612345678" });
-  await link(helene, zoe, "representant_legal", true, true);
-  await link(helene, noe, "representant_legal", true);
-  await link(cse, alex, "autre", true);
+  await link(helene, zoe, "legal_guardian", true, true);
+  await link(helene, noe, "legal_guardian", true);
+  await link(cse, alex, "other", true);
 
   const [season] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
@@ -107,7 +107,7 @@ beforeAll(async () => {
   const [i] = await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents)
     VALUES (${school}, ${season.id}, ${helene}, 'enfant', 'trimestre', 10000) RETURNING id`;
   await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${school}, ${i.id}, ${zoe}, ${jazz})`;
-  await admin`INSERT INTO student_document (school_id, student_id, type, valid_until) VALUES (${school}, ${zoe}, 'certificat_medical', '2027-09-30')`;
+  await admin`INSERT INTO student_document (school_id, student_id, type, valid_until) VALUES (${school}, ${zoe}, 'medical_certificate', '2027-09-30')`;
 });
 
 afterAll(async () => {
@@ -161,7 +161,7 @@ describe("lirePersonne", () => {
         id: expect.any(String),
         autre: { id: helene, name: "Hélène Lefèvre", telephone: "06 12 34 56 78", email: "helene@exemple.test" },
         sens: "vers",
-        type: "representant_legal",
+        type: "legal_guardian",
         emergencyContact: true,
         paysFor: true,
       },
@@ -180,7 +180,7 @@ describe("lirePersonne", () => {
         absents: 0,
       },
     ]);
-    expect(z?.documents).toEqual([{ type: "certificat_medical", granted: true, validUntil: "2027-09-30" }]);
+    expect(z?.documents).toEqual([{ type: "medical_certificate", granted: true, validUntil: "2027-09-30" }]);
 
     const h = await withSchool(school, (tx) => readPerson(tx, helene));
     expect(h?.relationships.map((l) => `${l.autre.name} ${l.sens}`)).toEqual(["Noé Lefèvre de", "Zoé Lefèvre de"]);
@@ -257,7 +257,7 @@ describe("creerPersonne et modifierPersonne", () => {
       createPerson(tx, { ...vide, name: "Lefèvre", firstName: "Lou", birthDate: "2021-05-04" }, false, {
         otherId: helene,
         de: "autre",
-        type: "representant_legal",
+        type: "legal_guardian",
         paysFor: true,
         emergencyContact: true,
       }),
@@ -276,7 +276,7 @@ describe("creerPersonne et modifierPersonne", () => {
         tx,
         {
           ...vide,
-          type: "professionnel",
+          type: "organisation",
           firstName: "X",
           birthDate: "2000-01-01",
           companyName: "Mairie",
@@ -298,7 +298,7 @@ describe("creerPersonne et modifierPersonne", () => {
 
 describe("liens", () => {
   it("refuse un second lien entre deux personnes, quel que soit le sens, et un lien vers soi-même", async () => {
-    const base = { type: "autre" as const, emergencyContact: false, paysFor: false };
+    const base = { type: "other" as const, emergencyContact: false, paysFor: false };
     expect(
       await withSchool(school, (tx) => addRelationship(tx, { ...base, personId: zoe, relatedPersonId: helene })),
     ).toEqual({
@@ -319,7 +319,7 @@ describe("liens", () => {
         addRelationship(tx, {
           personId: helene,
           relatedPersonId: foreign,
-          type: "conjoint",
+          type: "partner",
           emergencyContact: false,
           paysFor: false,
         }),
@@ -332,7 +332,7 @@ describe("liens", () => {
       addRelationship(tx, {
         personId: alex,
         relatedPersonId: noe,
-        type: "autre",
+        type: "other",
         emergencyContact: true,
         paysFor: false,
       }),
@@ -340,7 +340,7 @@ describe("liens", () => {
     const id = r.ok ? r.id : "";
     expect(
       await withSchool(school, (tx) =>
-        updateRelationship(tx, id, { type: "autre", emergencyContact: false, paysFor: true }),
+        updateRelationship(tx, id, { type: "other", emergencyContact: false, paysFor: true }),
       ),
     ).toEqual({ ok: true, id });
     expect((await withSchool(school, (tx) => payersOf(tx, noe))).map((p) => p.id).sort()).toEqual(

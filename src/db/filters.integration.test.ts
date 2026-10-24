@@ -32,7 +32,7 @@ beforeAll(async () => {
     (
       await admin`INSERT INTO person (school_id, last_name, first_name, birth_date, phone, is_student, type, company_name, siren, email)
         VALUES (${e}, ${name}, ${firstName}, ${champs.birth ?? null}, ${champs.telephone ?? null}, ${champs.student ?? false},
-          ${champs.societe ? "professionnel" : "particulier"}, ${champs.societe ?? null}, ${champs.societe ? "123456789" : null}, ${champs.email ?? null}) RETURNING id`
+          ${champs.societe ? "organisation" : "individual"}, ${champs.societe ?? null}, ${champs.societe ? "123456789" : null}, ${champs.email ?? null}) RETURNING id`
     )[0].id as string;
   const relationship = (de: string, to: string, type: string, paysFor = false, emergency = false) =>
     admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for, emergency_contact) VALUES (${school}, ${de}, ${to}, ${type}, ${paysFor}, ${emergency})`;
@@ -43,7 +43,7 @@ beforeAll(async () => {
     telephone: "06 12 34 56 78",
     email: "sophie@exemple.test",
   });
-  await relationship(sophie, lea, "representant_legal", true, true);
+  await relationship(sophie, lea, "legal_guardian", true, true);
   // Hugo, 12: neither guardian nor payer.
   const hugo = await person(school, "Bernard", "Hugo", {
     birth: "2014-01-10",
@@ -52,9 +52,9 @@ beforeAll(async () => {
   });
   // Inès, no date of birth: two guardians, paid for by a CSE.
   const ines = await person(school, "Moreau", "Inès", { student: true });
-  await relationship(await person(school, "Moreau", "Paul"), ines, "representant_legal");
-  await relationship(await person(school, "Petit", "Anne"), ines, "representant_legal");
-  await relationship(await person(school, "CSE", null, { societe: "CSE Ateliers" }), ines, "autre", true);
+  await relationship(await person(school, "Moreau", "Paul"), ines, "legal_guardian");
+  await relationship(await person(school, "Petit", "Anne"), ines, "legal_guardian");
+  await relationship(await person(school, "CSE", null, { societe: "CSE Ateliers" }), ines, "other", true);
   // Season: Léa enrolled in Monday 17:00 jazz, Hugo on the waitlist for the same course, Inès not enrolled.
   [{ id: season }] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;

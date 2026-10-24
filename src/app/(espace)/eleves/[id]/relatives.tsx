@@ -13,10 +13,10 @@ function nature(p: StudentRelative, firstName: string): string {
   if (p.sens === "de")
     return p.relation === "responsable"
       ? `${firstName} en est responsable`
-      : p.relation === "conjoint"
+      : p.relation === "partner"
         ? "Conjoint"
         : "Proche";
-  return p.relation === "responsable" ? "Responsable légal" : p.relation === "conjoint" ? "Conjoint" : "Proche";
+  return p.relation === "responsable" ? "Responsable légal" : p.relation === "partner" ? "Conjoint" : "Proche";
 }
 
 /** The student's guardians and relatives: « à prévenir », remove, add a guardian. */

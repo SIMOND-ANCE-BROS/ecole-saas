@@ -11,7 +11,7 @@ export type Choice =
   | { id: string; name: string }
   | {
       newPerson: {
-        type: "particulier" | "professionnel";
+        type: "individual" | "organisation";
         firstName: string;
         name: string;
         companyName: string;
@@ -21,7 +21,7 @@ export type Choice =
       };
     };
 
-export const newPerson = (type: "particulier" | "professionnel"): Choice => ({
+export const newPerson = (type: "individual" | "organisation"): Choice => ({
   newPerson: { type, firstName: "", name: "", companyName: "", siren: "", telephone: "", email: "" },
 });
 
@@ -126,14 +126,14 @@ export function PersonChoice({
       <div className="flex flex-col gap-2 rounded-md border border-bordure p-3">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-medium">
-            {n.type === "professionnel" ? "Nouvel organisme" : "Nouvelle personne"}
+            {n.type === "organisation" ? "Nouvel organisme" : "Nouvelle personne"}
           </span>
           <button type="button" className="lien text-sm" onClick={() => onChange(null)}>
             Chercher plutôt une personne connue
           </button>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
-          {n.type === "professionnel" ? (
+          {n.type === "organisation" ? (
             <>
               {field("companyName", "Raison sociale", { autoFocus: true })}
               {field("siren", "SIREN", { inputMode: "numeric", placeholder: "9 chiffres" })}
@@ -201,7 +201,7 @@ export function PersonChoice({
       <button
         type="button"
         className="lien self-start text-sm"
-        onClick={() => onChange(newPerson(organization ? "professionnel" : "particulier"))}
+        onClick={() => onChange(newPerson(organization ? "organisation" : "individual"))}
       >
         {organization ? "Nouvel organisme (CSE, entreprise…)" : "Nouvelle personne"}
       </button>

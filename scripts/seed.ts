@@ -20,7 +20,7 @@ const ACCOUNTS = [
 type DemoFamily = {
   name: string;
   firstName?: string;
-  type?: "particulier" | "professionnel";
+  type?: "individual" | "organisation";
   companyName?: string;
   siren?: string;
   email?: string;
@@ -62,7 +62,7 @@ const FAMILIES: DemoFamily[] = [
   { name: "Petit", firstName: "Sarah", telephone: "06 55 44 33 22", students: [["Chloé", "2013-12-24"]] },
   {
     name: "Ateliers Démo",
-    type: "professionnel",
+    type: "organisation",
     companyName: "CSE des Ateliers Démo",
     siren: "000000000",
     email: "cse@demo.test",
@@ -101,7 +101,7 @@ async function principal() {
     for (const f of FAMILIES) {
       const [p] = await admin`
         INSERT INTO person (school_id, type, last_name, first_name, company_name, siren, email, phone, address)
-        VALUES (${school.id}, ${f.type ?? "particulier"}, ${f.name}, ${f.firstName ?? null}, ${f.companyName ?? null},
+        VALUES (${school.id}, ${f.type ?? "individual"}, ${f.name}, ${f.firstName ?? null}, ${f.companyName ?? null},
                 ${f.siren ?? null}, ${f.email ?? null}, ${f.telephone ?? null}, ${f.address ?? null})
         RETURNING id`;
       for (const [firstName, birth] of f.students) {
@@ -114,7 +114,7 @@ async function principal() {
           VALUES (${school.id}, ${f.name}, ${firstName}, ${birth}, true) RETURNING id`;
         await admin`
           INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for, emergency_contact)
-          VALUES (${school.id}, ${p.id}, ${d.id}, 'representant_legal', true, true)`;
+          VALUES (${school.id}, ${p.id}, ${d.id}, 'legal_guardian', true, true)`;
       }
     }
   }

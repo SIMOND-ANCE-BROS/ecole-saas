@@ -60,7 +60,7 @@ export function NewStudentGuide({
       setRefusal(
         await createStudentFromGuide(
           {
-            student: { type: "particulier", companyName: "", siren: "", address: "", ...e },
+            student: { type: "individual", companyName: "", siren: "", address: "", ...e },
             guardian: displayedGuardian && guardian ? toInput(guardian) : null,
             toNotify: toNotify,
             billing:

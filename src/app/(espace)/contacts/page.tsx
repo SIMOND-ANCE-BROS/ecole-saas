@@ -59,7 +59,7 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
             rows={contacts.map((c) => ({
               id: c.id,
               href: `/contacts/${c.id}`,
-              badge: c.type === "professionnel" ? "organisme" : undefined,
+              badge: c.type === "organisation" ? "organisme" : undefined,
               cells: { nom: nomAffiche(c), eleves: c.students, telephone: c.telephone, email: c.email },
             }))}
           />
