@@ -107,7 +107,7 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
                         {d.firstName} {d.name}
                       </Link>
                       {d.age !== null && <span className="text-doux"> ({d.age} ans)</span>}
-                      {d.status === "essai" && (
+                      {d.status === "trial" && (
                         <span className="ml-2 rounded bg-accent-doux px-1.5 text-xs">à l’essai</span>
                       )}
                       {d.notes && <span className="block text-xs text-alerte-texte">{d.notes}</span>}

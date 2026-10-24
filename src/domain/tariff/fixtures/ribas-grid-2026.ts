@@ -29,46 +29,46 @@ function row(
 
 const adultes: TariffRow[] = [
   // « 1 cours »
-  row("adulte", "unite", [60], 15),
-  row("adulte", "unite", [90], 20),
+  row("adult", "single", [60], 15),
+  row("adult", "single", [90], 20),
   // Quarterly individual
-  row("adulte", "trimestre", [60], 120),
-  row("adulte", "trimestre", [90], 165),
-  row("adulte", "trimestre", [60, 60], 205),
-  row("adulte", "trimestre", [60, 90], 240),
-  row("adulte", "trimestre", [90, 90], 280),
-  row("adulte", "trimestre", [60, 60, 90], 285),
-  row("adulte", "trimestre", [60, 60, 60], 250),
-  row("adulte", "trimestre", [60, 90, 90], 315),
+  row("adult", "quarter", [60], 120),
+  row("adult", "quarter", [90], 165),
+  row("adult", "quarter", [60, 60], 205),
+  row("adult", "quarter", [60, 90], 240),
+  row("adult", "quarter", [90, 90], 280),
+  row("adult", "quarter", [60, 60, 90], 285),
+  row("adult", "quarter", [60, 60, 60], 250),
+  row("adult", "quarter", [60, 90, 90], 315),
   // Quarterly couple
-  row("couple", "trimestre", [60], 230),
-  row("couple", "trimestre", [90], 295),
-  row("couple", "trimestre", [60, 60], 390),
-  row("couple", "trimestre", [60, 90], 445),
-  row("couple", "trimestre", [90, 90], 500),
+  row("couple", "quarter", [60], 230),
+  row("couple", "quarter", [90], 295),
+  row("couple", "quarter", [60, 60], 390),
+  row("couple", "quarter", [60, 90], 445),
+  row("couple", "quarter", [90, 90], 500),
   // Quarterly student rate
-  row("etudiant", "trimestre", [60], 115),
-  row("etudiant", "trimestre", [90], 155),
+  row("student", "quarter", [60], 115),
+  row("student", "quarter", [90], 155),
   // Yearly individual
-  row("adulte", "annee", [60], 305),
-  row("adulte", "annee", [90], 420),
-  row("adulte", "annee", [60, 60], 520),
-  row("adulte", "annee", [60, 90], 615),
-  row("adulte", "annee", [90, 90], 715),
+  row("adult", "year", [60], 305),
+  row("adult", "year", [90], 420),
+  row("adult", "year", [60, 60], 520),
+  row("adult", "year", [60, 90], 615),
+  row("adult", "year", [90, 90], 715),
   // « Zumba 2h00 »: assumption, 2 Zumba courses of 1 h 00 (question D of #11).
-  row("adulte", "annee", [60, 60], 430, ZUMBA),
-  row("adulte", "annee", [60, 60, 90], 720),
-  row("adulte", "annee", [60, 60, 60], 640),
-  row("adulte", "annee", [60, 90, 90], 800),
+  row("adult", "year", [60, 60], 430, ZUMBA),
+  row("adult", "year", [60, 60, 90], 720),
+  row("adult", "year", [60, 60, 60], 640),
+  row("adult", "year", [60, 90, 90], 800),
   // Yearly couple
-  row("couple", "annee", [60], 550),
-  row("couple", "annee", [90], 755),
-  row("couple", "annee", [60, 60], 920),
-  row("couple", "annee", [60, 90], 1100),
-  row("couple", "annee", [90, 90], 1280),
+  row("couple", "year", [60], 550),
+  row("couple", "year", [90], 755),
+  row("couple", "year", [60, 60], 920),
+  row("couple", "year", [60, 90], 1100),
+  row("couple", "year", [90, 90], 1280),
   // Yearly student rate
-  row("etudiant", "annee", [60], 290),
-  row("etudiant", "annee", [90], 400),
+  row("student", "year", [60], 290),
+  row("student", "year", [90], 400),
 ];
 
 const children: TariffRow[] = (
@@ -86,8 +86,8 @@ const children: TariffRow[] = (
     [[45, 45, 60], 195, 490],
   ] as const
 ).flatMap(([combination, trimestre, annee]) => [
-  row("enfant", "trimestre", [...combination], trimestre),
-  row("enfant", "annee", [...combination], annee),
+  row("child", "quarter", [...combination], trimestre),
+  row("child", "year", [...combination], annee),
 ]);
 
 export const ribasGrid: TariffRow[] = [...adultes, ...children];
@@ -123,6 +123,6 @@ export const ribasSiblings: DiscountRule = {
   rateBps: 1000,
   amountCents: null,
   minStudents: 2,
-  audiences: ["enfant"],
+  audiences: ["child"],
   combinableWithMultiDiscipline: false,
 };

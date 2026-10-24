@@ -4,8 +4,8 @@
  * Amounts in cents, rates in basis points (1000 = 10 %).
  */
 
-export type Public = "enfant" | "adulte" | "couple" | "etudiant";
-export type Period = "trimestre" | "annee" | "unite";
+export type Public = "child" | "adult" | "couple" | "student";
+export type Period = "quarter" | "year" | "single";
 
 /** One cell of the tariff grid (table `tariff`). */
 export type TariffRow = {

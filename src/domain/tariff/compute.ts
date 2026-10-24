@@ -155,21 +155,21 @@ function checkRule(rule: DiscountRule) {
 // ---------------------------------------------------------------------------
 
 const PUBLIC_LABEL: Record<Public, string> = {
-  enfant: "enfant",
-  adulte: "adulte",
+  child: "enfant",
+  adult: "adulte",
   couple: "couple",
-  etudiant: "étudiant",
+  student: "étudiant",
 };
 
 const PERIOD_LABEL: Record<Period, string> = {
-  trimestre: "au trimestre",
-  annee: "à l’année",
-  unite: "à l’unité",
+  quarter: "au trimestre",
+  year: "à l’année",
+  single: "à l’unité",
 };
 
 /** « enfant(s) » if the rule targets children only, « danseur(s) » otherwise. */
 function studentWord(rule: DiscountRule, count: number): string {
-  const name = rule.audiences.length === 1 && rule.audiences[0] === "enfant" ? "enfant" : "danseur";
+  const name = rule.audiences.length === 1 && rule.audiences[0] === "child" ? "enfant" : "danseur";
   return count > 1 ? `${name}s` : name;
 }
 

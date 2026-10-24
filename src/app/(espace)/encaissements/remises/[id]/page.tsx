@@ -12,7 +12,7 @@ import { CancelDeposit, Print } from "./buttons";
 export const metadata: Metadata = { title: "Bordereau de remise" };
 
 const day = (iso: string) => iso.split("-").reverse().join("/");
-const DEPOSIT_KIND = { cheque: "chèques", especes: "espèces", cheque_vacances: "chèques vacances" } as const;
+const DEPOSIT_KIND = { cheque: "chèques", cash: "espèces", holiday_voucher: "chèques vacances" } as const;
 
 /** Deposit slip of a bank deposit (#98), to print and enclose with the deposit. */
 export default async function DepositPage({ params, searchParams }: PageProps<"/encaissements/remises/[id]">) {
@@ -60,7 +60,7 @@ export default async function DepositPage({ params, searchParams }: PageProps<"/
         <thead>
           <tr>
             <th>Payeur</th>
-            {r.method !== "especes" && <th>N°</th>}
+            {r.method !== "cash" && <th>N°</th>}
             {r.method === "cheque" && <th>Banque ou titulaire</th>}
             <th>Reçu le</th>
             <th className="text-right">Montant</th>
@@ -70,7 +70,7 @@ export default async function DepositPage({ params, searchParams }: PageProps<"/
           {r.payments.map((p) => (
             <tr key={p.id}>
               <td>{p.payer}</td>
-              {r.method !== "especes" && <td>{p.reference ?? "—"}</td>}
+              {r.method !== "cash" && <td>{p.reference ?? "—"}</td>}
               {r.method === "cheque" && <td>{p.issuer ?? "—"}</td>}
               <td className="whitespace-nowrap">{day(p.date)}</td>
               <td className="text-right tabular-nums whitespace-nowrap">{formatEuros(p.amountCents)}</td>
@@ -80,7 +80,7 @@ export default async function DepositPage({ params, searchParams }: PageProps<"/
         <tfoot>
           <tr>
             <td
-              colSpan={r.method === "cheque" ? 4 : r.method === "especes" ? 2 : 3}
+              colSpan={r.method === "cheque" ? 4 : r.method === "cash" ? 2 : 3}
               className="px-3 py-2 text-right font-semibold"
             >
               Total

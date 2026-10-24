@@ -27,10 +27,10 @@ beforeAll(async () => {
     ["{60,60}", 18500],
   ] as const) {
     await admin`INSERT INTO tariff (school_id, season_id, audience, period, combination, price_cents)
-      VALUES (${e}, ${ids.saison}, 'enfant', 'trimestre', ${combination}::smallint[], ${price})`;
+      VALUES (${e}, ${ids.saison}, 'child', 'quarter', ${combination}::smallint[], ${price})`;
   }
   await admin`INSERT INTO discount (school_id, season_id, code, rate_bps, min_students, audiences, combinable_with_multi_discipline)
-    VALUES (${e}, ${ids.saison}, 'fratrie', 1000, 2, '{enfant}', false)`;
+    VALUES (${e}, ${ids.saison}, 'fratrie', 1000, 2, '{child}', false)`;
   const [site] = await admin`INSERT INTO site (school_id, name, address) VALUES (${e}, 'Site', 'Adresse') RETURNING id`;
   const [room] =
     await admin`INSERT INTO room (school_id, site_id, name) VALUES (${e}, ${site.id}, 'Salle') RETURNING id`;
@@ -90,8 +90,8 @@ afterAll(async () => {
 
 const enfant = (studentIds: string[], courseIds: string[]) => ({
   studentIds: studentIds,
-  audience: "enfant" as const,
-  period: "trimestre" as const,
+  audience: "child" as const,
+  period: "quarter" as const,
   courseIds: courseIds,
 });
 const preview = (entry: ReturnType<typeof enfant>) =>
@@ -113,8 +113,8 @@ describe("Inscription", () => {
       await admin`SELECT audience, period, gross_price_cents, discount_cents, net_price_cents, discounts, tariff_id
       FROM enrollment WHERE id = ${r.id}`;
     expect(row).toMatchObject({
-      audience: "enfant",
-      period: "trimestre",
+      audience: "child",
+      period: "quarter",
       gross_price_cents: 11000,
       discount_cents: 0,
       net_price_cents: 11000,

@@ -202,11 +202,11 @@ describe("réinitialisation du mot de passe", () => {
     expect(before).toBeGreaterThan(0);
     const r = await createResetLink(school, diana, n.id);
     if (!r.ok) throw new Error(r.message);
-    expect(await openLink(school, r.token)).toMatchObject({ type: "reinitialisation", email: newMemberEmail });
+    expect(await openLink(school, r.token)).toMatchObject({ type: "reset", email: newMemberEmail });
     const next = "un tout nouveau mot de passe";
     expect(await acceptLink(school, r.token, entry(next))).toEqual({
       ok: true,
-      type: "reinitialisation",
+      type: "reset",
       email: newMemberEmail,
     });
     const [{ n: after }] = await admin`SELECT count(*)::int AS n FROM session WHERE user_id = ${n.userId}`;

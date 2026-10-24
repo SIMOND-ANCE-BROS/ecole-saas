@@ -108,7 +108,7 @@ function studentCourses(seasonId: string | null): SQL<string[]> {
       JOIN enrollment i ON i.id = ic.enrollment_id
       JOIN course c ON c.id = ic.course_id
       JOIN discipline d ON d.id = c.discipline_id
-      WHERE ic.student_id = ${currentId} AND i.season_id = ${seasonId} AND i.status IN ('active', 'essai')
+      WHERE ic.student_id = ${currentId} AND i.season_id = ${seasonId} AND i.status IN ('active', 'trial')
     ) x), '{}')`;
 }
 

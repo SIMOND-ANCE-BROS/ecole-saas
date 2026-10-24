@@ -13,8 +13,8 @@ const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::u
 const isUuid = (v: string) => z.uuid().safeParse(v).success;
 export type Result = { ok: true; id: string } | { ok: false; message: string };
 
-export const AUDIENCES = ["enfant", "adulte", "couple", "etudiant"] as const;
-export const PERIODS = ["trimestre", "annee", "unite"] as const;
+export const AUDIENCES = ["child", "adult", "couple", "student"] as const;
+export const PERIODS = ["quarter", "year", "single"] as const;
 export type Public = (typeof AUDIENCES)[number];
 export type Period = (typeof PERIODS)[number];
 

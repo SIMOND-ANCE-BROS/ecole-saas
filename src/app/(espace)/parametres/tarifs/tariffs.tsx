@@ -7,15 +7,15 @@ import { formatEuros, parseEuros } from "@/lib/money";
 import { lessonPack, cellPrice, siblingsRule, removeLessonPack } from "../actions";
 
 const AUDIENCES: [Public, string][] = [
-  ["enfant", "Enfant"],
-  ["adulte", "Adulte"],
+  ["child", "Enfant"],
+  ["adult", "Adulte"],
   ["couple", "Couple"],
-  ["etudiant", "Étudiant"],
+  ["student", "Étudiant"],
 ];
 const PERIODS: [Period, string][] = [
-  ["trimestre", "Trimestre"],
-  ["annee", "Année"],
-  ["unite", "À l’unité"],
+  ["quarter", "Trimestre"],
+  ["year", "Année"],
+  ["single", "À l’unité"],
 ];
 const DURATIONS = [30, 45, 60, 75, 90, 120];
 
@@ -105,14 +105,14 @@ export function Grid({
   grid: GridRow[];
   disciplines: { id: string; name: string }[];
 }) {
-  const [chosenAudience, setPublic] = useState<Public>("enfant");
+  const [chosenAudience, setPublic] = useState<Public>("child");
   const [combination, setCombination] = useState<number[]>([]);
   const [disciplineId, setDisciplineId] = useState("");
   const [duration, setDuration] = useState("60");
   const [newPrices, setNewPrice] = useState<Record<Period, string>>({
-    trimestre: "",
-    annee: "",
-    unite: "",
+    quarter: "",
+    year: "",
+    single: "",
   });
   const [message, setMessage] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
@@ -135,7 +135,7 @@ export function Grid({
       }
       setMessage(null);
       setCombination([]);
-      setNewPrice({ trimestre: "", annee: "", unite: "" });
+      setNewPrice({ quarter: "", year: "", single: "" });
     });
 
   const removeRow = (l: GridRow) =>
@@ -329,7 +329,7 @@ export function Siblings({
     mode: siblings?.amountCents ? "montant" : "taux",
     value: siblings?.amountCents ? inEuros(siblings.amountCents) : siblings?.rateBps ? inEuros(siblings.rateBps) : "10",
     threshold: String(siblings?.minStudents ?? 2),
-    audiences: siblings?.audiences ?? (["enfant"] as Public[]),
+    audiences: siblings?.audiences ?? (["child"] as Public[]),
     combinable: siblings?.combinableWithMultiDiscipline ?? false,
   });
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);

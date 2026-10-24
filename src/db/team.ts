@@ -195,13 +195,13 @@ export async function resetLink(tx: Tx, userId: string, memberId: string, now: D
   if (await elsewhereAccount(tx, m.userId)) return { ok: false, message: SHARED };
   await tx
     .delete(invitation)
-    .where(and(eq(invitation.type, "reinitialisation"), eq(invitation.userId, m.userId), isNull(invitation.usedAt)));
+    .where(and(eq(invitation.type, "reset"), eq(invitation.userId, m.userId), isNull(invitation.usedAt)));
   const token = newToken();
   const [{ id }] = await tx
     .insert(invitation)
     .values({
       schoolId: CURRENT_SCHOOL,
-      type: "reinitialisation",
+      type: "reset",
       email: m.email,
       name: m.name,
       userId: m.userId,
@@ -215,7 +215,7 @@ export async function resetLink(tx: Tx, userId: string, memberId: string, now: D
 
 export type OpenedLink = {
   id: string;
-  type: "invitation" | "reinitialisation";
+  type: "invitation" | "reset";
   email: string;
   name: string | null;
   role: Role | null;
@@ -252,7 +252,7 @@ export async function consumeLink(
   relationship: OpenedLink,
   userId: string,
 ): Promise<"ok" | "expire" | "partage"> {
-  if (relationship.type === "reinitialisation" && (await elsewhereAccount(tx, userId))) return "partage";
+  if (relationship.type === "reset" && (await elsewhereAccount(tx, userId))) return "partage";
   const badge = await tx
     .update(invitation)
     .set({ usedAt: sql`now()` })

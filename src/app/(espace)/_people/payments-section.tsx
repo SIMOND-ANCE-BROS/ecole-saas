@@ -12,9 +12,9 @@ const shortDate = new Intl.DateTimeFormat("fr-FR", {
 });
 const day = (iso: string) => shortDate.format(new Date(`${iso}T00:00:00Z`));
 const OUTSIDE_CALCULATION = {
-  abandon: "abandonnées",
-  essai: "à l’essai",
-  liste_attente: "en liste d’attente",
+  dropped: "abandonnées",
+  trial: "à l’essai",
+  waitlist: "en liste d’attente",
 } as const;
 
 type Props = {

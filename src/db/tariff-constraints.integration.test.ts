@@ -44,7 +44,7 @@ function insertTariff(
 ) {
   return tx`
     INSERT INTO tariff (school_id, season_id, audience, period, combination, discipline_id, price_cents)
-    VALUES (${ids.school}, ${ids.season}, 'enfant', 'trimestre', ${combination}::smallint[], ${disciplineId}, 11000)`;
+    VALUES (${ids.school}, ${ids.season}, 'child', 'quarter', ${combination}::smallint[], ${disciplineId}, 11000)`;
 }
 
 describe("tarif", () => {
