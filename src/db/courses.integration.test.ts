@@ -42,12 +42,12 @@ beforeAll(async () => {
     await admin`INSERT INTO room (school_id, site_id, name, capacity) VALUES (${school}, ${site}, 'Studio', 20) RETURNING id`;
   [{ id: teacher }] = await admin.unsafe(
     `INSERT INTO instructor ${INSTRUCTOR}
-    VALUES ($1, 'Durand', 'Camille', 'salarie', 'non_applicable', 'heure', 3000, true) RETURNING id`,
+    VALUES ($1, 'Durand', 'Camille', 'employee', 'not_applicable', 'hourly', 3000, true) RETURNING id`,
     [school],
   );
   [{ id: inactiveTeacher }] = await admin.unsafe(
     `INSERT INTO instructor ${INSTRUCTOR}
-    VALUES ($1, 'Ancien', 'Prof', 'salarie', 'non_applicable', 'heure', 3000, false) RETURNING id`,
+    VALUES ($1, 'Ancien', 'Prof', 'employee', 'not_applicable', 'hourly', 3000, false) RETURNING id`,
     [school],
   );
   const [s] =
@@ -58,8 +58,8 @@ beforeAll(async () => {
     discipline: { name: "Jazz" },
     room: { id: room },
     instructorId: teacher,
-    type: "collectif",
-    recurrence: "hebdomadaire",
+    type: "group",
+    recurrence: "weekly",
     weekday: 3,
     startDate: null,
     endDate: null,
@@ -255,7 +255,13 @@ describe("deplacerCours (vue agenda)", () => {
       message: "Le cours finirait après minuit.",
     });
     const stage = await withSchool(school, (tx) =>
-      createCourse(tx, season, { ...base, type: "stage", recurrence: "dates", weekday: null, dates: ["2026-10-24"] }),
+      createCourse(tx, season, {
+        ...base,
+        type: "workshop",
+        recurrence: "dates",
+        weekday: null,
+        dates: ["2026-10-24"],
+      }),
     );
     expect(
       await withSchool(school, (tx) =>

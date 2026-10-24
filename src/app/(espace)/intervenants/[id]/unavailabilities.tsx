@@ -7,11 +7,11 @@ export type DisplayedUnavailability = {
   id: string;
   start: string;
   end: string;
-  source: "saisie" | "google" | "microsoft";
+  source: "manual" | "google" | "microsoft";
   label: string | null;
 };
 
-const SOURCE = { saisie: null, google: "Google Agenda", microsoft: "Microsoft" } as const;
+const SOURCE = { manual: null, google: "Google Agenda", microsoft: "Microsoft" } as const;
 const day = new Intl.DateTimeFormat("fr-FR", {
   weekday: "short",
   day: "numeric",

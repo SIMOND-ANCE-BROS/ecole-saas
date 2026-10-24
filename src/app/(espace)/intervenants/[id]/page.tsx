@@ -75,7 +75,7 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
             </dd>
             <dt className="text-doux">Statut</dt>
             <dd>{STATUSES[instructor.status]}</dd>
-            {instructor.status !== "salarie" && (
+            {instructor.status !== "employee" && (
               <>
                 <dt className="text-doux">SIREN</dt>
                 <dd>{instructor.siren || "Non renseigné"}</dd>

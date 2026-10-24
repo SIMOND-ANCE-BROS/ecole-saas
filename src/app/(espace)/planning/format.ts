@@ -29,7 +29,7 @@ const date = (iso: string) => new Date(`${iso}T00:00:00Z`);
 export const shortDate = (iso: string, withDay = false) => (withDay ? shortDay : monthDay).format(date(iso));
 
 type WithRecurrence = {
-  recurrence: "hebdomadaire" | "quinzaine" | "dates";
+  recurrence: "weekly" | "biweekly" | "dates";
   weekday: number | null;
   startDate: string | null;
   endDate: string | null;
@@ -43,7 +43,7 @@ export function recurrenceText(c: WithRecurrence): string {
     return `Le ${c.dates.map((d) => shortDate(d, true)).join(", le ")}`;
   }
   const day = (DAYS[c.weekday ?? 0] ?? "").toLowerCase();
-  const base = c.recurrence === "quinzaine" ? `Un ${day} sur deux` : `Chaque ${day}`;
+  const base = c.recurrence === "biweekly" ? `Un ${day} sur deux` : `Chaque ${day}`;
   if (c.startDate && c.endDate) return `${base}, du ${shortDate(c.startDate)} au ${shortDate(c.endDate)}`;
   if (c.startDate) return `${base}, à partir du ${shortDate(c.startDate)}`;
   if (c.endDate) return `${base}, jusqu’au ${shortDate(c.endDate)}`;
@@ -53,7 +53,7 @@ export function recurrenceText(c: WithRecurrence): string {
 /** Short label of a calendar block: nothing for a weekly course running the whole season. */
 export function recurrenceBadge(c: WithRecurrence): string | null {
   const parts = [
-    c.recurrence === "quinzaine" ? "1 sem. sur 2" : null,
+    c.recurrence === "biweekly" ? "1 sem. sur 2" : null,
     c.startDate || c.endDate
       ? `${c.startDate ? shortDate(c.startDate) : "…"} → ${c.endDate ? shortDate(c.endDate) : "…"}`
       : null,

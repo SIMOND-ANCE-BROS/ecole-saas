@@ -19,7 +19,7 @@ export type UnavailabilityItem = {
   id: string;
   start: Date;
   end: Date;
-  source: "saisie" | "google" | "microsoft";
+  source: "manual" | "google" | "microsoft";
   label: string | null;
 };
 
@@ -56,7 +56,7 @@ export async function addUnavailability(
       endsAt: entry.end,
       label: entry.label?.trim() || null,
       instructorId: instructorId,
-      source: "saisie",
+      source: "manual",
       schoolId: CURRENT_SCHOOL,
     })
     .returning({ id: unavailability.id });
@@ -69,7 +69,7 @@ export async function deleteUnavailability(tx: Tx, id: string): Promise<Result> 
   if (!isUuid(id)) return refusal;
   const rows = await tx
     .delete(unavailability)
-    .where(and(eq(unavailability.id, id), eq(unavailability.source, "saisie")))
+    .where(and(eq(unavailability.id, id), eq(unavailability.source, "manual")))
     .returning({ id: unavailability.id });
   return rows.length === 1 ? { ok: true, id } : refusal;
 }
@@ -90,7 +90,7 @@ export async function replaceCalendarUnavailabilities(
     .where(
       and(
         eq(unavailability.instructorId, instructorId),
-        ne(unavailability.source, "saisie"),
+        ne(unavailability.source, "manual"),
         lt(unavailability.startsAt, window.end),
         gt(unavailability.endsAt, window.start),
       ),
@@ -190,7 +190,7 @@ export async function conflictingLessons(tx: Tx, courseId: string, today: string
     })
     .from(lesson)
     .innerJoin(course, eq(course.id, lesson.courseId))
-    .where(and(eq(lesson.courseId, courseId), gte(lesson.date, today), eq(lesson.status, "prevue")))
+    .where(and(eq(lesson.courseId, courseId), gte(lesson.date, today), eq(lesson.status, "planned")))
     .orderBy(asc(lesson.date));
   if (rows.length === 0) return new Set();
   const lessons = rows.map((l) => ({ ...l, startTime: l.startTime.slice(0, 5) }));
@@ -260,7 +260,7 @@ export async function lessonAvailabilities(
     })
     .from(lesson)
     .innerJoin(course, eq(course.id, lesson.courseId))
-    .where(and(eq(lesson.date, s.date), ne(lesson.status, "annulee")));
+    .where(and(eq(lesson.date, s.date), ne(lesson.status, "cancelled")));
   const unavailabilities = await unavailabilitiesBetween(tx, new Date(start), new Date(end));
 
   const names = new Map(active.map((a) => [a.id, `${a.firstName} ${a.name}`]));

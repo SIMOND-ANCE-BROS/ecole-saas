@@ -178,7 +178,7 @@ describe("sites et salles", () => {
   it("refuse de retirer une salle qui a des cours, un site qui a des salles, une discipline utilisée", async () => {
     const [p] =
       await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
-      VALUES (${school}, 'Prof', 'Camille', 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`;
+      VALUES (${school}, 'Prof', 'Camille', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
     await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
       VALUES (${school}, ${season2026}, ${jazz}, ${studio}, ${p.id}, 3, '17:00', 60)`;
     expect(await withSchool(school, (tx) => deleteRoom(tx, studio))).toEqual({

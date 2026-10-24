@@ -65,7 +65,7 @@ beforeAll(async () => {
     await admin`INSERT INTO room (school_id, site_id, name) VALUES (${school}, ${site.id}, 'Studio') RETURNING id`;
   const [teacher] =
     await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
-    VALUES (${school}, 'Prof', 'Lucas', 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`;
+    VALUES (${school}, 'Prof', 'Lucas', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
   const [jazz] =
     await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
     VALUES (${school}, ${season}, ${d.id}, ${room.id}, ${teacher.id}, 1, '17:00', 60) RETURNING id`;

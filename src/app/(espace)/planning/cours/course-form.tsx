@@ -53,8 +53,8 @@ export function CourseForm({
     newSite: "",
     siteAddress: "",
     instructorId: cours?.instructorId ?? r.instructors[0]?.id ?? "",
-    type: cours?.type ?? "collectif",
-    recurrence: cours?.recurrence ?? "hebdomadaire",
+    type: cours?.type ?? "group",
+    recurrence: cours?.recurrence ?? "weekly",
     startDate: cours?.startDate ?? "",
     endDate: cours?.endDate ?? "",
     weekday: String(cours?.weekday ?? day ?? 1),
@@ -248,7 +248,7 @@ export function CourseForm({
             onChange={(e) => {
               const type = e.target.value as typeof v.type;
               // A new workshop usually has specific dates.
-              setV({ ...v, type, recurrence: !cours && type === "stage" ? "dates" : v.recurrence });
+              setV({ ...v, type, recurrence: !cours && type === "workshop" ? "dates" : v.recurrence });
             }}
           >
             {Object.entries(COURSE_TYPES).map(([k, l]) => (

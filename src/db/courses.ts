@@ -7,10 +7,10 @@ import { course, courseDate, discipline, enrollmentCourse, instructor, attendanc
 /** Schedule editing (courses, disciplines, rooms), always within the `withSchool()` transaction (RLS). */
 
 export const COURSE_TYPES = {
-  collectif: "Collectif",
-  particulier: "Particulier",
+  group: "Collectif",
+  private: "Particulier",
   competition: "Compétition",
-  stage: "Stage",
+  workshop: "Stage",
 } as const;
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
@@ -20,8 +20,8 @@ const dateOrNull = z.iso.date("Date invalide").nullable();
 
 /** Offered recurrences (#90). */
 export const RECURRENCES = {
-  hebdomadaire: "Chaque semaine",
-  quinzaine: "Une semaine sur deux",
+  weekly: "Chaque semaine",
+  biweekly: "Une semaine sur deux",
   dates: "À des dates précises",
 } as const;
 
@@ -40,8 +40,8 @@ export const validCourseInput = z
       }),
     ]),
     instructorId: z.uuid(),
-    type: z.enum(["collectif", "particulier", "competition", "stage"]),
-    recurrence: z.enum(["hebdomadaire", "quinzaine", "dates"]),
+    type: z.enum(["group", "private", "competition", "workshop"]),
+    recurrence: z.enum(["weekly", "biweekly", "dates"]),
     weekday: integerOrNull(1, 7),
     startDate: dateOrNull,
     endDate: dateOrNull,
@@ -289,7 +289,7 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
         and(
           eq(lesson.courseId, id),
           eq(lesson.instructorId, existing.instructorId),
-          eq(lesson.status, "prevue"),
+          eq(lesson.status, "planned"),
           sql`${lesson.date} >= (now() AT TIME ZONE 'Europe/Paris')::date`,
         ),
       );

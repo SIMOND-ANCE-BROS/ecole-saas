@@ -44,7 +44,7 @@ beforeAll(async () => {
   const teacher = async (schoolId: string, firstName: string) =>
     (
       await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
-        VALUES (${schoolId}, 'Prof', ${firstName}, 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`
+        VALUES (${schoolId}, 'Prof', ${firstName}, 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`
     )[0].id as string;
   camille = await teacher(school, "Camille");
   ines = await teacher(school, "Inès");
@@ -98,7 +98,7 @@ describe("indisponibilités saisies", () => {
     const list = await withSchool(school, (tx) =>
       listUnavailabilities(tx, camille, instant("2026-10-19T00:00:00+02:00")),
     );
-    expect(list).toMatchObject([{ source: "saisie", label: "Stage" }]);
+    expect(list).toMatchObject([{ source: "manual", label: "Stage" }]);
   });
 
   it("refuse un intervenant d’une autre école", async () => {

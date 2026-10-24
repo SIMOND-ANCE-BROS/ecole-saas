@@ -25,11 +25,11 @@ const camille: InstructorInput = {
   firstName: "Camille",
   name: "Durand",
   email: "camille.durand@exemple.test",
-  status: "micro_entreprise",
+  status: "sole_trader",
   siren: "123456789",
   vatRegime: "franchise_293b",
   isOwner: false,
-  payMode: "heure",
+  payMode: "hourly",
   rateCents: 4000,
   active: true,
 };
@@ -42,7 +42,7 @@ beforeAll(async () => {
     VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   [{ id: foreign }] = await admin`
     INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
-    VALUES (${otherSchool}, 'Ailleurs', 'Prof', 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`;
+    VALUES (${otherSchool}, 'Ailleurs', 'Prof', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
 });
 
 afterAll(async () => {
@@ -90,7 +90,7 @@ describe("listerIntervenants", () => {
   it("liste les actifs d’abord, par nom, avec leurs cours de la saison", async () => {
     const [{ id: lucas }] = await admin`
       INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
-      VALUES (${school}, 'Faure', 'Lucas', 'societe', 'assujetti', 'cours', 3500) RETURNING id`;
+      VALUES (${school}, 'Faure', 'Lucas', 'company', 'vat_registered', 'per_lesson', 3500) RETURNING id`;
     const [d] = await admin`INSERT INTO discipline (school_id, name) VALUES (${school}, 'Jazz') RETURNING id`;
     const [s] =
       await admin`INSERT INTO site (school_id, name, address) VALUES (${school}, 'Centre', '1 rue Test') RETURNING id`;

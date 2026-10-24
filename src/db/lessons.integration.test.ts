@@ -51,7 +51,7 @@ beforeAll(async () => {
   const teacher = async (firstName: string, active = true) =>
     (
       await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents, active)
-        VALUES (${school}, 'Prof', ${firstName}, 'salarie', 'non_applicable', 'heure', 3000, ${active}) RETURNING id`
+        VALUES (${school}, 'Prof', ${firstName}, 'employee', 'not_applicable', 'hourly', 3000, ${active}) RETURNING id`
     )[0].id as string;
   camille = await teacher("Camille");
   ines = await teacher("Inès");
@@ -142,7 +142,7 @@ describe("appel", () => {
     const attendance = await withSchool(school, (tx) => readAttendance(tx, s.id));
     expect(attendance).toMatchObject({
       date: "2026-10-21",
-      status: "prevue",
+      status: "planned",
       discipline: "Jazz",
       startTime: "17:00",
       instructorId: camille,
@@ -172,7 +172,7 @@ describe("appel", () => {
       ]),
     );
     const attendance = await withSchool(school, (tx) => readAttendance(tx, s.id));
-    expect(attendance?.status).toBe("effectuee");
+    expect(attendance?.status).toBe("done");
     expect(attendance?.students.map((d) => d.present)).toEqual([true, true]);
     expect((await lessons())[0]).toMatchObject({ presents: 2, absents: 0 });
   });
@@ -222,7 +222,7 @@ describe("remplacement et annulation", () => {
     });
     // A cancelled lesson is neither recreated nor removed by the synchronisation.
     await sync();
-    expect((await lessons())[1]).toMatchObject({ id: prevue.id, status: "annulee" });
+    expect((await lessons())[1]).toMatchObject({ id: prevue.id, status: "cancelled" });
   });
 
   it("donne les séances du jour, sans celles d’une autre école", async () => {
@@ -278,7 +278,7 @@ describe("cours et séances", () => {
     const after = await lessons();
     // Lesson taught (Camille) unchanged; Camille's planned lessons handed to Inès.
     expect(after[0].instructor).toBe(before[0].instructor);
-    expect(after.filter((s) => s.status === "prevue").every((s) => s.instructor === "Inès Prof")).toBe(true);
+    expect(after.filter((s) => s.status === "planned").every((s) => s.instructor === "Inès Prof")).toBe(true);
   });
 
   it("refuse de supprimer un cours dont l’appel a été fait", async () => {
@@ -303,7 +303,7 @@ describe("récurrences (#90)", () => {
       discipline: { id: template.disciplineId },
       room: { id: template.roomId },
       instructorId: camille,
-      type: "collectif" as const,
+      type: "group" as const,
       startTime: "10:00",
       durationMinutes: 60,
       ageMin: null,
@@ -324,17 +324,17 @@ describe("récurrences (#90)", () => {
         if (!r.ok) throw new Error(r.message);
         return r.id;
       });
-    const quinzaine = await create({ ...base, recurrence: "quinzaine", weekday: 1 });
+    const quinzaine = await create({ ...base, recurrence: "biweekly", weekday: 1 });
     const period = await create({
       ...base,
-      recurrence: "hebdomadaire",
+      recurrence: "weekly",
       weekday: 2,
       startDate: "2026-11-01",
       endDate: "2026-11-17",
     });
     const stage = await create({
       ...base,
-      type: "stage",
+      type: "workshop",
       recurrence: "dates",
       weekday: null,
       dates: ["2026-11-21", "2026-10-26", "2026-10-26"],
@@ -343,13 +343,13 @@ describe("récurrences (#90)", () => {
 
     const wholeSeason = { start: "2026-09-01", end: "2026-11-30" };
     expect(await datesDe(quinzaine)).toEqual(
-      courseDates({ type: "quinzaine", weekday: 1, startDate: null, endDate: null }, wholeSeason, closures).filter(
+      courseDates({ type: "biweekly", weekday: 1, startDate: null, endDate: null }, wholeSeason, closures).filter(
         (d) => d >= TODAY,
       ),
     );
     expect(await datesDe(period)).toEqual(
       courseDates(
-        { type: "hebdomadaire", weekday: 2, startDate: "2026-11-01", endDate: "2026-11-17" },
+        { type: "weekly", weekday: 2, startDate: "2026-11-01", endDate: "2026-11-17" },
         wholeSeason,
         closures,
       ),

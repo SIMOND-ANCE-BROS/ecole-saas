@@ -26,7 +26,7 @@ async function createCourse(schoolId: string, seasonId: string, discipline: stri
     await admin`INSERT INTO room (school_id, site_id, name) VALUES (${schoolId}, ${s.id}, ${`Salle ${discipline}`}) RETURNING id`;
   const [teacher] = await admin`
     INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
-    VALUES (${schoolId}, 'Prof', ${discipline}, 'salarie', 'non_applicable', 'heure', 3000) RETURNING id`;
+    VALUES (${schoolId}, 'Prof', ${discipline}, 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
   await admin`
     INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes, age_min, age_max, level)
     VALUES (${schoolId}, ${seasonId}, ${d.id}, ${room.id}, ${teacher.id}, ${day}, ${heure}, 60, 8, 10, 'Débutant')`;

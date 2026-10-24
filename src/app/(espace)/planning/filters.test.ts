@@ -13,7 +13,7 @@ const base: ScheduleCourse = {
   room: "Salle 1",
   siteId: "site-centre",
   site: "Centre",
-  recurrence: "hebdomadaire",
+  recurrence: "weekly",
   startDate: null,
   endDate: null,
   dates: [],

@@ -74,7 +74,7 @@ export default async function AttendancePage({ params }: PageProps<"/planning/se
           {date}, {attendance.startTime}–{end(attendance.startTime, attendance.durationMinutes)}, {attendance.room}
         </p>
       </div>
-      {unavailable && attendance.status !== "annulee" && (
+      {unavailable && attendance.status !== "cancelled" && (
         <p role="alert" className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
           L’intervenant de cette séance est indisponible.{" "}
           {free > 0

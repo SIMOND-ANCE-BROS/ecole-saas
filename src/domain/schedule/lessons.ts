@@ -33,7 +33,7 @@ export function lessonDates({
  * (workshop, one-off course).
  */
 export type Recurrence =
-  | { type: "hebdomadaire" | "quinzaine"; weekday: number; startDate: string | null; endDate: string | null }
+  | { type: "weekly" | "biweekly"; weekday: number; startDate: string | null; endDate: string | null }
   | { type: "dates"; dates: string[] };
 
 /**
@@ -48,6 +48,6 @@ export function courseDates(r: Recurrence, season: Period, closures: Period[]): 
   const end = r.endDate && r.endDate < season.end ? r.endDate : season.end;
   if (start > end) return [];
   const toutes = lessonDates({ start, end, weekday: r.weekday, closures: [] });
-  const retained = r.type === "quinzaine" ? toutes.filter((_, i) => i % 2 === 0) : toutes;
+  const retained = r.type === "biweekly" ? toutes.filter((_, i) => i % 2 === 0) : toutes;
   return retained.filter((date) => !closures.some((f) => f.start <= date && date <= f.end));
 }
