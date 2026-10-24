@@ -10,14 +10,14 @@ import { preview, enroll, type FormInput } from "./actions";
 
 const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const AUDIENCES = [
-  ["enfant", "Enfant"],
-  ["adulte", "Adulte"],
+  ["child", "Enfant"],
+  ["adult", "Adulte"],
   ["couple", "Couple"],
-  ["etudiant", "Étudiant"],
+  ["student", "Étudiant"],
 ] as const;
 const PERIODS = [
-  ["trimestre", "Trimestre"],
-  ["annee", "Année"],
+  ["quarter", "Trimestre"],
+  ["year", "Année"],
 ] as const;
 
 type Props = {
@@ -37,9 +37,9 @@ export function EnrollmentForm({
   const initial = students.find((d) => d.id === initialStudent) ?? (students.length === 1 ? students[0] : undefined);
   const [studentIds, setStudentIds] = useState<string[]>(initial ? [initial.id] : []);
   const [chosenAudience, setPublic] = useState<FormInput["audience"]>(
-    initial && initial.age !== null && initial.age >= 18 ? "adulte" : "enfant",
+    initial && initial.age !== null && initial.age >= 18 ? "adult" : "child",
   );
-  const [period, setPeriod] = useState<FormInput["period"]>("trimestre");
+  const [period, setPeriod] = useState<FormInput["period"]>("quarter");
   const [courseIds, setCourseIds] = useState<string[]>([]);
   const [filter, setFilter] = useState("");
   const [lastPreview, setPreview] = useState<{

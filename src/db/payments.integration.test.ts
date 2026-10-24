@@ -33,8 +33,8 @@ beforeAll(async () => {
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${otherSchool}, 'Ailleurs', 'Paul') RETURNING id`;
   const [s] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
-  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents) VALUES (${school}, ${s.id}, ${payer}, 'enfant', 'annee', 30000)`;
-  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status) VALUES (${school}, ${s.id}, ${payer}, 'enfant', 'trimestre', 9000, 'abandon')`;
+  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents) VALUES (${school}, ${s.id}, ${payer}, 'child', 'year', 30000)`;
+  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status) VALUES (${school}, ${s.id}, ${payer}, 'child', 'quarter', 9000, 'dropped')`;
 });
 
 afterAll(async () => {
@@ -81,7 +81,7 @@ describe("encaisser", () => {
       paye: 30000,
       remaining: 0,
       toCollect: 20000,
-      outsideCalculation: { abandon: 9000 },
+      outsideCalculation: { dropped: 9000 },
     });
     const traces =
       await admin`SELECT action, after->>'montant_centimes' AS montant, actor IS NOT NULL AS signe FROM audit_log WHERE school_id = ${school} AND target_table = 'payment'`;
@@ -92,7 +92,7 @@ describe("encaisser", () => {
   it("refuse des espèces « à encaisser plus tard », un payeur d'une autre école, un compte non membre", async () => {
     expect(
       await withSchool(school, (tx) =>
-        collect(tx, frontDesk, payer, [{ ...cheque(5000, "2027-01-05", ""), method: "especes" }]),
+        collect(tx, frontDesk, payer, [{ ...cheque(5000, "2027-01-05", ""), method: "cash" }]),
       ),
     ).toEqual({
       ok: false,

@@ -53,35 +53,23 @@ export const lessonStatus = pgEnum("lesson_status", ["planned", "done", "cancell
 export const courseRecurrence = pgEnum("course_recurrence", ["weekly", "biweekly", "dates"]);
 export const unavailabilitySource = pgEnum("unavailability_source", ["manual", "google", "microsoft"]);
 export const calendarProvider = pgEnum("calendar_provider", ["google", "microsoft"]);
-export const tariffAudience = pgEnum("tariff_audience", ["enfant", "adulte", "couple", "etudiant"]);
-export const period = pgEnum("period", ["trimestre", "annee", "unite"]);
-export const enrollmentStatus = pgEnum("enrollment_status", [
-  "essai",
-  "liste_attente",
-  "active",
-  "abandon",
-  "terminee",
-]);
-export const invoiceStatus = pgEnum("invoice_status", ["a_envoyer", "brouillon_outil", "emise", "rejetee", "annulee"]);
+export const tariffAudience = pgEnum("tariff_audience", ["child", "adult", "couple", "student"]);
+export const period = pgEnum("period", ["quarter", "year", "single"]);
+export const enrollmentStatus = pgEnum("enrollment_status", ["trial", "waitlist", "active", "dropped", "ended"]);
+export const invoiceStatus = pgEnum("invoice_status", ["to_send", "tool_draft", "issued", "rejected", "cancelled"]);
 export const invoicingTool = pgEnum("invoicing_tool", ["pennylane", "abby", "shine"]);
 export const paymentMethod = pgEnum("payment_method", [
   "cheque",
-  "especes",
-  "carte",
-  "virement",
-  "prelevement",
-  "cheque_vacances",
+  "cash",
+  "card",
+  "transfer",
+  "direct_debit",
+  "holiday_voucher",
   "pass_sport",
-  "autre",
+  "other",
 ]);
-export const installmentStatus = pgEnum("installment_status", [
-  "a_venir",
-  "payee",
-  "partielle",
-  "en_retard",
-  "annulee",
-]);
-export const statementStatus = pgEnum("statement_status", ["a_controler", "conforme", "ecart", "paye"]);
+export const installmentStatus = pgEnum("installment_status", ["upcoming", "paid", "partial", "overdue", "cancelled"]);
+export const statementStatus = pgEnum("statement_status", ["to_check", "matching", "discrepancy", "paid"]);
 export const memberRole = pgEnum("member_role", ROLE_VALUES);
 
 // ---------------------------------------------------------------------------
@@ -160,7 +148,7 @@ export const member = pgTable(
 );
 
 /** Link sent to a person: join the team, or choose a new password (#104). */
-export const invitationType = pgEnum("invitation_type", ["invitation", "reinitialisation"]);
+export const invitationType = pgEnum("invitation_type", ["invitation", "reset"]);
 
 /**
  * Invitation to a school's team, or password reset for a
@@ -186,7 +174,7 @@ export const invitation = pgTable(
   (t) => [
     check(
       "invitation_content",
-      sql`(${t.type} = 'invitation' AND ${t.role} IS NOT NULL) OR (${t.type} = 'reinitialisation' AND ${t.userId} IS NOT NULL)`,
+      sql`(${t.type} = 'invitation' AND ${t.role} IS NOT NULL) OR (${t.type} = 'reset' AND ${t.userId} IS NOT NULL)`,
     ),
     sameSchool(t, t.createdBy, member),
   ],
@@ -704,7 +692,7 @@ export const invoice = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     schoolId: schoolIdColumn(),
     payerId: uuid("payer_id").notNull(),
-    status: invoiceStatus("status").notNull().default("a_envoyer"),
+    status: invoiceStatus("status").notNull().default("to_send"),
     tool: invoicingTool("tool"),
     toolRef: text("tool_ref"),
     number: text("number"), // returned by the tool, never entered here
@@ -754,13 +742,13 @@ export const installment = pgTable(
     rank: smallint("rank").notNull(),
     dueDate: date("due_date").notNull(),
     amountCents: integer("amount_cents").notNull(),
-    status: installmentStatus("status").notNull().default("a_venir"),
+    status: installmentStatus("status").notNull().default("upcoming"),
   },
   (t) => [
     unique().on(t.invoiceId, t.rank),
     index("installment_open")
       .on(t.schoolId, t.dueDate)
-      .where(sql`${t.status} IN ('a_venir', 'partielle', 'en_retard')`),
+      .where(sql`${t.status} IN ('upcoming', 'partial', 'overdue')`),
     sameSchoolTarget(t),
     sameSchool(t, t.invoiceId, invoice),
   ],
@@ -797,7 +785,7 @@ export const payment = pgTable(
 );
 
 /** Methods deposited at the bank (or at ANCV) with a deposit slip (#98). */
-export const depositMethod = pgEnum("deposit_method", ["cheque", "especes", "cheque_vacances"]);
+export const depositMethod = pgEnum("deposit_method", ["cheque", "cash", "holiday_voucher"]);
 
 /** Bank deposit: a deposit slip of cheques, cash or holiday vouchers deposited together (#98). */
 export const bankDeposit = pgTable(
@@ -859,7 +847,7 @@ export const instructorStatement = pgTable(
     amountDueCents: integer("amount_due_cents").notNull(),
     invoiceReceived: text("invoice_received"),
     invoicedAmountCents: integer("invoiced_amount_cents"),
-    status: statementStatus("status").notNull().default("a_controler"),
+    status: statementStatus("status").notNull().default("to_check"),
   },
   (t) => [unique().on(t.instructorId, t.month), sameSchool(t, t.instructorId, instructor)],
 );

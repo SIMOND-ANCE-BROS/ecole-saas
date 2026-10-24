@@ -120,13 +120,13 @@ describe("coursDuPlanning et inscritsDuCours", () => {
     }
     for (const [firstName, status] of [
       ["Louis", "active"],
-      ["Alice", "essai"],
-      ["Jules", "liste_attente"],
-      ["Zoé", "abandon"],
+      ["Alice", "trial"],
+      ["Jules", "waitlist"],
+      ["Zoé", "dropped"],
     ]) {
       const [i] = await admin`
         INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status)
-        VALUES (${school}, ${season2026}, ${p.id}, 'enfant', 'trimestre', 10000, ${status}) RETURNING id`;
+        VALUES (${school}, ${season2026}, ${p.id}, 'child', 'quarter', 10000, ${status}) RETURNING id`;
       await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${school}, ${i.id}, ${students[firstName]}, ${jazz.id})`;
     }
 
@@ -136,8 +136,8 @@ describe("coursDuPlanning et inscritsDuCours", () => {
     });
     const enrolled = await withSchool(school, (tx) => enrolledInCourse(tx, jazz.id));
     expect(enrolled.map((i) => `${i.firstName} ${i.status}`)).toEqual([
-      "Alice essai",
-      "Jules liste_attente",
+      "Alice trial",
+      "Jules waitlist",
       "Louis active",
     ]);
     expect(enrolled[0]).toMatchObject({

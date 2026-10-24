@@ -14,8 +14,8 @@ export const metadata: Metadata = { title: "Cours" };
 
 const STATUS = {
   active: null,
-  essai: { label: "à l’essai", className: "bg-accent-doux text-texte" },
-  liste_attente: { label: "en attente", className: "bg-alerte-fond text-alerte-texte" },
+  trial: { label: "à l’essai", className: "bg-accent-doux text-texte" },
+  waitlist: { label: "en attente", className: "bg-alerte-fond text-alerte-texte" },
 } as const;
 
 const lessonDate = new Intl.DateTimeFormat("fr-FR", {
@@ -45,8 +45,8 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
   const today = todayInParis();
 
   const active = enrolled.filter((i) => i.status === "active").length;
-  const trials = enrolled.filter((i) => i.status === "essai").length;
-  const waitlist = enrolled.filter((i) => i.status === "liste_attente").length;
+  const trials = enrolled.filter((i) => i.status === "trial").length;
+  const waitlist = enrolled.filter((i) => i.status === "waitlist").length;
   const full = cours.maxCapacity !== null && active >= cours.maxCapacity;
   // « Chaque lundi 17:00–18:00 », « Un mercredi sur deux… », « Le sam. 24 oct., … 10:00–12:00 » (#90).
   const slot = `${recurrenceText(cours)}, ${cours.startTime}–${end(cours.startTime, cours.durationMinutes)}`;

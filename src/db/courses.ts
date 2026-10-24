@@ -350,7 +350,7 @@ export async function moveCourse(
     const [{ n }] = await tx
       .select({ n: sql<number>`count(DISTINCT ${enrollmentCourse.studentId})::int` })
       .from(enrollmentCourse)
-      .innerJoin(sql`enrollment i`, sql`i.id = ${enrollmentCourse.enrollmentId} AND i.status IN ('active', 'essai')`)
+      .innerJoin(sql`enrollment i`, sql`i.id = ${enrollmentCourse.enrollmentId} AND i.status IN ('active', 'trial')`)
       .where(eq(enrollmentCourse.courseId, id));
     if (n > 0) return { status: "confirmer", enrolled: n };
   }

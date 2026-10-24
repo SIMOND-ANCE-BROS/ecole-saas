@@ -13,8 +13,8 @@ const DOCUMENT = {
   image_rights: "Droit à l’image",
   other: "Autre document",
 } as const;
-const PERIOD = { trimestre: "trimestre", annee: "année", unite: "unité" } as const;
-const PUBLIC = { enfant: "Enfant", adulte: "Adulte", couple: "Couple", etudiant: "Étudiant" } as const;
+const PERIOD = { quarter: "trimestre", year: "année", single: "unité" } as const;
+const PUBLIC = { child: "Enfant", adult: "Adulte", couple: "Couple", student: "Étudiant" } as const;
 
 const longDate = new Intl.DateTimeFormat("fr-FR", {
   day: "numeric",

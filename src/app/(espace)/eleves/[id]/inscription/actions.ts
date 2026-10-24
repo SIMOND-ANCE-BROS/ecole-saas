@@ -11,8 +11,8 @@ import { requireRole } from "@/lib/session";
 const validInput = z.object({
   payerId: z.uuid(),
   studentIds: z.array(z.uuid()).max(2),
-  audience: z.enum(["enfant", "adulte", "couple", "etudiant"]),
-  period: z.enum(["trimestre", "annee", "unite"]),
+  audience: z.enum(["child", "adult", "couple", "student"]),
+  period: z.enum(["quarter", "year", "single"]),
   courseIds: z.array(z.uuid()).max(10),
 });
 

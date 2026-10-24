@@ -8,7 +8,7 @@ describe("soldePayeur", () => {
     const s = payerBalance(
       [
         { status: "active", netPriceCents: 32_000 },
-        { status: "terminee", netPriceCents: 10_050 },
+        { status: "ended", netPriceCents: 10_050 },
       ],
       [{ priceCents: 12_000 }],
       [{ amountCents: 20_000, plannedPayment: null }],
@@ -48,9 +48,9 @@ describe("soldePayeur", () => {
   it("abandon, essai et liste d'attente restent hors du calcul, mais visibles (#99)", () => {
     const s = payerBalance(
       [
-        { status: "abandon", netPriceCents: 20_000 },
-        { status: "essai", netPriceCents: 1_500 },
-        { status: "liste_attente", netPriceCents: 9_000 },
+        { status: "dropped", netPriceCents: 20_000 },
+        { status: "trial", netPriceCents: 1_500 },
+        { status: "waitlist", netPriceCents: 9_000 },
       ],
       [],
       [{ amountCents: 1_000, plannedPayment: null }],
@@ -61,7 +61,7 @@ describe("soldePayeur", () => {
       paye: 1_000,
       remaining: -1_000,
       toCollect: 0,
-      outsideCalculation: { abandon: 20_000, essai: 1_500, liste_attente: 9_000 },
+      outsideCalculation: { dropped: 20_000, trial: 1_500, waitlist: 9_000 },
     });
   });
 });

@@ -49,7 +49,7 @@ beforeAll(async () => {
         plannedPayment: "2027-01-05",
       },
       {
-        method: "especes",
+        method: "cash",
         amountCents: 2000,
         date: TODAY,
         reference: null,
@@ -57,7 +57,7 @@ beforeAll(async () => {
         plannedPayment: null,
       },
       {
-        method: "carte",
+        method: "card",
         amountCents: 8000,
         date: TODAY,
         reference: null,
@@ -105,8 +105,8 @@ describe("remises en banque", () => {
   it("à remettre : chèque arrivé à échéance et espèces ; ni carte, ni chèque différé, ni chèque entièrement corrigé", async () => {
     const r = await toDeposit();
     expect(r.cheque.map((p) => p.id)).toEqual([ids.cheque]);
-    expect(r.especes.map((p) => p.id)).toEqual([ids.especes]);
-    expect(r.cheque_vacances).toEqual([]);
+    expect(r.cash.map((p) => p.id)).toEqual([ids.especes]);
+    expect(r.holiday_voucher).toEqual([]);
   });
 
   it("crée une remise de chèques ; refuse un chèque déjà remis, un autre moyen, un chèque pas encore à encaisser", async () => {
@@ -171,7 +171,7 @@ describe("remises en banque", () => {
     const j = await withSchool(school, (tx) => paymentLog(tx, TODAY, TODAY, null));
     expect(j).toHaveLength(6); // five payments and one correction
     expect(j.find((x) => x.id === ids.cheque)?.dateDeposit).toBe(TODAY);
-    expect(await withSchool(school, (tx) => paymentLog(tx, TODAY, TODAY, "especes"))).toHaveLength(1);
+    expect(await withSchool(school, (tx) => paymentLog(tx, TODAY, TODAY, "cash"))).toHaveLength(1);
   });
 
   it("annuler une remise rend ses chèques à remettre et laisse une trace", async () => {

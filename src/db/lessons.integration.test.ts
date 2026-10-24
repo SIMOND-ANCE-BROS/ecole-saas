@@ -64,15 +64,15 @@ beforeAll(async () => {
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Martin', 'Paul') RETURNING id`;
   for (const [firstName, status] of [
     ["Léa", "active"],
-    ["Zoé", "essai"],
-    ["Jules", "liste_attente"],
-    ["Max", "abandon"],
+    ["Zoé", "trial"],
+    ["Jules", "waitlist"],
+    ["Max", "dropped"],
   ]) {
     [{ id: students[firstName] }] =
       await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Martin', ${firstName}) RETURNING id`;
     const [i] =
       await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status)
-      VALUES (${school}, ${season}, ${payer.id}, 'enfant', 'trimestre', 10000, ${status}) RETURNING id`;
+      VALUES (${school}, ${season}, ${payer.id}, 'child', 'quarter', 10000, ${status}) RETURNING id`;
     await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${school}, ${i.id}, ${students[firstName]}, ${wednesday})`;
   }
 });
@@ -149,7 +149,7 @@ describe("appel", () => {
     });
     expect(attendance?.students.map((d) => `${d.firstName} ${d.status} ${d.present}`)).toEqual([
       "Léa active null",
-      "Zoé essai null",
+      "Zoé trial null",
     ]);
   });
 

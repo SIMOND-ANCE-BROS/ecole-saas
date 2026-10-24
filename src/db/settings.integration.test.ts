@@ -94,9 +94,9 @@ describe("saisons", () => {
 
   it("reprend la grille, les réductions et les carnets de la saison précédente", async () => {
     await admin`INSERT INTO tariff (school_id, season_id, audience, period, combination, price_cents)
-      VALUES (${school}, ${season2026}, 'enfant', 'trimestre', '{60}', 11000), (${school}, ${season2026}, 'adulte', 'annee', '{60,90}', 61500)`;
+      VALUES (${school}, ${season2026}, 'child', 'quarter', '{60}', 11000), (${school}, ${season2026}, 'adult', 'year', '{60,90}', 61500)`;
     await admin`INSERT INTO discount (school_id, season_id, code, rate_bps, min_students, audiences, combinable_with_multi_discipline)
-      VALUES (${school}, ${season2026}, 'fratrie', 1000, 2, '{enfant}', false)`;
+      VALUES (${school}, ${season2026}, 'fratrie', 1000, 2, '{child}', false)`;
     await admin`INSERT INTO lesson_pack_tariff (school_id, season_id, lesson_count, max_people, price_cents) VALUES (${school}, ${season2026}, 5, 1, 25000)`;
     const r = await withSchool(school, (tx) =>
       createSeason(tx, { label: "2027-2028", startDate: "2027-09-01", endDate: "2028-06-30" }, season2026),

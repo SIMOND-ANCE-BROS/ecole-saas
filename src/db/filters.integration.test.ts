@@ -71,11 +71,11 @@ beforeAll(async () => {
     VALUES (${school}, ${season}, ${d.id}, ${room.id}, ${teacher.id}, 1, '17:00', 60) RETURNING id`;
   for (const [student, payer, status] of [
     [lea, sophie, "active"],
-    [hugo, hugo, "liste_attente"],
+    [hugo, hugo, "waitlist"],
   ]) {
     const [i] =
       await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status)
-      VALUES (${school}, ${season}, ${payer}, 'enfant', 'trimestre', 10000, ${status}) RETURNING id`;
+      VALUES (${school}, ${season}, ${payer}, 'child', 'quarter', 10000, ${status}) RETURNING id`;
     await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${school}, ${i.id}, ${student}, ${jazz.id})`;
   }
   // A Léa in another school: never visible.

@@ -187,7 +187,7 @@ describe("supprimerCours", () => {
       await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Martin', 'Léa') RETURNING id`;
     const [i] = await admin`
       INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status)
-      VALUES (${school}, ${season}, ${p.id}, 'enfant', 'trimestre', 10000, 'active') RETURNING id`;
+      VALUES (${school}, ${season}, ${p.id}, 'child', 'quarter', 10000, 'active') RETURNING id`;
     await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${school}, ${i.id}, ${d.id}, ${id})`;
     expect(await withSchool(school, (tx) => deleteCourse(tx, id))).toEqual({
       ok: false,
@@ -231,7 +231,7 @@ describe("deplacerCours (vue agenda)", () => {
       await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Petit', 'Lou') RETURNING id`;
     const [i] =
       await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status)
-      VALUES (${school}, ${season}, ${p.id}, 'enfant', 'trimestre', 10000, 'active') RETURNING id`;
+      VALUES (${school}, ${season}, ${p.id}, 'child', 'quarter', 10000, 'active') RETURNING id`;
     await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${school}, ${i.id}, ${d.id}, ${id})`;
     const slot = { weekday: 5, startTime: "17:00", durationMinutes: 60 };
     expect(await withSchool(school, (tx) => moveCourse(tx, id, slot, false))).toEqual({

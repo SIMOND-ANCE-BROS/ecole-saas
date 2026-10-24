@@ -27,7 +27,7 @@ const isUuid = (v: string) => z.uuid().safeParse(v).success;
 export type Result = { ok: true; id: string } | { ok: false; message: string };
 
 /** Students on the attendance sheet: active or on trial, never on the waitlist. */
-const ATTENDANCE_STATUSES = ["active", "essai"] as const;
+const ATTENDANCE_STATUSES = ["active", "trial"] as const;
 
 // ---------------------------------------------------------------------------
 // Closures

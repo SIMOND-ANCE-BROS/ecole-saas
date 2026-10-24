@@ -195,29 +195,29 @@ async function principal() {
     await admin`SELECT count(*)::int AS "nbTarifs" FROM tariff WHERE season_id = ${season.id}`;
   if (tariffCount === 0) {
     const GRID: [publicTarif: string, combinaison: number[], trimestre: number, annee: number][] = [
-      ["enfant", [45], 85, 210],
-      ["enfant", [60], 110, 280],
-      ["enfant", [90], 150, 380],
-      ["enfant", [45, 60], 165, 415],
-      ["enfant", [60, 60], 185, 475],
-      ["enfant", [60, 90], 220, 560],
-      ["enfant", [45, 90], 200, 500],
-      ["enfant", [90, 90], 255, 645],
-      ["enfant", [60, 60, 60], 230, 590],
-      ["adulte", [60], 120, 305],
-      ["adulte", [90], 165, 420],
-      ["adulte", [60, 60], 205, 520],
-      ["adulte", [60, 90], 240, 615],
-      ["adulte", [90, 90], 280, 715],
+      ["child", [45], 85, 210],
+      ["child", [60], 110, 280],
+      ["child", [90], 150, 380],
+      ["child", [45, 60], 165, 415],
+      ["child", [60, 60], 185, 475],
+      ["child", [60, 90], 220, 560],
+      ["child", [45, 90], 200, 500],
+      ["child", [90, 90], 255, 645],
+      ["child", [60, 60, 60], 230, 590],
+      ["adult", [60], 120, 305],
+      ["adult", [90], 165, 420],
+      ["adult", [60, 60], 205, 520],
+      ["adult", [60, 90], 240, 615],
+      ["adult", [90, 90], 280, 715],
       ["couple", [60], 230, 550],
       ["couple", [90], 295, 755],
-      ["etudiant", [60], 115, 290],
-      ["etudiant", [90], 155, 400],
+      ["student", [60], 115, 290],
+      ["student", [90], 155, 400],
     ];
     for (const [tariffAudience, combination, trimestre, annee] of GRID) {
       for (const [period, euros] of [
-        ["trimestre", trimestre],
-        ["annee", annee],
+        ["quarter", trimestre],
+        ["year", annee],
       ] as const) {
         await admin`
           INSERT INTO tariff (school_id, season_id, audience, period, combination, price_cents)
@@ -226,7 +226,7 @@ async function principal() {
     }
     await admin`
       INSERT INTO discount (school_id, season_id, code, rate_bps, min_students, audiences, combinable_with_multi_discipline)
-      VALUES (${school.id}, ${season.id}, 'fratrie', 1000, 2, '{enfant}', false)`;
+      VALUES (${school.id}, ${season.id}, 'fratrie', 1000, 2, '{child}', false)`;
   }
 
   // Demo closures (fictitious dates) then upcoming lessons, as the application creates them.

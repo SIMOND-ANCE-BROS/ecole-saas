@@ -16,13 +16,13 @@ const isUuid = (v: string) => z.uuid().safeParse(v).success;
 
 export const PAYMENT_METHODS = {
   cheque: "Chèque",
-  especes: "Espèces",
-  carte: "Carte",
-  virement: "Virement",
-  prelevement: "Prélèvement",
-  cheque_vacances: "Chèques vacances",
+  cash: "Espèces",
+  card: "Carte",
+  transfer: "Virement",
+  direct_debit: "Prélèvement",
+  holiday_voucher: "Chèques vacances",
   pass_sport: "Pass’Sport",
-  autre: "Autre",
+  other: "Autre",
 } as const;
 export type Method = keyof typeof PAYMENT_METHODS;
 

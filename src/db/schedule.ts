@@ -123,7 +123,7 @@ export type Enrolled = {
   payer: string;
   telephone: string | null;
   email: string | null;
-  status: "active" | "essai" | "liste_attente";
+  status: "active" | "trial" | "waitlist";
   enrollmentDate: string;
 };
 
@@ -152,9 +152,7 @@ export async function enrolledInCourse(tx: Tx, courseId: string): Promise<Enroll
     .innerJoin(enrollment, eq(enrollment.id, enrollmentCourse.enrollmentId))
     .innerJoin(student, eq(student.id, enrollmentCourse.studentId))
     .innerJoin(payer, eq(payer.id, enrollment.payerId))
-    .where(
-      and(eq(enrollmentCourse.courseId, courseId), inArray(enrollment.status, ["active", "essai", "liste_attente"])),
-    )
+    .where(and(eq(enrollmentCourse.courseId, courseId), inArray(enrollment.status, ["active", "trial", "waitlist"])))
     .orderBy(asc(student.lastName), asc(student.firstName), asc(student.id), sql`${enrollment.status} = 'active' DESC`);
   return rows.map(
     ({

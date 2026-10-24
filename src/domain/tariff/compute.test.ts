@@ -20,8 +20,8 @@ function enrollment(
   return {
     reference: `i${n}`,
     studentIds: [`d${n}`],
-    audience: "enfant",
-    period: "trimestre",
+    audience: "child",
+    period: "quarter",
     ...partial,
     courses,
   };
@@ -56,29 +56,29 @@ describe("choix du forfait (grille Ribas)", () => {
   });
 
   it("applique la périodicité annuelle", () => {
-    const [r] = ribas(enrollment({ course: [90, 90], period: "annee" })).enrollments;
+    const [r] = ribas(enrollment({ course: [90, 90], period: "year" })).enrollments;
     expect(ok(r).grossPriceCents).toBe(64500);
   });
 
   it("tarife un adulte sur 3 cours", () => {
-    const [r] = ribas(enrollment({ audience: "adulte", course: [60, 90, 60] })).enrollments;
+    const [r] = ribas(enrollment({ audience: "adult", course: [60, 90, 60] })).enrollments;
     expect(ok(r)).toMatchObject({ grossPriceCents: 28500, packageLabel: "1 h 00 + 1 h 00 + 1 h 30" });
   });
 
   it("tarife un couple au prix du couple", () => {
     const [r] = ribas(
-      enrollment({ audience: "couple", studentIds: ["a", "b"], period: "annee", course: [90] }),
+      enrollment({ audience: "couple", studentIds: ["a", "b"], period: "year", course: [90] }),
     ).enrollments;
     expect(ok(r).grossPriceCents).toBe(75500);
   });
 
   it("tarife un étudiant", () => {
-    const [r] = ribas(enrollment({ audience: "etudiant", period: "annee", course: [60] })).enrollments;
+    const [r] = ribas(enrollment({ audience: "student", period: "year", course: [60] })).enrollments;
     expect(ok(r).grossPriceCents).toBe(29000);
   });
 
   it("tarife un cours à l’unité", () => {
-    const [r] = ribas(enrollment({ audience: "adulte", period: "unite", course: [90] })).enrollments;
+    const [r] = ribas(enrollment({ audience: "adult", period: "single", course: [90] })).enrollments;
     expect(ok(r).grossPriceCents).toBe(2000);
   });
 });
@@ -87,15 +87,15 @@ describe("forfait réservé à une discipline", () => {
   const zumba = (duration: number) => ({ disciplineId: ZUMBA, durationMinutes: duration });
 
   it("prend la ligne Zumba quand tous les cours sont de la Zumba", () => {
-    const [r] = ribas(enrollment({ audience: "adulte", period: "annee", course: [zumba(60), zumba(60)] })).enrollments;
+    const [r] = ribas(enrollment({ audience: "adult", period: "year", course: [zumba(60), zumba(60)] })).enrollments;
     expect(ok(r).grossPriceCents).toBe(43000);
   });
 
   it("prend la ligne générale quand les disciplines sont mélangées", () => {
     const [r] = ribas(
       enrollment({
-        audience: "adulte",
-        period: "annee",
+        audience: "adult",
+        period: "year",
         course: [zumba(60), { disciplineId: SALSA, durationMinutes: 60 }],
       }),
     ).enrollments;
@@ -103,7 +103,7 @@ describe("forfait réservé à une discipline", () => {
   });
 
   it("revient à la ligne générale si la discipline n’a pas de ligne pour cette périodicité", () => {
-    const [r] = ribas(enrollment({ audience: "adulte", course: [zumba(60), zumba(60)] })).enrollments;
+    const [r] = ribas(enrollment({ audience: "adult", course: [zumba(60), zumba(60)] })).enrollments;
     expect(ok(r).grossPriceCents).toBe(20500);
   });
 });
@@ -130,7 +130,7 @@ describe("inscriptions impossibles à tarifer", () => {
   });
 
   it("signale un étudiant sur deux cours (absent de la grille)", () => {
-    const [r] = ribas(enrollment({ audience: "etudiant", course: [60, 60] })).enrollments;
+    const [r] = ribas(enrollment({ audience: "student", course: [60, 60] })).enrollments;
     expect(r).toMatchObject({ status: "erreur", error: { code: "combinaison_absente" } });
   });
 
@@ -178,7 +178,7 @@ describe("réduction fratrie (Ribas : -10 % dès 2 enfants, non cumulable avec 2
   });
 
   it("ne compte pas un adulte du même payeur, et l’écarte pour lui", () => {
-    const [enfant, adulte] = ribas(enrollment({}), enrollment({ audience: "adulte" })).enrollments;
+    const [enfant, adulte] = ribas(enrollment({}), enrollment({ audience: "adult" })).enrollments;
     expect(siblings(enfant)?.status).toBe("ecartee");
     expect(siblings(adulte)).toMatchObject({ status: "ecartee", pattern: "Réservée au public enfant" });
   });
@@ -235,8 +235,8 @@ describe("réduction fratrie (Ribas : -10 % dès 2 enfants, non cumulable avec 2
 
 describe("rien n’est propre à une école", () => {
   const grid: TariffRow[] = [
-    { id: "a", audience: "adulte", period: "annee", combination: [75], disciplineId: null, priceCents: 12345 },
-    { id: "b", audience: "adulte", period: "unite", combination: [75], disciplineId: null, priceCents: 1500 },
+    { id: "a", audience: "adult", period: "year", combination: [75], disciplineId: null, priceCents: 12345 },
+    { id: "b", audience: "adult", period: "single", combination: [75], disciplineId: null, priceCents: 1500 },
   ];
   const rule = (partial: Partial<DiscountRule>): DiscountRule => ({
     code: "fratrie",
@@ -247,7 +247,7 @@ describe("rien n’est propre à une école", () => {
     combinableWithMultiDiscipline: true,
     ...partial,
   });
-  const adulte = (period: "annee" | "unite" = "annee") => enrollment({ audience: "adulte", period, course: [75] });
+  const adulte = (period: "year" | "single" = "year") => enrollment({ audience: "adult", period, course: [75] });
 
   it("arrondit chaque réduction au centime, et le total est la somme des lignes", () => {
     const result = computeTariff({
@@ -264,7 +264,7 @@ describe("rien n’est propre à une école", () => {
     const [yearly, unite] = computeTariff({
       grid,
       discounts: [rule({ amountCents: 2000 })],
-      enrollments: [adulte(), adulte("unite")],
+      enrollments: [adulte(), adulte("single")],
     }).enrollments;
     expect(ok(yearly)).toMatchObject({ discountCents: 2000, netPriceCents: 10345 });
     expect(siblings(yearly)?.pattern).toBe(`2 danseurs du même payeur : -${formatEuros(2000)}`);

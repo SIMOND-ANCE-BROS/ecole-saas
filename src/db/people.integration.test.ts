@@ -105,7 +105,7 @@ beforeAll(async () => {
     await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
     VALUES (${school}, ${season.id}, ${d.id}, ${room.id}, ${teacher.id}, 3, '17:00', 60) RETURNING id`;
   const [i] = await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents)
-    VALUES (${school}, ${season.id}, ${helene}, 'enfant', 'trimestre', 10000) RETURNING id`;
+    VALUES (${school}, ${season.id}, ${helene}, 'child', 'quarter', 10000) RETURNING id`;
   await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${school}, ${i.id}, ${zoe}, ${jazz})`;
   await admin`INSERT INTO student_document (school_id, student_id, type, valid_until) VALUES (${school}, ${zoe}, 'medical_certificate', '2027-09-30')`;
 });

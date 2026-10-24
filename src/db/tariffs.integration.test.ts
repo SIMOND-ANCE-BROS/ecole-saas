@@ -79,40 +79,40 @@ afterAll(async () => {
 describe("grille", () => {
   it("enregistre des prix, trie la combinaison, distingue une ligne réservée à une discipline", async () => {
     await price({
-      audience: "adulte",
+      audience: "adult",
       combination: [60],
       disciplineId: null,
-      period: "trimestre",
+      period: "quarter",
       priceCents: 12000,
     });
-    await price({ audience: "adulte", combination: [60], disciplineId: null, period: "annee", priceCents: 30500 });
+    await price({ audience: "adult", combination: [60], disciplineId: null, period: "year", priceCents: 30500 });
     await price({
-      audience: "adulte",
+      audience: "adult",
       combination: [90, 60],
       disciplineId: null,
-      period: "trimestre",
+      period: "quarter",
       priceCents: 24000,
     });
     await price({
-      audience: "adulte",
+      audience: "adult",
       combination: [60, 60],
       disciplineId: zumba,
-      period: "trimestre",
+      period: "quarter",
       priceCents: 19000,
     });
     await price({
-      audience: "enfant",
+      audience: "child",
       combination: [45],
       disciplineId: null,
-      period: "trimestre",
+      period: "quarter",
       priceCents: 8500,
     });
     // Correcting a price: the cell is updated, not duplicated.
     await price({
-      audience: "adulte",
+      audience: "adult",
       combination: [60],
       disciplineId: null,
-      period: "trimestre",
+      period: "quarter",
       priceCents: 12500,
     });
 
@@ -120,13 +120,13 @@ describe("grille", () => {
     expect(
       grid.map(
         (l) =>
-          `${l.audience} ${l.combination.join("+")} ${l.discipline ?? "toutes"} T${l.price.trimestre?.cents ?? "-"} A${l.price.annee?.cents ?? "-"}`,
+          `${l.audience} ${l.combination.join("+")} ${l.discipline ?? "toutes"} T${l.price.quarter?.cents ?? "-"} A${l.price.year?.cents ?? "-"}`,
       ),
     ).toEqual([
-      "enfant 45 toutes T8500 A-",
-      "adulte 60 toutes T12500 A30500",
-      "adulte 60+90 toutes T24000 A-",
-      "adulte 60+60 Zumba T19000 A-",
+      "child 45 toutes T8500 A-",
+      "adult 60 toutes T12500 A30500",
+      "adult 60+90 toutes T24000 A-",
+      "adult 60+60 Zumba T19000 A-",
     ]);
   });
 
@@ -134,8 +134,8 @@ describe("grille", () => {
     const r = await withSchool(school, (tx) =>
       enrollmentPreview(tx, payer, season, {
         studentIds: [ines],
-        audience: "adulte",
-        period: "trimestre",
+        audience: "adult",
+        period: "quarter",
         courseIds: [zumbaCourse],
       }),
     );
@@ -146,24 +146,24 @@ describe("grille", () => {
     expect(
       (
         await price({
-          audience: "adulte",
+          audience: "adult",
           combination: [60],
           disciplineId: null,
-          period: "annee",
+          period: "year",
           priceCents: null,
         })
       ).ok,
     ).toBe(true);
     const [{ id: tariffId }] =
-      await admin`SELECT id FROM tariff WHERE season_id = ${season} AND audience = 'adulte' AND period = 'trimestre' AND combination = '{60}'`;
+      await admin`SELECT id FROM tariff WHERE season_id = ${season} AND audience = 'adult' AND period = 'quarter' AND combination = '{60}'`;
     await admin`INSERT INTO enrollment (school_id, season_id, payer_id, tariff_id, audience, period, gross_price_cents)
-      VALUES (${school}, ${season}, ${payer}, ${tariffId}, 'adulte', 'trimestre', 12500)`;
+      VALUES (${school}, ${season}, ${payer}, ${tariffId}, 'adult', 'quarter', 12500)`;
     expect(
       await price({
-        audience: "adulte",
+        audience: "adult",
         combination: [60],
         disciplineId: null,
-        period: "trimestre",
+        period: "quarter",
         priceCents: null,
       }),
     ).toEqual({
@@ -174,27 +174,27 @@ describe("grille", () => {
     expect(
       (
         await price({
-          audience: "adulte",
+          audience: "adult",
           combination: [60],
           disciplineId: null,
-          period: "trimestre",
+          period: "quarter",
           priceCents: 13000,
         })
       ).ok,
     ).toBe(true);
     const row = (await withSchool(school, (tx) => seasonGrid(tx, season))).find(
-      (l) => l.audience === "adulte" && l.combination.join() === "60" && !l.disciplineId,
+      (l) => l.audience === "adult" && l.combination.join() === "60" && !l.disciplineId,
     );
-    expect(row?.price.trimestre).toMatchObject({ cents: 13000, used: true });
+    expect(row?.price.quarter).toMatchObject({ cents: 13000, used: true });
   });
 
   it("refuse une combinaison vide, une discipline ou une saison d’une autre école", async () => {
     expect(
       await price({
-        audience: "adulte",
+        audience: "adult",
         combination: [],
         disciplineId: null,
-        period: "trimestre",
+        period: "quarter",
         priceCents: 100,
       }),
     ).toEqual({
@@ -205,10 +205,10 @@ describe("grille", () => {
       await admin`INSERT INTO discipline (school_id, name) VALUES (${otherSchool}, 'Salsa') RETURNING id`;
     expect(
       await price({
-        audience: "adulte",
+        audience: "adult",
         combination: [60],
         disciplineId: otherDiscipline,
-        period: "trimestre",
+        period: "quarter",
         priceCents: 100,
       }),
     ).toEqual({
@@ -225,14 +225,14 @@ describe("fratrie et carnets", () => {
       rateBps: 1000,
       amountCents: null,
       minStudents: 2,
-      audiences: ["enfant" as const],
+      audiences: ["child" as const],
       combinableWithMultiDiscipline: false,
     };
     expect((await withSchool(school, (tx) => saveSiblings(tx, season, rule))).ok).toBe(true);
     await withSchool(school, (tx) => saveSiblings(tx, season, { ...rule, rateBps: 1500 }));
     expect(await withSchool(school, (tx) => readSiblings(tx, season))).toMatchObject({
       rateBps: 1500,
-      audiences: ["enfant"],
+      audiences: ["child"],
     });
     expect(await withSchool(school, (tx) => saveSiblings(tx, season, { ...rule, amountCents: 1000 }))).toEqual({
       ok: false,

@@ -55,7 +55,7 @@ export function ToDeposit({
                 />
               </th>
               <th>Payeur</th>
-              {method !== "especes" && <th>N°</th>}
+              {method !== "cash" && <th>N°</th>}
               {method === "cheque" && <th>Banque ou titulaire</th>}
               <th>Reçu le</th>
               {method === "cheque" && <th>À encaisser le</th>}
@@ -74,7 +74,7 @@ export function ToDeposit({
                   />
                 </td>
                 <td>{p.payer}</td>
-                {method !== "especes" && <td>{p.reference ?? "—"}</td>}
+                {method !== "cash" && <td>{p.reference ?? "—"}</td>}
                 {method === "cheque" && <td>{p.issuer ?? "—"}</td>}
                 <td className="whitespace-nowrap">{day(p.date)}</td>
                 {method === "cheque" && (

@@ -35,7 +35,7 @@ export async function acceptLink(schoolId: string, token: string, entry: LinkInp
   const ctx = await auth.$context;
   let userId: string;
 
-  if (link.type === "reinitialisation") {
+  if (link.type === "reset") {
     const refusal = passwordRefusal(entry.password, entry.confirmation);
     if (refusal) return { ok: false, message: refusal };
     if (!link.userId) return { ok: false, message: EXPIRE };
@@ -66,7 +66,7 @@ export async function acceptLink(schoolId: string, token: string, entry: LinkInp
   const used = await withSchool(schoolId, (tx) => consumeLink(tx, link, userId));
   if (used === "partage") return { ok: false, message: SHARED };
   if (used !== "ok") return { ok: false, message: EXPIRE };
-  if (link.type === "reinitialisation") {
+  if (link.type === "reset") {
     await ctx.internalAdapter.updatePassword(userId, await ctx.password.hash(entry.password));
     // Sessions opened with the old password are closed.
     await ctx.internalAdapter.deleteUserSessions(userId);

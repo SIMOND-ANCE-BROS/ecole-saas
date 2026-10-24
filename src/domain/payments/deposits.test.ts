@@ -23,16 +23,16 @@ describe("aRemettre", () => {
         p("a", "cheque", 10000),
         p("b", "cheque", 10000, { plannedPayment: "2026-10-21" }),
         p("c", "cheque", 10000, { plannedPayment: "2027-01-05" }),
-        p("d", "especes", 2000),
-        p("e", "cheque_vacances", 5000),
-        p("f", "carte", 8000),
+        p("d", "cash", 2000),
+        p("e", "holiday_voucher", 5000),
+        p("f", "card", 8000),
         p("g", "cheque", 10000, { depositId: "r1" }),
       ],
       "2026-10-21",
     );
     expect(r.cheque.map((x) => x.id)).toEqual(["a", "b"]);
-    expect(r.especes.map((x) => x.id)).toEqual(["d"]);
-    expect(r.cheque_vacances.map((x) => x.id)).toEqual(["e"]);
+    expect(r.cash.map((x) => x.id)).toEqual(["d"]);
+    expect(r.holiday_voucher.map((x) => x.id)).toEqual(["e"]);
   });
 
   it("ni les corrections, ni un chèque entièrement corrigé ; un chèque corrigé en partie reste à remettre", () => {
@@ -49,9 +49,9 @@ describe("aRemettre", () => {
 });
 
 it("totaux par moyen, corrections comprises", () => {
-  expect(totals([p("a", "cheque", 10000), p("b", "cheque", -4000), p("c", "especes", 2050)])).toEqual({
+  expect(totals([p("a", "cheque", 10000), p("b", "cheque", -4000), p("c", "cash", 2050)])).toEqual({
     total: 8050,
-    byMethod: { cheque: 6000, especes: 2050 },
+    byMethod: { cheque: 6000, cash: 2050 },
   });
 });
 

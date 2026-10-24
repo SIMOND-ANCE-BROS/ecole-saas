@@ -3,7 +3,7 @@
  * `YYYY-MM-DD`.
  */
 
-export const DEPOSIT_METHODS = ["cheque", "especes", "cheque_vacances"] as const;
+export const DEPOSIT_METHODS = ["cheque", "cash", "holiday_voucher"] as const;
 export type DepositMethod = (typeof DEPOSIT_METHODS)[number];
 export const isDepositable = (method: string): method is DepositMethod =>
   (DEPOSIT_METHODS as readonly string[]).includes(method);
@@ -24,7 +24,7 @@ export type DepositablePayment = {
  * by a correction.
  */
 export function toDeposit<T extends DepositablePayment>(payments: T[], today: string): Record<DepositMethod, T[]> {
-  const r: Record<DepositMethod, T[]> = { cheque: [], especes: [], cheque_vacances: [] };
+  const r: Record<DepositMethod, T[]> = { cheque: [], cash: [], holiday_voucher: [] };
   for (const p of payments) {
     if (!isDepositable(p.method) || p.amountCents <= 0 || p.depositId !== null) continue;
     if (p.amountCents - p.correctedCents <= 0) continue;

@@ -4,10 +4,10 @@
  * recorded against the payer.
  */
 
-export type EnrollmentStatus = "essai" | "liste_attente" | "active" | "abandon" | "terminee";
+export type EnrollmentStatus = "trial" | "waitlist" | "active" | "dropped" | "ended";
 
 /** Statuses counted in the amount due. Dropped and trial: rule to be set by the school (#99), shown apart. */
-export const DUE_STATUSES: EnrollmentStatus[] = ["active", "terminee"];
+export const DUE_STATUSES: EnrollmentStatus[] = ["active", "ended"];
 
 export type EnrollmentDue = { status: EnrollmentStatus; netPriceCents: number };
 export type BalancePayment = { amountCents: number; plannedPayment: string | null };
