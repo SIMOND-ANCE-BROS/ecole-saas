@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { isStudent } from "@/db/students";
 import { balanceOf } from "@/db/payments";
-import { readPerson, nomAffiche } from "@/db/people";
+import { readPerson, displayedName } from "@/db/people";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { PaymentForm } from "./payment-form";
@@ -31,14 +31,14 @@ export default async function CollectPaymentPage({ searchParams }: PageProps<"/p
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
         <Link href={back} className="lien">
-          {nomAffiche(p)}
+          {displayedName(p)}
         </Link>
         <span className="text-doux"> / Encaisser</span>
       </nav>
       <h1 className="titre-page">Encaisser</h1>
       <PaymentForm
         payerId={p.id}
-        payer={nomAffiche(p)}
+        payer={displayedName(p)}
         remaining={balance?.remaining ?? null}
         today={today}
         back={back}

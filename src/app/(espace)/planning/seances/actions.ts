@@ -33,9 +33,9 @@ export async function replace(lessonId: string, instructorId: string): Promise<B
   return back(r);
 }
 
-export async function cancel(lessonId: string, annulee: boolean): Promise<Back> {
+export async function cancel(lessonId: string, cancelled: boolean): Promise<Back> {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
-  const r = await withSchool(schoolId, (tx) => (annulee ? cancelLesson(tx, lessonId) : restoreLesson(tx, lessonId)));
+  const r = await withSchool(schoolId, (tx) => (cancelled ? cancelLesson(tx, lessonId) : restoreLesson(tx, lessonId)));
   revalidatePath(`/planning/seances/${lessonId}`);
   return back(r);
 }

@@ -70,18 +70,18 @@ export function DatedWeek({
     // One-off course: only the lesson exists; recurring course: ask for the scope.
     if (!choice && s?.recurrence !== "dates") {
       return {
-        status: "choisir",
+        status: "choose",
         question: `Déplacer ${s?.discipline ?? "la séance"} au ${when} :`,
         choice: [
-          { value: "seance", label: "Cette séance seulement" },
-          { value: "suivantes", label: "Cette séance et les suivantes" },
+          { value: "lesson", label: "Cette séance seulement" },
+          { value: "following", label: "Cette séance et les suivantes" },
         ],
       };
     }
     return moveOneLesson(
       id,
       { date, startTime: slot.startTime, durationMinutes: slot.durationMinutes },
-      choice === "suivantes" ? "suivantes" : "seance",
+      choice === "following" ? "following" : "lesson",
     );
   }
 

@@ -77,16 +77,16 @@ describe("collect", () => {
     if (!r.ok) throw new Error(r.message);
     ids = r.ids;
     expect(await withSchool(school, (tx) => balanceOf(tx, payer, TODAY))).toEqual({
-      du: 30000,
-      paye: 30000,
+      due: 30000,
+      paid: 30000,
       remaining: 0,
       toCollect: 20000,
       outsideCalculation: { dropped: 9000 },
     });
     const traces =
-      await admin`SELECT action, after->>'montant_centimes' AS montant, actor IS NOT NULL AS signe FROM audit_log WHERE school_id = ${school} AND target_table = 'payment'`;
+      await admin`SELECT action, after->>'montant_centimes' AS amount, actor IS NOT NULL AS signed FROM audit_log WHERE school_id = ${school} AND target_table = 'payment'`;
     expect(traces).toHaveLength(3);
-    expect(traces.every((t) => t.action === "insert" && t.montant === "10000" && t.signe)).toBe(true);
+    expect(traces.every((t) => t.action === "insert" && t.amount === "10000" && t.signed)).toBe(true);
   });
 
   it("rejects cash « à encaisser plus tard », a payer from another school, a non-member account", async () => {

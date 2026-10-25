@@ -6,7 +6,7 @@
 
 export type CalendarCourse = { id: string; weekday: number | null; startTime: string; durationMinutes: number };
 
-export const toMinutes = (heure: string) => Number(heure.slice(0, 2)) * 60 + Number(heure.slice(3, 5));
+export const toMinutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 export const toTime = (minutes: number) =>
   `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 

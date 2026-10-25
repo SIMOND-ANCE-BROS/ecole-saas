@@ -18,13 +18,13 @@ const day = new Intl.DateTimeFormat("fr-FR", {
   month: "short",
   timeZone: "Europe/Paris",
 });
-const heure = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
+const time = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
 
 /** « mer. 4 nov., 16:30 à 19:00 », or « mer. 4 nov. au ven. 6 nov. » for whole days. */
 function range(isoStart: string, isoEnd: string): string {
   const start = new Date(isoStart);
   const end = new Date(isoEnd);
-  const midnight = (d: Date) => heure.format(d) === "00:00";
+  const midnight = (d: Date) => time.format(d) === "00:00";
   if (midnight(start) && midnight(end)) {
     const last = new Date(end.getTime() - 1);
     return day.format(start) === day.format(last)
@@ -32,8 +32,8 @@ function range(isoStart: string, isoEnd: string): string {
       : `${day.format(start)} au ${day.format(last)}`;
   }
   return day.format(start) === day.format(end)
-    ? `${day.format(start)}, ${heure.format(start)} à ${heure.format(end)}`
-    : `${day.format(start)} ${heure.format(start)} au ${day.format(end)} ${heure.format(end)}`;
+    ? `${day.format(start)}, ${time.format(start)} à ${time.format(end)}`
+    : `${day.format(start)} ${time.format(start)} au ${day.format(end)} ${time.format(end)}`;
 }
 
 /** Upcoming unavailabilities of an instructor; those from a connected calendar cannot be removed here. */
@@ -46,7 +46,7 @@ export function Unavailabilities({
   firstName: string;
   unavailabilities: DisplayedUnavailability[];
 }) {
-  const [v, setV] = useState({ du: "", au: "", de: "", a: "", label: "" });
+  const [v, setV] = useState({ fromDate: "", toDate: "", fromTime: "", toTime: "", label: "" });
   const [message, setMessage] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
   const updated = (field: keyof typeof v) => (e: { target: { value: string } }) =>
@@ -95,9 +95,12 @@ export function Unavailabilities({
         onSubmit={(e) => {
           e.preventDefault();
           startTransition(async () => {
-            const { message: error } = await addUnavailabilityAction(instructorId, { ...v, au: v.au || v.du });
+            const { message: error } = await addUnavailabilityAction(instructorId, {
+              ...v,
+              toDate: v.toDate || v.fromDate,
+            });
             setMessage(error);
-            if (!error) setV({ du: "", au: "", de: "", a: "", label: "" });
+            if (!error) setV({ fromDate: "", toDate: "", fromTime: "", toTime: "", label: "" });
           });
         }}
       >
@@ -105,25 +108,39 @@ export function Unavailabilities({
           <label htmlFor="indispo-du" className="font-medium">
             Du
           </label>
-          <input id="indispo-du" type="date" className="champ" required value={v.du} onChange={updated("du")} />
+          <input
+            id="indispo-du"
+            type="date"
+            className="champ"
+            required
+            value={v.fromDate}
+            onChange={updated("fromDate")}
+          />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="indispo-au" className="font-medium">
             Au (inclus)
           </label>
-          <input id="indispo-au" type="date" className="champ" min={v.du} value={v.au} onChange={updated("au")} />
+          <input
+            id="indispo-au"
+            type="date"
+            className="champ"
+            min={v.fromDate}
+            value={v.toDate}
+            onChange={updated("toDate")}
+          />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="indispo-de" className="font-medium">
             De (facultatif)
           </label>
-          <input id="indispo-de" type="time" className="champ" value={v.de} onChange={updated("de")} />
+          <input id="indispo-de" type="time" className="champ" value={v.fromTime} onChange={updated("fromTime")} />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="indispo-a" className="font-medium">
             À
           </label>
-          <input id="indispo-a" type="time" className="champ" value={v.a} onChange={updated("a")} />
+          <input id="indispo-a" type="time" className="champ" value={v.toTime} onChange={updated("toTime")} />
         </div>
         <div className="flex flex-col gap-1 sm:col-span-3">
           <label htmlFor="indispo-libelle" className="font-medium">

@@ -16,6 +16,8 @@ import {
   season,
 } from "./schema";
 
+export { displayedName };
+
 /**
  * People (students, parents, partners, professional payers) and relationships
  * between them. Always within the `withSchool()` transaction: RLS limits
@@ -43,8 +45,6 @@ function contient(text: string): string {
 
 const digits = (v: string) => v.replace(/\D/g, "");
 const phoneDigits = sql`regexp_replace(coalesce(${person.phone}, ''), '[^0-9]', '', 'g')`;
-
-export { displayedName as nomAffiche };
 
 // ---------------------------------------------------------------------------
 // Search and list

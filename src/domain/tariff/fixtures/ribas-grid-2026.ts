@@ -85,9 +85,9 @@ const children: TariffRow[] = (
     [[60, 60, 60], 230, 590],
     [[45, 45, 60], 195, 490],
   ] as const
-).flatMap(([combination, trimestre, annee]) => [
-  row("child", "quarter", [...combination], trimestre),
-  row("child", "year", [...combination], annee),
+).flatMap(([combination, quarter, year]) => [
+  row("child", "quarter", [...combination], quarter),
+  row("child", "year", [...combination], year),
 ]);
 
 export const ribasGrid: TariffRow[] = [...adultes, ...children];

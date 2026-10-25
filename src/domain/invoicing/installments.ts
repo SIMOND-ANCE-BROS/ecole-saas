@@ -41,8 +41,8 @@ export function computeSchedule(request: ScheduleRequest): Installment[] {
 
 /** `YYYY-MM-DD` + n months, brought back to the last day of the month (31 January + 1 → 28 or 29 February). */
 export function addMonths(date: string, month: number): string {
-  const { annee, month: m, day: day } = readDate(date);
-  const index = annee * 12 + (m - 1) + month;
+  const { year: year, month: m, day: day } = readDate(date);
+  const index = year * 12 + (m - 1) + month;
   const targetYear = Math.floor(index / 12);
   const targetMonth = (index % 12) + 1;
   const targetDay = Math.min(day, daysInMonth(targetYear, targetMonth));
@@ -51,16 +51,16 @@ export function addMonths(date: string, month: number): string {
 
 function readDate(date: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  const [annee, month, day] = (match ?? []).slice(1).map(Number);
-  if (!match || month < 1 || month > 12 || day < 1 || day > daysInMonth(annee, month)) {
+  const [year, month, day] = (match ?? []).slice(1).map(Number);
+  if (!match || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) {
     throw new TypeError(`Date invalide (YYYY-MM-DD attendu) : ${date}`);
   }
-  return { annee, month: month, day: day };
+  return { year: year, month: month, day: day };
 }
 
-function daysInMonth(annee: number, month: number): number {
+function daysInMonth(year: number, month: number): number {
   // Day 0 of the next month = last day of the month, in UTC to avoid any time zone effect.
-  return new Date(Date.UTC(annee, month, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
 function two(n: number): string {

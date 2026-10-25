@@ -54,10 +54,10 @@ function rows(tx: Tx) {
 }
 
 /** Payments received between two dates (inclusive), optionally of a single method, oldest first. */
-export async function paymentLog(tx: Tx, du: string, au: string, method: Method | null): Promise<AuditLogRow[]> {
+export async function paymentLog(tx: Tx, from: string, to: string, method: Method | null): Promise<AuditLogRow[]> {
   return rows(tx)
     .where(
-      and(sql`${payment.date} BETWEEN ${du}::date AND ${au}::date`, method ? eq(payment.method, method) : undefined),
+      and(sql`${payment.date} BETWEEN ${from}::date AND ${to}::date`, method ? eq(payment.method, method) : undefined),
     )
     .orderBy(asc(payment.date), asc(payment.createdAt));
 }

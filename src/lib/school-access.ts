@@ -47,6 +47,6 @@ export async function idDeSession(token: string): Promise<string | null> {
 
 async function membership(userId: string, schoolId: string) {
   if (!uuid.safeParse(schoolId).success) return null;
-  const ecoles = await schoolsOf(userId);
-  return ecoles.find((e) => e.id === schoolId) ?? null;
+  const schools = await schoolsOf(userId);
+  return schools.find((e) => e.id === schoolId) ?? null;
 }

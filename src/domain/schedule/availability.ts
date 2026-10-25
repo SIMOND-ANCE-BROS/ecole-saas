@@ -26,9 +26,9 @@ function parisShift(instant: number): number {
 }
 
 /** Instant (milliseconds) of a Paris time `HH:MM` on a day `YYYY-MM-DD`. */
-export function instantParis(date: string, heure: string): number {
+export function instantParis(date: string, time: string): number {
   const [a, m, j] = date.split("-").map(Number);
-  const naive = Date.UTC(a, m - 1, j, Number(heure.slice(0, 2)), Number(heure.slice(3, 5)));
+  const naive = Date.UTC(a, m - 1, j, Number(time.slice(0, 2)), Number(time.slice(3, 5)));
   // Two passes: the offset may change between the naive time and the real time.
   const first = naive - parisShift(naive) * MINUTE;
   return naive - parisShift(first) * MINUTE;

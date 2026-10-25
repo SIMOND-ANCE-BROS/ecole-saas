@@ -199,8 +199,8 @@ describe("deleteCourse", () => {
 describe("scheduleReferential", () => {
   it("returns the school's disciplines, rooms with their site, and active instructors", async () => {
     const r = await withSchool(school, (tx) => scheduleReferential(tx));
-    expect(r.salles).toContainEqual({ id: room, name: "Studio", site: "Centre", siteId: site, capacity: 20 });
-    expect(r.salles.map((s) => s.id)).not.toContain(foreignRoom);
+    expect(r.rooms).toContainEqual({ id: room, name: "Studio", site: "Centre", siteId: site, capacity: 20 });
+    expect(r.rooms.map((s) => s.id)).not.toContain(foreignRoom);
     expect(r.instructors.map((i) => i.id)).toEqual([teacher]);
     expect(r.sites.map((s) => s.name)).toContain("Centre");
     expect(r.disciplines.map((d) => d.name)).toContain("Jazz");

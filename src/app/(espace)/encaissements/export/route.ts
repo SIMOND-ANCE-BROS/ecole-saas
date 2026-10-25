@@ -12,11 +12,11 @@ export async function GET(query: Request) {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const p = new URL(query.url).searchParams;
   const today = todayInParis();
-  const du = validDate(p.get("du")) ?? today;
-  const au = validDate(p.get("au")) ?? today;
+  const from = validDate(p.get("du")) ?? today;
+  const to = validDate(p.get("au")) ?? today;
   const m = p.get("moyen");
   const method = m && isKeyOf(PAYMENT_METHODS, m) ? m : null;
-  const rows = await withSchool(schoolId, (tx) => paymentLog(tx, du, au, method));
+  const rows = await withSchool(schoolId, (tx) => paymentLog(tx, from, to, method));
   const csv = toCsv(
     rows.map((l) => ({
       date: l.date,
@@ -32,7 +32,7 @@ export async function GET(query: Request) {
   return new Response(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="encaissements-${du}-${au}.csv"`,
+      "Content-Disposition": `attachment; filename="encaissements-${from}-${to}.csv"`,
       "Cache-Control": "no-store",
     },
   });

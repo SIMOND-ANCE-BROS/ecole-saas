@@ -18,7 +18,7 @@ export default async function SettingsPage() {
     disciplines: await listDisciplines(tx),
     seats: await listPlaces(tx),
   }));
-  const salles = seats.reduce((n, s) => n + s.salles.length, 0);
+  const rooms = seats.reduce((n, s) => n + s.rooms.length, 0);
   const sections = [
     {
       href: "/parametres/saisons",
@@ -38,7 +38,7 @@ export default async function SettingsPage() {
     {
       href: "/parametres/lieux",
       title: "Sites et salles",
-      detail: `${seats.length} site${seats.length > 1 ? "s" : ""}, ${salles} salle${salles > 1 ? "s" : ""}`,
+      detail: `${seats.length} site${seats.length > 1 ? "s" : ""}, ${rooms} salle${rooms > 1 ? "s" : ""}`,
     },
     { href: "/planning/fermetures", title: "Fermetures", detail: "Vacances, jours fériés, gala" },
     { href: "/intervenants", title: "Intervenants", detail: "Professeurs, statut et rémunération" },

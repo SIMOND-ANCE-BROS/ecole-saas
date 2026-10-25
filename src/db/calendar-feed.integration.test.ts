@@ -56,10 +56,10 @@ describe("iCal subscription", () => {
   it("creates a token of which only the hash is kept, and gives the upcoming lessons without the substituted one", async () => {
     const token = await withSchool(school, (tx) => createCalendarToken(tx, camille));
     expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    const [{ calendar_token_hash: jeton_agenda_hash }] =
+    const [{ calendar_token_hash: calendarTokenHash }] =
       await admin`SELECT calendar_token_hash FROM instructor WHERE id = ${camille}`;
-    expect(jeton_agenda_hash).not.toBe(token);
-    expect(jeton_agenda_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(calendarTokenHash).not.toBe(token);
+    expect(calendarTokenHash).toMatch(/^[0-9a-f]{64}$/);
     expect(await withSchool(school, (tx) => calendarState(tx, camille))).toBeInstanceOf(Date);
 
     const calendar = await withSchool(school, (tx) => readCalendar(tx, token as string, "2026-10-20"));
@@ -105,8 +105,8 @@ describe("iCal subscription", () => {
     expect(await withSchool(school, (tx) => calendarState(tx, ines))).toBeNull();
 
     // Even if the hash came back (backup restore), an inactive instructor reads nothing.
-    const [{ empreinte }] = await admin`SELECT encode(sha256(${token}::bytea), 'hex') AS empreinte`;
-    await admin`UPDATE instructor SET calendar_token_hash = ${empreinte} WHERE id = ${ines}`;
+    const [{ fingerprint }] = await admin`SELECT encode(sha256(${token}::bytea), 'hex') AS fingerprint`;
+    await admin`UPDATE instructor SET calendar_token_hash = ${fingerprint} WHERE id = ${ines}`;
     expect(await withSchool(school, (tx) => readCalendar(tx, token, "2026-10-20"))).toBeNull();
   });
 });

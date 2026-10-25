@@ -51,7 +51,7 @@ export function ScheduleGrid({
   const { discipline, site, roomId: roomId, instructorId: instructorId } = filters;
   const disciplines = useMemo(() => [...new Set(cours.map((c) => c.discipline))].sort(), [cours]);
   const sites = useMemo(() => [...new Set(cours.map((c) => c.site))].sort(), [cours]);
-  const salles = [
+  const rooms = [
     ...new Map(
       cours
         .filter((c) => !site || c.site === site)
@@ -118,7 +118,7 @@ export function ScheduleGrid({
             onChange={(e) => setFilters({ ...filters, roomId: e.target.value })}
           >
             <option value="">Toutes les salles</option>
-            {salles.map((s) => (
+            {rooms.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.label}
               </option>

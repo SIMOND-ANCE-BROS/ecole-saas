@@ -43,7 +43,7 @@ export default async function NewCoursePage({ searchParams }: PageProps<"/planni
         referential={referential}
         schedule={schedule}
         day={Number.isInteger(proposedDay) && proposedDay >= 1 && proposedDay <= 7 ? proposedDay : undefined}
-        heure={typeof heure === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(heure) ? heure : undefined}
+        startTime={typeof heure === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(heure) ? heure : undefined}
         date={validDate(date) ?? undefined}
         duration={
           Number.isInteger(proposedDuration) && proposedDuration >= 5 && proposedDuration <= 600

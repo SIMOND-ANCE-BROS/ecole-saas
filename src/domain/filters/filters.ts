@@ -251,13 +251,13 @@ function evaluate(cell: Cell, c: Condition, type: ColumnType): boolean {
 
 /** Rows that satisfy all (AND) or at least one (OR) of the conditions. */
 export function applyFilter<T>(rows: T[], filter: Filter, columns: (ColumnDef & { value: (l: T) => Cell })[]): T[] {
-  const actives = filter.conditions.flatMap((c) => {
+  const active = filter.conditions.flatMap((c) => {
     const def = columns.find((d) => d.id === c.column);
     return def ? [{ c, def }] : [];
   });
-  if (actives.length === 0) return rows;
+  if (active.length === 0) return rows;
   return rows.filter((l) => {
-    const r = actives.map(({ c, def }) => evaluate(def.value(l), c, def.type));
+    const r = active.map(({ c, def }) => evaluate(def.value(l), c, def.type));
     return filter.mode === "ou" ? r.some(Boolean) : r.every(Boolean);
   });
 }

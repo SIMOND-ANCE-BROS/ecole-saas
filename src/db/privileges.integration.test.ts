@@ -16,7 +16,7 @@ afterAll(async () => {
 });
 
 const QUERY_WITHOUT_PRIVILEGES = `
-  SELECT c.relname AS objet
+  SELECT c.relname AS object
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
   WHERE CASE c.relkind

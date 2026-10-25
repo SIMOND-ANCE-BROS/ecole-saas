@@ -15,7 +15,7 @@ let otherSchool: string;
 let season2026: string;
 let season2027: string;
 
-async function createCourse(schoolId: string, seasonId: string, discipline: string, day: number, heure: string) {
+async function createCourse(schoolId: string, seasonId: string, discipline: string, day: number, time: string) {
   const [d] = await admin`INSERT INTO discipline (school_id, name) VALUES (${schoolId}, ${discipline})
     ON CONFLICT (school_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id`;
   const [site] = await admin`SELECT id FROM site WHERE school_id = ${schoolId} LIMIT 1`;
@@ -29,7 +29,7 @@ async function createCourse(schoolId: string, seasonId: string, discipline: stri
     VALUES (${schoolId}, 'Prof', ${discipline}, 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
   await admin`
     INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes, age_min, age_max, level)
-    VALUES (${schoolId}, ${seasonId}, ${d.id}, ${room.id}, ${teacher.id}, ${day}, ${heure}, 60, 8, 10, 'Débutant')`;
+    VALUES (${schoolId}, ${seasonId}, ${d.id}, ${room.id}, ${teacher.id}, ${day}, ${time}, 60, 8, 10, 'Débutant')`;
 }
 
 beforeAll(async () => {

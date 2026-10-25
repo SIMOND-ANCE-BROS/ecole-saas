@@ -17,7 +17,7 @@ const entry = z.object({
   password: z.string().min(1),
 });
 
-export async function signIn(_etat: ConnectionState, formData: FormData): Promise<ConnectionState> {
+export async function signIn(_state: ConnectionState, formData: FormData): Promise<ConnectionState> {
   const email = SIGN_IN.read(formData, "email");
   const parsed = entry.safeParse({ email, password: SIGN_IN.read(formData, "password") });
   if (!parsed.success) {
@@ -48,9 +48,9 @@ export async function signIn(_etat: ConnectionState, formData: FormData): Promis
   await clearAttempts(parsed.data.email, ip);
 
   // A single school: chosen automatically, without going through the list.
-  const ecoles = await schoolsOf(connection.user.id);
+  const schools = await schoolsOf(connection.user.id);
   const sessionId = await idDeSession(connection.token);
-  if (ecoles.length === 1 && sessionId && (await chooseSchool(sessionId, connection.user.id, ecoles[0].id))) {
+  if (schools.length === 1 && sessionId && (await chooseSchool(sessionId, connection.user.id, schools[0].id))) {
     redirect("/");
   }
   redirect("/ecoles");

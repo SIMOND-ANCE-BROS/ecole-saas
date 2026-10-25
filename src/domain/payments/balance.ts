@@ -13,8 +13,8 @@ export type EnrollmentDue = { status: EnrollmentStatus; netPriceCents: number };
 export type BalancePayment = { amountCents: number; plannedPayment: string | null };
 
 export type Balance = {
-  du: number;
-  paye: number;
+  due: number;
+  paid: number;
   /** Positive: left to pay; negative: overpaid. */
   remaining: number;
   /** Cheques received but to be cashed after today (counted in « payé »). */
@@ -29,15 +29,15 @@ export function payerBalance(
   payments: BalancePayment[],
   today: string,
 ): Balance {
-  let du = lessonPacks.reduce((s, c) => s + c.priceCents, 0);
+  let due = lessonPacks.reduce((s, c) => s + c.priceCents, 0);
   const outsideCalculation: Balance["outsideCalculation"] = {};
   for (const i of enrollments) {
-    if (DUE_STATUSES.includes(i.status)) du += i.netPriceCents;
+    if (DUE_STATUSES.includes(i.status)) due += i.netPriceCents;
     else outsideCalculation[i.status] = (outsideCalculation[i.status] ?? 0) + i.netPriceCents;
   }
-  const paye = payments.reduce((s, p) => s + p.amountCents, 0);
+  const paid = payments.reduce((s, p) => s + p.amountCents, 0);
   const toCollect = payments
     .filter((p) => p.amountCents > 0 && p.plannedPayment !== null && p.plannedPayment > today)
     .reduce((s, p) => s + p.amountCents, 0);
-  return { du, paye, remaining: du - paye, toCollect, outsideCalculation };
+  return { due, paid, remaining: due - paid, toCollect, outsideCalculation };
 }

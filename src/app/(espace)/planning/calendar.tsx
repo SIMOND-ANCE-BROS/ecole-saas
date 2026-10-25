@@ -36,7 +36,7 @@ export type CalendarColumn = { day: number; title: string; closed?: string | nul
 /** Response to a move: done, refused, or a choice to offer (« cette séance seulement »…). */
 export type CalendarResponse =
   | { status: "ok"; text: string; warnings: string[] }
-  | { status: "choisir"; question: string; choice: { value: string; label: string }[] }
+  | { status: "choose"; question: string; choice: { value: string; label: string }[] }
   | { status: "refused"; message: string };
 type Gesture =
   | { type: "deplacer" | "etirer"; id: string; x: number; y: number; origin: Slot; bouge: boolean }
@@ -132,7 +132,7 @@ export function Calendar({
       } catch {
         r = { status: "refused", message: "Le déplacement n’a pas pu être enregistré : réessayez." };
       }
-      if (r.status === "choisir") {
+      if (r.status === "choose") {
         setToConfirm({ id, slot, question: r.question, choice: r.choice });
         return;
       }

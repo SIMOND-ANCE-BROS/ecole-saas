@@ -93,8 +93,8 @@ describe("invitation", () => {
     expect(await withSchool(school, (tx) => pendingInvitations(tx, new Date()))).toMatchObject([
       { email: newMemberEmail, name: "Accueil" },
     ]);
-    const [{ token_hash: jeton_hash }] = await admin`SELECT token_hash FROM invitation WHERE id = ${r2.id}`;
-    expect(jeton_hash).not.toContain(token);
+    const [{ token_hash: tokenHash }] = await admin`SELECT token_hash FROM invitation WHERE id = ${r2.id}`;
+    expect(tokenHash).not.toContain(token);
     expect(await withSchool(school, (tx) => pendingInvitations(tx, new Date()))).toHaveLength(1);
   });
 

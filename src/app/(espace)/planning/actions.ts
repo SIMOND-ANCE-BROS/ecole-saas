@@ -21,7 +21,7 @@ import { shortDate, end } from "./format";
 export async function moveOneLesson(
   lessonId: string,
   slot: { date: string; startTime: string; durationMinutes: number },
-  scope: "seance" | "suivantes",
+  scope: "lesson" | "following",
 ): Promise<CalendarResponse> {
   const { schoolId: schoolId } = await requireRole("director");
   const today = todayInParis();
@@ -60,7 +60,7 @@ export async function moveOneLesson(
     return {
       status: "ok",
       text:
-        scope === "seance"
+        scope === "lesson"
           ? `Séance déplacée au ${when}.`
           : `Cours déplacé à partir du ${when} : les séances suivantes suivent.`,
       warnings,
