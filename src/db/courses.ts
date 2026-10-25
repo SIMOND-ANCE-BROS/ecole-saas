@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { Tx } from "./index";
 import { hoursBySite } from "./settings";
 import { course, courseDate, discipline, enrollmentCourse, instructor, attendance, room, lesson, site } from "./schema";
+import { issuePath } from "../lib/form-errors";
+import { has } from "../lib/has";
 
 /** Schedule editing (courses, disciplines, rooms), always within the `withSchool()` transaction (RLS). */
 
@@ -25,53 +27,54 @@ export const RECURRENCES = {
   dates: "À des dates précises",
 } as const;
 
-export const validCourseInput = z
-  .object({
-    discipline: z.union([z.object({ id: z.uuid() }), z.object({ name: shortName })]),
-    room: z.union([
-      z.object({ id: z.uuid() }),
-      z.object({
-        name: shortName,
-        capacity: integerOrNull(1, 1000),
-        site: z.union([
-          z.object({ id: z.uuid() }),
-          z.object({ name: shortName, address: z.string().trim().min(1).max(300) }),
-        ]),
-      }),
-    ]),
-    instructorId: z.uuid(),
-    type: z.enum(["group", "private", "competition", "workshop"]),
-    recurrence: z.enum(["weekly", "biweekly", "dates"]),
-    weekday: integerOrNull(1, 7),
-    startDate: dateOrNull,
-    endDate: dateOrNull,
-    dates: z.array(z.iso.date("Date invalide")).max(100, "100 dates au plus"),
-    startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM"),
-    durationMinutes: z.int().min(5).max(600),
-    ageMin: integerOrNull(0, 120),
-    ageMax: integerOrNull(0, 120),
-    level: z
-      .string()
-      .trim()
-      .max(100)
-      .nullable()
-      .transform((v) => v || null),
-    maxCapacity: integerOrNull(1, 1000),
-  })
+const courseFields = z.object({
+  discipline: z.union([z.object({ id: z.uuid() }), z.object({ name: shortName })]),
+  room: z.union([
+    z.object({ id: z.uuid() }),
+    z.object({
+      name: shortName,
+      capacity: integerOrNull(1, 1000),
+      site: z.union([
+        z.object({ id: z.uuid() }),
+        z.object({ name: shortName, address: z.string().trim().min(1).max(300) }),
+      ]),
+    }),
+  ]),
+  instructorId: z.uuid(),
+  type: z.enum(["group", "private", "competition", "workshop"]),
+  recurrence: z.enum(["weekly", "biweekly", "dates"]),
+  weekday: integerOrNull(1, 7),
+  startDate: dateOrNull,
+  endDate: dateOrNull,
+  dates: z.array(z.iso.date("Date invalide")).max(100, "100 dates au plus"),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM"),
+  durationMinutes: z.int().min(5).max(600),
+  ageMin: integerOrNull(0, 120),
+  ageMax: integerOrNull(0, 120),
+  level: z
+    .string()
+    .trim()
+    .max(100)
+    .nullable()
+    .transform((v) => v || null),
+  maxCapacity: integerOrNull(1, 1000),
+});
+
+export const validCourseInput = courseFields
   .refine((c) => c.ageMin === null || c.ageMax === null || c.ageMin <= c.ageMax, {
-    path: ["ageMax"],
+    path: issuePath(courseFields, "ageMax"),
     message: "L’âge maximum est inférieur à l’âge minimum",
   })
   .refine((c) => c.recurrence === "dates" || c.weekday !== null, {
-    path: ["weekday"],
+    path: issuePath(courseFields, "weekday"),
     message: "Jour obligatoire",
   })
   .refine((c) => c.recurrence !== "dates" || c.dates.length > 0, {
-    path: ["dates"],
+    path: issuePath(courseFields, "dates"),
     message: "Ajoutez au moins une date",
   })
   .refine((c) => c.startDate === null || c.endDate === null || c.startDate <= c.endDate, {
-    path: ["endDate"],
+    path: issuePath(courseFields, "endDate"),
     message: "La fin précède le début",
   });
 
@@ -161,7 +164,7 @@ export type ScheduleReferential = Awaited<ReturnType<typeof scheduleReferential>
 
 /** Chosen discipline, or found by its name (case-insensitive), otherwise created. */
 async function resolveDiscipline(tx: Tx, d: CourseInput["discipline"]): Promise<string | null> {
-  if ("id" in d) {
+  if (has(d, "id")) {
     const [x] = await tx.select({ id: discipline.id }).from(discipline).where(eq(discipline.id, d.id));
     return x?.id ?? null;
   }
@@ -180,12 +183,12 @@ async function resolveDiscipline(tx: Tx, d: CourseInput["discipline"]): Promise<
 
 /** Chosen room, or created with its site (existing or new). */
 async function resolveRoom(tx: Tx, s: CourseInput["room"]): Promise<string | null> {
-  if ("id" in s) {
+  if (has(s, "id")) {
     const [x] = await tx.select({ id: room.id }).from(room).where(eq(room.id, s.id));
     return x?.id ?? null;
   }
   let siteId: string;
-  if ("id" in s.site) {
+  if (has(s.site, "id")) {
     const [x] = await tx.select({ id: site.id }).from(site).where(eq(site.id, s.site.id));
     if (!x) return null;
     siteId = x.id;

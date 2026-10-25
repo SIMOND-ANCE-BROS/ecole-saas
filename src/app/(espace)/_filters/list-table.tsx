@@ -25,7 +25,8 @@ import { saveColumns } from "./actions";
 import { type AddressFilter, useAddressFilter } from "./address-filter";
 
 export type CellValue = string | number | string[] | null;
-export type TableRow = {
+/** `Id`: the list column ids, so a cell keyed by a wrong id fails to compile (#138). */
+export type TableRow<Id extends string = string> = {
   id: string;
   /** Record link for the column named by `linkColumn`; absent: plain text. */
   href?: string;
@@ -33,26 +34,26 @@ export type TableRow = {
   dimmed?: boolean;
   /** Small badge after the name (« inactif », « organisme »). */
   badge?: string;
-  cells: Record<string, CellValue>;
+  cells: Record<Id, CellValue>;
 };
 
-type Props = {
+type Props<Id extends string> = {
   list: List;
   /** « les élèves »: for accessible labels. */
   what: string;
   caption: string;
-  columns: ColumnDef[];
+  columns: readonly ColumnDef<Id>[];
   /** The member's saved layout, or null. */
   layout: string[] | null;
-  rows: TableRow[];
+  rows: TableRow<NoInfer<Id>>[];
   /** Column carrying the link to the record. */
-  linkColumn: string;
+  linkColumn: NoInfer<Id>;
   /** Message when no row is shown. */
   vide: string;
   /** Phone-specific display (the table is hidden there). */
   mobile?: ReactNode;
   /** Checkbox values supplied by the page, per column (courses of the season, statuses…). */
-  choice?: Record<string, readonly string[]>;
+  choice?: Partial<Record<NoInfer<Id>, readonly string[]>>;
   /** Action offered when the list is empty without a filter (« Nouvel élève »). */
   emptyAction?: ReactNode;
 };
@@ -69,7 +70,7 @@ const CELLS_WITHOUT_SEARCH = 8;
  * reorders columns (saved for the member). Filters and sort go into the URL;
  * the page reads it back and queries the server.
  */
-export function ListTable({
+export function ListTable<Id extends string>({
   list: list,
   what: what,
   caption: caption,
@@ -81,7 +82,7 @@ export function ListTable({
   mobile,
   choice: choice = {},
   emptyAction: emptyAction,
-}: Props) {
+}: Props<Id>) {
   const f = useAddressFilter(columns);
   const router = useRouter();
   const path = usePathname();
@@ -91,7 +92,7 @@ export function ListTable({
   const [availability, setAvailability] = useState<Layout>(() => readLayout(columns, layout));
   const [saving, startTransition] = useTransition();
   const [failure, setFailure] = useState(false);
-  const defs = new Map(columns.map((c) => [c.id, c]));
+  const defs = new Map<string, ColumnDef<Id>>(columns.map((c) => [c.id, c]));
   const visible = availability.filter((d) => d.visible).flatMap((d) => defs.get(d.id) ?? []);
   const masquees = availability.filter((d) => !d.visible).flatMap((d) => defs.get(d.id) ?? []);
   const widthOf = (id: string) => availability.find((d) => d.id === id)?.width ?? null;
@@ -99,7 +100,7 @@ export function ListTable({
     const l = widthOf(id);
     return l ? { width: l, minWidth: l, maxWidth: l } : undefined;
   };
-  const choiceOf = (d: ColumnDef) => choice[d.id] ?? d.choice;
+  const choiceOf = (d: ColumnDef<Id>) => choice[d.id] ?? d.choice;
 
   function setSort(next: Sort | null) {
     const p = new URLSearchParams(params.toString());
@@ -371,10 +372,10 @@ export function ListTable({
                         <>
                           {l.href ? (
                             <Link href={l.href} data-resultat className="lien font-medium">
-                              {text(l.cells[d.id])}
+                              {text(l.cells[d.id] ?? null)}
                             </Link>
                           ) : (
-                            <span className="font-medium">{text(l.cells[d.id])}</span>
+                            <span className="font-medium">{text(l.cells[d.id] ?? null)}</span>
                           )}
                           {l.badge && (
                             <span className="ml-2 rounded border border-bordure px-1.5 text-xs font-normal text-doux">
@@ -383,7 +384,7 @@ export function ListTable({
                           )}
                         </>
                       ) : (
-                        <CellContent def={d} value={l.cells[d.id]} />
+                        <CellContent def={d} value={l.cells[d.id] ?? null} />
                       )}
                     </td>
                   ))}

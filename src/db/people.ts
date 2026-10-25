@@ -1,4 +1,5 @@
 import { type AnyColumn, and, asc, desc, eq, or, type SQL, sql } from "drizzle-orm";
+import { issuePath } from "../lib/form-errors";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { displayedName } from "../domain/people/name";
@@ -318,37 +319,45 @@ const optionalText = (max: number) =>
     .nullable()
     .transform((v) => v || null);
 
-export const validPersonInput = z
-  .object({
-    type: z.enum(["individual", "organisation"]),
-    name: z.string().trim().max(100),
-    firstName: optionalText(100),
-    companyName: optionalText(200),
-    siren: z
-      .string()
-      .nullable()
-      .transform((v) => (v ?? "").replace(/\s/g, "") || null)
-      .refine((v) => v === null || /^\d{9}$/.test(v), "Le SIREN compte 9 chiffres"),
-    birthDate: z
-      .union([z.literal(""), z.iso.date("Date invalide")])
-      .nullable()
-      .transform((v) => v || null),
-    email: z
-      .union([z.literal(""), z.email("E-mail invalide")])
-      .nullable()
-      .transform((v) => v || null),
-    telephone: optionalText(30),
-    address: optionalText(300),
-    notes: optionalText(2000),
-  })
-  .superRefine((f, ctx) => {
-    if (f.type === "individual" && !f.name)
-      ctx.addIssue({ code: "custom", path: ["name"], message: "Nom obligatoire" });
-    if (f.type === "organisation" && !f.companyName)
-      ctx.addIssue({ code: "custom", path: ["companyName"], message: "Raison sociale obligatoire" });
-    if (f.type === "organisation" && !f.siren)
-      ctx.addIssue({ code: "custom", path: ["siren"], message: "SIREN obligatoire pour un professionnel" });
-  });
+const personFields = z.object({
+  type: z.enum(["individual", "organisation"]),
+  name: z.string().trim().max(100),
+  firstName: optionalText(100),
+  companyName: optionalText(200),
+  siren: z
+    .string()
+    .nullable()
+    .transform((v) => (v ?? "").replace(/\s/g, "") || null)
+    .refine((v) => v === null || /^\d{9}$/.test(v), "Le SIREN compte 9 chiffres"),
+  birthDate: z
+    .union([z.literal(""), z.iso.date("Date invalide")])
+    .nullable()
+    .transform((v) => v || null),
+  email: z
+    .union([z.literal(""), z.email("E-mail invalide")])
+    .nullable()
+    .transform((v) => v || null),
+  telephone: optionalText(30),
+  address: optionalText(300),
+  notes: optionalText(2000),
+});
+
+export const validPersonInput = personFields.superRefine((f, ctx) => {
+  if (f.type === "individual" && !f.name)
+    ctx.addIssue({ code: "custom", path: issuePath(personFields, "name"), message: "Nom obligatoire" });
+  if (f.type === "organisation" && !f.companyName)
+    ctx.addIssue({
+      code: "custom",
+      path: issuePath(personFields, "companyName"),
+      message: "Raison sociale obligatoire",
+    });
+  if (f.type === "organisation" && !f.siren)
+    ctx.addIssue({
+      code: "custom",
+      path: issuePath(personFields, "siren"),
+      message: "SIREN obligatoire pour un professionnel",
+    });
+});
 
 export type PersonInput = z.output<typeof validPersonInput>;
 export type Duplicate = { id: string; name: string; telephone: string | null };

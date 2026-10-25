@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { type ConnectionState, signIn } from "./actions";
+import { SIGN_IN } from "./fields";
 
 const initialState: ConnectionState = { error: null, email: "" };
 
@@ -16,7 +17,7 @@ export function SignInForm() {
         </label>
         <input
           id="email"
-          name="email"
+          name={SIGN_IN.name("email")}
           type="email"
           autoComplete="username"
           required
@@ -31,7 +32,7 @@ export function SignInForm() {
         </label>
         <input
           id="password"
-          name="password"
+          name={SIGN_IN.name("password")}
           type="password"
           autoComplete="current-password"
           required

@@ -1,5 +1,5 @@
 import { getSessionCookie } from "better-auth/cookies";
-import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse, type ProxyConfig } from "next/server";
 
 /**
  * OPTIMISTIC redirect to sign-in when no session cookie is present.
@@ -13,6 +13,7 @@ export function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
+// `satisfies`: a misspelled key (`match`) fails to compile instead of matching every path (#138).
 export const config = {
   matcher: ["/((?!api|connexion|agenda|mon-agenda|_next/static|_next/image|favicon.ico).*)"],
-};
+} satisfies ProxyConfig;

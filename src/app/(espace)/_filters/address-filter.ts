@@ -21,7 +21,7 @@ const DELAY = 350;
  * go into the URL (`?f=…&mode=ou`) that the page reads back on the server.
  * A condition still being typed stays local.
  */
-export function useAddressFilter(columns: ColumnDef[]) {
+export function useAddressFilter(columns: readonly ColumnDef[]) {
   const router = useRouter();
   const path = usePathname();
   const params = useSearchParams();

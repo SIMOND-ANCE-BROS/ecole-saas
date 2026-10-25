@@ -1,5 +1,6 @@
 "use server";
 
+import { SIGN_IN } from "./fields";
 import { isAPIError } from "better-auth/api";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -17,8 +18,8 @@ const entry = z.object({
 });
 
 export async function signIn(_etat: ConnectionState, formData: FormData): Promise<ConnectionState> {
-  const email = String(formData.get("email") ?? "");
-  const parsed = entry.safeParse({ email, password: formData.get("password") });
+  const email = SIGN_IN.read(formData, "email");
+  const parsed = entry.safeParse({ email, password: SIGN_IN.read(formData, "password") });
   if (!parsed.success) {
     return { error: "Saisissez une adresse e-mail valide et votre mot de passe.", email };
   }

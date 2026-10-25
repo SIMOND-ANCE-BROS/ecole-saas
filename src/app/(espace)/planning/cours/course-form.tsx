@@ -153,13 +153,13 @@ export function CourseForm({
   const displayedUnavailability = key ? unavailabilityDates : [];
   const chosenInstructor = r.instructors.find((i) => i.id === v.instructorId);
 
-  const error = (field: string) =>
+  const error = (field: keyof Refusal["errors"]) =>
     refusal?.errors[field] && (
       <p id={`${field}-erreur`} className="text-xs text-erreur">
         {refusal.errors[field]}
       </p>
     );
-  const invalid = (field: string) =>
+  const invalid = (field: keyof Refusal["errors"]) =>
     refusal?.errors[field] ? { "aria-invalid": true, "aria-describedby": `${field}-erreur` } : {};
   const label = (section: string, text: string) => (
     <label htmlFor={section} className="text-sm font-medium">

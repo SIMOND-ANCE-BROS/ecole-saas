@@ -1,4 +1,5 @@
 import { and, asc, eq, or, type SQL, sql } from "drizzle-orm";
+import { issuePath } from "../lib/form-errors";
 import { z } from "zod";
 import { CONTACT_COLUMNS, STUDENT_COLUMNS } from "../domain/filters/columns";
 import { EMPTY_FILTER, type Filter, type Sort } from "../domain/filters/filters";
@@ -21,6 +22,7 @@ import {
   validPersonInput,
 } from "./people";
 import { relationship, person } from "./schema";
+import { has } from "../lib/has";
 
 /**
  * Students and contacts (#77): the same `person` table, presented plainly.
@@ -372,20 +374,24 @@ export async function readContact(tx: Tx, id: string): Promise<ContactRecord | n
 
 export const otherValidPerson = z.union([z.object({ id: z.uuid() }), z.object({ newPerson: validPersonInput })]);
 
-export const validStudentInput = z
-  .object({
-    student: validPersonInput,
-    guardian: otherValidPerson.nullable(),
-    toNotify: z.boolean(),
-    billing: z.union([
-      z.object({ type: z.literal("self") }),
-      z.object({ type: z.literal("guardian") }),
-      z.object({ type: z.literal("other"), payer: otherValidPerson }),
-    ]),
+const studentFields = z.object({
+  student: validPersonInput,
+  guardian: otherValidPerson.nullable(),
+  toNotify: z.boolean(),
+  billing: z.union([
+    z.object({ type: z.literal("self") }),
+    z.object({ type: z.literal("guardian") }),
+    z.object({ type: z.literal("other"), payer: otherValidPerson }),
+  ]),
+});
+
+export const validStudentInput = studentFields
+  .refine((s) => s.student.type === "individual", {
+    path: issuePath(studentFields, "student"),
+    message: "Un élève est un particulier.",
   })
-  .refine((s) => s.student.type === "individual", { path: ["student"], message: "Un élève est un particulier." })
   .refine((s) => s.billing.type !== "guardian" || s.guardian !== null, {
-    path: ["billing"],
+    path: issuePath(studentFields, "billing"),
     message: "Indiquez le responsable à facturer.",
   });
 
@@ -393,7 +399,7 @@ export type StudentInput = z.output<typeof validStudentInput>;
 export type DuplicateWithRole = Duplicate & { role: "élève" | "responsable" | "payeur" };
 
 async function resolve(tx: Tx, p: z.output<typeof otherValidPerson>): Promise<string | null> {
-  if ("id" in p) {
+  if (has(p, "id")) {
     const [x] = await tx.select({ id: person.id }).from(person).where(eq(person.id, p.id));
     return x?.id ?? null;
   }
@@ -416,8 +422,8 @@ export async function createStudent(
 ): Promise<{ status: "ok"; id: string } | { status: "duplicates"; duplicates: DuplicateWithRole[] }> {
   if (!confirmed) {
     const nextItems: [DuplicateWithRole["role"], PersonInput][] = [["élève", entry.student]];
-    if (entry.guardian && "newPerson" in entry.guardian) nextItems.push(["responsable", entry.guardian.newPerson]);
-    if (entry.billing.type === "other" && "newPerson" in entry.billing.payer)
+    if (entry.guardian && has(entry.guardian, "newPerson")) nextItems.push(["responsable", entry.guardian.newPerson]);
+    if (entry.billing.type === "other" && has(entry.billing.payer, "newPerson"))
       nextItems.push(["payeur", entry.billing.payer.newPerson]);
     const duplicates: DuplicateWithRole[] = [];
     for (const [role, s] of nextItems) duplicates.push(...(await likelyDuplicates(tx, s)).map((d) => ({ ...d, role })));
