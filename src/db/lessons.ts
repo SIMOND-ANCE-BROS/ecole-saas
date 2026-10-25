@@ -510,18 +510,23 @@ const shift = (iso: string, days: number) =>
   new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 
 /**
- * Moves a lesson (#90). « seance »: only it changes (the course stays);
- * « suivantes »: the course takes the new slot from this lesson on,
+ * Moves a lesson (#90). "lesson": only it changes (the course stays);
+ * "following": the course takes the new slot from this lesson on,
  * earlier lessons keep their (frozen) time, later ones move
  * to the new day keeping their instructor (replacement). The caller
  * then resyncs the lessons from `since` on.
  */
+// Sent by the browser through a server action: any other value is refused (#160).
+const validMoveScope = z.enum(["lesson", "following"]);
+
 export async function moveLesson(
   tx: Tx,
   id: string,
   slot: z.input<typeof validLessonSlot>,
-  scope: "lesson" | "following",
+  scope: z.infer<typeof validMoveScope>,
 ): Promise<LessonResult> {
+  if (!validMoveScope.safeParse(scope).success)
+    return { status: "refused", message: "Indiquez s’il faut déplacer cette séance seulement ou aussi les suivantes." };
   const c = validLessonSlot.safeParse(slot);
   if (!c.success) return { status: "refused", message: c.error.issues[0].message };
   const { date, startTime: startTime, durationMinutes: durationMinutes } = c.data;
