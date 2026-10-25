@@ -7,7 +7,7 @@ import type { ColumnDef } from "./filters";
  * rename them without a reason.
  */
 
-export const STUDENT_COLUMNS: ColumnDef[] = [
+export const STUDENT_COLUMNS = [
   { id: "nom", label: "Élève", type: "text", required: true },
   { id: "age", label: "Âge", type: "number", right: true },
   { id: "responsables", label: "Responsables", type: "text" },
@@ -26,23 +26,26 @@ export const STUDENT_COLUMNS: ColumnDef[] = [
   { id: "naissance", label: "Naissance", type: "date", byDefault: false },
   { id: "email", label: "E-mail", type: "text", email: true, byDefault: false },
   { id: "prevenir", label: "À prévenir", type: "text", byDefault: false },
-];
+] as const satisfies readonly ColumnDef[];
 
-export const CONTACT_COLUMNS: ColumnDef[] = [
+export const CONTACT_COLUMNS = [
   { id: "nom", label: "Contact", type: "text", required: true },
   { id: "eleves", label: "Pour les élèves", type: "text" },
   { id: "telephone", label: "Téléphone", type: "phone" },
   { id: "email", label: "E-mail", type: "text", email: true },
-];
+] as const satisfies readonly ColumnDef[];
 
-export const INSTRUCTOR_COLUMNS: ColumnDef[] = [
+export const INSTRUCTOR_COLUMNS = [
   { id: "nom", label: "Nom", type: "text", required: true },
   { id: "statut", label: "Statut", type: "text" },
   { id: "cours", label: "Cours", type: "number", right: true },
   /** Management only: the page removes it for the front desk. */
   { id: "tarif", label: "Tarif", type: "text", right: true, filterable: false, sortable: false },
   { id: "email", label: "E-mail", type: "text", email: true },
-];
+] as const satisfies readonly ColumnDef[];
+
+/** Ids of a column list, to key its cells and SQL expressions. */
+export type ColumnId<C extends readonly ColumnDef[]> = C[number]["id"];
 
 /** Lists whose column layout is saved per member (#89). */
 export const LISTS = {

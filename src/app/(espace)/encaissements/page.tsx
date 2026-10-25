@@ -9,6 +9,7 @@ import { todayInParis } from "@/domain/people/age";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
 import { ToDeposit } from "./to-deposit";
+import { isKeyOf } from "@/lib/has";
 
 export const metadata: Metadata = { title: "Encaissements" };
 
@@ -20,11 +21,11 @@ const day = (iso: string) => iso.split("-").reverse().join("/");
 export default async function PaymentsPage({ searchParams }: PageProps<"/encaissements">) {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const p = await searchParams;
-  const view: View = typeof p.vue === "string" && p.vue in VIEWS ? (p.vue as View) : "journal";
+  const view: View = typeof p.vue === "string" && isKeyOf(VIEWS, p.vue) ? p.vue : "journal";
   const today = todayInParis();
   const du = validDate(p.du) ?? `${today.slice(0, 8)}01`;
   const au = validDate(p.au) ?? today;
-  const method = typeof p.moyen === "string" && p.moyen in PAYMENT_METHODS ? (p.moyen as Method) : null;
+  const method = typeof p.moyen === "string" && isKeyOf(PAYMENT_METHODS, p.moyen) ? p.moyen : null;
 
   const parsed = await withSchool(schoolId, async (tx) => ({
     journal: view === "journal" ? await paymentLog(tx, du, au, method) : [],

@@ -13,17 +13,18 @@ import { outsideHours } from "@/domain/schedule/hours";
 import { SHORT_DAYS } from "@/domain/schedule/days";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
+import { topErrorsOf } from "@/lib/form-errors";
+import type { z } from "zod";
 
-export type Refusal = { message: string; errors: Partial<Record<string, string>> };
+export type Refusal = { message: string; errors: Partial<Record<keyof CourseFields, string>> };
+type CourseFields = z.input<typeof validCourseInput>;
 
 /** Creates (null id) or updates a course of the current season; management only. */
 export async function saveCourse(id: string | null, entry: unknown): Promise<Refusal> {
   const { schoolId: schoolId } = await requireRole("director");
   const parsed = validCourseInput.safeParse(entry);
   if (!parsed.success) {
-    const errors: Refusal["errors"] = {};
-    for (const p of parsed.error.issues) errors[String(p.path[0])] ??= p.message;
-    return { message: "Vérifiez les champs signalés.", errors };
+    return { message: "Vérifiez les champs signalés.", errors: topErrorsOf(parsed.error) };
   }
   const today = todayInParis();
   const result = await withSchool(schoolId, async (tx) => {

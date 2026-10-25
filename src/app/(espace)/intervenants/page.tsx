@@ -5,7 +5,7 @@ import { withSchool } from "@/db";
 import { listInstructors, PAY_MODES, STATUSES } from "@/db/instructors";
 import { readPreference } from "@/db/preferences";
 import { currentSeason } from "@/db/schedule";
-import { INSTRUCTOR_COLUMNS } from "@/domain/filters/columns";
+import { type ColumnId, INSTRUCTOR_COLUMNS } from "@/domain/filters/columns";
 import { applyFilter, type Cell, readFilter, readSort, normalizeText, sortRows } from "@/domain/filters/filters";
 import { todayInParis } from "@/domain/people/age";
 import { formatEuros } from "@/lib/money";
@@ -35,7 +35,7 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
   const columns = isDirector ? INSTRUCTOR_COLUMNS : INSTRUCTOR_COLUMNS.filter((c) => c.id !== "tarif");
   // Full list already loaded (a few instructors): in-memory filtering, same rules as in SQL.
   const filter = readFilter(f, mode, INSTRUCTOR_COLUMNS);
-  const values: Record<string, (i: (typeof instructors)[number]) => Cell> = {
+  const values: Partial<Record<ColumnId<typeof INSTRUCTOR_COLUMNS>, (i: (typeof instructors)[number]) => Cell>> = {
     nom: (i) => `${i.firstName} ${i.name}`,
     statut: (i) => STATUSES[i.status],
     cours: (i) => i.seasonCourses,
@@ -49,7 +49,10 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
       columns.map((c) => ({ ...c, value: values[c.id] ?? (() => null) })),
     ),
     readSort(sort, order, columns),
-    (i, column) => values[column]?.(i),
+    (i, column) => {
+      const c = INSTRUCTOR_COLUMNS.find((d) => d.id === column);
+      return c && values[c.id]?.(i);
+    },
   );
   const confirmed = instructors.find((i) => i.id === enregistre);
 
@@ -106,7 +109,7 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
                 statut: STATUSES[i.status],
                 cours: i.seasonCourses,
                 // Never sent to the front desk's browser: hiding the column is not enough.
-                ...(isDirector ? { tarif: `${formatEuros(i.rateCents)} ${PAY_MODES[i.payMode]}` } : {}),
+                tarif: isDirector ? `${formatEuros(i.rateCents)} ${PAY_MODES[i.payMode]}` : null,
                 email: i.email,
               },
             }))}

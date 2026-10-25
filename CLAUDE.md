@@ -171,6 +171,7 @@ DESIGN.md                    interface rules
 **TypeScript**
 
 - `strict` mode plus `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noFallthroughCasesInSwitch`; no `any` (ESLint error), no non-null assertion without a comment saying why it holds.
+- Every string key is checked by the compiler (#138): list cells and SQL expressions keyed by the column ids (`ColumnDef<Id>`, `TableRow<Id>`, `ColumnId<…>`); form errors through `errorsOf<T>()` / `FieldErrors<T>` and custom Zod paths through `issuePath(schema, …)` (`src/lib/form-errors.ts`); FormData names through one `formFields()` shared by the form and its action (`src/lib/form-fields.ts`); `has(value, "key")` instead of `"key" in value` (`src/lib/has.ts`, lint rule); framework config objects with `satisfies` (`ProxyConfig`).
 
 **CI** (`.github/workflows/`)
 
@@ -220,6 +221,7 @@ Rules in `DESIGN.md`. In short:
 - Don't hard-code a price, discount, VAT mention or anything school-specific.
 - Don't generate an invoice number; don't update an issued invoice, a payment or the audit log.
 - Don't use floating-point numbers for money.
+- Don't key cells, form errors, FormData fields or `in` checks with a bare string the compiler cannot check (#138).
 - Don't log personal data; don't put real personal data in issues, PRs, tests or seeds.
 - Don't edit an applied migration.
 - Don't skip git hooks (`--no-verify`) or CI checks.

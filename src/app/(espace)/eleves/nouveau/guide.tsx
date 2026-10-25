@@ -7,6 +7,9 @@ import { type Choice, PersonChoice, toInput } from "../../_people/person-choice"
 import { createStudentFromGuide, type StudentRefusal } from "../actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
 import type { StudentInput } from "@/db/students";
+import type { PersonInput } from "@/db/people";
+import type { FieldErrors, FieldPath } from "@/lib/form-errors";
+import { has } from "@/lib/has";
 
 /** Checked against the server schema: a value renamed on one side fails to compile. */
 type Billing = StudentInput["billing"]["type"];
@@ -42,15 +45,16 @@ export function NewStudentGuide({
   const chosenBilling: Billing = billing ?? (displayedGuardian ? "guardian" : "self");
   const firstName = e.firstName.trim() || "l’élève";
   const guardianName = guardian
-    ? "id" in guardian
+    ? has(guardian, "id")
       ? guardian.name
       : [guardian.newPerson.firstName, guardian.newPerson.name].filter(Boolean).join(" ") || "le responsable"
     : "le responsable";
 
   const updated = (field: keyof typeof e) => (x: { target: { value: string } }) =>
     setE({ ...e, [field]: x.target.value });
-  const error = (key: string) => refusal?.errors[key];
-  const sous = (prefix: string) =>
+  const error = (key: FieldPath<StudentInput>) => refusal?.errors[key];
+  // Errors of a person sub-form (`guardian.newPerson.`), keyed by the person field.
+  const sous = (prefix: `${FieldPath<StudentInput>}.`): FieldErrors<PersonInput> =>
     Object.fromEntries(
       Object.entries(refusal?.errors ?? {}).flatMap(([k, v]) =>
         k.startsWith(prefix) ? [[k.slice(prefix.length), v]] : [],
@@ -132,7 +136,7 @@ export function NewStudentGuide({
               onChange={(c) => {
                 // New person: same family name suggested.
                 setGuardian(
-                  c && "newPerson" in c && !c.newPerson.name && !c.newPerson.firstName
+                  c && has(c, "newPerson") && !c.newPerson.name && !c.newPerson.firstName
                     ? { newPerson: { ...c.newPerson, name: e.name } }
                     : c,
                 );

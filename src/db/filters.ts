@@ -118,14 +118,14 @@ function condition(c: Condition, def: ColumnDef, e: ColumnExpression): SQL | und
 }
 
 /** WHERE condition of a filter; undefined if there is nothing to filter. */
-export function filterCondition(
+export function filterCondition<Id extends string>(
   filter: Filter,
-  columns: ColumnDef[],
-  expressions: Record<string, ColumnExpression>,
+  columns: readonly ColumnDef<Id>[],
+  expressions: Record<NoInfer<Id>, ColumnExpression>,
 ): SQL | undefined {
   const parties = filter.conditions.flatMap((c) => {
     const def = columns.find((d) => d.id === c.column);
-    const e = expressions[c.column];
+    const e = def && expressions[def.id];
     const s = def && e ? condition(c, def, e) : undefined;
     return s ? [s] : [];
   });
@@ -138,13 +138,13 @@ export function filterCondition(
  * accents and case ignored, numbers and dates in their order, empty values
  * last. undefined without sorting (the caller keeps its default order).
  */
-export function columnOrder(
+export function columnOrder<Id extends string>(
   currentSort: Sort | null,
-  columns: ColumnDef[],
-  expressions: Record<string, ColumnExpression>,
+  columns: readonly ColumnDef<Id>[],
+  expressions: Record<NoInfer<Id>, ColumnExpression>,
 ): SQL | undefined {
   const def = currentSort && columns.find((d) => d.id === currentSort.column);
-  const e = currentSort && expressions[currentSort.column];
+  const e = def && expressions[def.id];
   if (!currentSort || !def || !e || def.sortable === false) return undefined;
   const key =
     def.type === "number"

@@ -30,6 +30,14 @@ const eslintConfig = defineConfig([
       "no-console": ["warn", { allow: ["warn", "error"] }],
       "prefer-const": "error",
       "no-var": "error",
+      // A string literal on the left of `in` is not checked by the compiler (#138).
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "BinaryExpression[operator='in'][left.type=/^(Literal|TemplateLiteral)$/]",
+          message: "Use has(value, 'key') from @/lib/has: the key is then checked against the type.",
+        },
+      ],
     },
   },
   // Tests may use loose values from fixtures and mocks.

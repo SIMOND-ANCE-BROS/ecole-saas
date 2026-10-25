@@ -1,8 +1,8 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { writeColumnFilter } from "../domain/filters/column-filter";
-import { CONTACT_COLUMNS, STUDENT_COLUMNS } from "../domain/filters/columns";
-import { applyFilter, EMPTY_FILTER, readFilter, readSort, EMPTY, toParams } from "../domain/filters/filters";
+import { CONTACT_COLUMNS, type ColumnId, STUDENT_COLUMNS } from "../domain/filters/columns";
+import { applyFilter, type Cell, EMPTY_FILTER, readFilter, readSort, EMPTY, toParams } from "../domain/filters/filters";
 import { ageAt } from "../domain/people/age";
 import { type StudentRow, seasonCourseLabels, listContacts, listStudents } from "./students";
 import { withSchool } from "./index";
@@ -178,14 +178,16 @@ describe("students", () => {
     const toutes = await withSchool(school, (tx) => listStudents(tx, "", { today: TODAY }));
     const columns = STUDENT_COLUMNS.map((c) => ({
       ...c,
-      value: (e: StudentRow) =>
-        ({
+      value: (e: StudentRow) => {
+        const cells: Partial<Record<ColumnId<typeof STUDENT_COLUMNS>, Cell>> = {
           nom: [e.firstName, e.name].filter(Boolean).join(" "),
           age: e.birthDate ? ageAt(e.birthDate, TODAY) : null,
           responsables: e.guardians,
           facture: e.billedTo,
           telephone: e.telephone,
-        })[c.id],
+        };
+        return cells[c.id];
+      },
     }));
     for (const f of [
       ["nom.ne_contient_pas.martin"],

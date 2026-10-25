@@ -13,14 +13,15 @@ import {
   markStudent,
   CreationRefusal,
   validStudentInput,
+  type StudentInput,
 } from "@/db/students";
 import { deleteRelationship } from "@/db/people";
-import { errorsOf } from "@/lib/form-errors";
+import { errorsOf, type FieldErrors } from "@/lib/form-errors";
 import { requireRole } from "@/lib/session";
 
 export type StudentRefusal = {
   message: string;
-  errors: Partial<Record<string, string>>;
+  errors: FieldErrors<StudentInput>;
   duplicates?: DuplicateWithRole[];
 };
 type Back = { message: string | null };
@@ -30,7 +31,7 @@ const back = (r: { ok: true } | { ok: false; message: string }): Back => ({ mess
 export async function createStudentFromGuide(entry: unknown, confirmed: boolean): Promise<StudentRefusal> {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const s = validStudentInput.safeParse(entry);
-  if (!s.success) return { message: "Vérifiez les champs signalés.", errors: errorsOf(s.error.issues) };
+  if (!s.success) return { message: "Vérifiez les champs signalés.", errors: errorsOf(s.error) };
   let r;
   try {
     r = await withSchool(schoolId, (tx) => createStudent(tx, s.data, confirmed));

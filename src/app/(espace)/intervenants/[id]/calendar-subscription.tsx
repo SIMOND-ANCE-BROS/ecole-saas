@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { createCalendarLink, disconnectCalendar, revokeCalendarLink, syncNow } from "../actions";
+import { has } from "@/lib/has";
 
 const shortDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 const dateTime = new Intl.DateTimeFormat("fr-FR", {
@@ -37,7 +38,7 @@ export function CalendarSubscription({
   const create = () =>
     startTransition(async () => {
       const r = await createCalendarLink(instructorId);
-      if ("url" in r) {
+      if (has(r, "url")) {
         setUrl(r);
         setMessage(null);
         setCopy(false);

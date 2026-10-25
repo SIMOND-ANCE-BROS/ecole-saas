@@ -3,6 +3,7 @@ import { schoolsOf } from "@/db";
 import { currentSession } from "@/lib/session";
 import { signOut } from "../(espace)/actions";
 import { chooseSchoolAction } from "./actions";
+import { SCHOOL_CHOICE } from "./fields";
 
 export const metadata: Metadata = { title: "Choisir une école" };
 
@@ -22,7 +23,7 @@ export default async function SchoolsPage() {
           {ecoles.map((e) => (
             <li key={e.id}>
               <form action={chooseSchoolAction}>
-                <input type="hidden" name="schoolId" value={e.id} />
+                <input type="hidden" name={SCHOOL_CHOICE.name("schoolId")} value={e.id} />
                 <button type="submit" className="bouton-secondaire flex w-full justify-between">
                   <span>{e.name}</span>
                   <span className="text-doux">{ROLE_LABEL[e.role]}</span>

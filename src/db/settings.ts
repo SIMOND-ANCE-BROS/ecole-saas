@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Hours } from "../domain/schedule/hours";
 import type { Tx } from "./index";
 import { course, discipline, siteHours, season, room, site } from "./schema";
+import { issuePath } from "../lib/form-errors";
 
 /**
  * School settings (#80): seasons, disciplines, sites and rooms. Everything
@@ -44,13 +45,16 @@ export function listSeasons(tx: Tx): Promise<SeasonRow[]> {
     .orderBy(desc(season.startDate));
 }
 
-export const validSeasonInput = z
-  .object({
-    label: z.string().trim().min(1, "Libellé obligatoire").max(30),
-    startDate: z.iso.date("Date invalide"),
-    endDate: z.iso.date("Date invalide"),
-  })
-  .refine((s) => s.endDate > s.startDate, { path: ["endDate"], message: "La fin doit suivre le début." });
+const seasonFields = z.object({
+  label: z.string().trim().min(1, "Libellé obligatoire").max(30),
+  startDate: z.iso.date("Date invalide"),
+  endDate: z.iso.date("Date invalide"),
+});
+
+export const validSeasonInput = seasonFields.refine((s) => s.endDate > s.startDate, {
+  path: issuePath(seasonFields, "endDate"),
+  message: "La fin doit suivre le début.",
+});
 
 /** Season columns from the form input. */
 const seasonRow = (s: z.output<typeof validSeasonInput>) => ({
