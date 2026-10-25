@@ -14,39 +14,47 @@ import { personalPage } from "@/lib/public-calendar";
 import { parseEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
 import { syncCalendar } from "@/lib/calendar-sync";
+import { topErrorsOf } from "@/lib/form-errors";
+import { INSTRUCTOR, type InstructorField } from "./fields";
 
 export type FormState = {
   /** Incremented on each rejection: the form is remounted with the returned input. */
   attempt: number;
-  errors: Partial<Record<string, string>>;
-  values: Record<string, string> | null;
+  /** Per field, plus `form` for a message about the whole form. */
+  errors: Partial<Record<InstructorField | "form", string>>;
+  values: Record<InstructorField, string> | null;
 };
-
-const text = (f: FormData, name: string) => String(f.get(name) ?? "");
 
 /** Creates (null id) or updates an instructor; management only. */
 export async function saveInstructor(id: string | null, state: FormState, f: FormData): Promise<FormState> {
   const { schoolId: schoolId } = await requireRole("director");
-  const values = Object.fromEntries(
-    ["firstName", "name", "email", "status", "siren", "vatRegime", "payMode", "tariff"].map((n) => [n, text(f, n)]),
-  );
+  const read = (n: InstructorField) => INSTRUCTOR.read(f, n);
+  const values = {
+    firstName: read("firstName"),
+    name: read("name"),
+    email: read("email"),
+    status: read("status"),
+    siren: read("siren"),
+    vatRegime: read("vatRegime"),
+    payMode: read("payMode"),
+    tariff: read("tariff"),
+  };
   const rateCents = parseEuros(values.tariff);
   const parsed = validInstructorInput.safeParse({
     ...values,
     rateCents: rateCents ?? -1,
-    isOwner: f.get("isOwner") === "on",
-    active: id === null || f.get("active") === "on",
+    isOwner: read("isOwner") === "on",
+    active: id === null || read("active") === "on",
   });
   const refusal = (errors: FormState["errors"]) => ({
     attempt: state.attempt + 1,
     errors: errors,
-    values: { ...values, isOwner: text(f, "isOwner"), active: text(f, "active") },
+    values: { ...values, isOwner: read("isOwner"), active: read("active") },
   });
   if (!parsed.success) {
-    const errors: FormState["errors"] = {};
-    for (const p of parsed.error.issues) errors[String(p.path[0])] ??= p.message;
-    if (errors.rateCents) errors.tariff = "Montant en euros, par exemple 35 ou 35,50";
-    return refusal(errors);
+    // The rate is typed in euros in the « tariff » field and validated in cents.
+    const { rateCents, ...errors } = topErrorsOf(parsed.error);
+    return refusal(rateCents ? { ...errors, tariff: "Montant en euros, par exemple 35 ou 35,50" } : errors);
   }
 
   const result = await withSchool(schoolId, async (tx) =>
@@ -85,13 +93,16 @@ export async function revokeCalendarLink(instructorId: string): Promise<{ messag
 
 const unavailabilityInput = z
   .object({
-    du: z.iso.date("Date de début invalide"),
-    au: z.iso.date("Date de fin invalide"),
-    de: z.union([z.literal(""), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure invalide")]),
-    a: z.union([z.literal(""), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure invalide")]),
+    fromDate: z.iso.date("Date de début invalide"),
+    toDate: z.iso.date("Date de fin invalide"),
+    fromTime: z.union([z.literal(""), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure invalide")]),
+    toTime: z.union([z.literal(""), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure invalide")]),
     label: z.string().max(100),
   })
-  .refine((s) => (s.de === "") === (s.a === ""), "Indiquez les deux heures, ou aucune pour des journées entières.");
+  .refine(
+    (s) => (s.fromTime === "") === (s.toTime === ""),
+    "Indiquez les deux heures, ou aucune pour des journées entières.",
+  );
 
 /** Whole days (no times) or a time range, in Paris time. */
 export async function addUnavailabilityAction(
@@ -101,11 +112,11 @@ export async function addUnavailabilityAction(
   const { schoolId: schoolId } = await requireRole("director");
   const s = unavailabilityInput.safeParse(entry);
   if (!s.success) return { message: s.error.issues[0].message };
-  const { du, au, de, a, label: label } = s.data;
-  const nextDay = new Date(Date.parse(au) + 86_400_000).toISOString().slice(0, 10);
-  const start = new Date(instantParis(du, de || "00:00"));
-  const end = new Date(de ? instantParis(au, a) : instantParis(nextDay, "00:00"));
-  const r = await withSchool(schoolId, (tx) => addUnavailability(tx, instructorId, { start, end, label: label }));
+  const { fromDate, toDate, fromTime, toTime, label } = s.data;
+  const nextDay = new Date(Date.parse(toDate) + 86_400_000).toISOString().slice(0, 10);
+  const start = new Date(instantParis(fromDate, fromTime || "00:00"));
+  const end = new Date(fromTime ? instantParis(toDate, toTime) : instantParis(nextDay, "00:00"));
+  const r = await withSchool(schoolId, (tx) => addUnavailability(tx, instructorId, { start, end, label }));
   revalidatePath(`/intervenants/${instructorId}`);
   return { message: r.ok ? null : r.message };
 }

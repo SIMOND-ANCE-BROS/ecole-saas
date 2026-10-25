@@ -43,14 +43,14 @@ const SCHOOL_TABLES_QUERY = `
 
 function defects(tables: SchoolTable[]): string[] {
   return tables.flatMap((t) => {
-    const manques = [
+    const missing = [
       !t.rls_enabled && "RLS non activée (ENABLE ROW LEVEL SECURITY)",
       !t.rls_forced && "RLS non forcée (FORCE ROW LEVEL SECURITY)",
       !t.policy && "politique school_isolation absente",
       t.policy && !t.policy_all_commands && "school_isolation ne couvre pas toutes les commandes",
       t.policy && !t.policy_reads_school && "school_isolation ne compare pas school_id au réglage app.school_id",
     ].filter(Boolean);
-    return manques.length ? [`${t.table} : ${manques.join(", ")}`] : [];
+    return missing.length ? [`${t.table} : ${missing.join(", ")}`] : [];
   });
 }
 

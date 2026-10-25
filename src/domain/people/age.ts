@@ -1,9 +1,9 @@
 /** Age in completed years on the given day (`YYYY-MM-DD` dates, no time). */
 export function ageAt(birthDate: string, day: string): number {
   const [yearN, monthN, dayN] = birthDate.split("-").map(Number);
-  const [annee, month, j] = day.split("-").map(Number);
+  const [year, month, j] = day.split("-").map(Number);
   const beforeBirthday = month < monthN || (month === monthN && j < dayN);
-  return annee - yearN - (beforeBirthday ? 1 : 0);
+  return year - yearN - (beforeBirthday ? 1 : 0);
 }
 
 const formatParis = new Intl.DateTimeFormat("en-CA", {

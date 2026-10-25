@@ -1,8 +1,10 @@
 import { and, asc, desc, eq, ne, type SQL, sql } from "drizzle-orm";
+import { columnsOf, rowsOf } from "./columns-of";
 import { z } from "zod";
 import type { Hours } from "../domain/schedule/hours";
 import type { Tx } from "./index";
 import { course, discipline, siteHours, season, room, site } from "./schema";
+import { issuePath } from "../lib/form-errors";
 
 /**
  * School settings (#80): seasons, disciplines, sites and rooms. Everything
@@ -44,13 +46,16 @@ export function listSeasons(tx: Tx): Promise<SeasonRow[]> {
     .orderBy(desc(season.startDate));
 }
 
-export const validSeasonInput = z
-  .object({
-    label: z.string().trim().min(1, "Libellé obligatoire").max(30),
-    startDate: z.iso.date("Date invalide"),
-    endDate: z.iso.date("Date invalide"),
-  })
-  .refine((s) => s.endDate > s.startDate, { path: ["endDate"], message: "La fin doit suivre le début." });
+const seasonFields = z.object({
+  label: z.string().trim().min(1, "Libellé obligatoire").max(30),
+  startDate: z.iso.date("Date invalide"),
+  endDate: z.iso.date("Date invalide"),
+});
+
+export const validSeasonInput = seasonFields.refine((s) => s.endDate > s.startDate, {
+  path: issuePath(seasonFields, "endDate"),
+  message: "La fin doit suivre le début.",
+});
 
 /** Season columns from the form input. */
 const seasonRow = (s: z.output<typeof validSeasonInput>) => ({
@@ -95,7 +100,7 @@ export async function createSeason(
 
   const [{ id }] = await tx
     .insert(season)
-    .values({ ...seasonRow(s.data), schoolId: CURRENT_SCHOOL })
+    .values(columnsOf(season, { ...seasonRow(s.data), schoolId: CURRENT_SCHOOL }))
     .returning({ id: season.id });
   if (copyFrom) {
     await tx.execute(sql`
@@ -118,7 +123,11 @@ export async function updateSeason(tx: Tx, id: string, entry: z.input<typeof val
   if (!isUuid(id)) return { ok: false, message: "Cette saison n’existe plus." };
   const refusal = await checkSeason(tx, s.data, id);
   if (refusal) return { ok: false, message: refusal };
-  const rows = await tx.update(season).set(seasonRow(s.data)).where(eq(season.id, id)).returning({ id: season.id });
+  const rows = await tx
+    .update(season)
+    .set(columnsOf(season, seasonRow(s.data)))
+    .where(eq(season.id, id))
+    .returning({ id: season.id });
   return rows.length === 1 ? { ok: true, id } : { ok: false, message: "Cette saison n’existe plus." };
 }
 
@@ -198,7 +207,7 @@ export type SiteRow = {
   name: string;
   address: string;
   permanence: boolean;
-  salles: RoomRow[];
+  rooms: RoomRow[];
   hours: Hours[];
 };
 
@@ -208,7 +217,7 @@ export async function listPlaces(tx: Tx): Promise<SiteRow[]> {
     .from(site)
     .orderBy(asc(site.name));
   const roomId = sql`${room}.${sql.identifier("id")}`;
-  const salles = await tx
+  const rooms = await tx
     .select({
       id: room.id,
       siteId: room.siteId,
@@ -222,7 +231,7 @@ export async function listPlaces(tx: Tx): Promise<SiteRow[]> {
   return sites.map((s) => ({
     ...s,
     hours: hours[s.id] ?? [],
-    salles: salles
+    rooms: rooms
       .filter((x) => x.siteId === s.id)
       .map((x) => ({ id: x.id, name: x.name, capacity: x.capacity, course: x.course })),
   }));
@@ -246,7 +255,7 @@ export async function createSite(tx: Tx, entry: z.input<typeof validSiteInput>):
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   const [{ id }] = await tx
     .insert(site)
-    .values({ ...siteRow(s.data), schoolId: CURRENT_SCHOOL })
+    .values(columnsOf(site, { ...siteRow(s.data), schoolId: CURRENT_SCHOOL }))
     .returning({ id: site.id });
   return { ok: true, id };
 }
@@ -255,7 +264,11 @@ export async function updateSite(tx: Tx, id: string, entry: z.input<typeof valid
   const s = validSiteInput.safeParse(entry);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   if (!isUuid(id)) return { ok: false, message: "Ce site n’existe plus." };
-  const rows = await tx.update(site).set(siteRow(s.data)).where(eq(site.id, id)).returning({ id: site.id });
+  const rows = await tx
+    .update(site)
+    .set(columnsOf(site, siteRow(s.data)))
+    .where(eq(site.id, id))
+    .returning({ id: site.id });
   return rows.length === 1 ? { ok: true, id } : { ok: false, message: "Ce site n’existe plus." };
 }
 
@@ -291,9 +304,9 @@ export async function hoursBySite(tx: Tx): Promise<Record<string, Hours[]>> {
   return r;
 }
 
-const heure = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM");
+const timePattern = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM");
 export const validHours = z
-  .array(z.object({ weekday: z.int().min(1).max(7), opening: heure, closure: heure }))
+  .array(z.object({ weekday: z.int().min(1).max(7), opening: timePattern, closure: timePattern }))
   .max(7)
   .refine((h) => new Set(h.map((x) => x.weekday)).size === h.length, "Un même jour est saisi deux fois.")
   .refine((h) => h.every((x) => x.closure > x.opening), "L’heure de fermeture doit suivre l’ouverture.");
@@ -308,13 +321,16 @@ export async function saveHours(tx: Tx, siteId: string, entry: z.input<typeof va
   await tx.delete(siteHours).where(eq(siteHours.siteId, siteId));
   if (h.data.length > 0)
     await tx.insert(siteHours).values(
-      h.data.map((x) => ({
-        weekday: x.weekday,
-        opensAt: x.opening,
-        closesAt: x.closure,
-        siteId,
-        schoolId: CURRENT_SCHOOL,
-      })),
+      rowsOf(
+        siteHours,
+        h.data.map((x) => ({
+          weekday: x.weekday,
+          opensAt: x.opening,
+          closesAt: x.closure,
+          siteId,
+          schoolId: CURRENT_SCHOOL,
+        })),
+      ),
     );
   return { ok: true, id: siteId };
 }
@@ -335,7 +351,7 @@ export async function createRoom(tx: Tx, entry: z.input<typeof validRoomInput>):
   if (!x) return { ok: false, message: "Site introuvable." };
   const [{ id }] = await tx
     .insert(room)
-    .values({ ...roomRow(s.data), schoolId: CURRENT_SCHOOL })
+    .values(columnsOf(room, { ...roomRow(s.data), schoolId: CURRENT_SCHOOL }))
     .returning({ id: room.id });
   return { ok: true, id };
 }
@@ -346,7 +362,11 @@ export async function updateRoom(tx: Tx, id: string, entry: z.input<typeof valid
   if (!isUuid(id)) return { ok: false, message: "Cette salle n’existe plus." };
   const [x] = await tx.select({ id: site.id }).from(site).where(eq(site.id, s.data.siteId));
   if (!x) return { ok: false, message: "Site introuvable." };
-  const rows = await tx.update(room).set(roomRow(s.data)).where(eq(room.id, id)).returning({ id: room.id });
+  const rows = await tx
+    .update(room)
+    .set(columnsOf(room, roomRow(s.data)))
+    .where(eq(room.id, id))
+    .returning({ id: room.id });
   return rows.length === 1 ? { ok: true, id } : { ok: false, message: "Cette salle n’existe plus." };
 }
 

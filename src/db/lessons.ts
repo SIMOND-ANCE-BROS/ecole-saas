@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { rowsOf } from "./columns-of";
 import { z } from "zod";
 import { courseDates, type Recurrence } from "../domain/schedule/lessons";
 import type { Tx } from "./index";
@@ -152,12 +153,15 @@ export async function syncLessons(
       : await tx
           .insert(lesson)
           .values(
-            missing.map((a) => ({
-              courseId: a.courseId,
-              date: a.date,
-              instructorId: a.instructorId,
-              schoolId: CURRENT_SCHOOL,
-            })),
+            rowsOf(
+              lesson,
+              missing.map((a) => ({
+                courseId: a.courseId,
+                date: a.date,
+                instructorId: a.instructorId,
+                schoolId: CURRENT_SCHOOL,
+              })),
+            ),
           )
           .onConflictDoNothing()
           .returning({ id: lesson.id });
@@ -353,12 +357,15 @@ export async function saveAttendance(
     await tx
       .insert(attendance)
       .values(
-        rows.data.map((l) => ({
-          studentId: l.studentId,
-          present: l.present,
-          lessonId: lessonId,
-          schoolId: CURRENT_SCHOOL,
-        })),
+        rowsOf(
+          attendance,
+          rows.data.map((l) => ({
+            studentId: l.studentId,
+            present: l.present,
+            lessonId: lessonId,
+            schoolId: CURRENT_SCHOOL,
+          })),
+        ),
       )
       .onConflictDoUpdate({
         target: [attendance.lessonId, attendance.studentId],
@@ -513,7 +520,7 @@ export async function moveLesson(
   tx: Tx,
   id: string,
   slot: z.input<typeof validLessonSlot>,
-  scope: "seance" | "suivantes",
+  scope: "lesson" | "following",
 ): Promise<LessonResult> {
   const c = validLessonSlot.safeParse(slot);
   if (!c.success) return { status: "refused", message: c.error.issues[0].message };
@@ -548,7 +555,7 @@ export async function moveLesson(
     return { status: "refused", message: "Cette date est en dehors de la saison." };
   const reference = s.plannedDate ?? s.date;
 
-  if (scope === "seance") {
+  if (scope === "lesson") {
     if (date !== s.date) {
       const [other] = await tx
         .select({ id: lesson.id })

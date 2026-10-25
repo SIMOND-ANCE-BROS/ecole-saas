@@ -1,11 +1,12 @@
 "use server";
 
+import { SIGN_IN } from "./fields";
 import { isAPIError } from "better-auth/api";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { schoolsOf } from "@/db";
-import { chooseSchool, idDeSession } from "@/lib/school-access";
+import { chooseSchool, sessionIdOf } from "@/lib/school-access";
 import { auth } from "@/lib/auth";
 import { clearAttempts, recordAttempt, trustedIp, LIMITS } from "@/lib/sign-in-limit";
 
@@ -16,9 +17,9 @@ const entry = z.object({
   password: z.string().min(1),
 });
 
-export async function signIn(_etat: ConnectionState, formData: FormData): Promise<ConnectionState> {
-  const email = String(formData.get("email") ?? "");
-  const parsed = entry.safeParse({ email, password: formData.get("password") });
+export async function signIn(_state: ConnectionState, formData: FormData): Promise<ConnectionState> {
+  const email = SIGN_IN.read(formData, "email");
+  const parsed = entry.safeParse({ email, password: SIGN_IN.read(formData, "password") });
   if (!parsed.success) {
     return { error: "Saisissez une adresse e-mail valide et votre mot de passe.", email };
   }
@@ -47,9 +48,9 @@ export async function signIn(_etat: ConnectionState, formData: FormData): Promis
   await clearAttempts(parsed.data.email, ip);
 
   // A single school: chosen automatically, without going through the list.
-  const ecoles = await schoolsOf(connection.user.id);
-  const sessionId = await idDeSession(connection.token);
-  if (ecoles.length === 1 && sessionId && (await chooseSchool(sessionId, connection.user.id, ecoles[0].id))) {
+  const schools = await schoolsOf(connection.user.id);
+  const sessionId = await sessionIdOf(connection.token);
+  if (schools.length === 1 && sessionId && (await chooseSchool(sessionId, connection.user.id, schools[0].id))) {
     redirect("/");
   }
   redirect("/ecoles");

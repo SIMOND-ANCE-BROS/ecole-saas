@@ -63,9 +63,9 @@ function collapse(row: string): string[] {
 }
 
 /** Local date and time `YYYYMMDDTHHMMSS`, minutes added without going through a time zone. */
-function local(date: string, heure: string, extraMinutes = 0): string {
+function local(date: string, time: string, extraMinutes = 0): string {
   const [a, m, j] = date.split("-").map(Number);
-  const total = Number(heure.slice(0, 2)) * 60 + Number(heure.slice(3, 5)) + extraMinutes;
+  const total = Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5)) + extraMinutes;
   const day = new Date(Date.UTC(a, m - 1, j) + Math.floor(total / 1440) * 86_400_000);
   const two = (n: number) => String(n).padStart(2, "0");
   const remaining = total % 1440;

@@ -1,4 +1,5 @@
 import { and, eq, gt, ne, sql } from "drizzle-orm";
+import { columnsOf } from "./columns-of";
 import { z } from "zod";
 import type { Provider } from "../connectors/calendar/oauth";
 import type { Tx } from "./index";
@@ -34,10 +35,10 @@ export async function saveConnection(
   const columns = { provider: c.provider, account: c.account, encryptedToken: c.encryptedToken };
   await tx
     .insert(calendarConnection)
-    .values({ ...columns, instructorId: instructorId, schoolId: CURRENT_SCHOOL })
+    .values(columnsOf(calendarConnection, { ...columns, instructorId: instructorId, schoolId: CURRENT_SCHOOL }))
     .onConflictDoUpdate({
       target: calendarConnection.instructorId,
-      set: { ...columns, lastSyncedAt: null, error: null, createdAt: sql`now()` },
+      set: columnsOf(calendarConnection, { ...columns, lastSyncedAt: null, error: null, createdAt: sql`now()` }),
     });
   return true;
 }
@@ -84,11 +85,13 @@ export async function recordSync(
 ): Promise<void> {
   await tx
     .update(calendarConnection)
-    .set({
-      error: r.error,
-      ...(r.error ? {} : { lastSyncedAt: sql`now()` }),
-      ...(r.encryptedToken ? { encryptedToken: r.encryptedToken } : {}),
-    })
+    .set(
+      columnsOf(calendarConnection, {
+        error: r.error,
+        ...(r.error ? {} : { lastSyncedAt: sql`now()` }),
+        ...(r.encryptedToken ? { encryptedToken: r.encryptedToken } : {}),
+      }),
+    )
     .where(eq(calendarConnection.instructorId, instructorId));
 }
 

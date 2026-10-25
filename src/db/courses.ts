@@ -1,8 +1,11 @@
 import { and, asc, eq, or, sql } from "drizzle-orm";
+import { columnsOf, rowsOf } from "./columns-of";
 import { z } from "zod";
 import type { Tx } from "./index";
 import { hoursBySite } from "./settings";
 import { course, courseDate, discipline, enrollmentCourse, instructor, attendance, room, lesson, site } from "./schema";
+import { issuePath } from "../lib/form-errors";
+import { has } from "../lib/has";
 
 /** Schedule editing (courses, disciplines, rooms), always within the `withSchool()` transaction (RLS). */
 
@@ -25,53 +28,54 @@ export const RECURRENCES = {
   dates: "À des dates précises",
 } as const;
 
-export const validCourseInput = z
-  .object({
-    discipline: z.union([z.object({ id: z.uuid() }), z.object({ name: shortName })]),
-    room: z.union([
-      z.object({ id: z.uuid() }),
-      z.object({
-        name: shortName,
-        capacity: integerOrNull(1, 1000),
-        site: z.union([
-          z.object({ id: z.uuid() }),
-          z.object({ name: shortName, address: z.string().trim().min(1).max(300) }),
-        ]),
-      }),
-    ]),
-    instructorId: z.uuid(),
-    type: z.enum(["group", "private", "competition", "workshop"]),
-    recurrence: z.enum(["weekly", "biweekly", "dates"]),
-    weekday: integerOrNull(1, 7),
-    startDate: dateOrNull,
-    endDate: dateOrNull,
-    dates: z.array(z.iso.date("Date invalide")).max(100, "100 dates au plus"),
-    startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM"),
-    durationMinutes: z.int().min(5).max(600),
-    ageMin: integerOrNull(0, 120),
-    ageMax: integerOrNull(0, 120),
-    level: z
-      .string()
-      .trim()
-      .max(100)
-      .nullable()
-      .transform((v) => v || null),
-    maxCapacity: integerOrNull(1, 1000),
-  })
+const courseFields = z.object({
+  discipline: z.union([z.object({ id: z.uuid() }), z.object({ name: shortName })]),
+  room: z.union([
+    z.object({ id: z.uuid() }),
+    z.object({
+      name: shortName,
+      capacity: integerOrNull(1, 1000),
+      site: z.union([
+        z.object({ id: z.uuid() }),
+        z.object({ name: shortName, address: z.string().trim().min(1).max(300) }),
+      ]),
+    }),
+  ]),
+  instructorId: z.uuid(),
+  type: z.enum(["group", "private", "competition", "workshop"]),
+  recurrence: z.enum(["weekly", "biweekly", "dates"]),
+  weekday: integerOrNull(1, 7),
+  startDate: dateOrNull,
+  endDate: dateOrNull,
+  dates: z.array(z.iso.date("Date invalide")).max(100, "100 dates au plus"),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM"),
+  durationMinutes: z.int().min(5).max(600),
+  ageMin: integerOrNull(0, 120),
+  ageMax: integerOrNull(0, 120),
+  level: z
+    .string()
+    .trim()
+    .max(100)
+    .nullable()
+    .transform((v) => v || null),
+  maxCapacity: integerOrNull(1, 1000),
+});
+
+export const validCourseInput = courseFields
   .refine((c) => c.ageMin === null || c.ageMax === null || c.ageMin <= c.ageMax, {
-    path: ["ageMax"],
+    path: issuePath(courseFields, "ageMax"),
     message: "L’âge maximum est inférieur à l’âge minimum",
   })
   .refine((c) => c.recurrence === "dates" || c.weekday !== null, {
-    path: ["weekday"],
+    path: issuePath(courseFields, "weekday"),
     message: "Jour obligatoire",
   })
   .refine((c) => c.recurrence !== "dates" || c.dates.length > 0, {
-    path: ["dates"],
+    path: issuePath(courseFields, "dates"),
     message: "Ajoutez au moins une date",
   })
   .refine((c) => c.startDate === null || c.endDate === null || c.startDate <= c.endDate, {
-    path: ["endDate"],
+    path: issuePath(courseFields, "endDate"),
     message: "La fin précède le début",
   });
 
@@ -135,7 +139,7 @@ export async function readCourse(tx: Tx, id: string): Promise<EditedCourse | nul
 
 /** Choices offered in the course form. `include`: instructor to keep even if inactive. */
 export async function scheduleReferential(tx: Tx, include?: string) {
-  const [disciplines, salles, sites, instructors] = [
+  const [disciplines, rooms, sites, instructors] = [
     await tx.select({ id: discipline.id, name: discipline.name }).from(discipline).orderBy(asc(discipline.name)),
     await tx
       .select({ id: room.id, name: room.name, site: site.name, siteId: site.id, capacity: room.capacity })
@@ -155,13 +159,13 @@ export async function scheduleReferential(tx: Tx, include?: string) {
       .orderBy(asc(instructor.firstName), asc(instructor.lastName)),
   ];
   // Opening hours per site (#90): the form warns about a slot that falls outside them.
-  return { disciplines, salles, sites, instructors: instructors, hours: await hoursBySite(tx) };
+  return { disciplines, rooms, sites, instructors, hours: await hoursBySite(tx) };
 }
 export type ScheduleReferential = Awaited<ReturnType<typeof scheduleReferential>>;
 
 /** Chosen discipline, or found by its name (case-insensitive), otherwise created. */
 async function resolveDiscipline(tx: Tx, d: CourseInput["discipline"]): Promise<string | null> {
-  if ("id" in d) {
+  if (has(d, "id")) {
     const [x] = await tx.select({ id: discipline.id }).from(discipline).where(eq(discipline.id, d.id));
     return x?.id ?? null;
   }
@@ -180,12 +184,12 @@ async function resolveDiscipline(tx: Tx, d: CourseInput["discipline"]): Promise<
 
 /** Chosen room, or created with its site (existing or new). */
 async function resolveRoom(tx: Tx, s: CourseInput["room"]): Promise<string | null> {
-  if ("id" in s) {
+  if (has(s, "id")) {
     const [x] = await tx.select({ id: room.id }).from(room).where(eq(room.id, s.id));
     return x?.id ?? null;
   }
   let siteId: string;
-  if ("id" in s.site) {
+  if (has(s.site, "id")) {
     const [x] = await tx.select({ id: site.id }).from(site).where(eq(site.id, s.site.id));
     if (!x) return null;
     siteId = x.id;
@@ -261,7 +265,7 @@ export async function createCourse(tx: Tx, seasonId: string, entry: CourseInput)
   if (!r.ok) return r;
   const [{ id }] = await tx
     .insert(course)
-    .values({ ...r.values, schoolId: CURRENT_SCHOOL, seasonId: seasonId })
+    .values(columnsOf(course, { ...r.values, schoolId: CURRENT_SCHOOL, seasonId: seasonId }))
     .returning({ id: course.id });
   await replaceDates(tx, id, r.dates);
   return { ok: true, id };
@@ -270,7 +274,12 @@ export async function createCourse(tx: Tx, seasonId: string, entry: CourseInput)
 async function replaceDates(tx: Tx, courseId: string, dates: string[]) {
   await tx.delete(courseDate).where(eq(courseDate.courseId, courseId));
   if (dates.length > 0)
-    await tx.insert(courseDate).values(dates.map((date) => ({ schoolId: CURRENT_SCHOOL, courseId: courseId, date })));
+    await tx.insert(courseDate).values(
+      rowsOf(
+        courseDate,
+        dates.map((date) => ({ schoolId: CURRENT_SCHOOL, courseId: courseId, date })),
+      ),
+    );
 }
 
 export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Promise<Result> {
@@ -278,7 +287,7 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
   if (!existing) return { ok: false, message: "Ce cours n’existe plus." };
   const r = await values(tx, entry, existing.instructorId);
   if (!r.ok) return r;
-  await tx.update(course).set(r.values).where(eq(course.id, id));
+  await tx.update(course).set(columnsOf(course, r.values)).where(eq(course.id, id));
   await replaceDates(tx, id, r.dates);
   // New main instructor: takes over the old one's upcoming lessons, not those of a substitute.
   if (r.values.instructorId !== existing.instructorId) {

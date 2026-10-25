@@ -18,7 +18,7 @@ const clamp = (l: number) => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, 
 const visibleByDefault = (c: ColumnDef) => c.byDefault !== false;
 
 /** Default layout: definition order, `byDefault: false` columns hidden. */
-export const defaultLayout = (columns: ColumnDef[]): Layout =>
+export const defaultLayout = (columns: readonly ColumnDef[]): Layout =>
   columns.map((c) => ({ id: c.id, visible: visibleByDefault(c) }));
 
 /**
@@ -26,7 +26,7 @@ export const defaultLayout = (columns: ColumnDef[]): Layout =>
  * added at the end with their default visibility. At least one column stays
  * visible, and a required column (the name) always does.
  */
-export function readLayout(columns: ColumnDef[], saved: string[] | null | undefined): Layout {
+export function readLayout(columns: readonly ColumnDef[], saved: string[] | null | undefined): Layout {
   if (!saved) return defaultLayout(columns);
   const known = new Set(columns.map((c) => c.id));
   const required = new Set(columns.filter((c) => c.required).map((c) => c.id));

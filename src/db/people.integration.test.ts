@@ -32,7 +32,7 @@ let cse: string;
 let foreign: string;
 let jazz: string;
 
-const vide: PersonInput = {
+const empty: PersonInput = {
   type: "individual",
   name: "",
   firstName: null,
@@ -226,7 +226,7 @@ describe("createPerson and updatePerson", () => {
     const r = await withSchool(school, (tx) =>
       createPerson(
         tx,
-        { ...vide, name: "Martin", firstName: "Léa", birthDate: "1990-06-21", telephone: "06 98 76 54 32" },
+        { ...empty, name: "Martin", firstName: "Léa", birthDate: "1990-06-21", telephone: "06 98 76 54 32" },
         false,
       ),
     );
@@ -234,7 +234,7 @@ describe("createPerson and updatePerson", () => {
     const id = r.status === "ok" ? r.id : "";
     expect(
       await withSchool(school, (tx) =>
-        updatePerson(tx, id, { ...vide, name: "Martin", firstName: "Léa", address: "3 rue des Lilas" }),
+        updatePerson(tx, id, { ...empty, name: "Martin", firstName: "Léa", address: "3 rue des Lilas" }),
       ),
     ).toEqual({
       ok: true,
@@ -247,7 +247,7 @@ describe("createPerson and updatePerson", () => {
   });
 
   it("flags a likely duplicate (phone without spaces), then creates on confirmation", async () => {
-    const julie = { ...vide, name: "Petit", firstName: "Julie", telephone: "0612345678" };
+    const julie = { ...empty, name: "Petit", firstName: "Julie", telephone: "0612345678" };
     expect(await withSchool(school, (tx) => createPerson(tx, julie, false))).toEqual({
       status: "duplicates",
       duplicates: [{ id: helene, name: "Hélène Lefèvre", telephone: "06 12 34 56 78" }],
@@ -257,7 +257,7 @@ describe("createPerson and updatePerson", () => {
 
   it("creates an already related person: a child whose classes Hélène pays for", async () => {
     const r = await withSchool(school, (tx) =>
-      createPerson(tx, { ...vide, name: "Lefèvre", firstName: "Lou", birthDate: "2021-05-04" }, false, {
+      createPerson(tx, { ...empty, name: "Lefèvre", firstName: "Lou", birthDate: "2021-05-04" }, false, {
         otherId: helene,
         source: "other",
         type: "legal_guardian",
@@ -278,7 +278,7 @@ describe("createPerson and updatePerson", () => {
       createPerson(
         tx,
         {
-          ...vide,
+          ...empty,
           type: "organisation",
           firstName: "X",
           birthDate: "2000-01-01",

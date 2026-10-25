@@ -53,10 +53,10 @@ const rangesOf = () => withSchool(school, (tx) => listUnavailabilities(tx, camil
 
 describe("syncCalendar", () => {
   it("keeps the token encrypted in the database, never in clear", async () => {
-    const [{ encrypted_token: jeton_chiffre }] =
+    const [{ encrypted_token: encryptedToken }] =
       await admin`SELECT encrypted_token FROM calendar_connection WHERE instructor_id = ${camille}`;
-    expect(jeton_chiffre).not.toContain("fake-r1");
-    expect(decrypt(jeton_chiffre)).toBe("fake-r1");
+    expect(encryptedToken).not.toContain("fake-r1");
+    expect(decrypt(encryptedToken)).toBe("fake-r1");
   });
 
   it("saves busy ranges, keeps manual entries, and takes the renewed token", async () => {
@@ -78,9 +78,9 @@ describe("syncCalendar", () => {
       "microsoft 2026-11-04T15:00:00.000Z",
       "manual 2099-11-10T09:00:00.000Z",
     ]);
-    const [{ encrypted_token: jeton_chiffre }] =
+    const [{ encrypted_token: encryptedToken }] =
       await admin`SELECT encrypted_token FROM calendar_connection WHERE instructor_id = ${camille}`;
-    expect(decrypt(jeton_chiffre)).toBe("fake-r2");
+    expect(decrypt(encryptedToken)).toBe("fake-r2");
     expect(await withSchool(school, (tx) => connectionState(tx, camille))).toMatchObject({
       account: "camille@exemple.test",
       error: null,

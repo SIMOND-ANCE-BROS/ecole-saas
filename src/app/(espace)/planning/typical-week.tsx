@@ -55,12 +55,12 @@ export function TypicalWeek({
   const when = (c: Slot) => `${DAYS[c.weekday].toLowerCase()} ${c.startTime}–${end(c.startTime, c.durationMinutes)}`;
   async function moveCourse(id: string, slot: Slot, choice: string | null): Promise<CalendarResponse> {
     const c = cours.find((x) => x.id === id);
-    const r = await move(id, slot, choice === "oui");
+    const r = await move(id, slot, choice === "yes");
     if (r.status === "confirm") {
       return {
-        status: "choisir",
+        status: "choose",
         question: `${c?.discipline} compte ${r.enrolled} élève${r.enrolled > 1 ? "s" : ""} inscrit${r.enrolled > 1 ? "s" : ""}. Passer au ${when(slot)} ? Les séances à venir suivent ; pensez à prévenir les familles.`,
-        choice: [{ value: "oui", label: "Déplacer le cours" }],
+        choice: [{ value: "yes", label: "Déplacer le cours" }],
       };
     }
     if (r.status === "refused") return r;

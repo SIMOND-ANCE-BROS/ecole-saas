@@ -3,6 +3,7 @@ import { z } from "zod";
 import { type Balance, payerBalance } from "../domain/payments/balance";
 import type { Tx } from "./index";
 import { lessonPack, enrollment, auditLog, member, payment, person, user } from "./schema";
+import { issuePath } from "../lib/form-errors";
 
 /**
  * Payments (#97): payments recorded against the payer, immutable
@@ -34,21 +35,22 @@ const shortText = (max: number) =>
     .nullable()
     .transform((v) => v || null);
 
-export const validPayment = z
-  .object({
-    method: z.enum(Object.keys(PAYMENT_METHODS) as [Method, ...Method[]]),
-    amountCents: z.int("Montant invalide").min(1, "Montant invalide").max(10_000_00, "Montant trop élevé"),
-    date: z.iso.date("Date invalide"),
-    reference: shortText(60),
-    issuer: shortText(100),
-    plannedPayment: z.iso.date("Date invalide").nullable(),
-  })
+const paymentFields = z.object({
+  method: z.enum(Object.keys(PAYMENT_METHODS) as [Method, ...Method[]]),
+  amountCents: z.int("Montant invalide").min(1, "Montant invalide").max(10_000_00, "Montant trop élevé"),
+  date: z.iso.date("Date invalide"),
+  reference: shortText(60),
+  issuer: shortText(100),
+  plannedPayment: z.iso.date("Date invalide").nullable(),
+});
+
+export const validPayment = paymentFields
   .refine((r) => r.plannedPayment === null || r.method === "cheque", {
-    path: ["plannedPayment"],
+    path: issuePath(paymentFields, "plannedPayment"),
     message: "Seul un chèque s’encaisse plus tard",
   })
   .refine((r) => r.plannedPayment === null || r.plannedPayment >= r.date, {
-    path: ["plannedPayment"],
+    path: issuePath(paymentFields, "plannedPayment"),
     message: "L’encaissement suit la réception",
   });
 export const validPayments = z.array(validPayment).min(1, "Aucun règlement").max(24);

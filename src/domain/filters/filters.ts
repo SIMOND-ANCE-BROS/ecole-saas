@@ -10,8 +10,9 @@
 /** `date`: day `YYYY-MM-DD` (date of birth…). */
 export type ColumnType = "text" | "number" | "phone" | "date";
 
-export type ColumnDef = {
-  id: string;
+/** A list column; `Id` narrows the ids so cells and SQL expressions are checked against them (#138). */
+export type ColumnDef<Id extends string = string> = {
+  id: Id;
   label: string;
   type: ColumnType;
   /** false: column offered but hidden until the member shows it (#89). */
@@ -144,7 +145,7 @@ export function normalizedValue(c: Condition, type: ColumnType): string | number
 export function readFilter(
   f: string | string[] | undefined | null,
   mode: string | string[] | undefined | null,
-  columns: ColumnDef[],
+  columns: readonly ColumnDef[],
 ): Filter {
   const brutes = (Array.isArray(f) ? f : f ? [f] : []).slice(0, CONDITIONS_MAX);
   const conditions: Condition[] = [];
@@ -250,19 +251,19 @@ function evaluate(cell: Cell, c: Condition, type: ColumnType): boolean {
 
 /** Rows that satisfy all (AND) or at least one (OR) of the conditions. */
 export function applyFilter<T>(rows: T[], filter: Filter, columns: (ColumnDef & { value: (l: T) => Cell })[]): T[] {
-  const actives = filter.conditions.flatMap((c) => {
+  const active = filter.conditions.flatMap((c) => {
     const def = columns.find((d) => d.id === c.column);
     return def ? [{ c, def }] : [];
   });
-  if (actives.length === 0) return rows;
+  if (active.length === 0) return rows;
   return rows.filter((l) => {
-    const r = actives.map(({ c, def }) => evaluate(def.value(l), c, def.type));
+    const r = active.map(({ c, def }) => evaluate(def.value(l), c, def.type));
     return filter.mode === "ou" ? r.some(Boolean) : r.every(Boolean);
   });
 }
 
 /** « Âge > 10 », « Responsables contient « Martin » », « Téléphone est vide »: for the chips. */
-export function conditionLabel(c: Condition, columns: ColumnDef[]): string {
+export function conditionLabel(c: Condition, columns: readonly ColumnDef[]): string {
   const def = columns.find((d) => d.id === c.column);
   const op = operatorLabel(c.operator, def?.type ?? "text");
   const name = def?.label ?? c.column;
@@ -278,7 +279,7 @@ export type Sort = { column: string; direction: "asc" | "desc" };
 export function readSort(
   sort: string | string[] | undefined | null,
   order: string | string[] | undefined | null,
-  columns: ColumnDef[],
+  columns: readonly ColumnDef[],
 ): Sort | null {
   const column = Array.isArray(sort) ? sort[0] : sort;
   const def = columns.find((c) => c.id === column);

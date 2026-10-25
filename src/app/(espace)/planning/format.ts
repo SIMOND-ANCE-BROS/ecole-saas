@@ -3,8 +3,8 @@
 export const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
 /** End time `HH:MM` of a slot. */
-export function end(heure: string, duration: number): string {
-  const [h, m] = heure.split(":").map(Number);
+export function end(time: string, duration: number): string {
+  const [h, m] = time.split(":").map(Number);
   const total = h * 60 + m + duration;
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }

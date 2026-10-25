@@ -5,7 +5,7 @@ import { withSchool } from "@/db";
 import { readContact } from "@/db/students";
 import { enrollmentsPaidBy } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
-import { nomAffiche } from "@/db/people";
+import { displayedName } from "@/db/people";
 import { currentSeason } from "@/db/schedule";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
@@ -41,7 +41,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
   });
   if (!parsed) notFound();
   const { contact: c, season: season, billed, balance: balance, payments: payments } = parsed;
-  const name = nomAffiche(c);
+  const name = displayedName(c);
   const firstName = c.firstName ?? name;
   const roles = (e: (typeof c.students)[number]) =>
     [e.guardian && "responsable", e.paysFor && "facturé", e.toNotify && "à prévenir"].filter(Boolean).join(", ") ||

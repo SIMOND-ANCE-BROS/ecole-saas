@@ -17,13 +17,13 @@ export default async function FrontDesk() {
     const today = todayInParis();
     const season = await currentSeason(tx, today);
     if (!season) return null;
-    const [digits, dernieres, courses, ofDay] = [
+    const [digits, latest, courses, ofDay] = [
       await seasonFigures(tx, season.id),
       await lastEnrollments(tx, season.id),
       await seasonCourses(tx, season.id),
       await dayLessons(tx, today),
     ];
-    return { season: season, digits: digits, dernieres, cours: courses, ofDay: ofDay };
+    return { season, digits, latest, courses, ofDay };
   });
 
   const firstName = user.name.split(" ")[0];
@@ -36,8 +36,8 @@ export default async function FrontDesk() {
     );
   }
 
-  const { season: season, digits: digits, dernieres, cours, ofDay: ofDay } = parsed;
-  const almostFull = cours
+  const { season, digits, latest, courses, ofDay } = parsed;
+  const almostFull = courses
     .filter((c) => c.maxCapacity && c.enrolled / c.maxCapacity >= ALMOST_FULL_RATE)
     .sort((a, b) => b.enrolled / (b.maxCapacity ?? 1) - a.enrolled / (a.maxCapacity ?? 1));
 
@@ -122,7 +122,7 @@ export default async function FrontDesk() {
           <h2 id="dernieres" className="text-base font-semibold">
             Dernières inscriptions
           </h2>
-          {dernieres.length === 0 ? (
+          {latest.length === 0 ? (
             <p className="text-sm text-doux">
               Aucune inscription pour l’instant. Recherchez une personne pour commencer.
             </p>
@@ -137,7 +137,7 @@ export default async function FrontDesk() {
                   </tr>
                 </thead>
                 <tbody>
-                  {dernieres.map((d) => (
+                  {latest.map((d) => (
                     <tr key={d.id}>
                       <td>
                         <Link href={`/personnes/${d.payerId}`} className="lien">

@@ -5,7 +5,7 @@ import { withSchool } from "@/db";
 import { seasonCourseLabels, listContacts, listStudents, MAX_RESULTS } from "@/db/students";
 import { currentSeason } from "@/db/schedule";
 import { readPreference } from "@/db/preferences";
-import { nomAffiche } from "@/db/people";
+import { displayedName } from "@/db/people";
 import { STUDENT_COLUMNS } from "@/domain/filters/columns";
 import { readFilter, readSort } from "@/domain/filters/filters";
 import { ageAt, todayInParis } from "@/domain/people/age";
@@ -29,7 +29,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
     students: students,
     contacts,
     layout: layout,
-    courses: cours,
+    courses,
   } = await withSchool(schoolId, async (tx) => {
     const season = await currentSeason(tx, today);
     return {
@@ -79,8 +79,8 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
             columns={STUDENT_COLUMNS}
             layout={layout}
             linkColumn="nom"
-            vide={emptyMessage}
-            choice={{ cours }}
+            empty={emptyMessage}
+            choice={{ cours: courses }}
             emptyAction={
               !entry && (
                 <Link href="/eleves/nouveau" className="bouton-principal">
@@ -144,7 +144,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
               {contacts.map((c) => (
                 <li key={c.id} className="flex flex-wrap items-baseline gap-x-3 px-3 py-2">
                   <Link href={`/contacts/${c.id}`} data-resultat className="lien font-medium">
-                    {nomAffiche(c)}
+                    {displayedName(c)}
                   </Link>
                   {c.students.length > 0 && <span className="text-doux">pour {c.students.join(", ")}</span>}
                   {c.telephone && <span className="ml-auto tabular-nums">{c.telephone}</span>}

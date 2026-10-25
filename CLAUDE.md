@@ -22,7 +22,7 @@ Reference for every agent working on this project. Read it in full before coding
 | PR section « Pour l’accueil et la direction »                          | **French**, written for the school                    |
 | URLs (Next route folders such as `src/app/(espace)/eleves`)            | **French**: they are user-visible                     |
 
-The database (`0027_english_names`, enum values in `0028`–`0031`), file names, TypeScript identifiers, code comments and test titles are in English (#114). Still being translated (#114): a few internal discriminants and property names (tariff engine statuses, `billedTo` and the guide billing choice, `DepositRow.nombre`, some SQL aliases) and data keys (discount code `fratrie`, audit-log JSON keys such as `montant_centimes`). Environment variables `CLE_CHIFFREMENT` and `IP_CLIENT_EN_TETE` keep their names until deployments are updated. Some keys stay French on purpose because they are data, not code: list column ids, URL parameters and their values (`?enregistre=cree`), route folders. Never translate one of them on one side only. New code is written in English, using the lexicon below.
+The database (`0027_english_names`, enum values in `0028`–`0031`), file names, TypeScript identifiers, code comments and test titles are in English (#114). Still French until a data migration (#114): keys stored in the database, namely the discount code `fratrie` and audit-log JSON keys such as `montant_centimes` (old audit rows are immutable). Environment variables `CLE_CHIFFREMENT` and `IP_CLIENT_EN_TETE` keep their names until deployments are updated. Some keys stay French on purpose because they are data, not code: list column ids, URL parameters and their values (`?enregistre=cree`), route folders. Never translate one of them on one side only. New code is written in English, using the lexicon below.
 
 ## 3. Domain lexicon (French → English)
 
@@ -171,6 +171,8 @@ DESIGN.md                    interface rules
 **TypeScript**
 
 - `strict` mode plus `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noFallthroughCasesInSwitch`; no `any` (ESLint error), no non-null assertion without a comment saying why it holds.
+- Every string key is checked by the compiler (#138): list cells and SQL expressions keyed by the column ids (`ColumnDef<Id>`, `TableRow<Id>`, `ColumnId<…>`); form errors through `errorsOf<T>()` / `FieldErrors<T>` and custom Zod paths through `issuePath(schema, …)` (`src/lib/form-errors.ts`); FormData names through one `formFields()` shared by the form and its action (`src/lib/form-fields.ts`); `has(value, "key")` instead of `"key" in value` (`src/lib/has.ts`, lint rule); framework config objects with `satisfies` (`ProxyConfig`).
+- Drizzle payloads of `insert().values()`, `update().set()` and `onConflictDoUpdate({ set })` are a literal without spread, or go through `columnsOf(table, …)` / `rowsOf(table, […])` (`src/db/columns-of.ts`, lint rule), since Drizzle silently drops an unknown key of a spread or built object (#134).
 
 **CI** (`.github/workflows/`)
 
@@ -220,6 +222,8 @@ Rules in `DESIGN.md`. In short:
 - Don't hard-code a price, discount, VAT mention or anything school-specific.
 - Don't generate an invoice number; don't update an issued invoice, a payment or the audit log.
 - Don't use floating-point numbers for money.
+- Don't key cells, form errors, FormData fields or `in` checks with a bare string the compiler cannot check (#138).
+- Don't spread or pass a built object into a Drizzle `values()` / `set()` without `columnsOf()` / `rowsOf()` (#134).
 - Don't log personal data; don't put real personal data in issues, PRs, tests or seeds.
 - Don't edit an applied migration.
 - Don't skip git hooks (`--no-verify`) or CI checks.

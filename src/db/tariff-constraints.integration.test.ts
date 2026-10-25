@@ -76,8 +76,8 @@ describe("tariff", () => {
 
   it("rejects a discipline from another school", async () => {
     await withSeason(async (tx, ids) => {
-      const [autre] = await tx`INSERT INTO school (name, slug) VALUES ('Autre école', 'autre-ecole') RETURNING id`;
-      const [foreign] = await tx`INSERT INTO discipline (school_id, name) VALUES (${autre.id}, 'Zumba') RETURNING id`;
+      const [other] = await tx`INSERT INTO school (name, slug) VALUES ('Autre école', 'autre-ecole') RETURNING id`;
+      const [foreign] = await tx`INSERT INTO discipline (school_id, name) VALUES (${other.id}, 'Zumba') RETURNING id`;
       await expect(tx.savepoint((sp) => insertTariff(sp, ids, [60, 60], foreign.id))).rejects.toMatchObject({
         constraint_name: "tariff_discipline_same_school_fk",
       });

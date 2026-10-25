@@ -75,8 +75,8 @@ beforeAll(async () => {
     ]),
   );
   if (!r.ok) throw new Error(r.message);
-  [ids.cheque, ids.differe, ids.especes, ids.carte, ids.annule] = r.ids;
-  await withSchool(school, (tx) => correctPayment(tx, director, ids.annule, 5000, TODAY));
+  [ids.cheque, ids.deferred, ids.cash, ids.card, ids.cancelled] = r.ids;
+  await withSchool(school, (tx) => correctPayment(tx, director, ids.cancelled, 5000, TODAY));
 });
 
 afterAll(async () => {
@@ -105,7 +105,7 @@ describe("bank deposits", () => {
   it("to deposit: due cheque and cash; no card, no post-dated cheque, no fully reversed cheque", async () => {
     const r = await toDeposit();
     expect(r.cheque.map((p) => p.id)).toEqual([ids.cheque]);
-    expect(r.cash.map((p) => p.id)).toEqual([ids.especes]);
+    expect(r.cash.map((p) => p.id)).toEqual([ids.cash]);
     expect(r.holiday_voucher).toEqual([]);
   });
 
@@ -127,19 +127,19 @@ describe("bank deposits", () => {
     ).toEqual(refusal);
     expect(
       await withSchool(school, (tx) =>
-        createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [ids.especes] }, TODAY),
+        createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [ids.cash] }, TODAY),
       ),
     ).toEqual(refusal);
     expect(
       await withSchool(school, (tx) =>
-        createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [ids.differe] }, TODAY),
+        createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [ids.deferred] }, TODAY),
       ),
     ).toEqual(refusal);
     // A deposit dated on the planned cashing day accepts the post-dated cheque.
     expect(
       (
         await withSchool(school, (tx) =>
-          createDeposit(tx, director, { date: "2027-01-05", method: "cheque", paymentIds: [ids.differe] }, TODAY),
+          createDeposit(tx, director, { date: "2027-01-05", method: "cheque", paymentIds: [ids.deferred] }, TODAY),
         )
       ).ok,
     ).toBe(true);
@@ -147,12 +147,12 @@ describe("bank deposits", () => {
   });
 
   it("a payment can belong to only one deposit (database constraint)", async () => {
-    const [{ id: autre }] =
+    const [{ id: other }] =
       await admin`INSERT INTO bank_deposit (school_id, date, method) VALUES (${school}, ${TODAY}, 'cheque') RETURNING id`;
     await expect(
-      admin`INSERT INTO bank_deposit_payment (school_id, bank_deposit_id, payment_id) VALUES (${school}, ${autre}, ${ids.cheque})`,
+      admin`INSERT INTO bank_deposit_payment (school_id, bank_deposit_id, payment_id) VALUES (${school}, ${other}, ${ids.cheque})`,
     ).rejects.toThrow();
-    await admin`DELETE FROM bank_deposit WHERE id = ${autre}`;
+    await admin`DELETE FROM bank_deposit WHERE id = ${other}`;
   });
 
   it("deposit slip, list and payment log", async () => {

@@ -5,7 +5,7 @@ import { withSchool } from "@/db";
 import { readStudent } from "@/db/students";
 import { enrollmentsPaidBy } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
-import { nomAffiche } from "@/db/people";
+import { displayedName } from "@/db/people";
 import { currentSeason } from "@/db/schedule";
 import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
@@ -49,11 +49,11 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   if (!parsed) notFound();
   const { student: e, season: season, billed, balance: balance, payments: payments } = parsed;
 
-  const name = nomAffiche(e);
+  const name = displayedName(e);
   const firstName = e.firstName ?? name;
   const age = e.birthDate ? ageAt(e.birthDate, today) : null;
   const minor = age !== null && age < 18;
-  const urgences = e.guardians
+  const emergencyContacts = e.guardians
     .filter((r) => r.toNotify)
     .concat(e.otherRelationships.filter((a) => a.toNotify && a.direction === "incoming"));
   const banner = BANNERS[String(inscription ?? enregistre)];
@@ -97,10 +97,10 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             <h2 id="urgence" className="text-sm font-semibold">
               En cas d’urgence
             </h2>
-            {urgences.length === 0 ? (
+            {emergencyContacts.length === 0 ? (
               <span className="text-doux">Personne à prévenir. Cochez « À prévenir » sur un responsable.</span>
             ) : (
-              urgences.map((u) => (
+              emergencyContacts.map((u) => (
                 <span key={u.relationshipId} className="flex flex-wrap gap-x-2">
                   <span className="font-medium">{u.name}</span>
                   {u.telephone ? (

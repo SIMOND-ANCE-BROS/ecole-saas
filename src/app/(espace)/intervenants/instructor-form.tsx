@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { type Instructor, PAY_MODES, VAT_REGIMES, STATUSES, PAY_UNITS } from "@/db/instructors";
 import { saveInstructor, type FormState } from "./actions";
+import { INSTRUCTOR, type InstructorField } from "./fields";
 import { Cancel } from "@/app/(espace)/_panel/panel";
 
 type Mode = keyof typeof PAY_UNITS;
@@ -10,7 +11,7 @@ type Mode = keyof typeof PAY_UNITS;
 /** Amount in cents → euro input (« 40 », « 40,50 »), without floating-point numbers. */
 const inEuros = (c: number) => `${Math.trunc(c / 100)}${c % 100 ? `,${String(c % 100).padStart(2, "0")}` : ""}`;
 
-function toValues(i: Instructor | null): Record<string, string> {
+function toValues(i: Instructor | null): Record<InstructorField, string> {
   return {
     firstName: i?.firstName ?? "",
     name: i?.name ?? "",
@@ -52,7 +53,7 @@ type PropsChamps = {
   inProgress: boolean;
   edition: boolean;
   back: string;
-  initial: Record<string, string>;
+  initial: Record<InstructorField, string>;
 };
 
 function Champs({ state: state, send: send, inProgress: inProgress, edition, initial, back: back }: PropsChamps) {
@@ -67,7 +68,7 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
     if (state.attempt > 0) form.current?.querySelector<HTMLElement>("[aria-invalid]")?.focus();
   }, [state.attempt]);
 
-  const field = (name: string, label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
+  const field = (name: InstructorField, label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
     <div className="flex flex-col gap-1">
       <label htmlFor={name} className="text-sm font-medium">
         {label}
@@ -118,7 +119,7 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
           </label>
           <select
             id="status"
-            name="status"
+            name={INSTRUCTOR.name("status")}
             className="champ"
             defaultValue={v.status}
             onChange={(x) => setStatus(x.target.value)}
@@ -133,13 +134,13 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
         {status !== "employee" ? (
           field("siren", "SIREN (facultatif)", { inputMode: "numeric", autoComplete: "off", placeholder: "9 chiffres" })
         ) : (
-          <input type="hidden" name="siren" value="" />
+          <input type="hidden" name={INSTRUCTOR.name("siren")} value="" />
         )}
         <div className="flex flex-col gap-1">
           <label htmlFor="vatRegime" className="text-sm font-medium">
             TVA
           </label>
-          <select id="vatRegime" name="vatRegime" className="champ" defaultValue={v.vatRegime}>
+          <select id="vatRegime" name={INSTRUCTOR.name("vatRegime")} className="champ" defaultValue={v.vatRegime}>
             {Object.entries(VAT_REGIMES).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
@@ -148,7 +149,7 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
           </select>
         </div>
         <label className="flex items-center gap-2 self-end pb-1.5 text-sm">
-          <input type="checkbox" name="isOwner" defaultChecked={v.isOwner === "on"} />
+          <input type="checkbox" name={INSTRUCTOR.name("isOwner")} defaultChecked={v.isOwner === "on"} />
           Dirigeant de l’école
         </label>
       </fieldset>
@@ -161,7 +162,7 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
           </label>
           <select
             id="payMode"
-            name="payMode"
+            name={INSTRUCTOR.name("payMode")}
             className="champ"
             defaultValue={v.payMode}
             onChange={(x) => setMode(x.target.value as Mode)}
@@ -182,7 +183,12 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
 
       {edition && (
         <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" name="active" defaultChecked={v.active === "on"} className="mt-0.5" />
+          <input
+            type="checkbox"
+            name={INSTRUCTOR.name("active")}
+            defaultChecked={v.active === "on"}
+            className="mt-0.5"
+          />
           <span>
             Actif
             <span className="block text-xs text-doux">

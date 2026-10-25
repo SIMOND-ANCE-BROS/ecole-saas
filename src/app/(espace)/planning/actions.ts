@@ -13,15 +13,15 @@ import type { CalendarResponse } from "./calendar";
 import { shortDate, end } from "./format";
 
 /**
- * Moves a lesson of the dated schedule (#90): « seance » (that one only) or
- * « suivantes » (the course changes from that lesson on). Then reports a room
+ * Moves a lesson of the dated schedule (#90): "lesson" (that one only) or
+ * "following" (the course changes from that lesson on). Then reports a room
  * or instructor already taken that day and a slot outside the site's opening
  * hours.
  */
 export async function moveOneLesson(
   lessonId: string,
   slot: { date: string; startTime: string; durationMinutes: number },
-  scope: "seance" | "suivantes",
+  scope: "lesson" | "following",
 ): Promise<CalendarResponse> {
   const { schoolId: schoolId } = await requireRole("director");
   const today = todayInParis();
@@ -60,7 +60,7 @@ export async function moveOneLesson(
     return {
       status: "ok",
       text:
-        scope === "seance"
+        scope === "lesson"
           ? `Séance déplacée au ${when}.`
           : `Cours déplacé à partir du ${when} : les séances suivantes suivent.`,
       warnings,

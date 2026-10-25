@@ -1,4 +1,6 @@
 import { type AnyColumn, and, asc, desc, eq, or, type SQL, sql } from "drizzle-orm";
+import { columnsOf } from "./columns-of";
+import { issuePath } from "../lib/form-errors";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { displayedName } from "../domain/people/name";
@@ -13,6 +15,8 @@ import {
   person,
   season,
 } from "./schema";
+
+export { displayedName };
 
 /**
  * People (students, parents, partners, professional payers) and relationships
@@ -35,14 +39,12 @@ function normalize(entry: string): string {
 }
 
 /** Escapes the LIKE wildcards (%, _, \) of an input. */
-function contient(text: string): string {
+function likePattern(text: string): string {
   return `%${text.replace(/[\\%_]/g, "\\$&")}%`;
 }
 
 const digits = (v: string) => v.replace(/\D/g, "");
 const phoneDigits = sql`regexp_replace(coalesce(${person.phone}, ''), '[^0-9]', '', 'g')`;
-
-export { displayedName as nomAffiche };
 
 // ---------------------------------------------------------------------------
 // Search and list
@@ -96,7 +98,7 @@ export type PersonResult = {
 export function searchCondition(entry: string, alias = "person"): SQL | null {
   const text = normalize(entry);
   if (text.length < MINIMUM_LENGTH) return null;
-  const pattern = contient(text);
+  const pattern = likePattern(text);
   const col = (c: string) =>
     sql`translate(lower(coalesce(${sql.identifier(alias)}.${sql.identifier(c)}, '')), ${DIACRITICS}, ${SANS_ACCENTS})`;
   const conditions: SQL[] = [
@@ -109,7 +111,7 @@ export function searchCondition(entry: string, alias = "person"): SQL | null {
   ];
   if (digits(text).length >= 4) {
     conditions.push(
-      sql`regexp_replace(coalesce(${sql.identifier(alias)}.phone, ''), '[^0-9]', '', 'g') LIKE ${contient(digits(text))}`,
+      sql`regexp_replace(coalesce(${sql.identifier(alias)}.phone, ''), '[^0-9]', '', 'g') LIKE ${likePattern(digits(text))}`,
     );
   }
   return or(...conditions) ?? null;
@@ -318,37 +320,45 @@ const optionalText = (max: number) =>
     .nullable()
     .transform((v) => v || null);
 
-export const validPersonInput = z
-  .object({
-    type: z.enum(["individual", "organisation"]),
-    name: z.string().trim().max(100),
-    firstName: optionalText(100),
-    companyName: optionalText(200),
-    siren: z
-      .string()
-      .nullable()
-      .transform((v) => (v ?? "").replace(/\s/g, "") || null)
-      .refine((v) => v === null || /^\d{9}$/.test(v), "Le SIREN compte 9 chiffres"),
-    birthDate: z
-      .union([z.literal(""), z.iso.date("Date invalide")])
-      .nullable()
-      .transform((v) => v || null),
-    email: z
-      .union([z.literal(""), z.email("E-mail invalide")])
-      .nullable()
-      .transform((v) => v || null),
-    telephone: optionalText(30),
-    address: optionalText(300),
-    notes: optionalText(2000),
-  })
-  .superRefine((f, ctx) => {
-    if (f.type === "individual" && !f.name)
-      ctx.addIssue({ code: "custom", path: ["name"], message: "Nom obligatoire" });
-    if (f.type === "organisation" && !f.companyName)
-      ctx.addIssue({ code: "custom", path: ["companyName"], message: "Raison sociale obligatoire" });
-    if (f.type === "organisation" && !f.siren)
-      ctx.addIssue({ code: "custom", path: ["siren"], message: "SIREN obligatoire pour un professionnel" });
-  });
+const personFields = z.object({
+  type: z.enum(["individual", "organisation"]),
+  name: z.string().trim().max(100),
+  firstName: optionalText(100),
+  companyName: optionalText(200),
+  siren: z
+    .string()
+    .nullable()
+    .transform((v) => (v ?? "").replace(/\s/g, "") || null)
+    .refine((v) => v === null || /^\d{9}$/.test(v), "Le SIREN compte 9 chiffres"),
+  birthDate: z
+    .union([z.literal(""), z.iso.date("Date invalide")])
+    .nullable()
+    .transform((v) => v || null),
+  email: z
+    .union([z.literal(""), z.email("E-mail invalide")])
+    .nullable()
+    .transform((v) => v || null),
+  telephone: optionalText(30),
+  address: optionalText(300),
+  notes: optionalText(2000),
+});
+
+export const validPersonInput = personFields.superRefine((f, ctx) => {
+  if (f.type === "individual" && !f.name)
+    ctx.addIssue({ code: "custom", path: issuePath(personFields, "name"), message: "Nom obligatoire" });
+  if (f.type === "organisation" && !f.companyName)
+    ctx.addIssue({
+      code: "custom",
+      path: issuePath(personFields, "companyName"),
+      message: "Raison sociale obligatoire",
+    });
+  if (f.type === "organisation" && !f.siren)
+    ctx.addIssue({
+      code: "custom",
+      path: issuePath(personFields, "siren"),
+      message: "SIREN obligatoire pour un professionnel",
+    });
+});
 
 export type PersonInput = z.output<typeof validPersonInput>;
 export type Duplicate = { id: string; name: string; telephone: string | null };
@@ -416,7 +426,7 @@ export async function createPerson(
   }
   const [{ id }] = await tx
     .insert(person)
-    .values({ ...personValues(entry), schoolId: CURRENT_SCHOOL })
+    .values(columnsOf(person, { ...personValues(entry), schoolId: CURRENT_SCHOOL }))
     .returning({ id: person.id });
   if (relationshipWith) {
     const { otherId, source, ...l } = relationshipWith;
@@ -434,7 +444,11 @@ export async function createPerson(
 export async function updatePerson(tx: Tx, id: string, entry: PersonInput): Promise<Result> {
   const refusal = { ok: false as const, message: "Cette personne n’existe plus." };
   if (!z.uuid().safeParse(id).success) return refusal;
-  const rows = await tx.update(person).set(personValues(entry)).where(eq(person.id, id)).returning({ id: person.id });
+  const rows = await tx
+    .update(person)
+    .set(columnsOf(person, personValues(entry)))
+    .where(eq(person.id, id))
+    .returning({ id: person.id });
   return rows.length === 1 ? { ok: true, id } : refusal;
 }
 

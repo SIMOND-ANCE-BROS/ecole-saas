@@ -14,7 +14,7 @@ describe("payerBalance", () => {
       [{ amountCents: 20_000, plannedPayment: null }],
       TODAY,
     );
-    expect(s).toEqual({ du: 54_050, paye: 20_000, remaining: 34_050, toCollect: 0, outsideCalculation: {} });
+    expect(s).toEqual({ due: 54_050, paid: 20_000, remaining: 34_050, toCollect: 0, outsideCalculation: {} });
   });
 
   it("three dated cheques: all counted as paid, future ones flagged as to cash", () => {
@@ -28,7 +28,7 @@ describe("payerBalance", () => {
       ],
       TODAY,
     );
-    expect(s).toMatchObject({ paye: 30_000, remaining: 0, toCollect: 20_000 });
+    expect(s).toMatchObject({ paid: 30_000, remaining: 0, toCollect: 20_000 });
   });
 
   it("a correction (negative payment) reduces the paid amount; a cheque past its date is no longer « à encaisser »", () => {
@@ -42,7 +42,7 @@ describe("payerBalance", () => {
       ],
       TODAY,
     );
-    expect(s).toMatchObject({ paye: 15_000, remaining: 0, toCollect: 0 });
+    expect(s).toMatchObject({ paid: 15_000, remaining: 0, toCollect: 0 });
   });
 
   it("dropped, trial and waitlist stay out of the computation, but visible (#99)", () => {
@@ -57,8 +57,8 @@ describe("payerBalance", () => {
       TODAY,
     );
     expect(s).toEqual({
-      du: 0,
-      paye: 1_000,
+      due: 0,
+      paid: 1_000,
       remaining: -1_000,
       toCollect: 0,
       outsideCalculation: { dropped: 20_000, trial: 1_500, waitlist: 9_000 },

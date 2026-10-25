@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { withSchool } from "@/db";
 import { listContacts } from "@/db/students";
 import { readPreference } from "@/db/preferences";
-import { nomAffiche } from "@/db/people";
+import { displayedName } from "@/db/people";
 import { CONTACT_COLUMNS } from "@/domain/filters/columns";
 import { readFilter, readSort } from "@/domain/filters/filters";
 import { requireRole } from "@/lib/session";
@@ -44,7 +44,7 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
             columns={CONTACT_COLUMNS}
             layout={layout}
             linkColumn="nom"
-            vide={
+            empty={
               filter.conditions.length > 0
                 ? "Aucun contact ne correspond à ces filtres."
                 : entry
@@ -60,7 +60,7 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
               id: c.id,
               href: `/contacts/${c.id}`,
               badge: c.type === "organisation" ? "organisme" : undefined,
-              cells: { nom: nomAffiche(c), eleves: c.students, telephone: c.telephone, email: c.email },
+              cells: { nom: displayedName(c), eleves: c.students, telephone: c.telephone, email: c.email },
             }))}
           />
         </Suspense>

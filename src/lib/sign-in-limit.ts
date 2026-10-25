@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import { and, count, gt, inArray, lt, sql } from "drizzle-orm";
+import { rowsOf } from "../db/columns-of";
 import { db } from "../db";
 import { loginAttempt } from "../db/schema";
 
@@ -52,7 +53,12 @@ export async function recordAttempt(email: string, ip: string | null): Promise<b
   const limits = keys(email, ip);
   const inserted = await db
     .insert(loginAttempt)
-    .values(limits.map(({ key: key }) => ({ key: key })))
+    .values(
+      rowsOf(
+        loginAttempt,
+        limits.map(({ key }) => ({ key })),
+      ),
+    )
     .returning({ id: loginAttempt.id });
   const accounts = await db
     .select({ key: loginAttempt.key, n: count() })

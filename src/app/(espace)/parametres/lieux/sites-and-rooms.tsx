@@ -104,7 +104,7 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                   <button type="button" className="lien" onClick={() => setEditionSite(s)}>
                     Modifier
                   </button>
-                  {s.salles.length === 0 && (
+                  {s.rooms.length === 0 && (
                     <button
                       type="button"
                       className="lien text-doux"
@@ -121,7 +121,7 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
             <SiteHours siteId={s.id} name={s.name} hours={s.hours} />
 
             <ul className="divide-y divide-bordure rounded-md border border-bordure">
-              {s.salles.map((x) =>
+              {s.rooms.map((x) =>
                 roomEditing?.id === x.id ? (
                   <li key={x.id} className="px-3 py-2">
                     <form

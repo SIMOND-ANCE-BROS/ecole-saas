@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { PersonResult } from "@/db/people";
+import type { PersonInput, PersonResult } from "@/db/people";
+import type { FieldErrors } from "@/lib/form-errors";
 import { displayedName } from "@/domain/people/name";
 import { deferredQuery } from "@/lib/deferred-query";
 import { searchPeopleAction } from "./actions";
+import { has } from "@/lib/has";
 
 /** Person picked from the database, or to be created with the essentials. */
 export type Choice =
@@ -27,7 +29,7 @@ export const newPerson = (type: "individual" | "organisation"): Choice => ({
 
 /** For sending to the server: shape expected by validPersonInput. */
 export function toInput(c: Choice) {
-  if ("id" in c) return { id: c.id };
+  if (has(c, "id")) return { id: c.id };
   const n = c.newPerson;
   return {
     newPerson: {
@@ -55,7 +57,7 @@ type Props = {
   exclude?: string[];
   /** Organisation (CSE, company) rather than individual for a new person. */
   organization?: boolean;
-  errors?: Partial<Record<string, string>>;
+  errors?: FieldErrors<PersonInput>;
 };
 
 /**
@@ -90,7 +92,7 @@ export function PersonChoice({
     );
   }, [entry, active, excluded]);
 
-  if (value && "id" in value) {
+  if (value && has(value, "id")) {
     return (
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-medium">{value.name}</span>
@@ -101,7 +103,7 @@ export function PersonChoice({
     );
   }
 
-  if (value && "newPerson" in value) {
+  if (value && has(value, "newPerson")) {
     const n = value.newPerson;
     const updated = (field: keyof typeof n) => (e: { target: { value: string } }) =>
       onChange({ newPerson: { ...n, [field]: e.target.value } });

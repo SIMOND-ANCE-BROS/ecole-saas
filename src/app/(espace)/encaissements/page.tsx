@@ -9,6 +9,7 @@ import { todayInParis } from "@/domain/people/age";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
 import { ToDeposit } from "./to-deposit";
+import { isKeyOf } from "@/lib/has";
 
 export const metadata: Metadata = { title: "Encaissements" };
 
@@ -20,19 +21,19 @@ const day = (iso: string) => iso.split("-").reverse().join("/");
 export default async function PaymentsPage({ searchParams }: PageProps<"/encaissements">) {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const p = await searchParams;
-  const view: View = typeof p.vue === "string" && p.vue in VIEWS ? (p.vue as View) : "journal";
+  const view: View = typeof p.vue === "string" && isKeyOf(VIEWS, p.vue) ? p.vue : "journal";
   const today = todayInParis();
-  const du = validDate(p.du) ?? `${today.slice(0, 8)}01`;
-  const au = validDate(p.au) ?? today;
-  const method = typeof p.moyen === "string" && p.moyen in PAYMENT_METHODS ? (p.moyen as Method) : null;
+  const from = validDate(p.du) ?? `${today.slice(0, 8)}01`;
+  const to = validDate(p.au) ?? today;
+  const method = typeof p.moyen === "string" && isKeyOf(PAYMENT_METHODS, p.moyen) ? p.moyen : null;
 
   const parsed = await withSchool(schoolId, async (tx) => ({
-    journal: view === "journal" ? await paymentLog(tx, du, au, method) : [],
+    journal: view === "journal" ? await paymentLog(tx, from, to, method) : [],
     toDeposit: view === "remettre" ? await paymentsToDeposit(tx, today) : null,
     remises: view === "remises" ? await listDeposits(tx) : [],
   }));
   const t = totals(parsed.journal);
-  const exportUrl = `/encaissements/export?${new URLSearchParams({ du, au, ...(method ? { moyen: method } : {}) })}`;
+  const exportUrl = `/encaissements/export?${new URLSearchParams({ du: from, au: to, ...(method ? { moyen: method } : {}) })}`;
 
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
@@ -63,13 +64,13 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
               <label htmlFor="du" className="text-xs text-doux">
                 Du
               </label>
-              <input id="du" name="du" type="date" className="champ" defaultValue={du} />
+              <input id="du" name="du" type="date" className="champ" defaultValue={from} />
             </div>
             <div className="flex flex-col gap-1">
               <label htmlFor="au" className="text-xs text-doux">
                 Au
               </label>
-              <input id="au" name="au" type="date" className="champ" defaultValue={au} />
+              <input id="au" name="au" type="date" className="champ" defaultValue={to} />
             </div>
             <div className="flex flex-col gap-1">
               <label htmlFor="moyen" className="text-xs text-doux">
@@ -109,7 +110,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
             <div className="panneau overflow-x-auto">
               <table className="tableau">
                 <caption className="sr-only">
-                  Encaissements du {day(du)} au {day(au)}
+                  Encaissements du {day(from)} au {day(to)}
                 </caption>
                 <thead>
                   <tr>
