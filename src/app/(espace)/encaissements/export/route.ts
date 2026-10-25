@@ -1,10 +1,11 @@
 import { withSchool } from "@/db";
-import { PAYMENT_METHODS, type Method } from "@/db/payments";
+import { PAYMENT_METHODS } from "@/db/payments";
 import { paymentLog } from "@/db/deposits";
 import { toCsv } from "@/domain/payments/deposits";
 import { validDate } from "@/domain/schedule/week";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
+import { isKeyOf } from "@/lib/has";
 
 /** CSV export of the payment log (`?du=&au=&moyen=`), for the accounts (#98). */
 export async function GET(query: Request) {
@@ -14,7 +15,7 @@ export async function GET(query: Request) {
   const du = validDate(p.get("du")) ?? today;
   const au = validDate(p.get("au")) ?? today;
   const m = p.get("moyen");
-  const method = m && m in PAYMENT_METHODS ? (m as Method) : null;
+  const method = m && isKeyOf(PAYMENT_METHODS, m) ? m : null;
   const rows = await withSchool(schoolId, (tx) => paymentLog(tx, du, au, method));
   const csv = toCsv(
     rows.map((l) => ({

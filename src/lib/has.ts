@@ -11,3 +11,11 @@ export function has<T extends object, K extends KeysOfUnion<T> & string>(
 ): value is Extract<T, Partial<Record<K, unknown>>> & Record<K, unknown> {
   return key in value;
 }
+
+/**
+ * Whether a runtime string (URL parameter…) is an own key of a constant
+ * record. Unlike `in`, inherited keys (`toString`, `constructor`) do not match.
+ */
+export function isKeyOf<O extends object>(record: O, key: string): key is keyof O & string {
+  return Object.hasOwn(record, key);
+}

@@ -19,7 +19,7 @@ export type Refusal = { message: string; errors: FieldErrors<PersonInput>; dupli
 export async function createContact(entry: unknown, confirmed: boolean): Promise<Refusal> {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const p = validPersonInput.safeParse(entry);
-  if (!p.success) return { message: "Vérifiez les champs signalés.", errors: errorsOf<PersonInput>(p.error.issues) };
+  if (!p.success) return { message: "Vérifiez les champs signalés.", errors: errorsOf(p.error) };
   const r = await withSchool(schoolId, (tx) => createPerson(tx, p.data, confirmed));
   if (r.status === "duplicates")
     return { message: "Cette personne existe peut-être déjà.", errors: {}, duplicates: r.duplicates };
@@ -30,7 +30,7 @@ export async function createContact(entry: unknown, confirmed: boolean): Promise
 export async function updateIdentity(id: string, entry: unknown, back: "eleves" | "contacts"): Promise<Refusal> {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const p = validPersonInput.safeParse(entry);
-  if (!p.success) return { message: "Vérifiez les champs signalés.", errors: errorsOf<PersonInput>(p.error.issues) };
+  if (!p.success) return { message: "Vérifiez les champs signalés.", errors: errorsOf(p.error) };
   const r = await withSchool(schoolId, (tx) => updatePerson(tx, id, p.data));
   if (!r.ok) return { message: r.message, errors: {} };
   redirect(`/${back}/${id}?enregistre=modifie`);

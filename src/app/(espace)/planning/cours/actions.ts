@@ -24,7 +24,7 @@ export async function saveCourse(id: string | null, entry: unknown): Promise<Ref
   const { schoolId: schoolId } = await requireRole("director");
   const parsed = validCourseInput.safeParse(entry);
   if (!parsed.success) {
-    return { message: "Vérifiez les champs signalés.", errors: topErrorsOf<CourseFields>(parsed.error.issues) };
+    return { message: "Vérifiez les champs signalés.", errors: topErrorsOf(parsed.error) };
   }
   const today = todayInParis();
   const result = await withSchool(schoolId, async (tx) => {

@@ -12,6 +12,7 @@ import {
   normalizedValue,
   toParams,
 } from "@/domain/filters/filters";
+import { has } from "@/lib/has";
 
 /** Delay before applying a typed value (the list reloads from the server). */
 const DELAY = 350;
@@ -63,7 +64,7 @@ export function useAddressFilter(columns: readonly ColumnDef[]) {
       if (withoutValue(next.operator)) next.value = "";
       return next;
     });
-    change({ ...filter, conditions }, ("value" satisfies keyof Condition) in updated);
+    change({ ...filter, conditions }, has(updated, "value"));
   }
 
   /** New empty condition on a column: nothing to reload until it has a value. */

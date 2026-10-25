@@ -34,7 +34,7 @@ const eslintConfig = defineConfig([
       "no-restricted-syntax": [
         "error",
         {
-          selector: "BinaryExpression[operator='in'][left.type='Literal']",
+          selector: "BinaryExpression[operator='in'][left.type=/^(Literal|TemplateLiteral)$/]",
           message: "Use has(value, 'key') from @/lib/has: the key is then checked against the type.",
         },
       ],

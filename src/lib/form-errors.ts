@@ -19,18 +19,22 @@ export type FieldPath<T, Depth extends unknown[] = []> = Depth["length"] extends
 /** Message of each field, keyed by its path in the form input. */
 export type FieldErrors<T> = Partial<Record<FieldPath<T>, string>>;
 
-/** First error message of each field, keyed by its full path, to display under the field. */
-export function errorsOf<T>(issues: z.core.$ZodIssue[]): FieldErrors<T> {
+/**
+ * First error message of each field, keyed by its full path, to display under
+ * the field. `T` is inferred from the schema that produced the error.
+ */
+export function errorsOf<T>(error: z.ZodError<T>): FieldErrors<T> {
   const errors: Partial<Record<string, string>> = {};
-  for (const p of issues) errors[p.path.map(String).join(".")] ??= p.message;
-  // Zod issue paths are paths of the parsed input, i.e. of T.
+  // Root issues (empty path) belong to no field: callers show their own message.
+  for (const p of error.issues) if (p.path.length > 0) errors[p.path.map(String).join(".")] ??= p.message;
+  // A non-empty Zod issue path is a path of the schema's object, i.e. of T.
   return errors as FieldErrors<T>;
 }
 
 /** First error message of each top-level field (flat forms). */
-export function topErrorsOf<T>(issues: z.core.$ZodIssue[]): Partial<Record<keyof T & string, string>> {
+export function topErrorsOf<T>(error: z.ZodError<T>): Partial<Record<keyof T & string, string>> {
   const errors: Partial<Record<string, string>> = {};
-  for (const p of issues) errors[String(p.path[0])] ??= p.message;
+  for (const p of error.issues) if (p.path.length > 0) errors[String(p.path[0])] ??= p.message;
   // The first segment of a Zod issue path is a key of the parsed object.
   return errors as Partial<Record<keyof T & string, string>>;
 }

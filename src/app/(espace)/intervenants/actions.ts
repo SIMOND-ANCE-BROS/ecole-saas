@@ -53,7 +53,7 @@ export async function saveInstructor(id: string | null, state: FormState, f: For
   });
   if (!parsed.success) {
     // The rate is typed in euros in the « tariff » field and validated in cents.
-    const { rateCents, ...errors } = topErrorsOf<z.input<typeof validInstructorInput>>(parsed.error.issues);
+    const { rateCents, ...errors } = topErrorsOf(parsed.error);
     return refusal(rateCents ? { ...errors, tariff: "Montant en euros, par exemple 35 ou 35,50" } : errors);
   }
 
