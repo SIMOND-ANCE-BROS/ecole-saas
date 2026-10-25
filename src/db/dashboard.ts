@@ -1,6 +1,6 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { Tx } from "./index";
-import { nomAffiche } from "./people";
+import { displayedName } from "./people";
 import { enrollment, person } from "./schema";
 
 /** Dashboard reads, always within the `withSchool()` transaction (RLS). */
@@ -58,7 +58,7 @@ export async function lastEnrollments(tx: Tx, seasonId: string, limit = 8): Prom
   return rows.map((l) => ({
     id: l.id,
     payerId: l.payerId,
-    payer: nomAffiche(l),
+    payer: displayedName(l),
     students: l.students ?? "—",
     netPriceCents: l.netPriceCents ?? 0,
   }));

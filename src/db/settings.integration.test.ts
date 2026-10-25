@@ -102,11 +102,12 @@ describe("seasons", () => {
       createSeason(tx, { label: "2027-2028", startDate: "2027-09-01", endDate: "2028-06-30" }, season2026),
     );
     const id = r.ok ? r.id : "";
-    const [{ tarifs }] = await admin`SELECT count(*)::int AS tarifs FROM tariff WHERE season_id = ${id}`;
-    const [{ fratrie }] =
-      await admin`SELECT rate_bps AS fratrie FROM discount WHERE season_id = ${id} AND code = 'fratrie'`;
-    const [{ carnets }] = await admin`SELECT count(*)::int AS carnets FROM lesson_pack_tariff WHERE season_id = ${id}`;
-    expect({ tariffs: tarifs, siblings: fratrie, lessonPacks: carnets }).toEqual({
+    const [{ tariffs }] = await admin`SELECT count(*)::int AS tariffs FROM tariff WHERE season_id = ${id}`;
+    const [{ siblings }] =
+      await admin`SELECT rate_bps AS siblings FROM discount WHERE season_id = ${id} AND code = 'fratrie'`;
+    const [{ lessonPacks }] =
+      await admin`SELECT count(*)::int AS "lessonPacks" FROM lesson_pack_tariff WHERE season_id = ${id}`;
+    expect({ tariffs, siblings, lessonPacks }).toEqual({
       tariffs: 2,
       siblings: 1000,
       lessonPacks: 1,
@@ -167,7 +168,7 @@ describe("sites and rooms", () => {
       {
         name: "Centre",
         permanence: true,
-        salles: [
+        rooms: [
           { name: "Annexe", capacity: null },
           { name: "Grand studio", capacity: 25, course: 0 },
         ],
@@ -196,7 +197,7 @@ describe("sites and rooms", () => {
   });
 
   it("removes an unused room, rejects a room or site from another school", async () => {
-    const annex = (await withSchool(school, (tx) => listPlaces(tx)))[0].salles.find((s) => s.name === "Annexe")
+    const annex = (await withSchool(school, (tx) => listPlaces(tx)))[0].rooms.find((s) => s.name === "Annexe")
       ?.id as string;
     expect(await withSchool(school, (tx) => deleteRoom(tx, annex))).toEqual({ ok: true, id: annex });
     expect(await withSchool(otherSchool, (tx) => deleteRoom(tx, studio))).toEqual({

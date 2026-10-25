@@ -93,7 +93,7 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
             columns={columns}
             layout={layout}
             linkColumn="nom"
-            vide={
+            empty={
               entry
                 ? "Aucun intervenant ne correspond à cette recherche."
                 : "Aucun intervenant ne correspond à ces filtres."

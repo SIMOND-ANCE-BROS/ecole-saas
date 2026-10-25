@@ -16,7 +16,7 @@ const addresses: string[] = [];
 const ips: string[] = [];
 
 /** n attempts; returns the number of allowed attempts. */
-async function tentatives(address: string, since: string | null, n: number) {
+async function attempts(address: string, since: string | null, n: number) {
   addresses.push(address);
   if (since) ips.push(since);
   let allowed = 0;
@@ -39,23 +39,23 @@ afterAll(async () => {
 
 describe("Sign-in attempt limiting", () => {
   it("blocks an e-mail address from the same IP beyond the pair limit", async () => {
-    expect(await tentatives(email("cible"), ip(1), LIMITS.byPair + 2)).toBe(LIMITS.byPair);
+    expect(await attempts(email("cible"), ip(1), LIMITS.byPair + 2)).toBe(LIMITS.byPair);
   });
 
   it("lets the real person sign in from another IP (no locking out someone else's account)", async () => {
-    await tentatives(email("victime"), ip(2), LIMITS.byPair + 3);
+    await attempts(email("victime"), ip(2), LIMITS.byPair + 3);
     expect(await recordAttempt(email("victime"), ip(9))).toBe(true);
   });
 
   it("still caps the total number of attempts on the same address", async () => {
     let allowed = 0;
-    for (let i = 0; i < LIMITS.byEmail + 5; i++) allowed += await tentatives(email("globale"), ip(100 + (i % 50)), 1);
+    for (let i = 0; i < LIMITS.byEmail + 5; i++) allowed += await attempts(email("globale"), ip(100 + (i % 50)), 1);
     expect(allowed).toBe(LIMITS.byEmail);
   });
 
   it("blocks an IP that sweeps many addresses", async () => {
     let allowed = 0;
-    for (let i = 0; i < LIMITS.byIp + 3; i++) allowed += await tentatives(email(`balayage-${i}`), ip(3), 1);
+    for (let i = 0; i < LIMITS.byIp + 3; i++) allowed += await attempts(email(`balayage-${i}`), ip(3), 1);
     expect(allowed).toBe(LIMITS.byIp);
   });
 
@@ -67,7 +67,7 @@ describe("Sign-in attempt limiting", () => {
   });
 
   it("does not extend the block on persistent retries (refused attempts do not count)", async () => {
-    await tentatives(email("acharne"), ip(10), LIMITS.byPair + 20);
+    await attempts(email("acharne"), ip(10), LIMITS.byPair + 20);
     const [{ n }] = await admin`
       SELECT count(*)::int AS n FROM login_attempt
       WHERE key = ${attemptKey("paire", `${email("acharne")}|${ip(10)}`)}`;
@@ -75,18 +75,18 @@ describe("Sign-in attempt limiting", () => {
   });
 
   it("clears the address's attempts after a successful sign-in", async () => {
-    await tentatives(email("oubli"), ip(5), LIMITS.byPair);
+    await attempts(email("oubli"), ip(5), LIMITS.byPair);
     expect(await recordAttempt(email("oubli"), ip(5))).toBe(false);
     await clearAttempts(email("oubli"), ip(5));
     expect(await recordAttempt(email("oubli"), ip(5))).toBe(true);
   });
 
   it("without a trusted IP, applies the pair limit to the address alone", async () => {
-    expect(await tentatives(email("sans-ip"), null, LIMITS.byPair + 1)).toBe(LIMITS.byPair);
+    expect(await attempts(email("sans-ip"), null, LIMITS.byPair + 1)).toBe(LIMITS.byPair);
   });
 
   it("stops counting attempts outside the window", async () => {
-    await tentatives(email("ancienne"), ip(7), LIMITS.byPair);
+    await attempts(email("ancienne"), ip(7), LIMITS.byPair);
     await admin`
       UPDATE login_attempt SET at = now() - make_interval(mins => ${LIMITS.windowMinutes + 1})
       WHERE key IN (${attemptKey("email", email("ancienne"))}, ${attemptKey("paire", `${email("ancienne")}|${ip(7)}`)})`;

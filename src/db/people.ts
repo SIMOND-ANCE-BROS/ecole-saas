@@ -16,6 +16,8 @@ import {
   season,
 } from "./schema";
 
+export { displayedName };
+
 /**
  * People (students, parents, partners, professional payers) and relationships
  * between them. Always within the `withSchool()` transaction: RLS limits
@@ -37,14 +39,12 @@ function normalize(entry: string): string {
 }
 
 /** Escapes the LIKE wildcards (%, _, \) of an input. */
-function contient(text: string): string {
+function likePattern(text: string): string {
   return `%${text.replace(/[\\%_]/g, "\\$&")}%`;
 }
 
 const digits = (v: string) => v.replace(/\D/g, "");
 const phoneDigits = sql`regexp_replace(coalesce(${person.phone}, ''), '[^0-9]', '', 'g')`;
-
-export { displayedName as nomAffiche };
 
 // ---------------------------------------------------------------------------
 // Search and list
@@ -98,7 +98,7 @@ export type PersonResult = {
 export function searchCondition(entry: string, alias = "person"): SQL | null {
   const text = normalize(entry);
   if (text.length < MINIMUM_LENGTH) return null;
-  const pattern = contient(text);
+  const pattern = likePattern(text);
   const col = (c: string) =>
     sql`translate(lower(coalesce(${sql.identifier(alias)}.${sql.identifier(c)}, '')), ${DIACRITICS}, ${SANS_ACCENTS})`;
   const conditions: SQL[] = [
@@ -111,7 +111,7 @@ export function searchCondition(entry: string, alias = "person"): SQL | null {
   ];
   if (digits(text).length >= 4) {
     conditions.push(
-      sql`regexp_replace(coalesce(${sql.identifier(alias)}.phone, ''), '[^0-9]', '', 'g') LIKE ${contient(digits(text))}`,
+      sql`regexp_replace(coalesce(${sql.identifier(alias)}.phone, ''), '[^0-9]', '', 'g') LIKE ${likePattern(digits(text))}`,
     );
   }
   return or(...conditions) ?? null;

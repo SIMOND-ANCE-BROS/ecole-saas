@@ -80,7 +80,7 @@ function condition(c: Condition, def: ColumnDef, e: ColumnExpression): SQL | und
       ? sql`regexp_replace(coalesce(${raw}, ''), '[^0-9]', '', 'g')`
       : normalize(sql`coalesce(${raw}, '')`);
   // A list "is" X if one of its items equals X.
-  const unElement = sql`EXISTS (SELECT 1 FROM unnest(${e.sql}) AS element WHERE ${normalize(sql`element`)} = ${v})`;
+  const anyElement = sql`EXISTS (SELECT 1 FROM unnest(${e.sql}) AS element WHERE ${normalize(sql`element`)} = ${v})`;
   switch (c.operator) {
     case "vide":
       return sql`${t} = ''`;
@@ -93,24 +93,24 @@ function condition(c: Condition, def: ColumnDef, e: ColumnExpression): SQL | und
     case "commence":
       return sql`starts_with(${t}, ${v})`;
     case "est":
-      return e.list ? unElement : sql`${t} = ${v}`;
+      return e.list ? anyElement : sql`${t} = ${v}`;
     case "n_est_pas":
-      return e.list ? sql`NOT ${unElement}` : sql`${t} <> ${v}`;
+      return e.list ? sql`NOT ${anyElement}` : sql`${t} <> ${v}`;
     case "parmi": {
-      const toutes = String(v).split(SEPARATOR);
-      const vs = toutes.filter((x) => x !== EMPTY);
+      const all = String(v).split(SEPARATOR);
+      const vs = all.filter((x) => x !== EMPTY);
       const list = sql.join(
         vs.map((x) => sql`${x}`),
         sql`, `,
       );
-      const parmi =
+      const among =
         vs.length === 0
           ? undefined
           : e.list
             ? sql`EXISTS (SELECT 1 FROM unnest(${e.sql}) AS element WHERE ${normalize(sql`element`)} IN (${list}))`
             : sql`${t} IN (${list})`;
-      const vide = toutes.includes(EMPTY) ? sql`${t} = ''` : undefined;
-      return parmi && vide ? sql`(${parmi} OR ${vide})` : (parmi ?? vide);
+      const empty = all.includes(EMPTY) ? sql`${t} = ''` : undefined;
+      return among && empty ? sql`(${among} OR ${empty})` : (among ?? empty);
     }
     default:
       return undefined;

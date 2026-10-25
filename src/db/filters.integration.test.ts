@@ -27,15 +27,15 @@ beforeAll(async () => {
     e: string,
     name: string,
     firstName: string | null,
-    champs: { birth?: string; telephone?: string; student?: boolean; societe?: string; email?: string } = {},
+    fields: { birth?: string; telephone?: string; student?: boolean; company?: string; email?: string } = {},
   ) =>
     (
       await admin`INSERT INTO person (school_id, last_name, first_name, birth_date, phone, is_student, type, company_name, siren, email)
-        VALUES (${e}, ${name}, ${firstName}, ${champs.birth ?? null}, ${champs.telephone ?? null}, ${champs.student ?? false},
-          ${champs.societe ? "organisation" : "individual"}, ${champs.societe ?? null}, ${champs.societe ? "123456789" : null}, ${champs.email ?? null}) RETURNING id`
+        VALUES (${e}, ${name}, ${firstName}, ${fields.birth ?? null}, ${fields.telephone ?? null}, ${fields.student ?? false},
+          ${fields.company ? "organisation" : "individual"}, ${fields.company ?? null}, ${fields.company ? "123456789" : null}, ${fields.email ?? null}) RETURNING id`
     )[0].id as string;
-  const relationship = (de: string, to: string, type: string, paysFor = false, emergency = false) =>
-    admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for, emergency_contact) VALUES (${school}, ${de}, ${to}, ${type}, ${paysFor}, ${emergency})`;
+  const relationship = (from: string, to: string, type: string, paysFor = false, emergency = false) =>
+    admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for, emergency_contact) VALUES (${school}, ${from}, ${to}, ${type}, ${paysFor}, ${emergency})`;
 
   // Léa, 8: her mother is her guardian, pays and is the emergency contact (her phone is shown for Léa).
   const lea = await person(school, "Martin", "Léa", { birth: "2018-03-01", student: true });
@@ -54,7 +54,7 @@ beforeAll(async () => {
   const ines = await person(school, "Moreau", "Inès", { student: true });
   await relationship(await person(school, "Moreau", "Paul"), ines, "legal_guardian");
   await relationship(await person(school, "Petit", "Anne"), ines, "legal_guardian");
-  await relationship(await person(school, "CSE", null, { societe: "CSE Ateliers" }), ines, "other", true);
+  await relationship(await person(school, "CSE", null, { company: "CSE Ateliers" }), ines, "other", true);
   // Season: Léa enrolled in Monday 17:00 jazz, Hugo on the waitlist for the same course, Inès not enrolled.
   [{ id: season }] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
@@ -128,16 +128,16 @@ describe("sorting and filter buttons (#107)", () => {
 
   it("checkboxes (status, course, « vide ») and bounds, as in memory", async () => {
     const def = (id: string) => STUDENT_COLUMNS.find((c) => c.id === id)!;
-    const par = (id: string, fc: Parameters<typeof writeColumnFilter>[2]) =>
+    const withFilter = (id: string, fc: Parameters<typeof writeColumnFilter>[2]) =>
       students(toParams(writeColumnFilter(EMPTY_FILTER, def(id), fc)).map(([, v]) => v));
-    expect(await par("inscription", { choice: ["Inscrit"] })).toEqual(["Léa"]);
-    expect(await par("inscription", { choice: ["En attente", EMPTY] })).toEqual(["Hugo", "Inès"]);
+    expect(await withFilter("inscription", { choice: ["Inscrit"] })).toEqual(["Léa"]);
+    expect(await withFilter("inscription", { choice: ["En attente", EMPTY] })).toEqual(["Hugo", "Inès"]);
     const labels = await withSchool(school, (tx) => seasonCourseLabels(tx, season));
     expect(labels).toEqual(["Jazz lun. 17:00"]);
-    expect(await par("cours", { choice: labels })).toEqual(["Léa"]);
-    expect(await par("cours", { choice: [EMPTY] })).toEqual(["Hugo", "Inès"]);
-    expect(await par("age", { min: "8", max: "12" })).toEqual(["Hugo", "Léa"]);
-    expect(await par("naissance", { min: "2018-03-01" })).toEqual(["Léa"]);
+    expect(await withFilter("cours", { choice: labels })).toEqual(["Léa"]);
+    expect(await withFilter("cours", { choice: [EMPTY] })).toEqual(["Hugo", "Inès"]);
+    expect(await withFilter("age", { min: "8", max: "12" })).toEqual(["Hugo", "Léa"]);
+    expect(await withFilter("naissance", { min: "2018-03-01" })).toEqual(["Léa"]);
   });
 });
 

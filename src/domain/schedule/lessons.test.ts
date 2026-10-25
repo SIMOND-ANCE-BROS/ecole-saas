@@ -75,12 +75,12 @@ describe("courseDates (#90)", () => {
   });
 
   it("every other week: alternation set on the first date, not shifted by a closure", () => {
-    const quinzaine = { type: "biweekly", weekday: 1, startDate: null, endDate: null } as const;
+    const fortnight = { type: "biweekly", weekday: 1, startDate: null, endDate: null } as const;
     // Mondays of the season: 7, 14, 21, 28 Sept., 5, 12, 19, 26 Oct.; every other one from the 7th.
-    expect(courseDates(quinzaine, SEASON, [])).toEqual(["2026-09-07", "2026-09-21", "2026-10-05", "2026-10-19"]);
+    expect(courseDates(fortnight, SEASON, [])).toEqual(["2026-09-07", "2026-09-21", "2026-10-05", "2026-10-19"]);
     // Closure on 19 October: the lesson is skipped, the others keep their week.
-    expect(courseDates(quinzaine, SEASON, ALL_SAINTS)).toEqual(["2026-09-07", "2026-09-21", "2026-10-05"]);
-    expect(courseDates({ ...quinzaine, startDate: "2026-09-14" }, SEASON, [])).toEqual([
+    expect(courseDates(fortnight, SEASON, ALL_SAINTS)).toEqual(["2026-09-07", "2026-09-21", "2026-10-05"]);
+    expect(courseDates({ ...fortnight, startDate: "2026-09-14" }, SEASON, [])).toEqual([
       "2026-09-14",
       "2026-09-28",
       "2026-10-12",

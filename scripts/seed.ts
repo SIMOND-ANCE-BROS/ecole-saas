@@ -75,7 +75,7 @@ const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
 const admin = postgres(url, { max: 1, onnotice: () => {} });
 
-async function principal() {
+async function main() {
   const [school] = await admin`
     INSERT INTO school (name, slug) VALUES ('École de démonstration', 'demo')
     ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
@@ -133,7 +133,7 @@ async function principal() {
         await admin`INSERT INTO site (school_id, name, address, enrollment_desk) VALUES (${school.id}, ${name}, ${address}, ${permanence}) RETURNING id`;
       sites[name] = s.id;
     }
-    const salles: Record<string, string> = {};
+    const rooms: Record<string, string> = {};
     for (const [name, site, capacity] of [
       ["Grande salle", "Site Centre", 30],
       ["Petite salle", "Site Centre", 15],
@@ -141,7 +141,7 @@ async function principal() {
     ] as const) {
       const [s] =
         await admin`INSERT INTO room (school_id, site_id, name, capacity) VALUES (${school.id}, ${sites[site]}, ${name}, ${capacity}) RETURNING id`;
-      salles[name] = s.id;
+      rooms[name] = s.id;
     }
     const disciplines: Record<string, string> = {};
     for (const name of ["Éveil", "Classique", "Jazz", "Contemporain", "Zumba", "Salsa"]) {
@@ -178,10 +178,10 @@ async function principal() {
       ["Salsa", "Studio", "Lucas", 3, "20:00", 60, 18, null, "Débutant"],
       ["Salsa", "Studio", "Lucas", 5, "20:00", 90, 18, null, "Intermédiaire"],
     ] as const;
-    for (const [d, room, teacher, day, heure, duration, ageMin, ageMax, level] of COURSE) {
+    for (const [d, room, teacher, day, time, duration, ageMin, ageMax, level] of COURSE) {
       await admin`
         INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes, age_min, age_max, level)
-        VALUES (${school.id}, ${season.id}, ${disciplines[d]}, ${salles[room]}, ${profs[teacher]}, ${day}, ${heure}, ${duration}, ${ageMin}, ${ageMax}, ${level})`;
+        VALUES (${school.id}, ${season.id}, ${disciplines[d]}, ${rooms[room]}, ${profs[teacher]}, ${day}, ${time}, ${duration}, ${ageMin}, ${ageMax}, ${level})`;
     }
   }
 
@@ -191,10 +191,10 @@ async function principal() {
     WHERE course.room_id = s.id AND course.school_id = ${school.id} AND course.max_capacity IS NULL`;
 
   // Demo tariff grid and siblings discount (amounts in euros).
-  const [{ nbTarifs: tariffCount }] =
-    await admin`SELECT count(*)::int AS "nbTarifs" FROM tariff WHERE season_id = ${season.id}`;
+  const [{ tariffCount }] =
+    await admin`SELECT count(*)::int AS "tariffCount" FROM tariff WHERE season_id = ${season.id}`;
   if (tariffCount === 0) {
-    const GRID: [publicTarif: string, combinaison: number[], trimestre: number, annee: number][] = [
+    const GRID: [audience: string, combination: number[], quarter: number, year: number][] = [
       ["child", [45], 85, 210],
       ["child", [60], 110, 280],
       ["child", [90], 150, 380],
@@ -214,10 +214,10 @@ async function principal() {
       ["student", [60], 115, 290],
       ["student", [90], 155, 400],
     ];
-    for (const [tariffAudience, combination, trimestre, annee] of GRID) {
+    for (const [tariffAudience, combination, quarter, year] of GRID) {
       for (const [period, euros] of [
-        ["quarter", trimestre],
-        ["year", annee],
+        ["quarter", quarter],
+        ["year", year],
       ] as const) {
         await admin`
           INSERT INTO tariff (school_id, season_id, audience, period, combination, price_cents)
@@ -249,7 +249,7 @@ async function principal() {
 }
 
 // The application pool (src/db) keeps the process alive: exit explicitly.
-void principal()
+void main()
   .catch((e: unknown) => {
     console.error(e);
     process.exitCode = 1;

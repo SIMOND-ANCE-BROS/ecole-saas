@@ -51,11 +51,11 @@ export function PaymentsSection({
         <dl className="panneau grid grid-cols-3 gap-2 p-3 text-sm">
           <div>
             <dt className="text-xs text-doux">Dû</dt>
-            <dd className="font-medium tabular-nums">{formatEuros(balance.du)}</dd>
+            <dd className="font-medium tabular-nums">{formatEuros(balance.due)}</dd>
           </div>
           <div>
             <dt className="text-xs text-doux">Payé</dt>
-            <dd className="font-medium tabular-nums">{formatEuros(balance.paye)}</dd>
+            <dd className="font-medium tabular-nums">{formatEuros(balance.paid)}</dd>
           </div>
           <div>
             <dt className="text-xs text-doux">{balance.remaining < 0 ? "Trop-perçu" : "Reste à payer"}</dt>

@@ -178,9 +178,9 @@ describe("siblings discount (Ribas: -10 % from 2 children, not combinable with 2
   });
 
   it("does not count an adult of the same payer, and leaves it out for them", () => {
-    const [enfant, adulte] = ribas(enrollment({}), enrollment({ audience: "adult" })).enrollments;
-    expect(siblings(enfant)?.status).toBe("rejected");
-    expect(siblings(adulte)).toMatchObject({ status: "rejected", reason: "Réservée au public enfant" });
+    const [child, adult] = ribas(enrollment({}), enrollment({ audience: "adult" })).enrollments;
+    expect(siblings(child)?.status).toBe("rejected");
+    expect(siblings(adult)).toMatchObject({ status: "rejected", reason: "Réservée au public enfant" });
   });
 
   it("leaves it out for a couple", () => {
@@ -247,13 +247,13 @@ describe("nothing is specific to one school", () => {
     combinableWithMultiDiscipline: true,
     ...partial,
   });
-  const adulte = (period: "year" | "single" = "year") => enrollment({ audience: "adult", period, course: [75] });
+  const adult = (period: "year" | "single" = "year") => enrollment({ audience: "adult", period, course: [75] });
 
   it("rounds each discount to the cent, and the total is the sum of the lines", () => {
     const result = computeTariff({
       grid,
       discounts: [rule({ rateBps: 1000, minStudents: 2 })],
-      enrollments: [adulte(), adulte()],
+      enrollments: [adult(), adult()],
     });
     expect(result.enrollments.map((r) => ok(r).discountCents)).toEqual([1235, 1235]);
     expect(result).toMatchObject({ totalDiscountCents: 2470, netTotalCents: 2 * 12345 - 2470 });
@@ -261,21 +261,21 @@ describe("nothing is specific to one school", () => {
   });
 
   it("applies a fixed amount, capped at the price", () => {
-    const [yearly, unite] = computeTariff({
+    const [yearly, single] = computeTariff({
       grid,
       discounts: [rule({ amountCents: 2000 })],
-      enrollments: [adulte(), adulte("single")],
+      enrollments: [adult(), adult("single")],
     }).enrollments;
     expect(ok(yearly)).toMatchObject({ discountCents: 2000, netPriceCents: 10345 });
     expect(siblings(yearly)?.reason).toBe(`2 danseurs du même payeur : -${formatEuros(2000)}`);
-    expect(ok(unite)).toMatchObject({ discountCents: 1500, netPriceCents: 0 });
+    expect(ok(single)).toMatchObject({ discountCents: 1500, netPriceCents: 0 });
   });
 
   it("leaves out a discount type unknown to the engine", () => {
     const [r] = computeTariff({
       grid,
       discounts: [rule({ code: "parrainage", rateBps: 500 })],
-      enrollments: [adulte()],
+      enrollments: [adult()],
     }).enrollments;
     expect(ok(r).discounts).toEqual([
       {
@@ -288,7 +288,7 @@ describe("nothing is specific to one school", () => {
   });
 
   it("rejects a discount with neither rate nor amount, or both", () => {
-    const calculation = (r: DiscountRule) => () => computeTariff({ grid, discounts: [r], enrollments: [adulte()] });
+    const calculation = (r: DiscountRule) => () => computeTariff({ grid, discounts: [r], enrollments: [adult()] });
     expect(calculation(rule({}))).toThrow("Réduction « fratrie » : renseigner un taux ou un montant, pas les deux");
     expect(calculation(rule({ rateBps: 1000, amountCents: 500 }))).toThrow(TypeError);
   });

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { courseDatesSql } from "./courses";
 import type { Tx } from "./index";
 import { alias } from "drizzle-orm/pg-core";
-import { nomAffiche } from "./people";
+import { displayedName } from "./people";
 import { course, discipline, enrollment, enrollmentCourse, instructor, person, season, room, site } from "./schema";
 
 /** Schedule reads, always within the `withSchool()` transaction (RLS). */
@@ -164,7 +164,7 @@ export async function enrolledInCourse(tx: Tx, courseId: string): Promise<Enroll
     }) => ({
       ...l,
       firstName: firstName ?? "",
-      payer: nomAffiche({ name: payerName, firstName: payerFirstName, companyName: companyName }),
+      payer: displayedName({ name: payerName, firstName: payerFirstName, companyName: companyName }),
     }),
   );
 }

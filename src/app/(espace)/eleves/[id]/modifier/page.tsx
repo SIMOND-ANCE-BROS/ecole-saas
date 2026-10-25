@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
-import { readPerson, nomAffiche } from "@/db/people";
+import { readPerson, displayedName } from "@/db/people";
 import { requireRole } from "@/lib/session";
 import { PersonForm } from "../../../_people/person-form";
 
@@ -22,11 +22,11 @@ export default async function EditStudentPage({ params }: PageProps<"/eleves/[id
         </Link>
         <span className="text-doux"> / </span>
         <Link href={`/eleves/${record.id}`} className="lien">
-          {nomAffiche(record)}
+          {displayedName(record)}
         </Link>
         <span className="text-doux"> / Modifier</span>
       </nav>
-      <h1 className="titre-page">Modifier {nomAffiche(record)}</h1>
+      <h1 className="titre-page">Modifier {displayedName(record)}</h1>
       <PersonForm person={record} section="eleves" />
     </section>
   );

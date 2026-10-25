@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { withSchool } from "@/db";
-import { readPerson, nomAffiche } from "@/db/people";
+import { readPerson, displayedName } from "@/db/people";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { NewStudentGuide } from "./guide";
@@ -22,7 +22,7 @@ export default async function NewStudentPage({ searchParams }: PageProps<"/eleve
         <span className="text-doux"> / Nouvel élève</span>
       </nav>
       <h1 className="titre-page">Nouvel élève</h1>
-      <NewStudentGuide today={todayInParis()} initialGuardian={r ? { id: r.id, name: nomAffiche(r) } : undefined} />
+      <NewStudentGuide today={todayInParis()} initialGuardian={r ? { id: r.id, name: displayedName(r) } : undefined} />
     </section>
   );
 }

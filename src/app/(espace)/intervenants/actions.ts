@@ -93,13 +93,16 @@ export async function revokeCalendarLink(instructorId: string): Promise<{ messag
 
 const unavailabilityInput = z
   .object({
-    du: z.iso.date("Date de début invalide"),
-    au: z.iso.date("Date de fin invalide"),
-    de: z.union([z.literal(""), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure invalide")]),
-    a: z.union([z.literal(""), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure invalide")]),
+    fromDate: z.iso.date("Date de début invalide"),
+    toDate: z.iso.date("Date de fin invalide"),
+    fromTime: z.union([z.literal(""), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure invalide")]),
+    toTime: z.union([z.literal(""), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure invalide")]),
     label: z.string().max(100),
   })
-  .refine((s) => (s.de === "") === (s.a === ""), "Indiquez les deux heures, ou aucune pour des journées entières.");
+  .refine(
+    (s) => (s.fromTime === "") === (s.toTime === ""),
+    "Indiquez les deux heures, ou aucune pour des journées entières.",
+  );
 
 /** Whole days (no times) or a time range, in Paris time. */
 export async function addUnavailabilityAction(
@@ -109,11 +112,11 @@ export async function addUnavailabilityAction(
   const { schoolId: schoolId } = await requireRole("director");
   const s = unavailabilityInput.safeParse(entry);
   if (!s.success) return { message: s.error.issues[0].message };
-  const { du, au, de, a, label: label } = s.data;
-  const nextDay = new Date(Date.parse(au) + 86_400_000).toISOString().slice(0, 10);
-  const start = new Date(instantParis(du, de || "00:00"));
-  const end = new Date(de ? instantParis(au, a) : instantParis(nextDay, "00:00"));
-  const r = await withSchool(schoolId, (tx) => addUnavailability(tx, instructorId, { start, end, label: label }));
+  const { fromDate, toDate, fromTime, toTime, label } = s.data;
+  const nextDay = new Date(Date.parse(toDate) + 86_400_000).toISOString().slice(0, 10);
+  const start = new Date(instantParis(fromDate, fromTime || "00:00"));
+  const end = new Date(fromTime ? instantParis(toDate, toTime) : instantParis(nextDay, "00:00"));
+  const r = await withSchool(schoolId, (tx) => addUnavailability(tx, instructorId, { start, end, label }));
   revalidatePath(`/intervenants/${instructorId}`);
   return { message: r.ok ? null : r.message };
 }

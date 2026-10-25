@@ -261,7 +261,7 @@ export async function enrollmentsPaidBy(tx: Tx, payerId: string, seasonId: strin
       firstName: sql<string>`coalesce(${person.firstName}, ${person.lastName})`,
       discipline: discipline.name,
       day: course.weekday,
-      heure: course.startTime,
+      startTime: course.startTime,
     })
     .from(enrollmentCourse)
     .innerJoin(person, eq(person.id, enrollmentCourse.studentId))
@@ -287,7 +287,7 @@ export async function enrollmentsPaidBy(tx: Tx, payerId: string, seasonId: strin
         students: [...new Set(own.map((x) => x.firstName))].sort().join(" et "),
         courses: [
           ...new Set(
-            own.map((x) => `${x.discipline} ${x.day ? DAYS[x.day] : ""} ${x.heure.slice(0, 5)}`.replace("  ", " ")),
+            own.map((x) => `${x.discipline} ${x.day ? DAYS[x.day] : ""} ${x.startTime.slice(0, 5)}`.replace("  ", " ")),
           ),
         ],
       };

@@ -520,7 +520,7 @@ export async function moveLesson(
   tx: Tx,
   id: string,
   slot: z.input<typeof validLessonSlot>,
-  scope: "seance" | "suivantes",
+  scope: "lesson" | "following",
 ): Promise<LessonResult> {
   const c = validLessonSlot.safeParse(slot);
   if (!c.success) return { status: "refused", message: c.error.issues[0].message };
@@ -555,7 +555,7 @@ export async function moveLesson(
     return { status: "refused", message: "Cette date est en dehors de la saison." };
   const reference = s.plannedDate ?? s.date;
 
-  if (scope === "seance") {
+  if (scope === "lesson") {
     if (date !== s.date) {
       const [other] = await tx
         .select({ id: lesson.id })

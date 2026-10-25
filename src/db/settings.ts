@@ -207,7 +207,7 @@ export type SiteRow = {
   name: string;
   address: string;
   permanence: boolean;
-  salles: RoomRow[];
+  rooms: RoomRow[];
   hours: Hours[];
 };
 
@@ -217,7 +217,7 @@ export async function listPlaces(tx: Tx): Promise<SiteRow[]> {
     .from(site)
     .orderBy(asc(site.name));
   const roomId = sql`${room}.${sql.identifier("id")}`;
-  const salles = await tx
+  const rooms = await tx
     .select({
       id: room.id,
       siteId: room.siteId,
@@ -231,7 +231,7 @@ export async function listPlaces(tx: Tx): Promise<SiteRow[]> {
   return sites.map((s) => ({
     ...s,
     hours: hours[s.id] ?? [],
-    salles: salles
+    rooms: rooms
       .filter((x) => x.siteId === s.id)
       .map((x) => ({ id: x.id, name: x.name, capacity: x.capacity, course: x.course })),
   }));
@@ -304,9 +304,9 @@ export async function hoursBySite(tx: Tx): Promise<Record<string, Hours[]>> {
   return r;
 }
 
-const heure = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM");
+const timePattern = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM");
 export const validHours = z
-  .array(z.object({ weekday: z.int().min(1).max(7), opening: heure, closure: heure }))
+  .array(z.object({ weekday: z.int().min(1).max(7), opening: timePattern, closure: timePattern }))
   .max(7)
   .refine((h) => new Set(h.map((x) => x.weekday)).size === h.length, "Un même jour est saisi deux fois.")
   .refine((h) => h.every((x) => x.closure > x.opening), "L’heure de fermeture doit suivre l’ouverture.");

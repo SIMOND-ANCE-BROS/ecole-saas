@@ -49,7 +49,7 @@ type Props<Id extends string> = {
   /** Column carrying the link to the record. */
   linkColumn: NoInfer<Id>;
   /** Message when no row is shown. */
-  vide: string;
+  empty: string;
   /** Phone-specific display (the table is hidden there). */
   mobile?: ReactNode;
   /** Checkbox values supplied by the page, per column (courses of the season, statuses…). */
@@ -78,7 +78,7 @@ export function ListTable<Id extends string>({
   layout: layout,
   rows: rows,
   linkColumn: linkColumn,
-  vide,
+  empty,
   mobile,
   choice: choice = {},
   emptyAction: emptyAction,
@@ -158,7 +158,7 @@ export function ListTable<Id extends string>({
   }
 
   // Pills for active filters, hidden columns included.
-  const pastilles = columns.flatMap((d) => {
+  const pills = columns.flatMap((d) => {
     const fc = readColumnFilter(f.filter, d);
     const summary = columnFilterSummary(d, fc);
     const keep = (other: ColumnFilter["otherConditions"]) =>
@@ -177,7 +177,7 @@ export function ListTable<Id extends string>({
         })),
     ];
   });
-  const filter = pastilles.length > 0;
+  const filter = pills.length > 0;
   const clearAll = () => f.change({ mode: "et", conditions: [] });
 
   return (
@@ -186,7 +186,7 @@ export function ListTable<Id extends string>({
         {filter ? (
           <>
             <ul className="flex flex-wrap gap-1.5" aria-label="Filtres actifs">
-              {pastilles.map((p) => (
+              {pills.map((p) => (
                 <li
                   key={p.key}
                   className="flex items-center gap-1 rounded-full border border-accent bg-accent-doux py-0.5 pr-1 pl-2.5"
@@ -343,7 +343,7 @@ export function ListTable<Id extends string>({
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={visible.length + 1} className="py-6 text-center">
-                  <p className="text-doux">{vide}</p>
+                  <p className="text-doux">{empty}</p>
                   <div className="mt-3 flex justify-center gap-3">
                     {filter ? (
                       <button type="button" className="bouton-secondaire" onClick={clearAll}>

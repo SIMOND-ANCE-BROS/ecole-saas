@@ -14,11 +14,11 @@ const BIRTH: ColumnDef = { id: "naissance", label: "Naissance", type: "date" };
 const NAME: ColumnDef = { id: "nom", label: "Élève", type: "text" };
 const COURSE: ColumnDef = { id: "cours", label: "Cours", type: "text" };
 const COLUMNS = [ENROLLMENT, AGE, BIRTH, NAME, COURSE];
-const vide: Filter = { mode: "et", conditions: [] };
+const empty: Filter = { mode: "et", conditions: [] };
 
 describe("column filter (header menu)", () => {
   it("is written as URL conditions and read back unchanged", () => {
-    let f = writeColumnFilter(vide, ENROLLMENT, { choice: ["Inscrit", EMPTY] });
+    let f = writeColumnFilter(empty, ENROLLMENT, { choice: ["Inscrit", EMPTY] });
     f = writeColumnFilter(f, AGE, { min: "3", max: "17" });
     f = writeColumnFilter(f, NAME, { text: "mart" });
     const reread = readFilter(
@@ -58,14 +58,14 @@ describe("column filter (header menu)", () => {
 
   it("summarises the filter for its badge", () => {
     const r = (def: ColumnDef, f: Filter) => columnFilterSummary(def, readColumnFilter(f, def));
-    expect(r(ENROLLMENT, writeColumnFilter(vide, ENROLLMENT, { choice: ["Inscrit", EMPTY] }))).toBe(
+    expect(r(ENROLLMENT, writeColumnFilter(empty, ENROLLMENT, { choice: ["Inscrit", EMPTY] }))).toBe(
       "Inscription : Inscrit, aucune",
     );
-    expect(r(AGE, writeColumnFilter(vide, AGE, { min: "3", max: "17" }))).toBe("Âge : de 3 à 17");
-    expect(r(AGE, writeColumnFilter(vide, AGE, { max: "17" }))).toBe("Âge : jusqu’à 17");
-    expect(r(BIRTH, writeColumnFilter(vide, BIRTH, { min: "2015-01-01" }))).toBe("Naissance : depuis le 01/01/2015");
-    expect(r(NAME, writeColumnFilter(vide, NAME, { text: "mart" }))).toBe("Élève : contient « mart »");
-    expect(r(NAME, vide)).toBeNull();
+    expect(r(AGE, writeColumnFilter(empty, AGE, { min: "3", max: "17" }))).toBe("Âge : de 3 à 17");
+    expect(r(AGE, writeColumnFilter(empty, AGE, { max: "17" }))).toBe("Âge : jusqu’à 17");
+    expect(r(BIRTH, writeColumnFilter(empty, BIRTH, { min: "2015-01-01" }))).toBe("Naissance : depuis le 01/01/2015");
+    expect(r(NAME, writeColumnFilter(empty, NAME, { text: "mart" }))).toBe("Élève : contient « mart »");
+    expect(r(NAME, empty)).toBeNull();
   });
 });
 
@@ -80,7 +80,7 @@ describe("checkboxes and bounds, in memory", () => {
     value: (l: (typeof rows)[number]) => l[c.id as keyof (typeof rows)[number]],
   }));
   const names = (def: ColumnDef, fc: Parameters<typeof writeColumnFilter>[2]) =>
-    applyFilter(rows, writeColumnFilter(vide, def, fc), cols).map((l) => l.nom);
+    applyFilter(rows, writeColumnFilter(empty, def, fc), cols).map((l) => l.nom);
 
   it("among: a checked value, the « vide » box, an element of a list; ignores accents and case", () => {
     expect(names(ENROLLMENT, { choice: ["inscrit", EMPTY] })).toEqual(["Léa", "Inès"]);

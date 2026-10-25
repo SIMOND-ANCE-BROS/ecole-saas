@@ -21,7 +21,7 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [inProgress, startTransition] = useTransition();
   const rows = useRef<(HTMLLIElement | null)[]>([]);
-  const annulee = attendance.status === "cancelled";
+  const cancelled = attendance.status === "cancelled";
 
   const unmarked = attendance.students.filter((d) => attendances[d.id] === null).length;
   const presents = attendance.students.filter((d) => attendances[d.id] === true).length;
@@ -50,13 +50,13 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
       <div
         className="flex flex-col gap-3"
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !annulee) {
+          if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !cancelled) {
             e.preventDefault();
             save();
           }
         }}
       >
-        {annulee ? (
+        {cancelled ? (
           <p className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">Séance annulée : pas d’appel.</p>
         ) : attendance.students.length === 0 ? (
           <p className="text-sm text-doux">Aucun danseur inscrit ou à l’essai dans ce cours.</p>
@@ -178,9 +178,11 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
           type="button"
           className="lien self-start text-sm"
           disabled={inProgress}
-          onClick={() => act(() => cancel(attendance.id, !annulee), annulee ? "Séance rétablie." : "Séance annulée.")}
+          onClick={() =>
+            act(() => cancel(attendance.id, !cancelled), cancelled ? "Séance rétablie." : "Séance annulée.")
+          }
         >
-          {annulee ? "Rétablir la séance" : "Annuler la séance"}
+          {cancelled ? "Rétablir la séance" : "Annuler la séance"}
         </button>
       </aside>
     </div>

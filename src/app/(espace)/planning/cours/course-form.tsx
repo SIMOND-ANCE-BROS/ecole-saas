@@ -26,7 +26,7 @@ type Props = {
   /** Day suggested for a new course (« + » link of a schedule column). */
   day?: number;
   /** Slot suggested from the calendar view. */
-  heure?: string;
+  startTime?: string;
   duration?: number;
   /** Date clicked in the dated schedule: first date if « à des dates précises » is chosen. */
   date?: string;
@@ -35,38 +35,38 @@ type Props = {
 const whole = (v: string) => (v.trim() === "" ? null : Number(v));
 
 export function CourseForm({
-  course: cours,
+  course,
   referential: referential,
   schedule: schedule,
   day: day,
-  heure,
+  startTime,
   duration: duration,
   date,
 }: Props) {
   const r = referential;
   const [v, setV] = useState({
-    discipline: cours?.discipline ?? "",
-    roomId: cours?.roomId ?? r.salles[0]?.id ?? NEW,
+    discipline: course?.discipline ?? "",
+    roomId: course?.roomId ?? r.rooms[0]?.id ?? NEW,
     newRoom: "",
     roomCapacity: "",
     siteId: r.sites[0]?.id ?? NEW,
     newSite: "",
     siteAddress: "",
-    instructorId: cours?.instructorId ?? r.instructors[0]?.id ?? "",
-    type: cours?.type ?? "group",
-    recurrence: cours?.recurrence ?? "weekly",
-    startDate: cours?.startDate ?? "",
-    endDate: cours?.endDate ?? "",
-    weekday: String(cours?.weekday ?? day ?? 1),
-    startTime: cours?.startTime ?? heure ?? "17:00",
-    durationMinutes: String(cours?.durationMinutes ?? duration ?? 60),
-    ageMin: cours?.ageMin?.toString() ?? "",
-    ageMax: cours?.ageMax?.toString() ?? "",
-    level: cours?.level ?? "",
-    maxCapacity: cours?.maxCapacity?.toString() ?? "",
+    instructorId: course?.instructorId ?? r.instructors[0]?.id ?? "",
+    type: course?.type ?? "group",
+    recurrence: course?.recurrence ?? "weekly",
+    startDate: course?.startDate ?? "",
+    endDate: course?.endDate ?? "",
+    weekday: String(course?.weekday ?? day ?? 1),
+    startTime: course?.startTime ?? startTime ?? "17:00",
+    durationMinutes: String(course?.durationMinutes ?? duration ?? 60),
+    ageMin: course?.ageMin?.toString() ?? "",
+    ageMax: course?.ageMax?.toString() ?? "",
+    level: course?.level ?? "",
+    maxCapacity: course?.maxCapacity?.toString() ?? "",
   });
   // Dates of a one-off course; one empty row to start with.
-  const [dates, setDates] = useState<string[]>(cours?.dates.length ? cours.dates : [date ?? ""]);
+  const [dates, setDates] = useState<string[]>(course?.dates.length ? course.dates : [date ?? ""]);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const [sending, startTransition] = useTransition();
   const form = useRef<HTMLFormElement>(null);
@@ -78,7 +78,7 @@ export function CourseForm({
     setV({ ...v, [field]: e.target.value });
 
   const oneOff = v.recurrence === "dates";
-  const chosenRoom = r.salles.find((s) => s.id === v.roomId);
+  const chosenRoom = r.rooms.find((s) => s.id === v.roomId);
   const existingDiscipline = r.disciplines.find((d) => d.name.toLowerCase() === v.discipline.trim().toLowerCase());
 
   const entry = {
@@ -108,7 +108,7 @@ export function CourseForm({
 
   const overlaps = conflicts(
     {
-      id: cours?.id ?? null,
+      id: course?.id ?? null,
       weekday: entry.weekday,
       startTime: v.startTime,
       durationMinutes: entry.durationMinutes || 0,
@@ -124,7 +124,7 @@ export function CourseForm({
   });
 
   // Slot outside the opening hours of the room's site (warning only: an exceptional course is still allowed).
-  const roomSite = r.salles.find((s) => s.id === v.roomId)?.siteId;
+  const roomSite = r.rooms.find((s) => s.id === v.roomId)?.siteId;
   const outsideOpening =
     !oneOff && roomSite && entry.weekday && entry.durationMinutes > 0
       ? outsideHours(
@@ -138,18 +138,18 @@ export function CourseForm({
   const key = oneOff ? "" : `${v.instructorId}|${v.weekday}|${v.startTime}|${v.durationMinutes}`;
   useEffect(() => {
     if (!key) return;
-    const [instructorId, day, heure, duration] = key.split("|");
+    const [instructorId, day, time, duration] = key.split("|");
     const timer = setTimeout(() => {
       // A failed check shows no warning rather than an unhandled error.
-      checkSlot(cours?.id ?? null, {
+      checkSlot(course?.id ?? null, {
         instructorId,
         weekday: Number(day),
-        startTime: heure,
+        startTime: time,
         durationMinutes: Number(duration),
       }).then(setUnavailabilityDates, () => setUnavailabilityDates([]));
     }, 300);
     return () => clearTimeout(timer);
-  }, [key, cours?.id]);
+  }, [key, course?.id]);
   const displayedUnavailability = key ? unavailabilityDates : [];
   const chosenInstructor = r.instructors.find((i) => i.id === v.instructorId);
 
@@ -174,7 +174,7 @@ export function CourseForm({
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
-        startTransition(async () => setRefusal(await saveCourse(cours?.id ?? null, entry)));
+        startTransition(async () => setRefusal(await saveCourse(course?.id ?? null, entry)));
       }}
     >
       <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
@@ -186,7 +186,7 @@ export function CourseForm({
             className="champ"
             list="disciplines"
             autoComplete="off"
-            autoFocus={!cours}
+            autoFocus={!course}
             value={v.discipline}
             onChange={updated("discipline")}
             {...invalid("discipline")}
@@ -248,7 +248,7 @@ export function CourseForm({
             onChange={(e) => {
               const type = e.target.value as typeof v.type;
               // A new workshop usually has specific dates.
-              setV({ ...v, type, recurrence: !cours && type === "workshop" ? "dates" : v.recurrence });
+              setV({ ...v, type, recurrence: !course && type === "workshop" ? "dates" : v.recurrence });
             }}
           >
             {Object.entries(COURSE_TYPES).map(([k, l]) => (
@@ -399,7 +399,7 @@ export function CourseForm({
         <div className="flex flex-col gap-1 sm:col-span-2">
           {label("salle", "Salle")}
           <select id="salle" className="champ" value={v.roomId} onChange={updated("roomId")}>
-            {r.salles.map((s) => (
+            {r.rooms.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}, {s.site}
                 {s.capacity ? ` (${s.capacity} places)` : ""}
@@ -546,10 +546,10 @@ export function CourseForm({
 
       <div className="flex flex-wrap items-center gap-2 border-t border-bordure pt-4">
         <button type="submit" className="bouton-principal" disabled={sending}>
-          {sending ? "Enregistrement…" : cours ? "Enregistrer les modifications" : "Créer le cours"}
+          {sending ? "Enregistrement…" : course ? "Enregistrer les modifications" : "Créer le cours"}
         </button>
-        <Cancel href={cours ? `/planning/cours/${cours.id}` : "/planning"} />
-        {cours &&
+        <Cancel href={course ? `/planning/cours/${course.id}` : "/planning"} />
+        {course &&
           (confirmDeletion ? (
             <span className="ml-auto flex items-center gap-2 text-sm">
               Supprimer ce cours ?
@@ -559,7 +559,7 @@ export function CourseForm({
                 disabled={sending}
                 onClick={() =>
                   startTransition(async () => {
-                    setRefusal(await remove(cours.id));
+                    setRefusal(await remove(course.id));
                     setConfirm(false);
                   })
                 }

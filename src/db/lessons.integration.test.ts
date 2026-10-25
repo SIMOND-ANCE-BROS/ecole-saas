@@ -208,21 +208,21 @@ describe("replacement and cancellation", () => {
   });
 
   it("cancels a lesson without attendance, refuses once attendance is taken, and rejects attendance on a cancelled lesson", async () => {
-    const [done, prevue] = await lessons();
+    const [done, planned] = await lessons();
     expect(await withSchool(school, (tx) => cancelLesson(tx, done.id))).toEqual({
       ok: false,
       message: "L’appel de cette séance est déjà fait.",
     });
-    expect(await withSchool(school, (tx) => cancelLesson(tx, prevue.id))).toEqual({ ok: true, id: prevue.id });
+    expect(await withSchool(school, (tx) => cancelLesson(tx, planned.id))).toEqual({ ok: true, id: planned.id });
     expect(
-      await withSchool(school, (tx) => saveAttendance(tx, prevue.id, [{ studentId: students["Léa"], present: true }])),
+      await withSchool(school, (tx) => saveAttendance(tx, planned.id, [{ studentId: students["Léa"], present: true }])),
     ).toEqual({
       ok: false,
       message: "Cette séance est annulée.",
     });
     // A cancelled lesson is neither recreated nor removed by the synchronisation.
     await sync();
-    expect((await lessons())[1]).toMatchObject({ id: prevue.id, status: "cancelled" });
+    expect((await lessons())[1]).toMatchObject({ id: planned.id, status: "cancelled" });
   });
 
   it("returns today's lessons, without those of another school", async () => {
@@ -291,7 +291,7 @@ describe("courses and lessons", () => {
 });
 
 describe("recurrences (#90)", () => {
-  const datesDe = async (courseId: string) =>
+  const datesOf = async (courseId: string) =>
     (await admin`SELECT date::text AS date FROM lesson WHERE course_id = ${courseId} ORDER BY date`).map(
       (r) => r.date as string,
     );
@@ -324,7 +324,7 @@ describe("recurrences (#90)", () => {
         if (!r.ok) throw new Error(r.message);
         return r.id;
       });
-    const quinzaine = await create({ ...base, recurrence: "biweekly", weekday: 1 });
+    const fortnight = await create({ ...base, recurrence: "biweekly", weekday: 1 });
     const period = await create({
       ...base,
       recurrence: "weekly",
@@ -342,19 +342,19 @@ describe("recurrences (#90)", () => {
     await sync();
 
     const wholeSeason = { start: "2026-09-01", end: "2026-11-30" };
-    expect(await datesDe(quinzaine)).toEqual(
+    expect(await datesOf(fortnight)).toEqual(
       courseDates({ type: "biweekly", weekday: 1, startDate: null, endDate: null }, wholeSeason, closures).filter(
         (d) => d >= TODAY,
       ),
     );
-    expect(await datesDe(period)).toEqual(
+    expect(await datesOf(period)).toEqual(
       courseDates(
         { type: "weekly", weekday: 2, startDate: "2026-11-01", endDate: "2026-11-17" },
         wholeSeason,
         closures,
       ),
     );
-    expect(await datesDe(stage)).toEqual(["2026-10-26", "2026-11-21"]);
+    expect(await datesOf(stage)).toEqual(["2026-10-26", "2026-11-21"]);
     expect((await withSchool(school, (tx) => readCourse(tx, stage)))?.dates).toEqual(["2026-10-26", "2026-11-21"]);
 
     // The workshop goes down to a single date: the removed lesson disappears.
@@ -393,9 +393,9 @@ describe("recurrences (#90)", () => {
       });
     });
     await sync();
-    expect(await datesDe(stage)).toEqual(["2026-11-21"]);
+    expect(await datesOf(stage)).toEqual(["2026-11-21"]);
 
-    for (const id of [quinzaine, period, stage])
+    for (const id of [fortnight, period, stage])
       expect((await withSchool(school, (tx) => deleteCourse(tx, id))).ok).toBe(true);
   });
 });
@@ -404,19 +404,19 @@ describe("dated schedule: moving a lesson (#90)", () => {
   let monday: string;
   const list = async () =>
     (
-      await admin`SELECT id, date::text AS date, planned_date::text AS prevue, to_char(start_time, 'HH24:MI') AS heure, instructor_id AS prof
+      await admin`SELECT id, date::text AS date, planned_date::text AS planned, to_char(start_time, 'HH24:MI') AS time, instructor_id AS teacher
         FROM lesson WHERE course_id = ${monday} ORDER BY date`
     ).map((r) => ({
       id: r.id as string,
       date: r.date as string,
-      prevue: r.prevue as string | null,
-      heure: r.heure as string | null,
-      teacher: r.prof as string,
+      planned: r.planned as string | null,
+      time: r.time as string | null,
+      teacher: r.teacher as string,
     }));
   const move = (
     id: string,
     slot: { date: string; startTime: string; durationMinutes: number },
-    scope: "seance" | "suivantes",
+    scope: "lesson" | "following",
   ) =>
     withSchool(school, async (tx) => {
       const r = await moveLesson(tx, id, slot, scope);
@@ -436,15 +436,15 @@ describe("dated schedule: moving a lesson (#90)", () => {
     const before = await list();
     const target = before[1];
     expect(
-      await move(target.id, { date: "2026-10-27", startTime: "11:30", durationMinutes: 60 }, "seance"),
+      await move(target.id, { date: "2026-10-27", startTime: "11:30", durationMinutes: 60 }, "lesson"),
     ).toMatchObject({ status: "ok" });
     await sync();
     const after = await list();
     expect(after).toHaveLength(before.length);
     expect(after.find((x) => x.id === target.id)).toMatchObject({
       date: "2026-10-27",
-      prevue: target.date,
-      heure: "11:30",
+      planned: target.date,
+      time: "11:30",
     });
     const week = await withSchool(school, (tx) => weekLessons(tx, "2026-10-26"));
     expect(week.find((x) => x.id === target.id)).toMatchObject({ startTime: "11:30", moved: true });
@@ -452,16 +452,16 @@ describe("dated schedule: moving a lesson (#90)", () => {
 
   it("rejects a date already taken by the course, outside the season, or a cancelled lesson", async () => {
     const [a, b] = await list();
-    expect(await move(a.id, { date: b.date, startTime: "10:00", durationMinutes: 60 }, "seance")).toEqual({
+    expect(await move(a.id, { date: b.date, startTime: "10:00", durationMinutes: 60 }, "lesson")).toEqual({
       status: "refused",
       message: "Ce cours a déjà une séance ce jour-là.",
     });
-    expect(await move(a.id, { date: "2027-01-04", startTime: "10:00", durationMinutes: 60 }, "seance")).toEqual({
+    expect(await move(a.id, { date: "2027-01-04", startTime: "10:00", durationMinutes: 60 }, "lesson")).toEqual({
       status: "refused",
       message: "Cette date est en dehors de la saison.",
     });
     await withSchool(school, (tx) => cancelLesson(tx, a.id));
-    expect((await move(a.id, { date: "2026-10-20", startTime: "10:00", durationMinutes: 60 }, "seance")).status).toBe(
+    expect((await move(a.id, { date: "2026-10-20", startTime: "10:00", durationMinutes: 60 }, "lesson")).status).toBe(
       "refused",
     );
   });
@@ -473,7 +473,7 @@ describe("dated schedule: moving a lesson (#90)", () => {
     const r = await move(
       pivot.id,
       { date: addDays(pivot.date, 1), startTime: "18:30", durationMinutes: 90 },
-      "suivantes",
+      "following",
     );
     expect(r).toMatchObject({ status: "ok" });
     const [c] =
@@ -481,11 +481,11 @@ describe("dated schedule: moving a lesson (#90)", () => {
     expect(c).toMatchObject({ weekday: 2, h: "18:30", duration_minutes: 90 });
     const after = await list();
     // Before the pivot: still Monday, original time frozen (except the lesson already moved).
-    for (const x of after.filter((x) => (x.prevue ?? x.date) < pivot.date))
-      expect(x.heure === "10:00" || x.heure === "11:30").toBe(true);
+    for (const x of after.filter((x) => (x.planned ?? x.date) < pivot.date))
+      expect(x.time === "10:00" || x.time === "11:30").toBe(true);
     // From the pivot on: Tuesday, at the course time; the substitute of the next lesson is kept.
     const following = after.filter((x) => x.date > pivot.date);
-    expect(following.every((x) => new Date(`${x.date}T00:00:00Z`).getUTCDay() === 2 && x.heure === null)).toBe(true);
+    expect(following.every((x) => new Date(`${x.date}T00:00:00Z`).getUTCDay() === 2 && x.time === null)).toBe(true);
     expect(after.find((x) => x.id === then.id)?.teacher).toBe(ines);
   });
 });

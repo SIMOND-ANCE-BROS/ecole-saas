@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { readStudent } from "@/db/students";
-import { payableStudents, nomAffiche } from "@/db/people";
+import { payableStudents, displayedName } from "@/db/people";
 import { seasonCourses, currentSeason } from "@/db/schedule";
 import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
@@ -35,7 +35,7 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
   });
   if (!parsed) notFound();
   const { student: student, payerId: payerId, season: season, students: students, courses: cours } = parsed;
-  const name = nomAffiche(student);
+  const name = displayedName(student);
   const payer = student.billedTo.type === "person" ? student.billedTo.name : name;
 
   return (
