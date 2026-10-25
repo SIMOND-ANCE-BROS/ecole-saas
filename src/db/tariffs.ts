@@ -1,4 +1,5 @@
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { columnsOf } from "./columns-of";
 import { z } from "zod";
 import type { Tx } from "./index";
 import { discipline, enrollment, discount, tariff, lessonPackTariff } from "./schema";
@@ -209,8 +210,10 @@ export async function saveSiblings(
   if (!f.success) return { ok: false, message: f.error.issues[0].message };
   await tx
     .insert(discount)
-    .values({ ...siblingsRow(f.data), code: "fratrie", seasonId: seasonId, schoolId: CURRENT_SCHOOL })
-    .onConflictDoUpdate({ target: [discount.seasonId, discount.code], set: siblingsRow(f.data) });
+    .values(
+      columnsOf(discount, { ...siblingsRow(f.data), code: "fratrie", seasonId: seasonId, schoolId: CURRENT_SCHOOL }),
+    )
+    .onConflictDoUpdate({ target: [discount.seasonId, discount.code], set: columnsOf(discount, siblingsRow(f.data)) });
   return { ok: true, id: seasonId };
 }
 

@@ -1,4 +1,5 @@
 import { type AnyColumn, and, asc, desc, eq, or, type SQL, sql } from "drizzle-orm";
+import { columnsOf } from "./columns-of";
 import { issuePath } from "../lib/form-errors";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
@@ -425,7 +426,7 @@ export async function createPerson(
   }
   const [{ id }] = await tx
     .insert(person)
-    .values({ ...personValues(entry), schoolId: CURRENT_SCHOOL })
+    .values(columnsOf(person, { ...personValues(entry), schoolId: CURRENT_SCHOOL }))
     .returning({ id: person.id });
   if (relationshipWith) {
     const { otherId, source, ...l } = relationshipWith;
@@ -443,7 +444,11 @@ export async function createPerson(
 export async function updatePerson(tx: Tx, id: string, entry: PersonInput): Promise<Result> {
   const refusal = { ok: false as const, message: "Cette personne n’existe plus." };
   if (!z.uuid().safeParse(id).success) return refusal;
-  const rows = await tx.update(person).set(personValues(entry)).where(eq(person.id, id)).returning({ id: person.id });
+  const rows = await tx
+    .update(person)
+    .set(columnsOf(person, personValues(entry)))
+    .where(eq(person.id, id))
+    .returning({ id: person.id });
   return rows.length === 1 ? { ok: true, id } : refusal;
 }
 

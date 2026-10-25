@@ -1,4 +1,5 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
+import { columnsOf } from "./columns-of";
 import { z } from "zod";
 import { deleteConnection } from "./calendar-connections";
 import type { Tx } from "./index";
@@ -93,7 +94,12 @@ export async function readInstructor(tx: Tx, id: string): Promise<Instructor | n
 export async function createInstructor(tx: Tx, entry: InstructorInput): Promise<string> {
   const [{ id }] = await tx
     .insert(instructor)
-    .values({ ...instructorRow(entry), schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid` })
+    .values(
+      columnsOf(instructor, {
+        ...instructorRow(entry),
+        schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid`,
+      }),
+    )
     .returning({ id: instructor.id });
   return id;
 }
@@ -105,7 +111,7 @@ export async function updateInstructor(tx: Tx, id: string, entry: InstructorInpu
   const cutoff = entry.active ? {} : { calendarTokenHash: null, calendarTokenCreatedAt: null };
   const rows = await tx
     .update(instructor)
-    .set({ ...instructorRow(entry), ...cutoff })
+    .set(columnsOf(instructor, { ...instructorRow(entry), ...cutoff }))
     .where(eq(instructor.id, id))
     .returning({ id: instructor.id });
   if (rows.length === 1 && !entry.active) await deleteConnection(tx, id);

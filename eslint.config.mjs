@@ -3,6 +3,31 @@ import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import tseslint from "typescript-eslint";
 
+// A string literal on the left of `in` is not checked by the compiler (#138).
+const IN_LITERAL = {
+  selector: "BinaryExpression[operator='in'][left.type=/^(Literal|TemplateLiteral)$/]",
+  message: "Use has(value, 'key') from @/lib/has: the key is then checked against the type.",
+};
+
+// Drizzle drops an unknown key of a payload that is not a fresh literal (#134):
+// a spread, a built object or mapped rows go through columnsOf() / rowsOf(),
+// which check every key.
+const WRITE =
+  "CallExpression:matches([callee.property.name='set'][callee.object.callee.property.name='update'], [callee.property.name='values'][callee.object.callee.property.name='insert'])";
+const UPSERT =
+  "CallExpression[callee.property.name='onConflictDoUpdate'] > ObjectExpression > Property[key.name='set']";
+const CHECKED = "CallExpression[callee.name=/^(columnsOf|rowsOf)$/]";
+const PAYLOAD_MESSAGE =
+  "Drizzle ignores unknown keys here: write a literal without spread, or wrap the payload in columnsOf(table, …) / rowsOf(table, […]) from @/db/columns-of.";
+const DRIZZLE_PAYLOADS = [
+  `${WRITE} > ObjectExpression > SpreadElement`,
+  `${WRITE} > ArrayExpression > ObjectExpression > SpreadElement`,
+  `${WRITE} > ArrayExpression > :not(ObjectExpression)`,
+  `${WRITE} > :not(ObjectExpression, ArrayExpression, ${CHECKED}).arguments`,
+  `${UPSERT} > ObjectExpression > SpreadElement`,
+  `${UPSERT} > :not(ObjectExpression, ${CHECKED}).value`,
+].map((selector) => ({ selector, message: PAYLOAD_MESSAGE }));
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -30,14 +55,7 @@ const eslintConfig = defineConfig([
       "no-console": ["warn", { allow: ["warn", "error"] }],
       "prefer-const": "error",
       "no-var": "error",
-      // A string literal on the left of `in` is not checked by the compiler (#138).
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector: "BinaryExpression[operator='in'][left.type=/^(Literal|TemplateLiteral)$/]",
-          message: "Use has(value, 'key') from @/lib/has: the key is then checked against the type.",
-        },
-      ],
+      "no-restricted-syntax": ["error", IN_LITERAL, ...DRIZZLE_PAYLOADS],
     },
   },
   // Tests may use loose values from fixtures and mocks.

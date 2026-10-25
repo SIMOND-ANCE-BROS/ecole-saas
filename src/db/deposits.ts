@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { rowsOf } from "./columns-of";
 import { z } from "zod";
 import { toDeposit, DEPOSIT_METHODS, type DepositMethod } from "../domain/payments/deposits";
 import type { Tx } from "./index";
@@ -117,9 +118,12 @@ export async function createDeposit(
     .insert(bankDeposit)
     .values({ schoolId: CURRENT_SCHOOL, date, method: method, createdBy: who })
     .returning({ id: bankDeposit.id });
-  await tx
-    .insert(bankDepositPayment)
-    .values(ids.map((paymentId) => ({ schoolId: CURRENT_SCHOOL, bankDepositId: id, paymentId: paymentId })));
+  await tx.insert(bankDepositPayment).values(
+    rowsOf(
+      bankDepositPayment,
+      ids.map((paymentId) => ({ schoolId: CURRENT_SCHOOL, bankDepositId: id, paymentId: paymentId })),
+    ),
+  );
   await tx.insert(auditLog).values({
     schoolId: CURRENT_SCHOOL,
     actor: who,
