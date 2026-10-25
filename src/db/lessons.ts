@@ -509,6 +509,9 @@ const isoDay = (iso: string) => ((new Date(`${iso}T00:00:00Z`).getUTCDay() + 6) 
 const shift = (iso: string, days: number) =>
   new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 
+// Sent by the browser through a server action: any other value is refused (#160).
+const validMoveScope = z.enum(["lesson", "following"]);
+
 /**
  * Moves a lesson (#90). "lesson": only it changes (the course stays);
  * "following": the course takes the new slot from this lesson on,
@@ -516,9 +519,6 @@ const shift = (iso: string, days: number) =>
  * to the new day keeping their instructor (replacement). The caller
  * then resyncs the lessons from `since` on.
  */
-// Sent by the browser through a server action: any other value is refused (#160).
-const validMoveScope = z.enum(["lesson", "following"]);
-
 export async function moveLesson(
   tx: Tx,
   id: string,
