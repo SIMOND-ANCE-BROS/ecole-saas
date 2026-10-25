@@ -40,7 +40,7 @@ export async function contextFromSession(
 }
 
 /** Id of the session carrying this token (returned by sign-in). */
-export async function idDeSession(token: string): Promise<string | null> {
+export async function sessionIdOf(token: string): Promise<string | null> {
   const [row] = await db.select({ id: session.id }).from(session).where(eq(session.token, token));
   return row?.id ?? null;
 }

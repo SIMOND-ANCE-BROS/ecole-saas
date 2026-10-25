@@ -27,7 +27,7 @@ function row(
   };
 }
 
-const adultes: TariffRow[] = [
+const adults: TariffRow[] = [
   // « 1 cours »
   row("adult", "single", [60], 15),
   row("adult", "single", [90], 20),
@@ -90,7 +90,7 @@ const children: TariffRow[] = (
   row("child", "year", [...combination], year),
 ]);
 
-export const ribasGrid: TariffRow[] = [...adultes, ...children];
+export const ribasGrid: TariffRow[] = [...adults, ...children];
 
 /**
  * Page 3, private lessons: « 1 OU 2 PERSONNES », « 3 PERSONNES », « 4 PERSONNES »;

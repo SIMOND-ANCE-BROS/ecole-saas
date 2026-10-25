@@ -75,7 +75,7 @@ const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
 const admin = postgres(url, { max: 1, onnotice: () => {} });
 
-async function principal() {
+async function main() {
   const [school] = await admin`
     INSERT INTO school (name, slug) VALUES ('École de démonstration', 'demo')
     ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
@@ -249,7 +249,7 @@ async function principal() {
 }
 
 // The application pool (src/db) keeps the process alive: exit explicitly.
-void principal()
+void main()
   .catch((e: unknown) => {
     console.error(e);
     process.exitCode = 1;

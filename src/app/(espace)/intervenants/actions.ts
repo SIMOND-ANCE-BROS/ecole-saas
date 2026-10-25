@@ -112,11 +112,11 @@ export async function addUnavailabilityAction(
   const { schoolId: schoolId } = await requireRole("director");
   const s = unavailabilityInput.safeParse(entry);
   if (!s.success) return { message: s.error.issues[0].message };
-  const { fromDate, toDate, fromTime, toTime, label: label } = s.data;
+  const { fromDate, toDate, fromTime, toTime, label } = s.data;
   const nextDay = new Date(Date.parse(toDate) + 86_400_000).toISOString().slice(0, 10);
   const start = new Date(instantParis(fromDate, fromTime || "00:00"));
   const end = new Date(fromTime ? instantParis(toDate, toTime) : instantParis(nextDay, "00:00"));
-  const r = await withSchool(schoolId, (tx) => addUnavailability(tx, instructorId, { start, end, label: label }));
+  const r = await withSchool(schoolId, (tx) => addUnavailability(tx, instructorId, { start, end, label }));
   revalidatePath(`/intervenants/${instructorId}`);
   return { message: r.ok ? null : r.message };
 }

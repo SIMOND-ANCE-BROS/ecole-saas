@@ -105,7 +105,7 @@ function studentCourses(seasonId: string | null): SQL<string[]> {
   if (!seasonId) return sql<string[]>`'{}'::text[]`;
   return sql<string[]>`coalesce((
     SELECT array_agg(x.label ORDER BY x.weekday NULLS LAST, x.start_time) FROM (
-      SELECT DISTINCT ${courseLabel()} AS label, c.weekday AS weekday, c.start_time AS start_time
+      SELECT DISTINCT ${courseLabel()} AS label, c.weekday, c.start_time
       FROM enrollment_course ic
       JOIN enrollment i ON i.id = ic.enrollment_id
       JOIN course c ON c.id = ic.course_id
@@ -118,7 +118,7 @@ function studentCourses(seasonId: string | null): SQL<string[]> {
 export async function seasonCourseLabels(tx: Tx, seasonId: string): Promise<string[]> {
   const rows = await tx.execute<{ label: string }>(sql`
     SELECT x.label FROM (
-      SELECT DISTINCT ${courseLabel()} AS label, c.weekday AS weekday, c.start_time AS start_time
+      SELECT DISTINCT ${courseLabel()} AS label, c.weekday, c.start_time
       FROM course c JOIN discipline d ON d.id = c.discipline_id
       WHERE c.season_id = ${seasonId}
     ) x ORDER BY x.weekday NULLS LAST, x.start_time, x.label`);

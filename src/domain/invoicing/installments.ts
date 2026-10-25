@@ -41,7 +41,7 @@ export function computeSchedule(request: ScheduleRequest): Installment[] {
 
 /** `YYYY-MM-DD` + n months, brought back to the last day of the month (31 January + 1 → 28 or 29 February). */
 export function addMonths(date: string, month: number): string {
-  const { year: year, month: m, day: day } = readDate(date);
+  const { year, month: m, day } = readDate(date);
   const index = year * 12 + (m - 1) + month;
   const targetYear = Math.floor(index / 12);
   const targetMonth = (index % 12) + 1;
@@ -55,7 +55,7 @@ function readDate(date: string) {
   if (!match || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) {
     throw new TypeError(`Date invalide (YYYY-MM-DD attendu) : ${date}`);
   }
-  return { year: year, month: month, day: day };
+  return { year, month, day };
 }
 
 function daysInMonth(year: number, month: number): number {

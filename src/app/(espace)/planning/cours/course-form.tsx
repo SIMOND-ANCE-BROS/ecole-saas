@@ -35,7 +35,7 @@ type Props = {
 const whole = (v: string) => (v.trim() === "" ? null : Number(v));
 
 export function CourseForm({
-  course: course,
+  course,
   referential: referential,
   schedule: schedule,
   day: day,
@@ -138,13 +138,13 @@ export function CourseForm({
   const key = oneOff ? "" : `${v.instructorId}|${v.weekday}|${v.startTime}|${v.durationMinutes}`;
   useEffect(() => {
     if (!key) return;
-    const [instructorId, day, startTime, duration] = key.split("|");
+    const [instructorId, day, time, duration] = key.split("|");
     const timer = setTimeout(() => {
       // A failed check shows no warning rather than an unhandled error.
       checkSlot(course?.id ?? null, {
         instructorId,
         weekday: Number(day),
-        startTime: startTime,
+        startTime: time,
         durationMinutes: Number(duration),
       }).then(setUnavailabilityDates, () => setUnavailabilityDates([]));
     }, 300);

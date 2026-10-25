@@ -261,14 +261,14 @@ describe("nothing is specific to one school", () => {
   });
 
   it("applies a fixed amount, capped at the price", () => {
-    const [yearly, unite] = computeTariff({
+    const [yearly, single] = computeTariff({
       grid,
       discounts: [rule({ amountCents: 2000 })],
       enrollments: [adult(), adult("single")],
     }).enrollments;
     expect(ok(yearly)).toMatchObject({ discountCents: 2000, netPriceCents: 10345 });
     expect(siblings(yearly)?.reason).toBe(`2 danseurs du même payeur : -${formatEuros(2000)}`);
-    expect(ok(unite)).toMatchObject({ discountCents: 1500, netPriceCents: 0 });
+    expect(ok(single)).toMatchObject({ discountCents: 1500, netPriceCents: 0 });
   });
 
   it("leaves out a discount type unknown to the engine", () => {

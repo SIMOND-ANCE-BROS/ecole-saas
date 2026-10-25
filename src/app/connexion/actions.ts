@@ -6,7 +6,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { schoolsOf } from "@/db";
-import { chooseSchool, idDeSession } from "@/lib/school-access";
+import { chooseSchool, sessionIdOf } from "@/lib/school-access";
 import { auth } from "@/lib/auth";
 import { clearAttempts, recordAttempt, trustedIp, LIMITS } from "@/lib/sign-in-limit";
 
@@ -49,7 +49,7 @@ export async function signIn(_state: ConnectionState, formData: FormData): Promi
 
   // A single school: chosen automatically, without going through the list.
   const schools = await schoolsOf(connection.user.id);
-  const sessionId = await idDeSession(connection.token);
+  const sessionId = await sessionIdOf(connection.token);
   if (schools.length === 1 && sessionId && (await chooseSchool(sessionId, connection.user.id, schools[0].id))) {
     redirect("/");
   }

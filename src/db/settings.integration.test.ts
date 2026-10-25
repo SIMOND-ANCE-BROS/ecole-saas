@@ -105,8 +105,8 @@ describe("seasons", () => {
     const [{ tariffs }] = await admin`SELECT count(*)::int AS tariffs FROM tariff WHERE season_id = ${id}`;
     const [{ siblings }] =
       await admin`SELECT rate_bps AS siblings FROM discount WHERE season_id = ${id} AND code = 'fratrie'`;
-    const [{ lesson_packs: lessonPacks }] =
-      await admin`SELECT count(*)::int AS lesson_packs FROM lesson_pack_tariff WHERE season_id = ${id}`;
+    const [{ lessonPacks }] =
+      await admin`SELECT count(*)::int AS "lessonPacks" FROM lesson_pack_tariff WHERE season_id = ${id}`;
     expect({ tariffs, siblings, lessonPacks }).toEqual({
       tariffs: 2,
       siblings: 1000,

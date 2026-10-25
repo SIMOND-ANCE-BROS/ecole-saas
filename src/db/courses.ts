@@ -159,7 +159,7 @@ export async function scheduleReferential(tx: Tx, include?: string) {
       .orderBy(asc(instructor.firstName), asc(instructor.lastName)),
   ];
   // Opening hours per site (#90): the form warns about a slot that falls outside them.
-  return { disciplines, rooms: rooms, sites, instructors: instructors, hours: await hoursBySite(tx) };
+  return { disciplines, rooms, sites, instructors, hours: await hoursBySite(tx) };
 }
 export type ScheduleReferential = Awaited<ReturnType<typeof scheduleReferential>>;
 

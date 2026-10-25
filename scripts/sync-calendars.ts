@@ -15,7 +15,7 @@ const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante");
 const admin = postgres(url, { max: 1, onnotice: () => {} });
 
-async function principal() {
+async function main() {
   const schools = await admin`SELECT DISTINCT school_id AS id FROM calendar_connection`;
   let succeeded = 0;
   let failed = 0;
@@ -28,7 +28,7 @@ async function principal() {
 }
 
 // The application pool (src/db) keeps the process alive: exit explicitly.
-void principal()
+void main()
   .catch((e: unknown) => {
     console.error(e);
     process.exitCode = 1;

@@ -39,8 +39,8 @@ export type CalendarResponse =
   | { status: "choose"; question: string; choice: { value: string; label: string }[] }
   | { status: "refused"; message: string };
 type Gesture =
-  | { type: "deplacer" | "etirer"; id: string; x: number; y: number; origin: Slot; bouge: boolean }
-  | { type: "creer"; day: number; y: number; anchor: number; bouge: boolean };
+  | { type: "move" | "resize"; id: string; x: number; y: number; origin: Slot; moved: boolean }
+  | { type: "create"; day: number; y: number; anchor: number; moved: boolean };
 /** Slot reached by the gesture in progress. */
 type Target = { preview?: { id: string } & Slot; selection?: { day: number; start: number; duration: number } };
 
@@ -54,7 +54,7 @@ type Props = {
   hours: Hours[];
   editable: boolean;
   highlighted?: string;
-  /** Moves an element; `choice`: answer to a question asked by a « choisir » response. */
+  /** Moves an element; `choice`: answer to a question asked by a "choose" response. */
   move: (id: string, slot: Slot, choice: string | null) => Promise<CalendarResponse>;
   /** Free slot chosen (click or drag): create a course. */
   create: (day: number, start: number, duration: number) => void;
@@ -169,7 +169,7 @@ export function Calendar({
   }
 
   // Gestures on a course: move (body) or stretch (bottom edge).
-  function enterCourse(e: React.PointerEvent, c: CalendarElement, type: "deplacer" | "etirer") {
+  function enterCourse(e: React.PointerEvent, c: CalendarElement, type: "move" | "resize") {
     if (!editable || !c.movable || e.button !== 0 || inProgress || toConfirm) return;
     e.stopPropagation();
     justDragged.current = false;
@@ -178,7 +178,7 @@ export function Calendar({
       id: c.id,
       x: e.clientX,
       y: e.clientY,
-      bouge: false,
+      moved: false,
       origin: { weekday: c.weekday, startTime: c.startTime, durationMinutes: c.durationMinutes },
     });
   }
@@ -187,15 +187,15 @@ export function Calendar({
   function enterOnEmptySlot(e: React.PointerEvent, day: number) {
     if (!editable || e.button !== 0 || e.pointerType !== "mouse" || inProgress || toConfirm) return;
     const anchor = Math.max(opening, Math.floor(minuteA(e.clientY, day) / 15) * 15);
-    beginGesture({ type: "creer", day, y: e.clientY, anchor, bouge: false });
+    beginGesture({ type: "create", day, y: e.clientY, anchor, moved: false });
   }
 
   function trackPointer(e: PointerEvent) {
     const g = gesture.current;
     if (!g) return;
-    g.bouge ||= Math.abs(e.clientY - g.y) > THRESHOLD || (g.type !== "creer" && Math.abs(e.clientX - g.x) > THRESHOLD);
-    if (!g.bouge) return;
-    if (g.type === "creer") {
+    g.moved ||= Math.abs(e.clientY - g.y) > THRESHOLD || (g.type !== "create" && Math.abs(e.clientX - g.x) > THRESHOLD);
+    if (!g.moved) return;
+    if (g.type === "create") {
       const here = Math.min(closure, Math.max(opening, snap(minuteA(e.clientY, g.day))));
       g.selection = { day: g.day, start: Math.min(g.anchor, here), duration: Math.max(15, Math.abs(here - g.anchor)) };
       setSelection(g.selection);
@@ -203,7 +203,7 @@ export function Calendar({
     }
     const { origin: origin } = g;
     const shift = snap((e.clientY - g.y) / PX);
-    if (g.type === "etirer") {
+    if (g.type === "resize") {
       const start = toMinutes(origin.startTime);
       g.preview = {
         id: g.id,
@@ -227,13 +227,13 @@ export function Calendar({
     if (!g) return;
     gesture.current = null;
     setActive(false);
-    if (g.type === "creer") {
+    if (g.type === "create") {
       setSelection(null);
-      if (g.bouge && g.selection) next(g.selection.day, g.selection.start, g.selection.duration);
+      if (g.moved && g.selection) next(g.selection.day, g.selection.start, g.selection.duration);
       else next(g.day, g.anchor, 60);
       return;
     }
-    if (!g.bouge) return; // plain click: the link opens the record
+    if (!g.moved) return; // plain click: the link opens the record
     justDragged.current = true;
     const a = g.preview;
     if (
@@ -417,7 +417,7 @@ export function Calendar({
                         left: `calc(${place.column * width}% + 2px)`,
                         width: `calc(${width}% - 4px)`,
                       }}
-                      onPointerDown={(e) => enterCourse(e, c, "deplacer")}
+                      onPointerDown={(e) => enterCourse(e, c, "move")}
                     >
                       <Link
                         href={c.href}
@@ -448,7 +448,7 @@ export function Calendar({
                         <div
                           aria-hidden
                           className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize"
-                          onPointerDown={(e) => enterCourse(e, c, "etirer")}
+                          onPointerDown={(e) => enterCourse(e, c, "resize")}
                         />
                       )}
                     </div>

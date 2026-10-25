@@ -13,8 +13,8 @@ import type { CalendarResponse } from "./calendar";
 import { shortDate, end } from "./format";
 
 /**
- * Moves a lesson of the dated schedule (#90): « seance » (that one only) or
- * « suivantes » (the course changes from that lesson on). Then reports a room
+ * Moves a lesson of the dated schedule (#90): "lesson" (that one only) or
+ * "following" (the course changes from that lesson on). Then reports a room
  * or instructor already taken that day and a slot outside the site's opening
  * hours.
  */

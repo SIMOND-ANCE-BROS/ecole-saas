@@ -182,8 +182,8 @@ describe("Dashboard and headcounts", () => {
   });
 
   it("lists the latest enrollments, most recent first", async () => {
-    const dernieres = await withSchool(ids.school, (tx) => lastEnrollments(tx, ids.season));
-    expect(dernieres.map((d) => [d.students, d.payer, d.netPriceCents])).toEqual([
+    const latest = await withSchool(ids.school, (tx) => lastEnrollments(tx, ids.season));
+    expect(latest.map((d) => [d.students, d.payer, d.netPriceCents])).toEqual([
       ["Noé", "Test Famille", 14850],
       ["Zoé", "Test Famille", 11000],
     ]);
