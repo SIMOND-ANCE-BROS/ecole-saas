@@ -432,6 +432,18 @@ describe("dated schedule: moving a lesson (#90)", () => {
     await sync();
   });
 
+  it("refuses an unknown move scope and moves nothing", async () => {
+    const before = await list();
+    // A server action argument can be any value: the type does not protect it.
+    const forged = "all" as never;
+    expect(
+      await move(before[1].id, { date: "2026-10-27", startTime: "11:30", durationMinutes: 60 }, forged),
+    ).toMatchObject({
+      status: "refused",
+    });
+    expect(await list()).toEqual(before);
+  });
+
   it("this lesson only: it changes day and time without being recreated on its original date", async () => {
     const before = await list();
     const target = before[1];
