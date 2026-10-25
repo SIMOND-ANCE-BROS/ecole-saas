@@ -142,7 +142,7 @@ export type ExistingImpact = {
 };
 
 export type Preview =
-  | { status: "invalide"; message: string }
+  | { status: "invalid"; message: string }
   | { status: "ok"; newEnrollment: EnrollmentResult; existingImpacts: ExistingImpact[] };
 
 /** Price of the new enrollment, computed with the grid, the discounts and the payer's other enrollments. */
@@ -153,7 +153,7 @@ export async function enrollmentPreview(
   entry: EnrollmentInput,
 ): Promise<Preview> {
   const chosenCourses = await validate(tx, payerId, seasonId, entry);
-  if (typeof chosenCourses === "string") return { status: "invalide", message: chosenCourses };
+  if (typeof chosenCourses === "string") return { status: "invalid", message: chosenCourses };
 
   const grid = await loadGrid(tx, seasonId);
   const discounts = await loadDiscounts(tx, seasonId);
@@ -193,7 +193,7 @@ export async function saveEnrollment(
   entry: EnrollmentInput,
 ): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
   const preview = await enrollmentPreview(tx, payerId, seasonId, entry);
-  if (preview.status === "invalide") return { ok: false, message: preview.message };
+  if (preview.status === "invalid") return { ok: false, message: preview.message };
   const r = preview.newEnrollment;
   if (r.status === "error") return { ok: false, message: r.error.message };
 

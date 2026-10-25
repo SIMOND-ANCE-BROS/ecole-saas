@@ -453,16 +453,16 @@ describe("dated schedule: moving a lesson (#90)", () => {
   it("rejects a date already taken by the course, outside the season, or a cancelled lesson", async () => {
     const [a, b] = await list();
     expect(await move(a.id, { date: b.date, startTime: "10:00", durationMinutes: 60 }, "seance")).toEqual({
-      status: "refus",
+      status: "refused",
       message: "Ce cours a déjà une séance ce jour-là.",
     });
     expect(await move(a.id, { date: "2027-01-04", startTime: "10:00", durationMinutes: 60 }, "seance")).toEqual({
-      status: "refus",
+      status: "refused",
       message: "Cette date est en dehors de la saison.",
     });
     await withSchool(school, (tx) => cancelLesson(tx, a.id));
     expect((await move(a.id, { date: "2026-10-20", startTime: "10:00", durationMinutes: 60 }, "seance")).status).toBe(
-      "refus",
+      "refused",
     );
   });
 

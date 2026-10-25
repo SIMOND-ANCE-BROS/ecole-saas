@@ -26,12 +26,12 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
   const au = validDate(p.au) ?? today;
   const method = typeof p.moyen === "string" && p.moyen in PAYMENT_METHODS ? (p.moyen as Method) : null;
 
-  const donnees = await withSchool(schoolId, async (tx) => ({
+  const parsed = await withSchool(schoolId, async (tx) => ({
     journal: view === "journal" ? await paymentLog(tx, du, au, method) : [],
     toDeposit: view === "remettre" ? await paymentsToDeposit(tx, today) : null,
     remises: view === "remises" ? await listDeposits(tx) : [],
   }));
-  const t = totals(donnees.journal);
+  const t = totals(parsed.journal);
   const exportUrl = `/encaissements/export?${new URLSearchParams({ du, au, ...(method ? { moyen: method } : {}) })}`;
 
   return (
@@ -103,7 +103,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
               </div>
             ))}
           </dl>
-          {donnees.journal.length === 0 ? (
+          {parsed.journal.length === 0 ? (
             <p className="text-sm text-doux">Aucun encaissement sur cette période.</p>
           ) : (
             <div className="panneau overflow-x-auto">
@@ -123,7 +123,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
                   </tr>
                 </thead>
                 <tbody>
-                  {donnees.journal.map((l) => (
+                  {parsed.journal.map((l) => (
                     <tr key={l.id} className={l.amountCents < 0 ? "text-doux" : ""}>
                       <td className="whitespace-nowrap">{day(l.date)}</td>
                       <td>
@@ -155,22 +155,22 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
         </>
       )}
 
-      {view === "remettre" && donnees.toDeposit && (
+      {view === "remettre" && parsed.toDeposit && (
         <>
           <p className="text-sm text-doux">
             Chèques dont la date d’encaissement est arrivée, espèces et chèques vacances pas encore déposés.
           </p>
-          {DEPOSIT_METHODS.every((m) => donnees.toDeposit![m].length === 0) && (
+          {DEPOSIT_METHODS.every((m) => parsed.toDeposit![m].length === 0) && (
             <p className="text-sm">Rien à remettre pour l’instant.</p>
           )}
-          {DEPOSIT_METHODS.filter((m) => donnees.toDeposit![m].length > 0).map((m) => (
-            <ToDeposit key={m} method={m} payments={donnees.toDeposit![m]} today={today} />
+          {DEPOSIT_METHODS.filter((m) => parsed.toDeposit![m].length > 0).map((m) => (
+            <ToDeposit key={m} method={m} payments={parsed.toDeposit![m]} today={today} />
           ))}
         </>
       )}
 
       {view === "remises" &&
-        (donnees.remises.length === 0 ? (
+        (parsed.remises.length === 0 ? (
           <p className="text-sm text-doux">Aucune remise pour l’instant.</p>
         ) : (
           <div className="panneau overflow-x-auto">
@@ -185,7 +185,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
                 </tr>
               </thead>
               <tbody>
-                {donnees.remises.map((r) => (
+                {parsed.remises.map((r) => (
                   <tr key={r.id}>
                     <td>
                       <Link href={`/encaissements/remises/${r.id}`} className="lien">

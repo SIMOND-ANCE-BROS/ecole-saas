@@ -22,7 +22,7 @@ const longDate = new Intl.DateTimeFormat("fr-FR", {
 export default async function AttendancePage({ params }: PageProps<"/planning/seances/[id]">) {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const { id } = await params;
-  const donnees = await withSchool(schoolId, async (tx) => {
+  const parsed = await withSchool(schoolId, async (tx) => {
     const attendance = await readAttendance(tx, id);
     if (!attendance) return null;
     const { instructors: instructors } = await scheduleReferential(tx, attendance.instructorId);
@@ -48,8 +48,8 @@ export default async function AttendancePage({ params }: PageProps<"/planning/se
       free: availability?.substitutes.filter((r) => r.free).length ?? 0,
     };
   });
-  if (!donnees) notFound();
-  const { attendance: attendance, instructors: instructors, unavailable: unavailable, free: free } = donnees;
+  if (!parsed) notFound();
+  const { attendance: attendance, instructors: instructors, unavailable: unavailable, free: free } = parsed;
   const date = longDate.format(new Date(`${attendance.date}T00:00:00Z`));
 
   return (

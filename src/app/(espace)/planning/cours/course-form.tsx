@@ -117,10 +117,10 @@ export function CourseForm({
     },
     schedule,
   ).map((c) => {
-    const autre = schedule.find((p) => p.id === c.id)!;
-    const when = `${autre.discipline} à ${autre.startTime}`;
-    if (c.room && c.instructor) return `${autre.room} et ${autre.instructor} déjà pris (${when})`;
-    return c.room ? `${autre.room} déjà occupée (${when})` : `${autre.instructor} donne déjà un cours (${when})`;
+    const other = schedule.find((p) => p.id === c.id)!;
+    const when = `${other.discipline} à ${other.startTime}`;
+    if (c.room && c.instructor) return `${other.room} et ${other.instructor} déjà pris (${when})`;
+    return c.room ? `${other.room} déjà occupée (${when})` : `${other.instructor} donne déjà un cours (${when})`;
   });
 
   // Slot outside the opening hours of the room's site (warning only: an exceptional course is still allowed).

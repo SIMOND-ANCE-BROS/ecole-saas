@@ -17,8 +17,8 @@ describe("encryption", () => {
 
   it("rejects altered text or another key", () => {
     const c = encrypt("jeton");
-    const [v, iv, tag, donnees] = c.split(".");
-    const tampered = [v, iv, tag, donnees.slice(0, -2) + (donnees.endsWith("A") ? "BB" : "AA")].join(".");
+    const [v, iv, tag, parsed] = c.split(".");
+    const tampered = [v, iv, tag, parsed.slice(0, -2) + (parsed.endsWith("A") ? "BB" : "AA")].join(".");
     expect(() => decrypt(tampered)).toThrow();
     process.env.CLE_CHIFFREMENT = randomBytes(32).toString("base64");
     expect(() => decrypt(c)).toThrow();

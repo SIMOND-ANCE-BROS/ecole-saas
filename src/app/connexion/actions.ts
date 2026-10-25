@@ -18,15 +18,15 @@ const entry = z.object({
 
 export async function signIn(_etat: ConnectionState, formData: FormData): Promise<ConnectionState> {
   const email = String(formData.get("email") ?? "");
-  const donnees = entry.safeParse({ email, password: formData.get("password") });
-  if (!donnees.success) {
+  const parsed = entry.safeParse({ email, password: formData.get("password") });
+  if (!parsed.success) {
     return { error: "Saisissez une adresse e-mail valide et votre mot de passe.", email };
   }
 
   const requestHeaders = await headers();
   // Attempt recorded before the password check (see sign-in-limit.ts).
   const ip = trustedIp(requestHeaders);
-  if (!(await recordAttempt(donnees.data.email, ip))) {
+  if (!(await recordAttempt(parsed.data.email, ip))) {
     return {
       error: `Trop de tentatives de connexion. Réessayez dans ${LIMITS.windowMinutes} minutes.`,
       email,
@@ -36,7 +36,7 @@ export async function signIn(_etat: ConnectionState, formData: FormData): Promis
   let connection;
   try {
     connection = await auth.api.signInEmail({
-      body: { email: donnees.data.email, password: donnees.data.password },
+      body: { email: parsed.data.email, password: parsed.data.password },
       headers: requestHeaders,
     });
   } catch (e) {
@@ -44,7 +44,7 @@ export async function signIn(_etat: ConnectionState, formData: FormData): Promis
     if (isAPIError(e)) return { error: "Adresse e-mail ou mot de passe incorrect.", email };
     throw e;
   }
-  await clearAttempts(donnees.data.email, ip);
+  await clearAttempts(parsed.data.email, ip);
 
   // A single school: chosen automatically, without going through the list.
   const ecoles = await schoolsOf(connection.user.id);

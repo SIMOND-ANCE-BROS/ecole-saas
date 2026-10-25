@@ -26,7 +26,7 @@ export function Billing({
   siblings: siblings,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [autre, setOther] = useState<Choice | null>(null);
+  const [other, setOther] = useState<Choice | null>(null);
   const [seeOther, setSeeOther] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
@@ -123,7 +123,7 @@ export function Billing({
               <PersonChoice
                 id="autre-payeur"
                 label="Quel payeur ?"
-                value={autre}
+                value={other}
                 onChange={setOther}
                 exclude={[studentId]}
                 organization
@@ -131,8 +131,8 @@ export function Billing({
               <button
                 type="button"
                 className="bouton-principal self-start"
-                disabled={inProgress || !autre}
-                onClick={() => autre && choose(() => billNewPerson(studentId, toInput(autre)))}
+                disabled={inProgress || !other}
+                onClick={() => other && choose(() => billNewPerson(studentId, toInput(other)))}
               >
                 Facturer à ce payeur
               </button>

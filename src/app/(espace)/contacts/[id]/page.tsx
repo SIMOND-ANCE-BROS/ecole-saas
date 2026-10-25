@@ -27,7 +27,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
   const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
   const [{ id }, { enregistre, encaisse }] = await Promise.all([params, searchParams]);
   const today = todayInParis();
-  const donnees = await withSchool(schoolId, async (tx) => {
+  const parsed = await withSchool(schoolId, async (tx) => {
     const contact = await readContact(tx, id);
     if (!contact) return null;
     const season = await currentSeason(tx, today);
@@ -39,8 +39,8 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
       payments: await paymentsOf(tx, contact.id),
     };
   });
-  if (!donnees) notFound();
-  const { contact: c, season: season, billed, balance: balance, payments: payments } = donnees;
+  if (!parsed) notFound();
+  const { contact: c, season: season, billed, balance: balance, payments: payments } = parsed;
   const name = nomAffiche(c);
   const firstName = c.firstName ?? name;
   const roles = (e: (typeof c.students)[number]) =>

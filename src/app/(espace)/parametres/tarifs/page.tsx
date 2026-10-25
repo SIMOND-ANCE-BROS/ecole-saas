@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: "Tarifs et réductions" };
 export default async function TariffsPage({ searchParams }: PageProps<"/parametres/tarifs">) {
   const { schoolId: schoolId } = await requireRole("director");
   const { saison: chosen } = await searchParams;
-  const donnees = await withSchool(schoolId, async (tx) => {
+  const parsed = await withSchool(schoolId, async (tx) => {
     const seasons = await listSeasons(tx);
     const current = await currentSeason(tx, todayInParis());
     const season = seasons.find((s) => s.id === chosen) ?? seasons.find((s) => s.id === current?.id) ?? seasons[0];
@@ -36,7 +36,7 @@ export default async function TariffsPage({ searchParams }: PageProps<"/parametr
         title="Tarifs et réductions"
         help="Le prix d’une inscription dépend de la durée hebdomadaire cumulée des cours choisis : une ligne par combinaison (« 45 min + 1 h »), éventuellement réservée à une discipline. Les inscriptions déjà faites gardent leur prix."
       />
-      {!donnees ? (
+      {!parsed ? (
         <p className="text-sm">
           Créez d’abord une{" "}
           <Link href="/parametres/saisons" className="lien">
@@ -47,21 +47,21 @@ export default async function TariffsPage({ searchParams }: PageProps<"/parametr
       ) : (
         <>
           <nav aria-label="Saisons" className="flex flex-wrap gap-2 text-sm">
-            {donnees.seasons.map((s) => (
+            {parsed.seasons.map((s) => (
               <Link
                 key={s.id}
                 href={`/parametres/tarifs?saison=${s.id}`}
-                aria-current={s.id === donnees.season.id ? "page" : undefined}
+                aria-current={s.id === parsed.season.id ? "page" : undefined}
                 className="rounded-md border border-bordure px-3 py-1 hover:border-accent aria-[current=page]:border-accent aria-[current=page]:bg-accent-doux aria-[current=page]:font-medium"
               >
                 {s.label}
               </Link>
             ))}
           </nav>
-          <Grid seasonId={donnees.season.id} grid={donnees.grid} disciplines={donnees.disciplines} />
+          <Grid seasonId={parsed.season.id} grid={parsed.grid} disciplines={parsed.disciplines} />
           <div className="grid gap-5 lg:grid-cols-2">
-            <Siblings seasonId={donnees.season.id} siblings={donnees.siblings} />
-            <LessonPacks seasonId={donnees.season.id} lessonPacks={donnees.lessonPacks} />
+            <Siblings seasonId={parsed.season.id} siblings={parsed.siblings} />
+            <LessonPacks seasonId={parsed.season.id} lessonPacks={parsed.lessonPacks} />
           </div>
         </>
       )}

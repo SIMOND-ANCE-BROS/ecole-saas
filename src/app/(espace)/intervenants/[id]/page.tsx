@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: "Intervenant" };
 export default async function InstructorPage({ params }: PageProps<"/intervenants/[id]">) {
   const { schoolId: schoolId } = await requireRole("director");
   const { id } = await params;
-  const donnees = await withSchool(schoolId, async (tx) => {
+  const parsed = await withSchool(schoolId, async (tx) => {
     const i = await readInstructor(tx, id);
     return i
       ? {
@@ -28,13 +28,13 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
         }
       : null;
   });
-  if (!donnees) notFound();
+  if (!parsed) notFound();
   const {
     instructor: instructor,
     calendar: calendar,
     connection: connection,
     unavailabilities: unavailabilities,
-  } = donnees;
+  } = parsed;
 
   const name = `${instructor.firstName} ${instructor.name}`;
   return (

@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Modifier un cours" };
 export default async function EditCoursePage({ params }: PageProps<"/planning/cours/[id]/modifier">) {
   const { schoolId: schoolId } = await requireRole("director");
   const { id } = await params;
-  const donnees = await withSchool(schoolId, async (tx) => {
+  const parsed = await withSchool(schoolId, async (tx) => {
     const course = await readCourse(tx, id);
     if (!course) return null;
     return {
@@ -21,8 +21,8 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
       schedule: await seasonCourses(tx, course.seasonId),
     };
   });
-  if (!donnees) notFound();
-  const { cours } = donnees;
+  if (!parsed) notFound();
+  const { cours } = parsed;
 
   return (
     <section className="flex flex-col gap-4">
@@ -37,7 +37,7 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
         <span className="text-doux"> / Modifier</span>
       </nav>
       <h1 className="titre-page">Modifier le cours : {cours.discipline}</h1>
-      <CourseForm course={cours} referential={donnees.referential} schedule={donnees.schedule} />
+      <CourseForm course={cours} referential={parsed.referential} schedule={parsed.schedule} />
     </section>
   );
 }

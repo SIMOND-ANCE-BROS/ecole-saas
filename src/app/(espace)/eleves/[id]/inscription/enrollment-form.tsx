@@ -327,7 +327,7 @@ export function EnrollmentForm({
               : "Choisissez au moins un cours pour connaître le prix."}
           </p>
         )}
-        {result?.status === "invalide" && <p role="alert">{result.message}</p>}
+        {result?.status === "invalid" && <p role="alert">{result.message}</p>}
         {next?.status === "error" && <p role="alert">{next.error.message}</p>}
         {next?.status === "ok" && (
           <dl className="flex flex-col gap-1">

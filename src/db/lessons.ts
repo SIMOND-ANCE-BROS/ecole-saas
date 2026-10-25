@@ -496,7 +496,7 @@ export const validLessonSlot = z.object({
 });
 
 export type LessonResult =
-  { status: "ok"; seasonId: string; since: string | null } | { status: "refus"; message: string };
+  { status: "ok"; seasonId: string; since: string | null } | { status: "refused"; message: string };
 
 const isoDay = (iso: string) => ((new Date(`${iso}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
 const shift = (iso: string, days: number) =>
@@ -516,12 +516,12 @@ export async function moveLesson(
   scope: "seance" | "suivantes",
 ): Promise<LessonResult> {
   const c = validLessonSlot.safeParse(slot);
-  if (!c.success) return { status: "refus", message: c.error.issues[0].message };
+  if (!c.success) return { status: "refused", message: c.error.issues[0].message };
   const { date, startTime: startTime, durationMinutes: durationMinutes } = c.data;
   if (Number(startTime.slice(0, 2)) * 60 + Number(startTime.slice(3)) + durationMinutes > 24 * 60) {
-    return { status: "refus", message: "La séance finirait après minuit." };
+    return { status: "refused", message: "La séance finirait après minuit." };
   }
-  if (!isUuid(id)) return { status: "refus", message: "Cette séance n’existe plus." };
+  if (!isUuid(id)) return { status: "refused", message: "Cette séance n’existe plus." };
   const [s] = await tx
     .select({
       courseId: lesson.courseId,
@@ -541,20 +541,20 @@ export async function moveLesson(
     .innerJoin(course, eq(course.id, lesson.courseId))
     .innerJoin(season, eq(season.id, course.seasonId))
     .where(eq(lesson.id, id));
-  if (!s) return { status: "refus", message: "Cette séance n’existe plus." };
+  if (!s) return { status: "refused", message: "Cette séance n’existe plus." };
   if (s.status !== "planned" || s.attendanceSheet)
-    return { status: "refus", message: "Cette séance est annulée ou son appel est fait : elle ne se déplace plus." };
+    return { status: "refused", message: "Cette séance est annulée ou son appel est fait : elle ne se déplace plus." };
   if (date < s.seasonStart || date > s.seasonEnd)
-    return { status: "refus", message: "Cette date est en dehors de la saison." };
+    return { status: "refused", message: "Cette date est en dehors de la saison." };
   const reference = s.plannedDate ?? s.date;
 
   if (scope === "seance") {
     if (date !== s.date) {
-      const [autre] = await tx
+      const [other] = await tx
         .select({ id: lesson.id })
         .from(lesson)
         .where(and(eq(lesson.courseId, s.courseId), eq(lesson.date, date)));
-      if (autre) return { status: "refus", message: "Ce cours a déjà une séance ce jour-là." };
+      if (other) return { status: "refused", message: "Ce cours a déjà une séance ce jour-là." };
     }
     const sameSlot = startTime === s.courseTime && durationMinutes === s.courseDuration;
     if (s.recurrence === "dates") {
@@ -586,7 +586,7 @@ export async function moveLesson(
   }
 
   if (s.recurrence === "dates")
-    return { status: "refus", message: "Un cours à dates précises se déplace séance par séance." };
+    return { status: "refused", message: "Un cours à dates précises se déplace séance par séance." };
   const newDay = isoDay(date);
   // 1. Earlier lessons keep the old slot.
   await tx

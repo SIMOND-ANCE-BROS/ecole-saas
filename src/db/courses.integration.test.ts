@@ -235,7 +235,7 @@ describe("moveCourse (calendar view)", () => {
     await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${school}, ${i.id}, ${d.id}, ${id})`;
     const slot = { weekday: 5, startTime: "17:00", durationMinutes: 60 };
     expect(await withSchool(school, (tx) => moveCourse(tx, id, slot, false))).toEqual({
-      status: "confirmer",
+      status: "confirm",
       enrolled: 1,
     });
     expect((await withSchool(school, (tx) => readCourse(tx, id)))?.weekday).toBe(3);
@@ -251,7 +251,7 @@ describe("moveCourse (calendar view)", () => {
         moveCourse(tx, id, { weekday: 3, startTime: "23:30", durationMinutes: 60 }, true),
       ),
     ).toEqual({
-      status: "refus",
+      status: "refused",
       message: "Le cours finirait après minuit.",
     });
     const stage = await withSchool(school, (tx) =>
@@ -268,7 +268,7 @@ describe("moveCourse (calendar view)", () => {
         moveCourse(tx, stage.ok ? stage.id : "", { weekday: 3, startTime: "10:00", durationMinutes: 60 }, true),
       ),
     ).toEqual({
-      status: "refus",
+      status: "refused",
       message: "Un cours à dates précises se modifie depuis sa fiche.",
     });
     expect(
@@ -276,7 +276,7 @@ describe("moveCourse (calendar view)", () => {
         moveCourse(tx, id, { weekday: 2, startTime: "10:00", durationMinutes: 60 }, true),
       ),
     ).toEqual({
-      status: "refus",
+      status: "refused",
       message: "Ce cours n’existe plus.",
     });
   });

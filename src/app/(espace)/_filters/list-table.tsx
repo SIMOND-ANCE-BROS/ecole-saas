@@ -483,7 +483,7 @@ function Popover({
 }
 
 /** Labels of the two sort directions, depending on the column's kind. */
-const SENS: Record<ColumnDef["type"], [string, string]> = {
+const SORT_LABELS: Record<ColumnDef["type"], [string, string]> = {
   text: ["De A à Z", "De Z à A"],
   phone: ["Croissant", "Décroissant"],
   number: ["Du plus petit au plus grand", "Du plus grand au plus petit"],
@@ -563,7 +563,7 @@ function TitleMenu({
                 <span aria-hidden className="w-3 text-xs">
                   {direction === "asc" ? "▲" : "▼"}
                 </span>
-                {SENS[def.type][i]}
+                {SORT_LABELS[def.type][i]}
               </button>
             ))}
           </div>

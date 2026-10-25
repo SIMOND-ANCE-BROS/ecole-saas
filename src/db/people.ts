@@ -400,8 +400,8 @@ export type NewRelationship = { type: RelationshipType; emergencyContact: boolea
 export class RelationshipRefusal extends Error {}
 
 /**
- * Creates a person, optionally linked straight away to another (`de`: who is
- * <type> of whom; « nouvelle » means the created person). Without `confirmed`,
+ * Creates a person, optionally linked straight away to another (`source`: who is
+ * <type> of whom; "new" means the created person). Without `confirmed`,
  * first returns the likely duplicates.
  */
 export async function createPerson(

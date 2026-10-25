@@ -32,7 +32,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
   const [{ id }, { enregistre, inscription, encaisse }] = await Promise.all([params, searchParams]);
   const today = todayInParis();
-  const donnees = await withSchool(schoolId, async (tx) => {
+  const parsed = await withSchool(schoolId, async (tx) => {
     const student = await readStudent(tx, id, today);
     if (!student) return null;
     const season = await currentSeason(tx, today);
@@ -46,8 +46,8 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
       payments: paysForThemselves ? await paymentsOf(tx, student.id) : [],
     };
   });
-  if (!donnees) notFound();
-  const { student: e, season: season, billed, balance: balance, payments: payments } = donnees;
+  if (!parsed) notFound();
+  const { student: e, season: season, billed, balance: balance, payments: payments } = parsed;
 
   const name = nomAffiche(e);
   const firstName = e.firstName ?? name;

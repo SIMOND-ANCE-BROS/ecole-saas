@@ -326,7 +326,7 @@ export const validSlot = z.object({
 });
 
 export type MoveResult =
-  { status: "ok"; id: string } | { status: "confirmer"; enrolled: number } | { status: "refus"; message: string };
+  { status: "ok"; id: string } | { status: "confirm"; enrolled: number } | { status: "refused"; message: string };
 
 /**
  * Moves (day, time) or stretches (duration) a course from the calendar view. If
@@ -340,19 +340,19 @@ export async function moveCourse(
   confirmed: boolean,
 ): Promise<MoveResult> {
   const c = validSlot.safeParse(slot);
-  if (!c.success) return { status: "refus", message: c.error.issues[0].message };
+  if (!c.success) return { status: "refused", message: c.error.issues[0].message };
   const existing = await readCourse(tx, id);
-  if (!existing) return { status: "refus", message: "Ce cours n’existe plus." };
+  if (!existing) return { status: "refused", message: "Ce cours n’existe plus." };
   if (existing.recurrence === "dates")
-    return { status: "refus", message: "Un cours à dates précises se modifie depuis sa fiche." };
-  if (toMinutesEnd(c.data) > 24 * 60) return { status: "refus", message: "Le cours finirait après minuit." };
+    return { status: "refused", message: "Un cours à dates précises se modifie depuis sa fiche." };
+  if (toMinutesEnd(c.data) > 24 * 60) return { status: "refused", message: "Le cours finirait après minuit." };
   if (!confirmed) {
     const [{ n }] = await tx
       .select({ n: sql<number>`count(DISTINCT ${enrollmentCourse.studentId})::int` })
       .from(enrollmentCourse)
       .innerJoin(sql`enrollment i`, sql`i.id = ${enrollmentCourse.enrollmentId} AND i.status IN ('active', 'trial')`)
       .where(eq(enrollmentCourse.courseId, id));
-    if (n > 0) return { status: "confirmer", enrolled: n };
+    if (n > 0) return { status: "confirm", enrolled: n };
   }
   await tx
     .update(course)

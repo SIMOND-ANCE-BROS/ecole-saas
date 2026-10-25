@@ -15,19 +15,19 @@ function key(): Buffer {
 export function encrypt(text: string): string {
   const iv = randomBytes(12);
   const encryptor = createCipheriv("aes-256-gcm", key(), iv);
-  const donnees = Buffer.concat([encryptor.update(text, "utf8"), encryptor.final()]);
+  const parsed = Buffer.concat([encryptor.update(text, "utf8"), encryptor.final()]);
   return [
     "v1",
     iv.toString("base64url"),
     encryptor.getAuthTag().toString("base64url"),
-    donnees.toString("base64url"),
+    parsed.toString("base64url"),
   ].join(".");
 }
 
 export function decrypt(ciphertext: string): string {
-  const [version, iv, tag, donnees] = ciphertext.split(".");
-  if (version !== "v1" || !iv || !tag || !donnees) throw new Error("Texte chiffré invalide");
+  const [version, iv, tag, parsed] = ciphertext.split(".");
+  if (version !== "v1" || !iv || !tag || !parsed) throw new Error("Texte chiffré invalide");
   const decryptor = createDecipheriv("aes-256-gcm", key(), Buffer.from(iv, "base64url"));
   decryptor.setAuthTag(Buffer.from(tag, "base64url"));
-  return Buffer.concat([decryptor.update(Buffer.from(donnees, "base64url")), decryptor.final()]).toString("utf8");
+  return Buffer.concat([decryptor.update(Buffer.from(parsed, "base64url")), decryptor.final()]).toString("utf8");
 }
