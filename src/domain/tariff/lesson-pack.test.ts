@@ -35,9 +35,9 @@ describe("private lesson packs (Ribas grid)", () => {
 
   it("refers to a quote beyond the last bracket", () => {
     expect(priceLessonPack(ribasLessonPacksGrid, { lessonCount: 10, peopleCount: 5 })).toEqual({
-      status: "erreur",
+      status: "error",
       error: {
-        code: "hors_grille",
+        code: "off_grid",
         message: "Aucun tarif pour 10 cours à 5 personnes : prix sur devis, à saisir par l’accueil.",
       },
     });
@@ -45,8 +45,8 @@ describe("private lesson packs (Ribas grid)", () => {
 
   it("reports a number of lessons missing from the grid", () => {
     expect(priceLessonPack(ribasLessonPacksGrid, { lessonCount: 7, peopleCount: 1 })).toMatchObject({
-      status: "erreur",
-      error: { code: "hors_grille" },
+      status: "error",
+      error: { code: "off_grid" },
     });
   });
 });
@@ -68,7 +68,7 @@ describe("lesson packs: nothing is specific to one school", () => {
   });
 
   it("reports an empty grid", () => {
-    expect(priceLessonPack([], { lessonCount: 1, peopleCount: 1 }).status).toBe("erreur");
+    expect(priceLessonPack([], { lessonCount: 1, peopleCount: 1 }).status).toBe("error");
   });
 
   it("rejects an invalid number of lessons or people", () => {

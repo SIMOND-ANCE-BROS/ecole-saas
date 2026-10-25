@@ -15,7 +15,7 @@ export type Result = { ok: true; id: string } | { ok: false; message: string };
 
 export const AUDIENCES = ["child", "adult", "couple", "student"] as const;
 export const PERIODS = ["quarter", "year", "single"] as const;
-export type Public = (typeof AUDIENCES)[number];
+export type Audience = (typeof AUDIENCES)[number];
 export type Period = (typeof PERIODS)[number];
 
 // ---------------------------------------------------------------------------
@@ -23,7 +23,7 @@ export type Period = (typeof PERIODS)[number];
 // ---------------------------------------------------------------------------
 
 export type GridRow = {
-  audience: Public;
+  audience: Audience;
   /** Sorted durations, in minutes. */
   combination: number[];
   disciplineId: string | null;
@@ -153,7 +153,7 @@ export type Siblings = {
   rateBps: number | null;
   amountCents: number | null;
   minStudents: number;
-  audiences: Public[];
+  audiences: Audience[];
   combinableWithMultiDiscipline: boolean;
 };
 

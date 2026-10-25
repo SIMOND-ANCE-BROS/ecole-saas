@@ -159,13 +159,13 @@ describe("bank deposits", () => {
     const b = await withSchool(school, (tx) => readDeposit(tx, chequesDeposit));
     expect(b).toMatchObject({
       method: "cheque",
-      nombre: 1,
+      count: 1,
       totalCents: 10000,
       payments: [{ reference: "0001", issuer: "Banque A", payer: "Sophie Martin" }],
     });
     expect(
       (await withSchool(school, (tx) => listDeposits(tx))).map(
-        (x) => `${x.date} ${x.method} ${x.nombre} ${x.totalCents}`,
+        (x) => `${x.date} ${x.method} ${x.count} ${x.totalCents}`,
       ),
     ).toEqual(["2027-01-05 cheque 1 10000", "2026-10-21 cheque 1 10000"]);
     const j = await withSchool(school, (tx) => paymentLog(tx, TODAY, TODAY, null));

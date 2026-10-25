@@ -6,7 +6,7 @@ import type {
   EnrollmentRequest,
   TariffRow,
   Period,
-  Public,
+  Audience,
   DiscountRule,
   EnrollmentResult,
 } from "../domain/tariff/types";
@@ -22,12 +22,12 @@ import { course, discipline, enrollment, enrollmentCourse, person, discount, tar
 
 export type EnrollmentInput = {
   studentIds: string[];
-  audience: Public;
+  audience: Audience;
   period: Period;
   courseIds: string[];
 };
 
-const NEW = "nouvelle";
+const NEW = "new";
 const uuid = z.uuid();
 
 export async function loadGrid(tx: Tx, seasonId: string): Promise<TariffRow[]> {
@@ -195,7 +195,7 @@ export async function saveEnrollment(
   const preview = await enrollmentPreview(tx, payerId, seasonId, entry);
   if (preview.status === "invalide") return { ok: false, message: preview.message };
   const r = preview.newEnrollment;
-  if (r.status === "erreur") return { ok: false, message: r.error.message };
+  if (r.status === "error") return { ok: false, message: r.error.message };
 
   const [{ id }] = await tx
     .insert(enrollment)
@@ -208,7 +208,7 @@ export async function saveEnrollment(
       period: entry.period,
       grossPriceCents: r.grossPriceCents,
       discountCents: r.discountCents,
-      discounts: r.discounts.filter((d) => d.status === "appliquee").map((d) => d.code),
+      discounts: r.discounts.filter((d) => d.status === "applied").map((d) => d.code),
     })
     .returning({ id: enrollment.id });
 
@@ -232,7 +232,7 @@ export async function saveEnrollment(
 export type PaidEnrollment = {
   id: string;
   students: string;
-  audience: Public;
+  audience: Audience;
   period: Period;
   courses: string[];
   netPriceCents: number;

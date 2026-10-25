@@ -21,7 +21,7 @@ export type ColumnFilter = {
 /** Filter of column `def`, read from the list's filter. */
 export function readColumnFilter(filter: Filter, def: ColumnDef): ColumnFilter {
   const r: ColumnFilter = { choice: null, text: "", min: "", max: "", otherConditions: [] };
-  const bound = def.type === "nombre" || def.type === "date";
+  const bound = def.type === "number" || def.type === "date";
   for (const c of filter.conditions) {
     if (c.column !== def.id) continue;
     if (c.operator === "parmi" && r.choice === null) r.choice = amongValues(c.value);

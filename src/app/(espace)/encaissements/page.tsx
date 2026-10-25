@@ -193,7 +193,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
                       </Link>
                     </td>
                     <td>{PAYMENT_METHODS[r.method]}</td>
-                    <td className="text-right tabular-nums">{r.nombre}</td>
+                    <td className="text-right tabular-nums">{r.count}</td>
                     <td className="text-right tabular-nums">{formatEuros(r.totalCents)}</td>
                   </tr>
                 ))}

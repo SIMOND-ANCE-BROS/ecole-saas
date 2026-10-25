@@ -60,9 +60,9 @@ describe("freeSubstitutes", () => {
     const other = [lesson("x", "2026-11-04", "17:30", "lucas")];
     const unavailabilities = [unavailability("mathis", "2026-11-04T00:00:00Z", "2026-11-05T00:00:00Z")];
     expect(freeSubstitutes(target, instructors, other, unavailabilities)).toEqual([
-      { id: "ines", free: true, pattern: null, taught: false },
-      { id: "lucas", free: false, pattern: "autre séance", taught: true },
-      { id: "mathis", free: false, pattern: "indisponible", taught: true },
+      { id: "ines", free: true, reason: null, taught: false },
+      { id: "lucas", free: false, reason: "autre séance", taught: true },
+      { id: "mathis", free: false, reason: "indisponible", taught: true },
     ]);
   });
 });

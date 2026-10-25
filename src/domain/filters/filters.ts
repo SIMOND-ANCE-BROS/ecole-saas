@@ -8,7 +8,7 @@
  */
 
 /** `date`: day `YYYY-MM-DD` (date of birth…). */
-export type ColumnType = "texte" | "nombre" | "telephone" | "date";
+export type ColumnType = "text" | "number" | "phone" | "date";
 
 export type ColumnDef = {
   id: string;
@@ -58,9 +58,9 @@ export const CONDITIONS_MAX = 8;
 
 const TEXT: Operator[] = ["contient", "ne_contient_pas", "est", "n_est_pas", "commence", "vide", "non_vide", "parmi"];
 export const OPERATORS: Record<ColumnType, Operator[]> = {
-  texte: TEXT,
-  telephone: ["contient", "commence", "vide", "non_vide"],
-  nombre: ["egal", "different", "sup", "sup_egal", "inf", "inf_egal", "vide", "non_vide"],
+  text: TEXT,
+  phone: ["contient", "commence", "vide", "non_vide"],
+  number: ["egal", "different", "sup", "sup_egal", "inf", "inf_egal", "vide", "non_vide"],
   date: ["egal", "inf", "sup", "inf_egal", "sup_egal", "vide", "non_vide"],
 };
 
@@ -130,13 +130,13 @@ export function readNumber(v: string): number | null {
 /** Usable value for this condition, or null if it must be ignored. */
 export function normalizedValue(c: Condition, type: ColumnType): string | number | null {
   if (withoutValue(c.operator)) return "";
-  if (type === "nombre") return readNumber(c.value);
+  if (type === "number") return readNumber(c.value);
   if (type === "date") return DATE.test(c.value.trim()) ? c.value.trim() : null;
   if (c.operator === "parmi") {
     const vs = amongValues(c.value).map((x) => (x === EMPTY ? EMPTY : normalizeText(x)));
     return vs.length ? vs.join(SEPARATOR) : null;
   }
-  const v = type === "telephone" ? digits(c.value) : normalizeText(c.value);
+  const v = type === "phone" ? digits(c.value) : normalizeText(c.value);
   return v === "" ? null : v;
 }
 
@@ -178,7 +178,7 @@ export type Cell = string | number | string[] | null | undefined;
 
 function evaluate(cell: Cell, c: Condition, type: ColumnType): boolean {
   const v = normalizedValue(c, type);
-  if (type === "nombre") {
+  if (type === "number") {
     const n = typeof cell === "number" ? cell : null;
     if (c.operator === "vide") return n === null;
     if (c.operator === "non_vide") return n !== null;
@@ -220,7 +220,7 @@ function evaluate(cell: Cell, c: Condition, type: ColumnType): boolean {
     }
   }
   const raw = Array.isArray(cell) ? cell.join(", ") : cell == null ? "" : String(cell);
-  const t = type === "telephone" ? digits(raw) : normalizeText(raw);
+  const t = type === "phone" ? digits(raw) : normalizeText(raw);
   const target = String(v);
   switch (c.operator) {
     case "vide":
@@ -264,15 +264,15 @@ export function applyFilter<T>(rows: T[], filter: Filter, columns: (ColumnDef & 
 /** « Âge > 10 », « Responsables contient « Martin » », « Téléphone est vide »: for the chips. */
 export function conditionLabel(c: Condition, columns: ColumnDef[]): string {
   const def = columns.find((d) => d.id === c.column);
-  const op = operatorLabel(c.operator, def?.type ?? "texte");
+  const op = operatorLabel(c.operator, def?.type ?? "text");
   const name = def?.label ?? c.column;
   if (withoutValue(c.operator)) return `${name} ${op}`;
   if (def?.type === "date") return `${name} ${op} ${c.value.split("-").reverse().join("/")}`;
-  return def?.type === "nombre" ? `${name} ${op} ${c.value}` : `${name} ${op} « ${c.value} »`;
+  return def?.type === "number" ? `${name} ${op} ${c.value}` : `${name} ${op} « ${c.value} »`;
 }
 
 /** Sorting a list by a column (#107), in the URL: `?sort=age&order=desc`. */
-export type Sort = { column: string; sens: "asc" | "desc" };
+export type Sort = { column: string; direction: "asc" | "desc" };
 
 /** The URL's sort if it targets a known, sortable column; otherwise null (default order). */
 export function readSort(
@@ -283,21 +283,21 @@ export function readSort(
   const column = Array.isArray(sort) ? sort[0] : sort;
   const def = columns.find((c) => c.id === column);
   if (!def || def.sortable === false) return null;
-  return { column: def.id, sens: (Array.isArray(order) ? order[0] : order) === "desc" ? "desc" : "asc" };
+  return { column: def.id, direction: (Array.isArray(order) ? order[0] : order) === "desc" ? "desc" : "asc" };
 }
 
 /** In-memory sort, with the SQL sort's rules: accents ignored, numbers in numeric order, empty values last. */
 export function sortRows<L>(rows: L[], currentSort: Sort | null, value: (l: L, column: string) => Cell): L[] {
   if (!currentSort) return rows;
   const key = (v: Cell) => (Array.isArray(v) ? v.join(", ") : v);
-  const sens = currentSort.sens === "asc" ? 1 : -1;
+  const direction = currentSort.direction === "asc" ? 1 : -1;
   return [...rows].sort((a, b) => {
     const x = key(value(a, currentSort.column));
     const y = key(value(b, currentSort.column));
     const xEmpty = x == null || x === "";
     const yEmpty = y == null || y === "";
     if (xEmpty || yEmpty) return xEmpty === yEmpty ? 0 : xEmpty ? 1 : -1;
-    if (typeof x === "number" && typeof y === "number") return (x - y) * sens;
-    return normalizeText(String(x)).localeCompare(normalizeText(String(y)), "fr", { numeric: true }) * sens;
+    if (typeof x === "number" && typeof y === "number") return (x - y) * direction;
+    return normalizeText(String(x)).localeCompare(normalizeText(String(y)), "fr", { numeric: true }) * direction;
   });
 }

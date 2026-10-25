@@ -6,8 +6,10 @@ import { ageAt } from "@/domain/people/age";
 import { type Choice, PersonChoice, toInput } from "../../_people/person-choice";
 import { createStudentFromGuide, type StudentRefusal } from "../actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
+import type { StudentInput } from "@/db/students";
 
-type Billing = "eleve" | "responsable" | "autre";
+/** Checked against the server schema: a value renamed on one side fails to compile. */
+type Billing = StudentInput["billing"]["type"];
 
 /**
  * New student in a single entry: identity; if a minor, their guardian
@@ -37,7 +39,7 @@ export function NewStudentGuide({
   const minor = age !== null && age < 18;
   // By default: a minor has a guardian who pays; an adult pays for themself. The front desk can change it.
   const displayedGuardian = withGuardian ?? minor;
-  const chosenBilling: Billing = billing ?? (displayedGuardian ? "responsable" : "eleve");
+  const chosenBilling: Billing = billing ?? (displayedGuardian ? "guardian" : "self");
   const firstName = e.firstName.trim() || "l’élève";
   const guardianName = guardian
     ? "id" in guardian
@@ -64,8 +66,8 @@ export function NewStudentGuide({
             guardian: displayedGuardian && guardian ? toInput(guardian) : null,
             toNotify: toNotify,
             billing:
-              chosenBilling === "autre"
-                ? { type: "autre", payeur: payer ? toInput(payer) : null }
+              chosenBilling === "other"
+                ? { type: "other", payer: payer ? toInput(payer) : null }
                 : { type: chosenBilling },
           },
           confirmed,
@@ -161,9 +163,9 @@ export function NewStudentGuide({
         <legend className="px-1 text-sm font-semibold">3. À qui facturer ?</legend>
         {(
           [
-            ["eleve", `À ${firstName}`, !minor],
-            ["responsable", `Au responsable${guardian ? ` (${guardianName})` : ""}`, displayedGuardian],
-            ["autre", "À un autre payeur : CSE, entreprise, proche…", true],
+            ["self", `À ${firstName}`, !minor],
+            ["guardian", `Au responsable${guardian ? ` (${guardianName})` : ""}`, displayedGuardian],
+            ["other", "À un autre payeur : CSE, entreprise, proche…", true],
           ] as const
         )
           .filter(([, , visible]) => visible)
@@ -178,14 +180,14 @@ export function NewStudentGuide({
               {label}
             </label>
           ))}
-        {chosenBilling === "autre" && (
+        {chosenBilling === "other" && (
           <PersonChoice
             id="payeur"
             label="Quel payeur ?"
             value={payer}
             onChange={setPayer}
             organization
-            errors={sous("billing.payeur.newPerson.")}
+            errors={sous("billing.payer.newPerson.")}
           />
         )}
         {error("billing") && <p className="text-xs text-erreur">{error("billing")}</p>}

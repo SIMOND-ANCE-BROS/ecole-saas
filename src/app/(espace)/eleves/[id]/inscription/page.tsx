@@ -23,11 +23,7 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
     const student = await readStudent(tx, id, today);
     if (!student) return null;
     const payerId =
-      student.billedTo.type === "personne"
-        ? student.billedTo.id
-        : student.billedTo.type === "eleve"
-          ? student.id
-          : null;
+      student.billedTo.type === "person" ? student.billedTo.id : student.billedTo.type === "self" ? student.id : null;
     const season = await currentSeason(tx, today);
     return {
       student: student,
@@ -40,7 +36,7 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
   if (!donnees) notFound();
   const { student: student, payerId: payerId, season: season, students: students, courses: cours } = donnees;
   const name = nomAffiche(student);
-  const payer = student.billedTo.type === "personne" ? student.billedTo.name : name;
+  const payer = student.billedTo.type === "person" ? student.billedTo.name : name;
 
   return (
     <section className="flex flex-col gap-4">

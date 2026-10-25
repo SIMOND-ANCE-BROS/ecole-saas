@@ -34,7 +34,7 @@ export type LastEnrollment = {
 };
 
 /** Latest enrollments of the season, most recent first. */
-export async function lastEnrollments(tx: Tx, seasonId: string, nombre = 8): Promise<LastEnrollment[]> {
+export async function lastEnrollments(tx: Tx, seasonId: string, limit = 8): Promise<LastEnrollment[]> {
   const rows = await tx
     .select({
       id: enrollment.id,
@@ -53,7 +53,7 @@ export async function lastEnrollments(tx: Tx, seasonId: string, nombre = 8): Pro
     .innerJoin(person, eq(person.id, enrollment.payerId))
     .where(and(eq(enrollment.seasonId, seasonId), eq(enrollment.status, "active")))
     .orderBy(desc(enrollment.createdAt))
-    .limit(nombre);
+    .limit(limit);
 
   return rows.map((l) => ({
     id: l.id,

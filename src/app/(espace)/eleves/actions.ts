@@ -38,14 +38,14 @@ export async function createStudentFromGuide(entry: unknown, confirmed: boolean)
     if (e instanceof CreationRefusal) return { message: e.message, errors: {} };
     throw e;
   }
-  if (r.status === "doublons")
+  if (r.status === "duplicates")
     return { message: "Certaines personnes existent peut-être déjà.", errors: {}, duplicates: r.duplicates };
   redirect(`/eleves/${r.id}?enregistre=cree`);
 }
 
 export async function invoice(
   studentId: string,
-  target: { type: "eleve" } | { type: "personne"; id: string },
+  target: { type: "self" } | { type: "person"; id: string },
 ): Promise<Back> {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const r = await withSchool(schoolId, (tx) => setBilling(tx, studentId, target));

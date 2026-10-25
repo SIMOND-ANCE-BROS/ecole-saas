@@ -130,8 +130,8 @@ export type Enrolled = {
 /** Students of the course during the year (active, on trial, on the waitlist), by last then first name. */
 export async function enrolledInCourse(tx: Tx, courseId: string): Promise<Enrolled[]> {
   if (!z.uuid().safeParse(courseId).success) return [];
-  const student = alias(person, "danseur");
-  const payer = alias(person, "payeur");
+  const student = alias(person, "student");
+  const payer = alias(person, "payer");
   const rows = await tx
     .selectDistinctOn([student.lastName, student.firstName, student.id], {
       studentId: student.id,

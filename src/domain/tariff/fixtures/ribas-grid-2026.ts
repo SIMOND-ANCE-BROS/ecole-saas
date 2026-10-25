@@ -4,13 +4,13 @@
  * Never import from application code: in production, the tariff grid comes
  * from each school's `tariff` table.
  */
-import type { TariffRow, LessonPackTariffRow, Period, Public, DiscountRule } from "../types";
+import type { TariffRow, LessonPackTariffRow, Period, Audience, DiscountRule } from "../types";
 
 export const ZUMBA = "discipline-zumba";
 
 let counter = 0;
 function row(
-  tariffAudience: Public,
+  tariffAudience: Audience,
   period: Period,
   combination: number[],
   euros: number,

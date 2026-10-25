@@ -153,7 +153,7 @@ export async function cancelDeposit(tx: Tx, userId: string, id: string): Promise
   return { ok: true, id };
 }
 
-export type DepositRow = { id: string; date: string; method: DepositMethod; nombre: number; totalCents: number };
+export type DepositRow = { id: string; date: string; method: DepositMethod; count: number; totalCents: number };
 
 /** Deposits, most recent first. */
 export function listDeposits(tx: Tx): Promise<DepositRow[]> {
@@ -162,7 +162,7 @@ export function listDeposits(tx: Tx): Promise<DepositRow[]> {
       id: bankDeposit.id,
       date: bankDeposit.date,
       method: bankDeposit.method,
-      nombre: sql<number>`count(${bankDepositPayment.paymentId})::int`,
+      count: sql<number>`count(${bankDepositPayment.paymentId})::int`,
       totalCents: sql<number>`coalesce(sum(${payment.amountCents}), 0)::int`,
     })
     .from(bankDeposit)
@@ -186,7 +186,7 @@ export async function readDeposit(tx: Tx, id: string): Promise<(DepositRow & { p
   return {
     ...x,
     payments,
-    nombre: payments.length,
+    count: payments.length,
     totalCents: payments.reduce((s, p) => s + p.amountCents, 0),
   };
 }

@@ -43,7 +43,7 @@ export function Billing({
     });
 
   const current =
-    billedTo.type === "personne" ? billedTo.name : billedTo.type === "eleve" ? `${firstName} (paie ses cours)` : null;
+    billedTo.type === "person" ? billedTo.name : billedTo.type === "self" ? `${firstName} (paie ses cours)` : null;
 
   return (
     <section aria-labelledby="facture-a" className="panneau flex flex-col gap-2 p-4 text-sm">
@@ -52,7 +52,7 @@ export function Billing({
       </h2>
       {current ? (
         <p className="text-base font-medium">
-          {billedTo.type === "personne" ? (
+          {billedTo.type === "person" ? (
             <Link href={`/personnes/${billedTo.id}`} className="lien">
               {current}
             </Link>
@@ -92,9 +92,9 @@ export function Billing({
               <input
                 type="radio"
                 name="facturer"
-                checked={billedTo.type === "eleve"}
+                checked={billedTo.type === "self"}
                 disabled={inProgress}
-                onChange={() => choose(() => invoice(studentId, { type: "eleve" }))}
+                onChange={() => choose(() => invoice(studentId, { type: "self" }))}
               />
               {firstName}
             </label>
@@ -104,13 +104,13 @@ export function Billing({
               <input
                 type="radio"
                 name="facturer"
-                checked={billedTo.type === "personne" && billedTo.id === p.id}
+                checked={billedTo.type === "person" && billedTo.id === p.id}
                 disabled={inProgress}
-                onChange={() => choose(() => invoice(studentId, { type: "personne", id: p.id }))}
+                onChange={() => choose(() => invoice(studentId, { type: "person", id: p.id }))}
               />
               {p.name}
               <span className="text-xs text-doux">
-                {p.relation === "responsable" ? "responsable" : p.relation === "partner" ? "conjoint" : "proche"}
+                {p.relation === "legal_guardian" ? "responsable" : p.relation === "partner" ? "conjoint" : "proche"}
               </span>
             </label>
           ))}

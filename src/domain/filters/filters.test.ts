@@ -11,10 +11,10 @@ import {
 } from "./filters";
 
 const COLUMNS: ColumnDef[] = [
-  { id: "nom", label: "Élève", type: "texte" },
-  { id: "age", label: "Âge", type: "nombre" },
-  { id: "responsables", label: "Responsables", type: "texte" },
-  { id: "telephone", label: "Téléphone", type: "telephone" },
+  { id: "nom", label: "Élève", type: "text" },
+  { id: "age", label: "Âge", type: "number" },
+  { id: "responsables", label: "Responsables", type: "text" },
+  { id: "telephone", label: "Téléphone", type: "phone" },
 ];
 
 type Row = { name: string; age: number | null; guardians: string[]; telephone: string | null };
@@ -48,7 +48,7 @@ describe("readFilter", () => {
   });
 
   it("ignores a non-filterable column", () => {
-    const withTariff: ColumnDef[] = [...COLUMNS, { id: "tarif", label: "Tarif", type: "texte", filterable: false }];
+    const withTariff: ColumnDef[] = [...COLUMNS, { id: "tarif", label: "Tarif", type: "text", filterable: false }];
     expect(readFilter(["tarif.contient.30"], null, withTariff).conditions).toEqual([]);
   });
 
@@ -139,14 +139,14 @@ it("conditionLabel", () => {
 
 describe("sort (#107)", () => {
   const COLS: ColumnDef[] = [
-    { id: "nom", label: "Nom", type: "texte" },
-    { id: "age", label: "Âge", type: "nombre" },
-    { id: "tarif", label: "Tarif", type: "texte", sortable: false },
+    { id: "nom", label: "Nom", type: "text" },
+    { id: "age", label: "Âge", type: "number" },
+    { id: "tarif", label: "Tarif", type: "text", sortable: false },
   ];
 
   it("reads the sort from the URL, ignores an unknown or non-sortable column", () => {
-    expect(readSort("age", "desc", COLS)).toEqual({ column: "age", sens: "desc" });
-    expect(readSort(["nom"], undefined, COLS)).toEqual({ column: "nom", sens: "asc" });
+    expect(readSort("age", "desc", COLS)).toEqual({ column: "age", direction: "desc" });
+    expect(readSort(["nom"], undefined, COLS)).toEqual({ column: "nom", direction: "asc" });
     expect(readSort("tarif", "asc", COLS)).toBeNull();
     expect(readSort("inconnue", "asc", COLS)).toBeNull();
   });
@@ -159,8 +159,13 @@ describe("sort (#107)", () => {
       { nom: "", age: 30 },
     ];
     const v = (l: (typeof rows)[number], c: string) => l[c as "nom" | "age"];
-    expect(sortRows(rows, { column: "nom", sens: "asc" }, v).map((l) => l.nom)).toEqual(["Émile", "eva", "Zoé", ""]);
-    expect(sortRows(rows, { column: "age", sens: "desc" }, v).map((l) => l.age)).toEqual([30, 10, 9, null]);
+    expect(sortRows(rows, { column: "nom", direction: "asc" }, v).map((l) => l.nom)).toEqual([
+      "Émile",
+      "eva",
+      "Zoé",
+      "",
+    ]);
+    expect(sortRows(rows, { column: "age", direction: "desc" }, v).map((l) => l.age)).toEqual([30, 10, 9, null]);
     expect(sortRows(rows, null, v)).toBe(rows);
   });
 });

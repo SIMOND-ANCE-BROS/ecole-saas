@@ -36,7 +36,7 @@ export function EnrollmentForm({
 }: Props) {
   const initial = students.find((d) => d.id === initialStudent) ?? (students.length === 1 ? students[0] : undefined);
   const [studentIds, setStudentIds] = useState<string[]>(initial ? [initial.id] : []);
-  const [chosenAudience, setPublic] = useState<FormInput["audience"]>(
+  const [chosenAudience, setAudience] = useState<FormInput["audience"]>(
     initial && initial.age !== null && initial.age >= 18 ? "adult" : "child",
   );
   const [period, setPeriod] = useState<FormInput["period"]>("quarter");
@@ -166,7 +166,7 @@ export function EnrollmentForm({
               value={chosenAudience}
               onChange={(e) => {
                 const value = e.target.value as FormInput["audience"];
-                setPublic(value);
+                setAudience(value);
                 if (value !== "couple") setStudentIds(studentIds.slice(0, 1));
               }}
             >
@@ -328,7 +328,7 @@ export function EnrollmentForm({
           </p>
         )}
         {result?.status === "invalide" && <p role="alert">{result.message}</p>}
-        {next?.status === "erreur" && <p role="alert">{next.error.message}</p>}
+        {next?.status === "error" && <p role="alert">{next.error.message}</p>}
         {next?.status === "ok" && (
           <dl className="flex flex-col gap-1">
             <div className="flex justify-between gap-2">
@@ -336,15 +336,15 @@ export function EnrollmentForm({
               <dd className="tabular-nums">{formatEuros(next.grossPriceCents)}</dd>
             </div>
             {next.discounts.map((r) => (
-              <div key={r.code} className={r.status === "ecartee" ? "text-doux" : ""}>
+              <div key={r.code} className={r.status === "rejected" ? "text-doux" : ""}>
                 <div className="flex justify-between gap-2">
                   <dt>
                     Réduction {r.code}
-                    {r.status === "ecartee" ? " (écartée)" : ""}
+                    {r.status === "rejected" ? " (écartée)" : ""}
                   </dt>
-                  <dd className="tabular-nums">{r.status === "appliquee" ? `−${formatEuros(r.amountCents)}` : "—"}</dd>
+                  <dd className="tabular-nums">{r.status === "applied" ? `−${formatEuros(r.amountCents)}` : "—"}</dd>
                 </div>
-                <p className="text-xs">{r.pattern}</p>
+                <p className="text-xs">{r.reason}</p>
               </div>
             ))}
             <div className="mt-2 flex justify-between gap-2 border-t border-bordure pt-3 text-base font-semibold">

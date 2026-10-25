@@ -147,7 +147,7 @@ describe("substitutes", () => {
     const d = await withSchool(school, (tx) => lessonAvailabilities(tx, lessons["2026-11-04"]));
     expect(d?.unavailable).toBe(true);
     // Inès is free; Lucas teaches jazz but gives Zumba at 17:30.
-    expect(d?.substitutes.map((r) => `${r.name} ${r.free} ${r.pattern} ${r.taught}`)).toEqual([
+    expect(d?.substitutes.map((r) => `${r.name} ${r.free} ${r.reason} ${r.taught}`)).toEqual([
       "Inès Prof true null false",
       "Lucas Prof false autre séance true",
     ]);

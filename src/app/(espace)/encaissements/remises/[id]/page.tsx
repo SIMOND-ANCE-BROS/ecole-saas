@@ -46,7 +46,7 @@ export default async function DepositPage({ params, searchParams }: PageProps<"/
             Bordereau de remise de {DEPOSIT_KIND[r.method]} du {day(r.date)}
           </h1>
           <p className="text-sm">
-            {r.nombre} {r.nombre > 1 ? "paiements" : "paiement"}, total{" "}
+            {r.count} {r.count > 1 ? "paiements" : "paiement"}, total{" "}
             <strong className="tabular-nums">{formatEuros(r.totalCents)}</strong>
           </p>
         </div>

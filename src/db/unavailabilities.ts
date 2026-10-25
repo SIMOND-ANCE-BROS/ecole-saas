@@ -205,7 +205,7 @@ export type Substitute = {
   id: string;
   name: string;
   free: boolean;
-  pattern: "indisponible" | "autre séance" | null;
+  reason: "indisponible" | "autre séance" | null;
   taught: boolean;
 };
 

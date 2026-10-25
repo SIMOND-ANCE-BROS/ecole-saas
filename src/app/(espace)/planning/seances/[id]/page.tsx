@@ -32,8 +32,7 @@ export default async function AttendancePage({ params }: PageProps<"/planning/se
     const options = instructors
       .map((i) => {
         const r = ranking.get(i.id);
-        const state =
-          i.id === attendance.instructorId ? "" : r?.free ? " (libre)" : r?.pattern ? ` (${r.pattern})` : "";
+        const state = i.id === attendance.instructorId ? "" : r?.free ? " (libre)" : r?.reason ? ` (${r.reason})` : "";
         return {
           id: i.id,
           name: `${i.firstName} ${i.name}${state}`,

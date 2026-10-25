@@ -5,14 +5,14 @@ import { applyFilter, type ColumnDef, type Filter, readFilter, EMPTY, toParams }
 const ENROLLMENT: ColumnDef = {
   id: "inscription",
   label: "Inscription",
-  type: "texte",
+  type: "text",
   ifEmpty: "aucune",
   choice: ["Inscrit", "À l’essai"],
 };
-const AGE: ColumnDef = { id: "age", label: "Âge", type: "nombre" };
+const AGE: ColumnDef = { id: "age", label: "Âge", type: "number" };
 const BIRTH: ColumnDef = { id: "naissance", label: "Naissance", type: "date" };
-const NAME: ColumnDef = { id: "nom", label: "Élève", type: "texte" };
-const COURSE: ColumnDef = { id: "cours", label: "Cours", type: "texte" };
+const NAME: ColumnDef = { id: "nom", label: "Élève", type: "text" };
+const COURSE: ColumnDef = { id: "cours", label: "Cours", type: "text" };
 const COLUMNS = [ENROLLMENT, AGE, BIRTH, NAME, COURSE];
 const vide: Filter = { mode: "et", conditions: [] };
 

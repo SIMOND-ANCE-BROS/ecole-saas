@@ -72,7 +72,7 @@ describe("guided creation", () => {
         student: person({ name: "Lefèvre", firstName: "Zoé", birthDate: "2015-03-10" }),
         guardian: { newPerson: person({ name: "Lefèvre", firstName: "Hélène", telephone: "06 12 34 56 78" }) },
         toNotify: true,
-        billing: { type: "responsable" },
+        billing: { type: "guardian" },
       }),
     );
     const z = await record(zoe);
@@ -81,7 +81,7 @@ describe("guided creation", () => {
       { name: "Hélène Lefèvre", toNotify: true, paysFor: true, telephone: "06 12 34 56 78" },
     ]);
     helene = z?.guardians[0].id as string;
-    expect(z?.billedTo).toEqual({ type: "personne", id: helene, name: "Hélène Lefèvre" });
+    expect(z?.billedTo).toEqual({ type: "person", id: helene, name: "Hélène Lefèvre" });
 
     const h = await withSchool(school, (tx) => readContact(tx, helene));
     expect(h).toMatchObject({
@@ -95,9 +95,12 @@ describe("guided creation", () => {
       student: person({ name: "Lefèvre", firstName: "Noé", birthDate: "2017-11-02" }),
       guardian: { newPerson: person({ name: "Lefèvre", firstName: "Hélène", telephone: "0612345678" }) },
       toNotify: true,
-      billing: { type: "responsable" as const },
+      billing: { type: "guardian" as const },
     };
-    expect(await create(noe)).toMatchObject({ status: "doublons", duplicates: [{ role: "responsable", id: helene }] });
+    expect(await create(noe)).toMatchObject({
+      status: "duplicates",
+      duplicates: [{ role: "responsable", id: helene }],
+    });
     const id = idDe(await create({ ...noe, guardian: { id: helene } }));
     expect((await record(id))?.siblings).toEqual([{ id: zoe, firstName: "Zoé" }]);
     expect((await record(zoe))?.siblings.map((f) => f.firstName)).toEqual(["Noé"]);
@@ -109,19 +112,19 @@ describe("guided creation", () => {
         student: person({ name: "Moreau", firstName: "Inès", birthDate: "1992-07-14" }),
         guardian: null,
         toNotify: false,
-        billing: { type: "eleve" },
+        billing: { type: "self" },
       }),
     );
-    expect((await record(ines))?.billedTo).toEqual({ type: "eleve" });
+    expect((await record(ines))?.billedTo).toEqual({ type: "self" });
     const lou = idDe(
       await create({
         student: person({ name: "Petit", firstName: "Lou", birthDate: "2020-01-01" }),
         guardian: null,
         toNotify: false,
-        billing: { type: "eleve" },
+        billing: { type: "self" },
       }),
     );
-    expect((await record(lou))?.billedTo).toEqual({ type: "aucun" });
+    expect((await record(lou))?.billedTo).toEqual({ type: "none" });
   });
 
   it("bills an organisation created on the fly", async () => {
@@ -131,12 +134,12 @@ describe("guided creation", () => {
         guardian: null,
         toNotify: false,
         billing: {
-          type: "autre",
-          payeur: { newPerson: person({ type: "organisation", companyName: "CSE Ateliers", siren: "123456789" }) },
+          type: "other",
+          payer: { newPerson: person({ type: "organisation", companyName: "CSE Ateliers", siren: "123456789" }) },
         },
       }),
     );
-    expect((await record(paul))?.billedTo).toMatchObject({ type: "personne", name: "CSE Ateliers" });
+    expect((await record(paul))?.billedTo).toMatchObject({ type: "person", name: "CSE Ateliers" });
     expect((await withSchool(school, (tx) => listContacts(tx, "ateliers"))).map((c) => c.students)).toEqual([["Paul"]]);
   });
 
@@ -148,7 +151,7 @@ describe("guided creation", () => {
           student: person({ name: "Seul", firstName: "Max", birthDate: "2016-01-01" }),
           guardian: { id: foreign },
           toNotify: true,
-          billing: { type: "responsable" },
+          billing: { type: "guardian" },
         },
         true,
       ),
@@ -184,13 +187,13 @@ describe("lists", () => {
 
 describe("changes from the person record", () => {
   it("changes the payer: the student herself, then her mother again", async () => {
-    expect(await withSchool(school, (tx) => setBilling(tx, zoe, { type: "eleve" }))).toEqual({
+    expect(await withSchool(school, (tx) => setBilling(tx, zoe, { type: "self" }))).toEqual({
       ok: true,
       id: zoe,
     });
-    expect((await record(zoe))?.billedTo).toEqual({ type: "aucun" }); // minor without a payer: flagged
-    await withSchool(school, (tx) => setBilling(tx, zoe, { type: "personne", id: helene }));
-    expect((await record(zoe))?.billedTo).toMatchObject({ type: "personne", id: helene });
+    expect((await record(zoe))?.billedTo).toEqual({ type: "none" }); // minor without a payer: flagged
+    await withSchool(school, (tx) => setBilling(tx, zoe, { type: "person", id: helene }));
+    expect((await record(zoe))?.billedTo).toMatchObject({ type: "person", id: helene });
   });
 
   it("reverses a relationship entered the other way round to make them the payer", async () => {
@@ -198,9 +201,9 @@ describe("changes from the person record", () => {
       await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Moreau', 'Sam') RETURNING id`;
     const [{ id: ines }] = await admin`SELECT id FROM person WHERE school_id = ${school} AND first_name = 'Inès'`;
     await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type) VALUES (${school}, ${ines}, ${conjoint}, 'partner')`;
-    await withSchool(school, (tx) => setBilling(tx, ines, { type: "personne", id: conjoint }));
+    await withSchool(school, (tx) => setBilling(tx, ines, { type: "person", id: conjoint }));
     const f = await record(ines);
-    expect(f?.billedTo).toMatchObject({ type: "personne", name: "Sam Moreau" });
+    expect(f?.billedTo).toMatchObject({ type: "person", name: "Sam Moreau" });
     expect(f?.otherRelationships).toMatchObject([{ name: "Sam Moreau", relation: "partner", paysFor: true }]);
   });
 

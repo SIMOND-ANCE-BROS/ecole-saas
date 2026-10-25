@@ -3,10 +3,10 @@ import { toggle, move, writeLayout, readLayout, place, resize } from "./layout";
 import type { ColumnDef } from "./filters";
 
 const COLUMNS: ColumnDef[] = [
-  { id: "nom", label: "Élève", type: "texte" },
-  { id: "age", label: "Âge", type: "nombre" },
-  { id: "telephone", label: "Téléphone", type: "telephone" },
-  { id: "naissance", label: "Naissance", type: "texte", byDefault: false },
+  { id: "nom", label: "Élève", type: "text" },
+  { id: "age", label: "Âge", type: "number" },
+  { id: "telephone", label: "Téléphone", type: "phone" },
+  { id: "naissance", label: "Naissance", type: "text", byDefault: false },
 ];
 const view = (d: ReturnType<typeof readLayout>) => writeLayout(d).join(" ");
 

@@ -11,7 +11,7 @@ import { Cancel } from "@/app/(espace)/_panel/panel";
 
 const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const DURATIONS = [45, 60, 90, 120];
-const NEW = "nouvelle";
+const NEW = "new";
 const shortDate = new Intl.DateTimeFormat("fr-FR", {
   weekday: "short",
   day: "numeric",
