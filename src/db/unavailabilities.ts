@@ -1,4 +1,5 @@
 import { and, asc, eq, gt, gte, inArray, lt, ne, sql } from "drizzle-orm";
+import { rowsOf } from "./columns-of";
 import { z } from "zod";
 import { conflicts, type Unavailability, lessonInterval, freeSubstitutes } from "../domain/schedule/availability";
 import { lessonDates } from "../domain/schedule/lessons";
@@ -98,13 +99,16 @@ export async function replaceCalendarUnavailabilities(
   const valid = ranges.filter((p) => p.end > p.start);
   if (valid.length > 0) {
     await tx.insert(unavailability).values(
-      valid.map((p) => ({
-        startsAt: p.start,
-        endsAt: p.end,
-        instructorId: instructorId,
-        source: source,
-        schoolId: CURRENT_SCHOOL,
-      })),
+      rowsOf(
+        unavailability,
+        valid.map((p) => ({
+          startsAt: p.start,
+          endsAt: p.end,
+          instructorId: instructorId,
+          source: source,
+          schoolId: CURRENT_SCHOOL,
+        })),
+      ),
     );
   }
   return valid.length;

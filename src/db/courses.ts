@@ -1,4 +1,5 @@
 import { and, asc, eq, or, sql } from "drizzle-orm";
+import { columnsOf, rowsOf } from "./columns-of";
 import { z } from "zod";
 import type { Tx } from "./index";
 import { hoursBySite } from "./settings";
@@ -264,7 +265,7 @@ export async function createCourse(tx: Tx, seasonId: string, entry: CourseInput)
   if (!r.ok) return r;
   const [{ id }] = await tx
     .insert(course)
-    .values({ ...r.values, schoolId: CURRENT_SCHOOL, seasonId: seasonId })
+    .values(columnsOf(course, { ...r.values, schoolId: CURRENT_SCHOOL, seasonId: seasonId }))
     .returning({ id: course.id });
   await replaceDates(tx, id, r.dates);
   return { ok: true, id };
@@ -273,7 +274,12 @@ export async function createCourse(tx: Tx, seasonId: string, entry: CourseInput)
 async function replaceDates(tx: Tx, courseId: string, dates: string[]) {
   await tx.delete(courseDate).where(eq(courseDate.courseId, courseId));
   if (dates.length > 0)
-    await tx.insert(courseDate).values(dates.map((date) => ({ schoolId: CURRENT_SCHOOL, courseId: courseId, date })));
+    await tx.insert(courseDate).values(
+      rowsOf(
+        courseDate,
+        dates.map((date) => ({ schoolId: CURRENT_SCHOOL, courseId: courseId, date })),
+      ),
+    );
 }
 
 export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Promise<Result> {
@@ -281,7 +287,7 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
   if (!existing) return { ok: false, message: "Ce cours n’existe plus." };
   const r = await values(tx, entry, existing.instructorId);
   if (!r.ok) return r;
-  await tx.update(course).set(r.values).where(eq(course.id, id));
+  await tx.update(course).set(columnsOf(course, r.values)).where(eq(course.id, id));
   await replaceDates(tx, id, r.dates);
   // New main instructor: takes over the old one's upcoming lessons, not those of a substitute.
   if (r.values.instructorId !== existing.instructorId) {

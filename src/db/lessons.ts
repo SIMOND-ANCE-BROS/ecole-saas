@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { rowsOf } from "./columns-of";
 import { z } from "zod";
 import { courseDates, type Recurrence } from "../domain/schedule/lessons";
 import type { Tx } from "./index";
@@ -152,12 +153,15 @@ export async function syncLessons(
       : await tx
           .insert(lesson)
           .values(
-            missing.map((a) => ({
-              courseId: a.courseId,
-              date: a.date,
-              instructorId: a.instructorId,
-              schoolId: CURRENT_SCHOOL,
-            })),
+            rowsOf(
+              lesson,
+              missing.map((a) => ({
+                courseId: a.courseId,
+                date: a.date,
+                instructorId: a.instructorId,
+                schoolId: CURRENT_SCHOOL,
+              })),
+            ),
           )
           .onConflictDoNothing()
           .returning({ id: lesson.id });
@@ -353,12 +357,15 @@ export async function saveAttendance(
     await tx
       .insert(attendance)
       .values(
-        rows.data.map((l) => ({
-          studentId: l.studentId,
-          present: l.present,
-          lessonId: lessonId,
-          schoolId: CURRENT_SCHOOL,
-        })),
+        rowsOf(
+          attendance,
+          rows.data.map((l) => ({
+            studentId: l.studentId,
+            present: l.present,
+            lessonId: lessonId,
+            schoolId: CURRENT_SCHOOL,
+          })),
+        ),
       )
       .onConflictDoUpdate({
         target: [attendance.lessonId, attendance.studentId],

@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { rowsOf } from "./columns-of";
 import { z } from "zod";
 import { computeTariff } from "../domain/tariff/compute";
 import type {
@@ -216,13 +217,16 @@ export async function saveEnrollment(
   const courseIds = [...new Set(entry.courseIds)];
   if (courseIds.length > 0) {
     await tx.insert(enrollmentCourse).values(
-      studentIds.flatMap((studentId) =>
-        courseIds.map((courseId) => ({
-          schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid`,
-          enrollmentId: id,
-          studentId: studentId,
-          courseId: courseId,
-        })),
+      rowsOf(
+        enrollmentCourse,
+        studentIds.flatMap((studentId) =>
+          courseIds.map((courseId) => ({
+            schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid`,
+            enrollmentId: id,
+            studentId: studentId,
+            courseId: courseId,
+          })),
+        ),
       ),
     );
   }
