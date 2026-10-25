@@ -35,9 +35,9 @@ export type CalendarColumn = { day: number; title: string; closed?: string | nul
 
 /** Response to a move: done, refused, or a choice to offer (« cette séance seulement »…). */
 export type CalendarResponse =
-  | { status: "ok"; text: string; alertes: string[] }
+  | { status: "ok"; text: string; warnings: string[] }
   | { status: "choisir"; question: string; choice: { value: string; label: string }[] }
-  | { status: "refus"; message: string };
+  | { status: "refused"; message: string };
 type Gesture =
   | { type: "deplacer" | "etirer"; id: string; x: number; y: number; origin: Slot; bouge: boolean }
   | { type: "creer"; day: number; y: number; anchor: number; bouge: boolean };
@@ -90,7 +90,7 @@ export function Calendar({
     question: string;
     choice: { value: string; label: string }[];
   } | null>(null);
-  const [message, setMessage] = useState<{ type: "ok" | "refus"; text: string; alertes: string[] } | null>(null);
+  const [message, setMessage] = useState<{ type: "ok" | "refused"; text: string; warnings: string[] } | null>(null);
   const columns = useRef(new Map<number, HTMLDivElement>());
   const justDragged = useRef(false);
 
@@ -130,19 +130,19 @@ export function Calendar({
       try {
         r = await move(id, slot, choice);
       } catch {
-        r = { status: "refus", message: "Le déplacement n’a pas pu être enregistré : réessayez." };
+        r = { status: "refused", message: "Le déplacement n’a pas pu être enregistré : réessayez." };
       }
       if (r.status === "choisir") {
         setToConfirm({ id, slot, question: r.question, choice: r.choice });
         return;
       }
       setToConfirm(null);
-      if (r.status === "refus") {
+      if (r.status === "refused") {
         setPreview(null);
-        setMessage({ type: "refus", text: r.message, alertes: [] });
+        setMessage({ type: "refused", text: r.message, warnings: [] });
         return;
       }
-      setMessage({ type: "ok", text: r.text, alertes: r.alertes });
+      setMessage({ type: "ok", text: r.text, warnings: r.warnings });
       router.refresh();
       setPreview(null);
     });
@@ -317,9 +317,9 @@ export function Calendar({
             className={`rounded-md border px-3 py-2 text-sm ${message.type === "ok" ? "border-accent bg-accent-doux" : "border-erreur text-erreur"}`}
           >
             <p>{message.text}</p>
-            {message.alertes.length > 0 && (
+            {message.warnings.length > 0 && (
               <ul className="mt-1 list-disc pl-5 text-alerte-texte">
-                {message.alertes.map((a) => (
+                {message.warnings.map((a) => (
                   <li key={a}>{a}</li>
                 ))}
               </ul>

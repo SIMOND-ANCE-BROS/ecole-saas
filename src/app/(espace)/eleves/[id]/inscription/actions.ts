@@ -19,14 +19,14 @@ const validInput = z.object({
 export type FormInput = z.infer<typeof validInput>;
 
 const NO_SEASON_MESSAGE = "Aucune saison n’est paramétrée.";
-const WITHOUT_SEASON: Preview = { status: "invalide", message: NO_SEASON_MESSAGE };
+const WITHOUT_SEASON: Preview = { status: "invalid", message: NO_SEASON_MESSAGE };
 
 /** Price preview, recomputed on the server on every change to the input. */
 export async function preview(entry: FormInput): Promise<Preview> {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
-  const donnees = validInput.safeParse(entry);
-  if (!donnees.success) return { status: "invalide", message: "Saisie invalide." };
-  const { payerId: payerId, ...rest } = donnees.data;
+  const parsed = validInput.safeParse(entry);
+  if (!parsed.success) return { status: "invalid", message: "Saisie invalide." };
+  const { payerId: payerId, ...rest } = parsed.data;
   return withSchool(schoolId, async (tx) => {
     const season = await currentSeason(tx, todayInParis());
     return season ? enrollmentPreview(tx, payerId, season.id, rest) : WITHOUT_SEASON;
@@ -36,9 +36,9 @@ export async function preview(entry: FormInput): Promise<Preview> {
 /** Saves the enrollment; when refused, returns the message to display. */
 export async function enroll(entry: FormInput): Promise<{ message: string }> {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
-  const donnees = validInput.safeParse(entry);
-  if (!donnees.success) return { message: "Saisie invalide." };
-  const { payerId: payerId, ...rest } = donnees.data;
+  const parsed = validInput.safeParse(entry);
+  if (!parsed.success) return { message: "Saisie invalide." };
+  const { payerId: payerId, ...rest } = parsed.data;
   const result = await withSchool(schoolId, async (tx) => {
     const season = await currentSeason(tx, todayInParis());
     if (!season) return { ok: false as const, message: NO_SEASON_MESSAGE };

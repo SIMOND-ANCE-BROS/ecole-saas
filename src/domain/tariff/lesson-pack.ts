@@ -16,9 +16,9 @@ export function priceLessonPack(grid: readonly LessonPackTariffRow[], request: L
   const index = bands.findIndex((l) => l.maxPeople >= peopleCount);
   if (index === -1) {
     return {
-      status: "erreur",
+      status: "error",
       error: {
-        code: "hors_grille",
+        code: "off_grid",
         message: `Aucun tarif pour ${lessonCount} cours à ${people(peopleCount)} : prix sur devis, à saisir par l’accueil.`,
       },
     };

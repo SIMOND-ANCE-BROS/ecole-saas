@@ -60,16 +60,16 @@ const seasonRow = (s: z.output<typeof validSeasonInput>) => ({
 });
 
 async function checkSeason(tx: Tx, s: z.output<typeof validSeasonInput>, except?: string): Promise<string | null> {
-  const autre = except ? ne(season.id, except) : undefined;
+  const other = except ? ne(season.id, except) : undefined;
   const [duplicate] = await tx
     .select({ id: season.id })
     .from(season)
-    .where(and(eq(season.label, s.label), autre));
+    .where(and(eq(season.label, s.label), other));
   if (duplicate) return "Une saison porte déjà ce libellé.";
   const [overlaps] = await tx
     .select({ label: season.label })
     .from(season)
-    .where(and(sql`${season.startDate} <= ${s.endDate}`, sql`${season.endDate} >= ${s.startDate}`, autre));
+    .where(and(sql`${season.startDate} <= ${s.endDate}`, sql`${season.endDate} >= ${s.startDate}`, other));
   return overlaps ? `Ces dates chevauchent la saison ${overlaps.label}.` : null;
 }
 

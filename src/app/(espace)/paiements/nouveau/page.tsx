@@ -16,15 +16,15 @@ export default async function CollectPaymentPage({ searchParams }: PageProps<"/p
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const { payeur } = await searchParams;
   const today = todayInParis();
-  const donnees =
+  const parsed =
     typeof payeur === "string"
       ? await withSchool(schoolId, async (tx) => {
           const p = await readPerson(tx, payeur);
           return p ? { p, student: await isStudent(tx, p.id), balance: await balanceOf(tx, p.id, today) } : null;
         })
       : null;
-  if (!donnees) notFound();
-  const { p, student: student, balance: balance } = donnees;
+  if (!parsed) notFound();
+  const { p, student: student, balance: balance } = parsed;
   const back = `/${student ? "eleves" : "contacts"}/${p.id}`;
 
   return (

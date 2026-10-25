@@ -74,7 +74,7 @@ export function freeSubstitutes(
   instructors: { id: string; disciplines: string[] }[],
   otherLessons: DatedLesson[],
   unavailabilities: Unavailability[],
-): { id: string; free: boolean; pattern: "indisponible" | "autre séance" | null; taught: boolean }[] {
+): { id: string; free: boolean; reason: "indisponible" | "autre séance" | null; taught: boolean }[] {
   const slot = lessonInterval(target);
   return instructors
     .filter((i) => i.id !== target.instructorId)
@@ -85,15 +85,15 @@ export function freeSubstitutes(
       const busy = otherLessons.some(
         (s) => s.id !== target.id && s.instructorId === i.id && overlaps(slot, lessonInterval(s)),
       );
-      const pattern = unavailable ? ("indisponible" as const) : busy ? ("autre séance" as const) : null;
+      const reason = unavailable ? ("indisponible" as const) : busy ? ("autre séance" as const) : null;
       return {
         id: i.id,
-        free: pattern === null,
-        pattern: pattern,
+        free: reason === null,
+        reason,
         taught: i.disciplines.includes(target.discipline),
         rank: rank,
       };
     })
     .sort((a, b) => Number(b.free) - Number(a.free) || Number(b.taught) - Number(a.taught) || a.rank - b.rank)
-    .map((r) => ({ id: r.id, free: r.free, pattern: r.pattern, taught: r.taught }));
+    .map((r) => ({ id: r.id, free: r.free, reason: r.reason, taught: r.taught }));
 }

@@ -6,7 +6,7 @@ import type {
   DiscountDetail,
   TariffRow,
   Period,
-  Public,
+  Audience,
   DiscountRule,
   EnrollmentResult,
   TariffResult,
@@ -45,8 +45,8 @@ function price(enrollment: EnrollmentRequest, request: TariffRequest): Enrollmen
   if (cours.length === 0) {
     return {
       reference,
-      status: "erreur",
-      error: { code: "aucun_cours", message: "Aucun cours choisi : impossible de déterminer le forfait." },
+      status: "error",
+      error: { code: "no_courses", message: "Aucun cours choisi : impossible de déterminer le forfait." },
     };
   }
 
@@ -55,9 +55,9 @@ function price(enrollment: EnrollmentRequest, request: TariffRequest): Enrollmen
   if (!row) {
     return {
       reference,
-      status: "erreur",
+      status: "error",
       error: {
-        code: "combinaison_absente",
+        code: "missing_combination",
         message:
           `Aucun forfait « ${PUBLIC_LABEL[enrollment.audience]} » ${PERIOD_LABEL[enrollment.period]} ` +
           `pour ${combinationLabel(combination)} : prix à saisir par l’accueil.`,
@@ -69,12 +69,12 @@ function price(enrollment: EnrollmentRequest, request: TariffRequest): Enrollmen
   let remaining = grossPriceCents;
   const discounts = request.discounts.map((rule): DiscountDetail => {
     const decision = evaluate(rule, enrollment, request.enrollments);
-    if (decision.status === "ecartee") {
-      return { code: rule.code, status: "ecartee", amountCents: 0, pattern: decision.pattern };
+    if (decision.status === "rejected") {
+      return { code: rule.code, status: "rejected", amountCents: 0, reason: decision.reason };
     }
     const amount = Math.min(discountAmount(rule, grossPriceCents), remaining);
     remaining -= amount;
-    return { code: rule.code, status: "appliquee", amountCents: amount, pattern: decision.pattern };
+    return { code: rule.code, status: "applied", amountCents: amount, reason: decision.reason };
   });
   const discountCents = grossPriceCents - remaining;
 
@@ -108,19 +108,19 @@ function findRow(
   );
 }
 
-type Decision = { status: "appliquee" | "ecartee"; pattern: string };
+type Decision = { status: "applied" | "rejected"; reason: string };
 
 function evaluate(rule: DiscountRule, enrollment: EnrollmentRequest, toutes: readonly EnrollmentRequest[]): Decision {
   if (rule.code !== "fratrie") {
-    return { status: "ecartee", pattern: "Type de réduction non pris en charge par le moteur de tarif" };
+    return { status: "rejected", reason: "Type de réduction non pris en charge par le moteur de tarif" };
   }
 
-  const eligible = (p: Public) => rule.audiences.length === 0 || rule.audiences.includes(p);
+  const eligible = (p: Audience) => rule.audiences.length === 0 || rule.audiences.includes(p);
   if (!eligible(enrollment.audience)) {
     const audiences = rule.audiences.map((p) => PUBLIC_LABEL[p]).join(", ");
     return {
-      status: "ecartee",
-      pattern: rule.audiences.length === 1 ? `Réservée au public ${audiences}` : `Réservée aux publics ${audiences}`,
+      status: "rejected",
+      reason: rule.audiences.length === 1 ? `Réservée au public ${audiences}` : `Réservée aux publics ${audiences}`,
     };
   }
 
@@ -129,14 +129,14 @@ function evaluate(rule: DiscountRule, enrollment: EnrollmentRequest, toutes: rea
   const students = new Set(toutes.filter((i) => eligible(i.audience)).flatMap((i) => i.studentIds));
   const countLabel = `${students.size} ${studentWord(rule, students.size)} du même payeur`;
   if (students.size < rule.minStudents) {
-    return { status: "ecartee", pattern: `${countLabel}, ${rule.minStudents} requis` };
+    return { status: "rejected", reason: `${countLabel}, ${rule.minStudents} requis` };
   }
 
   if (!rule.combinableWithMultiDiscipline && new Set(enrollment.courses.map((c) => c.disciplineId)).size >= 2) {
-    return { status: "ecartee", pattern: "Non cumulable avec un forfait 2 disciplines" };
+    return { status: "rejected", reason: "Non cumulable avec un forfait 2 disciplines" };
   }
 
-  return { status: "appliquee", pattern: `${countLabel} : -${value(rule)}` };
+  return { status: "applied", reason: `${countLabel} : -${value(rule)}` };
 }
 
 function discountAmount(rule: DiscountRule, priceCents: number): number {
@@ -154,7 +154,7 @@ function checkRule(rule: DiscountRule) {
 // Labels
 // ---------------------------------------------------------------------------
 
-const PUBLIC_LABEL: Record<Public, string> = {
+const PUBLIC_LABEL: Record<Audience, string> = {
   child: "enfant",
   adult: "adulte",
   couple: "couple",

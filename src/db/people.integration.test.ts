@@ -159,8 +159,8 @@ describe("readPerson", () => {
     expect(z?.relationships).toEqual([
       {
         id: expect.any(String),
-        autre: { id: helene, name: "Hélène Lefèvre", telephone: "06 12 34 56 78", email: "helene@exemple.test" },
-        sens: "vers",
+        other: { id: helene, name: "Hélène Lefèvre", telephone: "06 12 34 56 78", email: "helene@exemple.test" },
+        direction: "incoming",
         type: "legal_guardian",
         emergencyContact: true,
         paysFor: true,
@@ -183,7 +183,10 @@ describe("readPerson", () => {
     expect(z?.documents).toEqual([{ type: "medical_certificate", granted: true, validUntil: "2027-09-30" }]);
 
     const h = await withSchool(school, (tx) => readPerson(tx, helene));
-    expect(h?.relationships.map((l) => `${l.autre.name} ${l.sens}`)).toEqual(["Noé Lefèvre de", "Zoé Lefèvre de"]);
+    expect(h?.relationships.map((l) => `${l.other.name} ${l.direction}`)).toEqual([
+      "Noé Lefèvre outgoing",
+      "Zoé Lefèvre outgoing",
+    ]);
   });
 
   it("does not read a person from another school, nor an invalid id", async () => {
@@ -246,7 +249,7 @@ describe("createPerson and updatePerson", () => {
   it("flags a likely duplicate (phone without spaces), then creates on confirmation", async () => {
     const julie = { ...vide, name: "Petit", firstName: "Julie", telephone: "0612345678" };
     expect(await withSchool(school, (tx) => createPerson(tx, julie, false))).toEqual({
-      status: "doublons",
+      status: "duplicates",
       duplicates: [{ id: helene, name: "Hélène Lefèvre", telephone: "06 12 34 56 78" }],
     });
     expect((await withSchool(school, (tx) => createPerson(tx, julie, true))).status).toBe("ok");
@@ -256,7 +259,7 @@ describe("createPerson and updatePerson", () => {
     const r = await withSchool(school, (tx) =>
       createPerson(tx, { ...vide, name: "Lefèvre", firstName: "Lou", birthDate: "2021-05-04" }, false, {
         otherId: helene,
-        de: "autre",
+        source: "other",
         type: "legal_guardian",
         paysFor: true,
         emergencyContact: true,
@@ -265,7 +268,7 @@ describe("createPerson and updatePerson", () => {
     const id = r.status === "ok" ? r.id : "";
     expect((await withSchool(school, (tx) => payableStudents(tx, helene))).map((d) => d.firstName)).toContain("Lou");
     expect((await withSchool(school, (tx) => readPerson(tx, id)))?.relationships[0]).toMatchObject({
-      sens: "vers",
+      direction: "incoming",
       emergencyContact: true,
     });
   });

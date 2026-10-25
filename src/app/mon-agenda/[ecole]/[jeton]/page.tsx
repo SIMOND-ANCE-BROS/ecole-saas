@@ -30,12 +30,12 @@ const dateTime = new Intl.DateTimeFormat("fr-FR", {
 export default async function MyCalendarPage({ params, searchParams }: PageProps<"/mon-agenda/[ecole]/[jeton]">) {
   const [{ ecole, jeton }, { agenda: status }] = await Promise.all([params, searchParams]);
   if (!z.uuid().safeParse(ecole).success) notFound();
-  const donnees = await withSchool(ecole, async (tx) => {
+  const parsed = await withSchool(ecole, async (tx) => {
     const i = await tokenInstructor(tx, jeton);
     return i ? { instructor: i, connection: await connectionState(tx, i.id) } : null;
   });
-  if (!donnees) notFound();
-  const { instructor: instructor, connection: connection } = donnees;
+  if (!parsed) notFound();
+  const { instructor: instructor, connection: connection } = parsed;
   const ics = `${publicAddress()}/agenda/${ecole}/${jeton}.ics`;
   const banner = typeof status === "string" ? BANNERS[status] : undefined;
   const available = PROVIDERS.filter((f) => credentials(f));

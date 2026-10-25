@@ -27,7 +27,7 @@ export async function moveOneLesson(
   const today = todayInParis();
   const r = await withSchool(schoolId, async (tx): Promise<CalendarResponse> => {
     const d = await moveLesson(tx, lessonId, slot, scope);
-    if (d.status === "refus") return d;
+    if (d.status === "refused") return d;
     if (d.since) await syncLessons(tx, d.seasonId, today, d.since);
 
     const week = await weekLessons(tx, mondayOf(slot.date));
@@ -37,24 +37,24 @@ export async function moveOneLesson(
     const me = day.find(
       (s) => s.courseId === week.find((x) => x.id === lessonId)?.courseId && s.startTime === slot.startTime,
     );
-    const alertes: string[] = [];
+    const warnings: string[] = [];
     if (me) {
       for (const x of conflicts(me, day)) {
-        const autre = day.find((s) => s.id === x.id)!;
-        const when = `${autre.discipline} à ${autre.startTime}`;
-        alertes.push(
+        const other = day.find((s) => s.id === x.id)!;
+        const when = `${other.discipline} à ${other.startTime}`;
+        warnings.push(
           x.room && x.instructor
-            ? `${autre.room} et ${autre.instructor} déjà pris (${when})`
+            ? `${other.room} et ${other.instructor} déjà pris (${when})`
             : x.room
-              ? `${autre.room} déjà occupée (${when})`
-              : `${autre.instructor} donne déjà un cours (${when})`,
+              ? `${other.room} déjà occupée (${when})`
+              : `${other.instructor} donne déjà un cours (${when})`,
         );
       }
       const outside = outsideHours(
         { weekday: me.weekday, startTime: me.startTime, durationMinutes: me.durationMinutes },
         (await hoursBySite(tx))[me.siteId] ?? [],
       );
-      if (outside) alertes.push(outside);
+      if (outside) warnings.push(outside);
     }
     const when = `${shortDate(slot.date, true)} ${slot.startTime}–${end(slot.startTime, slot.durationMinutes)}`;
     return {
@@ -63,7 +63,7 @@ export async function moveOneLesson(
         scope === "seance"
           ? `Séance déplacée au ${when}.`
           : `Cours déplacé à partir du ${when} : les séances suivantes suivent.`,
-      alertes,
+      warnings,
     };
   });
   revalidatePath("/planning");

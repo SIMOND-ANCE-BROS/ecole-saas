@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { Siblings as SiblingsRule, LessonPackRow, GridRow, Period, Public } from "@/db/tariffs";
+import type { Siblings as SiblingsRule, LessonPackRow, GridRow, Period, Audience } from "@/db/tariffs";
 import { combinationLabel } from "@/domain/tariff/compute";
 import { formatEuros, parseEuros } from "@/lib/money";
 import { lessonPack, cellPrice, siblingsRule, removeLessonPack } from "../actions";
 
-const AUDIENCES: [Public, string][] = [
+const AUDIENCES: [Audience, string][] = [
   ["child", "Enfant"],
   ["adult", "Adulte"],
   ["couple", "Couple"],
@@ -22,7 +22,7 @@ const DURATIONS = [30, 45, 60, 75, 90, 120];
 /** Cents → euro input (« 110 », « 112,50 »), without floating-point numbers. */
 const inEuros = (c: number) => `${Math.trunc(c / 100)}${c % 100 ? `,${String(c % 100).padStart(2, "0")}` : ""}`;
 
-type State = "enregistre" | "erreur" | null;
+type State = "saved" | "error" | null;
 
 /** Price of a cell, saved when leaving the field (Enter or Tab); empty = no package. */
 function PriceCell({
@@ -47,7 +47,7 @@ function PriceCell({
     if (value.trim() === initial) return;
     const cents = value.trim() === "" ? null : parseEuros(value);
     if (value.trim() !== "" && cents === null) {
-      setState("erreur");
+      setState("error");
       setMessage("Montant en euros, par exemple 110 ou 112,50");
       return;
     }
@@ -59,7 +59,7 @@ function PriceCell({
         period: period,
         priceCents: cents,
       });
-      setState(r.message ? "erreur" : "enregistre");
+      setState(r.message ? "error" : "saved");
       setMessage(r.message);
       if (r.message) setValue(initial);
     });
@@ -71,7 +71,7 @@ function PriceCell({
         <input
           aria-label={label}
           inputMode="decimal"
-          className={`champ w-24 text-right tabular-nums ${state === "erreur" ? "border-erreur" : ""}`}
+          className={`champ w-24 text-right tabular-nums ${state === "error" ? "border-erreur" : ""}`}
           value={value}
           placeholder="—"
           disabled={inProgress}
@@ -83,7 +83,7 @@ function PriceCell({
           onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), e.currentTarget.blur())}
         />
         <span className="w-3 text-xs" aria-hidden>
-          {state === "enregistre" ? "✓" : "€"}
+          {state === "saved" ? "✓" : "€"}
         </span>
       </div>
       {current?.used && <span className="text-[11px] text-doux">déjà utilisé</span>}
@@ -105,7 +105,7 @@ export function Grid({
   grid: GridRow[];
   disciplines: { id: string; name: string }[];
 }) {
-  const [chosenAudience, setPublic] = useState<Public>("child");
+  const [chosenAudience, setAudience] = useState<Audience>("child");
   const [combination, setCombination] = useState<number[]>([]);
   const [disciplineId, setDisciplineId] = useState("");
   const [duration, setDuration] = useState("60");
@@ -167,7 +167,7 @@ export function Grid({
             role="tab"
             aria-selected={chosenAudience === p}
             className="rounded-md border border-bordure px-3 py-1.5 text-sm aria-selected:border-accent aria-selected:bg-accent-doux aria-selected:font-medium"
-            onClick={() => setPublic(p)}
+            onClick={() => setAudience(p)}
           >
             {label} <span className="text-doux">({grid.filter((l) => l.audience === p).length})</span>
           </button>
@@ -326,10 +326,10 @@ export function Siblings({
 }) {
   const [v, setV] = useState({
     active: siblings !== null,
-    mode: siblings?.amountCents ? "montant" : "taux",
+    mode: siblings?.amountCents ? "amount" : "rate",
     value: siblings?.amountCents ? inEuros(siblings.amountCents) : siblings?.rateBps ? inEuros(siblings.rateBps) : "10",
     threshold: String(siblings?.minStudents ?? 2),
-    audiences: siblings?.audiences ?? (["child"] as Public[]),
+    audiences: siblings?.audiences ?? (["child"] as Audience[]),
     combinable: siblings?.combinableWithMultiDiscipline ?? false,
   });
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
@@ -338,14 +338,14 @@ export function Siblings({
   const save = () =>
     startTransition(async () => {
       // Percentage entered as « 10 » or « 12,5 »: in basis points (1000 = 10 %), without floating-point numbers.
-      const nombre = parseEuros(v.value);
-      if (v.active && nombre === null) return setMessage({ text: "Valeur invalide.", error: true });
+      const value = parseEuros(v.value);
+      if (v.active && value === null) return setMessage({ text: "Valeur invalide.", error: true });
       const r = await siblingsRule(
         seasonId,
         v.active
           ? {
-              rateBps: v.mode === "taux" ? nombre : null,
-              amountCents: v.mode === "montant" ? nombre : null,
+              rateBps: v.mode === "rate" ? value : null,
+              amountCents: v.mode === "amount" ? value : null,
               minStudents: Number(v.threshold),
               audiences: v.audiences,
               combinableWithMultiDiscipline: v.combinable,
@@ -386,8 +386,8 @@ export function Siblings({
               value={v.mode}
               onChange={(e) => setV({ ...v, mode: e.target.value })}
             >
-              <option value="taux">% par élève</option>
-              <option value="montant">€ par élève</option>
+              <option value="rate">% par élève</option>
+              <option value="amount">€ par élève</option>
             </select>
             <div className="flex flex-col gap-1">
               <label htmlFor="fratrie-seuil">À partir de</label>

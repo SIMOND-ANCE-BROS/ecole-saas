@@ -31,7 +31,7 @@ export async function saveInstructor(id: string | null, state: FormState, f: For
     ["firstName", "name", "email", "status", "siren", "vatRegime", "payMode", "tariff"].map((n) => [n, text(f, n)]),
   );
   const rateCents = parseEuros(values.tariff);
-  const donnees = validInstructorInput.safeParse({
+  const parsed = validInstructorInput.safeParse({
     ...values,
     rateCents: rateCents ?? -1,
     isOwner: f.get("isOwner") === "on",
@@ -42,15 +42,15 @@ export async function saveInstructor(id: string | null, state: FormState, f: For
     errors: errors,
     values: { ...values, isOwner: text(f, "isOwner"), active: text(f, "active") },
   });
-  if (!donnees.success) {
+  if (!parsed.success) {
     const errors: FormState["errors"] = {};
-    for (const p of donnees.error.issues) errors[String(p.path[0])] ??= p.message;
+    for (const p of parsed.error.issues) errors[String(p.path[0])] ??= p.message;
     if (errors.rateCents) errors.tariff = "Montant en euros, par exemple 35 ou 35,50";
     return refusal(errors);
   }
 
   const result = await withSchool(schoolId, async (tx) =>
-    id === null ? createInstructor(tx, donnees.data) : (await updateInstructor(tx, id, donnees.data)) ? id : null,
+    id === null ? createInstructor(tx, parsed.data) : (await updateInstructor(tx, id, parsed.data)) ? id : null,
   );
   if (result === null) return refusal({ form: "Cet intervenant n’existe plus." });
   redirect(`/intervenants?enregistre=${result}`);

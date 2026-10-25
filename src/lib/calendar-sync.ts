@@ -41,7 +41,7 @@ export async function syncCalendar(
       end: new Date(now.getTime() + AFTER * DAY),
     };
     const ranges = await readBusyRanges(connection.provider, access, window, query);
-    const nombre = await withSchool(schoolId, async (tx) => {
+    const count = await withSchool(schoolId, async (tx) => {
       const n = await replaceCalendarUnavailabilities(tx, instructorId, connection.provider, window, ranges);
       await recordSync(tx, instructorId, {
         error: null,
@@ -49,7 +49,7 @@ export async function syncCalendar(
       });
       return n;
     });
-    return { ok: true, ranges: nombre };
+    return { ok: true, ranges: count };
   } catch (e) {
     return failure(
       e instanceof AccessRemoved ? e.message : "Synchronisation impossible pour le moment ; elle sera retentée.",

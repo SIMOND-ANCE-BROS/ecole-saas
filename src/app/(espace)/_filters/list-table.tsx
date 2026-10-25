@@ -107,7 +107,7 @@ export function ListTable({
     p.delete("order");
     if (next) {
       p.set("sort", next.column);
-      p.set("order", next.sens);
+      p.set("order", next.direction);
     }
     const text = p.toString();
     startSort(() => router.replace(text ? `${path}?${text}` : path, { scroll: false }));
@@ -251,7 +251,11 @@ export function ListTable({
                   key={d.id}
                   scope="col"
                   aria-sort={
-                    currentSort?.column === d.id ? (currentSort.sens === "asc" ? "ascending" : "descending") : undefined
+                    currentSort?.column === d.id
+                      ? currentSort.direction === "asc"
+                        ? "ascending"
+                        : "descending"
+                      : undefined
                   }
                   draggable
                   onMouseDown={(e) => {
@@ -286,8 +290,8 @@ export function ListTable({
                     def={d}
                     choice={choiceOf(d)}
                     f={f}
-                    currentSort={currentSort?.column === d.id ? currentSort.sens : null}
-                    sort={(sens) => setSort(sens ? { column: d.id, sens } : null)}
+                    currentSort={currentSort?.column === d.id ? currentSort.direction : null}
+                    sort={(direction) => setSort(direction ? { column: d.id, direction } : null)}
                     hide={
                       visible.length > 1 && !d.required ? () => changeAvailability(toggle(availability, d.id)) : null
                     }
@@ -399,7 +403,7 @@ const text = (v: CellValue) => (Array.isArray(v) ? v.join(", ") : v == null ? ""
 function CellContent({ def, value: value }: { def: ColumnDef; value: CellValue }) {
   const t = text(value);
   if (t === "") return <span className="text-doux">{def.ifEmpty ?? "—"}</span>;
-  if (def.type === "telephone") {
+  if (def.type === "phone") {
     return (
       <a href={`tel:${t.replace(/\s/g, "")}`} className="lien whitespace-nowrap tabular-nums">
         {t}
@@ -479,10 +483,10 @@ function Popover({
 }
 
 /** Labels of the two sort directions, depending on the column's kind. */
-const SENS: Record<ColumnDef["type"], [string, string]> = {
-  texte: ["De A à Z", "De Z à A"],
-  telephone: ["Croissant", "Décroissant"],
-  nombre: ["Du plus petit au plus grand", "Du plus grand au plus petit"],
+const SORT_LABELS: Record<ColumnDef["type"], [string, string]> = {
+  text: ["De A à Z", "De Z à A"],
+  phone: ["Croissant", "Décroissant"],
+  number: ["Du plus petit au plus grand", "Du plus grand au plus petit"],
   date: ["Du plus ancien au plus récent", "Du plus récent au plus ancien"],
 };
 
@@ -504,7 +508,7 @@ function TitleMenu({
   choice: readonly string[] | undefined;
   f: AddressFilter;
   currentSort: "asc" | "desc" | null;
-  sort: (sens: "asc" | "desc" | null) => void;
+  sort: (direction: "asc" | "desc" | null) => void;
   hide: (() => void) | null;
 }) {
   const fc = readColumnFilter(f.filter, def);
@@ -548,18 +552,18 @@ function TitleMenu({
       <div className="flex flex-col gap-3">
         {sortable && (
           <div role="group" aria-label="Trier" className="flex flex-col gap-1">
-            {(["asc", "desc"] as const).map((sens, i) => (
+            {(["asc", "desc"] as const).map((direction, i) => (
               <button
-                key={sens}
+                key={direction}
                 type="button"
-                aria-pressed={currentSort === sens}
-                className={`flex items-center gap-2 rounded px-2 py-1 text-left hover:bg-accent-doux ${currentSort === sens ? "bg-accent-doux font-medium text-accent" : ""}`}
-                onClick={() => sort(currentSort === sens ? null : sens)}
+                aria-pressed={currentSort === direction}
+                className={`flex items-center gap-2 rounded px-2 py-1 text-left hover:bg-accent-doux ${currentSort === direction ? "bg-accent-doux font-medium text-accent" : ""}`}
+                onClick={() => sort(currentSort === direction ? null : direction)}
               >
                 <span aria-hidden className="w-3 text-xs">
-                  {sens === "asc" ? "▲" : "▼"}
+                  {direction === "asc" ? "▲" : "▼"}
                 </span>
-                {SENS[def.type][i]}
+                {SORT_LABELS[def.type][i]}
               </button>
             ))}
           </div>
@@ -609,7 +613,7 @@ function TitleFilter({
   const id = useId();
   const [search, setSearch] = useState("");
 
-  if (def.type === "texte" && choice) {
+  if (def.type === "text" && choice) {
     const checked = fc.choice ?? [];
     const toggleChoice = (v: string) =>
       change({ choice: checked.includes(v) ? checked.filter((x) => x !== v) : [...checked, v] });
@@ -646,7 +650,7 @@ function TitleFilter({
     );
   }
 
-  if (def.type === "nombre" || def.type === "date") {
+  if (def.type === "number" || def.type === "date") {
     const date = def.type === "date";
     return (
       <div className="flex items-center gap-2">
@@ -682,7 +686,7 @@ function TitleFilter({
         type="search"
         className="champ"
         placeholder="Contient…"
-        inputMode={def.type === "telephone" ? "tel" : undefined}
+        inputMode={def.type === "phone" ? "tel" : undefined}
         value={fc.text}
         onChange={(e) => change({ text: e.target.value }, true)}
       />

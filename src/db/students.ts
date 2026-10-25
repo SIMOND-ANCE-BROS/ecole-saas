@@ -268,9 +268,9 @@ export type StudentRelative = {
   email: string | null;
   toNotify: boolean;
   paysFor: boolean;
-  relation: "responsable" | "partner" | "other";
-  /** « vers »: this relative is <relation> of the student; « de »: the student is <relation> of this relative. */
-  sens: "de" | "vers";
+  relation: "legal_guardian" | "partner" | "other";
+  /** "incoming": this relative is <relation> of the student; "outgoing": the student is <relation> of this relative. */
+  direction: "outgoing" | "incoming";
 };
 
 export type StudentRecord = Omit<PersonRecord, "relationships"> & {
@@ -278,7 +278,7 @@ export type StudentRecord = Omit<PersonRecord, "relationships"> & {
   guardians: StudentRelative[];
   otherRelationships: StudentRelative[];
   /** Who receives the invoices: the student themselves, a person, or nobody set (minor without a payer). */
-  billedTo: { type: "eleve" } | { type: "personne"; id: string; name: string } | { type: "aucun" };
+  billedTo: { type: "self" } | { type: "person"; id: string; name: string } | { type: "none" };
   /** Other students of the same payer (siblings discount). */
   siblings: { id: string; firstName: string }[];
 };
@@ -296,35 +296,37 @@ export async function readStudent(tx: Tx, id: string, today: string): Promise<St
   const [{ student: student }] = await tx.select({ student: person.isStudent }).from(person).where(eq(person.id, id));
   const relative = (l: PersonRecord["relationships"][number]): StudentRelative => ({
     relationshipId: l.id,
-    id: l.autre.id,
-    name: l.autre.name,
-    telephone: l.autre.telephone,
-    email: l.autre.email,
+    id: l.other.id,
+    name: l.other.name,
+    telephone: l.other.telephone,
+    email: l.other.email,
     toNotify: l.emergencyContact,
     paysFor: l.paysFor,
-    relation: l.type === "legal_guardian" ? "responsable" : l.type,
-    sens: l.sens,
+    relation: l.type,
+    direction: l.direction,
   });
-  const to = p.relationships.filter((l) => l.sens === "vers");
+  const to = p.relationships.filter((l) => l.direction === "incoming");
   const payer = to.find((l) => l.paysFor);
   const billedTo: StudentRecord["billedTo"] = payer
-    ? { type: "personne", id: payer.autre.id, name: payer.autre.name }
+    ? { type: "person", id: payer.other.id, name: payer.other.name }
     : adult(p.birthDate, today)
-      ? { type: "eleve" }
-      : { type: "aucun" };
+      ? { type: "self" }
+      : { type: "none" };
   const siblings =
-    billedTo.type === "personne"
+    billedTo.type === "person"
       ? (await payableStudents(tx, billedTo.id))
           .filter((d) => d.id !== id && d.id !== billedTo.id)
           .map((d) => ({ id: d.id, firstName: d.firstName }))
       : [];
-  const { relationships: liens, ...rest } = p;
+  const { relationships: relationships, ...rest } = p;
   return {
     ...rest,
     isStudent: student,
     guardians: to.filter((l) => l.type === "legal_guardian").map(relative),
     // The other relatives, and the relationships entered from the student (guardian of, partner entered on their side).
-    otherRelationships: liens.filter((l) => l.sens === "de" || l.type !== "legal_guardian").map(relative),
+    otherRelationships: relationships
+      .filter((l) => l.direction === "outgoing" || l.type !== "legal_guardian")
+      .map(relative),
     billedTo,
     siblings,
   };
@@ -347,16 +349,16 @@ export async function readContact(tx: Tx, id: string): Promise<ContactRecord | n
   const p = await readPerson(tx, id);
   if (!p) return null;
   const [{ student: student }] = await tx.select({ student: person.isStudent }).from(person).where(eq(person.id, id));
-  const { relationships: liens, ...rest } = p;
+  const { relationships: relationships, ...rest } = p;
   return {
     ...rest,
     isStudent: student,
-    students: liens
-      .filter((l) => l.sens === "de")
+    students: relationships
+      .filter((l) => l.direction === "outgoing")
       .map((l) => ({
         relationshipId: l.id,
-        id: l.autre.id,
-        name: l.autre.name,
+        id: l.other.id,
+        name: l.other.name,
         guardian: l.type === "legal_guardian",
         paysFor: l.paysFor,
         toNotify: l.emergencyContact,
@@ -376,13 +378,13 @@ export const validStudentInput = z
     guardian: otherValidPerson.nullable(),
     toNotify: z.boolean(),
     billing: z.union([
-      z.object({ type: z.literal("eleve") }),
-      z.object({ type: z.literal("responsable") }),
-      z.object({ type: z.literal("autre"), payeur: otherValidPerson }),
+      z.object({ type: z.literal("self") }),
+      z.object({ type: z.literal("guardian") }),
+      z.object({ type: z.literal("other"), payer: otherValidPerson }),
     ]),
   })
   .refine((s) => s.student.type === "individual", { path: ["student"], message: "Un élève est un particulier." })
-  .refine((s) => s.billing.type !== "responsable" || s.guardian !== null, {
+  .refine((s) => s.billing.type !== "guardian" || s.guardian !== null, {
     path: ["billing"],
     message: "Indiquez le responsable à facturer.",
   });
@@ -411,15 +413,15 @@ export async function createStudent(
   tx: Tx,
   entry: StudentInput,
   confirmed: boolean,
-): Promise<{ status: "ok"; id: string } | { status: "doublons"; duplicates: DuplicateWithRole[] }> {
+): Promise<{ status: "ok"; id: string } | { status: "duplicates"; duplicates: DuplicateWithRole[] }> {
   if (!confirmed) {
     const nextItems: [DuplicateWithRole["role"], PersonInput][] = [["élève", entry.student]];
     if (entry.guardian && "newPerson" in entry.guardian) nextItems.push(["responsable", entry.guardian.newPerson]);
-    if (entry.billing.type === "autre" && "newPerson" in entry.billing.payeur)
-      nextItems.push(["payeur", entry.billing.payeur.newPerson]);
+    if (entry.billing.type === "other" && "newPerson" in entry.billing.payer)
+      nextItems.push(["payeur", entry.billing.payer.newPerson]);
     const duplicates: DuplicateWithRole[] = [];
     for (const [role, s] of nextItems) duplicates.push(...(await likelyDuplicates(tx, s)).map((d) => ({ ...d, role })));
-    if (duplicates.length > 0) return { status: "doublons", duplicates };
+    if (duplicates.length > 0) return { status: "duplicates", duplicates };
   }
 
   const created = await createPerson(tx, entry.student, true);
@@ -435,14 +437,14 @@ export async function createStudent(
       relatedPersonId: id,
       type: "legal_guardian",
       emergencyContact: entry.toNotify,
-      paysFor: entry.billing.type === "responsable",
+      paysFor: entry.billing.type === "guardian",
     });
     if (!r.ok) throw new CreationRefusal(r.message);
   }
-  if (entry.billing.type === "autre") {
-    const payerId = await resolve(tx, entry.billing.payeur);
+  if (entry.billing.type === "other") {
+    const payerId = await resolve(tx, entry.billing.payer);
     if (!payerId) throw new CreationRefusal("Payeur introuvable.");
-    const r = await setBilling(tx, id, { type: "personne", id: payerId });
+    const r = await setBilling(tx, id, { type: "person", id: payerId });
     if (!r.ok) throw new CreationRefusal(r.message);
   }
   return { status: "ok", id };
@@ -459,15 +461,15 @@ export async function createStudent(
 export async function setBilling(
   tx: Tx,
   studentId: string,
-  target: { type: "eleve" } | { type: "personne"; id: string },
+  target: { type: "self" } | { type: "person"; id: string },
 ): Promise<Result> {
-  if (!isUuid(studentId) || (target.type === "personne" && (!isUuid(target.id) || target.id === studentId))) {
+  if (!isUuid(studentId) || (target.type === "person" && (!isUuid(target.id) || target.id === studentId))) {
     return { ok: false, message: "Choix de facturation invalide." };
   }
   const [e] = await tx.select({ id: person.id }).from(person).where(eq(person.id, studentId));
   if (!e) return { ok: false, message: "Cet élève n’existe plus." };
   await tx.update(relationship).set({ paysFor: false }).where(eq(relationship.relatedPersonId, studentId));
-  if (target.type === "eleve") return { ok: true, id: studentId };
+  if (target.type === "self") return { ok: true, id: studentId };
 
   const [direct] = await tx
     .select({ id: relationship.id })
@@ -566,5 +568,5 @@ export async function billTo(tx: Tx, studentId: string, payer: z.input<typeof ot
   const p = otherValidPerson.safeParse(payer);
   if (!p.success) return { ok: false, message: "Vérifiez les informations du payeur." };
   const id = await resolve(tx, p.data);
-  return id ? setBilling(tx, studentId, { type: "personne", id }) : { ok: false, message: "Payeur introuvable." };
+  return id ? setBilling(tx, studentId, { type: "person", id }) : { ok: false, message: "Payeur introuvable." };
 }

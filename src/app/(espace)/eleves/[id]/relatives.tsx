@@ -10,13 +10,13 @@ import { addGuardianAction, notify, removeRelative } from "../actions";
 type Props = { studentId: string; firstName: string; guardians: StudentRelative[]; other: StudentRelative[] };
 
 function nature(p: StudentRelative, firstName: string): string {
-  if (p.sens === "de")
-    return p.relation === "responsable"
+  if (p.direction === "outgoing")
+    return p.relation === "legal_guardian"
       ? `${firstName} en est responsable`
       : p.relation === "partner"
         ? "Conjoint"
         : "Proche";
-  return p.relation === "responsable" ? "Responsable légal" : p.relation === "partner" ? "Conjoint" : "Proche";
+  return p.relation === "legal_guardian" ? "Responsable légal" : p.relation === "partner" ? "Conjoint" : "Proche";
 }
 
 /** The student's guardians and relatives: « à prévenir », remove, add a guardian. */
@@ -42,7 +42,9 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
           {p.name}
         </Link>
         <span className="text-xs text-doux">{nature(p, firstName)}</span>
-        {p.paysFor && p.sens === "vers" && <span className="rounded bg-accent-doux px-1.5 text-xs">payeur</span>}
+        {p.paysFor && p.direction === "incoming" && (
+          <span className="rounded bg-accent-doux px-1.5 text-xs">payeur</span>
+        )}
         {p.telephone && (
           <span className="ml-auto">
             <Telephone number={p.telephone} />
@@ -50,7 +52,7 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
         )}
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        {p.sens === "vers" && (
+        {p.direction === "incoming" && (
           <label className="flex items-center gap-2">
             <input
               type="checkbox"

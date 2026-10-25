@@ -13,7 +13,7 @@ const ALMOST_FULL_RATE = 0.8;
 
 export default async function FrontDesk() {
   const [{ user }, { schoolId: schoolId, role }] = await Promise.all([currentSession(), schoolContext()]);
-  const donnees = await withSchool(schoolId, async (tx) => {
+  const parsed = await withSchool(schoolId, async (tx) => {
     const today = todayInParis();
     const season = await currentSeason(tx, today);
     if (!season) return null;
@@ -27,7 +27,7 @@ export default async function FrontDesk() {
   });
 
   const firstName = user.name.split(" ")[0];
-  if (!donnees) {
+  if (!parsed) {
     return (
       <section className="flex flex-col gap-2">
         <h1 className="titre-page">Bonjour {firstName}</h1>
@@ -36,7 +36,7 @@ export default async function FrontDesk() {
     );
   }
 
-  const { season: season, digits: digits, dernieres, cours, ofDay: ofDay } = donnees;
+  const { season: season, digits: digits, dernieres, cours, ofDay: ofDay } = parsed;
   const almostFull = cours
     .filter((c) => c.maxCapacity && c.enrolled / c.maxCapacity >= ALMOST_FULL_RATE)
     .sort((a, b) => b.enrolled / (b.maxCapacity ?? 1) - a.enrolled / (a.maxCapacity ?? 1));

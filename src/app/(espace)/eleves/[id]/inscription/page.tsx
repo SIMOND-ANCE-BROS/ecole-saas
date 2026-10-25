@@ -19,15 +19,11 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const { id } = await params;
   const today = todayInParis();
-  const donnees = await withSchool(schoolId, async (tx) => {
+  const parsed = await withSchool(schoolId, async (tx) => {
     const student = await readStudent(tx, id, today);
     if (!student) return null;
     const payerId =
-      student.billedTo.type === "personne"
-        ? student.billedTo.id
-        : student.billedTo.type === "eleve"
-          ? student.id
-          : null;
+      student.billedTo.type === "person" ? student.billedTo.id : student.billedTo.type === "self" ? student.id : null;
     const season = await currentSeason(tx, today);
     return {
       student: student,
@@ -37,10 +33,10 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
       courses: season ? await seasonCourses(tx, season.id) : [],
     };
   });
-  if (!donnees) notFound();
-  const { student: student, payerId: payerId, season: season, students: students, courses: cours } = donnees;
+  if (!parsed) notFound();
+  const { student: student, payerId: payerId, season: season, students: students, courses: cours } = parsed;
   const name = nomAffiche(student);
-  const payer = student.billedTo.type === "personne" ? student.billedTo.name : name;
+  const payer = student.billedTo.type === "person" ? student.billedTo.name : name;
 
   return (
     <section className="flex flex-col gap-4">

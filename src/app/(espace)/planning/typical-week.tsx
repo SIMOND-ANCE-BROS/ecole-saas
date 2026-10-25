@@ -56,18 +56,18 @@ export function TypicalWeek({
   async function moveCourse(id: string, slot: Slot, choice: string | null): Promise<CalendarResponse> {
     const c = cours.find((x) => x.id === id);
     const r = await move(id, slot, choice === "oui");
-    if (r.status === "confirmer") {
+    if (r.status === "confirm") {
       return {
         status: "choisir",
         question: `${c?.discipline} compte ${r.enrolled} élève${r.enrolled > 1 ? "s" : ""} inscrit${r.enrolled > 1 ? "s" : ""}. Passer au ${when(slot)} ? Les séances à venir suivent ; pensez à prévenir les familles.`,
         choice: [{ value: "oui", label: "Déplacer le cours" }],
       };
     }
-    if (r.status === "refus") return r;
+    if (r.status === "refused") return r;
     return {
       status: "ok",
       text: `Cours déplacé — ${c?.discipline ?? "Cours"} : ${when(slot)}.`,
-      alertes: r.alertes,
+      warnings: r.warnings,
     };
   }
 

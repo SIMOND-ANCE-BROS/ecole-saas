@@ -19,10 +19,10 @@ export type Refusal = { message: string; errors: Partial<Record<string, string>>
 /** Creates (null id) or updates a course of the current season; management only. */
 export async function saveCourse(id: string | null, entry: unknown): Promise<Refusal> {
   const { schoolId: schoolId } = await requireRole("director");
-  const donnees = validCourseInput.safeParse(entry);
-  if (!donnees.success) {
+  const parsed = validCourseInput.safeParse(entry);
+  if (!parsed.success) {
     const errors: Refusal["errors"] = {};
-    for (const p of donnees.error.issues) errors[String(p.path[0])] ??= p.message;
+    for (const p of parsed.error.issues) errors[String(p.path[0])] ??= p.message;
     return { message: "Vérifiez les champs signalés.", errors };
   }
   const today = todayInParis();
@@ -33,7 +33,7 @@ export async function saveCourse(id: string | null, entry: unknown): Promise<Ref
         ok: false as const,
         message: id !== null ? "Ce cours n’existe plus." : "Aucune saison n’est paramétrée.",
       };
-    const r = id !== null ? await updateCourse(tx, id, donnees.data) : await createCourse(tx, seasonId, donnees.data);
+    const r = id !== null ? await updateCourse(tx, id, parsed.data) : await createCourse(tx, seasonId, parsed.data);
     // Upcoming lessons recomputed in the same transaction (day changed, new course…).
     if (r.ok) await syncLessons(tx, seasonId, today);
     return r;
@@ -63,9 +63,9 @@ export async function checkSlot(
 }
 
 export type MoveResponse =
-  | { status: "ok"; alertes: string[] }
-  | { status: "confirmer"; enrolled: number }
-  | { status: "refus"; message: string };
+  | { status: "ok"; warnings: string[] }
+  | { status: "confirm"; enrolled: number }
+  | { status: "refused"; message: string };
 
 const shortDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
 
@@ -81,16 +81,16 @@ export async function move(courseId: string, slot: unknown, confirmed: boolean):
     const d = await moveCourse(tx, courseId, slot as Parameters<typeof moveCourse>[2], confirmed);
     if (d.status !== "ok") return d;
     const c = await readCourse(tx, courseId);
-    if (!c) return { status: "refus" as const, message: "Ce cours n’existe plus." };
+    if (!c) return { status: "refused" as const, message: "Ce cours n’existe plus." };
     await syncLessons(tx, c.seasonId, today);
     const schedule = await seasonCourses(tx, c.seasonId);
     const me = schedule.find((p) => p.id === courseId);
-    const alertes = me
+    const warnings = me
       ? conflicts(me, schedule).map((x) => {
-          const autre = schedule.find((p) => p.id === x.id)!;
-          const when = `${autre.discipline}, ${SHORT_DAYS[autre.weekday ?? 0]} ${autre.startTime}`;
-          if (x.room && x.instructor) return `${autre.room} et ${autre.instructor} déjà pris (${when})`;
-          return x.room ? `${autre.room} déjà occupée (${when})` : `${autre.instructor} donne déjà un cours (${when})`;
+          const other = schedule.find((p) => p.id === x.id)!;
+          const when = `${other.discipline}, ${SHORT_DAYS[other.weekday ?? 0]} ${other.startTime}`;
+          if (x.room && x.instructor) return `${other.room} et ${other.instructor} déjà pris (${when})`;
+          return x.room ? `${other.room} déjà occupée (${when})` : `${other.instructor} donne déjà un cours (${when})`;
         })
       : [];
     if (me && c.weekday) {
@@ -98,7 +98,7 @@ export async function move(courseId: string, slot: unknown, confirmed: boolean):
         { weekday: c.weekday, startTime: c.startTime, durationMinutes: c.durationMinutes },
         (await hoursBySite(tx))[me.siteId] ?? [],
       );
-      if (outside) alertes.push(outside);
+      if (outside) warnings.push(outside);
     }
     if (c.weekday) {
       const dates = await slotConflicts(
@@ -113,7 +113,7 @@ export async function move(courseId: string, slot: unknown, confirmed: boolean):
         today,
       );
       if (dates.length > 0) {
-        alertes.push(
+        warnings.push(
           `Intervenant indisponible le ${dates
             .slice(0, 4)
             .map((x) => shortDate.format(new Date(`${x}T00:00:00Z`)))
@@ -121,7 +121,7 @@ export async function move(courseId: string, slot: unknown, confirmed: boolean):
         );
       }
     }
-    return { status: "ok" as const, alertes };
+    return { status: "ok" as const, warnings };
   });
   revalidatePath("/planning");
   return r;

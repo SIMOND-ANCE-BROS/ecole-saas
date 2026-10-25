@@ -14,7 +14,7 @@ export async function createContact(entry: unknown, confirmed: boolean): Promise
   const p = validPersonInput.safeParse(entry);
   if (!p.success) return { message: "Vérifiez les champs signalés.", errors: errorsOf(p.error.issues) };
   const r = await withSchool(schoolId, (tx) => createPerson(tx, p.data, confirmed));
-  if (r.status === "doublons")
+  if (r.status === "duplicates")
     return { message: "Cette personne existe peut-être déjà.", errors: {}, duplicates: r.duplicates };
   redirect(`/contacts/${r.id}?enregistre=cree`);
 }

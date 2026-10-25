@@ -18,13 +18,13 @@ const DEPOSIT_KIND = { cheque: "chèques", cash: "espèces", holiday_voucher: "c
 export default async function DepositPage({ params, searchParams }: PageProps<"/encaissements/remises/[id]">) {
   const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
   const [{ id }, { cree }] = await Promise.all([params, searchParams]);
-  const donnees = await withSchool(schoolId, async (tx) => {
+  const parsed = await withSchool(schoolId, async (tx) => {
     const r = await readDeposit(tx, id);
     const [e] = await tx.select({ name: school.name }).from(school).where(eq(school.id, schoolId));
     return r ? { r, school: e?.name ?? "" } : null;
   });
-  if (!donnees) notFound();
-  const { r } = donnees;
+  if (!parsed) notFound();
+  const { r } = parsed;
 
   return (
     <article className="flex flex-col gap-4">
@@ -41,12 +41,12 @@ export default async function DepositPage({ params, searchParams }: PageProps<"/
       )}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm text-doux">{donnees.school}</p>
+          <p className="text-sm text-doux">{parsed.school}</p>
           <h1 className="titre-page">
             Bordereau de remise de {DEPOSIT_KIND[r.method]} du {day(r.date)}
           </h1>
           <p className="text-sm">
-            {r.nombre} {r.nombre > 1 ? "paiements" : "paiement"}, total{" "}
+            {r.count} {r.count > 1 ? "paiements" : "paiement"}, total{" "}
             <strong className="tabular-nums">{formatEuros(r.totalCents)}</strong>
           </p>
         </div>

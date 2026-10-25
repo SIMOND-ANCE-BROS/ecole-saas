@@ -28,7 +28,7 @@ function condition(c: Condition, def: ColumnDef, e: ColumnExpression): SQL | und
   const v = normalizedValue(c, def.type);
   if (v === null) return undefined;
 
-  if (def.type === "nombre") {
+  if (def.type === "number") {
     const n = sql`(${e.sql})::numeric`;
     switch (c.operator) {
       case "vide":
@@ -76,7 +76,7 @@ function condition(c: Condition, def: ColumnDef, e: ColumnExpression): SQL | und
 
   const raw = e.list ? sql`array_to_string(${e.sql}, ', ')` : sql`(${e.sql})::text`;
   const t =
-    def.type === "telephone"
+    def.type === "phone"
       ? sql`regexp_replace(coalesce(${raw}, ''), '[^0-9]', '', 'g')`
       : normalize(sql`coalesce(${raw}, '')`);
   // A list "is" X if one of its items equals X.
@@ -147,10 +147,10 @@ export function columnOrder(
   const e = currentSort && expressions[currentSort.column];
   if (!currentSort || !def || !e || def.sortable === false) return undefined;
   const key =
-    def.type === "nombre"
+    def.type === "number"
       ? sql`(${e.sql})::numeric`
       : def.type === "date"
         ? sql`(${e.sql})::date`
         : sql`nullif(${normalize(e.list ? sql`array_to_string(${e.sql}, ', ')` : sql`(${e.sql})::text`)}, '')`;
-  return currentSort.sens === "desc" ? sql`${key} DESC NULLS LAST` : sql`${key} ASC NULLS LAST`;
+  return currentSort.direction === "desc" ? sql`${key} DESC NULLS LAST` : sql`${key} ASC NULLS LAST`;
 }

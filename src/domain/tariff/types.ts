@@ -4,13 +4,13 @@
  * Amounts in cents, rates in basis points (1000 = 10 %).
  */
 
-export type Public = "child" | "adult" | "couple" | "student";
+export type Audience = "child" | "adult" | "couple" | "student";
 export type Period = "quarter" | "year" | "single";
 
 /** One cell of the tariff grid (table `tariff`). */
 export type TariffRow = {
   id: string;
-  audience: Public;
+  audience: Audience;
   period: Period;
   /** Durations of the week's courses, in minutes, in any order. */
   combination: readonly number[];
@@ -28,7 +28,7 @@ export type DiscountRule = {
   /** Minimum number of eligible students of the same payer. */
   minStudents: number;
   /** Eligible audiences; empty = all. */
-  audiences: readonly Public[];
+  audiences: readonly Audience[];
   /** false: rejected on a package whose courses belong to at least 2 disciplines. */
   combinableWithMultiDiscipline: boolean;
 };
@@ -41,7 +41,7 @@ export type EnrollmentRequest = {
   reference: string;
   /** One student, or two for a couple. */
   studentIds: readonly string[];
-  audience: Public;
+  audience: Audience;
   period: Period;
   courses: readonly ChosenCourse[];
 };
@@ -55,15 +55,15 @@ export type TariffRequest = {
 
 export type DiscountDetail = {
   code: string;
-  status: "appliquee" | "ecartee";
+  status: "applied" | "rejected";
   /** 0 if rejected. */
   amountCents: number;
   /** Explanation for the front desk. */
-  pattern: string;
+  reason: string;
 };
 
 export type TariffError = {
-  code: "aucun_cours" | "combinaison_absente";
+  code: "no_courses" | "missing_combination";
   message: string;
 };
 
@@ -79,7 +79,7 @@ export type EnrollmentResult =
       discountCents: number;
       netPriceCents: number;
     }
-  | { reference: string; status: "erreur"; error: TariffError };
+  | { reference: string; status: "error"; error: TariffError };
 
 // ---------------------------------------------------------------------------
 // Private lesson packs
@@ -104,7 +104,7 @@ export type LessonPackResult =
       label: string;
       priceCents: number;
     }
-  | { status: "erreur"; error: { code: "hors_grille"; message: string } };
+  | { status: "error"; error: { code: "off_grid"; message: string } };
 
 export type TariffResult = {
   enrollments: EnrollmentResult[];

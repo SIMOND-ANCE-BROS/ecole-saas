@@ -64,9 +64,9 @@ export function resize(d: Layout, id: string, width: number | null): Layout {
 }
 
 /** Moves a column one step (-1: to the left, +1: to the right). */
-export function move(d: Layout, id: string, sens: -1 | 1): Layout {
+export function move(d: Layout, id: string, direction: -1 | 1): Layout {
   const i = d.findIndex((c) => c.id === id);
-  const j = i + sens;
+  const j = i + direction;
   if (i === -1 || j < 0 || j >= d.length) return d;
   const r = [...d];
   [r[i], r[j]] = [r[j], r[i]];

@@ -29,7 +29,7 @@ const shortDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "sho
 export default async function CoursePage({ params, searchParams }: PageProps<"/planning/cours/[id]">) {
   const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
   const [{ id }, { modifie }] = await Promise.all([params, searchParams]);
-  const donnees = await withSchool(schoolId, async (tx) => {
+  const parsed = await withSchool(schoolId, async (tx) => {
     const course = await scheduleCourse(tx, id);
     return course
       ? {
@@ -40,8 +40,8 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
         }
       : null;
   });
-  if (!donnees) notFound();
-  const { cours, enrolled: enrolled, lessons: lessons, inConflict: inConflict } = donnees;
+  if (!parsed) notFound();
+  const { cours, enrolled: enrolled, lessons: lessons, inConflict: inConflict } = parsed;
   const today = todayInParis();
 
   const active = enrolled.filter((i) => i.status === "active").length;

@@ -142,9 +142,9 @@ export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number];
 export type RelationshipItem = {
   id: string;
   /** The other person of the relationship. */
-  autre: { id: string; name: string; telephone: string | null; email: string | null };
-  /** « de »: the record's person is <type> of the other; « vers »: the other is <type> of them. */
-  sens: "de" | "vers";
+  other: { id: string; name: string; telephone: string | null; email: string | null };
+  /** "outgoing": the record's person is <type> of the other; "incoming": the other is <type> of them. */
+  direction: "outgoing" | "incoming";
   type: RelationshipType;
   emergencyContact: boolean;
   paysFor: boolean;
@@ -206,7 +206,7 @@ export async function readPerson(tx: Tx, id: string): Promise<PersonRecord | nul
     .where(eq(person.id, id));
   if (!p) return null;
 
-  const autre = alias(person, "autre");
+  const other = alias(person, "other");
   const relationships = await tx
     .select({
       id: relationship.id,
@@ -214,20 +214,20 @@ export async function readPerson(tx: Tx, id: string): Promise<PersonRecord | nul
       type: relationship.type,
       emergencyContact: relationship.emergencyContact,
       paysFor: relationship.paysFor,
-      otherId: autre.id,
-      name: autre.lastName,
-      firstName: autre.firstName,
-      companyName: autre.companyName,
-      telephone: autre.phone,
-      email: autre.email,
+      otherId: other.id,
+      name: other.lastName,
+      firstName: other.firstName,
+      companyName: other.companyName,
+      telephone: other.phone,
+      email: other.email,
     })
     .from(relationship)
     .innerJoin(
-      autre,
-      sql`${autre.id} = CASE WHEN ${relationship.personId} = ${id} THEN ${relationship.relatedPersonId} ELSE ${relationship.personId} END`,
+      other,
+      sql`${other.id} = CASE WHEN ${relationship.personId} = ${id} THEN ${relationship.relatedPersonId} ELSE ${relationship.personId} END`,
     )
     .where(or(eq(relationship.personId, id), eq(relationship.relatedPersonId, id)))
-    .orderBy(asc(autre.firstName), asc(autre.lastName));
+    .orderBy(asc(other.firstName), asc(other.lastName));
 
   const followed = await tx
     .select({
@@ -260,8 +260,8 @@ export async function readPerson(tx: Tx, id: string): Promise<PersonRecord | nul
     ...p,
     relationships: relationships.map((l) => ({
       id: l.id,
-      autre: { id: l.otherId, name: displayedName(l), telephone: l.telephone, email: l.email },
-      sens: l.personId === id ? "de" : "vers",
+      other: { id: l.otherId, name: displayedName(l), telephone: l.telephone, email: l.email },
+      direction: l.personId === id ? "outgoing" : "incoming",
       type: l.type,
       emergencyContact: l.emergencyContact,
       paysFor: l.paysFor,
@@ -400,29 +400,29 @@ export type NewRelationship = { type: RelationshipType; emergencyContact: boolea
 export class RelationshipRefusal extends Error {}
 
 /**
- * Creates a person, optionally linked straight away to another (`de`: who is
- * <type> of whom; « nouvelle » means the created person). Without `confirmed`,
+ * Creates a person, optionally linked straight away to another (`source`: who is
+ * <type> of whom; "new" means the created person). Without `confirmed`,
  * first returns the likely duplicates.
  */
 export async function createPerson(
   tx: Tx,
   entry: PersonInput,
   confirmed: boolean,
-  relationshipWith?: NewRelationship & { otherId: string; de: "nouvelle" | "autre" },
-): Promise<{ status: "ok"; id: string } | { status: "doublons"; duplicates: Duplicate[] }> {
+  relationshipWith?: NewRelationship & { otherId: string; source: "new" | "other" },
+): Promise<{ status: "ok"; id: string } | { status: "duplicates"; duplicates: Duplicate[] }> {
   if (!confirmed) {
     const duplicates = await likelyDuplicates(tx, entry);
-    if (duplicates.length > 0) return { status: "doublons", duplicates };
+    if (duplicates.length > 0) return { status: "duplicates", duplicates };
   }
   const [{ id }] = await tx
     .insert(person)
     .values({ ...personValues(entry), schoolId: CURRENT_SCHOOL })
     .returning({ id: person.id });
   if (relationshipWith) {
-    const { otherId: otherId, de, ...l } = relationshipWith;
+    const { otherId, source, ...l } = relationshipWith;
     const r = await addRelationship(
       tx,
-      de === "nouvelle"
+      source === "new"
         ? { ...l, personId: id, relatedPersonId: otherId }
         : { ...l, personId: otherId, relatedPersonId: id },
     );

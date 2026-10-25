@@ -30,7 +30,7 @@ export function useAddressFilter(columns: ColumnDef[]) {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  const typeDe = (column: string) => columns.find((c) => c.id === column)?.type ?? "texte";
+  const typeDe = (column: string) => columns.find((c) => c.id === column)?.type ?? "text";
   const complete = (c: Condition) => normalizedValue(c, typeDe(c.column)) !== null;
 
   function publish(f: Filter, deferred = false) {

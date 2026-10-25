@@ -32,12 +32,12 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
   const [{ id }, { enregistre, inscription, encaisse }] = await Promise.all([params, searchParams]);
   const today = todayInParis();
-  const donnees = await withSchool(schoolId, async (tx) => {
+  const parsed = await withSchool(schoolId, async (tx) => {
     const student = await readStudent(tx, id, today);
     if (!student) return null;
     const season = await currentSeason(tx, today);
     // An adult student who pays for themself sees their invoiced enrollments here.
-    const paysForThemselves = student.billedTo.type !== "personne";
+    const paysForThemselves = student.billedTo.type !== "person";
     return {
       student: student,
       season: season,
@@ -46,8 +46,8 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
       payments: paysForThemselves ? await paymentsOf(tx, student.id) : [],
     };
   });
-  if (!donnees) notFound();
-  const { student: e, season: season, billed, balance: balance, payments: payments } = donnees;
+  if (!parsed) notFound();
+  const { student: e, season: season, billed, balance: balance, payments: payments } = parsed;
 
   const name = nomAffiche(e);
   const firstName = e.firstName ?? name;
@@ -55,7 +55,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   const minor = age !== null && age < 18;
   const urgences = e.guardians
     .filter((r) => r.toNotify)
-    .concat(e.otherRelationships.filter((a) => a.toNotify && a.sens === "vers"));
+    .concat(e.otherRelationships.filter((a) => a.toNotify && a.direction === "incoming"));
   const banner = BANNERS[String(inscription ?? enregistre)];
 
   return (
@@ -117,7 +117,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             firstName={firstName}
             minor={minor}
             billedTo={e.billedTo}
-            relatives={[...e.guardians, ...e.otherRelationships.filter((a) => a.sens === "vers")]}
+            relatives={[...e.guardians, ...e.otherRelationships.filter((a) => a.direction === "incoming")]}
             siblings={e.siblings}
           />
           <section aria-labelledby="coordonnees" className="panneau flex flex-col gap-1 p-4 text-sm">
@@ -140,7 +140,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           <Relatives studentId={e.id} firstName={firstName} guardians={e.guardians} other={e.otherRelationships} />
           <FollowedCourses courses={e.courses} />
           {season && <BilledEnrollments enrollments={billed} season={season.label} />}
-          {e.billedTo.type === "personne" ? (
+          {e.billedTo.type === "person" ? (
             <p className="text-sm text-doux">
               Paiements : sur la fiche de{" "}
               <Link href={`/contacts/${e.billedTo.id}`} className="lien">
