@@ -9,6 +9,16 @@ export const ROLE_VALUES = ["director", "front_desk", "teacher"] as const;
 export type Role = (typeof ROLE_VALUES)[number];
 export type TeamMember = { id: string; role: Role; active: boolean };
 
+/** Role names shown to the user. */
+export const ROLE_LABELS: Record<Role, string> = {
+  director: "Direction",
+  front_desk: "Accueil",
+  teacher: "Professeur",
+};
+
+/** Roles that can be given today; teacher accounts will come later (#22). */
+export const INVITABLE_ROLES = ["front_desk", "director"] as const satisfies readonly Role[];
+
 /** Refusal message for a change of role or active status, or null if it is allowed. */
 export function changeRefusal(
   members: TeamMember[],

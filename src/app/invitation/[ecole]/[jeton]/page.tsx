@@ -6,7 +6,12 @@ import { openLink } from "@/lib/invitations";
 import { submitLink } from "./actions";
 import { LinkForm } from "./link-form";
 
-export const metadata: Metadata = { title: "Accès à l’école", robots: { index: false, follow: false } };
+// no-referrer: the token is in the path; it must not follow a click to another site.
+export const metadata: Metadata = {
+  title: "Accès à l’école",
+  robots: { index: false, follow: false },
+  referrer: "no-referrer",
+};
 
 /**
  * Invitation or reset link (#104), opened without being signed in: the

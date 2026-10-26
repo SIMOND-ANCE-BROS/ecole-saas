@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Équipe" };
 
 /** Who can sign in to the school, and with which role (#104). Management only. */
 export default async function TeamPage() {
-  const { schoolId: schoolId, userId } = await requireRole("director");
+  const { schoolId, userId } = await requireRole("director");
   const now = new Date();
   const { members, invitations } = await withSchool(schoolId, async (tx) => ({
     members: await listMembers(tx),

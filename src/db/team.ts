@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
-import { changeRefusal, ROLE_VALUES, type Role } from "../domain/team/rules";
+import { changeRefusal, INVITABLE_ROLES, ROLE_VALUES, type Role } from "../domain/team/rules";
 import type { Tx } from "./index";
 import { school, invitation, auditLog, member, user } from "./schema";
 
@@ -20,10 +20,6 @@ const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const DAY = 86_400_000;
 export const INVITATION_DURATION = 7 * DAY;
 export const RESET_DURATION = DAY;
-
-/** Roles that can be given today; teacher accounts will come later (#22). */
-export const INVITABLE_ROLES = { director: "Direction", front_desk: "Accueil" } as const;
-export const ROLES = { ...INVITABLE_ROLES, teacher: "Professeur" } as const;
 
 export type Result = { ok: true; id: string } | { ok: false; message: string };
 export type RelationshipResult = { ok: true; id: string; token: string } | { ok: false; message: string };
@@ -52,6 +48,15 @@ async function elsewhereAccount(tx: Tx, userId: string): Promise<boolean> {
   await tx.execute(sql`select set_config('app.user_id', '', true)`);
   return n > 0;
 }
+/**
+ * A link only works while its author is still an active director: one who
+ * leaves management (deactivated, or another role) cannot keep a way in.
+ * Checked when the link is opened and again when it is used.
+ */
+const AUTHOR_STILL_DIRECTOR = sql`${invitation.createdBy} IN (
+  SELECT ${member.id} FROM ${member} WHERE ${member.active} AND ${member.role} = 'director'
+)`;
+
 export const SHARED =
   "Ce compte sert aussi dans une autre école : la personne doit changer elle-même son mot de passe.";
 
@@ -100,7 +105,7 @@ export function pendingInvitations(tx: Tx, now: Date): Promise<PendingInvitation
 export const validInvitation = z.object({
   email: z.email("E-mail invalide").trim().toLowerCase().max(200),
   name: z.string().trim().min(1, "Nom obligatoire").max(100),
-  role: z.enum(Object.keys(INVITABLE_ROLES) as [keyof typeof INVITABLE_ROLES]),
+  role: z.enum(INVITABLE_ROLES),
 });
 
 /** Invites a person; an invitation still open for the same e-mail is replaced. */
@@ -165,6 +170,10 @@ export async function updateMember(
   if (refusal) return { ok: false, message: refusal };
   const before = team.find((m) => m.id === memberId)!;
   await tx.update(member).set({ role: after.role, active: after.active }).where(eq(member.id, memberId));
+  if (!after.active || after.role !== "director") {
+    // Their links stop working anyway (AUTHOR_STILL_DIRECTOR): removed so they leave the pending list too.
+    await tx.delete(invitation).where(and(eq(invitation.createdBy, memberId), isNull(invitation.usedAt)));
+  }
   await tx.insert(auditLog).values({
     schoolId: CURRENT_SCHOOL,
     actor: who,
@@ -238,7 +247,14 @@ export async function readRelationship(tx: Tx, token: string, now: Date): Promis
     })
     .from(invitation)
     .innerJoin(school, eq(school.id, invitation.schoolId))
-    .where(and(eq(invitation.tokenHash, hash(token)), isNull(invitation.usedAt), gt(invitation.expiresAt, now)));
+    .where(
+      and(
+        eq(invitation.tokenHash, hash(token)),
+        isNull(invitation.usedAt),
+        gt(invitation.expiresAt, now),
+        AUTHOR_STILL_DIRECTOR,
+      ),
+    );
   return l ?? null;
 }
 
@@ -256,7 +272,7 @@ export async function consumeLink(
   const badge = await tx
     .update(invitation)
     .set({ usedAt: sql`now()` })
-    .where(and(eq(invitation.id, relationship.id), isNull(invitation.usedAt)))
+    .where(and(eq(invitation.id, relationship.id), isNull(invitation.usedAt), AUTHOR_STILL_DIRECTOR))
     .returning({ id: invitation.id });
   if (badge.length !== 1) return "expire";
   if (relationship.type === "invitation" && relationship.role) {

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { acceptLink, openLink } from "@/lib/invitations";
 import { clearAttempts, LIMITS, recordAttempt, trustedIp } from "@/lib/sign-in-limit";
+import type { BANNERS } from "@/app/connexion/banners";
 import { LINK } from "./fields";
 
 export type LinkState = { error: string | null };
@@ -34,5 +35,6 @@ export async function submitLink(schoolId: string, token: string, _s: LinkState,
   });
   if (!r.ok) return { error: r.message };
   if (confirming) await clearAttempts(link.email, ip);
-  redirect(`/connexion?lien=${r.type === "reset" ? "mot-de-passe" : "acces"}`);
+  const banner: keyof typeof BANNERS = r.type === "reset" ? "mot-de-passe" : "acces";
+  redirect(`/connexion?lien=${banner}`);
 }
