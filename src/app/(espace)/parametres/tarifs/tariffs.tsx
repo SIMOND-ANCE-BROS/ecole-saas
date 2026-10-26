@@ -61,7 +61,8 @@ function PriceCell({
       });
       setState(r.message ? "error" : "saved");
       setMessage(r.message);
-      if (r.message) setValue(initial);
+      // Show the saved amount as the grid writes it (« 110 » becomes « 110,00 »).
+      setValue(r.message ? initial : cents === null ? "" : inEuros(cents));
     });
   };
 
@@ -210,7 +211,7 @@ export function Grid({
                     )}
                   </td>
                   {PERIODS.map(([p, periodLabel]) => (
-                    <td key={`${key}-${p}-${l.price[p]?.cents ?? "vide"}`}>
+                    <td key={`${key}-${p}`}>
                       <PriceCell seasonId={seasonId} row={l} period={p} label={`${label}, ${periodLabel}`} />
                     </td>
                   ))}

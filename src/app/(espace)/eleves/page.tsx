@@ -74,7 +74,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
         <Suspense>
           <ListTable
             list="eleves"
-            what="les élèves"
+            what="des élèves"
             caption="Élèves"
             columns={STUDENT_COLUMNS}
             layout={layout}

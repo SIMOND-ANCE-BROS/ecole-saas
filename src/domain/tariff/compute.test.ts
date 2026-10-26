@@ -148,7 +148,7 @@ describe("siblings discount (Ribas: -10 % from 2 children, not combinable with 2
       code: "fratrie",
       status: "applied",
       amountCents: 1100,
-      reason: "2 enfants du même payeur : -10 %",
+      reason: "2 enfants du même payeur : −10 %",
     });
     expect(ok(b)).toMatchObject({ discountCents: 850, netPriceCents: 7650 });
     expect(result).toMatchObject({
@@ -173,7 +173,7 @@ describe("siblings discount (Ribas: -10 % from 2 children, not combinable with 2
   it("applies it to all three children of three siblings", () => {
     const result = ribas(enrollment({}), enrollment({}), enrollment({}));
     expect(result.enrollments.map((r) => siblings(r)?.status)).toEqual(["applied", "applied", "applied"]);
-    expect(siblings(result.enrollments[2])?.reason).toBe("3 enfants du même payeur : -10 %");
+    expect(siblings(result.enrollments[2])?.reason).toBe("3 enfants du même payeur : −10 %");
     expect(result.netTotalCents).toBe(3 * 9900);
   });
 
@@ -257,7 +257,7 @@ describe("nothing is specific to one school", () => {
     });
     expect(result.enrollments.map((r) => ok(r).discountCents)).toEqual([1235, 1235]);
     expect(result).toMatchObject({ totalDiscountCents: 2470, netTotalCents: 2 * 12345 - 2470 });
-    expect(siblings(result.enrollments[0])?.reason).toBe("2 danseurs du même payeur : -10 %");
+    expect(siblings(result.enrollments[0])?.reason).toBe("2 danseurs du même payeur : −10 %");
   });
 
   it("applies a fixed amount, capped at the price", () => {
@@ -267,7 +267,7 @@ describe("nothing is specific to one school", () => {
       enrollments: [adult(), adult("single")],
     }).enrollments;
     expect(ok(yearly)).toMatchObject({ discountCents: 2000, netPriceCents: 10345 });
-    expect(siblings(yearly)?.reason).toBe(`2 danseurs du même payeur : -${formatEuros(2000)}`);
+    expect(siblings(yearly)?.reason).toBe(`2 danseurs du même payeur : −${formatEuros(2000)}`);
     expect(ok(single)).toMatchObject({ discountCents: 1500, netPriceCents: 0 });
   });
 
