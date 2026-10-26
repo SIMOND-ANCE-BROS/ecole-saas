@@ -7,7 +7,8 @@ import { createCourse, moveCourse, readCourse, updateCourse, validCourseInput, d
 import { slotConflicts } from "@/db/unavailabilities";
 import { hoursBySite } from "@/db/settings";
 import { seasonCourses, currentSeason } from "@/db/schedule";
-import { syncLessons } from "@/db/lessons";
+import { seasonCalendar, syncLessons } from "@/db/lessons";
+import { lessonDatesOf } from "@/domain/schedule/lessons";
 import { conflicts } from "@/domain/schedule/overlap";
 import { outsideHours } from "@/domain/schedule/hours";
 import { SHORT_DAYS } from "@/domain/schedule/days";
@@ -84,7 +85,11 @@ export async function move(courseId: string, slot: unknown, confirmed: boolean):
     const c = await readCourse(tx, courseId);
     if (!c) return { status: "refused" as const, message: "Ce cours n’existe plus." };
     await syncLessons(tx, c.seasonId, today);
-    const schedule = await seasonCourses(tx, c.seasonId);
+    const calendar = await seasonCalendar(tx, c.seasonId);
+    const schedule = (await seasonCourses(tx, c.seasonId)).map((p) => ({
+      ...p,
+      lessonDates: calendar ? lessonDatesOf(p, calendar) : undefined,
+    }));
     const me = schedule.find((p) => p.id === courseId);
     const warnings = me
       ? conflicts(me, schedule).map((x) => {

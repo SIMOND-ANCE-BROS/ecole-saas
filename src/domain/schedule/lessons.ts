@@ -36,6 +36,29 @@ export type Recurrence =
   | { type: "weekly" | "biweekly"; weekday: number; startDate: string | null; endDate: string | null }
   | { type: "dates"; dates: string[] };
 
+/** Recurrence of a stored course (`dates`: its one-off dates). */
+export function recurrenceOf(c: {
+  recurrence: "weekly" | "biweekly" | "dates";
+  weekday: number | null;
+  startDate: string | null;
+  endDate: string | null;
+  dates: string[];
+}): Recurrence | null {
+  if (c.recurrence === "dates") return { type: "dates", dates: c.dates };
+  return c.weekday === null
+    ? null
+    : { type: c.recurrence, weekday: c.weekday, startDate: c.startDate, endDate: c.endDate };
+}
+
+/** What lesson dates are computed from: the season and its closures. */
+export type SeasonCalendar = { period: Period; closures: Period[] };
+
+/** Lesson dates of a stored course; undefined without a recurrence (regular course without a day). */
+export function lessonDatesOf(c: Parameters<typeof recurrenceOf>[0], calendar: SeasonCalendar): string[] | undefined {
+  const r = recurrenceOf(c);
+  return r ? courseDates(r, calendar.period, calendar.closures) : undefined;
+}
+
 /**
  * Lesson dates of a course in the season. A closure removes the lesson of a
  * regular course without shifting the alternation of an "every other week"

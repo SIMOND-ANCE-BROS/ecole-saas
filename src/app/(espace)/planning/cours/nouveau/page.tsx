@@ -3,6 +3,7 @@ import Link from "next/link";
 import { withSchool } from "@/db";
 import { scheduleReferential } from "@/db/courses";
 import { seasonCourses, currentSeason } from "@/db/schedule";
+import { seasonCalendar } from "@/db/lessons";
 import { todayInParis } from "@/domain/people/age";
 import { validDate } from "@/domain/schedule/week";
 import { requireRole } from "@/lib/session";
@@ -17,12 +18,14 @@ export default async function NewCoursePage({ searchParams }: PageProps<"/planni
     season: season,
     referential: referential,
     schedule: schedule,
+    calendar,
   } = await withSchool(schoolId, async (tx) => {
     const s = await currentSeason(tx, todayInParis());
     return {
       season: s,
       referential: await scheduleReferential(tx),
       schedule: s ? await seasonCourses(tx, s.id) : [],
+      calendar: s ? await seasonCalendar(tx, s.id) : null,
     };
   });
   if (!season) return <p className="text-sm text-doux">Aucune saison n’est encore paramétrée.</p>;
@@ -42,6 +45,7 @@ export default async function NewCoursePage({ searchParams }: PageProps<"/planni
         course={null}
         referential={referential}
         schedule={schedule}
+        calendar={calendar}
         day={Number.isInteger(proposedDay) && proposedDay >= 1 && proposedDay <= 7 ? proposedDay : undefined}
         startTime={typeof heure === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(heure) ? heure : undefined}
         date={validDate(date) ?? undefined}

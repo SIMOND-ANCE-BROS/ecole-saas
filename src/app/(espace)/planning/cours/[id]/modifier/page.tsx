@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { readCourse, scheduleReferential } from "@/db/courses";
 import { seasonCourses } from "@/db/schedule";
+import { seasonCalendar } from "@/db/lessons";
 import { requireRole } from "@/lib/session";
 import { CourseForm } from "../../course-form";
 
@@ -19,6 +20,7 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
       cours: course,
       referential: await scheduleReferential(tx, course.instructorId),
       schedule: await seasonCourses(tx, course.seasonId),
+      calendar: await seasonCalendar(tx, course.seasonId),
     };
   });
   if (!parsed) notFound();
@@ -37,7 +39,12 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
         <span className="text-doux"> / Modifier</span>
       </nav>
       <h1 className="titre-page">Modifier le cours : {cours.discipline}</h1>
-      <CourseForm course={cours} referential={parsed.referential} schedule={parsed.schedule} />
+      <CourseForm
+        course={cours}
+        referential={parsed.referential}
+        schedule={parsed.schedule}
+        calendar={parsed.calendar}
+      />
     </section>
   );
 }

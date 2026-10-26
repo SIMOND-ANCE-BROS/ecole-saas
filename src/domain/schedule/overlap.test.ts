@@ -41,3 +41,25 @@ describe("conflicts", () => {
     ).toEqual([]);
   });
 });
+
+describe("overlaps with lesson dates (#96)", () => {
+  const at = (lessonDates: string[], startTime = "17:00") => ({ ...slot(3, startTime, 60), lessonDates });
+
+  it("does not report two « une semaine sur deux » courses that alternate", () => {
+    expect(overlaps(at(["2026-09-02", "2026-09-16"]), at(["2026-09-09", "2026-09-23"]))).toBe(false);
+  });
+  it("does not report two regular courses on disjoint periods", () => {
+    expect(overlaps(at(["2026-12-09", "2026-12-16"]), at(["2027-01-06", "2027-01-13"]))).toBe(false);
+  });
+  it("reports courses sharing at least one date, at overlapping times", () => {
+    expect(overlaps(at(["2026-09-02", "2026-09-16"]), at(["2026-09-16"], "17:30"))).toBe(true);
+    expect(overlaps(at(["2026-09-16"]), at(["2026-09-16"], "18:00"))).toBe(false);
+  });
+  it("compares workshops by their dates", () => {
+    const workshop = { ...slot(null, "14:00", 120), lessonDates: ["2026-10-24"] };
+    expect(overlaps(workshop, { ...slot(null, "15:00", 60), lessonDates: ["2026-10-24"] })).toBe(true);
+  });
+  it("falls back on the weekday when one side has no dates", () => {
+    expect(overlaps(at(["2026-09-09"]), slot(3, "17:30", 60))).toBe(true);
+  });
+});

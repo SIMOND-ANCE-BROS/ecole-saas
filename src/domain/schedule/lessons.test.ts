@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lessonDates, courseDates } from "./lessons";
+import { lessonDates, courseDates, recurrenceOf } from "./lessons";
 
 describe("lessonDates", () => {
   it("gives every Wednesday of the period, bounds included", () => {
@@ -96,5 +96,26 @@ describe("courseDates (#90)", () => {
         ALL_SAINTS,
       ),
     ).toEqual(["2026-09-12", "2026-10-24"]);
+  });
+});
+
+describe("recurrenceOf", () => {
+  const stored = { weekday: 3, startDate: null, endDate: "2026-12-31", dates: [] };
+  it("reads a regular course and its period", () => {
+    expect(recurrenceOf({ ...stored, recurrence: "biweekly" })).toEqual({
+      type: "biweekly",
+      weekday: 3,
+      startDate: null,
+      endDate: "2026-12-31",
+    });
+  });
+  it("reads a course on specific dates", () => {
+    expect(recurrenceOf({ ...stored, recurrence: "dates", weekday: null, dates: ["2026-10-24"] })).toEqual({
+      type: "dates",
+      dates: ["2026-10-24"],
+    });
+  });
+  it("has no recurrence for a regular course without a day", () => {
+    expect(recurrenceOf({ ...stored, recurrence: "weekly", weekday: null })).toBeNull();
   });
 });

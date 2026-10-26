@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { type EditedCourse, RECURRENCES, type ScheduleReferential, COURSE_TYPES } from "@/db/courses";
 import type { ScheduleCourse } from "@/db/schedule";
 import { conflicts } from "@/domain/schedule/overlap";
+import { lessonDatesOf, type SeasonCalendar } from "@/domain/schedule/lessons";
 import { outsideHours } from "@/domain/schedule/hours";
 import { saveCourse, type Refusal, remove, checkSlot } from "./actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
@@ -23,6 +24,8 @@ type Props = {
   course: EditedCourse | null;
   referential: ScheduleReferential;
   schedule: ScheduleCourse[];
+  /** Season dates and closures: overlaps are checked on actual lesson dates (#96). */
+  calendar: SeasonCalendar | null;
   /** Day suggested for a new course (« + » link of a schedule column). */
   day?: number;
   /** Slot suggested from the calendar view. */
@@ -38,6 +41,7 @@ export function CourseForm({
   course,
   referential: referential,
   schedule: schedule,
+  calendar,
   day: day,
   startTime,
   duration: duration,
@@ -106,6 +110,7 @@ export function CourseForm({
     maxCapacity: whole(v.maxCapacity),
   };
 
+  const datesOf = (c: Parameters<typeof lessonDatesOf>[0]) => (calendar ? lessonDatesOf(c, calendar) : undefined);
   const overlaps = conflicts(
     {
       id: course?.id ?? null,
@@ -114,8 +119,9 @@ export function CourseForm({
       durationMinutes: entry.durationMinutes || 0,
       roomId: v.roomId,
       instructorId: v.instructorId,
+      lessonDates: datesOf({ ...entry, recurrence: v.recurrence }),
     },
-    schedule,
+    schedule.map((c) => ({ ...c, lessonDates: datesOf(c) })),
   ).map((c) => {
     const other = schedule.find((p) => p.id === c.id)!;
     const when = `${other.discipline} à ${other.startTime}`;
