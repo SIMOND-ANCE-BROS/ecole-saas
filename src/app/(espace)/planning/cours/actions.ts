@@ -85,7 +85,7 @@ export async function move(courseId: string, slot: unknown, confirmed: boolean):
     const c = await readCourse(tx, courseId);
     if (!c) return { status: "refused" as const, message: "Ce cours n’existe plus." };
     await syncLessons(tx, c.seasonId, today);
-    const calendar = await seasonCalendar(tx, c.seasonId);
+    const calendar = await seasonCalendar(tx, c.seasonId, today);
     const schedule = (await seasonCourses(tx, c.seasonId)).map((p) => ({
       ...p,
       lessonDates: calendar ? lessonDatesOf(p, calendar) : undefined,
@@ -94,7 +94,13 @@ export async function move(courseId: string, slot: unknown, confirmed: boolean):
     const warnings = me
       ? conflicts(me, schedule).map((x) => {
           const other = schedule.find((p) => p.id === x.id)!;
-          const when = `${other.discipline}, ${SHORT_DAYS[other.weekday ?? 0]} ${other.startTime}`;
+          // A workshop has no weekday: name the first date both share.
+          const shared = other.lessonDates?.find((d) => me.lessonDates?.includes(d));
+          const day =
+            other.weekday === null && shared
+              ? shortDate.format(new Date(`${shared}T00:00:00Z`))
+              : SHORT_DAYS[other.weekday ?? 0];
+          const when = `${other.discipline}, ${day} ${other.startTime}`;
           if (x.room && x.instructor) return `${other.room} et ${other.instructor} déjà pris (${when})`;
           return x.room ? `${other.room} déjà occupée (${when})` : `${other.instructor} donne déjà un cours (${when})`;
         })

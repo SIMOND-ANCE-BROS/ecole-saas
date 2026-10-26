@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { lessonDates, courseDates, recurrenceOf } from "./lessons";
+import { lessonDates, courseDates, recurrenceOf, lessonDatesOf } from "./lessons";
+import { overlaps } from "./overlap";
 
 describe("lessonDates", () => {
   it("gives every Wednesday of the period, bounds included", () => {
@@ -117,5 +118,43 @@ describe("recurrenceOf", () => {
   });
   it("has no recurrence for a regular course without a day", () => {
     expect(recurrenceOf({ ...stored, recurrence: "weekly", weekday: null })).toBeNull();
+  });
+});
+
+describe("lessonDatesOf (#96)", () => {
+  const calendar = {
+    period: { start: "2026-09-01", end: "2027-06-30" },
+    closures: [{ start: "2026-10-17", end: "2026-11-01" }],
+    from: "2026-09-01",
+  };
+  const biweekly = (startDate: string) => ({
+    recurrence: "biweekly" as const,
+    weekday: 3,
+    startDate,
+    endDate: null,
+    dates: [],
+  });
+  const at = (lessonDates: string[] | undefined) => ({
+    weekday: 3,
+    startTime: "17:00",
+    durationMinutes: 60,
+    lessonDates,
+  });
+
+  it("gives two alternate fortnights no shared date, across a closure too", () => {
+    const a = lessonDatesOf(biweekly("2026-09-02"), calendar);
+    const b = lessonDatesOf(biweekly("2026-09-09"), calendar);
+    expect(a?.slice(0, 2)).toEqual(["2026-09-02", "2026-09-16"]);
+    expect(b?.slice(0, 2)).toEqual(["2026-09-09", "2026-09-23"]);
+    expect(overlaps(at(a), at(b))).toBe(false);
+  });
+
+  it("leaves out dates before `from`: a course already over no longer clashes", () => {
+    const ended = { ...biweekly("2026-09-02"), recurrence: "weekly" as const, endDate: "2026-10-14" };
+    const weekly = { ...ended, endDate: null };
+    const later = { ...calendar, from: "2026-11-15" };
+    expect(lessonDatesOf(ended, later)).toEqual([]);
+    expect(overlaps(at(lessonDatesOf(ended, later)), at(lessonDatesOf(weekly, later)))).toBe(false);
+    expect(overlaps(at(lessonDatesOf(ended, calendar)), at(lessonDatesOf(weekly, calendar)))).toBe(true);
   });
 });

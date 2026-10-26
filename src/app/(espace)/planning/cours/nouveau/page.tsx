@@ -25,7 +25,7 @@ export default async function NewCoursePage({ searchParams }: PageProps<"/planni
       season: s,
       referential: await scheduleReferential(tx),
       schedule: s ? await seasonCourses(tx, s.id) : [],
-      calendar: s ? await seasonCalendar(tx, s.id) : null,
+      calendar: s ? await seasonCalendar(tx, s.id, todayInParis()) : null,
     };
   });
   if (!season) return <p className="text-sm text-doux">Aucune saison n’est encore paramétrée.</p>;

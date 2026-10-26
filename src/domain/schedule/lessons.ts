@@ -50,13 +50,17 @@ export function recurrenceOf(c: {
     : { type: c.recurrence, weekday: c.weekday, startDate: c.startDate, endDate: c.endDate };
 }
 
-/** What lesson dates are computed from: the season and its closures. */
-export type SeasonCalendar = { period: Period; closures: Period[] };
+/**
+ * What lesson dates are computed from: the season and its closures. Dates before
+ * `from` (today) are left out: a lesson already given can no longer clash.
+ */
+export type SeasonCalendar = { period: Period; closures: Period[]; from: string };
 
 /** Lesson dates of a stored course; undefined without a recurrence (regular course without a day). */
 export function lessonDatesOf(c: Parameters<typeof recurrenceOf>[0], calendar: SeasonCalendar): string[] | undefined {
   const r = recurrenceOf(c);
-  return r ? courseDates(r, calendar.period, calendar.closures) : undefined;
+  // The whole season first: the « une semaine sur deux » alternation is anchored on its first date.
+  return r ? courseDates(r, calendar.period, calendar.closures).filter((d) => d >= calendar.from) : undefined;
 }
 
 /**

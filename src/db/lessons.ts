@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { rowsOf } from "./columns-of";
 import { z } from "zod";
-import { courseDates, type Recurrence, type SeasonCalendar } from "../domain/schedule/lessons";
+import { courseDates, recurrenceOf, type SeasonCalendar } from "../domain/schedule/lessons";
 import type { Tx } from "./index";
 import {
   course,
@@ -43,14 +43,14 @@ export const validClosureInput = z.object({
 });
 
 /** The season's dates and closures, to compute lesson dates (overlap warnings, #96); null if unknown. */
-export async function seasonCalendar(tx: Tx, seasonId: string): Promise<SeasonCalendar | null> {
+export async function seasonCalendar(tx: Tx, seasonId: string, today: string): Promise<SeasonCalendar | null> {
   const [s] = await tx
     .select({ start: season.startDate, end: season.endDate })
     .from(season)
     .where(eq(season.id, seasonId));
   if (!s) return null;
   const closures = await listClosures(tx, seasonId);
-  return { period: s, closures: closures.map(({ start, end }) => ({ start, end })) };
+  return { period: s, closures: closures.map(({ start, end }) => ({ start, end })), from: today };
 }
 
 export function listClosures(tx: Tx, seasonId: string): Promise<Closure[]> {
@@ -136,10 +136,8 @@ export async function syncLessons(
 
   // The whole season, then from `start` on: the « une semaine sur deux » alternation is aligned on the first date.
   const expected = tous.flatMap((c) => {
-    const r: Recurrence =
-      c.recurrence === "dates"
-        ? { type: "dates", dates: oneOff.filter((p) => p.courseId === c.id).map((p) => p.date) }
-        : { type: c.recurrence, weekday: c.weekday as number, startDate: c.startDate, endDate: c.endDate };
+    const r = recurrenceOf({ ...c, dates: oneOff.filter((p) => p.courseId === c.id).map((p) => p.date) });
+    if (!r) return [];
     return courseDates(r, { start: s.start, end: s.end }, closures)
       .filter((date) => date >= start)
       .map((date) => ({ courseId: c.id, date, instructorId: c.instructorId }));

@@ -119,7 +119,7 @@ export function CourseForm({
       durationMinutes: entry.durationMinutes || 0,
       roomId: v.roomId,
       instructorId: v.instructorId,
-      lessonDates: datesOf({ ...entry, recurrence: v.recurrence }),
+      lessonDates: datesOf(entry),
     },
     schedule.map((c) => ({ ...c, lessonDates: datesOf(c) })),
   ).map((c) => {
