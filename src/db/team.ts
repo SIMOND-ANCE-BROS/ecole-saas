@@ -169,10 +169,17 @@ export async function updateMember(
   const refusal = changeRefusal(team, who, memberId, after);
   if (refusal) return { ok: false, message: refusal };
   const before = team.find((m) => m.id === memberId)!;
+  const target = await memberAccount(tx, memberId);
   await tx.update(member).set({ role: after.role, active: after.active }).where(eq(member.id, memberId));
   if (!after.active || after.role !== "director") {
     // Their links stop working anyway (AUTHOR_STILL_DIRECTOR): removed so they leave the pending list too.
     await tx.delete(invitation).where(and(eq(invitation.createdBy, memberId), isNull(invitation.usedAt)));
+  }
+  if (!after.active && target) {
+    // A deactivated member has nothing to sign in to: their pending reset link goes too.
+    await tx
+      .delete(invitation)
+      .where(and(eq(invitation.type, "reset"), eq(invitation.userId, target), isNull(invitation.usedAt)));
   }
   await tx.insert(auditLog).values({
     schoolId: CURRENT_SCHOOL,
@@ -199,8 +206,8 @@ export async function resetLink(tx: Tx, userId: string, memberId: string, now: D
     .select({ userId: member.userId, email: user.email, name: user.name })
     .from(member)
     .innerJoin(user, eq(user.id, member.userId))
-    .where(eq(member.id, memberId));
-  if (!m) return { ok: false, message: "Ce membre n’existe plus." };
+    .where(and(eq(member.id, memberId), eq(member.active, true)));
+  if (!m) return { ok: false, message: "Réactivez d’abord ce membre, ou il n’existe plus." };
   if (await elsewhereAccount(tx, m.userId)) return { ok: false, message: SHARED };
   await tx
     .delete(invitation)

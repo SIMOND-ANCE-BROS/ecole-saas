@@ -206,6 +206,8 @@ describe("links of a director who leaves management", () => {
       (await withSchool(school, (tx) => updateMember(tx, diana, p.id, { role: "director", active: false }))).ok,
     ).toBe(true);
     expect(await openLink(school, link)).toBeNull();
+    // No reset link for a deactivated member.
+    expect(await createResetLink(school, diana, p.id)).toMatchObject({ ok: false });
     expect((await withSchool(school, (tx) => pendingInvitations(tx, new Date()))).map((i) => i.name)).not.toContain(
       "Porte Arrière",
     );
@@ -240,6 +242,13 @@ describe("links of a director who leaves management", () => {
 });
 
 describe("password reset", () => {
+  // A reset link is only for an active member: the front desk deactivated above comes back first.
+  beforeAll(async () => {
+    const n = await member(newMemberEmail);
+    const r = await withSchool(school, (tx) => updateMember(tx, diana, n.id, { role: "front_desk", active: true }));
+    if (!r.ok) throw new Error(r.message);
+  });
+
   it("refused for an account also used in another school", async () => {
     const p = await member(teacherEmail);
     expect(await createResetLink(school, diana, p.id)).toEqual({
