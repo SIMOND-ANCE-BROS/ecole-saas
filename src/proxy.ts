@@ -15,5 +15,5 @@ export function proxy(request: NextRequest) {
 
 // `satisfies`: a misspelled key (`match`) fails to compile instead of matching every path (#138).
 export const config = {
-  matcher: ["/((?!api|connexion|agenda|mon-agenda|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api|connexion|invitation/|agenda|mon-agenda|_next/static|_next/image|favicon.ico).*)"],
 } satisfies ProxyConfig;

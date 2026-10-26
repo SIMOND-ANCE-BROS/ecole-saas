@@ -186,7 +186,69 @@ describe("roles and access", () => {
   });
 });
 
+describe("links of a director who leaves management", () => {
+  const token = (r: { ok: boolean; token?: string }) => (r.ok && r.token ? r.token : "");
+
+  it("deactivating a director removes their unused links, which no longer open", async () => {
+    const p = await member(teacherEmail);
+    const link = token(
+      await withSchool(school, (tx) =>
+        invite(
+          tx,
+          teacher,
+          { email: `porte-${suffix}@exemple.test`, name: "Porte Arrière", role: "director" },
+          new Date(),
+        ),
+      ),
+    );
+    expect(await openLink(school, link)).not.toBeNull();
+    expect(
+      (await withSchool(school, (tx) => updateMember(tx, diana, p.id, { role: "director", active: false }))).ok,
+    ).toBe(true);
+    expect(await openLink(school, link)).toBeNull();
+    // No reset link for a deactivated member.
+    expect(await createResetLink(school, diana, p.id)).toMatchObject({ ok: false });
+    expect((await withSchool(school, (tx) => pendingInvitations(tx, new Date()))).map((i) => i.name)).not.toContain(
+      "Porte Arrière",
+    );
+    expect(
+      (await withSchool(school, (tx) => updateMember(tx, diana, p.id, { role: "director", active: true }))).ok,
+    ).toBe(true);
+  });
+
+  it("a link stops working as soon as its author is no longer an active director, even outside updateMember", async () => {
+    const p = await member(teacherEmail);
+    const link = token(
+      await withSchool(school, (tx) =>
+        invite(
+          tx,
+          teacher,
+          { email: `porte2-${suffix}@exemple.test`, name: "Porte Deux", role: "front_desk" },
+          new Date(),
+        ),
+      ),
+    );
+    await admin`UPDATE member SET role = 'front_desk' WHERE id = ${p.id}`;
+    expect(await openLink(school, link)).toBeNull();
+    expect(await acceptLink(school, link, entry(PASSWORD))).toMatchObject({ ok: false });
+    await admin`UPDATE member SET role = 'director' WHERE id = ${p.id}`;
+    // Back in management: the link opens again (it was never deleted, only refused).
+    expect(await openLink(school, link)).not.toBeNull();
+    await withSchool(school, async (tx) => {
+      const i = (await pendingInvitations(tx, new Date())).find((x) => x.name === "Porte Deux");
+      if (i) await revokeInvitation(tx, i.id);
+    });
+  });
+});
+
 describe("password reset", () => {
+  // A reset link is only for an active member: the front desk deactivated above comes back first.
+  beforeAll(async () => {
+    const n = await member(newMemberEmail);
+    const r = await withSchool(school, (tx) => updateMember(tx, diana, n.id, { role: "front_desk", active: true }));
+    if (!r.ok) throw new Error(r.message);
+  });
+
   it("refused for an account also used in another school", async () => {
     const p = await member(teacherEmail);
     expect(await createResetLink(school, diana, p.id)).toEqual({
