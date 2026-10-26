@@ -11,7 +11,7 @@ import {
 } from "@/connectors/calendar/oauth";
 import { withSchool } from "@/db";
 import { tokenInstructor } from "@/db/calendar-feed";
-import { COOKIE_OAUTH, personalPage, oauthRedirect } from "@/lib/public-calendar";
+import { COOKIE_OAUTH, personalPage, oauthRedirect, publicAddress } from "@/lib/public-calendar";
 
 /**
  * Departure to Google or Microsoft from an instructor's personal page.
@@ -20,7 +20,12 @@ import { COOKIE_OAUTH, personalPage, oauthRedirect } from "@/lib/public-calendar
  */
 export async function GET(_req: NextRequest, ctx: RouteContext<"/mon-agenda/[ecole]/[jeton]/connecter/[fournisseur]">) {
   const { ecole, jeton, fournisseur } = await ctx.params;
-  const notFound = new Response("Lien introuvable ou révoqué.", { status: 404 });
+  // Back to the personal page, whose not-found page tells the instructor to ask for a new link.
+  // Same origin, and the decoded params are encoded again: no open redirect.
+  const notFound = Response.redirect(
+    `${publicAddress()}${personalPage(encodeURIComponent(ecole), encodeURIComponent(jeton))}`,
+    303,
+  );
   if (!z.uuid().safeParse(ecole).success || !PROVIDERS.includes(fournisseur as Provider)) return notFound;
   const f = fournisseur as Provider;
   const id = credentials(f);

@@ -26,7 +26,8 @@ const formatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: 
 
 /** 123456 → « 1 234,56 € »; −1250 → « −12,50 € » with the typographic minus (U+2212). */
 export function formatEuros(cents: number): string {
-  return formatter.format(cents / 100).replace("-", "−");
+  // -0 (e.g. the opposite of 0) would print « −0,00 € ».
+  return formatter.format(cents === 0 ? 0 : cents / 100).replace("-", "−");
 }
 
 /**
