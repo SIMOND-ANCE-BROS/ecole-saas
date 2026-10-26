@@ -1,13 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, type ReactNode, use, useEffect, useRef, useState } from "react";
 
 /** True inside a panel: « Annuler » goes back there instead of navigating. */
 const InPanel = createContext(false);
 
 type Props = { title: string; children: ReactNode };
+
+/**
+ * Field focused when a panel opens: the one a form marks with `data-panel-focus`,
+ * else its first text field or list (not a radio or checkbox, such as « Particulier / Professionnel »).
+ */
+const FIRST_FIELD = "input:enabled:not([type=hidden],[type=radio],[type=checkbox]), select:enabled, textarea:enabled";
 
 /**
  * Side panel opened by an intercepted route (`@modal`): the original page
@@ -29,7 +35,10 @@ export function Panel(props: Props) {
 
 function PanelDialog({ title, children, path }: Props & { path: string }) {
   const router = useRouter();
+  // The panel's own parameters (« ?payeur= », « ?jour= »): the full page needs them too.
+  const query = useSearchParams().toString();
   const dialogue = useRef<HTMLDialogElement>(null);
+  const body = useRef<HTMLDivElement>(null);
   /** Element that had focus before opening (recorded once only: the effect may run again). */
   const before = useRef<HTMLElement | null>(null);
 
@@ -38,6 +47,12 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
     if (d && !d.open) {
       before.current = document.activeElement as HTMLElement | null;
       d.showModal();
+      // showModal() focuses the first focusable element, « Ouvrir en pleine page »:
+      // a form opens on its first field instead, ready to type.
+      const field =
+        body.current?.querySelector<HTMLElement>("[data-panel-focus]") ??
+        body.current?.querySelector<HTMLElement>(FIRST_FIELD);
+      field?.focus();
     }
     return () => {
       if (before.current?.isConnected) before.current.focus();
@@ -60,14 +75,14 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
       <div className="flex h-full flex-col">
         <div className="flex items-center justify-end gap-2 border-b border-bordure px-4 py-2">
           {/* Plain link: full reload, hence the whole page without a panel. */}
-          <a href={path} className="lien text-sm">
+          <a href={query ? `${path}?${query}` : path} className="lien text-sm">
             Ouvrir en pleine page
           </a>
           <button type="button" className="bouton-secondaire" onClick={close}>
             Fermer
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto overscroll-contain p-4">
+        <div ref={body} className="flex-1 overflow-y-auto overscroll-contain p-4">
           <InPanel value>{children}</InPanel>
         </div>
       </div>

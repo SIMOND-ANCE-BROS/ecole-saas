@@ -104,6 +104,8 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
               </label>
               <input
                 id={`montant-${i}`}
+                // « Reçu le » is already today: the amount is what gets typed first.
+                data-panel-focus={i === 0 || undefined}
                 inputMode="decimal"
                 className="champ text-right tabular-nums"
                 value={l.amount}
