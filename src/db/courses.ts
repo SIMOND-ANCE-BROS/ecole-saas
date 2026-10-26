@@ -332,6 +332,8 @@ export const validSlot = z.object({
   weekday: z.int().min(1).max(7),
   startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM"),
   durationMinutes: z.int().min(5).max(600),
+  /** Day-by-room view (#85): the course moves to another room too. */
+  roomId: z.uuid().optional(),
 });
 
 export type MoveResult =
@@ -355,6 +357,12 @@ export async function moveCourse(
   if (existing.recurrence === "dates")
     return { status: "refused", message: "Un cours à dates précises se modifie depuis sa fiche." };
   if (toMinutesEnd(c.data) > 24 * 60) return { status: "refused", message: "Le cours finirait après minuit." };
+  const roomId = c.data.roomId ?? existing.roomId;
+  if (roomId !== existing.roomId) {
+    // Under RLS: a room of another school is not found (and the composite foreign key would refuse it).
+    const [r] = await tx.select({ id: room.id }).from(room).where(eq(room.id, roomId));
+    if (!r) return { status: "refused", message: "Cette salle n’existe plus." };
+  }
   if (!confirmed) {
     const [{ n }] = await tx
       .select({ n: sql<number>`count(DISTINCT ${enrollmentCourse.studentId})::int` })
@@ -365,7 +373,7 @@ export async function moveCourse(
   }
   await tx
     .update(course)
-    .set({ weekday: c.data.weekday, startTime: c.data.startTime, durationMinutes: c.data.durationMinutes })
+    .set({ weekday: c.data.weekday, startTime: c.data.startTime, durationMinutes: c.data.durationMinutes, roomId })
     .where(eq(course.id, id));
   return { status: "ok", id };
 }

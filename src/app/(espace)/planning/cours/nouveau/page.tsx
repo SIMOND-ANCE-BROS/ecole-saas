@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Nouveau cours" };
 
 export default async function NewCoursePage({ searchParams }: PageProps<"/planning/cours/nouveau">) {
   const { schoolId: schoolId } = await requireRole("director");
-  const { jour, heure, duree, date } = await searchParams;
+  const { jour, heure, duree, date, salle } = await searchParams;
   const {
     season: season,
     referential: referential,
@@ -49,6 +49,7 @@ export default async function NewCoursePage({ searchParams }: PageProps<"/planni
         day={Number.isInteger(proposedDay) && proposedDay >= 1 && proposedDay <= 7 ? proposedDay : undefined}
         startTime={typeof heure === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(heure) ? heure : undefined}
         date={validDate(date) ?? undefined}
+        room={typeof salle === "string" ? salle : undefined}
         duration={
           Number.isInteger(proposedDuration) && proposedDuration >= 5 && proposedDuration <= 600
             ? proposedDuration

@@ -9,9 +9,16 @@ import { ages, end, DAYS, recurrenceBadge, recurrenceText } from "./format";
 import { EMPTY_FILTERS, filterSchedule } from "./filters";
 import { DatedWeek } from "./dated-week";
 import { TypicalWeek } from "./typical-week";
+import { type PlanningRoom, RoomsDay } from "./rooms-day";
+import { calendarFrame } from "@/domain/schedule/hours";
 
-export type ScheduleView = "datee" | "type" | "liste";
-const VIEWS: Record<ScheduleView, string> = { datee: "Par semaine", type: "Semaine type", liste: "Liste" };
+export type ScheduleView = "datee" | "type" | "salles" | "liste";
+const VIEWS: Record<ScheduleView, string> = {
+  datee: "Par semaine",
+  type: "Semaine type",
+  salles: "Par salle",
+  liste: "Liste",
+};
 
 type Props = {
   courses: ScheduleCourse[];
@@ -21,6 +28,10 @@ type Props = {
   highlighted?: string;
   /** Chosen view (`?vue=`): dated week by default (#90). */
   view: ScheduleView;
+  /** Day of the « Par salle » view (`?jour=`, 1 = Monday); otherwise the first day of the week. */
+  day: number;
+  /** All rooms of the school, by site then name: the columns of « Par salle ». */
+  rooms: PlanningRoom[];
   /** Displayed dated week: its Monday, its lessons and its closures. */
   monday: string;
   today: string;
@@ -36,6 +47,8 @@ export function ScheduleGrid({
   editable: editable,
   highlighted: highlighted,
   view: initialView,
+  day: initialDay,
+  rooms: allRooms,
   hours: hours,
   monday: monday,
   today: today,
@@ -44,9 +57,21 @@ export function ScheduleGrid({
 }: Props) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [view, setView] = useState(initialView);
+  const weekDays = calendarFrame(Object.values(hours).flat(), cours).days;
+  const [day, setDay] = useState(weekDays.includes(initialDay) ? initialDay : (weekDays[0] ?? 1));
+  const address = (v: ScheduleView, d: number) =>
+    v === "datee"
+      ? `/planning?semaine=${monday}`
+      : v === "salles"
+        ? `/planning?vue=salles&jour=${d}`
+        : `/planning?vue=${v}`;
   const chooseView = (v: ScheduleView) => {
     setView(v);
-    window.history.replaceState(null, "", v === "datee" ? `/planning?semaine=${monday}` : `/planning?vue=${v}`);
+    window.history.replaceState(null, "", address(v, day));
+  };
+  const chooseDay = (d: number) => {
+    setDay(d);
+    window.history.replaceState(null, "", address("salles", d));
   };
   const { discipline, site, roomId: roomId, instructorId: instructorId } = filters;
   const disciplines = useMemo(() => [...new Set(cours.map((c) => c.discipline))].sort(), [cours]);
@@ -191,6 +216,18 @@ export function ScheduleGrid({
           closures={closures}
           hours={displayedHours}
           editable={editable}
+        />
+      ) : view === "salles" ? (
+        <RoomsDay
+          courses={visible}
+          tous={cours}
+          rooms={allRooms.filter((r) => (roomId ? r.id === roomId : !site || r.site === site))}
+          day={day}
+          days={weekDays}
+          onDay={chooseDay}
+          hours={hours}
+          editable={editable}
+          highlighted={highlighted}
         />
       ) : view === "type" ? (
         <TypicalWeek
