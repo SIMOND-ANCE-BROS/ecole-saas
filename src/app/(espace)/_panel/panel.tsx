@@ -9,6 +9,8 @@ const InPanel = createContext(false);
 
 type Props = { title: string; children: ReactNode };
 
+const FIRST_FIELD = "input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])";
+
 /**
  * Side panel opened by an intercepted route (`@modal`): the original page
  * stays behind, the URL is the full page's. Closed by « Fermer », Escape,
@@ -32,6 +34,7 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
   // The panel's own parameters (« ?payeur= », « ?jour= »): the full page needs them too.
   const query = useSearchParams().toString();
   const dialogue = useRef<HTMLDialogElement>(null);
+  const body = useRef<HTMLDivElement>(null);
   /** Element that had focus before opening (recorded once only: the effect may run again). */
   const before = useRef<HTMLElement | null>(null);
 
@@ -40,6 +43,9 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
     if (d && !d.open) {
       before.current = document.activeElement as HTMLElement | null;
       d.showModal();
+      // showModal() focuses the first focusable element, « Ouvrir en pleine page »:
+      // a form opens on its first field instead, ready to type.
+      body.current?.querySelector<HTMLElement>(FIRST_FIELD)?.focus();
     }
     return () => {
       if (before.current?.isConnected) before.current.focus();
@@ -69,7 +75,7 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
             Fermer
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto overscroll-contain p-4">
+        <div ref={body} className="flex-1 overflow-y-auto overscroll-contain p-4">
           <InPanel value>{children}</InPanel>
         </div>
       </div>
