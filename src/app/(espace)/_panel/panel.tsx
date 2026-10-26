@@ -9,7 +9,11 @@ const InPanel = createContext(false);
 
 type Props = { title: string; children: ReactNode };
 
-const FIRST_FIELD = "input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])";
+/**
+ * Field focused when a panel opens: the one a form marks with `data-panel-focus`,
+ * else its first text field or list (not a radio or checkbox, such as « Particulier / Professionnel »).
+ */
+const FIRST_FIELD = "input:enabled:not([type=hidden],[type=radio],[type=checkbox]), select:enabled, textarea:enabled";
 
 /**
  * Side panel opened by an intercepted route (`@modal`): the original page
@@ -45,7 +49,10 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
       d.showModal();
       // showModal() focuses the first focusable element, « Ouvrir en pleine page »:
       // a form opens on its first field instead, ready to type.
-      body.current?.querySelector<HTMLElement>(FIRST_FIELD)?.focus();
+      const field =
+        body.current?.querySelector<HTMLElement>("[data-panel-focus]") ??
+        body.current?.querySelector<HTMLElement>(FIRST_FIELD);
+      field?.focus();
     }
     return () => {
       if (before.current?.isConnected) before.current.focus();
