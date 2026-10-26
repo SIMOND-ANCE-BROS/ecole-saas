@@ -55,6 +55,9 @@ jobs:
       - run: npm test
       - name: Integration tests (real database)
         run: npm run test:integration
+      # Catches what tsc and the dev server miss: prerendering, route and config errors (#159).
+      - name: Production build
+        run: npm run build
 
   audit:
     name: Dependency audit
