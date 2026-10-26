@@ -18,7 +18,8 @@ const validChange = z.object({ role: z.enum(ROLE_VALUES), active: z.boolean() })
 export async function inviteMember(entry: unknown): Promise<LinkBack> {
   const { schoolId, userId } = await requireRole("director");
   const parsed = validInvitation.safeParse(entry);
-  if (!parsed.success) return { ok: false, message: "Indiquez le nom, l’e-mail et le rôle." };
+  // The schema's French messages (« Nom obligatoire », « E-mail invalide »).
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
   const r = await withSchool(schoolId, (tx) => invite(tx, userId, parsed.data, new Date()));
   revalidatePath(PATH);
   return r.ok ? { ok: true, link: linkAddress(schoolId, r.token) } : r;

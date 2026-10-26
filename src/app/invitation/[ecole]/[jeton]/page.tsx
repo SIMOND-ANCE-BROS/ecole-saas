@@ -27,7 +27,7 @@ export default async function LinkPage({ params }: PageProps<"/invitation/[ecole
   const intro = {
     new: `Vous êtes invité(e) à rejoindre ${link.school}. Choisissez votre mot de passe pour ${link.email}.`,
     existing: `Vous êtes invité(e) à rejoindre ${link.school}. Vous avez déjà un compte (${link.email}) : confirmez avec votre mot de passe actuel.`,
-    reset: `Choisissez un nouveau mot de passe pour ${link.email} (${link.school}). Les sessions ouvertes seront fermées.`,
+    reset: `Choisissez un nouveau mot de passe pour ${link.email} (${link.school}). Vous serez déconnecté(e) sur vos autres appareils.`,
   }[kind];
 
   return (

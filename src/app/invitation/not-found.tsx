@@ -1,4 +1,4 @@
-import { Text, Title } from "@mantine/core";
+import { Button, Text, Title } from "@mantine/core";
 
 /** An invitation or reset link that is used, revoked, expired or mistyped. */
 export default function NotFound() {
@@ -12,6 +12,10 @@ export default function NotFound() {
       <Text size="sm" c="dimmed">
         Il a déjà servi, a été révoqué ou a expiré. Demandez un nouveau lien à la direction de l’école.
       </Text>
+      {/* Someone who already finished only needs to sign in. */}
+      <Button component="a" href="/connexion" variant="default" className="self-start">
+        Se connecter
+      </Button>
     </main>
   );
 }

@@ -1,16 +1,27 @@
 "use client";
 
-import { Badge, Button, CopyButton, Select, Table, Text, TextInput, Title } from "@mantine/core";
-import { useState, useTransition } from "react";
+import { Badge, Button, CopyButton, Group, Modal, Select, Table, Text, TextInput, Title } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { MemberListItem, PendingInvitation } from "@/db/team";
-import { INVITABLE_ROLES, ROLE_LABELS } from "@/domain/team/rules";
+import { INVITABLE_ROLES, ROLE_LABELS, type Role } from "@/domain/team/rules";
 import { type Back, changeMember, inviteMember, type LinkBack, resetPassword, revoke } from "./actions";
 
 type Member = Omit<MemberListItem, "userId"> & { me: boolean };
 type Invitation = Omit<PendingInvitation, "expiresAt"> & { expiresAt: string };
-/** Where a result is shown: next to what the user just did. */
+/** Where a refusal is shown: next to what the user just did. */
 type Section = "members" | "invite" | "invitations";
 type Shown = { link: string; who: string; kind: "invitation" | "reset" };
+/** A change that needs a « yes » first (DESIGN.md: destructive actions ask for confirmation). */
+type Pending = {
+  title: string;
+  body: string;
+  verb: string;
+  red: boolean;
+  section: Section;
+  done: string;
+  action: () => Promise<Back>;
+};
 
 const INVITABLE = INVITABLE_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] }));
 const ALL_ROLES = [...INVITABLE, { value: "teacher", label: ROLE_LABELS.teacher }];
@@ -18,6 +29,9 @@ const day = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", ti
 
 /** A link to pass on by hand: shown once, with who it is for and how long it is valid. */
 function ShownLink({ shown, onClose }: { shown: Shown; onClose: () => void }) {
+  const copyButton = useRef<HTMLButtonElement>(null);
+  // Ready to copy with Enter: the link is what the director came for.
+  useEffect(() => copyButton.current?.focus(), [shown.link]);
   const validity = shown.kind === "invitation" ? "7 jours" : "24 heures";
   return (
     <div role="status" className="panneau flex flex-col gap-2 border-accent p-3 text-sm">
@@ -25,8 +39,8 @@ function ShownLink({ shown, onClose }: { shown: Shown; onClose: () => void }) {
         <strong>
           {shown.kind === "invitation" ? "Invitation de" : "Nouveau mot de passe pour"} {shown.who}
         </strong>{" "}
-        : lien à lui transmettre (SMS, e-mail personnel…), valable {validity}. Il ne sera plus affiché ensuite : en cas
-        de perte, créez-en un nouveau.
+        : lien à lui transmettre (SMS, e-mail personnel…), valable {validity}. La personne y choisira elle-même son mot
+        de passe. Le lien ne sera plus affiché ensuite : en cas de perte, créez-en un nouveau.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <TextInput
@@ -37,7 +51,11 @@ function ShownLink({ shown, onClose }: { shown: Shown; onClose: () => void }) {
           onFocus={(e) => e.currentTarget.select()}
         />
         <CopyButton value={shown.link}>
-          {({ copied, copy }) => <Button onClick={copy}>{copied ? "Copié" : "Copier le lien"}</Button>}
+          {({ copied, copy }) => (
+            <Button ref={copyButton} onClick={copy}>
+              {copied ? "Copié" : "Copier le lien"}
+            </Button>
+          )}
         </CopyButton>
         <Button variant="subtle" onClick={onClose}>
           Fermer
@@ -59,15 +77,18 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
   const [inProgress, startTransition] = useTransition();
   const [refusal, setRefusal] = useState<{ section: Section; text: string } | null>(null);
   const [shown, setShown] = useState<Shown | null>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
   const [entry, setEntry] = useState({ name: "", email: "", role: "front_desk" });
   const refusalIn = (s: Section) => (refusal?.section === s ? refusal.text : undefined);
 
-  const run = (section: Section, action: () => Promise<Back>) =>
+  const confirm = (p: Pending) =>
     startTransition(async () => {
-      const r = await action();
-      setRefusal(r.ok ? null : { section, text: r.message });
+      const r = await p.action();
+      setPending(null);
+      setRefusal(r.ok ? null : { section: p.section, text: r.message });
+      if (r.ok) notifications.show({ message: p.done, color: "green" });
       // A revoked invitation's link no longer works: it is not left on screen to copy.
-      if (section === "invitations") setShown(null);
+      if (r.ok && p.section === "invitations" && shown?.kind === "invitation") setShown(null);
     });
   const withLink = (section: Section, action: () => Promise<LinkBack>, kind: Shown["kind"], who: string) =>
     startTransition(async () => {
@@ -76,13 +97,125 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
       setShown(r.ok ? { link: r.link, who, kind } : null);
     });
 
+  const askRole = (m: Member, role: Role) =>
+    setPending({
+      title: "Changer le rôle",
+      body: `${m.name} passera de « ${ROLE_LABELS[m.role]} » à « ${ROLE_LABELS[role]} ».`,
+      verb: "Changer le rôle",
+      red: false,
+      section: "members",
+      done: `Rôle de ${m.name} changé`,
+      action: () => changeMember(m.id, { role, active: m.active }),
+    });
+  const askActive = (m: Member) =>
+    setPending(
+      m.active
+        ? {
+            title: "Désactiver l’accès",
+            body: `${m.name} ne pourra plus se connecter à l’école. Vous pourrez réactiver son accès plus tard.`,
+            verb: "Désactiver",
+            red: true,
+            section: "members",
+            done: `Accès de ${m.name} désactivé`,
+            action: () => changeMember(m.id, { role: m.role, active: false }),
+          }
+        : {
+            title: "Réactiver l’accès",
+            body: `${m.name} pourra de nouveau se connecter, avec le rôle « ${ROLE_LABELS[m.role]} ».`,
+            verb: "Réactiver",
+            red: false,
+            section: "members",
+            done: `Accès de ${m.name} réactivé`,
+            action: () => changeMember(m.id, { role: m.role, active: true }),
+          },
+    );
+  const askRevoke = (i: Invitation) =>
+    setPending({
+      title: "Révoquer l’invitation",
+      body: `Le lien envoyé à ${i.name ?? i.email} ne fonctionnera plus.`,
+      verb: "Révoquer",
+      red: true,
+      section: "invitations",
+      done: "Invitation révoquée",
+      action: () => revoke(i.id),
+    });
+
+  const roleControl = (m: Member) =>
+    m.me ? (
+      ROLE_LABELS[m.role]
+    ) : (
+      <Select
+        aria-label={`Rôle de ${m.name}`}
+        size="xs"
+        w={140}
+        allowDeselect={false}
+        disabled={inProgress}
+        data={m.role === "teacher" ? ALL_ROLES : INVITABLE}
+        value={m.role}
+        onChange={(role) => role && role !== m.role && askRole(m, role as Role)}
+      />
+    );
+  const memberActions = (m: Member) =>
+    !m.me && (
+      <div className="flex flex-wrap gap-1 sm:justify-end">
+        {m.active && (
+          <Button
+            size="xs"
+            variant="subtle"
+            disabled={inProgress}
+            onClick={() => withLink("members", () => resetPassword(m.id), "reset", m.name)}
+          >
+            Créer un lien de mot de passe
+          </Button>
+        )}
+        <Button
+          size="xs"
+          variant="subtle"
+          color={m.active ? "red" : undefined}
+          disabled={inProgress}
+          onClick={() => askActive(m)}
+        >
+          {m.active ? "Désactiver…" : "Réactiver…"}
+        </Button>
+      </div>
+    );
+  const badges = (m: Member) => (
+    <>
+      {m.me && <Badge variant="light">vous</Badge>}{" "}
+      {!m.active && (
+        <Badge color="gray" variant="light">
+          désactivé
+        </Badge>
+      )}
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-6">
+      <Modal opened={pending !== null} onClose={() => setPending(null)} title={pending?.title} centered>
+        <Text size="sm">{pending?.body}</Text>
+        <Group justify="flex-end" mt="md">
+          {/* A destructive change starts on « Annuler »: Enter by reflex must not cut someone off. */}
+          <Button variant="default" onClick={() => setPending(null)} data-autofocus={pending?.red ? true : undefined}>
+            Annuler
+          </Button>
+          <Button
+            color={pending?.red ? "red" : undefined}
+            loading={inProgress}
+            onClick={() => pending && confirm(pending)}
+            data-autofocus={pending?.red ? undefined : true}
+          >
+            {pending?.verb}
+          </Button>
+        </Group>
+      </Modal>
+
       <section aria-labelledby="membres" className="flex flex-col gap-2">
         <Title order={2} size="h4" id="membres">
           Membres
         </Title>
-        <div className="panneau overflow-x-auto">
+        {/* Desktop: a table. Phone: one card per member, actions on their own line (no horizontal scroll). */}
+        <div className="panneau relative hidden overflow-x-auto sm:block">
           <Table verticalSpacing="xs">
             <Table.Thead>
               <Table.Tr>
@@ -98,60 +231,28 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
               {members.map((m) => (
                 <Table.Tr key={m.id} className={m.active ? undefined : "text-doux"}>
                   <Table.Td>
-                    {m.name} {m.me && <Badge variant="light">vous</Badge>}{" "}
-                    {!m.active && (
-                      <Badge color="gray" variant="light">
-                        désactivé
-                      </Badge>
-                    )}
+                    {m.name} {badges(m)}
                   </Table.Td>
                   <Table.Td>{m.email}</Table.Td>
-                  <Table.Td>
-                    {m.me ? (
-                      ROLE_LABELS[m.role]
-                    ) : (
-                      <Select
-                        aria-label={`Rôle de ${m.name}`}
-                        size="xs"
-                        w={140}
-                        allowDeselect={false}
-                        disabled={inProgress}
-                        data={m.role === "teacher" ? ALL_ROLES : INVITABLE}
-                        value={m.role}
-                        onChange={(role) =>
-                          role && run("members", () => changeMember(m.id, { role, active: m.active }))
-                        }
-                      />
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    {!m.me && (
-                      <div className="flex flex-wrap justify-end gap-1">
-                        <Button
-                          size="xs"
-                          variant="subtle"
-                          disabled={inProgress}
-                          onClick={() => withLink("members", () => resetPassword(m.id), "reset", m.name)}
-                        >
-                          Lien de mot de passe
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="subtle"
-                          color={m.active ? "red" : undefined}
-                          disabled={inProgress}
-                          onClick={() => run("members", () => changeMember(m.id, { role: m.role, active: !m.active }))}
-                        >
-                          {m.active ? "Désactiver" : "Réactiver"}
-                        </Button>
-                      </div>
-                    )}
-                  </Table.Td>
+                  <Table.Td>{roleControl(m)}</Table.Td>
+                  <Table.Td>{memberActions(m)}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
         </div>
+        <ul className="panneau divide-y divide-bordure text-sm sm:hidden">
+          {members.map((m) => (
+            <li key={m.id} className={`flex flex-col gap-1.5 px-3 py-2.5 ${m.active ? "" : "text-doux"}`}>
+              <span className="font-medium">
+                {m.name} {badges(m)}
+              </span>
+              <span className="break-all text-doux">{m.email}</span>
+              <span>{roleControl(m)}</span>
+              {memberActions(m)}
+            </li>
+          ))}
+        </ul>
         <Refusal text={refusalIn("members")} />
         {shown?.kind === "reset" && <ShownLink shown={shown} onClose={() => setShown(null)} />}
       </section>
@@ -161,6 +262,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
           Inviter une personne
         </Title>
         <form
+          noValidate
           className="panneau flex flex-wrap items-end gap-3 p-4"
           onSubmit={(e) => {
             e.preventDefault();
@@ -200,7 +302,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
             value={entry.role}
             onChange={(role) => role && setEntry({ ...entry, role })}
           />
-          <Button type="submit" loading={inProgress}>
+          <Button type="submit" variant={shown?.kind === "invitation" ? "default" : "filled"} loading={inProgress}>
             Créer le lien d’invitation
           </Button>
         </form>
@@ -221,7 +323,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
             {invitations.map((i) => (
               <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
                 {i.name && <span className="font-medium">{i.name}</span>}
-                <span className={i.name ? "text-doux" : "font-medium"}>{i.email}</span>
+                <span className={i.name ? "break-all text-doux" : "break-all font-medium"}>{i.email}</span>
                 {i.role && <Badge variant="light">{ROLE_LABELS[i.role]}</Badge>}
                 <span className="text-doux">valable jusqu’au {day.format(new Date(i.expiresAt))}</span>
                 <Button
@@ -230,9 +332,9 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
                   color="red"
                   className="ml-auto"
                   disabled={inProgress}
-                  onClick={() => run("invitations", () => revoke(i.id))}
+                  onClick={() => askRevoke(i)}
                 >
-                  Révoquer
+                  Révoquer…
                 </Button>
               </li>
             ))}
