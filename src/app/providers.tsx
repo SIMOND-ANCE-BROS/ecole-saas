@@ -5,7 +5,7 @@ import { MantineProvider } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import "dayjs/locale/fr";
 import type { ReactNode } from "react";
-import { theme } from "./theme";
+import { cssVariablesResolver, theme } from "./theme";
 
 /**
  * Interface providers (#107): Mantine (theme, dark mode following the
@@ -13,7 +13,7 @@ import { theme } from "./theme";
  */
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <MantineProvider theme={theme} defaultColorScheme="auto">
+    <MantineProvider theme={theme} cssVariablesResolver={cssVariablesResolver} defaultColorScheme="auto">
       <DatesProvider settings={{ locale: "fr", firstDayOfWeek: 1 }}>
         <Notifications position="bottom-right" />
         {children}

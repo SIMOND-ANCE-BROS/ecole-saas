@@ -1,4 +1,4 @@
-import { createTheme, type MantineColorsTuple } from "@mantine/core";
+import { createTheme, type CSSVariablesResolver, type MantineColorsTuple } from "@mantine/core";
 
 /**
  * Mantine theme (#107), aligned with the `globals.css` tokens: the interface
@@ -61,4 +61,20 @@ export const theme = createTheme({
   components: {
     Table: { defaultProps: { verticalSpacing: "xs", highlightOnHover: true } },
   },
+});
+
+/**
+ * Dark mode: Mantine takes the text colour of `light` and `subtle` variants from
+ * shade `primaryShade.dark - 5`, i.e. shade 0 with our bright dark shade (4): red
+ * « Désactiver » or « Révoquer » turned almost white (#180). Shade 3 keeps the hue
+ * readable on the dark background, as with Mantine's default shade.
+ */
+export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
+  variables: {},
+  light: {},
+  dark: Object.fromEntries(
+    Object.keys(t.colors)
+      .filter((c) => c !== "dark")
+      .map((c) => [`--mantine-color-${c}-light-color`, `var(--mantine-color-${c}-3)`]),
+  ),
 });
