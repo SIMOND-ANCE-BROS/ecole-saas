@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { withSchool } from "@/db";
-import { hoursBySite } from "@/db/settings";
+import { hoursBySite, listPlaces } from "@/db/settings";
 import { seasonCourses, currentSeason } from "@/db/schedule";
 import { closuresBetween, weekLessons } from "@/db/lessons";
 import { addDays, validDate, mondayOf } from "@/domain/schedule/week";
@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Planning" };
 
 export default async function SchedulePage({ searchParams }: PageProps<"/planning">) {
   const { schoolId: schoolId, role } = await schoolContext();
-  const { enregistre, supprime, vue, semaine } = await searchParams;
+  const { enregistre, supprime, vue, semaine, jour } = await searchParams;
   const today = todayInParis();
   const monday = mondayOf(validDate(semaine) ?? today);
   const {
@@ -22,6 +22,7 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
     hours: hours,
     lessons: lessons,
     closures: closures,
+    places,
   } = await withSchool(schoolId, async (tx) => {
     const s = await currentSeason(tx, today);
     return {
@@ -30,6 +31,7 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
       hours: await hoursBySite(tx),
       lessons: await weekLessons(tx, monday),
       closures: await closuresBetween(tx, monday, addDays(monday, 6)),
+      places: await listPlaces(tx),
     };
   });
 
@@ -74,7 +76,9 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
           courses={cours}
           editable={isDirector}
           highlighted={confirmed?.id}
-          view={vue === "liste" ? "liste" : vue === "type" ? "type" : "datee"}
+          view={vue === "liste" || vue === "type" || vue === "salles" ? vue : "datee"}
+          day={Number(jour)}
+          rooms={places.flatMap((s) => s.rooms.map((r) => ({ id: r.id, name: r.name, siteId: s.id, site: s.name })))}
           hours={hours}
           monday={monday}
           today={today}

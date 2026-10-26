@@ -243,6 +243,24 @@ describe("moveCourse (calendar view)", () => {
     expect((await withSchool(school, (tx) => readCourse(tx, id)))?.weekday).toBe(5);
   });
 
+  it("moves a course to another room of the school, never to a room of another school (#85)", async () => {
+    const r = await withSchool(school, (tx) => createCourse(tx, season, base));
+    const id = r.ok ? r.id : "";
+    const [{ id: annex }] =
+      await admin`INSERT INTO room (school_id, site_id, name) VALUES (${school}, ${site}, 'Annexe') RETURNING id`;
+    const slot = { weekday: 3, startTime: "17:00", durationMinutes: 60 };
+    expect(await withSchool(school, (tx) => moveCourse(tx, id, { ...slot, roomId: annex }, true))).toEqual({
+      status: "ok",
+      id,
+    });
+    expect((await withSchool(school, (tx) => readCourse(tx, id)))?.roomId).toBe(annex);
+    expect(await withSchool(school, (tx) => moveCourse(tx, id, { ...slot, roomId: foreignRoom }, true))).toEqual({
+      status: "refused",
+      message: "Cette salle n’existe plus.",
+    });
+    expect((await withSchool(school, (tx) => readCourse(tx, id)))?.roomId).toBe(annex);
+  });
+
   it("rejects a course ending after midnight, a workshop, and a course from another school", async () => {
     const r = await withSchool(school, (tx) => createCourse(tx, season, base));
     const id = r.ok ? r.id : "";

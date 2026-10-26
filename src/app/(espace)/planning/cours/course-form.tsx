@@ -33,6 +33,8 @@ type Props = {
   duration?: number;
   /** Date clicked in the dated schedule: first date if « à des dates précises » is chosen. */
   date?: string;
+  /** Room of the column clicked in the « Par salle » view (#85); ignored if unknown. */
+  room?: string;
 };
 
 const whole = (v: string) => (v.trim() === "" ? null : Number(v));
@@ -46,11 +48,12 @@ export function CourseForm({
   startTime,
   duration: duration,
   date,
+  room,
 }: Props) {
   const r = referential;
   const [v, setV] = useState({
     discipline: course?.discipline ?? "",
-    roomId: course?.roomId ?? r.rooms[0]?.id ?? NEW,
+    roomId: course?.roomId ?? r.rooms.find((s) => s.id === room)?.id ?? r.rooms[0]?.id ?? NEW,
     newRoom: "",
     roomCapacity: "",
     siteId: r.sites[0]?.id ?? NEW,
