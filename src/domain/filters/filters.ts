@@ -100,7 +100,7 @@ const DATE_LABELS: Partial<Record<Operator, string>> = {
 
 /** An operator's label according to the column type (« avant le » for a date). */
 export const operatorLabel = (o: Operator, type: ColumnType) =>
-  (type === "date" && DATE_LABELS[o]) || OPERATOR_LABELS[o];
+  (type === "date" ? DATE_LABELS[o] : undefined) ?? OPERATOR_LABELS[o];
 
 export const withoutValue = (o: Operator) => o === "vide" || o === "non_vide";
 

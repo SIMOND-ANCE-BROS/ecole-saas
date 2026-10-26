@@ -47,7 +47,8 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-unsafe-call": "error",
       "@typescript-eslint/no-unsafe-member-access": "error",
       "@typescript-eslint/no-unsafe-return": "error",
-      "@typescript-eslint/prefer-nullish-coalescing": "warn",
+      // An empty form field ("") falls back on purpose (`v || null`, « Non renseigné »): strings are ignored (#124).
+      "@typescript-eslint/prefer-nullish-coalescing": ["error", { ignorePrimitives: { string: true } }],
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
