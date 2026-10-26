@@ -6,14 +6,27 @@ export type Slot = {
   /** `HH:MM` */
   startTime: string;
   durationMinutes: number;
+  /**
+   * Lesson dates of the course when known (#96): two courses then only overlap
+   * on a shared date, so alternate weeks or disjoint periods do not clash.
+   */
+  lessonDates?: readonly string[];
 };
 
 const minutes = (h: string) => Number(h.slice(0, 2)) * 60 + Number(h.slice(3, 5));
 
 export function overlaps(a: Slot, b: Slot): boolean {
-  if (a.weekday === null || a.weekday !== b.weekday) return false;
+  if (!sameDay(a, b)) return false;
   const [da, db] = [minutes(a.startTime), minutes(b.startTime)];
   return da < db + b.durationMinutes && db < da + a.durationMinutes;
+}
+
+function sameDay(a: Slot, b: Slot): boolean {
+  if (a.lessonDates && b.lessonDates) {
+    const dates = new Set(a.lessonDates);
+    return b.lessonDates.some((d) => dates.has(d));
+  }
+  return a.weekday !== null && a.weekday === b.weekday;
 }
 
 type PlacedCourse = Slot & { id: string | null; roomId: string; instructorId: string };
