@@ -42,6 +42,7 @@ export default async function SettingsPage() {
     },
     { href: "/planning/fermetures", title: "Fermetures", detail: "Vacances, jours fériés, gala" },
     { href: "/intervenants", title: "Intervenants", detail: "Professeurs, statut et rémunération" },
+    { href: "/parametres/equipe", title: "Équipe", detail: "Accès de la direction et de l’accueil, invitations" },
   ];
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">

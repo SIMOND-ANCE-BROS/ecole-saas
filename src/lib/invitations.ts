@@ -3,6 +3,7 @@ import { type OpenedLink, resetLink, readRelationship, SHARED, consumeLink } fro
 import { passwordRefusal } from "../domain/team/rules";
 import { auth } from "./auth";
 import { createAccount } from "./accounts";
+import { publicAddress } from "./public-calendar";
 
 /**
  * Accepting an invitation or reset link (#104), opened without being signed
@@ -73,6 +74,9 @@ export async function acceptLink(schoolId: string, token: string, entry: LinkInp
   }
   return { ok: true, type: link.type, email: link.email };
 }
+
+/** Address of an invitation or reset link, to copy and pass on (SMS, personal e-mail…). */
+export const linkAddress = (schoolId: string, token: string) => `${publicAddress()}/invitation/${schoolId}/${token}`;
 
 /** Reset link for a member (management); refused for an account also used in another school. */
 export function createResetLink(schoolId: string, userId: string, memberId: string) {
