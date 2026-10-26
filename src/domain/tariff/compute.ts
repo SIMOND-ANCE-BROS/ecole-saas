@@ -103,7 +103,7 @@ function findRow(
   );
   const discipline = disciplineUnique(enrollment.courses);
   return (
-    (discipline !== null && candidates.find((l) => l.disciplineId === discipline)) ||
+    (discipline !== null ? candidates.find((l) => l.disciplineId === discipline) : undefined) ??
     candidates.find((l) => l.disciplineId === null)
   );
 }
