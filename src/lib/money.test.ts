@@ -25,6 +25,12 @@ describe("formatEuros", () => {
   it("formats in euros the French way", () => {
     expect(formatEuros(123456).replace(/\s/g, " ")).toBe("1 234,56 €");
   });
+
+  it("writes a negative amount with the typographic minus, not a hyphen", () => {
+    expect(formatEuros(-1250).replace(/\s/g, " ")).toBe("−12,50 €");
+    expect(formatEuros(-1250)).not.toContain("-");
+    expect(formatEuros(-0).replace(/\s/g, " ")).toBe("0,00 €");
+  });
 });
 
 describe("parseEuros", () => {
