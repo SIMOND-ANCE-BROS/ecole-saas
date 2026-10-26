@@ -177,7 +177,7 @@ DESIGN.md                    interface rules
 **CI** (`.github/workflows/`)
 
 - Read-only token by default, actions pinned by commit SHA, `persist-credentials: false`, a timeout on every job, stale runs cancelled.
-- `ci-success` aggregates the required jobs (format, lint, typecheck, tests, integration, `npm audit` on runtime dependencies, gitleaks secret scan); `PR conventions` checks the branch prefix and the conventional-commit PR title.
+- `ci-success` aggregates the required jobs (format, lint, typecheck, tests, integration, `next build`, `npm audit` on runtime dependencies, gitleaks secret scan); `PR conventions` checks the branch prefix and the conventional-commit PR title.
 - Dependabot proposes updates after a 14-day cooldown; `CODEOWNERS` covers sensitive paths only.
 
 ## 9. Tests
