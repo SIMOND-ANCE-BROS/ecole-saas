@@ -25,6 +25,7 @@ else
   echo "SKIP  integration tests (database not reachable on 5433: npm run db:up)"
   failed=1
 fi
+step "build" npm run --silent build
 step "secret scan" sh scripts/gitleaks.sh git --redact --no-banner --log-level warn --log-opts="origin/main..HEAD"
 step "audit (runtime deps)" npm audit --omit=dev --audit-level=high
 rm -f /tmp/preflight-$$.log
