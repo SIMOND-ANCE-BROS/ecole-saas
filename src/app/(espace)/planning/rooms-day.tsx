@@ -1,5 +1,6 @@
 "use client";
 
+import { SegmentedControl } from "@mantine/core";
 import { useRouter } from "next/navigation";
 import type { ScheduleCourse } from "@/db/schedule";
 import { toTime } from "@/domain/schedule/calendar";
@@ -14,7 +15,7 @@ type Props = {
   /** Visible courses (filters applied). */
   courses: ScheduleCourse[];
   /** All courses of the season: a time range that stays stable whatever the filters. */
-  tous: ScheduleCourse[];
+  allCourses: ScheduleCourse[];
   /** Rooms shown as columns, by site then name (empty rooms included: a course can be created there). */
   rooms: PlanningRoom[];
   /** 1 = Monday … 7 = Sunday. */
@@ -35,17 +36,18 @@ type Props = {
  *
  * The calendar positions columns by number: column i (from 1) is `rooms[i - 1]`.
  */
-export function RoomsDay({ courses, tous, rooms, day, days, onDay, hours, editable, highlighted }: Props) {
+export function RoomsDay({ courses, allCourses, rooms, day, days, onDay, hours, editable, highlighted }: Props) {
   const router = useRouter();
   const column = new Map(rooms.map((r, i) => [r.id, i + 1]));
   const severalSites = new Set(rooms.map((r) => r.siteId)).size > 1;
-  const { start, end: dayEnd } = calendarFrame(Object.values(hours).flat(), tous);
+  const { start, end: dayEnd } = calendarFrame(Object.values(hours).flat(), allCourses);
 
-  const elements: CalendarElement[] = courses
-    .filter((c) => c.weekday === day && column.has(c.roomId))
-    .map((c) => ({
+  const elements: CalendarElement[] = courses.flatMap((c) => {
+    const col = column.get(c.roomId);
+    if (c.weekday !== day || col === undefined) return [];
+    return {
       id: c.id,
-      weekday: column.get(c.roomId) as number,
+      weekday: col,
       startTime: c.startTime,
       durationMinutes: c.durationMinutes,
       title: c.discipline,
@@ -57,15 +59,20 @@ export function RoomsDay({ courses, tous, rooms, day, days, onDay, hours, editab
       alert: c.maxCapacity !== null && c.enrolled >= c.maxCapacity ? "complet" : null,
       href: `/planning/cours/${c.id}`,
       movable: true,
-    }));
-  // Each room column greys out the closed hours of its own site on that day.
-  const columnHours = rooms.flatMap((r, i) =>
-    (hours[r.siteId] ?? []).filter((h) => h.weekday === day).map((h) => ({ ...h, weekday: i + 1 })),
-  );
+    };
+  });
+  // Each room column greys out the closed hours of its own site on that day; a site without
+  // opening hours imposes nothing (domain/schedule/hours), so its columns stay open all day.
+  const columnHours = rooms.flatMap((r, i) => {
+    const site = hours[r.siteId];
+    if (!site?.length) return [{ weekday: i + 1, opening: "00:00", closure: "23:59" }];
+    return site.filter((h) => h.weekday === day).map((h) => ({ ...h, weekday: i + 1 }));
+  });
 
   async function moveCourse(id: string, slot: Slot, choice: string | null): Promise<CalendarResponse> {
     const c = courses.find((x) => x.id === id);
     const target = rooms[slot.weekday - 1];
+    if (!target) return { status: "refused", message: "Cette salle n’est plus affichée." };
     const when = `${DAYS[day].toLowerCase()} ${slot.startTime}–${end(slot.startTime, slot.durationMinutes)}, ${target.name}`;
     const r = await move(
       id,
@@ -85,23 +92,19 @@ export function RoomsDay({ courses, tous, rooms, day, days, onDay, hours, editab
 
   return (
     <div className="flex flex-col gap-3">
-      <div role="group" aria-label="Jour" className="flex flex-wrap gap-1">
-        {days.map((d) => (
-          <button
-            key={d}
-            type="button"
-            aria-pressed={d === day}
-            className="rounded-md border border-bordure px-3 py-1.5 text-sm aria-pressed:border-accent aria-pressed:bg-accent-doux aria-pressed:font-medium"
-            onClick={() => onDay(d)}
-          >
-            {DAYS[d]}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        aria-label="Jour"
+        className="self-start"
+        value={String(day)}
+        onChange={(d) => onDay(Number(d))}
+        data={days.map((d) => ({ value: String(d), label: DAYS[d] }))}
+      />
       {rooms.length === 0 ? (
         <p className="text-sm text-doux">Aucune salle pour ces filtres.</p>
       ) : (
         <Calendar
+          // New day or new columns: a pending move or confirmation refers to old column numbers, it is dropped.
+          key={`${day}:${rooms.map((r) => r.id).join()}`}
           elements={elements}
           columns={rooms.map((r, i) => ({ day: i + 1, title: severalSites ? `${r.name} · ${r.site}` : r.name }))}
           start={start}

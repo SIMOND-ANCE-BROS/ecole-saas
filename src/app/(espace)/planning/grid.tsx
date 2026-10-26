@@ -220,7 +220,7 @@ export function ScheduleGrid({
       ) : view === "salles" ? (
         <RoomsDay
           courses={visible}
-          tous={cours}
+          allCourses={cours}
           rooms={allRooms.filter((r) => (roomId ? r.id === roomId : !site || r.site === site))}
           day={day}
           days={weekDays}
