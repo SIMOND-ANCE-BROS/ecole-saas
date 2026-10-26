@@ -162,7 +162,7 @@ DESIGN.md                    interface rules
 - Never write personal data to logs (names, phone numbers, health); log technical ids only.
 - Invoicing tool credentials are stored encrypted (`invoicing_connector.encrypted_credentials`), never in clear, never in the repository.
 - No secret in code: environment variables, and `.env.example` kept up to date.
-- Issues and PRs are public to the organisation: fictitious data only, no secret names.
+- The repository is public (issues, PRs, commits and their history): fictitious data only, no secret names.
 
 **External services** (invoicing tools, calendars)
 

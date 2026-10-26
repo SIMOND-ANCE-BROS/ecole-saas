@@ -35,5 +35,5 @@ propose an addition to the guide instead of improvising.
 
 - Be FRUGAL on GitHub: comment only when it changes something.
 - Search before creating; reuse existing labels and types.
-- Issues are visible to the organisation: fictitious data only, no secrets.
+- The repository is public, issues included: fictitious data only, no secrets.
 - Recap every creation, closure or notable change in your final answer, with numbers.
