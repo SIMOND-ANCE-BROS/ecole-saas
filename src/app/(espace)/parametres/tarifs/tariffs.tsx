@@ -39,6 +39,12 @@ function PriceCell({
   const current = row.price[period];
   const initial = current ? inEuros(current.cents) : "";
   const [value, setValue] = useState(initial);
+  // The saved price comes back with the refresh (« 112,5 » → « 112,50 »): follow it, keep ✓.
+  const [shown, setShown] = useState(initial);
+  if (shown !== initial) {
+    setShown(initial);
+    setValue(initial);
+  }
   const [state, setState] = useState<State>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
@@ -61,8 +67,7 @@ function PriceCell({
       });
       setState(r.message ? "error" : "saved");
       setMessage(r.message);
-      // Show the saved amount as the grid writes it (« 110 » becomes « 110,00 »).
-      setValue(r.message ? initial : cents === null ? "" : inEuros(cents));
+      if (r.message) setValue(initial);
     });
   };
 
@@ -199,7 +204,7 @@ export function Grid({
               </tr>
             )}
             {rows.map((l) => {
-              const key = `${l.combination.join("+")}|${l.disciplineId ?? ""}`;
+              const key = `${l.audience}|${l.combination.join("+")}|${l.disciplineId ?? ""}`;
               const label = combinationLabel(l.combination);
               const used = PERIODS.some(([p]) => l.price[p]?.used);
               return (
