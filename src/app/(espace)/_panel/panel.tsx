@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, type ReactNode, use, useEffect, useRef, useState } from "react";
 
 /** True inside a panel: « Annuler » goes back there instead of navigating. */
@@ -29,6 +29,8 @@ export function Panel(props: Props) {
 
 function PanelDialog({ title, children, path }: Props & { path: string }) {
   const router = useRouter();
+  // The panel's own parameters (« ?payeur= », « ?jour= »): the full page needs them too.
+  const query = useSearchParams().toString();
   const dialogue = useRef<HTMLDialogElement>(null);
   /** Element that had focus before opening (recorded once only: the effect may run again). */
   const before = useRef<HTMLElement | null>(null);
@@ -60,7 +62,7 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
       <div className="flex h-full flex-col">
         <div className="flex items-center justify-end gap-2 border-b border-bordure px-4 py-2">
           {/* Plain link: full reload, hence the whole page without a panel. */}
-          <a href={path} className="lien text-sm">
+          <a href={query ? `${path}?${query}` : path} className="lien text-sm">
             Ouvrir en pleine page
           </a>
           <button type="button" className="bouton-secondaire" onClick={close}>
