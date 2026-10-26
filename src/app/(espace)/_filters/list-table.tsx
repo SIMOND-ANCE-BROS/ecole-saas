@@ -39,7 +39,7 @@ export type TableRow<Id extends string = string> = {
 
 type Props<Id extends string> = {
   list: List;
-  /** « les élèves »: for accessible labels. */
+  /** End of the columns popover title, with its article: « des élèves ». */
   what: string;
   caption: string;
   columns: readonly ColumnDef<Id>[];
@@ -225,7 +225,7 @@ export function ListTable<Id extends string>({
           {/* On phones, cards: no columns to adjust. */}
           <span className={mobile ? "hidden sm:inline" : ""}>
             <Popover
-              title={`Colonnes de ${what}`}
+              title={`Colonnes ${what}`}
               button={masquees.length ? `Colonnes (${masquees.length} de plus)` : "Colonnes"}
               buttonClass="bouton-secondaire"
               width="w-[22rem]"

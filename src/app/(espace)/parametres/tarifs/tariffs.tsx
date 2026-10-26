@@ -39,6 +39,12 @@ function PriceCell({
   const current = row.price[period];
   const initial = current ? inEuros(current.cents) : "";
   const [value, setValue] = useState(initial);
+  // The saved price comes back with the refresh (« 112,5 » → « 112,50 »): follow it, keep ✓.
+  const [shown, setShown] = useState(initial);
+  if (shown !== initial) {
+    setShown(initial);
+    setValue(initial);
+  }
   const [state, setState] = useState<State>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
@@ -198,7 +204,7 @@ export function Grid({
               </tr>
             )}
             {rows.map((l) => {
-              const key = `${l.combination.join("+")}|${l.disciplineId ?? ""}`;
+              const key = `${l.audience}|${l.combination.join("+")}|${l.disciplineId ?? ""}`;
               const label = combinationLabel(l.combination);
               const used = PERIODS.some(([p]) => l.price[p]?.used);
               return (
@@ -210,7 +216,7 @@ export function Grid({
                     )}
                   </td>
                   {PERIODS.map(([p, periodLabel]) => (
-                    <td key={`${key}-${p}-${l.price[p]?.cents ?? "vide"}`}>
+                    <td key={`${key}-${p}`}>
                       <PriceCell seasonId={seasonId} row={l} period={p} label={`${label}, ${periodLabel}`} />
                     </td>
                   ))}

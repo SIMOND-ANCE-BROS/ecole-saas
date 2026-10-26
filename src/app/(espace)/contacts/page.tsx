@@ -39,7 +39,7 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
         <Suspense>
           <ListTable
             list="contacts"
-            what="les contacts"
+            what="des contacts"
             caption="Contacts"
             columns={CONTACT_COLUMNS}
             layout={layout}

@@ -136,7 +136,7 @@ function evaluate(rule: DiscountRule, enrollment: EnrollmentRequest, toutes: rea
     return { status: "rejected", reason: "Non cumulable avec un forfait 2 disciplines" };
   }
 
-  return { status: "applied", reason: `${countLabel} : -${value(rule)}` };
+  return { status: "applied", reason: `${countLabel} : −${value(rule)}` };
 }
 
 function discountAmount(rule: DiscountRule, priceCents: number): number {

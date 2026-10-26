@@ -88,7 +88,7 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
         <Suspense>
           <ListTable
             list="intervenants"
-            what="les intervenants"
+            what="des intervenants"
             caption="Intervenants"
             columns={columns}
             layout={layout}

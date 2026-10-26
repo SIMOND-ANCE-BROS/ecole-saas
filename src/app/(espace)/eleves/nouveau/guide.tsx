@@ -134,9 +134,10 @@ export function NewStudentGuide({
               label={`Qui est le responsable légal de ${firstName} (parent, tuteur) ?`}
               value={guardian}
               onChange={(c) => {
-                // New person: same family name suggested.
+                // New person: same family name suggested once, when it is created.
+                const created = c && has(c, "newPerson") && !(guardian && has(guardian, "newPerson"));
                 setGuardian(
-                  c && has(c, "newPerson") && !c.newPerson.name && !c.newPerson.firstName
+                  created && !c.newPerson.name && !c.newPerson.firstName
                     ? { newPerson: { ...c.newPerson, name: e.name } }
                     : c,
                 );
