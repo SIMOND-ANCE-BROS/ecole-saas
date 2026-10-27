@@ -3,6 +3,7 @@
 import { Button, Group, Text, Title } from "@mantine/core";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import type { ScheduleLesson } from "@/db/lessons";
 import { toTime } from "@/domain/schedule/calendar";
 import { calendarFrame, type Hours } from "@/domain/schedule/hours";
@@ -106,12 +107,7 @@ export function DatedWeek({
           <Text span size="sm" c="dimmed" id="aller-au">
             Aller au
           </Text>
-          <DateField
-            aria-labelledby="aller-au"
-            w={140}
-            value={monday}
-            onChange={(d) => d && router.push(weekLink(d))}
-          />
+          <GoTo key={monday} monday={monday} onGo={(d) => router.push(weekLink(d))} />
         </Group>
       </nav>
       {lessons.length === 0 && (
@@ -136,5 +132,25 @@ export function DatedWeek({
         }
       />
     </div>
+  );
+}
+
+/**
+ * « Aller au »: shows the Monday of the week and moves only once a date is
+ * settled (Enter, leaving the field, a day picked), never on a half-typed
+ * year such as « 12/09/20 ».
+ */
+function GoTo({ monday, onGo }: { monday: string; onGo: (date: string) => void }) {
+  const [date, setDate] = useState(monday);
+  return (
+    <DateField
+      aria-labelledby="aller-au"
+      w={140}
+      value={date}
+      onChange={setDate}
+      onCommit={(d) => {
+        if (addDays(d, 1 - weekdayOf(d)) !== monday) onGo(d);
+      }}
+    />
   );
 }

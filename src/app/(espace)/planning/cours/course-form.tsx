@@ -187,6 +187,10 @@ export function CourseForm({
           autoComplete="off"
           autoFocus={!course}
           data={r.disciplines.map((d) => d.name)}
+          // « Ja » then Enter takes « Jazz » rather than creating « Ja ».
+          selectFirstOptionOnChange
+          // After a refusal, focus lands here: the list would cover the message.
+          openOnFocus={!refusal}
           value={v.discipline}
           onChange={set("discipline")}
           description={
@@ -211,15 +215,14 @@ export function CourseForm({
           }))}
           value={v.instructorId || null}
           onChange={set("instructorId")}
-          error={
+          description={
             r.instructors.length === 0 ? (
               <>
                 Aucun intervenant actif : <TextLink href="/intervenants/nouveau">en ajouter un</TextLink>.
               </>
-            ) : (
-              error("instructorId")
-            )
+            ) : undefined
           }
+          error={error("instructorId")}
         />
         <Select
           label="Type"
@@ -256,7 +259,7 @@ export function CourseForm({
                     w={140}
                     value={d}
                     onChange={(value) => setDates(dates.map((x, j) => (j === i ? value : x)))}
-                    error={i === 0 ? error("dates") : undefined}
+                    error={Boolean(error("dates"))}
                   />
                   {dates.length > 1 && (
                     <Button
@@ -272,6 +275,11 @@ export function CourseForm({
                 </li>
               ))}
             </ul>
+            {error("dates") && (
+              <Text size="sm" c="red" role="alert" tabIndex={-1}>
+                {error("dates")}
+              </Text>
+            )}
             <Button variant="subtle" size="compact-sm" className="self-start" onClick={() => setDates([...dates, ""])}>
               Ajouter une date
             </Button>
@@ -301,6 +309,9 @@ export function CourseForm({
             min={5}
             step={5}
             allowDecimal={false}
+            // No silent correction on blur (0 places → 1): the server says what is wrong.
+            clampBehavior="none"
+            trimLeadingZeroesOnBlur={false}
             value={v.durationMinutes}
             onChange={set("durationMinutes")}
             error={error("durationMinutes")}
@@ -310,7 +321,7 @@ export function CourseForm({
               <Button
                 key={d}
                 size="compact-xs"
-                variant={String(d) === v.durationMinutes ? "light" : "default"}
+                variant={String(d) === v.durationMinutes ? "filled" : "default"}
                 aria-pressed={String(d) === v.durationMinutes}
                 onClick={() => setV({ ...v, durationMinutes: String(d) })}
               >
@@ -363,6 +374,8 @@ export function CourseForm({
               label="Capacité de la salle (facultatif)"
               min={1}
               allowDecimal={false}
+              clampBehavior="none"
+              trimLeadingZeroesOnBlur={false}
               value={v.roomCapacity}
               onChange={set("roomCapacity")}
             />
@@ -390,11 +403,21 @@ export function CourseForm({
       </Fieldset>
 
       <Fieldset legend="Public" className="grid gap-3 sm:grid-cols-3">
-        <NumberInput label="Âge minimum" min={0} allowDecimal={false} value={v.ageMin} onChange={set("ageMin")} />
+        <NumberInput
+          label="Âge minimum"
+          min={0}
+          allowDecimal={false}
+          clampBehavior="none"
+          trimLeadingZeroesOnBlur={false}
+          value={v.ageMin}
+          onChange={set("ageMin")}
+        />
         <NumberInput
           label="Âge maximum"
           min={0}
           allowDecimal={false}
+          clampBehavior="none"
+          trimLeadingZeroesOnBlur={false}
           value={v.ageMax}
           onChange={set("ageMax")}
           error={error("ageMax")}
@@ -403,6 +426,8 @@ export function CourseForm({
           label="Places"
           min={1}
           allowDecimal={false}
+          clampBehavior="none"
+          trimLeadingZeroesOnBlur={false}
           placeholder={chosenRoom?.capacity ? `${chosenRoom.capacity} (salle)` : "sans limite"}
           value={v.maxCapacity}
           onChange={set("maxCapacity")}
@@ -471,7 +496,9 @@ export function CourseForm({
               >
                 Oui, supprimer
               </Button>
-              <Button variant="default" onClick={() => setConfirm(false)}>
+              {/* Focus on the safe answer: keyboard users keep their place and the
+                  confirmation, which may wrap below, scrolls into view. */}
+              <Button variant="default" autoFocus onClick={() => setConfirm(false)}>
                 Non
               </Button>
             </Group>

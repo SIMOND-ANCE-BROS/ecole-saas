@@ -17,8 +17,11 @@ export const COURSE_TYPES = {
 } as const;
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
-const shortName = z.string().trim().min(1).max(100);
-const integerOrNull = (min: number, max: number) => z.int().min(min).max(max).nullable();
+const shortName = z.string().trim().min(1, "Obligatoire").max(100, "100 caractères au plus");
+const between = (min: number, max: number) => `Nombre entier entre ${min} et ${max}`;
+const integerOrNull = (min: number, max: number) =>
+  z.int(between(min, max)).min(min, between(min, max)).max(max, between(min, max)).nullable();
+const duration = z.int(between(5, 600)).min(5, between(5, 600)).max(600, between(5, 600));
 const dateOrNull = z.iso.date("Date invalide").nullable();
 
 /** Offered recurrences (#90). */
@@ -37,7 +40,10 @@ const courseFields = z.object({
       capacity: integerOrNull(1, 1000),
       site: z.union([
         z.object({ id: z.uuid() }),
-        z.object({ name: shortName, address: z.string().trim().min(1).max(300) }),
+        z.object({
+          name: shortName,
+          address: z.string().trim().min(1, "Obligatoire").max(300, "300 caractères au plus"),
+        }),
       ]),
     }),
   ]),
@@ -49,7 +55,7 @@ const courseFields = z.object({
   endDate: dateOrNull,
   dates: z.array(z.iso.date("Date invalide")).max(100, "100 dates au plus"),
   startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM"),
-  durationMinutes: z.int().min(5).max(600),
+  durationMinutes: duration,
   ageMin: integerOrNull(0, 120),
   ageMax: integerOrNull(0, 120),
   level: z
@@ -331,7 +337,7 @@ export async function deleteCourse(tx: Tx, id: string): Promise<Result> {
 export const validSlot = z.object({
   weekday: z.int().min(1).max(7),
   startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM"),
-  durationMinutes: z.int().min(5).max(600),
+  durationMinutes: duration,
   /** Day-by-room view (#85): the course moves to another room too. */
   roomId: z.uuid().optional(),
 });

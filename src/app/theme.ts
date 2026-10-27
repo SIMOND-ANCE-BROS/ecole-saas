@@ -85,17 +85,29 @@ export const theme = createTheme({
 /**
  * Dark mode: Mantine takes the text colour of `light` and `subtle` variants from
  * shade `primaryShade.dark - 5`, i.e. shade 0 with our bright dark shade (4): red
- * « Désactiver » or « Révoquer » turned almost white (#180). Shade 3 keeps the hue
- * readable on the dark background, as with Mantine's default shade.
+ * « Désactiver » or « Révoquer » turned almost white (#180). The `outline` variant
+ * takes shade `- 4`, so « Oui, supprimer » turned white too (#187). Shade 3 keeps
+ * the hue readable on the dark background, as with Mantine's default shade.
+ *
+ * Light mode: yellow 6 on white or on its pale tint reads at 2:1, a pressed
+ * « Absent » or a « Complet » badge looked disabled (#187). A dark amber
+ * (6:1 on white) keeps the hue.
  */
 export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
   variables: {},
-  light: { "--filled-text": "var(--mantine-color-white)" },
+  light: {
+    "--filled-text": "var(--mantine-color-white)",
+    "--mantine-color-yellow-light-color": "#8f5500",
+    "--mantine-color-yellow-outline": "#8f5500",
+  },
   dark: {
     ...Object.fromEntries(
       Object.keys(t.colors)
         .filter((c) => c !== "dark")
-        .map((c) => [`--mantine-color-${c}-light-color`, `var(--mantine-color-${c}-3)`]),
+        .flatMap((c) => [
+          [`--mantine-color-${c}-light-color`, `var(--mantine-color-${c}-3)`],
+          [`--mantine-color-${c}-outline`, `var(--mantine-color-${c}-3)`],
+        ]),
     ),
     // Near-black on the light dark-mode fills, as the old `--sur-accent` (#11131a).
     "--filled-text": "var(--mantine-color-dark-8)",
