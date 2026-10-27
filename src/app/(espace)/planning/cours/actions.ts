@@ -6,7 +6,7 @@ import { withSchool, type Tx } from "@/db";
 import { createCourse, moveCourse, readCourse, updateCourse, validCourseInput, deleteCourse } from "@/db/courses";
 import { slotConflicts } from "@/db/unavailabilities";
 import { hoursBySite } from "@/db/settings";
-import { chosenSeason, currentSeason, seasonCourses } from "@/db/schedule";
+import { chosenSeason, currentSeason, seasonById, seasonCourses } from "@/db/schedule";
 import { seasonCalendar, syncLessons } from "@/db/lessons";
 import { lessonDatesOf } from "@/domain/schedule/lessons";
 import { conflicts } from "@/domain/schedule/overlap";
@@ -16,7 +16,7 @@ import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { errorsOf, type FieldErrors, topErrorsOf } from "@/lib/form-errors";
 import type { z } from "zod";
-import { withSeason } from "../season-link";
+import { seasonParam, withSeason } from "../season-link";
 
 /** Errors by field: top-level (« room ») and nested (« room.capacity », a new room's own fields). */
 export type Refusal = { message: string; errors: FieldErrors<CourseFields> };
@@ -24,8 +24,7 @@ type CourseFields = z.input<typeof validCourseInput>;
 
 /**
  * Creates (null id) a course in the season chosen on the planning (#189; the
- * current one when that id is not one of the school's seasons) or updates a
- * course; management only.
+ * current one when none is given) or updates a course; management only.
  */
 export async function saveCourse(id: string | null, entry: unknown, seasonId?: unknown): Promise<Refusal> {
   const { schoolId: schoolId } = await requireRole("director");
@@ -38,11 +37,21 @@ export async function saveCourse(id: string | null, entry: unknown, seasonId?: u
   }
   const today = todayInParis();
   const result = await withSchool(schoolId, async (tx) => {
-    const target = id !== null ? (await readCourse(tx, id))?.seasonId : (await chosenSeason(tx, seasonId, today))?.id;
+    const target =
+      id !== null
+        ? (await readCourse(tx, id))?.seasonId
+        : seasonId
+          ? (await seasonById(tx, seasonId))?.id
+          : (await currentSeason(tx, today))?.id;
     if (!target)
       return {
         ok: false as const,
-        message: id !== null ? "Ce cours n’existe plus." : "Aucune saison n’est paramétrée.",
+        message:
+          id !== null
+            ? "Ce cours n’existe plus."
+            : seasonId
+              ? "Cette saison n’existe plus."
+              : "Aucune saison n’est paramétrée.",
       };
     const r = id !== null ? await updateCourse(tx, id, parsed.data) : await createCourse(tx, target, parsed.data);
     // Upcoming lessons recomputed in the same transaction (day changed, new course…).
@@ -88,7 +97,7 @@ export async function checkSlot(
 
 /** `?saison=` value of a planning link: undefined for the current season. */
 async function seasonOfLink(tx: Tx, seasonId: string, today: string) {
-  return (await currentSeason(tx, today))?.id === seasonId ? undefined : seasonId;
+  return seasonParam(seasonId, (await currentSeason(tx, today))?.id);
 }
 
 export type MoveResponse =

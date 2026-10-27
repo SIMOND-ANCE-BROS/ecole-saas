@@ -40,6 +40,8 @@ type Props = {
   room?: string;
   /** Season of a new course, chosen on the planning (#189); ignored when editing. */
   seasonId?: string;
+  /** Planning of that season, where « Annuler » goes back for a new course. */
+  planning?: string;
 };
 
 const whole = (v: string) => (v.trim() === "" ? null : Number(v));
@@ -55,6 +57,7 @@ export function CourseForm({
   date,
   room,
   seasonId,
+  planning = "/planning",
 }: Props) {
   const r = referential;
   const [v, setV] = useState({
@@ -509,7 +512,7 @@ export function CourseForm({
         <Button type="submit" loading={sending}>
           {course ? "Enregistrer les modifications" : "Créer le cours"}
         </Button>
-        <Cancel href={course ? `/planning/cours/${course.id}` : `/planning${seasonId ? `?saison=${seasonId}` : ""}`} />
+        <Cancel href={course ? `/planning/cours/${course.id}` : planning} />
         {course &&
           (confirmDeletion ? (
             <Group gap="xs" className="ml-auto text-sm">

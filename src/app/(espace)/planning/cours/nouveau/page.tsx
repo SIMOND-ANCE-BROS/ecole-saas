@@ -9,7 +9,7 @@ import { validDate } from "@/domain/schedule/week";
 import { requireRole } from "@/lib/session";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { CourseForm } from "../course-form";
-import { withSeason } from "../../season-link";
+import { newCourseTitle, seasonParam, withSeason } from "../../season-link";
 
 export const metadata: Metadata = { title: "Nouveau cours" };
 
@@ -38,13 +38,14 @@ export default async function NewCoursePage({ searchParams }: PageProps<"/planni
         Aucune saison n’est encore paramétrée.
       </Text>
     );
+  const planning = withSeason("/planning", seasonParam(season.id, current?.id));
   const proposedDay = Number(jour);
   const proposedDuration = Number(duree);
 
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <TextLink href={withSeason("/planning", season.id === current?.id ? undefined : season.id)} size="sm">
+        <TextLink href={planning} size="sm">
           Planning {season.label}
         </TextLink>
         <Text span size="sm" c="dimmed">
@@ -53,11 +54,12 @@ export default async function NewCoursePage({ searchParams }: PageProps<"/planni
         </Text>
       </nav>
       <Title order={1} fz="xl">
-        Nouveau cours
+        {newCourseTitle(season.label, season.id === current?.id)}
       </Title>
       <CourseForm
         course={null}
         seasonId={season.id}
+        planning={planning}
         referential={referential}
         schedule={schedule}
         calendar={calendar}

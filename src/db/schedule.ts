@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { courseDatesSql } from "./courses";
 import type { Tx } from "./index";
@@ -27,22 +27,45 @@ export function schoolSeasons(tx: Tx): Promise<Season[]> {
   return tx.select(seasonColumns).from(season).orderBy(desc(season.startDate));
 }
 
+/** The school's season with this id (RLS); null for an unknown or malformed id. */
+export async function seasonById(tx: Tx, asked: unknown): Promise<Season | null> {
+  const id = z.uuid().safeParse(asked);
+  if (!id.success) return null;
+  const [s] = await tx.select(seasonColumns).from(season).where(eq(season.id, id.data));
+  return s ?? null;
+}
+
 /**
  * The season asked for in the URL (`?saison=`) when it is one of the school's
  * (RLS), otherwise the current one (`currentSeason`).
  */
 export async function chosenSeason(tx: Tx, asked: unknown, day: string): Promise<Season | null> {
-  const id = z.uuid().safeParse(asked);
-  if (id.success) {
-    const [s] = await tx.select(seasonColumns).from(season).where(eq(season.id, id.data));
-    if (s) return s;
-  }
-  return currentSeason(tx, day);
+  return (await seasonById(tx, asked)) ?? currentSeason(tx, day);
+}
+
+/** Season of a course; null for an unknown course. */
+export async function seasonOfCourse(tx: Tx, courseId: string): Promise<Season | null> {
+  const [s] = await tx
+    .select(seasonColumns)
+    .from(course)
+    .innerJoin(season, eq(season.id, course.seasonId))
+    .where(eq(course.id, courseId));
+  return s ?? null;
+}
+
+/** First season overlapping the days `start`–`end` (`YYYY-MM-DD`, a week); null if none does. */
+export async function seasonOverlapping(tx: Tx, start: string, end: string): Promise<Season | null> {
+  const [s] = await tx
+    .select(seasonColumns)
+    .from(season)
+    .where(and(lte(season.startDate, end), gte(season.endDate, start)))
+    .orderBy(asc(season.startDate))
+    .limit(1);
+  return s ?? null;
 }
 
 export type ScheduleCourse = {
   id: string;
-  seasonId: string;
   /** 1 = Monday … 7 = Sunday; null for a workshop. */
   weekday: number | null;
   /** `HH:MM` */
@@ -97,7 +120,6 @@ async function readScheduleCourse(tx: Tx, filter: SQL): Promise<ScheduleCourse[]
   const rows = await tx
     .select({
       id: course.id,
-      seasonId: course.seasonId,
       weekday: course.weekday,
       startTime: course.startTime,
       durationMinutes: course.durationMinutes,

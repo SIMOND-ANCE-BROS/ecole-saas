@@ -8,6 +8,9 @@ import {
   currentSeason,
   chosenSeason,
   schoolSeasons,
+  seasonById,
+  seasonOfCourse,
+  seasonOverlapping,
 } from "./schedule";
 
 /** Schedule, read as the application does (app_user, RLS). Fictitious data deleted at the end. */
@@ -109,6 +112,27 @@ describe("chosenSeason (#189)", () => {
 
   it("never returns another school's season", async () => {
     expect((await withSchool(school, (tx) => chosenSeason(tx, otherSeason, "2026-10-19")))?.id).toBe(season2026);
+  });
+
+  it("seasonById is strict: null for an unknown, malformed or other school's id", async () => {
+    for (const asked of [undefined, "abc", "00000000-0000-4000-8000-000000000000", otherSeason]) {
+      expect(await withSchool(school, (tx) => seasonById(tx, asked))).toBeNull();
+    }
+    expect((await withSchool(school, (tx) => seasonById(tx, season2027)))?.label).toBe("2027-2028");
+  });
+
+  it("finds the season overlapping a week, or none in the summer gap", async () => {
+    expect((await withSchool(school, (tx) => seasonOverlapping(tx, "2027-09-06", "2027-09-12")))?.id).toBe(season2027);
+    // Week of 30 June 2027: last days of 2026-2027.
+    expect((await withSchool(school, (tx) => seasonOverlapping(tx, "2027-06-28", "2027-07-04")))?.id).toBe(season2026);
+    expect(await withSchool(school, (tx) => seasonOverlapping(tx, "2027-07-19", "2027-07-25"))).toBeNull();
+  });
+
+  it("gives the season of a course, and nothing for another school's course", async () => {
+    const [mine] = await admin`SELECT id FROM course WHERE school_id = ${school} AND season_id = ${season2027}`;
+    const [theirs] = await admin`SELECT id FROM course WHERE school_id = ${otherSchool}`;
+    expect((await withSchool(school, (tx) => seasonOfCourse(tx, mine.id)))?.id).toBe(season2027);
+    expect(await withSchool(school, (tx) => seasonOfCourse(tx, theirs.id))).toBeNull();
   });
 
   it("lists the school's seasons, the most recent first", async () => {

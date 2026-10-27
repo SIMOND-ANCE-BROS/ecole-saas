@@ -14,9 +14,20 @@ const shortDate = new Intl.DateTimeFormat("fr-FR", {
 });
 const day = (iso: string) => shortDate.format(new Date(`${iso}T00:00:00Z`));
 
-type Props = { closures: Closure[]; seasonStart: string; seasonEnd: string };
+type Props = {
+  closures: Closure[];
+  seasonStart: string;
+  seasonEnd: string;
+  /** Season shown (#189): closures are added to it. */
+  seasonId: string;
+};
 
-export function ClosuresManagement({ closures: closures, seasonStart: seasonStart, seasonEnd: seasonEnd }: Props) {
+export function ClosuresManagement({
+  closures: closures,
+  seasonStart: seasonStart,
+  seasonEnd: seasonEnd,
+  seasonId,
+}: Props) {
   const [v, setV] = useState({ label: "", start: "", end: "" });
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [inProgress, startTransition] = useTransition();
@@ -40,7 +51,7 @@ export function ClosuresManagement({ closures: closures, seasonStart: seasonStar
           // A date shown as refused is never sent as empty (« Date invalide »).
           if (refusedDateField(e.currentTarget)) return;
           act(
-            () => close({ ...v, end: v.end || v.start }),
+            () => close({ ...v, end: v.end || v.start }, seasonId),
             "Fermeture ajoutée, séances mises à jour.",
             () => setV({ label: "", start: "", end: "" }),
           );
@@ -101,7 +112,7 @@ export function ClosuresManagement({ closures: closures, seasonStart: seasonStar
                 color="gray"
                 className="ml-auto"
                 disabled={inProgress}
-                onClick={() => act(() => reopen(f.id), "Fermeture retirée, séances remises.")}
+                onClick={() => act(() => reopen(f.id, seasonId), "Fermeture retirée, séances remises.")}
                 aria-label={`Retirer la fermeture ${f.label}`}
               >
                 Retirer
@@ -115,7 +126,7 @@ export function ClosuresManagement({ closures: closures, seasonStart: seasonStar
         <Button
           variant="default"
           loading={inProgress}
-          onClick={() => act(updateLessons, "Séances à venir mises à jour.")}
+          onClick={() => act(() => updateLessons(seasonId), "Séances à venir mises à jour.")}
         >
           Mettre à jour les séances
         </Button>
