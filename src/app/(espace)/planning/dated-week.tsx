@@ -107,7 +107,7 @@ export function DatedWeek({
           <Text span size="sm" c="dimmed" id="aller-au">
             Aller au
           </Text>
-          <GoTo key={monday} monday={monday} onGo={(d) => router.push(weekLink(d))} />
+          <GoTo monday={monday} onGo={(d) => router.push(weekLink(d))} />
         </Group>
       </nav>
       {lessons.length === 0 && (
@@ -141,13 +141,20 @@ export function DatedWeek({
  * year such as « 12/09/20 ».
  */
 function GoTo({ monday, onGo }: { monday: string; onGo: (date: string) => void }) {
-  const [date, setDate] = useState(monday);
+  // Not remounted on navigation, so focus stays here after Enter. A date typed
+  // for another week than the one shown gives way to its Monday (also when
+  // moved by the arrows); derived rather than synced, which a navigation
+  // transition can undo.
+  const [typed, setTyped] = useState({ monday, date: monday });
+  const date = typed.monday === monday ? typed.date : monday;
   return (
     <DateField
       aria-labelledby="aller-au"
+      // Picking the selected day again changes nothing rather than emptying the field.
+      required
       w={140}
       value={date}
-      onChange={setDate}
+      onChange={(d) => setTyped({ monday, date: d })}
       onCommit={(d) => {
         if (addDays(d, 1 - weekdayOf(d)) !== monday) onGo(d);
       }}

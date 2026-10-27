@@ -10,7 +10,7 @@ import { lessonDatesOf, type SeasonCalendar } from "@/domain/schedule/lessons";
 import { outsideHours } from "@/domain/schedule/hours";
 import { saveCourse, type Refusal, remove, checkSlot } from "./actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
-import { DateField } from "@/app/(espace)/_ui/date-field";
+import { DateField, refusedDateField } from "@/app/(espace)/_ui/date-field";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
 
 const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
@@ -92,6 +92,9 @@ export function CourseForm({
   const oneOff = v.recurrence === "dates";
   const chosenRoom = r.rooms.find((s) => s.id === v.roomId);
   const existingDiscipline = r.disciplines.find((d) => d.name.toLowerCase() === v.discipline.trim().toLowerCase());
+  const typedDiscipline = v.discipline.trim().toLowerCase();
+  const startsADiscipline =
+    typedDiscipline !== "" && r.disciplines.some((d) => d.name.toLowerCase().startsWith(typedDiscipline));
 
   const entry = {
     discipline: existingDiscipline ? { id: existingDiscipline.id } : { name: v.discipline },
@@ -178,6 +181,8 @@ export function CourseForm({
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
+        // A date shown as refused is never saved as empty or dropped from the list.
+        if (refusedDateField(e.currentTarget)) return;
         startTransition(async () => setRefusal(await saveCourse(course?.id ?? null, entry)));
       }}
     >
@@ -187,8 +192,9 @@ export function CourseForm({
           autoComplete="off"
           autoFocus={!course}
           data={r.disciplines.map((d) => d.name)}
-          // « Ja » then Enter takes « Jazz » rather than creating « Ja ».
-          selectFirstOptionOnChange
+          // « Ja » then Enter takes « Jazz » rather than creating « Ja »; a new
+          // « Jazz » is not replaced by « Modern jazz », which only contains it.
+          selectFirstOptionOnChange={startsADiscipline}
           // After a refusal, focus lands here: the list would cover the message.
           openOnFocus={!refusal}
           value={v.discipline}
@@ -365,11 +371,18 @@ export function CourseForm({
           ]}
           value={v.roomId}
           onChange={set("roomId")}
-          error={error("room")}
+          // A new room's errors show under its own fields.
+          error={v.roomId === NEW ? undefined : error("room")}
         />
         {v.roomId === NEW && (
           <>
-            <TextInput label="Nom de la salle" autoComplete="off" value={v.newRoom} onChange={typed("newRoom")} />
+            <TextInput
+              label="Nom de la salle"
+              autoComplete="off"
+              value={v.newRoom}
+              onChange={typed("newRoom")}
+              error={error("room.name")}
+            />
             <NumberInput
               label="Capacité de la salle (facultatif)"
               min={1}
@@ -378,6 +391,7 @@ export function CourseForm({
               trimLeadingZeroesOnBlur={false}
               value={v.roomCapacity}
               onChange={set("roomCapacity")}
+              error={error("room.capacity")}
             />
             <Select
               label="Site"
@@ -386,15 +400,23 @@ export function CourseForm({
               data={[...r.sites.map((s) => ({ value: s.id, label: s.name })), { value: NEW, label: "Nouveau site…" }]}
               value={v.siteId}
               onChange={set("siteId")}
+              error={v.siteId === NEW ? undefined : error("room.site")}
             />
             {v.siteId === NEW && (
               <>
-                <TextInput label="Nom du site" autoComplete="off" value={v.newSite} onChange={typed("newSite")} />
+                <TextInput
+                  label="Nom du site"
+                  autoComplete="off"
+                  value={v.newSite}
+                  onChange={typed("newSite")}
+                  error={error("room.site.name")}
+                />
                 <TextInput
                   label="Adresse du site"
                   autoComplete="off"
                   value={v.siteAddress}
                   onChange={typed("siteAddress")}
+                  error={error("room.site.address")}
                 />
               </>
             )}

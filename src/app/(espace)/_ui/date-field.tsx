@@ -29,6 +29,10 @@ type Props = Omit<DateInputProps, "value" | "onChange" | "valueFormat" | "datePa
  * the value becomes empty as soon as such text is typed, so Enter cannot
  * save an old date. The message shows on Enter or when leaving the field,
  * not while typing. A field that is not `required` can be emptied.
+ *
+ * Refused text also marks the input (`data-date-refused`): a form calls
+ * `refusedDateField()` before saving, so Enter in another field cannot save
+ * the form without that date either.
  */
 export function DateField({
   value,
@@ -37,19 +41,27 @@ export function DateField({
   error,
   onBlur,
   onFocus,
+  onClick,
   onInput,
   onKeyDown,
+  popoverProps,
   getDayProps,
   minDate,
   maxDate,
   ...props
 }: Props) {
+  // Why the text in the field is refused, and whether that is shown yet.
   const [refusal, setRefusal] = useState<string | null>(null);
+  const [shown, setShown] = useState(false);
+  // The calendar is opened here rather than by Mantine, so that a refused
+  // save can focus the field without the calendar covering the message.
+  const [open, setOpen] = useState(false);
   const check = (text: string) => typedDateRefusal(text, minDate ?? null, maxDate ?? null);
   // Enter or blur: show why the text is refused, or hand over the settled date.
   const settle = (text: string) => {
     const why = check(text);
     setRefusal(why);
+    setShown(true);
     const date = why ? null : parseTypedDate(text);
     if (date) onCommit?.(date);
     return why;
@@ -65,23 +77,36 @@ export function DateField({
       fixOnBlur={false}
       minDate={minDate}
       maxDate={maxDate}
+      popoverProps={{ ...popoverProps, opened: open, onClose: () => setOpen(false) }}
       value={value || null}
       onChange={(v) => onChange(v ?? "")}
       onInput={(e) => {
         const text = e.currentTarget.value;
+        const why = check(text);
+        setRefusal(why);
+        setShown(false);
+        setOpen(true);
         // Mantine keeps the previous date for text it cannot accept: drop it.
-        if (text.trim() === "" || check(text)) onChange("");
+        if (text.trim() === "" || why) onChange("");
         onInput?.(e);
       }}
       onKeyDown={(e) => {
+        if (e.key === "Escape") setOpen(false);
         if (e.key === "Enter" && settle(e.currentTarget.value)) e.preventDefault();
         onKeyDown?.(e);
       }}
       onFocus={(e) => {
-        setRefusal(null);
+        // Focus given by `refusedDateField()`: the message stays visible.
+        if (e.currentTarget.dataset.quietFocus) delete e.currentTarget.dataset.quietFocus;
+        else setOpen(true);
         onFocus?.(e);
       }}
+      onClick={(e) => {
+        setOpen(true);
+        onClick?.(e);
+      }}
       onBlur={(e) => {
+        setOpen(false);
         settle(e.currentTarget.value);
         onBlur?.(e);
       }}
@@ -92,13 +117,33 @@ export function DateField({
           onClick: (event) => {
             given?.onClick?.(event);
             setRefusal(null);
+            setShown(false);
+            setOpen(false);
             // A click on the selected day of an optional field empties it.
             if (props.required || day !== value) onCommit?.(day);
           },
         };
       }}
-      error={refusal ?? error}
+      error={(shown && refusal) || error}
+      data-date-refused={refusal ? true : undefined}
       {...props}
     />
   );
+}
+
+/**
+ * First date field of the form (or of an edited table row) whose text is
+ * refused, focused with its message shown; null when every date can be
+ * saved. Forms call it at the start of `onSubmit` and send nothing when it
+ * returns a field.
+ */
+export function refusedDateField(form: HTMLElement): HTMLInputElement | null {
+  const field = form.querySelector<HTMLInputElement>("input[data-date-refused]");
+  // Its message is already shown: the submit came from Enter in another
+  // field or a click on a button, so this field was left (blur) before.
+  if (field) {
+    field.dataset.quietFocus = "1";
+    field.focus();
+  }
+  return field;
 }

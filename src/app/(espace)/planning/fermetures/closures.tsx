@@ -3,7 +3,7 @@
 import { Button, Paper, Text, TextInput } from "@mantine/core";
 import { useState, useTransition } from "react";
 import type { Closure } from "@/db/lessons";
-import { DateField } from "../../_ui/date-field";
+import { DateField, refusedDateField } from "../../_ui/date-field";
 import { close, updateLessons, reopen } from "../seances/actions";
 
 const shortDate = new Intl.DateTimeFormat("fr-FR", {
@@ -37,6 +37,8 @@ export function ClosuresManagement({ closures: closures, seasonStart: seasonStar
         className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto] lg:items-start"
         onSubmit={(e) => {
           e.preventDefault();
+          // A date shown as refused is never sent as empty (« Date invalide »).
+          if (refusedDateField(e.currentTarget)) return;
           act(
             () => close({ ...v, end: v.end || v.start }),
             "Fermeture ajoutée, séances mises à jour.",

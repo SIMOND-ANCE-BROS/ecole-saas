@@ -3,7 +3,7 @@
 import { Button, Group, Paper, Select, Table, Text, TextInput } from "@mantine/core";
 import { useState, useTransition } from "react";
 import type { SeasonRow } from "@/db/settings";
-import { DateField } from "../../_ui/date-field";
+import { DateField, refusedDateField } from "../../_ui/date-field";
 import { changeSeason, newSeason } from "../actions";
 
 const date = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -69,7 +69,7 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
                         e.preventDefault();
-                        saveEdition(s.id, edition);
+                        if (!refusedDateField(e.currentTarget)) saveEdition(s.id, edition);
                       }
                       if (e.key === "Escape") setEdition(null);
                     }}
@@ -107,7 +107,10 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
                           size="compact-sm"
                           variant="light"
                           loading={inProgress}
-                          onClick={() => saveEdition(s.id, edition)}
+                          onClick={(e) => {
+                            const row = e.currentTarget.closest("tr");
+                            if (!row || !refusedDateField(row)) saveEdition(s.id, edition);
+                          }}
                         >
                           Enregistrer
                         </Button>
@@ -149,6 +152,7 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
         className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end"
         onSubmit={(e) => {
           e.preventDefault();
+          if (refusedDateField(e.currentTarget)) return;
           act(
             () => newSeason(v, copy || null),
             () => setV({ label: "", startDate: "", endDate: "" }),
