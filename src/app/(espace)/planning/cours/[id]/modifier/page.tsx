@@ -31,7 +31,7 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <TextLink href="/planning" size="sm">
+        <TextLink href={`/planning?saison=${cours.seasonId}`} size="sm">
           Planning
         </TextLink>
         <Text span size="sm" c="dimmed">

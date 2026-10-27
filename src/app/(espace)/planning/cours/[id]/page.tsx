@@ -72,7 +72,7 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
   return (
     <article className="flex w-full min-w-0 flex-col gap-5">
       <nav aria-label="Fil d’Ariane" className="text-sm print:hidden">
-        <TextLink href="/planning" size="sm">
+        <TextLink href={`/planning?saison=${cours.seasonId}`} size="sm">
           Planning
         </TextLink>
         <Text span size="sm" c="dimmed">

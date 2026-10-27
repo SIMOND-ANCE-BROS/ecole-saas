@@ -38,6 +38,8 @@ type Props = {
   date?: string;
   /** Room of the column clicked in the « Par salle » view (#85); ignored if unknown. */
   room?: string;
+  /** Season of a new course, chosen on the planning (#189); ignored when editing. */
+  seasonId?: string;
 };
 
 const whole = (v: string) => (v.trim() === "" ? null : Number(v));
@@ -52,6 +54,7 @@ export function CourseForm({
   duration: duration,
   date,
   room,
+  seasonId,
 }: Props) {
   const r = referential;
   const [v, setV] = useState({
@@ -159,15 +162,19 @@ export function CourseForm({
     const [instructorId, day, time, duration] = key.split("|");
     const timer = setTimeout(() => {
       // A failed check shows no warning rather than an unhandled error.
-      checkSlot(course?.id ?? null, {
-        instructorId,
-        weekday: Number(day),
-        startTime: time,
-        durationMinutes: Number(duration),
-      }).then(setUnavailabilityDates, () => setUnavailabilityDates([]));
+      checkSlot(
+        course?.id ?? null,
+        {
+          instructorId,
+          weekday: Number(day),
+          startTime: time,
+          durationMinutes: Number(duration),
+        },
+        seasonId,
+      ).then(setUnavailabilityDates, () => setUnavailabilityDates([]));
     }, 300);
     return () => clearTimeout(timer);
-  }, [key, course?.id]);
+  }, [key, course?.id, seasonId]);
   const displayedUnavailability = key ? unavailabilityDates : [];
   const chosenInstructor = r.instructors.find((i) => i.id === v.instructorId);
 
@@ -187,7 +194,7 @@ export function CourseForm({
         e.preventDefault();
         // A date shown as refused is never saved as empty or dropped from the list.
         if (refusedDateField(e.currentTarget)) return;
-        startTransition(async () => setRefusal(await saveCourse(course?.id ?? null, entry)));
+        startTransition(async () => setRefusal(await saveCourse(course?.id ?? null, entry, seasonId)));
       }}
     >
       <Fieldset legend="Cours" className="grid gap-3 sm:grid-cols-2">
@@ -502,7 +509,7 @@ export function CourseForm({
         <Button type="submit" loading={sending}>
           {course ? "Enregistrer les modifications" : "Créer le cours"}
         </Button>
-        <Cancel href={course ? `/planning/cours/${course.id}` : "/planning"} />
+        <Cancel href={course ? `/planning/cours/${course.id}` : `/planning${seasonId ? `?saison=${seasonId}` : ""}`} />
         {course &&
           (confirmDeletion ? (
             <Group gap="xs" className="ml-auto text-sm">

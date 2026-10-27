@@ -10,18 +10,39 @@ import { course, discipline, enrollment, enrollmentCourse, instructor, person, s
 
 export type Season = { id: string; label: string; startDate: string; endDate: string };
 
+const seasonColumns = { id: season.id, label: season.label, startDate: season.startDate, endDate: season.endDate };
+
 /** Season containing the day (`YYYY-MM-DD`), otherwise the most recent; null if there is none. */
 export async function currentSeason(tx: Tx, day: string): Promise<Season | null> {
   const [s] = await tx
-    .select({ id: season.id, label: season.label, startDate: season.startDate, endDate: season.endDate })
+    .select(seasonColumns)
     .from(season)
     .orderBy(sql`(${season.startDate} <= ${day} AND ${season.endDate} >= ${day}) DESC`, desc(season.startDate))
     .limit(1);
   return s ?? null;
 }
 
+/** Seasons of the school, the most recent first. */
+export function schoolSeasons(tx: Tx): Promise<Season[]> {
+  return tx.select(seasonColumns).from(season).orderBy(desc(season.startDate));
+}
+
+/**
+ * The season asked for in the URL (`?saison=`) when it is one of the school's
+ * (RLS), otherwise the current one (`currentSeason`).
+ */
+export async function chosenSeason(tx: Tx, asked: unknown, day: string): Promise<Season | null> {
+  const id = z.uuid().safeParse(asked);
+  if (id.success) {
+    const [s] = await tx.select(seasonColumns).from(season).where(eq(season.id, id.data));
+    if (s) return s;
+  }
+  return currentSeason(tx, day);
+}
+
 export type ScheduleCourse = {
   id: string;
+  seasonId: string;
   /** 1 = Monday … 7 = Sunday; null for a workshop. */
   weekday: number | null;
   /** `HH:MM` */
@@ -76,6 +97,7 @@ async function readScheduleCourse(tx: Tx, filter: SQL): Promise<ScheduleCourse[]
   const rows = await tx
     .select({
       id: course.id,
+      seasonId: course.seasonId,
       weekday: course.weekday,
       startTime: course.startTime,
       durationMinutes: course.durationMinutes,

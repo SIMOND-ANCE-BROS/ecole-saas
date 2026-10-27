@@ -1,7 +1,14 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
-import { seasonCourses, scheduleCourse, enrolledInCourse, currentSeason } from "./schedule";
+import {
+  seasonCourses,
+  scheduleCourse,
+  enrolledInCourse,
+  currentSeason,
+  chosenSeason,
+  schoolSeasons,
+} from "./schedule";
 
 /** Schedule, read as the application does (app_user, RLS). Fictitious data deleted at the end. */
 
@@ -14,6 +21,7 @@ let school: string;
 let otherSchool: string;
 let season2026: string;
 let season2027: string;
+let otherSeason: string;
 
 async function createCourse(schoolId: string, seasonId: string, discipline: string, day: number, time: string) {
   const [d] = await admin`INSERT INTO discipline (school_id, name) VALUES (${schoolId}, ${discipline})
@@ -46,6 +54,7 @@ beforeAll(async () => {
   await createCourse(school, season2026, "Classique", 1, "18:30");
   await createCourse(school, season2026, "Éveil", 3, "14:00");
   await createCourse(school, season2027, "Zumba", 2, "19:00");
+  otherSeason = b.id;
   await createCourse(otherSchool, b.id, "Salsa", 1, "20:00");
 });
 
@@ -84,6 +93,29 @@ describe("currentSeason", () => {
     const [{ id }] = await admin`INSERT INTO school (name, slug) VALUES ('Vide', ${`pv-${suffix}`}) RETURNING id`;
     expect(await withSchool(id, (tx) => currentSeason(tx, "2026-10-19"))).toBeNull();
     await admin`DELETE FROM school WHERE id = ${id}`;
+  });
+});
+
+describe("chosenSeason (#189)", () => {
+  it("returns the season asked for, even when it is not the current one", async () => {
+    expect((await withSchool(school, (tx) => chosenSeason(tx, season2027, "2026-10-19")))?.label).toBe("2027-2028");
+  });
+
+  it("falls back to the current season for a missing, malformed or unknown id", async () => {
+    for (const asked of [undefined, "abc", "00000000-0000-4000-8000-000000000000", ["x"]]) {
+      expect((await withSchool(school, (tx) => chosenSeason(tx, asked, "2026-10-19")))?.id).toBe(season2026);
+    }
+  });
+
+  it("never returns another school's season", async () => {
+    expect((await withSchool(school, (tx) => chosenSeason(tx, otherSeason, "2026-10-19")))?.id).toBe(season2026);
+  });
+
+  it("lists the school's seasons, the most recent first", async () => {
+    expect((await withSchool(school, (tx) => schoolSeasons(tx))).map((s) => s.label)).toEqual([
+      "2027-2028",
+      "2026-2027",
+    ]);
   });
 });
 

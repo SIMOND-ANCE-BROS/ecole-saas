@@ -4,6 +4,7 @@ import { EMPTY_FILTERS, filterSchedule } from "./filters";
 
 const base: ScheduleCourse = {
   id: "cours-1",
+  seasonId: "saison-1",
   weekday: 1,
   startTime: "18:00",
   durationMinutes: 60,

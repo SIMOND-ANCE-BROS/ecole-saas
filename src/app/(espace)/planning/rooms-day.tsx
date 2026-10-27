@@ -8,6 +8,7 @@ import { calendarFrame, type Hours } from "@/domain/schedule/hours";
 import { Calendar, type CalendarElement, type CalendarResponse, type Slot } from "./calendar";
 import { move } from "./cours/actions";
 import { DAYS, end, recurrenceBadge } from "./format";
+import { withSeason } from "./season-link";
 
 export type PlanningRoom = { id: string; name: string; siteId: string; site: string };
 
@@ -27,6 +28,8 @@ type Props = {
   hours: Record<string, Hours[]>;
   editable: boolean;
   highlighted?: string;
+  /** Chosen season when it is not the current one (`?saison=`, #189), kept in links. */
+  season?: string;
 };
 
 /**
@@ -36,7 +39,18 @@ type Props = {
  *
  * The calendar positions columns by number: column i (from 1) is `rooms[i - 1]`.
  */
-export function RoomsDay({ courses, allCourses, rooms, day, days, onDay, hours, editable, highlighted }: Props) {
+export function RoomsDay({
+  courses,
+  allCourses,
+  rooms,
+  day,
+  days,
+  onDay,
+  hours,
+  editable,
+  highlighted,
+  season,
+}: Props) {
   const router = useRouter();
   const column = new Map(rooms.map((r, i) => [r.id, i + 1]));
   const severalSites = new Set(rooms.map((r) => r.siteId)).size > 1;
@@ -115,7 +129,10 @@ export function RoomsDay({ courses, allCourses, rooms, day, days, onDay, hours, 
           move={moveCourse}
           create={(col, d, duration) =>
             router.push(
-              `/planning/cours/nouveau?jour=${day}&heure=${toTime(d)}&duree=${duration}&salle=${rooms[col - 1].id}`,
+              withSeason(
+                `/planning/cours/nouveau?jour=${day}&heure=${toTime(d)}&duree=${duration}&salle=${rooms[col - 1].id}`,
+                season,
+              ),
             )
           }
         />

@@ -12,6 +12,7 @@ import { DatedWeek } from "./dated-week";
 import { TypicalWeek } from "./typical-week";
 import { type PlanningRoom, RoomsDay } from "./rooms-day";
 import { calendarFrame } from "@/domain/schedule/hours";
+import { withSeason } from "./season-link";
 
 export type ScheduleView = "datee" | "type" | "salles" | "liste";
 const VIEWS: Record<ScheduleView, string> = {
@@ -40,6 +41,8 @@ type Props = {
   closures: { label: string; start: string; end: string }[];
   /** Opening hours per site (#90): they bound the calendar. */
   hours: Record<string, Hours[]>;
+  /** Chosen season when it is not the current one (`?saison=`, #189), kept in links. */
+  season?: string;
 };
 
 /** Weekly schedule, filterable by discipline, site, room and instructor, with the headcount of each course. */
@@ -55,17 +58,21 @@ export function ScheduleGrid({
   today: today,
   lessons: lessons,
   closures: closures,
+  season,
 }: Props) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [view, setView] = useState(initialView);
   const weekDays = calendarFrame(Object.values(hours).flat(), cours).days;
   const [day, setDay] = useState(weekDays.includes(initialDay) ? initialDay : (weekDays[0] ?? 1));
   const address = (v: ScheduleView, d: number) =>
-    v === "datee"
-      ? `/planning?semaine=${monday}`
-      : v === "salles"
-        ? `/planning?vue=salles&jour=${d}`
-        : `/planning?vue=${v}`;
+    withSeason(
+      v === "datee"
+        ? `/planning?semaine=${monday}`
+        : v === "salles"
+          ? `/planning?vue=salles&jour=${d}`
+          : `/planning?vue=${v}`,
+      season,
+    );
   const chooseView = (v: ScheduleView) => {
     setView(v);
     window.history.replaceState(null, "", address(v, day));
@@ -177,6 +184,7 @@ export function ScheduleGrid({
           closures={closures}
           hours={displayedHours}
           editable={editable}
+          season={season}
         />
       ) : view === "salles" ? (
         <RoomsDay
@@ -188,6 +196,7 @@ export function ScheduleGrid({
           onDay={chooseDay}
           hours={hours}
           editable={editable}
+          season={season}
           highlighted={highlighted}
         />
       ) : view === "type" ? (
@@ -195,6 +204,7 @@ export function ScheduleGrid({
           courses={visible}
           tous={cours}
           editable={editable}
+          season={season}
           highlighted={highlighted}
           hours={displayedHours}
         />
@@ -209,7 +219,7 @@ export function ScheduleGrid({
                 {editable && day && (
                   <Button
                     component={Link}
-                    href={`/planning/cours/nouveau?jour=${day}`}
+                    href={withSeason(`/planning/cours/nouveau?jour=${day}`, season)}
                     size="compact-sm"
                     variant="subtle"
                     className="-my-1"
