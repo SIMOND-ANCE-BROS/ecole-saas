@@ -56,6 +56,9 @@ export function DateField({
   // The calendar is opened here rather than by Mantine, so that a refused
   // save can focus the field without the calendar covering the message.
   const [open, setOpen] = useState(false);
+  // Refused text always empties the value: a value given back by the parent
+  // (a row removed, another week) replaces the text, and the refusal with it.
+  const refused = value === "" ? refusal : null;
   const check = (text: string) => typedDateRefusal(text, minDate ?? null, maxDate ?? null);
   // Enter or blur: show why the text is refused, or hand over the settled date.
   const settle = (text: string) => {
@@ -77,7 +80,14 @@ export function DateField({
       fixOnBlur={false}
       minDate={minDate}
       maxDate={maxDate}
-      popoverProps={{ ...popoverProps, opened: open, onClose: () => setOpen(false) }}
+      popoverProps={{
+        ...popoverProps,
+        opened: open,
+        onClose: () => {
+          setOpen(false);
+          popoverProps?.onClose?.();
+        },
+      }}
       value={value || null}
       onChange={(v) => onChange(v ?? "")}
       onInput={(e) => {
@@ -124,8 +134,8 @@ export function DateField({
           },
         };
       }}
-      error={(shown && refusal) || error}
-      data-date-refused={refusal ? true : undefined}
+      error={(shown && refused) || error}
+      data-date-refused={refused ? true : undefined}
       {...props}
     />
   );
@@ -141,7 +151,8 @@ export function refusedDateField(form: HTMLElement): HTMLInputElement | null {
   const field = form.querySelector<HTMLInputElement>("input[data-date-refused]");
   // Its message is already shown: the submit came from Enter in another
   // field or a click on a button, so this field was left (blur) before.
-  if (field) {
+  // Already focused (Enter inside it): no focus event would consume the flag.
+  if (field && document.activeElement !== field) {
     field.dataset.quietFocus = "1";
     field.focus();
   }

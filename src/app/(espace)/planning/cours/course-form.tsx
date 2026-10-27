@@ -93,8 +93,9 @@ export function CourseForm({
   const chosenRoom = r.rooms.find((s) => s.id === v.roomId);
   const existingDiscipline = r.disciplines.find((d) => d.name.toLowerCase() === v.discipline.trim().toLowerCase());
   const typedDiscipline = v.discipline.trim().toLowerCase();
-  const startsADiscipline =
-    typedDiscipline !== "" && r.disciplines.some((d) => d.name.toLowerCase().startsWith(typedDiscipline));
+  // Mantine highlights the first option containing the text, in list order.
+  const firstMatch = r.disciplines.find((d) => d.name.toLowerCase().includes(typedDiscipline));
+  const startsADiscipline = typedDiscipline !== "" && !!firstMatch?.name.toLowerCase().startsWith(typedDiscipline);
 
   const entry = {
     discipline: existingDiscipline ? { id: existingDiscipline.id } : { name: v.discipline },
@@ -171,6 +172,9 @@ export function CourseForm({
   const chosenInstructor = r.instructors.find((i) => i.id === v.instructorId);
 
   const error = (field: keyof Refusal["errors"]) => refusal?.errors[field];
+  const newRoomError = (
+    ["room.name", "room.capacity", "room.site", "room.site.name", "room.site.address"] as const
+  ).some((k) => error(k));
   const options = (labels: Record<string, string>) =>
     Object.entries(labels).map(([value, label]) => ({ value, label }));
 
@@ -371,8 +375,8 @@ export function CourseForm({
           ]}
           value={v.roomId}
           onChange={set("roomId")}
-          // A new room's errors show under its own fields.
-          error={v.roomId === NEW ? undefined : error("room")}
+          // A new room's errors show under its own fields, when Zod names one.
+          error={v.roomId === NEW && newRoomError ? undefined : error("room")}
         />
         {v.roomId === NEW && (
           <>

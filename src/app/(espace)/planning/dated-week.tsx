@@ -156,7 +156,10 @@ function GoTo({ monday, onGo }: { monday: string; onGo: (date: string) => void }
       value={date}
       onChange={(d) => setTyped({ monday, date: d })}
       onCommit={(d) => {
-        if (addDays(d, 1 - weekdayOf(d)) !== monday) onGo(d);
+        // Kept under its own week: back on this one, the field shows this Monday.
+        const week = addDays(d, 1 - weekdayOf(d));
+        setTyped({ monday: week, date: d });
+        if (week !== monday) onGo(d);
       }}
     />
   );
