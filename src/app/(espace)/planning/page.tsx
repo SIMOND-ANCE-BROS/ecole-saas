@@ -18,7 +18,7 @@ export const metadata: Metadata = { title: "Planning" };
 
 export default async function SchedulePage({ searchParams }: PageProps<"/planning">) {
   const { schoolId: schoolId, role } = await schoolContext();
-  const { enregistre, supprime, vue, semaine, jour, saison } = await searchParams;
+  const { enregistre, supprime, copie, vue, semaine, jour, saison } = await searchParams;
   const today = todayInParis();
   const {
     season: season,
@@ -76,6 +76,7 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
   const view = vue === "liste" || vue === "type" || vue === "salles" ? vue : "datee";
   const savedId = typeof enregistre === "string" ? enregistre : undefined;
   const confirmed = cours.find((c) => c.id === savedId);
+  const copied = typeof copie === "string" ? Number(copie) || 0 : 0;
 
   return (
     <section className="flex flex-col gap-4">
@@ -89,7 +90,12 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
           )}
         </div>
         {isDirector && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {seasons.length > 1 && (
+              <ButtonLink href={withSeason("/planning/copier", seasonParam)} variant="default">
+                Copier un planning
+              </ButtonLink>
+            )}
             <ButtonLink href={withSeason("/planning/fermetures", seasonParam)} variant="default">
               Fermetures
             </ButtonLink>
@@ -104,9 +110,19 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
       )}
       {confirmed && <Alert role="status">Cours de {confirmed.discipline} enregistré.</Alert>}
       {supprime && <Alert role="status">Cours supprimé.</Alert>}
+      {copied > 0 && (
+        <Alert role="status">
+          {copied === 1 ? "1 cours copié" : `${copied} cours copiés`}, avec leurs séances. Modifiez maintenant ce qui
+          change pour cette saison.
+        </Alert>
+      )}
       {cours.length === 0 ? (
         <Text size="sm" c="dimmed">
-          Aucun cours pour cette saison.{isDirector && " Créez le premier avec « Nouveau cours »."}
+          Aucun cours pour cette saison.
+          {isDirector &&
+            (seasons.length > 1
+              ? " Créez le premier avec « Nouveau cours », ou reprenez ceux d’une autre saison avec « Copier un planning »."
+              : " Créez le premier avec « Nouveau cours ».")}
         </Text>
       ) : (
         <ScheduleGrid
