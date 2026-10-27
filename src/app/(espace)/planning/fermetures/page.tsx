@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Text, Title } from "@mantine/core";
 import { withSchool } from "@/db";
 import { currentSeason } from "@/db/schedule";
 import { listClosures } from "@/db/lessons";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
+import { TextLink } from "../../_ui/text-link";
 import { ClosuresManagement } from "./closures";
 
 export const metadata: Metadata = { title: "Fermetures" };
@@ -19,22 +20,27 @@ export default async function ClosuresPage() {
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <Link href="/planning" className="lien">
+        <TextLink href="/planning" size="sm">
           Planning
-        </Link>
-        <span className="text-doux"> / Fermetures</span>
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" "}
+          / Fermetures
+        </Text>
       </nav>
       <div>
-        <h1 className="titre-page">Fermetures {season?.label}</h1>
-        <p className="text-sm text-doux">
+        <Title order={1} fz="xl">
+          Fermetures {season?.label}
+        </Title>
+        <Text size="sm" c="dimmed">
           Vacances, jours fériés, gala : aucun cours n’a lieu ces jours-là. Les séances à venir se mettent à jour
           aussitôt ; une séance dont l’appel est fait n’est jamais retirée.
-        </p>
+        </Text>
       </div>
       {season ? (
         <ClosuresManagement closures={closures} seasonStart={season.startDate} seasonEnd={season.endDate} />
       ) : (
-        <p className="text-sm">Aucune saison n’est paramétrée.</p>
+        <Text size="sm">Aucune saison n’est paramétrée.</Text>
       )}
     </section>
   );

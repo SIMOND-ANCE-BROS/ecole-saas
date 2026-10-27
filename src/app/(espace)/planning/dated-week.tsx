@@ -1,5 +1,6 @@
 "use client";
 
+import { Button, Group, Text, Title } from "@mantine/core";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ScheduleLesson } from "@/db/lessons";
@@ -9,6 +10,7 @@ import { addDays, weekDays, weekdayOf } from "@/domain/schedule/week";
 import { moveOneLesson } from "./actions";
 import { Calendar, type Slot, type CalendarElement, type CalendarResponse } from "./calendar";
 import { shortDate, end } from "./format";
+import { DateField } from "../_ui/date-field";
 
 type Props = {
   /** Visible lessons of the week (filters applied). */
@@ -88,29 +90,35 @@ export function DatedWeek({
   return (
     <div className="flex flex-col gap-3">
       <nav aria-label="Semaines" className="flex flex-wrap items-center gap-2 text-sm">
-        <Link href={weekLink(addDays(monday, -7))} className="bouton-secondaire" aria-label="Semaine précédente">
+        <Button component={Link} href={weekLink(addDays(monday, -7))} variant="default" aria-label="Semaine précédente">
           ←
-        </Link>
-        <Link href={weekLink(addDays(monday, 7))} className="bouton-secondaire" aria-label="Semaine suivante">
+        </Button>
+        <Button component={Link} href={weekLink(addDays(monday, 7))} variant="default" aria-label="Semaine suivante">
           →
-        </Link>
-        <Link href={weekLink(addDays(today, 1 - weekdayOf(today)))} className="bouton-secondaire">
+        </Button>
+        <Button component={Link} href={weekLink(addDays(today, 1 - weekdayOf(today)))} variant="default">
           Cette semaine
-        </Link>
-        <h2 className="font-semibold">
+        </Button>
+        <Title order={2} size="h5">
           Semaine du {shortDate(monday)} au {shortDate(dates[6])} {dates[6].slice(0, 4)}
-        </h2>
-        <label className="ml-auto flex items-center gap-2">
-          <span className="text-doux">Aller au</span>
-          <input
-            type="date"
-            className="champ"
-            defaultValue={monday}
-            onChange={(e) => e.target.value && router.push(weekLink(e.target.value))}
+        </Title>
+        <Group gap="xs" className="ml-auto">
+          <Text span size="sm" c="dimmed" id="aller-au">
+            Aller au
+          </Text>
+          <DateField
+            aria-labelledby="aller-au"
+            w={140}
+            value={monday}
+            onChange={(d) => d && router.push(weekLink(d))}
           />
-        </label>
+        </Group>
       </nav>
-      {lessons.length === 0 && <p className="text-sm text-doux">Aucune séance cette semaine.</p>}
+      {lessons.length === 0 && (
+        <Text size="sm" c="dimmed">
+          Aucune séance cette semaine.
+        </Text>
+      )}
       <Calendar
         elements={elements}
         columns={days.map((j) => ({

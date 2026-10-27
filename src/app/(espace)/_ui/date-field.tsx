@@ -2,7 +2,7 @@
 
 import { DateInput, type DateInputProps } from "@mantine/dates";
 import { useState } from "react";
-import { parseTypedDate } from "@/lib/dates";
+import { parseTypedDate, typedDateRefusal } from "@/lib/dates";
 
 type Props = Omit<DateInputProps, "value" | "onChange" | "valueFormat" | "dateParser"> & {
   /** `YYYY-MM-DD`, or "" when empty. */
@@ -10,18 +10,24 @@ type Props = Omit<DateInputProps, "value" | "onChange" | "valueFormat" | "datePa
   onChange: (value: string) => void;
 };
 
+const iso = (d: DateInputProps["minDate"]) =>
+  d === undefined ? null : typeof d === "string" ? d.slice(0, 10) : d.toISOString().slice(0, 10);
+
 /**
  * Date field of the whole interface (#115): typed as « 12/09/2027 » or
  * picked in the calendar, read strictly (`parseTypedDate`). With `name`, the
  * form receives `YYYY-MM-DD`, like the native date field it replaces.
  *
- * Text that is not a date is never silently replaced by the previous date:
- * it stays visible with a message and the value becomes empty, so an old
- * date cannot be saved by mistake. A field that is not `required` can be
- * emptied.
+ * Text that is not a date, or a date outside `minDate`/`maxDate` (which
+ * Mantine ignores without a word), is never silently replaced by the
+ * previous date: it stays visible with a message and the value becomes
+ * empty, so an old date cannot be saved by mistake. A field that is not
+ * `required` can be emptied.
  */
 export function DateField({ value, onChange, error, onBlur, onFocus, ...props }: Props) {
-  const [unread, setUnread] = useState(false);
+  const [unread, setUnread] = useState<string | null>(null);
+  const min = iso(props.minDate);
+  const max = iso(props.maxDate);
   return (
     <DateInput
       valueFormat="DD/MM/YYYY"
@@ -34,17 +40,16 @@ export function DateField({ value, onChange, error, onBlur, onFocus, ...props }:
       value={value || null}
       onChange={(v) => onChange(v ?? "")}
       onFocus={(e) => {
-        setUnread(false);
+        setUnread(null);
         onFocus?.(e);
       }}
       onBlur={(e) => {
-        const text = e.currentTarget.value.trim();
-        const unreadable = text !== "" && parseTypedDate(text) === null;
-        setUnread(unreadable);
-        if (unreadable) onChange("");
+        const why = typedDateRefusal(e.currentTarget.value, min, max);
+        setUnread(why);
+        if (why) onChange("");
         onBlur?.(e);
       }}
-      error={unread ? "Date non reconnue : tapez jj/mm/aaaa" : error}
+      error={unread ?? error}
       {...props}
     />
   );

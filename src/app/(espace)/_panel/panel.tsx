@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@mantine/core";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, type ReactNode, use, useEffect, useRef, useState } from "react";
@@ -95,14 +96,14 @@ export function Cancel({ href }: { href: string }) {
   const router = useRouter();
   if (use(InPanel)) {
     return (
-      <button type="button" className="bouton-secondaire" onClick={() => router.back()}>
+      <Button variant="default" onClick={() => router.back()}>
         Annuler
-      </button>
+      </Button>
     );
   }
   return (
-    <Link href={href} className="bouton-secondaire">
+    <Button component={Link} href={href} variant="default">
       Annuler
-    </Link>
+    </Button>
   );
 }
