@@ -25,13 +25,19 @@ export const RESET_DURATION = DAY;
 export type Result = { ok: true; id: string } | { ok: false; message: string };
 export type RelationshipResult = { ok: true; id: string; token: string } | { ok: false; message: string };
 
-/** What the audit log keeps of a link: never its token nor its hash (#178). */
+/**
+ * What the audit log keeps of a link (#178): never its token nor its hash.
+ * The e-mail only for an invitation, where nothing else names the person;
+ * a reset link names the account (`userId`). The log is immutable, so
+ * personal data in it is kept to the minimum.
+ */
 const LOGGED_LINK = {
   id: invitation.id,
   type: invitation.type,
   email: invitation.email,
   role: invitation.role,
   userId: invitation.userId,
+  createdBy: invitation.createdBy,
   expiresAt: invitation.expiresAt,
 };
 type LoggedLink = {
@@ -40,6 +46,7 @@ type LoggedLink = {
   email: string;
   role: Role | null;
   userId: string | null;
+  createdBy: string | null;
   expiresAt: Date;
 };
 
@@ -49,8 +56,8 @@ async function logLinks(tx: Tx, actor: string, action: "insert" | "delete", link
   await tx.insert(auditLog).values(
     rowsOf(
       auditLog,
-      links.map(({ id, ...l }) => {
-        const entry = { ...l, expiresAt: l.expiresAt.toISOString() };
+      links.map(({ id, email, ...l }) => {
+        const entry = { ...l, ...(l.type === "invitation" ? { email } : {}), expiresAt: l.expiresAt.toISOString() };
         return {
           schoolId: CURRENT_SCHOOL,
           actor,

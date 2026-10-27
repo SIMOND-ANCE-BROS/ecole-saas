@@ -165,7 +165,14 @@ describe("audit log of links (#178)", () => {
         action: "insert",
         actor: dianaMember,
         before: null,
-        after: { type: "invitation", email, role: "front_desk", userId: null, expiresAt: "2026-10-08T10:00:00.000Z" },
+        after: {
+          type: "invitation",
+          email,
+          role: "front_desk",
+          userId: null,
+          createdBy: dianaMember,
+          expiresAt: "2026-10-08T10:00:00.000Z",
+        },
       },
       { action: "delete", actor: dianaMember, before: expect.objectContaining({ role: "front_desk" }), after: null },
     ]);
@@ -174,7 +181,7 @@ describe("audit log of links (#178)", () => {
     const [{ tokenHash }] =
       await admin`SELECT encode(sha256(convert_to(${second.token}, 'UTF8')), 'hex') AS "tokenHash"`;
     const [{ n }] = await admin`SELECT count(*)::int AS n FROM audit_log
-      WHERE school_id = ${school} AND (concat(before, after) LIKE ${`%${second.token}%`} OR concat(before, after) LIKE ${`%${tokenHash}%`})`;
+      WHERE school_id = ${school} AND (strpos(concat(before, after), ${second.token}) > 0 OR strpos(concat(before, after), ${tokenHash}) > 0)`;
     expect(n).toBe(0);
   });
 
@@ -252,6 +259,10 @@ describe("links of a director who leaves management", () => {
       (await withSchool(school, (tx) => updateMember(tx, diana, p.id, { role: "director", active: false }))).ok,
     ).toBe(true);
     expect(await openLink(school, link)).toBeNull();
+    // The dropped link is logged, by the director who made the change, with its author.
+    const [dropped] = await admin`SELECT actor, before FROM audit_log
+      WHERE target_table = 'invitation' AND action = 'delete' AND before->>'email' = ${`porte-${suffix}@exemple.test`}`;
+    expect(dropped).toMatchObject({ actor: dianaMember, before: { createdBy: p.id } });
     // No reset link for a deactivated member.
     expect(await createResetLink(school, diana, p.id)).toMatchObject({ ok: false });
     expect((await withSchool(school, (tx) => pendingInvitations(tx, new Date()))).map((i) => i.name)).not.toContain(
@@ -315,8 +326,9 @@ describe("password reset", () => {
       await admin`SELECT actor, after FROM audit_log WHERE target_table = 'invitation' AND row_id = ${r.id} AND action = 'insert'`;
     expect(logged).toMatchObject({
       actor: dianaMember,
-      after: { type: "reset", email: newMemberEmail, userId: n.userId },
+      after: { type: "reset", userId: n.userId },
     });
+    expect(logged.after).not.toHaveProperty("email");
     const next = "un tout nouveau mot de passe";
     expect(await acceptLink(school, r.token, entry(next))).toEqual({
       ok: true,
