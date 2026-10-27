@@ -1,7 +1,9 @@
 "use client";
 
+import { Button, Group, Text, Title } from "@mantine/core";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import type { ScheduleLesson } from "@/db/lessons";
 import { toTime } from "@/domain/schedule/calendar";
 import { calendarFrame, type Hours } from "@/domain/schedule/hours";
@@ -9,6 +11,7 @@ import { addDays, weekDays, weekdayOf } from "@/domain/schedule/week";
 import { moveOneLesson } from "./actions";
 import { Calendar, type Slot, type CalendarElement, type CalendarResponse } from "./calendar";
 import { shortDate, end } from "./format";
+import { DateField } from "../_ui/date-field";
 
 type Props = {
   /** Visible lessons of the week (filters applied). */
@@ -88,29 +91,30 @@ export function DatedWeek({
   return (
     <div className="flex flex-col gap-3">
       <nav aria-label="Semaines" className="flex flex-wrap items-center gap-2 text-sm">
-        <Link href={weekLink(addDays(monday, -7))} className="bouton-secondaire" aria-label="Semaine précédente">
+        <Button component={Link} href={weekLink(addDays(monday, -7))} variant="default" aria-label="Semaine précédente">
           ←
-        </Link>
-        <Link href={weekLink(addDays(monday, 7))} className="bouton-secondaire" aria-label="Semaine suivante">
+        </Button>
+        <Button component={Link} href={weekLink(addDays(monday, 7))} variant="default" aria-label="Semaine suivante">
           →
-        </Link>
-        <Link href={weekLink(addDays(today, 1 - weekdayOf(today)))} className="bouton-secondaire">
+        </Button>
+        <Button component={Link} href={weekLink(addDays(today, 1 - weekdayOf(today)))} variant="default">
           Cette semaine
-        </Link>
-        <h2 className="font-semibold">
+        </Button>
+        <Title order={2} size="h5">
           Semaine du {shortDate(monday)} au {shortDate(dates[6])} {dates[6].slice(0, 4)}
-        </h2>
-        <label className="ml-auto flex items-center gap-2">
-          <span className="text-doux">Aller au</span>
-          <input
-            type="date"
-            className="champ"
-            defaultValue={monday}
-            onChange={(e) => e.target.value && router.push(weekLink(e.target.value))}
-          />
-        </label>
+        </Title>
+        <Group gap="xs" className="ml-auto">
+          <Text span size="sm" c="dimmed" id="aller-au">
+            Aller au
+          </Text>
+          <GoTo key={monday} monday={monday} onGo={(d) => router.push(weekLink(d))} />
+        </Group>
       </nav>
-      {lessons.length === 0 && <p className="text-sm text-doux">Aucune séance cette semaine.</p>}
+      {lessons.length === 0 && (
+        <Text size="sm" c="dimmed">
+          Aucune séance cette semaine.
+        </Text>
+      )}
       <Calendar
         elements={elements}
         columns={days.map((j) => ({
@@ -128,5 +132,29 @@ export function DatedWeek({
         }
       />
     </div>
+  );
+}
+
+/**
+ * « Aller au »: shows the Monday of the week and moves only once a date is
+ * settled (Enter, leaving the field, a day picked), never on a half-typed
+ * year such as « 12/09/20 ».
+ */
+function GoTo({ monday, onGo }: { monday: string; onGo: (date: string) => void }) {
+  // Remounted for each week (key): whatever was typed, even with the cursor
+  // still here when the browser goes back, gives way to the Monday shown.
+  const [date, setDate] = useState(monday);
+  return (
+    <DateField
+      aria-labelledby="aller-au"
+      // Picking the selected day again changes nothing rather than emptying the field.
+      required
+      w={140}
+      value={date}
+      onChange={setDate}
+      onCommit={(d) => {
+        if (addDays(d, 1 - weekdayOf(d)) !== monday) onGo(d);
+      }}
+    />
   );
 }

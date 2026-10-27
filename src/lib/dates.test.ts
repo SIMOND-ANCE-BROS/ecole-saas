@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseTypedDate } from "./dates";
+import { parseTypedDate, typedDateRefusal } from "./dates";
 
 describe("parseTypedDate", () => {
   it("reads a French date, with or without leading zeros and with the usual separators", () => {
@@ -33,5 +33,27 @@ describe("parseTypedDate", () => {
     expect(parseTypedDate("31/04/2027")).toBeNull();
     expect(parseTypedDate("00/09/2027")).toBeNull();
     expect(parseTypedDate("12/13/2027")).toBeNull();
+  });
+});
+
+describe("typedDateRefusal", () => {
+  it("accepts an empty field and a readable date inside the bounds, bounds included", () => {
+    expect(typedDateRefusal("", "2027-09-01", "2028-06-30")).toBeNull();
+    expect(typedDateRefusal("1/9/27", "2027-09-01", "2028-06-30")).toBeNull();
+    expect(typedDateRefusal("30/06/2028", "2027-09-01", "2028-06-30")).toBeNull();
+    expect(typedDateRefusal("12/09/2027", null, null)).toBeNull();
+  });
+
+  it("explains an unreadable date", () => {
+    expect(typedDateRefusal("31/02/2027", null, null)).toBe("Date non reconnue : tapez jj/mm/aaaa");
+  });
+
+  it("names the allowed period for a date outside it", () => {
+    expect(typedDateRefusal("31/08/2027", "2027-09-01", "2028-06-30")).toBe(
+      "Choisissez une date du 1 sept. 2027 au 30 juin 2028",
+    );
+    expect(typedDateRefusal("01/07/2028", "2027-09-01", null)).toBeNull();
+    expect(typedDateRefusal("31/08/2027", "2027-09-01", null)).toBe("Choisissez une date à partir du 1 sept. 2027");
+    expect(typedDateRefusal("01/07/2028", null, "2028-06-30")).toBe("Choisissez une date jusqu’au 30 juin 2028");
   });
 });

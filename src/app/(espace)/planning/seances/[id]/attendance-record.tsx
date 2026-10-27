@@ -1,5 +1,6 @@
 "use client";
 
+import { Alert, Anchor, Badge, Button, Paper, Select, Text } from "@mantine/core";
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 import type { Attendance } from "@/db/lessons";
@@ -57,28 +58,31 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
         }}
       >
         {cancelled ? (
-          <p className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">Séance annulée : pas d’appel.</p>
+          <Alert color="yellow" role="status">
+            Séance annulée : pas d’appel.
+          </Alert>
         ) : attendance.students.length === 0 ? (
-          <p className="text-sm text-doux">Aucun danseur inscrit ou à l’essai dans ce cours.</p>
+          <Text size="sm" c="dimmed">
+            Aucun danseur inscrit ou à l’essai dans ce cours.
+          </Text>
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-3 text-sm">
-              <button
-                type="button"
-                className="bouton-secondaire"
+              <Button
+                variant="default"
                 onClick={() => setAttendances(Object.fromEntries(attendance.students.map((d) => [d.id, true])))}
               >
                 Tous présents
-              </button>
-              <span className="text-doux" aria-live="polite">
+              </Button>
+              <Text span size="sm" c="dimmed" aria-live="polite">
                 {presents} présent{presents > 1 ? "s" : ""} sur {attendance.students.length}
                 {unmarked > 0 && `, ${unmarked} à marquer`}
-              </span>
+              </Text>
               <span className="ml-auto hidden text-xs text-doux sm:inline">
                 P présent, A absent, flèches pour se déplacer
               </span>
             </div>
-            <ul className="panneau divide-y divide-bordure" aria-label="Danseurs">
+            <Paper withBorder component="ul" className="divide-y divide-bordure" aria-label="Danseurs">
               {attendance.students.map((d, i) => {
                 const p = attendances[d.id];
                 return (
@@ -103,88 +107,88 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
                     }}
                   >
                     <span className="min-w-40 flex-1">
-                      <Link href={`/eleves/${d.id}`} className="lien font-medium" tabIndex={-1}>
+                      <Anchor component={Link} href={`/eleves/${d.id}`} inherit fw={500} tabIndex={-1}>
                         {d.firstName} {d.name}
-                      </Link>
+                      </Anchor>
                       {d.age !== null && <span className="text-doux"> ({d.age} ans)</span>}
                       {d.status === "trial" && (
-                        <span className="ml-2 rounded bg-accent-doux px-1.5 text-xs">à l’essai</span>
+                        <Badge variant="light" ml="xs">
+                          à l’essai
+                        </Badge>
                       )}
                       {d.notes && <span className="block text-xs text-alerte-texte">{d.notes}</span>}
                     </span>
                     <span className="flex gap-1" role="group" aria-label={`Présence de ${d.firstName}`}>
-                      <button
-                        type="button"
+                      <Button
+                        size="xs"
                         tabIndex={-1}
                         aria-pressed={p === true}
-                        className="rounded-md border border-bordure px-3 py-2 text-sm sm:py-1 aria-pressed:border-accent aria-pressed:bg-accent aria-pressed:text-sur-accent"
+                        variant={p === true ? "filled" : "default"}
                         onClick={() => mark(d.id, true)}
                       >
                         Présent
-                      </button>
-                      <button
-                        type="button"
+                      </Button>
+                      <Button
+                        size="xs"
                         tabIndex={-1}
                         aria-pressed={p === false}
-                        className="rounded-md border border-bordure px-3 py-2 text-sm sm:py-1 aria-pressed:border-alerte-texte aria-pressed:bg-alerte-fond aria-pressed:text-alerte-texte"
+                        variant={p === false ? "light" : "default"}
+                        color={p === false ? "yellow" : undefined}
                         onClick={() => mark(d.id, false)}
                       >
                         Absent
-                      </button>
+                      </Button>
                     </span>
                   </li>
                 );
               })}
-            </ul>
+            </Paper>
             <div className="flex flex-wrap items-center gap-3">
-              <button type="button" className="bouton-principal" disabled={inProgress} onClick={save}>
-                {inProgress ? "Enregistrement…" : "Enregistrer l’appel"}
-              </button>
+              <Button loading={inProgress} onClick={save}>
+                Enregistrer l’appel
+              </Button>
               <span className="hidden text-xs text-doux sm:inline">ou Ctrl + Entrée</span>
             </div>
           </>
         )}
         {message && (
-          <p role={message.error ? "alert" : "status"} className={`text-sm ${message.error ? "text-erreur" : ""}`}>
+          <Text role={message.error ? "alert" : "status"} size="sm" c={message.error ? "red" : undefined}>
             {message.text}
-          </p>
+          </Text>
         )}
       </div>
 
-      <aside className="panneau flex flex-col gap-3 self-start p-3 text-sm">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="intervenant" className="font-medium">
-            Intervenant de la séance
-          </label>
-          <select
-            id="intervenant"
-            className="champ"
-            defaultValue={attendance.instructorId}
-            disabled={inProgress}
-            onChange={(e) => act(() => replace(attendance.id, e.target.value), "Intervenant de la séance changé.")}
-          >
-            {instructors.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.name}
-                {i.id === attendance.regularInstructorId ? " (titulaire)" : ""}
-              </option>
-            ))}
-          </select>
-          {attendance.instructorId !== attendance.regularInstructorId && (
-            <p className="text-xs text-doux">Remplacement pour cette séance seulement.</p>
-          )}
-        </div>
-        <button
-          type="button"
-          className="lien self-start text-sm"
+      <Paper withBorder component="aside" p="sm" className="flex flex-col gap-3 self-start text-sm">
+        <Select
+          label="Intervenant de la séance"
+          allowDeselect={false}
+          searchable
+          defaultValue={attendance.instructorId}
+          disabled={inProgress}
+          data={instructors.map((i) => ({
+            value: i.id,
+            label: `${i.name}${i.id === attendance.regularInstructorId ? " (titulaire)" : ""}`,
+          }))}
+          onChange={(id) => id && act(() => replace(attendance.id, id), "Intervenant de la séance changé.")}
+          description={
+            attendance.instructorId !== attendance.regularInstructorId
+              ? "Remplacement pour cette séance seulement."
+              : undefined
+          }
+          inputWrapperOrder={["label", "input", "description", "error"]}
+        />
+        <Button
+          variant="subtle"
+          size="compact-sm"
+          className="self-start"
           disabled={inProgress}
           onClick={() =>
             act(() => cancel(attendance.id, !cancelled), cancelled ? "Séance rétablie." : "Séance annulée.")
           }
         >
           {cancelled ? "Rétablir la séance" : "Annuler la séance"}
-        </button>
-      </aside>
+        </Button>
+      </Paper>
     </div>
   );
 }

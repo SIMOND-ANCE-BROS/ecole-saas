@@ -1,7 +1,9 @@
 "use client";
 
+import { Button, Paper, Text, TextInput } from "@mantine/core";
 import { useState, useTransition } from "react";
 import type { Closure } from "@/db/lessons";
+import { DateField, refusedDateField } from "../../_ui/date-field";
 import { close, updateLessons, reopen } from "../seances/actions";
 
 const shortDate = new Intl.DateTimeFormat("fr-FR", {
@@ -28,10 +30,15 @@ export function ClosuresManagement({ closures: closures, seasonStart: seasonStar
 
   return (
     <div className="flex flex-col gap-5">
-      <form
-        className="panneau grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto] lg:items-end"
+      <Paper
+        withBorder
+        component="form"
+        p="sm"
+        className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto] lg:items-start"
         onSubmit={(e) => {
           e.preventDefault();
+          // A date shown as refused is never sent as empty (« Date invalide »).
+          if (refusedDateField(e.currentTarget)) return;
           act(
             () => close({ ...v, end: v.end || v.start }),
             "Fermeture ajoutée, séances mises à jour.",
@@ -39,98 +46,82 @@ export function ClosuresManagement({ closures: closures, seasonStart: seasonStar
           );
         }}
       >
-        <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-1">
-          <label htmlFor="libelle" className="text-sm font-medium">
-            Libellé
-          </label>
-          <input
-            id="libelle"
-            className="champ"
-            placeholder="Vacances de la Toussaint"
-            autoFocus
-            value={v.label}
-            onChange={(e) => setV({ ...v, label: e.target.value })}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="debut" className="text-sm font-medium">
-            Du
-          </label>
-          <input
-            id="debut"
-            type="date"
-            className="champ"
-            min={seasonStart}
-            max={seasonEnd}
-            value={v.start}
-            onChange={(e) => setV({ ...v, start: e.target.value })}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="fin" className="text-sm font-medium">
-            Au (inclus)
-          </label>
-          <input
-            id="fin"
-            type="date"
-            className="champ"
-            min={v.start || seasonStart}
-            max={seasonEnd}
-            value={v.end}
-            onChange={(e) => setV({ ...v, end: e.target.value })}
-          />
-        </div>
-        <button
+        <TextInput
+          label="Libellé"
+          className="sm:col-span-2 lg:col-span-1"
+          placeholder="Vacances de la Toussaint"
+          autoFocus
+          value={v.label}
+          onChange={(e) => setV({ ...v, label: e.currentTarget.value })}
+        />
+        <DateField
+          label="Du"
+          minDate={seasonStart}
+          maxDate={seasonEnd}
+          value={v.start}
+          onChange={(start) => setV({ ...v, start })}
+        />
+        <DateField
+          label="Au (inclus)"
+          minDate={v.start || seasonStart}
+          maxDate={seasonEnd}
+          value={v.end}
+          onChange={(end) => setV({ ...v, end })}
+        />
+        <Button
           type="submit"
-          className="bouton-principal sm:col-span-2 sm:justify-self-start lg:col-span-1"
-          disabled={inProgress}
+          loading={inProgress}
+          className="sm:col-span-2 sm:justify-self-start lg:col-span-1 lg:mt-[25px]"
         >
           Ajouter
-        </button>
-      </form>
+        </Button>
+      </Paper>
 
       {message && (
-        <p role={message.error ? "alert" : "status"} className={`text-sm ${message.error ? "text-erreur" : ""}`}>
+        <Text role={message.error ? "alert" : "status"} size="sm" c={message.error ? "red" : undefined}>
           {message.text}
-        </p>
+        </Text>
       )}
 
       {closures.length === 0 ? (
-        <p className="text-sm text-doux">
+        <Text size="sm" c="dimmed">
           Aucune fermeture pour cette saison. Pensez aux vacances scolaires de votre zone et aux jours fériés.
-        </p>
+        </Text>
       ) : (
-        <ul className="panneau divide-y divide-bordure text-sm">
+        <Paper withBorder component="ul" className="divide-y divide-bordure text-sm">
           {closures.map((f) => (
-            <li key={f.id} className="flex flex-wrap items-baseline gap-x-4 px-3 py-2">
+            <li key={f.id} className="flex flex-wrap items-center gap-x-4 px-3 py-1.5">
               <span className="font-medium">{f.label}</span>
-              <span className="tabular-nums text-doux">
+              <Text span size="sm" c="dimmed" className="tabular-nums">
                 {f.start === f.end ? day(f.start) : `${day(f.start)} au ${day(f.end)}`}
-              </span>
-              <button
-                type="button"
-                className="lien ml-auto text-xs text-doux"
+              </Text>
+              <Button
+                size="compact-sm"
+                variant="subtle"
+                color="gray"
+                className="ml-auto"
                 disabled={inProgress}
                 onClick={() => act(() => reopen(f.id), "Fermeture retirée, séances remises.")}
                 aria-label={`Retirer la fermeture ${f.label}`}
               >
                 Retirer
-              </button>
+              </Button>
             </li>
           ))}
-        </ul>
+        </Paper>
       )}
 
-      <div className="flex items-center gap-3 border-t border-bordure pt-4 text-sm">
-        <button
-          type="button"
-          className="bouton-secondaire"
-          disabled={inProgress}
+      <div className="flex flex-wrap items-center gap-3 border-t border-bordure pt-4">
+        <Button
+          variant="default"
+          loading={inProgress}
           onClick={() => act(updateLessons, "Séances à venir mises à jour.")}
         >
           Mettre à jour les séances
-        </button>
-        <span className="text-doux">À utiliser une fois en début de saison, ou après une reprise de données.</span>
+        </Button>
+        <Text span size="sm" c="dimmed">
+          À utiliser une fois en début de saison, ou après une reprise de données.
+        </Text>
       </div>
     </div>
   );

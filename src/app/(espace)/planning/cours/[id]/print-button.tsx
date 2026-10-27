@@ -1,9 +1,11 @@
 "use client";
 
+import { Button } from "@mantine/core";
+
 export function PrintButton() {
   return (
-    <button type="button" className="bouton-secondaire" onClick={() => window.print()}>
+    <Button variant="default" onClick={() => window.print()}>
       Imprimer la liste
-    </button>
+    </Button>
   );
 }

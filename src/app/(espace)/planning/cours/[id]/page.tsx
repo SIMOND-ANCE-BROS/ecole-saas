@@ -1,3 +1,18 @@
+import {
+  Alert,
+  Anchor,
+  Badge,
+  Paper,
+  Progress,
+  Table,
+  TableTbody,
+  TableTd,
+  TableTh,
+  TableThead,
+  TableTr,
+  Text,
+  Title,
+} from "@mantine/core";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -8,14 +23,16 @@ import { courseLessons } from "@/db/lessons";
 import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { ages, end, recurrenceText } from "../../format";
+import { ButtonLink } from "@/app/(espace)/_ui/button-link";
+import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { PrintButton } from "./print-button";
 
 export const metadata: Metadata = { title: "Cours" };
 
 const STATUS = {
   active: null,
-  trial: { label: "à l’essai", className: "bg-accent-doux text-texte" },
-  waitlist: { label: "en attente", className: "bg-alerte-fond text-alerte-texte" },
+  trial: { label: "à l’essai", color: "indigo" },
+  waitlist: { label: "en attente", color: "yellow" },
 } as const;
 
 const lessonDate = new Intl.DateTimeFormat("fr-FR", {
@@ -55,37 +72,43 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
   return (
     <article className="flex w-full min-w-0 flex-col gap-5">
       <nav aria-label="Fil d’Ariane" className="text-sm print:hidden">
-        <Link href="/planning" className="lien">
+        <TextLink href="/planning" size="sm">
           Planning
-        </Link>
-        <span className="text-doux"> / {cours.discipline}</span>
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" "}
+          / {cours.discipline}
+        </Text>
       </nav>
 
       {modifie && (
-        <p role="status" className="rounded-md border border-accent bg-accent-doux px-3 py-2 text-sm print:hidden">
+        <Alert role="status" className="print:hidden">
           Cours modifié.
-        </p>
+        </Alert>
       )}
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="titre-page">
+          <Title order={1} fz="xl">
             {cours.discipline}
-            {cours.level && <span className="font-normal text-doux"> {cours.level}</span>}
-          </h1>
-          <p className="text-sm">{slot}</p>
+            {cours.level && (
+              <Text span inherit fw={400} c="dimmed">
+                {" "}
+                {cours.level}
+              </Text>
+            )}
+          </Title>
+          <Text size="sm">{slot}</Text>
         </div>
         <div className="flex gap-2 print:hidden">
           <PrintButton />
           {role === "director" && (
-            <Link href={`/planning/cours/${cours.id}/modifier`} className="bouton-principal">
-              Modifier le cours
-            </Link>
+            <ButtonLink href={`/planning/cours/${cours.id}/modifier`}>Modifier le cours</ButtonLink>
           )}
         </div>
       </header>
 
-      <dl className="panneau grid grid-cols-2 gap-x-6 gap-y-3 p-4 text-sm sm:grid-cols-4">
+      <Paper withBorder component="dl" p="md" className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
         <div>
           <dt className="text-xs text-doux">Salle</dt>
           <dd>
@@ -107,18 +130,18 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
               {active}
               {cours.maxCapacity !== null && ` / ${cours.maxCapacity}`} inscrit{active > 1 ? "s" : ""}
               {full && (
-                <span className="ml-2 rounded bg-alerte-fond px-1.5 text-xs font-medium text-alerte-texte">
+                <Badge color="yellow" variant="light" ml="xs">
                   Complet
-                </span>
+                </Badge>
               )}
             </span>
             {cours.maxCapacity !== null && (
-              <span className="h-1.5 overflow-hidden rounded-full bg-accent-doux" aria-hidden>
-                <span
-                  className={`block h-full rounded-full ${full ? "bg-alerte-texte" : "bg-accent"}`}
-                  style={{ width: `${Math.min(1, active / cours.maxCapacity) * 100}%` }}
-                />
-              </span>
+              <Progress
+                aria-hidden
+                size="sm"
+                color={full ? "yellow" : undefined}
+                value={Math.min(1, active / cours.maxCapacity) * 100}
+              />
             )}
             {(trials > 0 || waitlist > 0) && (
               <span className="text-xs text-doux">
@@ -127,23 +150,23 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
             )}
           </dd>
         </div>
-      </dl>
+      </Paper>
 
       <section aria-labelledby="seances" className="flex flex-col gap-2 print:hidden">
         <div className="flex items-baseline justify-between gap-2">
-          <h2 id="seances" className="text-base font-semibold">
+          <Title order={2} size="h5" id="seances">
             Séances
-          </h2>
+          </Title>
           {role === "director" && (
-            <Link href="/planning/fermetures" className="lien text-sm">
+            <TextLink href="/planning/fermetures" size="sm">
               Fermetures
-            </Link>
+            </TextLink>
           )}
         </div>
         {lessons.length === 0 ? (
-          <p className="text-sm text-doux">
+          <Text size="sm" c="dimmed">
             Aucune séance générée.{role === "director" && " Utilisez « Mettre à jour les séances » dans Fermetures."}
-          </p>
+          </Text>
         ) : (
           <ul className="flex flex-wrap gap-1.5 text-sm">
             {[
@@ -175,27 +198,27 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
       </section>
 
       <section aria-labelledby="inscrits" className="flex flex-col gap-2">
-        <h2 id="inscrits" className="text-base font-semibold">
+        <Title order={2} size="h5" id="inscrits">
           Danseurs ({enrolled.length})
-        </h2>
+        </Title>
         {enrolled.length === 0 ? (
-          <p className="text-sm text-doux">
+          <Text size="sm" c="dimmed">
             Personne n’est encore inscrit. Les inscriptions se font depuis la fiche du danseur ou de la personne qui
             paie.
-          </p>
+          </Text>
         ) : (
-          <div className="panneau overflow-x-auto">
-            <table className="tableau">
-              <thead>
-                <tr>
-                  <th>Danseur</th>
-                  <th className="text-right">Âge</th>
-                  <th className="hidden sm:table-cell">Payeur</th>
-                  <th>Téléphone</th>
-                  <th className="hidden sm:table-cell print:hidden">Inscrit le</th>
-                </tr>
-              </thead>
-              <tbody>
+          <Paper withBorder className="overflow-x-auto">
+            <Table>
+              <TableThead>
+                <TableTr>
+                  <TableTh>Danseur</TableTh>
+                  <TableTh className="text-right">Âge</TableTh>
+                  <TableTh className="hidden sm:table-cell">Payeur</TableTh>
+                  <TableTh>Téléphone</TableTh>
+                  <TableTh className="hidden sm:table-cell print:hidden">Inscrit le</TableTh>
+                </TableTr>
+              </TableThead>
+              <TableTbody>
                 {enrolled.map((i) => {
                   const status = STATUS[i.status];
                   const age = i.birthDate ? ageAt(i.birthDate, today) : null;
@@ -203,47 +226,47 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
                     age !== null &&
                     ((cours.ageMin !== null && age < cours.ageMin) || (cours.ageMax !== null && age > cours.ageMax));
                   return (
-                    <tr key={i.studentId}>
-                      <td className="font-medium">
-                        <Link href={`/eleves/${i.studentId}`} className="lien">
+                    <TableTr key={i.studentId}>
+                      <TableTd className="font-medium">
+                        <TextLink href={`/eleves/${i.studentId}`} inherit>
                           {i.firstName} {i.name}
-                        </Link>
+                        </TextLink>
                         {status && (
-                          <span className={`ml-2 rounded px-1.5 text-xs font-normal ${status.className}`}>
+                          <Badge color={status.color} variant="light" ml="xs">
                             {status.label}
-                          </span>
+                          </Badge>
                         )}
-                      </td>
-                      <td
+                      </TableTd>
+                      <TableTd
                         className={`text-right tabular-nums ${outsideBand ? "font-medium text-alerte-texte" : ""}`}
                         title={outsideBand ? "Hors tranche d’âge du cours" : undefined}
                       >
                         {age ?? "—"}
                         {outsideBand && <span className="sr-only"> (hors tranche d’âge)</span>}
-                      </td>
-                      <td className="hidden sm:table-cell">
-                        <Link href={`/personnes/${i.payerId}`} className="lien">
+                      </TableTd>
+                      <TableTd className="hidden sm:table-cell">
+                        <TextLink href={`/personnes/${i.payerId}`} inherit>
                           {i.payer}
-                        </Link>
-                      </td>
-                      <td className="whitespace-nowrap tabular-nums">
+                        </TextLink>
+                      </TableTd>
+                      <TableTd className="whitespace-nowrap tabular-nums">
                         {i.telephone ? (
-                          <a href={`tel:${i.telephone.replace(/\s/g, "")}`} className="lien">
+                          <Anchor href={`tel:${i.telephone.replace(/\s/g, "")}`} inherit>
                             {i.telephone}
-                          </a>
+                          </Anchor>
                         ) : (
                           "—"
                         )}
-                      </td>
-                      <td className="hidden text-doux sm:table-cell print:hidden">
+                      </TableTd>
+                      <TableTd className="hidden text-doux sm:table-cell print:hidden">
                         {shortDate.format(new Date(i.enrollmentDate))}
-                      </td>
-                    </tr>
+                      </TableTd>
+                    </TableTr>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
+              </TableTbody>
+            </Table>
+          </Paper>
         )}
       </section>
     </article>

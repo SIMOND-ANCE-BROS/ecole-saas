@@ -14,10 +14,11 @@ import { outsideHours } from "@/domain/schedule/hours";
 import { SHORT_DAYS } from "@/domain/schedule/days";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
-import { topErrorsOf } from "@/lib/form-errors";
+import { errorsOf, type FieldErrors, topErrorsOf } from "@/lib/form-errors";
 import type { z } from "zod";
 
-export type Refusal = { message: string; errors: Partial<Record<keyof CourseFields, string>> };
+/** Errors by field: top-level (« room ») and nested (« room.capacity », a new room's own fields). */
+export type Refusal = { message: string; errors: FieldErrors<CourseFields> };
 type CourseFields = z.input<typeof validCourseInput>;
 
 /** Creates (null id) or updates a course of the current season; management only. */
@@ -25,7 +26,10 @@ export async function saveCourse(id: string | null, entry: unknown): Promise<Ref
   const { schoolId: schoolId } = await requireRole("director");
   const parsed = validCourseInput.safeParse(entry);
   if (!parsed.success) {
-    return { message: "Vérifiez les champs signalés.", errors: topErrorsOf(parsed.error) };
+    return {
+      message: "Vérifiez les champs signalés.",
+      errors: { ...errorsOf(parsed.error), ...topErrorsOf(parsed.error) },
+    };
   }
   const today = todayInParis();
   const result = await withSchool(schoolId, async (tx) => {

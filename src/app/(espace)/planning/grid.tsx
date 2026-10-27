@@ -1,5 +1,6 @@
 "use client";
 
+import { Anchor, Badge, Button, Paper, Progress, SegmentedControl, Select, Text, Title } from "@mantine/core";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ScheduleCourse } from "@/db/schedule";
@@ -99,115 +100,75 @@ export function ScheduleGrid({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="panneau flex flex-wrap items-end gap-3 p-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="filtre-discipline" className="text-xs text-doux">
-            Discipline
-          </label>
-          <select
-            id="filtre-discipline"
-            className="champ"
-            value={discipline}
-            onChange={(e) => setFilters({ ...filters, discipline: e.target.value })}
-          >
-            <option value="">Toutes</option>
-            {disciplines.map((d) => (
-              <option key={d}>{d}</option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="filtre-site" className="text-xs text-doux">
-            Site
-          </label>
-          <select
-            id="filtre-site"
-            className="champ"
-            value={site}
-            onChange={(e) => setFilters({ ...filters, site: e.target.value, roomId: "" })}
-          >
-            <option value="">Tous</option>
-            {sites.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="filtre-salle" className="text-xs text-doux">
-            Salle
-          </label>
-          <select
-            id="filtre-salle"
-            className="champ"
-            value={roomId}
-            onChange={(e) => setFilters({ ...filters, roomId: e.target.value })}
-          >
-            <option value="">Toutes les salles</option>
-            {rooms.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="filtre-intervenant" className="text-xs text-doux">
-            Intervenant
-          </label>
-          <select
-            id="filtre-intervenant"
-            className="champ"
-            value={instructorId}
-            onChange={(e) => setFilters({ ...filters, instructorId: e.target.value })}
-          >
-            <option value="">Tous les intervenants</option>
-            {instructors.map(([id, name]) => (
-              <option key={id} value={id}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
+      <Paper withBorder p="sm" className="flex flex-wrap items-end gap-3">
+        <Select
+          label="Discipline"
+          w={170}
+          allowDeselect={false}
+          data={[{ value: "", label: "Toutes" }, ...disciplines.map((d) => ({ value: d, label: d }))]}
+          value={discipline}
+          onChange={(d) => setFilters({ ...filters, discipline: d ?? "" })}
+        />
+        <Select
+          label="Site"
+          w={170}
+          allowDeselect={false}
+          data={[{ value: "", label: "Tous" }, ...sites.map((s) => ({ value: s, label: s }))]}
+          value={site}
+          onChange={(s) => setFilters({ ...filters, site: s ?? "", roomId: "" })}
+        />
+        <Select
+          label="Salle"
+          w={190}
+          allowDeselect={false}
+          data={[{ value: "", label: "Toutes les salles" }, ...rooms.map((s) => ({ value: s.id, label: s.label }))]}
+          value={roomId}
+          onChange={(r) => setFilters({ ...filters, roomId: r ?? "" })}
+        />
+        <Select
+          label="Intervenant"
+          w={190}
+          allowDeselect={false}
+          searchable
+          data={[
+            { value: "", label: "Tous les intervenants" },
+            ...instructors.map(([id, name]) => ({ value: id, label: name })),
+          ]}
+          value={instructorId}
+          onChange={(i) => setFilters({ ...filters, instructorId: i ?? "" })}
+        />
         {activeFilters && (
-          <button type="button" className="bouton-secondaire" onClick={() => setFilters(EMPTY_FILTERS)}>
+          <Button variant="default" onClick={() => setFilters(EMPTY_FILTERS)}>
             Réinitialiser les filtres
-          </button>
+          </Button>
         )}
-        <p className="pb-1.5 text-sm text-doux" aria-live="polite">
+        <Text size="sm" c="dimmed" pb={6} aria-live="polite">
           {visible.length} cours sur {cours.length}
-        </p>
-        <div
-          role="group"
-          aria-label="Affichage"
-          className="ml-auto flex overflow-hidden rounded-md border border-bordure text-sm"
-        >
-          {(Object.keys(VIEWS) as ScheduleView[]).map((v) => (
-            <button
-              key={v}
-              type="button"
-              aria-pressed={view === v}
-              className={`px-3 py-1.5 ${view === v ? "bg-accent text-sur-accent" : "hover:bg-accent-doux"}`}
-              onClick={() => chooseView(v)}
-            >
-              {VIEWS[v]}
-            </button>
-          ))}
+        </Text>
+        {/* Four views do not fit a phone width: the switcher scrolls there rather than overflowing. */}
+        <div className="max-w-full overflow-x-auto sm:ml-auto">
+          <SegmentedControl
+            aria-label="Affichage"
+            data={(Object.keys(VIEWS) as ScheduleView[]).map((v) => ({ value: v, label: VIEWS[v] }))}
+            value={view}
+            onChange={(v) => chooseView(v as ScheduleView)}
+          />
         </div>
-      </div>
+      </Paper>
 
       {visible.length === 0 ? (
-        <div className="panneau flex flex-col items-start gap-3 p-5">
-          <p className="text-sm text-doux">
+        <Paper withBorder p="lg" className="flex flex-col items-start gap-3">
+          <Text size="sm" c="dimmed">
             {cours.length === 0
               ? "Aucun cours n’est encore programmé."
               : "Aucun cours ne correspond à cette combinaison de filtres."}
-          </p>
+          </Text>
           {activeFilters && (
-            <button type="button" className="bouton-secondaire" onClick={() => setFilters(EMPTY_FILTERS)}>
+            <Button variant="default" onClick={() => setFilters(EMPTY_FILTERS)}>
               Afficher tous les cours
-            </button>
+            </Button>
           )}
-        </div>
+        </Paper>
       ) : view === "datee" ? (
         <DatedWeek
           lessons={filterSchedule(lessons, filters)}
@@ -242,17 +203,20 @@ export function ScheduleGrid({
           {days.map((day) => (
             <section key={day ?? "stage"} aria-labelledby={`jour-${day ?? "stage"}`} className="flex flex-col gap-2">
               <div className="flex items-baseline justify-between border-b border-bordure pb-1">
-                <h2 id={`jour-${day ?? "stage"}`} className="text-sm font-semibold">
+                <Title order={2} size="h6" id={`jour-${day ?? "stage"}`}>
                   {day ? DAYS[day] : "À dates précises"}
-                </h2>
+                </Title>
                 {editable && day && (
-                  <Link
+                  <Button
+                    component={Link}
                     href={`/planning/cours/nouveau?jour=${day}`}
-                    className="lien -my-1 px-2 py-1 text-base"
+                    size="compact-sm"
+                    variant="subtle"
+                    className="-my-1"
                     aria-label={`Nouveau cours le ${DAYS[day].toLowerCase()}`}
                   >
                     +
-                  </Link>
+                  </Button>
                 )}
               </div>
               <ul className="flex flex-col gap-2">
@@ -262,23 +226,25 @@ export function ScheduleGrid({
                     const full = c.maxCapacity !== null && c.enrolled >= c.maxCapacity;
                     const fill = c.maxCapacity ? Math.min(1, c.enrolled / c.maxCapacity) : 0;
                     return (
-                      <li
+                      <Paper
+                        withBorder
+                        component="li"
                         key={c.id}
-                        className={`panneau flex flex-col gap-0.5 px-2.5 py-2 text-sm ${c.id === highlighted ? "border-accent ring-1 ring-accent" : ""}`}
+                        className={`flex flex-col gap-0.5 px-2.5 py-2 text-sm ${c.id === highlighted ? "border-accent ring-1 ring-accent" : ""}`}
                       >
                         <div className="flex items-baseline justify-between gap-2">
                           <p className="font-medium">
                             <span className="tabular-nums">
                               {c.startTime}–{end(c.startTime, c.durationMinutes)}
                             </span>{" "}
-                            <Link href={`/planning/cours/${c.id}`} className="lien">
+                            <Anchor component={Link} href={`/planning/cours/${c.id}`} inherit>
                               {c.discipline}
-                            </Link>
+                            </Anchor>
                           </p>
                           {full && (
-                            <span className="rounded bg-alerte-fond px-1.5 text-xs font-medium text-alerte-texte">
+                            <Badge color="yellow" variant="light" size="sm">
                               Complet
-                            </span>
+                            </Badge>
                           )}
                         </div>
                         <p className="text-xs text-doux">
@@ -297,16 +263,14 @@ export function ScheduleGrid({
                         <div className="mt-1 flex items-center gap-2 text-xs">
                           {c.maxCapacity ? (
                             <>
-                              <span
-                                className="h-1.5 flex-1 overflow-hidden rounded-full bg-accent-doux"
+                              <Progress
+                                className="flex-1"
+                                size="sm"
                                 role="img"
                                 aria-label={`${c.enrolled} inscrits sur ${c.maxCapacity} places`}
-                              >
-                                <span
-                                  className={`block h-full rounded-full ${full ? "bg-alerte-texte" : "bg-accent"}`}
-                                  style={{ width: `${fill * 100}%` }}
-                                />
-                              </span>
+                                color={full ? "yellow" : undefined}
+                                value={fill * 100}
+                              />
                               <span className="tabular-nums text-doux">
                                 {c.enrolled} / {c.maxCapacity}
                               </span>
@@ -317,7 +281,7 @@ export function ScheduleGrid({
                             </span>
                           )}
                         </div>
-                      </li>
+                      </Paper>
                     );
                   })}
               </ul>

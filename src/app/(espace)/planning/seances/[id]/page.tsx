@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Alert, Text, Title } from "@mantine/core";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { scheduleReferential } from "@/db/courses";
@@ -8,6 +8,7 @@ import { readAttendance } from "@/db/lessons";
 import { ageAt } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { end } from "../../format";
+import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { AttendanceRecord } from "./attendance-record";
 
 export const metadata: Metadata = { title: "Appel" };
@@ -55,31 +56,42 @@ export default async function AttendancePage({ params }: PageProps<"/planning/se
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <Link href="/planning" className="lien">
+        <TextLink href="/planning" size="sm">
           Planning
-        </Link>
-        <span className="text-doux"> / </span>
-        <Link href={`/planning/cours/${attendance.courseId}`} className="lien">
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" "}
+          /{" "}
+        </Text>
+        <TextLink href={`/planning/cours/${attendance.courseId}`} size="sm">
           {attendance.discipline}
-        </Link>
-        <span className="text-doux"> / Appel du {date}</span>
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" "}
+          / Appel du {date}
+        </Text>
       </nav>
       <div>
-        <h1 className="titre-page">
+        <Title order={1} fz="xl">
           Appel : {attendance.discipline}
-          {attendance.level && <span className="font-normal text-doux"> {attendance.level}</span>}
-        </h1>
-        <p className="text-sm first-letter:uppercase">
+          {attendance.level && (
+            <Text span inherit fw={400} c="dimmed">
+              {" "}
+              {attendance.level}
+            </Text>
+          )}
+        </Title>
+        <Text size="sm" className="first-letter:uppercase">
           {date}, {attendance.startTime}–{end(attendance.startTime, attendance.durationMinutes)}, {attendance.room}
-        </p>
+        </Text>
       </div>
       {unavailable && attendance.status !== "cancelled" && (
-        <p role="alert" className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
+        <Alert role="alert" color="yellow">
           L’intervenant de cette séance est indisponible.{" "}
           {free > 0
             ? `${free} remplaçant${free > 1 ? "s" : ""} libre${free > 1 ? "s" : ""} en tête de la liste « Intervenant de la séance ».`
             : "Aucun autre intervenant n’est libre à cette heure."}
-        </p>
+        </Alert>
       )}
       <AttendanceRecord
         attendance={{

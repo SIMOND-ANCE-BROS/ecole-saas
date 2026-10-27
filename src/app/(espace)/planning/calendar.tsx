@@ -1,5 +1,6 @@
 "use client";
 
+import { Alert, Button, Paper, Text } from "@mantine/core";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -283,39 +284,37 @@ export function Calendar({
   return (
     <div className="flex flex-col gap-3">
       {toConfirm && (
-        <div
+        <Paper
+          withBorder
+          p="sm"
           role="alertdialog"
           aria-labelledby="confirmer-deplacement"
-          className="panneau flex flex-wrap items-center gap-3 border-accent p-3 text-sm"
+          className="flex flex-wrap items-center gap-3 border-accent text-sm"
         >
           <p id="confirmer-deplacement" className="flex-1">
             {toConfirm.question}
           </p>
           <div className="flex flex-wrap gap-2">
             {toConfirm.choice.map((c, i) => (
-              <button
+              <Button
                 key={c.value}
-                type="button"
-                className={i === 0 ? "bouton-principal" : "bouton-secondaire"}
+                variant={i === 0 ? "filled" : "default"}
                 disabled={inProgress}
                 onClick={() => send(toConfirm.id, toConfirm.slot, c.value)}
                 autoFocus={i === 0}
               >
                 {c.label}
-              </button>
+              </Button>
             ))}
-            <button type="button" className="bouton-secondaire" disabled={inProgress} onClick={cancel}>
+            <Button variant="default" disabled={inProgress} onClick={cancel}>
               Annuler
-            </button>
+            </Button>
           </div>
-        </div>
+        </Paper>
       )}
       <div aria-live="polite">
         {message && (
-          <div
-            role="status"
-            className={`rounded-md border px-3 py-2 text-sm ${message.type === "ok" ? "border-accent bg-accent-doux" : "border-erreur text-erreur"}`}
-          >
+          <Alert role="status" color={message.type === "ok" ? undefined : "red"}>
             <p>{message.text}</p>
             {message.warnings.length > 0 && (
               <ul className="mt-1 list-disc pl-5 text-alerte-texte">
@@ -324,17 +323,17 @@ export function Calendar({
                 ))}
               </ul>
             )}
-          </div>
+          </Alert>
         )}
       </div>
       {editable && (
-        <p className="text-xs text-doux">
+        <Text size="xs" c="dimmed">
           Glissez un bloc pour le déplacer, tirez son bord bas pour changer sa durée, cliquez ou glissez sur un créneau
           libre pour créer un cours.
-        </p>
+        </Text>
       )}
 
-      <div className="panneau overflow-x-auto">
+      <Paper withBorder className="overflow-x-auto">
         <div
           className="grid min-w-[44rem] select-none"
           style={{ gridTemplateColumns: `3rem repeat(${days.length}, minmax(6.5rem, 1fr))` }}
@@ -457,7 +456,7 @@ export function Calendar({
             </div>
           ))}
         </div>
-      </div>
+      </Paper>
     </div>
   );
 }

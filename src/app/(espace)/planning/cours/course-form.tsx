@@ -1,6 +1,7 @@
 "use client";
 
-import Link from "next/link";
+import { Alert, Autocomplete, Button, Fieldset, Group, NumberInput, Select, Text, TextInput } from "@mantine/core";
+import { TimeInput } from "@mantine/dates";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { type EditedCourse, RECURRENCES, type ScheduleReferential, COURSE_TYPES } from "@/db/courses";
 import type { ScheduleCourse } from "@/db/schedule";
@@ -9,6 +10,8 @@ import { lessonDatesOf, type SeasonCalendar } from "@/domain/schedule/lessons";
 import { outsideHours } from "@/domain/schedule/hours";
 import { saveCourse, type Refusal, remove, checkSlot } from "./actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
+import { DateField, refusedDateField } from "@/app/(espace)/_ui/date-field";
+import { TextLink } from "@/app/(espace)/_ui/text-link";
 
 const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const DURATIONS = [45, 60, 90, 120];
@@ -81,12 +84,18 @@ export function CourseForm({
     if (refusal) form.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
   }, [refusal]);
   const [confirmDeletion, setConfirm] = useState(false);
-  const updated = (field: keyof typeof v) => (e: { target: { value: string } }) =>
-    setV({ ...v, [field]: e.target.value });
+  const set = (field: keyof typeof v) => (value: string | number | null) =>
+    setV({ ...v, [field]: value === null ? "" : String(value) });
+  const typed = (field: keyof typeof v) => (e: { currentTarget: { value: string } }) =>
+    set(field)(e.currentTarget.value);
 
   const oneOff = v.recurrence === "dates";
   const chosenRoom = r.rooms.find((s) => s.id === v.roomId);
   const existingDiscipline = r.disciplines.find((d) => d.name.toLowerCase() === v.discipline.trim().toLowerCase());
+  const typedDiscipline = v.discipline.trim().toLowerCase();
+  // Mantine highlights the first option containing the text, in list order.
+  const firstMatch = r.disciplines.find((d) => d.name.toLowerCase().includes(typedDiscipline));
+  const startsADiscipline = typedDiscipline !== "" && !!firstMatch?.name.toLowerCase().startsWith(typedDiscipline);
 
   const entry = {
     discipline: existingDiscipline ? { id: existingDiscipline.id } : { name: v.discipline },
@@ -162,19 +171,12 @@ export function CourseForm({
   const displayedUnavailability = key ? unavailabilityDates : [];
   const chosenInstructor = r.instructors.find((i) => i.id === v.instructorId);
 
-  const error = (field: keyof Refusal["errors"]) =>
-    refusal?.errors[field] && (
-      <p id={`${field}-erreur`} className="text-xs text-erreur">
-        {refusal.errors[field]}
-      </p>
-    );
-  const invalid = (field: keyof Refusal["errors"]) =>
-    refusal?.errors[field] ? { "aria-invalid": true, "aria-describedby": `${field}-erreur` } : {};
-  const label = (section: string, text: string) => (
-    <label htmlFor={section} className="text-sm font-medium">
-      {text}
-    </label>
-  );
+  const error = (field: keyof Refusal["errors"]) => refusal?.errors[field];
+  const newRoomError = (
+    ["room.name", "room.capacity", "room.site", "room.site.name", "room.site.address"] as const
+  ).some((k) => error(k));
+  const options = (labels: Record<string, string>) =>
+    Object.entries(labels).map(([value, label]) => ({ value, label }));
 
   return (
     <form
@@ -183,389 +185,334 @@ export function CourseForm({
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
+        // A date shown as refused is never saved as empty or dropped from the list.
+        if (refusedDateField(e.currentTarget)) return;
         startTransition(async () => setRefusal(await saveCourse(course?.id ?? null, entry)));
       }}
     >
-      <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
-        <legend className="px-1 text-sm font-semibold">Cours</legend>
-        <div className="flex flex-col gap-1">
-          {label("discipline", "Discipline")}
-          <input
-            id="discipline"
-            className="champ"
-            list="disciplines"
-            autoComplete="off"
-            autoFocus={!course}
-            value={v.discipline}
-            onChange={updated("discipline")}
-            {...invalid("discipline")}
-          />
-          <datalist id="disciplines">
-            {r.disciplines.map((d) => (
-              <option key={d.id} value={d.name} />
-            ))}
-          </datalist>
-          {v.discipline.trim() && !existingDiscipline ? (
-            <p className="text-xs text-doux">Nouvelle discipline : elle sera créée.</p>
-          ) : (
-            error("discipline")
-          )}
-        </div>
-        <div className="flex flex-col gap-1">
-          {label("niveau", "Niveau (facultatif)")}
-          <input
-            id="niveau"
-            className="champ"
-            autoComplete="off"
-            placeholder="Débutant, Adultes…"
-            value={v.level}
-            onChange={updated("level")}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          {label("intervenant", "Intervenant")}
-          <select
-            id="intervenant"
-            className="champ"
-            value={v.instructorId}
-            onChange={updated("instructorId")}
-            {...invalid("instructorId")}
-          >
-            {r.instructors.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.firstName} {i.name}
-                {i.active ? "" : " (inactif)"}
-              </option>
-            ))}
-          </select>
-          {r.instructors.length === 0 && (
-            <p className="text-xs text-erreur">
-              Aucun intervenant actif :{" "}
-              <Link href="/intervenants/nouveau" className="lien">
-                en ajouter un
-              </Link>
-              .
-            </p>
-          )}
-        </div>
-        <div className="flex flex-col gap-1">
-          {label("type", "Type")}
-          <select
-            id="type"
-            className="champ"
-            value={v.type}
-            onChange={(e) => {
-              const type = e.target.value as typeof v.type;
-              // A new workshop usually has specific dates.
-              setV({ ...v, type, recurrence: !course && type === "workshop" ? "dates" : v.recurrence });
-            }}
-          >
-            {Object.entries(COURSE_TYPES).map(([k, l]) => (
-              <option key={k} value={k}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </div>
-      </fieldset>
+      <Fieldset legend="Cours" className="grid gap-3 sm:grid-cols-2">
+        <Autocomplete
+          label="Discipline"
+          autoComplete="off"
+          autoFocus={!course}
+          data={r.disciplines.map((d) => d.name)}
+          // « Ja » then Enter takes « Jazz » rather than creating « Ja »; a new
+          // « Jazz » is not replaced by « Modern jazz », which only contains it.
+          selectFirstOptionOnChange={startsADiscipline}
+          // After a refusal, focus lands here: the list would cover the message.
+          openOnFocus={!refusal}
+          value={v.discipline}
+          onChange={set("discipline")}
+          description={
+            v.discipline.trim() && !existingDiscipline ? "Nouvelle discipline : elle sera créée." : undefined
+          }
+          error={v.discipline.trim() && !existingDiscipline ? undefined : error("discipline")}
+        />
+        <TextInput
+          label="Niveau (facultatif)"
+          autoComplete="off"
+          placeholder="Débutant, Adultes…"
+          value={v.level}
+          onChange={typed("level")}
+        />
+        <Select
+          label="Intervenant"
+          allowDeselect={false}
+          searchable
+          data={r.instructors.map((i) => ({
+            value: i.id,
+            label: `${i.firstName} ${i.name}${i.active ? "" : " (inactif)"}`,
+          }))}
+          value={v.instructorId || null}
+          onChange={set("instructorId")}
+          description={
+            r.instructors.length === 0 ? (
+              <>
+                Aucun intervenant actif : <TextLink href="/intervenants/nouveau">en ajouter un</TextLink>.
+              </>
+            ) : undefined
+          }
+          error={error("instructorId")}
+        />
+        <Select
+          label="Type"
+          allowDeselect={false}
+          data={options(COURSE_TYPES)}
+          value={v.type}
+          onChange={(value) => {
+            const type = (value ?? v.type) as typeof v.type;
+            // A new workshop usually has specific dates.
+            setV({ ...v, type, recurrence: !course && type === "workshop" ? "dates" : v.recurrence });
+          }}
+        />
+      </Fieldset>
 
-      <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-3">
-        <legend className="px-1 text-sm font-semibold">Créneau</legend>
-        <div className="flex flex-col gap-1 sm:col-span-3">
-          {label("recurrence", "Récurrence")}
-          <select id="recurrence" className="champ sm:max-w-xs" value={v.recurrence} onChange={updated("recurrence")}>
-            {Object.entries(RECURRENCES).map(([k, l]) => (
-              <option key={k} value={k}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </div>
+      <Fieldset legend="Créneau" className="grid gap-3 sm:grid-cols-3">
+        <Select
+          label="Récurrence"
+          className="sm:col-span-3 sm:max-w-xs"
+          allowDeselect={false}
+          data={options(RECURRENCES)}
+          value={v.recurrence}
+          onChange={set("recurrence")}
+        />
         {oneOff ? (
           <div className="flex flex-col gap-1 sm:col-span-3">
-            <span className="text-sm font-medium" id="dates-libelle">
+            <Text size="sm" fw={500} id="dates-libelle">
               Dates
-            </span>
+            </Text>
             <ul className="flex flex-wrap gap-2" aria-labelledby="dates-libelle">
               {dates.map((d, i) => (
-                <li key={i} className="flex items-center gap-1">
-                  <label className="sr-only" htmlFor={`date-${i}`}>
-                    Date {i + 1}
-                  </label>
-                  <input
-                    id={`date-${i}`}
-                    type="date"
-                    className="champ"
+                <li key={i} className="flex items-start gap-1">
+                  <DateField
+                    aria-label={`Date ${i + 1}`}
+                    w={140}
                     value={d}
-                    onChange={(e) => setDates(dates.map((x, j) => (j === i ? e.target.value : x)))}
-                    {...(i === 0 ? invalid("dates") : {})}
+                    onChange={(value) => setDates(dates.map((x, j) => (j === i ? value : x)))}
+                    error={Boolean(error("dates"))}
                   />
                   {dates.length > 1 && (
-                    <button
-                      type="button"
-                      className="bouton-secondaire px-2"
+                    <Button
+                      variant="subtle"
+                      color="gray"
+                      px="xs"
                       aria-label={`Retirer la date ${i + 1}`}
                       onClick={() => setDates(dates.filter((_, j) => j !== i))}
                     >
                       ×
-                    </button>
+                    </Button>
                   )}
                 </li>
               ))}
             </ul>
-            <button type="button" className="lien self-start text-sm" onClick={() => setDates([...dates, ""])}>
+            {error("dates") && (
+              <Text size="sm" c="red" role="alert" tabIndex={-1}>
+                {error("dates")}
+              </Text>
+            )}
+            <Button variant="subtle" size="compact-sm" className="self-start" onClick={() => setDates([...dates, ""])}>
               Ajouter une date
-            </button>
-            {error("dates")}
-            <p className="text-xs text-doux">
+            </Button>
+            <Text size="xs" c="dimmed">
               Les dates précises ne tiennent pas compte des fermetures (un stage peut avoir lieu pendant les vacances).
-            </p>
+            </Text>
           </div>
         ) : (
-          <div className="flex flex-col gap-1">
-            {label("jour", "Jour")}
-            <select id="jour" className="champ" value={v.weekday} onChange={updated("weekday")}>
-              {DAYS.slice(1).map((j, i) => (
-                <option key={j} value={i + 1}>
-                  {j}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-        <div className="flex flex-col gap-1">
-          {label("heure", "Début")}
-          <input
-            id="heure"
-            type="time"
-            step={300}
-            className="champ"
-            value={v.startTime}
-            onChange={updated("startTime")}
-            {...invalid("startTime")}
+          <Select
+            label="Jour"
+            allowDeselect={false}
+            data={DAYS.slice(1).map((j, i) => ({ value: String(i + 1), label: j }))}
+            value={v.weekday}
+            onChange={set("weekday")}
           />
-          {error("startTime")}
-        </div>
+        )}
+        <TimeInput
+          label="Début"
+          step={300}
+          value={v.startTime}
+          onChange={typed("startTime")}
+          error={error("startTime")}
+        />
         <div className="flex flex-col gap-1">
-          {label("duree", "Durée (minutes)")}
-          <input
-            id="duree"
-            type="number"
+          <NumberInput
+            label="Durée (minutes)"
             min={5}
             step={5}
-            className="champ"
+            allowDecimal={false}
+            // No silent correction on blur (0 places → 1): the server says what is wrong.
+            clampBehavior="none"
+            trimLeadingZeroesOnBlur={false}
             value={v.durationMinutes}
-            onChange={updated("durationMinutes")}
-            {...invalid("durationMinutes")}
+            onChange={set("durationMinutes")}
+            error={error("durationMinutes")}
           />
-          <div className="flex gap-1" role="group" aria-label="Durées courantes">
+          <Group gap={4} role="group" aria-label="Durées courantes">
             {DURATIONS.map((d) => (
-              <button
+              <Button
                 key={d}
-                type="button"
-                className={`rounded border px-1.5 text-xs ${String(d) === v.durationMinutes ? "border-accent bg-accent-doux" : "border-bordure text-doux hover:border-accent"}`}
+                size="compact-xs"
+                variant={String(d) === v.durationMinutes ? "filled" : "default"}
+                aria-pressed={String(d) === v.durationMinutes}
                 onClick={() => setV({ ...v, durationMinutes: String(d) })}
               >
                 {d}
-              </button>
+              </Button>
             ))}
-          </div>
-          {error("durationMinutes")}
+          </Group>
         </div>
         {!oneOff && (
-          <fieldset className="flex flex-wrap items-end gap-3 sm:col-span-3">
-            <legend className="mb-1 text-sm font-medium">
-              Période <span className="font-normal text-doux">(facultatif : vide, toute la saison)</span>
-            </legend>
-            <div className="flex flex-col gap-1">
-              {label("date-debut", "Du")}
-              <input
-                id="date-debut"
-                type="date"
-                className="champ"
-                value={v.startDate}
-                onChange={updated("startDate")}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              {label("date-fin", "Au")}
-              <input
-                id="date-fin"
-                type="date"
-                className="champ"
-                value={v.endDate}
-                onChange={updated("endDate")}
-                {...invalid("endDate")}
-              />
-            </div>
-            {error("endDate")}
-          </fieldset>
+          <Fieldset
+            variant="unstyled"
+            className="sm:col-span-3"
+            legend={
+              <Text span size="sm" fw={500}>
+                Période{" "}
+                <Text span size="sm" c="dimmed">
+                  (facultatif : vide, toute la saison)
+                </Text>
+              </Text>
+            }
+          >
+            <Group align="flex-start" gap="sm">
+              <DateField label="Du" w={160} value={v.startDate} onChange={set("startDate")} />
+              <DateField label="Au" w={160} value={v.endDate} onChange={set("endDate")} error={error("endDate")} />
+            </Group>
+          </Fieldset>
         )}
-      </fieldset>
+      </Fieldset>
 
-      <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
-        <legend className="px-1 text-sm font-semibold">Lieu</legend>
-        <div className="flex flex-col gap-1 sm:col-span-2">
-          {label("salle", "Salle")}
-          <select id="salle" className="champ" value={v.roomId} onChange={updated("roomId")}>
-            {r.rooms.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}, {s.site}
-                {s.capacity ? ` (${s.capacity} places)` : ""}
-              </option>
-            ))}
-            <option value={NEW}>Nouvelle salle…</option>
-          </select>
-          {error("room")}
-        </div>
+      <Fieldset legend="Lieu" className="grid gap-3 sm:grid-cols-2">
+        <Select
+          label="Salle"
+          className="sm:col-span-2"
+          allowDeselect={false}
+          data={[
+            ...r.rooms.map((s) => ({
+              value: s.id,
+              label: `${s.name}, ${s.site}${s.capacity ? ` (${s.capacity} places)` : ""}`,
+            })),
+            { value: NEW, label: "Nouvelle salle…" },
+          ]}
+          value={v.roomId}
+          onChange={set("roomId")}
+          // A new room's errors show under its own fields, when Zod names one.
+          error={v.roomId === NEW && newRoomError ? undefined : error("room")}
+        />
         {v.roomId === NEW && (
           <>
-            <div className="flex flex-col gap-1">
-              {label("nouvelle-salle", "Nom de la salle")}
-              <input
-                id="nouvelle-salle"
-                className="champ"
-                autoComplete="off"
-                value={v.newRoom}
-                onChange={updated("newRoom")}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              {label("capacite-salle", "Capacité de la salle (facultatif)")}
-              <input
-                id="capacite-salle"
-                type="number"
-                min={1}
-                className="champ"
-                value={v.roomCapacity}
-                onChange={updated("roomCapacity")}
-              />
-            </div>
-            <div className="flex flex-col gap-1 sm:col-span-2">
-              {label("site", "Site")}
-              <select id="site" className="champ" value={v.siteId} onChange={updated("siteId")}>
-                {r.sites.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-                <option value={NEW}>Nouveau site…</option>
-              </select>
-            </div>
+            <TextInput
+              label="Nom de la salle"
+              autoComplete="off"
+              value={v.newRoom}
+              onChange={typed("newRoom")}
+              error={error("room.name")}
+            />
+            <NumberInput
+              label="Capacité de la salle (facultatif)"
+              min={1}
+              allowDecimal={false}
+              clampBehavior="none"
+              trimLeadingZeroesOnBlur={false}
+              value={v.roomCapacity}
+              onChange={set("roomCapacity")}
+              error={error("room.capacity")}
+            />
+            <Select
+              label="Site"
+              className="sm:col-span-2"
+              allowDeselect={false}
+              data={[...r.sites.map((s) => ({ value: s.id, label: s.name })), { value: NEW, label: "Nouveau site…" }]}
+              value={v.siteId}
+              onChange={set("siteId")}
+              error={v.siteId === NEW ? undefined : error("room.site")}
+            />
             {v.siteId === NEW && (
               <>
-                <div className="flex flex-col gap-1">
-                  {label("nouveau-site", "Nom du site")}
-                  <input
-                    id="nouveau-site"
-                    className="champ"
-                    autoComplete="off"
-                    value={v.newSite}
-                    onChange={updated("newSite")}
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  {label("adresse-site", "Adresse du site")}
-                  <input
-                    id="adresse-site"
-                    className="champ"
-                    autoComplete="off"
-                    value={v.siteAddress}
-                    onChange={updated("siteAddress")}
-                  />
-                </div>
+                <TextInput
+                  label="Nom du site"
+                  autoComplete="off"
+                  value={v.newSite}
+                  onChange={typed("newSite")}
+                  error={error("room.site.name")}
+                />
+                <TextInput
+                  label="Adresse du site"
+                  autoComplete="off"
+                  value={v.siteAddress}
+                  onChange={typed("siteAddress")}
+                  error={error("room.site.address")}
+                />
               </>
             )}
           </>
         )}
-      </fieldset>
+      </Fieldset>
 
-      <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-3">
-        <legend className="px-1 text-sm font-semibold">Public</legend>
-        <div className="flex flex-col gap-1">
-          {label("age-min", "Âge minimum")}
-          <input id="age-min" type="number" min={0} className="champ" value={v.ageMin} onChange={updated("ageMin")} />
-        </div>
-        <div className="flex flex-col gap-1">
-          {label("age-max", "Âge maximum")}
-          <input
-            id="age-max"
-            type="number"
-            min={0}
-            className="champ"
-            value={v.ageMax}
-            onChange={updated("ageMax")}
-            {...invalid("ageMax")}
-          />
-          {error("ageMax")}
-        </div>
-        <div className="flex flex-col gap-1">
-          {label("capacite", "Places")}
-          <input
-            id="capacite"
-            type="number"
-            min={1}
-            className="champ"
-            placeholder={chosenRoom?.capacity ? `${chosenRoom.capacity} (salle)` : "sans limite"}
-            value={v.maxCapacity}
-            onChange={updated("maxCapacity")}
-          />
-        </div>
-      </fieldset>
+      <Fieldset legend="Public" className="grid gap-3 sm:grid-cols-3">
+        <NumberInput
+          label="Âge minimum"
+          min={0}
+          allowDecimal={false}
+          clampBehavior="none"
+          trimLeadingZeroesOnBlur={false}
+          value={v.ageMin}
+          onChange={set("ageMin")}
+        />
+        <NumberInput
+          label="Âge maximum"
+          min={0}
+          allowDecimal={false}
+          clampBehavior="none"
+          trimLeadingZeroesOnBlur={false}
+          value={v.ageMax}
+          onChange={set("ageMax")}
+          error={error("ageMax")}
+        />
+        <NumberInput
+          label="Places"
+          min={1}
+          allowDecimal={false}
+          clampBehavior="none"
+          trimLeadingZeroesOnBlur={false}
+          placeholder={chosenRoom?.capacity ? `${chosenRoom.capacity} (salle)` : "sans limite"}
+          value={v.maxCapacity}
+          onChange={set("maxCapacity")}
+        />
+      </Fieldset>
 
       {displayedUnavailability.length > 0 && (
-        <div role="status" className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
+        <Alert role="status" color="yellow">
           <p className="font-medium">
             {chosenInstructor?.firstName} est indisponible{" "}
             {displayedUnavailability.length > 1 ? `${displayedUnavailability.length} fois` : "une fois"} sur ce créneau
             :
           </p>
-          <p>
-            {displayedUnavailability
-              .slice(0, 6)
-              .map((d) => shortDate.format(new Date(`${d}T00:00:00Z`)))
-              .join(", ")}
-            {displayedUnavailability.length > 6 && "…"}
-          </p>
-        </div>
+          {displayedUnavailability
+            .slice(0, 6)
+            .map((d) => shortDate.format(new Date(`${d}T00:00:00Z`)))
+            .join(", ")}
+          {displayedUnavailability.length > 6 && "…"}
+        </Alert>
       )}
 
       {outsideOpening && (
-        <p role="status" className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
+        <Alert role="status" color="yellow">
           {outsideOpening} Le cours reste possible.
-        </p>
+        </Alert>
       )}
 
       {overlaps.length > 0 && (
-        <div role="status" className="rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte">
+        <Alert role="status" color="yellow">
           <p className="font-medium">Ce créneau est déjà occupé :</p>
           <ul className="list-disc pl-5">
             {overlaps.map((t) => (
               <li key={t}>{t}</li>
             ))}
           </ul>
-        </div>
+        </Alert>
       )}
 
       {refusal && (
-        <p tabIndex={-1} role="alert" className="text-sm text-erreur">
+        <Text tabIndex={-1} role="alert" size="sm" c="red">
           {refusal.message}
-        </p>
+        </Text>
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-bordure pt-4">
-        <button type="submit" className="bouton-principal" disabled={sending}>
-          {sending ? "Enregistrement…" : course ? "Enregistrer les modifications" : "Créer le cours"}
-        </button>
+        <Button type="submit" loading={sending}>
+          {course ? "Enregistrer les modifications" : "Créer le cours"}
+        </Button>
         <Cancel href={course ? `/planning/cours/${course.id}` : "/planning"} />
         {course &&
           (confirmDeletion ? (
-            <span className="ml-auto flex items-center gap-2 text-sm">
-              Supprimer ce cours ?
-              <button
-                type="button"
-                className="rounded-md border border-erreur px-3 py-1.5 text-sm font-medium text-erreur hover:bg-erreur/10 disabled:opacity-50"
-                disabled={sending}
+            <Group gap="xs" className="ml-auto text-sm">
+              <Text span size="sm">
+                Supprimer ce cours ?
+              </Text>
+              <Button
+                color="red"
+                variant="outline"
+                loading={sending}
                 onClick={() =>
                   startTransition(async () => {
                     setRefusal(await remove(course.id));
@@ -574,15 +521,17 @@ export function CourseForm({
                 }
               >
                 Oui, supprimer
-              </button>
-              <button type="button" className="bouton-secondaire" onClick={() => setConfirm(false)}>
+              </Button>
+              {/* Focus on the safe answer: keyboard users keep their place and the
+                  confirmation, which may wrap below, scrolls into view. */}
+              <Button variant="default" autoFocus onClick={() => setConfirm(false)}>
                 Non
-              </button>
-            </span>
+              </Button>
+            </Group>
           ) : (
-            <button type="button" className="lien ml-auto text-sm text-erreur" onClick={() => setConfirm(true)}>
+            <Button variant="subtle" color="red" className="ml-auto" onClick={() => setConfirm(true)}>
               Supprimer le cours
-            </button>
+            </Button>
           ))}
       </div>
     </form>

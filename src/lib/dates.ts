@@ -20,3 +20,26 @@ export function parseTypedDate(input: string): string | null {
   if (d > new Date(Date.UTC(y, m, 0)).getUTCDate()) return null;
   return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
+
+const shortDate = new Intl.DateTimeFormat("fr-FR", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+const shown = (iso: string) => shortDate.format(new Date(`${iso}T00:00:00Z`));
+
+/**
+ * Why a typed date is refused, as a message for the field, or null when it
+ * is empty or acceptable: unreadable, or outside the optional `min`/`max`
+ * bounds (`YYYY-MM-DD`, inclusive).
+ */
+export function typedDateRefusal(input: string, min: string | null, max: string | null): string | null {
+  if (input.trim() === "") return null;
+  const date = parseTypedDate(input);
+  if (date === null) return "Date non reconnue : tapez jj/mm/aaaa";
+  if (min && max && (date < min || date > max)) return `Choisissez une date du ${shown(min)} au ${shown(max)}`;
+  if (min && date < min) return `Choisissez une date à partir du ${shown(min)}`;
+  if (max && date > max) return `Choisissez une date jusqu’au ${shown(max)}`;
+  return null;
+}

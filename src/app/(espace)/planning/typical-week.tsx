@@ -1,5 +1,6 @@
 "use client";
 
+import { Anchor, Paper, Text, Title } from "@mantine/core";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ScheduleCourse } from "@/db/schedule";
@@ -88,19 +89,19 @@ export function TypicalWeek({
       />
       {oneOff.length > 0 && (
         <section aria-labelledby="agenda-ponctuels" className="flex flex-col gap-1">
-          <h2 id="agenda-ponctuels" className="text-sm font-semibold">
+          <Title order={2} size="h6" id="agenda-ponctuels">
             À dates précises (stages, cours exceptionnels)
-          </h2>
+          </Title>
           <ul className="flex flex-col gap-1 text-sm">
             {oneOff.map((s) => (
-              <li key={s.id} className="panneau px-2.5 py-1.5">
-                <Link href={`/planning/cours/${s.id}`} className="lien font-medium">
+              <Paper withBorder component="li" key={s.id} className="px-2.5 py-1.5">
+                <Anchor component={Link} href={`/planning/cours/${s.id}`} inherit fw={500}>
                   {s.discipline}
-                </Link>{" "}
-                <span className="text-doux">
+                </Anchor>{" "}
+                <Text span inherit c="dimmed">
                   {s.startTime}–{end(s.startTime, s.durationMinutes)}, {s.room} — {recurrenceText(s)}
-                </span>
-              </li>
+                </Text>
+              </Paper>
             ))}
           </ul>
         </section>
