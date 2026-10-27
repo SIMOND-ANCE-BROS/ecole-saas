@@ -28,6 +28,20 @@ export const metadata: Metadata = { title: "Copier un planning" };
 
 const when = (c: CourseToCopy) => `${DAY_NAMES[c.weekday ?? 0]} ${c.startTime.slice(0, 5)}`;
 
+/** « Classique (Débutant), mercredi 15:00, Grande salle, Site Centre » */
+const describe = (c: CourseToCopy) =>
+  [`${c.discipline}${c.level ? ` (${c.level})` : ""}`, ...(c.weekday ? [when(c)] : []), c.room].join(", ");
+
+const count = (n: number, one: string, many: string) => (n === 1 ? `1 cours ${one}` : `${n} cours ${many}`);
+
+function Flag({ children }: { children: string }) {
+  return (
+    <Badge color="yellow" variant="light" ml="xs">
+      {children}
+    </Badge>
+  );
+}
+
 /**
  * Copy of another season's planning into the season chosen on the planning
  * (#190): choose the season to copy, review what will be created, confirm.
@@ -55,6 +69,20 @@ export default async function CopyPage({ searchParams }: PageProps<"/planning/co
   const { target, others, current, copy } = data;
   const targetParam = seasonParam(target.id, current?.id);
   const planning = withSeason("/planning", targetParam);
+  const copied = copy?.ok ? copy.plan.copied : [];
+  const check = copy?.ok ? copy.plan.check : null;
+  const toCheck = check
+    ? [
+        check.periodDropped.length > 0 &&
+          `${count(check.periodDropped.length, "avait une période limitée", "avaient une période limitée")} dans l’ancienne saison : la copie a lieu toute la saison, ajustez ses dates si besoin.`,
+        check.biweekly.length > 0 &&
+          `${count(check.biweekly.length, "a lieu", "ont lieu")} une semaine sur deux : l’alternance repart de la première semaine de la saison, vérifiez les semaines où ils tombent.`,
+        check.roomTaken.length > 0 &&
+          `${count(check.roomTaken.length, "tombe", "tombent")} dans une salle déjà occupée à la même heure par un autre cours de la saison ${target.label}.`,
+        check.inactiveInstructor.length > 0 &&
+          `${count(check.inactiveInstructor.length, "a un intervenant", "ont un intervenant")} qui n’est plus actif : il est copié tel quel, pensez à le remplacer.`,
+      ].filter((line): line is string => typeof line === "string")
+    : [];
 
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
@@ -86,28 +114,29 @@ export default async function CopyPage({ searchParams }: PageProps<"/planning/co
         </Alert>
       ) : (
         <>
-          <SourcePicker seasons={others} chosen={copy.source.id} target={targetParam} />
-          {copy.targetCourses > 0 && (
+          <SourcePicker seasons={others} chosen={copy.source.id} current={current?.id} target={targetParam} />
+          {copied.length > 0 && copy.targetCourses > 0 && (
             <Alert color="yellow" title={`La saison ${target.label} a déjà ${copy.targetCourses} cours`}>
               Les cours copiés s’y ajoutent. Un cours déjà présent (même discipline, jour, heure et salle) n’est pas
               recopié.
             </Alert>
           )}
-          {copy.plan.inactiveInstructor.length > 0 && (
-            <Alert color="yellow">
-              {copy.plan.inactiveInstructor.length === 1
-                ? "1 cours a un intervenant qui n’est plus actif"
-                : `${copy.plan.inactiveInstructor.length} cours ont un intervenant qui n’est plus actif`}{" "}
-              : il est copié tel quel, pensez à le remplacer.
+          {toCheck.length > 0 && (
+            <Alert color="yellow" title="À vérifier après la copie">
+              <ul className="flex list-disc flex-col gap-1 pl-4">
+                {toCheck.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
             </Alert>
           )}
 
           <Title order={2} size="h5">
-            {copy.plan.copied.length === 0
+            {copied.length === 0
               ? `Aucun cours à copier depuis ${copy.source.label}`
-              : `${copy.plan.copied.length} cours à copier depuis ${copy.source.label}`}
+              : `${copied.length} cours à copier depuis ${copy.source.label}`}
           </Title>
-          {copy.plan.copied.length > 0 && (
+          {copied.length > 0 && (
             <Paper withBorder className="overflow-x-auto">
               <Table>
                 <TableThead>
@@ -119,26 +148,28 @@ export default async function CopyPage({ searchParams }: PageProps<"/planning/co
                   </TableTr>
                 </TableThead>
                 <TableTbody>
-                  {copy.plan.copied.map((c) => (
+                  {copied.map((c) => (
                     <TableTr key={c.id}>
-                      <TableTd className="whitespace-nowrap tabular-nums">{when(c)}</TableTd>
+                      <TableTd className="whitespace-nowrap tabular-nums">
+                        {when(c)}
+                        {/* Here rather than under the room, which is hidden on a phone. */}
+                        {copy.plan.check.roomTaken.includes(c) && <Flag>salle déjà occupée</Flag>}
+                      </TableTd>
                       <TableTd>
                         {c.discipline}
                         {c.level && (
                           <Text span size="sm" c="dimmed">
                             {" "}
-                            · {c.level}
+                            ({c.level})
                           </Text>
                         )}
+                        {copy.plan.check.periodDropped.includes(c) && <Flag>période non reprise</Flag>}
+                        {copy.plan.check.biweekly.includes(c) && <Flag>une semaine sur deux</Flag>}
                       </TableTd>
                       <TableTd className="hidden sm:table-cell">{c.room}</TableTd>
                       <TableTd>
                         {c.instructor}
-                        {!c.instructorActive && (
-                          <Badge color="yellow" variant="light" ml="xs">
-                            inactif
-                          </Badge>
-                        )}
+                        {copy.plan.check.inactiveInstructor.includes(c) && <Flag>inactif</Flag>}
                       </TableTd>
                     </TableTr>
                   ))}
@@ -153,17 +184,25 @@ export default async function CopyPage({ searchParams }: PageProps<"/planning/co
                 Non copiés
               </Title>
               <ul className="flex flex-col gap-1 text-sm">
-                {copy.plan.alreadyThere.map((c) => (
-                  <li key={c.id}>
-                    {c.discipline}, {when(c)} :{" "}
-                    <Text span size="sm" c="dimmed">
-                      déjà dans la saison {target.label}
-                    </Text>
+                {copied.length === 0 && copy.plan.alreadyThere.length > 0 ? (
+                  <li>
+                    {copy.plan.alreadyThere.length === 1
+                      ? `Le cours régulier de ${copy.source.label} est déjà dans la saison ${target.label}.`
+                      : `Les ${copy.plan.alreadyThere.length} cours réguliers de ${copy.source.label} sont déjà dans la saison ${target.label}.`}
                   </li>
-                ))}
+                ) : (
+                  copy.plan.alreadyThere.map((c) => (
+                    <li key={c.id}>
+                      {describe(c)} :{" "}
+                      <Text span size="sm" c="dimmed">
+                        déjà dans la saison {target.label}
+                      </Text>
+                    </li>
+                  ))
+                )}
                 {copy.plan.oneOff.map((c) => (
                   <li key={c.id}>
-                    {c.discipline} :{" "}
+                    {describe(c)} :{" "}
                     <Text span size="sm" c="dimmed">
                       cours à des dates précises, à recréer avec les dates de la nouvelle saison
                     </Text>
@@ -173,8 +212,8 @@ export default async function CopyPage({ searchParams }: PageProps<"/planning/co
             </div>
           )}
 
-          {copy.plan.copied.length > 0 ? (
-            <CopyButton sourceId={copy.source.id} targetId={target.id} count={copy.plan.copied.length}>
+          {copied.length > 0 ? (
+            <CopyButton sourceId={copy.source.id} targetId={target.id} count={copied.length}>
               <ButtonLink href={planning} variant="default">
                 Annuler
               </ButtonLink>

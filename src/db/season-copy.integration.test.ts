@@ -26,6 +26,7 @@ let target: string;
 let foreignSeason: string;
 let weekly: string;
 let gone: string;
+let competition: string;
 
 beforeAll(async () => {
   [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`ca-${suffix}`}) RETURNING id`;
@@ -86,6 +87,11 @@ beforeAll(async () => {
   gone = await insertCourse(school, source, a, a.inactive, 3, "18:00");
   const workshop = await insertCourse(school, source, a, a.active, null, "14:00");
   await admin`INSERT INTO course_date (school_id, course_id, date) VALUES (${school}, ${workshop}, '2027-02-13')`;
+  // Every column away from the defaults: type, recurrence, ages, level and places left empty, length.
+  [{ id: competition }] = await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id,
+      type, recurrence, weekday, start_time, duration_minutes, level, age_min, age_max, max_capacity)
+    VALUES (${school}, ${source}, ${a.discipline}, ${a.room}, ${a.active},
+      'competition', 'biweekly', 6, '10:30', 90, NULL, 14, 25, NULL) RETURNING id`;
   await insertCourse(otherSchool, foreignSeason, b, b.active, 2, "19:00");
 });
 
@@ -103,12 +109,14 @@ afterAll(async () => {
 });
 
 describe("copy of a season's planning (#190)", () => {
-  it("plans the regular courses, skips the one-off ones and flags the inactive instructor", async () => {
+  it("plans the regular courses, skips the one-off ones and flags what to check", async () => {
     const r = await withSchool(school, (tx) => seasonCopyPlan(tx, source, target));
     if (!r.ok) throw new Error(r.message);
-    expect(r.plan.copied.map((c) => c.id).sort()).toEqual([weekly, gone].sort());
+    expect(r.plan.copied.map((c) => c.id).sort()).toEqual([weekly, gone, competition].sort());
     expect(r.plan.oneOff).toHaveLength(1);
-    expect(r.plan.inactiveInstructor.map((c) => c.id)).toEqual([gone]);
+    expect(r.plan.check.inactiveInstructor.map((c) => c.id)).toEqual([gone]);
+    expect(r.plan.check.periodDropped.map((c) => c.id)).toEqual([weekly]);
+    expect(r.plan.check.biweekly.map((c) => c.id)).toEqual([competition]);
     expect(r.targetCourses).toBe(0);
   });
 
@@ -135,32 +143,39 @@ describe("copy of a season's planning (#190)", () => {
       if (c.ok) await syncLessons(tx, target, TODAY);
       return c;
     });
-    expect(r).toMatchObject({ ok: true, copied: 2 });
+    expect(r).toMatchObject({ ok: true, copied: 3 });
 
-    const copies = await admin`
-      SELECT c.id, c.weekday, c.start_time::text AS time, c.start_date, c.end_date, c.level, c.max_capacity,
-             c.recurrence, (SELECT count(*)::int FROM lesson l WHERE l.course_id = c.id) AS lessons
-      FROM course c WHERE c.season_id = ${target} ORDER BY c.weekday`;
-    expect(copies.map((c) => [c.weekday, c.time, c.level, c.max_capacity, c.recurrence])).toEqual([
-      [1, "17:00:00", "Débutant", 12, "weekly"],
-      [3, "18:00:00", "Débutant", 12, "weekly"],
-    ]);
-    // The old season's period is not carried over: the copy runs the whole season.
-    expect(copies.every((c) => c.start_date === null && c.end_date === null)).toBe(true);
-    expect(copies.every((c) => c.lessons > 30)).toBe(true);
+    // Each copy against its source, column by column: only the id, the season and the period differ.
+    const pairs = await admin`
+      SELECT to_jsonb(s) AS source, to_jsonb(c) AS copy,
+             (SELECT count(*)::int FROM lesson l WHERE l.course_id = c.id) AS lessons
+      FROM audit_log a
+      JOIN course c ON c.id = a.row_id
+      JOIN course s ON s.id = (a.after->>'copiedFrom')::uuid
+      WHERE a.school_id = ${school} AND a.target_table = 'course'`;
+    expect(pairs).toHaveLength(3);
+    for (const { source: from, copy } of pairs) {
+      const differ = Object.keys(from).filter((k) => JSON.stringify(from[k]) !== JSON.stringify(copy[k]));
+      expect(differ.sort()).toEqual(
+        ["id", "season_id", ...(from.start_date ? ["start_date"] : []), ...(from.end_date ? ["end_date"] : [])].sort(),
+      );
+      expect(copy.season_id).toBe(target);
+      expect([copy.start_date, copy.end_date]).toEqual([null, null]);
+    }
+    // Lessons generated over the whole season: about 40 weeks, 20 for every other week.
+    expect(pairs.map((p) => p.lessons).every((n) => n >= 15)).toBe(true);
 
     const log = await admin`
       SELECT row_id, after->>'copiedFrom' AS "from", actor IS NOT NULL AS signed
       FROM audit_log WHERE school_id = ${school} AND target_table = 'course' AND action = 'insert'`;
-    expect(log.map((l) => l.from).sort()).toEqual([weekly, gone].sort());
-    expect(log.map((l) => l.row_id).sort()).toEqual(copies.map((c) => c.id).sort());
+    expect(log.map((l) => l.from).sort()).toEqual([weekly, gone, competition].sort());
     expect(log.every((l) => l.signed)).toBe(true);
   });
 
   it("adds nothing on a second copy", async () => {
     const plan = await withSchool(school, (tx) => seasonCopyPlan(tx, source, target));
-    expect(plan).toMatchObject({ ok: true, targetCourses: 2 });
-    if (plan.ok) expect(plan.plan.alreadyThere).toHaveLength(2);
+    expect(plan).toMatchObject({ ok: true, targetCourses: 3 });
+    if (plan.ok) expect(plan.plan.alreadyThere).toHaveLength(3);
     expect(await withSchool(school, (tx) => copySeason(tx, director, source, target))).toEqual({
       ok: false,
       message: "Aucun cours à copier.",

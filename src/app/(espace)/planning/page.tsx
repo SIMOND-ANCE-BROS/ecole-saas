@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Alert, Text, Title } from "@mantine/core";
 import { withSchool } from "@/db";
 import { hoursBySite, listPlaces } from "@/db/settings";
+import { courseCountBySeason } from "@/db/season-copy";
 import { chosenSeason, currentSeason, schoolSeasons, seasonCourses, seasonOverlapping } from "@/db/schedule";
 import { closuresBetween, weekLessons } from "@/db/lessons";
 import { addDays, validDate, mondayOf } from "@/domain/schedule/week";
@@ -10,8 +11,9 @@ import { todayInParis } from "@/domain/people/age";
 import { shownSeason } from "@/domain/schedule/shown-season";
 import { schoolContext } from "@/lib/session";
 import { ButtonLink } from "../_ui/button-link";
+import { TextLink } from "../_ui/text-link";
 import { ScheduleGrid } from "./grid";
-import { seasonParam as paramOf, withSeason } from "./season-link";
+import { copiedCount, copyLink, seasonParam as paramOf, withSeason } from "./season-link";
 import { SeasonPicker } from "./season-picker";
 
 export const metadata: Metadata = { title: "Planning" };
@@ -26,6 +28,7 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
     outside,
     current,
     seasons,
+    courseCounts,
     monday,
     courses: cours,
     hours: hours,
@@ -47,6 +50,7 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
       outside,
       current: await currentSeason(tx, today),
       seasons: await schoolSeasons(tx),
+      courseCounts: await courseCountBySeason(tx),
       monday,
       courses: s ? await seasonCourses(tx, s.id) : [],
       hours: await hoursBySite(tx),
@@ -76,7 +80,8 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
   const view = vue === "liste" || vue === "type" || vue === "salles" ? vue : "datee";
   const savedId = typeof enregistre === "string" ? enregistre : undefined;
   const confirmed = cours.find((c) => c.id === savedId);
-  const copied = typeof copie === "string" ? Number(copie) || 0 : 0;
+  const copied = copiedCount(copie, cours.length);
+  const copy = copyLink(season, seasons, courseCounts, current?.id);
 
   return (
     <section className="flex flex-col gap-4">
@@ -92,8 +97,8 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
         {isDirector && (
           <div className="flex flex-wrap gap-2">
             {seasons.length > 1 && (
-              <ButtonLink href={withSeason("/planning/copier", seasonParam)} variant="default">
-                Copier un planning
+              <ButtonLink href={copy.href} variant="default">
+                {copy.label}
               </ButtonLink>
             )}
             <ButtonLink href={withSeason("/planning/fermetures", seasonParam)} variant="default">
@@ -120,9 +125,18 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
         <Text size="sm" c="dimmed">
           Aucun cours pour cette saison.
           {isDirector &&
-            (seasons.length > 1
-              ? " Créez le premier avec « Nouveau cours », ou reprenez ceux d’une autre saison avec « Copier un planning »."
-              : " Créez le premier avec « Nouveau cours ».")}
+            (seasons.length > 1 ? (
+              <>
+                {" "}
+                Créez le premier avec « Nouveau cours », ou{" "}
+                <TextLink href={copy.href} size="sm" inherit>
+                  reprenez les cours d’une autre saison
+                </TextLink>
+                .
+              </>
+            ) : (
+              " Créez le premier avec « Nouveau cours »."
+            ))}
         </Text>
       ) : (
         <ScheduleGrid

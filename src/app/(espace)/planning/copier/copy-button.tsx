@@ -1,6 +1,7 @@
 "use client";
 
 import { Alert, Button, Group } from "@mantine/core";
+import { useRouter } from "next/navigation";
 import { type ReactNode, useState, useTransition } from "react";
 import { copyPlanning } from "./actions";
 
@@ -17,6 +18,7 @@ export function CopyButton({
   /** Next to the button: « Annuler ». */
   children: ReactNode;
 }) {
+  const router = useRouter();
   const [refusal, setRefusal] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
   return (
@@ -32,7 +34,9 @@ export function CopyButton({
           onClick={() =>
             startTransition(async () => {
               setRefusal(null);
-              setRefusal((await copyPlanning(sourceId, targetId)).message);
+              const r = await copyPlanning(sourceId, targetId);
+              if (r.ok) router.push(r.planning);
+              else setRefusal(r.message);
             })
           }
         >

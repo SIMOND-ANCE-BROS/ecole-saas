@@ -4,7 +4,7 @@ import { rowsOf } from "./columns-of";
 import type { Tx } from "./index";
 import { seasonById, type Season } from "./schedule";
 import { auditLog, course, discipline, instructor, member, room, season, site } from "./schema";
-import { COPIED_COLUMNS, planSeasonCopy, type SeasonCopyPlan } from "../domain/schedule/season-copy";
+import { planSeasonCopy, type SeasonCopyPlan } from "../domain/schedule/season-copy";
 
 /**
  * Copy of another season's planning (#190), always within the
@@ -14,49 +14,42 @@ import { COPIED_COLUMNS, planSeasonCopy, type SeasonCopyPlan } from "../domain/s
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 
-export type CourseToCopy = {
-  id: string;
-  recurrence: "weekly" | "biweekly" | "dates";
-  type: "group" | "private" | "competition" | "workshop";
-  disciplineId: string;
-  discipline: string;
-  roomId: string;
-  /** « Salle, Site » */
-  room: string;
-  instructorId: string;
-  /** « Prénom Nom » */
-  instructor: string;
-  instructorActive: boolean;
-  weekday: number | null;
-  /** `HH:MM:SS` */
-  startTime: string;
-  durationMinutes: number;
-  level: string | null;
-  ageMin: number | null;
-  ageMax: number | null;
-  maxCapacity: number | null;
-};
+/** Course columns a copy does not take from its source: its own id, school and season, and the old season's period. */
+type NotCopied = "id" | "schoolId" | "seasonId" | "startDate" | "endDate";
+type MustCopy = Exclude<keyof typeof course.$inferInsert, NotCopied>;
 
-function coursesOf(tx: Tx, seasonId: string): Promise<CourseToCopy[]> {
-  return tx
+/**
+ * Every other course column is copied as it is. Checked by the compiler: a
+ * column added to `course` must be listed here or in `NotCopied`.
+ */
+const COPIED = {
+  disciplineId: course.disciplineId,
+  roomId: course.roomId,
+  instructorId: course.instructorId,
+  type: course.type,
+  level: course.level,
+  ageMin: course.ageMin,
+  ageMax: course.ageMax,
+  recurrence: course.recurrence,
+  weekday: course.weekday,
+  startTime: course.startTime,
+  durationMinutes: course.durationMinutes,
+  maxCapacity: course.maxCapacity,
+} satisfies { [K in MustCopy]: (typeof course)[K] };
+
+async function coursesOf(tx: Tx, seasonId: string) {
+  const rows = await tx
     .select({
       id: course.id,
-      recurrence: course.recurrence,
-      type: course.type,
-      disciplineId: course.disciplineId,
+      columns: COPIED,
+      startDate: course.startDate,
+      endDate: course.endDate,
       discipline: discipline.name,
-      roomId: course.roomId,
+      /** « Salle, Site » */
       room: sql<string>`${room.name} || ', ' || ${site.name}`,
-      instructorId: course.instructorId,
+      /** « Prénom Nom » */
       instructor: sql<string>`${instructor.firstName} || ' ' || ${instructor.lastName}`,
       instructorActive: instructor.active,
-      weekday: course.weekday,
-      startTime: course.startTime,
-      durationMinutes: course.durationMinutes,
-      level: course.level,
-      ageMin: course.ageMin,
-      ageMax: course.ageMax,
-      maxCapacity: course.maxCapacity,
     })
     .from(course)
     .innerJoin(discipline, eq(discipline.id, course.disciplineId))
@@ -65,7 +58,11 @@ function coursesOf(tx: Tx, seasonId: string): Promise<CourseToCopy[]> {
     .innerJoin(instructor, eq(instructor.id, course.instructorId))
     .where(eq(course.seasonId, seasonId))
     .orderBy(sql`${course.weekday} NULLS LAST`, course.startTime, discipline.name);
+  // The fields the plan reads, next to the copied columns kept whole for the insert.
+  return rows.map((r) => ({ ...r, ...r.columns }));
 }
+
+export type CourseToCopy = Awaited<ReturnType<typeof coursesOf>>[number];
 
 export type SeasonCopy =
   | { ok: false; message: string }
@@ -83,11 +80,14 @@ export async function seasonCopyPlan(tx: Tx, sourceId: unknown, targetId: unknow
   return { ok: true, source, target, plan, targetCourses: already.length };
 }
 
-const copiedColumns = (c: CourseToCopy) => {
-  const picked = {} as Pick<CourseToCopy, (typeof COPIED_COLUMNS)[number]>;
-  for (const k of COPIED_COLUMNS) Object.assign(picked, { [k]: c[k] });
-  return picked;
-};
+/** Number of courses of each season of the school. */
+export async function courseCountBySeason(tx: Tx): Promise<Map<string, number>> {
+  const rows = await tx
+    .select({ seasonId: course.seasonId, n: sql<number>`count(*)::int` })
+    .from(course)
+    .groupBy(course.seasonId);
+  return new Map(rows.map((r) => [r.seasonId, r.n]));
+}
 
 /**
  * Creates the planned courses in the target season, each one written to the
@@ -114,7 +114,7 @@ export async function copySeason(
   const { copied } = r.plan;
   if (copied.length === 0) return { ok: false, message: "Aucun cours à copier." };
   // Ids chosen here: each audit entry names its course without relying on the order of RETURNING.
-  const rows = copied.map((c) => ({ id: randomUUID(), from: c.id, columns: copiedColumns(c) }));
+  const rows = copied.map((c) => ({ id: randomUUID(), from: c.id, columns: c.columns }));
   await tx.insert(course).values(
     rowsOf(
       course,

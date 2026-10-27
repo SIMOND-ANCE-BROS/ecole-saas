@@ -9,10 +9,13 @@ import { withSeason } from "../season-link";
 export function SourcePicker({
   seasons,
   chosen,
+  current,
   target,
 }: {
   seasons: Season[];
   chosen: string;
+  /** Today's season, marked « (en cours) ». */
+  current: string | undefined;
   /** `?saison=` of the season to fill, undefined for the current one. */
   target: string | undefined;
 }) {
@@ -22,7 +25,7 @@ export function SourcePicker({
       label="Copier le planning de la saison"
       w={260}
       allowDeselect={false}
-      data={seasons.map((s) => ({ value: s.id, label: s.label }))}
+      data={seasons.map((s) => ({ value: s.id, label: s.id === current ? `${s.label} (en cours)` : s.label }))}
       value={chosen}
       onChange={(id) => {
         if (id && id !== chosen)

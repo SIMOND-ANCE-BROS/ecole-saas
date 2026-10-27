@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COPIED_COLUMNS, planSeasonCopy, type CopiedCourse } from "./season-copy";
+import { planSeasonCopy, type CopiedCourse } from "./season-copy";
 
 const course = (over: Partial<CopiedCourse> & { id: string }) => ({
   recurrence: "weekly" as const,
@@ -7,19 +7,21 @@ const course = (over: Partial<CopiedCourse> & { id: string }) => ({
   roomId: "salle-1",
   weekday: 1,
   startTime: "17:00:00",
+  startDate: null,
+  endDate: null,
   instructorActive: true,
   ...over,
 });
 
 describe("planSeasonCopy", () => {
-  it("copies the regular courses into an empty season", () => {
+  it("copies the regular courses into an empty season, with nothing to check", () => {
     const weekly = course({ id: "a" });
-    const biweekly = course({ id: "b", recurrence: "biweekly", weekday: 3 });
-    expect(planSeasonCopy([weekly, biweekly], [])).toEqual({
-      copied: [weekly, biweekly],
+    const other = course({ id: "b", weekday: 3 });
+    expect(planSeasonCopy([weekly, other], [])).toEqual({
+      copied: [weekly, other],
       oneOff: [],
       alreadyThere: [],
-      inactiveInstructor: [],
+      check: { inactiveInstructor: [], periodDropped: [], biweekly: [], roomTaken: [] },
     });
   });
 
@@ -40,24 +42,28 @@ describe("planSeasonCopy", () => {
     expect(plan.copied.map((c) => c.id)).toEqual(["b", "c"]);
   });
 
-  it("copies a course whose instructor is inactive, and flags it", () => {
+  it("copies and flags a course whose instructor is inactive, not one left out", () => {
     const gone = course({ id: "a", instructorActive: false });
     const plan = planSeasonCopy([gone, course({ id: "b", weekday: 2 })], []);
     expect(plan.copied.map((c) => c.id)).toEqual(["a", "b"]);
-    expect(plan.inactiveInstructor).toEqual([gone]);
+    expect(plan.check.inactiveInstructor).toEqual([gone]);
+    expect(planSeasonCopy([gone], [gone]).check.inactiveInstructor).toEqual([]);
   });
 
-  it("does not flag an inactive instructor whose course is not copied", () => {
-    const gone = course({ id: "a", instructorActive: false });
-    expect(planSeasonCopy([gone], [gone]).inactiveInstructor).toEqual([]);
+  it("flags a limited period that is not carried over, and every-other-week courses", () => {
+    const fromOctober = course({ id: "a", startDate: "2026-10-01" });
+    const untilMarch = course({ id: "b", weekday: 2, endDate: "2027-03-31" });
+    const biweekly = course({ id: "c", weekday: 4, recurrence: "biweekly" });
+    const plan = planSeasonCopy([fromOctober, untilMarch, biweekly], []);
+    expect(plan.copied).toHaveLength(3);
+    expect(plan.check.periodDropped).toEqual([fromOctober, untilMarch]);
+    expect(plan.check.biweekly).toEqual([biweekly]);
   });
-});
 
-describe("COPIED_COLUMNS", () => {
-  it("copies everything except the season and the dates", () => {
-    expect(COPIED_COLUMNS).not.toContain("seasonId");
-    expect(COPIED_COLUMNS).not.toContain("startDate");
-    expect(COPIED_COLUMNS).not.toContain("endDate");
-    expect(COPIED_COLUMNS).toEqual(expect.arrayContaining(["instructorId", "roomId", "weekday", "startTime"]));
+  it("flags a course whose room is taken at that time by another discipline of the target", () => {
+    const jazz = course({ id: "a" });
+    const plan = planSeasonCopy([jazz], [{ ...jazz, disciplineId: "salsa", startTime: "17:00" }]);
+    expect(plan.copied).toEqual([jazz]);
+    expect(plan.check.roomTaken).toEqual([jazz]);
   });
 });

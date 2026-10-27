@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { withSchool } from "@/db";
 import { syncLessons } from "@/db/lessons";
 import { currentSeason } from "@/db/schedule";
@@ -14,8 +13,12 @@ import { seasonParam, withSeason } from "../season-link";
  * Copies the courses of `sourceId` into `targetId` (#190), then generates
  * their lessons in the same transaction, as for a course created by hand.
  * Management only; both ids come from the browser and are checked under RLS.
+ * On success, the address of the planning to open.
  */
-export async function copyPlanning(sourceId: unknown, targetId: unknown): Promise<{ message: string }> {
+export async function copyPlanning(
+  sourceId: unknown,
+  targetId: unknown,
+): Promise<{ ok: true; copied: number; planning: string } | { ok: false; message: string }> {
   const { schoolId: schoolId, userId } = await requireRole("director");
   const today = todayInParis();
   const r = await withSchool(schoolId, async (tx) => {
@@ -24,7 +27,8 @@ export async function copyPlanning(sourceId: unknown, targetId: unknown): Promis
     await syncLessons(tx, c.target.id, today);
     return { ...c, season: seasonParam(c.target.id, (await currentSeason(tx, today))?.id) };
   });
-  if (!r.ok) return { message: r.message };
+  if (!r.ok) return r;
   revalidatePath("/planning");
-  redirect(withSeason(`/planning?copie=${r.copied}`, r.season));
+  // The planning of the filled season, which confirms the copy.
+  return { ok: true, copied: r.copied, planning: withSeason(`/planning?copie=${r.copied}`, r.season) };
 }
