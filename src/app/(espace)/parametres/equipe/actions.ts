@@ -26,8 +26,8 @@ export async function inviteMember(entry: unknown): Promise<LinkBack> {
 }
 
 export async function revoke(invitationId: string): Promise<Back> {
-  const { schoolId } = await requireRole("director");
-  const r = await withSchool(schoolId, (tx) => revokeInvitation(tx, invitationId));
+  const { schoolId, userId } = await requireRole("director");
+  const r = await withSchool(schoolId, (tx) => revokeInvitation(tx, userId, invitationId));
   revalidatePath(PATH);
   return r.ok ? { ok: true } : r;
 }
