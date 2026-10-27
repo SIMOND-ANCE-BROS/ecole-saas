@@ -69,8 +69,17 @@ export async function close(entry: unknown, seasonId?: unknown): Promise<Back> {
   return withSeasonOf(seasonId, (id) => (tx) => addClosure(tx, id, entry as never));
 }
 
-export async function reopen(closureId: string, seasonId?: unknown): Promise<Back> {
-  return withSeasonOf(seasonId, () => (tx) => deleteClosure(tx, closureId));
+/** Removes a closure: the lessons of ITS season come back, whatever season is shown. */
+export async function reopen(closureId: string): Promise<Back> {
+  const { schoolId: schoolId } = await requireRole("director");
+  const today = todayInParis();
+  const r = await withSchool(schoolId, async (tx) => {
+    const result = await deleteClosure(tx, closureId);
+    if (result.ok) await syncLessons(tx, result.seasonId, today);
+    return result;
+  });
+  revalidatePath("/planning/fermetures");
+  return back(r);
 }
 
 /** Recomputes the upcoming lessons (after an import, or on first use). */

@@ -122,6 +122,18 @@ describe("closures and lesson generation", () => {
     });
   });
 
+  it("rejects a closure outside its season (#189)", async () => {
+    for (const [start, end] of [
+      ["2026-08-31", "2026-09-02"],
+      ["2026-11-29", "2026-12-02"],
+    ]) {
+      expect(await withSchool(school, (tx) => addClosure(tx, season, { label: "Hors saison", start, end }))).toEqual({
+        ok: false,
+        message: "Les dates doivent être comprises dans la saison.",
+      });
+    }
+  });
+
   it("removes the lessons of a closure, then restores them when it is deleted", async () => {
     const r = await withSchool(school, (tx) =>
       addClosure(tx, season, { label: "Toussaint", start: "2026-10-17", end: "2026-11-01" }),
@@ -131,7 +143,10 @@ describe("closures and lesson generation", () => {
     expect(await dates()).toEqual(["2026-11-04", "2026-11-11", "2026-11-18", "2026-11-25"]);
     expect((await withSchool(school, (tx) => listClosures(tx, season))).map((f) => f.label)).toEqual(["Toussaint"]);
 
-    await withSchool(school, (tx) => deleteClosure(tx, r.ok ? r.id : ""));
+    expect(await withSchool(school, (tx) => deleteClosure(tx, r.ok ? r.id : ""))).toMatchObject({
+      ok: true,
+      seasonId: season,
+    });
     expect(await sync()).toEqual({ added: 2, removed: 0 });
   });
 });

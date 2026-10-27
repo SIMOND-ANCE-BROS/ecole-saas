@@ -7,6 +7,7 @@ import { chosenSeason, currentSeason, schoolSeasons, seasonCourses, seasonOverla
 import { closuresBetween, weekLessons } from "@/db/lessons";
 import { addDays, validDate, mondayOf } from "@/domain/schedule/week";
 import { todayInParis } from "@/domain/people/age";
+import { shownSeason } from "@/domain/schedule/shown-season";
 import { schoolContext } from "@/lib/session";
 import { ButtonLink } from "../_ui/button-link";
 import { ScheduleGrid } from "./grid";
@@ -37,15 +38,13 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
     // Another season opens on its first week, unless a week is asked for.
     const shownDay = week ?? (asked && (today < asked.startDate || today > asked.endDate) ? asked.startDate : today);
     const monday = mondayOf(shownDay);
-    // A week asked for outside the chosen season shows the season it belongs
-    // to; a week in no season (summer) keeps the chosen one, with a notice.
-    const inAsked = asked && asked.startDate <= addDays(monday, 6) && asked.endDate >= monday;
-    const weekSeason = week && asked && !inAsked ? await seasonOverlapping(tx, monday, addDays(monday, 6)) : null;
-    const s = weekSeason ?? asked;
+    // A week of another season shows that season; a week in no season keeps the chosen one.
+    const overlapping = week ? await seasonOverlapping(tx, monday, addDays(monday, 6)) : null;
+    const { season: s, moved, outside } = shownSeason(asked, week ? monday : null, overlapping);
     return {
       season: s,
-      moved: weekSeason !== null,
-      outside: !!week && !!asked && !inAsked && weekSeason === null,
+      moved,
+      outside,
       current: await currentSeason(tx, today),
       seasons: await schoolSeasons(tx),
       monday,
@@ -67,7 +66,12 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
   // Undefined for the current season: its addresses stay as they were.
   const seasonParam = paramOf(season.id, current?.id);
   // The address names the season shown.
-  if (moved) redirect(withSeason(`/planning?semaine=${monday}`, seasonParam));
+  if (moved) {
+    const kept = new URLSearchParams({ semaine: monday });
+    if (typeof vue === "string") kept.set("vue", vue);
+    if (typeof jour === "string") kept.set("jour", jour);
+    redirect(withSeason(`/planning?${kept}`, seasonParam));
+  }
   const isDirector = role === "director";
   const view = vue === "liste" || vue === "type" || vue === "salles" ? vue : "datee";
   const savedId = typeof enregistre === "string" ? enregistre : undefined;

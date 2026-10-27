@@ -112,7 +112,7 @@ export function ClosuresManagement({
                 color="gray"
                 className="ml-auto"
                 disabled={inProgress}
-                onClick={() => act(() => reopen(f.id, seasonId), "Fermeture retirée, séances remises.")}
+                onClick={() => act(() => reopen(f.id), "Fermeture retirée, séances remises.")}
                 aria-label={`Retirer la fermeture ${f.label}`}
               >
                 Retirer
