@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge, Button, Checkbox, Group, NumberInput, Paper, Select, Text, TextInput, Title } from "@mantine/core";
 import { useState, useTransition } from "react";
 import type { SiteRow } from "@/db/settings";
 import { changeRoom, changeSite, newSite, newRoom, removeRoom, removeSite } from "../actions";
@@ -34,14 +35,21 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
   return (
     <div className="flex flex-col gap-5">
       {message && (
-        <p role="alert" className="text-sm text-erreur">
+        <Text role="alert" size="sm" c="red">
           {message}
-        </p>
+        </Text>
       )}
       {seats.map((s) => {
         const next = nextItems[s.id] ?? { name: "", capacity: "" };
         return (
-          <section key={s.id} aria-labelledby={`site-${s.id}`} className="panneau flex flex-col gap-3 p-4 text-sm">
+          <Paper
+            withBorder
+            component="section"
+            key={s.id}
+            aria-labelledby={`site-${s.id}`}
+            p="md"
+            className="flex flex-col gap-3 text-sm"
+          >
             {editionSite?.id === s.id ? (
               <form
                 className="grid gap-2 sm:grid-cols-[1fr_2fr_auto_auto] sm:items-end"
@@ -58,63 +66,63 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                   );
                 }}
               >
-                <div className="flex flex-col gap-1">
-                  <label htmlFor={`site-nom-${s.id}`}>Nom</label>
-                  <input
-                    id={`site-nom-${s.id}`}
-                    className="champ"
-                    value={editionSite.name}
-                    onChange={(e) => setEditionSite({ ...editionSite, name: e.target.value })}
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label htmlFor={`site-adresse-${s.id}`}>Adresse</label>
-                  <input
-                    id={`site-adresse-${s.id}`}
-                    className="champ"
-                    value={editionSite.address}
-                    onChange={(e) => setEditionSite({ ...editionSite, address: e.target.value })}
-                  />
-                </div>
-                <label className="flex items-center gap-2 pb-2">
-                  <input
-                    type="checkbox"
-                    checked={editionSite.permanence}
-                    onChange={(e) => setEditionSite({ ...editionSite, permanence: e.target.checked })}
-                  />
-                  Accueil sur place
-                </label>
-                <span className="flex gap-2 pb-2">
-                  <button type="submit" className="lien" disabled={inProgress}>
+                <TextInput
+                  label="Nom"
+                  autoFocus
+                  value={editionSite.name}
+                  onChange={(e) => setEditionSite({ ...editionSite, name: e.currentTarget.value })}
+                />
+                <TextInput
+                  label="Adresse"
+                  value={editionSite.address}
+                  onChange={(e) => setEditionSite({ ...editionSite, address: e.currentTarget.value })}
+                />
+                <Checkbox
+                  className="pb-2"
+                  label="Accueil sur place"
+                  checked={editionSite.permanence}
+                  onChange={(e) => setEditionSite({ ...editionSite, permanence: e.currentTarget.checked })}
+                />
+                <Group gap="xs" wrap="nowrap">
+                  <Button type="submit" size="compact-sm" loading={inProgress}>
                     Enregistrer
-                  </button>
-                  <button type="button" className="lien text-doux" onClick={() => setEditionSite(null)}>
+                  </Button>
+                  <Button
+                    type="button"
+                    size="compact-sm"
+                    variant="subtle"
+                    color="gray"
+                    onClick={() => setEditionSite(null)}
+                  >
                     Annuler
-                  </button>
-                </span>
+                  </Button>
+                </Group>
               </form>
             ) : (
-              <div className="flex flex-wrap items-baseline gap-x-3">
-                <h2 id={`site-${s.id}`} className="text-base font-semibold">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <Title order={2} size="h5" id={`site-${s.id}`}>
                   {s.name}
-                </h2>
-                <span className="text-doux">{s.address}</span>
-                {s.permanence && <span className="rounded bg-accent-doux px-1.5 text-xs">accueil sur place</span>}
-                <span className="ml-auto flex gap-3">
-                  <button type="button" className="lien" onClick={() => setEditionSite(s)}>
+                </Title>
+                <Text span size="sm" c="dimmed">
+                  {s.address}
+                </Text>
+                {s.permanence && <Badge variant="light">accueil sur place</Badge>}
+                <Group gap="xs" className="ml-auto">
+                  <Button size="compact-sm" variant="subtle" onClick={() => setEditionSite(s)}>
                     Modifier
-                  </button>
+                  </Button>
                   {s.rooms.length === 0 && (
-                    <button
-                      type="button"
-                      className="lien text-doux"
+                    <Button
+                      size="compact-sm"
+                      variant="subtle"
+                      color="gray"
                       disabled={inProgress}
                       onClick={() => act(() => removeSite(s.id))}
                     >
                       Retirer
-                    </button>
+                    </Button>
                   )}
-                </span>
+                </Group>
               </div>
             )}
 
@@ -139,61 +147,54 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                         );
                       }}
                     >
-                      <div className="flex flex-col gap-1">
-                        <label htmlFor={`salle-nom-${x.id}`}>Salle</label>
-                        <input
-                          id={`salle-nom-${x.id}`}
-                          className="champ"
-                          value={roomEditing.name}
-                          onChange={(e) => setRoomEdition({ ...roomEditing, name: e.target.value })}
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label htmlFor={`salle-cap-${x.id}`}>Capacité</label>
-                        <input
-                          id={`salle-cap-${x.id}`}
-                          type="number"
-                          min={1}
-                          className="champ w-24"
-                          value={roomEditing.capacity}
-                          onChange={(e) => setRoomEdition({ ...roomEditing, capacity: e.target.value })}
-                        />
-                      </div>
+                      <TextInput
+                        label="Salle"
+                        autoFocus
+                        value={roomEditing.name}
+                        onChange={(e) => setRoomEdition({ ...roomEditing, name: e.currentTarget.value })}
+                      />
+                      <NumberInput
+                        label="Capacité"
+                        w={96}
+                        min={1}
+                        allowDecimal={false}
+                        value={roomEditing.capacity}
+                        onChange={(v) => setRoomEdition({ ...roomEditing, capacity: String(v) })}
+                      />
                       {seats.length > 1 && (
-                        <div className="flex flex-col gap-1">
-                          <label htmlFor={`salle-site-${x.id}`}>Site</label>
-                          <select
-                            id={`salle-site-${x.id}`}
-                            className="champ"
-                            value={roomEditing.siteId}
-                            onChange={(e) => setRoomEdition({ ...roomEditing, siteId: e.target.value })}
-                          >
-                            {seats.map((l) => (
-                              <option key={l.id} value={l.id}>
-                                {l.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <Select
+                          label="Site"
+                          allowDeselect={false}
+                          data={seats.map((l) => ({ value: l.id, label: l.name }))}
+                          value={roomEditing.siteId}
+                          onChange={(siteId) => siteId && setRoomEdition({ ...roomEditing, siteId })}
+                        />
                       )}
-                      <button type="submit" className="lien pb-2" disabled={inProgress}>
+                      <Button type="submit" size="compact-sm" loading={inProgress}>
                         Enregistrer
-                      </button>
-                      <button type="button" className="lien pb-2 text-doux" onClick={() => setRoomEdition(null)}>
+                      </Button>
+                      <Button
+                        type="button"
+                        size="compact-sm"
+
+                        variant="subtle"
+                        color="gray"
+                        onClick={() => setRoomEdition(null)}
+                      >
                         Annuler
-                      </button>
+                      </Button>
                     </form>
                   </li>
                 ) : (
-                  <li key={x.id} className="flex flex-wrap items-baseline gap-x-3 px-3 py-2">
+                  <li key={x.id} className="flex flex-wrap items-center gap-x-3 px-3 py-2">
                     <span className="font-medium">{x.name}</span>
-                    <span className="text-doux">
+                    <Text span size="sm" c="dimmed">
                       {x.capacity ? `${x.capacity} places` : "capacité libre"}, {x.course} cours
-                    </span>
-                    <span className="ml-auto flex gap-3">
-                      <button
-                        type="button"
-                        className="lien"
+                    </Text>
+                    <Group gap="xs" className="ml-auto">
+                      <Button
+                        size="compact-sm"
+                        variant="subtle"
                         onClick={() =>
                           setRoomEdition({
                             id: x.id,
@@ -204,18 +205,19 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                         }
                       >
                         Modifier
-                      </button>
+                      </Button>
                       {x.course === 0 && (
-                        <button
-                          type="button"
-                          className="lien text-doux"
+                        <Button
+                          size="compact-sm"
+                          variant="subtle"
+                          color="gray"
                           disabled={inProgress}
                           onClick={() => act(() => removeRoom(x.id))}
                         >
                           Retirer
-                        </button>
+                        </Button>
                       )}
-                    </span>
+                    </Group>
                   </li>
                 ),
               )}
@@ -230,38 +232,34 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                     );
                   }}
                 >
-                  <div className="flex flex-col gap-1">
-                    <label htmlFor={`nouvelle-salle-${s.id}`}>Nouvelle salle</label>
-                    <input
-                      id={`nouvelle-salle-${s.id}`}
-                      className="champ"
-                      value={next.name}
-                      onChange={(e) => setNew({ ...nextItems, [s.id]: { ...next, name: e.target.value } })}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label htmlFor={`nouvelle-cap-${s.id}`}>Capacité</label>
-                    <input
-                      id={`nouvelle-cap-${s.id}`}
-                      type="number"
-                      min={1}
-                      className="champ w-24"
-                      value={next.capacity}
-                      onChange={(e) => setNew({ ...nextItems, [s.id]: { ...next, capacity: e.target.value } })}
-                    />
-                  </div>
-                  <button type="submit" className="bouton-secondaire" disabled={inProgress || !next.name.trim()}>
+                  <TextInput
+                    label="Nouvelle salle"
+                    value={next.name}
+                    onChange={(e) => setNew({ ...nextItems, [s.id]: { ...next, name: e.currentTarget.value } })}
+                  />
+                  <NumberInput
+                    label="Capacité"
+                    w={96}
+                    min={1}
+                    allowDecimal={false}
+                    value={next.capacity}
+                    onChange={(v) => setNew({ ...nextItems, [s.id]: { ...next, capacity: String(v) } })}
+                  />
+                  <Button type="submit" variant="default" loading={inProgress} disabled={!next.name.trim()}>
                     Ajouter la salle
-                  </button>
+                  </Button>
                 </form>
               </li>
             </ul>
-          </section>
+          </Paper>
         );
       })}
 
-      <form
-        className="panneau grid gap-3 p-4 sm:grid-cols-[1fr_2fr_auto_auto] sm:items-end"
+      <Paper
+        withBorder
+        component="form"
+        p="md"
+        className="grid gap-3 sm:grid-cols-[1fr_2fr_auto_auto] sm:items-end"
         onSubmit={(e) => {
           e.preventDefault();
           act(
@@ -270,41 +268,25 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
           );
         }}
       >
-        <p className="text-sm font-semibold sm:col-span-4">Nouveau site</p>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="site-nom" className="text-sm font-medium">
-            Nom
-          </label>
-          <input
-            id="site-nom"
-            className="champ"
-            value={site.name}
-            onChange={(e) => setSite({ ...site, name: e.target.value })}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="site-adresse" className="text-sm font-medium">
-            Adresse
-          </label>
-          <input
-            id="site-adresse"
-            className="champ"
-            value={site.address}
-            onChange={(e) => setSite({ ...site, address: e.target.value })}
-          />
-        </div>
-        <label className="flex items-center gap-2 pb-2 text-sm">
-          <input
-            type="checkbox"
-            checked={site.permanence}
-            onChange={(e) => setSite({ ...site, permanence: e.target.checked })}
-          />
-          Accueil sur place
-        </label>
-        <button type="submit" className="bouton-principal" disabled={inProgress}>
+        <Text size="sm" fw={600} className="sm:col-span-4">
+          Nouveau site
+        </Text>
+        <TextInput label="Nom" value={site.name} onChange={(e) => setSite({ ...site, name: e.currentTarget.value })} />
+        <TextInput
+          label="Adresse"
+          value={site.address}
+          onChange={(e) => setSite({ ...site, address: e.currentTarget.value })}
+        />
+        <Checkbox
+          className="pb-2"
+          label="Accueil sur place"
+          checked={site.permanence}
+          onChange={(e) => setSite({ ...site, permanence: e.currentTarget.checked })}
+        />
+        <Button type="submit" loading={inProgress}>
           Ajouter le site
-        </button>
-      </form>
+        </Button>
+      </Paper>
     </div>
   );
 }

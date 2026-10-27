@@ -1,7 +1,9 @@
 "use client";
 
+import { Button, Group, Paper, Select, Table, Text, TextInput } from "@mantine/core";
 import { useState, useTransition } from "react";
 import type { SeasonRow } from "@/db/settings";
+import { DateField } from "../../_ui/date-field";
 import { changeSeason, newSeason } from "../actions";
 
 const date = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -38,107 +40,101 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
   return (
     <div className="flex flex-col gap-5">
       {seasons.length > 0 && (
-        <div className="panneau overflow-x-auto">
-          <table className="tableau">
-            <thead>
-              <tr>
-                <th>Saison</th>
-                <th>Du</th>
-                <th>Au</th>
-                <th className="text-right">Cours</th>
-                <th className="text-right">Tarifs</th>
-                <th>
+        <Paper withBorder className="overflow-x-auto">
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Saison</Table.Th>
+                <Table.Th>Du</Table.Th>
+                <Table.Th>Au</Table.Th>
+                <Table.Th className="text-right">Cours</Table.Th>
+                <Table.Th className="text-right">Tarifs</Table.Th>
+                <Table.Th>
                   <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
               {seasons.map((s) =>
                 edition?.id === s.id ? (
-                  <tr key={s.id}>
-                    <td>
-                      <label className="sr-only" htmlFor="edition-libelle">
-                        Libellé
-                      </label>
-                      <input
-                        id="edition-libelle"
-                        className="champ w-32"
+                  <Table.Tr key={s.id}>
+                    <Table.Td>
+                      <TextInput
+                        aria-label="Libellé"
+                        w={128}
+                        autoFocus
                         value={edition.label}
-                        onChange={(e) => setEdition({ ...edition, label: e.target.value })}
+                        onChange={(e) => setEdition({ ...edition, label: e.currentTarget.value })}
                       />
-                    </td>
-                    <td>
-                      <label className="sr-only" htmlFor="edition-debut">
-                        Début
-                      </label>
-                      <input
-                        id="edition-debut"
-                        type="date"
-                        className="champ"
+                    </Table.Td>
+                    <Table.Td>
+                      <DateField
+                        aria-label="Début"
+                        w={140}
                         value={edition.startDate}
-                        onChange={(e) => setEdition({ ...edition, startDate: e.target.value })}
+                        onChange={(startDate) => setEdition({ ...edition, startDate })}
                       />
-                    </td>
-                    <td>
-                      <label className="sr-only" htmlFor="edition-fin">
-                        Fin
-                      </label>
-                      <input
-                        id="edition-fin"
-                        type="date"
-                        className="champ"
+                    </Table.Td>
+                    <Table.Td>
+                      <DateField
+                        aria-label="Fin"
+                        w={140}
                         value={edition.endDate}
-                        onChange={(e) => setEdition({ ...edition, endDate: e.target.value })}
+                        onChange={(endDate) => setEdition({ ...edition, endDate })}
                       />
-                    </td>
-                    <td className="text-right tabular-nums">{s.course}</td>
-                    <td className="text-right tabular-nums">{s.tariffs}</td>
-                    <td className="whitespace-nowrap">
-                      <button
-                        type="button"
-                        className="lien text-sm"
-                        disabled={inProgress}
-                        onClick={() =>
-                          act(
-                            () =>
-                              changeSeason(s.id, {
-                                label: edition.label,
-                                startDate: edition.startDate,
-                                endDate: edition.endDate,
-                              }),
-                            () => setEdition(null),
-                          )
-                        }
-                      >
-                        Enregistrer
-                      </button>{" "}
-                      <button type="button" className="lien text-sm text-doux" onClick={() => setEdition(null)}>
-                        Annuler
-                      </button>
-                    </td>
-                  </tr>
+                    </Table.Td>
+                    <Table.Td className="text-right tabular-nums">{s.course}</Table.Td>
+                    <Table.Td className="text-right tabular-nums">{s.tariffs}</Table.Td>
+                    <Table.Td>
+                      <Group gap="xs" wrap="nowrap">
+                        <Button
+                          size="compact-sm"
+                          loading={inProgress}
+                          onClick={() =>
+                            act(
+                              () =>
+                                changeSeason(s.id, {
+                                  label: edition.label,
+                                  startDate: edition.startDate,
+                                  endDate: edition.endDate,
+                                }),
+                              () => setEdition(null),
+                            )
+                          }
+                        >
+                          Enregistrer
+                        </Button>
+                        <Button size="compact-sm" variant="subtle" color="gray" onClick={() => setEdition(null)}>
+                          Annuler
+                        </Button>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
                 ) : (
-                  <tr key={s.id}>
-                    <td className="font-medium">{s.label}</td>
-                    <td className="tabular-nums">{day(s.startDate)}</td>
-                    <td className="tabular-nums">{day(s.endDate)}</td>
-                    <td className="text-right tabular-nums">{s.course}</td>
-                    <td className="text-right tabular-nums">{s.tariffs}</td>
-                    <td>
-                      <button type="button" className="lien text-sm" onClick={() => setEdition(s)}>
+                  <Table.Tr key={s.id}>
+                    <Table.Td className="font-medium">{s.label}</Table.Td>
+                    <Table.Td className="tabular-nums">{day(s.startDate)}</Table.Td>
+                    <Table.Td className="tabular-nums">{day(s.endDate)}</Table.Td>
+                    <Table.Td className="text-right tabular-nums">{s.course}</Table.Td>
+                    <Table.Td className="text-right tabular-nums">{s.tariffs}</Table.Td>
+                    <Table.Td>
+                      <Button size="compact-sm" variant="subtle" onClick={() => setEdition(s)}>
                         Modifier
-                      </button>
-                    </td>
-                  </tr>
+                      </Button>
+                    </Table.Td>
+                  </Table.Tr>
                 ),
               )}
-            </tbody>
-          </table>
-        </div>
+            </Table.Tbody>
+          </Table>
+        </Paper>
       )}
 
-      <form
-        className="panneau grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4 lg:items-end"
+      <Paper
+        withBorder
+        component="form"
+        p="md"
+        className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end"
         onSubmit={(e) => {
           e.preventDefault();
           act(
@@ -147,68 +143,35 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
           );
         }}
       >
-        <p className="text-sm font-semibold sm:col-span-2 lg:col-span-4">Nouvelle saison</p>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="libelle" className="text-sm font-medium">
-            Libellé
-          </label>
-          <input
-            id="libelle"
-            className="champ"
-            placeholder="2027-2028"
-            value={v.label}
-            onChange={(e) => setV({ ...v, label: e.target.value })}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="debut" className="text-sm font-medium">
-            Du
-          </label>
-          <input
-            id="debut"
-            type="date"
-            className="champ"
-            value={v.startDate}
-            onChange={(e) => setV({ ...v, startDate: e.target.value })}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="fin" className="text-sm font-medium">
-            Au
-          </label>
-          <input
-            id="fin"
-            type="date"
-            className="champ"
-            value={v.endDate}
-            onChange={(e) => setV({ ...v, endDate: e.target.value })}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="reprendre" className="text-sm font-medium">
-            Reprendre la grille de
-          </label>
-          <select id="reprendre" className="champ" value={copy} onChange={(e) => setCopy(e.target.value)}>
-            <option value="">Aucune (grille vide)</option>
-            {seasons.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button
-          type="submit"
-          className="bouton-principal sm:col-span-2 sm:justify-self-start lg:col-span-4"
-          disabled={inProgress}
-        >
+        <Text size="sm" fw={600} className="sm:col-span-2 lg:col-span-4">
+          Nouvelle saison
+        </Text>
+        <TextInput
+          label="Libellé"
+          placeholder="2027-2028"
+          value={v.label}
+          onChange={(e) => setV({ ...v, label: e.currentTarget.value })}
+        />
+        <DateField label="Du" value={v.startDate} onChange={(startDate) => setV({ ...v, startDate })} />
+        <DateField label="Au" value={v.endDate} onChange={(endDate) => setV({ ...v, endDate })} />
+        <Select
+          label="Reprendre la grille de"
+          allowDeselect={false}
+          data={[
+            { value: "", label: "Aucune (grille vide)" },
+            ...seasons.map((s) => ({ value: s.id, label: s.label })),
+          ]}
+          value={copy}
+          onChange={(c) => setCopy(c ?? "")}
+        />
+        <Button type="submit" loading={inProgress} className="sm:col-span-2 sm:justify-self-start lg:col-span-4">
           Créer la saison
-        </button>
-      </form>
+        </Button>
+      </Paper>
       {message && (
-        <p role="alert" className="text-sm text-erreur">
+        <Text role="alert" size="sm" c="red">
           {message}
-        </p>
+        </Text>
       )}
     </div>
   );

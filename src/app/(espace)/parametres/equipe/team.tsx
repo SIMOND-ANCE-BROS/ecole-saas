@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge, Button, CopyButton, Group, Modal, Select, Table, Text, TextInput, Title } from "@mantine/core";
+import { Badge, Button, CopyButton, Group, Modal, Paper, Select, Table, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { MemberListItem, PendingInvitation } from "@/db/team";
@@ -34,7 +34,7 @@ function ShownLink({ shown, onClose }: { shown: Shown; onClose: () => void }) {
   useEffect(() => copyButton.current?.focus(), [shown.link]);
   const validity = shown.kind === "invitation" ? "7 jours" : "24 heures";
   return (
-    <div role="status" className="panneau flex flex-col gap-2 border-accent p-3 text-sm">
+    <Paper withBorder role="status" p="sm" className="flex flex-col gap-2 border-accent text-sm">
       <p>
         <strong>
           {shown.kind === "invitation" ? "Invitation de" : "Nouveau mot de passe pour"} {shown.who}
@@ -61,7 +61,7 @@ function ShownLink({ shown, onClose }: { shown: Shown; onClose: () => void }) {
           Fermer
         </Button>
       </div>
-    </div>
+    </Paper>
   );
 }
 
@@ -160,7 +160,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
       <div className="flex flex-wrap gap-1 sm:justify-end">
         {m.active && (
           <Button
-            size="xs"
+            size="compact-sm"
             variant="subtle"
             disabled={inProgress}
             onClick={() => withLink("members", () => resetPassword(m.id), "reset", m.name)}
@@ -169,7 +169,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
           </Button>
         )}
         <Button
-          size="xs"
+          size="compact-sm"
           variant="subtle"
           color={m.active ? "red" : undefined}
           disabled={inProgress}
@@ -215,7 +215,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
           Membres
         </Title>
         {/* Desktop: a table. Phone: one card per member, actions on their own line (no horizontal scroll). */}
-        <div className="panneau relative hidden overflow-x-auto sm:block">
+        <Paper withBorder className="relative hidden overflow-x-auto sm:block">
           <Table verticalSpacing="xs">
             <Table.Thead>
               <Table.Tr>
@@ -240,8 +240,8 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
               ))}
             </Table.Tbody>
           </Table>
-        </div>
-        <ul className="panneau divide-y divide-bordure text-sm sm:hidden">
+        </Paper>
+        <Paper withBorder component="ul" className="divide-y divide-bordure text-sm sm:hidden">
           {members.map((m) => (
             <li key={m.id} className={`flex flex-col gap-1.5 px-3 py-2.5 ${m.active ? "" : "text-doux"}`}>
               <span className="font-medium">
@@ -252,7 +252,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
               {memberActions(m)}
             </li>
           ))}
-        </ul>
+        </Paper>
         <Refusal text={refusalIn("members")} />
         {shown?.kind === "reset" && <ShownLink shown={shown} onClose={() => setShown(null)} />}
       </section>
@@ -261,9 +261,12 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
         <Title order={2} size="h4" id="inviter">
           Inviter une personne
         </Title>
-        <form
+        <Paper
+          withBorder
+          component="form"
+          p="md"
           noValidate
-          className="panneau flex flex-wrap items-end gap-3 p-4"
+          className="flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
             const who = entry.name.trim();
@@ -305,7 +308,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
           <Button type="submit" variant={shown?.kind === "invitation" ? "default" : "filled"} loading={inProgress}>
             Créer le lien d’invitation
           </Button>
-        </form>
+        </Paper>
         <Refusal text={refusalIn("invite")} />
         {shown?.kind === "invitation" && <ShownLink shown={shown} onClose={() => setShown(null)} />}
       </section>
@@ -319,7 +322,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
             Aucune invitation en attente.
           </Text>
         ) : (
-          <ul className="panneau divide-y divide-bordure text-sm">
+          <Paper withBorder component="ul" className="divide-y divide-bordure text-sm">
             {invitations.map((i) => (
               <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
                 {i.name && <span className="font-medium">{i.name}</span>}
@@ -327,7 +330,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
                 {i.role && <Badge variant="light">{ROLE_LABELS[i.role]}</Badge>}
                 <span className="text-doux">valable jusqu’au {day.format(new Date(i.expiresAt))}</span>
                 <Button
-                  size="xs"
+                  size="compact-sm"
                   variant="subtle"
                   color="red"
                   className="ml-auto"
@@ -338,7 +341,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
                 </Button>
               </li>
             ))}
-          </ul>
+          </Paper>
         )}
         <Refusal text={refusalIn("invitations")} />
       </section>

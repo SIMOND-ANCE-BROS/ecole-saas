@@ -1,5 +1,7 @@
 "use client";
 
+import { Button, Checkbox, Text } from "@mantine/core";
+import { TimeInput } from "@mantine/dates";
 import { useState, useTransition } from "react";
 import type { Hours } from "@/domain/schedule/hours";
 import { changeHours } from "../actions";
@@ -55,44 +57,33 @@ export function SiteHours({ siteId, name: name, hours: hours }: { siteId: string
             {[1, 2, 3, 4, 5, 6, 7].map((j) => (
               <tr key={j}>
                 <td className="py-1 pr-3">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={days[j].open}
-                      onChange={(e) => updated(j, { open: e.target.checked })}
-                    />
-                    {DAYS[j]}
-                  </label>
+                  <Checkbox
+                    label={DAYS[j]}
+                    checked={days[j].open}
+                    onChange={(e) => updated(j, { open: e.currentTarget.checked })}
+                  />
                 </td>
                 <td className="py-1">
                   {days[j].open ? (
                     <span className="flex items-center gap-2">
-                      <label className="sr-only" htmlFor={`ouv-${siteId}-${j}`}>
-                        Ouverture le {DAYS[j].toLowerCase()}
-                      </label>
-                      <input
-                        id={`ouv-${siteId}-${j}`}
-                        type="time"
+                      <TimeInput
+                        aria-label={`Ouverture le ${DAYS[j].toLowerCase()}`}
                         step={900}
-                        className="champ"
                         value={days[j].opening}
-                        onChange={(e) => updated(j, { opening: e.target.value })}
+                        onChange={(e) => updated(j, { opening: e.currentTarget.value })}
                       />
                       <span aria-hidden>–</span>
-                      <label className="sr-only" htmlFor={`ferm-${siteId}-${j}`}>
-                        Fermeture le {DAYS[j].toLowerCase()}
-                      </label>
-                      <input
-                        id={`ferm-${siteId}-${j}`}
-                        type="time"
+                      <TimeInput
+                        aria-label={`Fermeture le ${DAYS[j].toLowerCase()}`}
                         step={900}
-                        className="champ"
                         value={days[j].closure}
-                        onChange={(e) => updated(j, { closure: e.target.value })}
+                        onChange={(e) => updated(j, { closure: e.currentTarget.value })}
                       />
                     </span>
                   ) : (
-                    <span className="text-doux">fermé</span>
+                    <Text span size="sm" c="dimmed">
+                      fermé
+                    </Text>
                   )}
                 </td>
               </tr>
@@ -100,13 +91,13 @@ export function SiteHours({ siteId, name: name, hours: hours }: { siteId: string
           </tbody>
         </table>
         <div className="flex flex-wrap items-center gap-3">
-          <button type="submit" className="bouton-secondaire" disabled={inProgress}>
-            {inProgress ? "Enregistrement…" : "Enregistrer les horaires"}
-          </button>
+          <Button type="submit" variant="default" loading={inProgress}>
+            Enregistrer les horaires
+          </Button>
           {open > 1 && (
-            <button
-              type="button"
-              className="lien text-sm"
+            <Button
+              size="compact-sm"
+              variant="subtle"
               onClick={() => {
                 const first = [1, 2, 3, 4, 5, 6, 7].find((j) => days[j].open)!;
                 const { opening: opening, closure: closure } = days[first];
@@ -121,11 +112,11 @@ export function SiteHours({ siteId, name: name, hours: hours }: { siteId: string
               }}
             >
               Mêmes heures pour tous les jours ouverts
-            </button>
+            </Button>
           )}
-          <span role="status" className={`text-sm ${message?.ok === false ? "text-erreur" : "text-doux"}`}>
+          <Text span role="status" size="sm" c={message?.ok === false ? "red" : "dimmed"}>
             {message?.text}
-          </span>
+          </Text>
         </div>
       </form>
     </details>
