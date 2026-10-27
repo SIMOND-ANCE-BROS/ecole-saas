@@ -9,6 +9,7 @@ import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { CourseForm } from "../../course-form";
+import { coursePlanning } from "../../../course-planning";
 
 export const metadata: Metadata = { title: "Modifier un cours" };
 
@@ -20,6 +21,7 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
     if (!course) return null;
     return {
       cours: course,
+      planning: await coursePlanning(tx, course.id),
       referential: await scheduleReferential(tx, course.instructorId),
       schedule: await seasonCourses(tx, course.seasonId),
       calendar: await seasonCalendar(tx, course.seasonId, todayInParis()),
@@ -31,8 +33,8 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <TextLink href="/planning" size="sm">
-          Planning
+        <TextLink href={parsed.planning.href} size="sm">
+          {parsed.planning.label}
         </TextLink>
         <Text span size="sm" c="dimmed">
           {" "}

@@ -10,6 +10,7 @@ import { requireRole } from "@/lib/session";
 import { end } from "../../format";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { AttendanceRecord } from "./attendance-record";
+import { coursePlanning } from "../../course-planning";
 
 export const metadata: Metadata = { title: "Appel" };
 
@@ -26,6 +27,7 @@ export default async function AttendancePage({ params }: PageProps<"/planning/se
   const parsed = await withSchool(schoolId, async (tx) => {
     const attendance = await readAttendance(tx, id);
     if (!attendance) return null;
+    const planning = await coursePlanning(tx, attendance.courseId);
     const { instructors: instructors } = await scheduleReferential(tx, attendance.instructorId);
     const availability = await lessonAvailabilities(tx, attendance.id);
     const ranking = new Map(availability?.substitutes.map((r, rank) => [r.id, { ...r, rank: rank }]));
@@ -44,6 +46,7 @@ export default async function AttendancePage({ params }: PageProps<"/planning/se
       .map((o) => ({ id: o.id, name: o.name }));
     return {
       attendance: attendance,
+      planning,
       instructors: options,
       unavailable: availability?.unavailable ?? false,
       free: availability?.substitutes.filter((r) => r.free).length ?? 0,
@@ -56,8 +59,8 @@ export default async function AttendancePage({ params }: PageProps<"/planning/se
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <TextLink href="/planning" size="sm">
-          Planning
+        <TextLink href={parsed.planning.href} size="sm">
+          {parsed.planning.label}
         </TextLink>
         <Text span size="sm" c="dimmed">
           {" "}

@@ -9,6 +9,7 @@ import { calendarFrame, type Hours } from "@/domain/schedule/hours";
 import { Calendar, type Slot, type CalendarElement, type CalendarResponse } from "./calendar";
 import { move } from "./cours/actions";
 import { end, DAYS, recurrenceBadge, recurrenceText } from "./format";
+import { withSeason } from "./season-link";
 
 type Props = {
   /** Visible courses (filters applied). */
@@ -18,6 +19,8 @@ type Props = {
   editable: boolean;
   highlighted?: string;
   hours: Hours[];
+  /** Chosen season when it is not the current one (`?saison=`, #189), kept in links. */
+  season?: string;
 };
 
 /**
@@ -31,6 +34,7 @@ export function TypicalWeek({
   editable: editable,
   highlighted: highlighted,
   hours: hours,
+  season,
 }: Props) {
   const router = useRouter();
   const regular = cours.filter((c) => c.weekday !== null);
@@ -84,7 +88,7 @@ export function TypicalWeek({
         highlighted={highlighted}
         move={moveCourse}
         create={(day, d, duration) =>
-          router.push(`/planning/cours/nouveau?jour=${day}&heure=${toTime(d)}&duree=${duration}`)
+          router.push(withSeason(`/planning/cours/nouveau?jour=${day}&heure=${toTime(d)}&duree=${duration}`, season))
         }
       />
       {oneOff.length > 0 && (

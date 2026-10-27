@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { withSchool } from "@/db";
-import { currentSeason } from "@/db/schedule";
+import { currentSeason, seasonById } from "@/db/schedule";
 import {
   addClosure,
   cancelLesson,
@@ -40,13 +40,23 @@ export async function cancel(lessonId: string, cancelled: boolean): Promise<Back
   return back(r);
 }
 
-/** Closures of the current season: management; upcoming lessons follow at once. */
-async function withCurrentSeason(action: (seasonId: string) => Parameters<typeof withSchool>[1]): Promise<Back> {
+/**
+ * Closures of the season shown (`?saison=`, #189; the current one when none is
+ * given): management; upcoming lessons follow at once.
+ */
+async function withSeasonOf(
+  seasonId: unknown,
+  action: (seasonId: string) => Parameters<typeof withSchool>[1],
+): Promise<Back> {
   const { schoolId: schoolId } = await requireRole("director");
   const today = todayInParis();
   const r = await withSchool(schoolId, async (tx) => {
-    const season = await currentSeason(tx, today);
-    if (!season) return { ok: false as const, message: "Aucune saison n’est paramétrée." };
+    const season = seasonId ? await seasonById(tx, seasonId) : await currentSeason(tx, today);
+    if (!season)
+      return {
+        ok: false as const,
+        message: seasonId ? "Cette saison n’existe plus." : "Aucune saison n’est paramétrée.",
+      };
     const result = (await action(season.id)(tx)) as { ok: true } | { ok: false; message: string };
     if (result.ok) await syncLessons(tx, season.id, today);
     return result;
@@ -55,15 +65,24 @@ async function withCurrentSeason(action: (seasonId: string) => Parameters<typeof
   return back(r);
 }
 
-export async function close(entry: unknown): Promise<Back> {
-  return withCurrentSeason((seasonId) => (tx) => addClosure(tx, seasonId, entry as never));
+export async function close(entry: unknown, seasonId?: unknown): Promise<Back> {
+  return withSeasonOf(seasonId, (id) => (tx) => addClosure(tx, id, entry as never));
 }
 
+/** Removes a closure: the lessons of ITS season come back, whatever season is shown. */
 export async function reopen(closureId: string): Promise<Back> {
-  return withCurrentSeason(() => (tx) => deleteClosure(tx, closureId));
+  const { schoolId: schoolId } = await requireRole("director");
+  const today = todayInParis();
+  const r = await withSchool(schoolId, async (tx) => {
+    const result = await deleteClosure(tx, closureId);
+    if (result.ok) await syncLessons(tx, result.seasonId, today);
+    return result;
+  });
+  revalidatePath("/planning/fermetures");
+  return back(r);
 }
 
 /** Recomputes the upcoming lessons (after an import, or on first use). */
-export async function updateLessons(): Promise<Back> {
-  return withCurrentSeason(() => async () => ({ ok: true }));
+export async function updateLessons(seasonId?: unknown): Promise<Back> {
+  return withSeasonOf(seasonId, () => async () => ({ ok: true }));
 }

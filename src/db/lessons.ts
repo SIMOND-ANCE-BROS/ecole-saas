@@ -65,6 +65,14 @@ export async function addClosure(tx: Tx, seasonId: string, entry: z.input<typeof
   const f = validClosureInput.safeParse(entry);
   if (!f.success) return { ok: false, message: f.error.issues[0].message };
   if (f.data.end < f.data.start) return { ok: false, message: "La fin précède le début." };
+  const [s] = await tx
+    .select({ start: season.startDate, end: season.endDate })
+    .from(season)
+    .where(eq(season.id, seasonId));
+  if (!s) return { ok: false, message: "Cette saison n’existe plus." };
+  // A closure belongs to one season (#189): its lessons are the ones it cancels.
+  if (f.data.start < s.start || f.data.end > s.end)
+    return { ok: false, message: "Les dates doivent être comprises dans la saison." };
   const [{ id }] = await tx
     .insert(closure)
     .values({
@@ -78,11 +86,15 @@ export async function addClosure(tx: Tx, seasonId: string, entry: z.input<typeof
   return { ok: true, id };
 }
 
-export async function deleteClosure(tx: Tx, id: string): Promise<Result> {
+/** Deletes a closure; gives its season, whose lessons are then to be restored. */
+export async function deleteClosure(
+  tx: Tx,
+  id: string,
+): Promise<{ ok: true; id: string; seasonId: string } | { ok: false; message: string }> {
   const refusal = { ok: false as const, message: "Cette fermeture n’existe plus." };
   if (!isUuid(id)) return refusal;
-  const rows = await tx.delete(closure).where(eq(closure.id, id)).returning({ id: closure.id });
-  return rows.length === 1 ? { ok: true, id } : refusal;
+  const [row] = await tx.delete(closure).where(eq(closure.id, id)).returning({ seasonId: closure.seasonId });
+  return row ? { ok: true, id, seasonId: row.seasonId } : refusal;
 }
 
 // ---------------------------------------------------------------------------

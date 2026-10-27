@@ -26,6 +26,7 @@ import { ages, end, recurrenceText } from "../../format";
 import { ButtonLink } from "@/app/(espace)/_ui/button-link";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { PrintButton } from "./print-button";
+import { coursePlanning } from "../../course-planning";
 
 export const metadata: Metadata = { title: "Cours" };
 
@@ -51,6 +52,7 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
     return course
       ? {
           cours: course,
+          planning: await coursePlanning(tx, course.id),
           enrolled: await enrolledInCourse(tx, course.id),
           lessons: await courseLessons(tx, course.id),
           inConflict: await conflictingLessons(tx, course.id, todayInParis()),
@@ -72,8 +74,8 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
   return (
     <article className="flex w-full min-w-0 flex-col gap-5">
       <nav aria-label="Fil d’Ariane" className="text-sm print:hidden">
-        <TextLink href="/planning" size="sm">
-          Planning
+        <TextLink href={parsed.planning.href} size="sm">
+          {parsed.planning.label}
         </TextLink>
         <Text span size="sm" c="dimmed">
           {" "}

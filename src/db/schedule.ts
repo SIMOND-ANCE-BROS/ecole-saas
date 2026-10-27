@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { courseDatesSql } from "./courses";
 import type { Tx } from "./index";
@@ -10,12 +10,56 @@ import { course, discipline, enrollment, enrollmentCourse, instructor, person, s
 
 export type Season = { id: string; label: string; startDate: string; endDate: string };
 
+const seasonColumns = { id: season.id, label: season.label, startDate: season.startDate, endDate: season.endDate };
+
 /** Season containing the day (`YYYY-MM-DD`), otherwise the most recent; null if there is none. */
 export async function currentSeason(tx: Tx, day: string): Promise<Season | null> {
   const [s] = await tx
-    .select({ id: season.id, label: season.label, startDate: season.startDate, endDate: season.endDate })
+    .select(seasonColumns)
     .from(season)
     .orderBy(sql`(${season.startDate} <= ${day} AND ${season.endDate} >= ${day}) DESC`, desc(season.startDate))
+    .limit(1);
+  return s ?? null;
+}
+
+/** Seasons of the school, the most recent first. */
+export function schoolSeasons(tx: Tx): Promise<Season[]> {
+  return tx.select(seasonColumns).from(season).orderBy(desc(season.startDate));
+}
+
+/** The school's season with this id (RLS); null for an unknown or malformed id. */
+export async function seasonById(tx: Tx, asked: unknown): Promise<Season | null> {
+  const id = z.uuid().safeParse(asked);
+  if (!id.success) return null;
+  const [s] = await tx.select(seasonColumns).from(season).where(eq(season.id, id.data));
+  return s ?? null;
+}
+
+/**
+ * The season asked for in the URL (`?saison=`) when it is one of the school's
+ * (RLS), otherwise the current one (`currentSeason`).
+ */
+export async function chosenSeason(tx: Tx, asked: unknown, day: string): Promise<Season | null> {
+  return (await seasonById(tx, asked)) ?? currentSeason(tx, day);
+}
+
+/** Season of a course; null for an unknown course. */
+export async function seasonOfCourse(tx: Tx, courseId: string): Promise<Season | null> {
+  const [s] = await tx
+    .select(seasonColumns)
+    .from(course)
+    .innerJoin(season, eq(season.id, course.seasonId))
+    .where(eq(course.id, courseId));
+  return s ?? null;
+}
+
+/** First season overlapping the days `start`–`end` (`YYYY-MM-DD`, a week); null if none does. */
+export async function seasonOverlapping(tx: Tx, start: string, end: string): Promise<Season | null> {
+  const [s] = await tx
+    .select(seasonColumns)
+    .from(season)
+    .where(and(lte(season.startDate, end), gte(season.endDate, start)))
+    .orderBy(asc(season.startDate))
     .limit(1);
   return s ?? null;
 }

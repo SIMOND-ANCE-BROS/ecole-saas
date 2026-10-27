@@ -12,6 +12,7 @@ import { moveOneLesson } from "./actions";
 import { Calendar, type Slot, type CalendarElement, type CalendarResponse } from "./calendar";
 import { shortDate, end } from "./format";
 import { DateField } from "../_ui/date-field";
+import { withSeason } from "./season-link";
 
 type Props = {
   /** Visible lessons of the week (filters applied). */
@@ -22,6 +23,8 @@ type Props = {
   closures: { label: string; start: string; end: string }[];
   hours: Hours[];
   editable: boolean;
+  /** Chosen season when it is not the current one (`?saison=`, #189), kept in links. */
+  season?: string;
 };
 
 const capital = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
@@ -39,10 +42,11 @@ export function DatedWeek({
   closures: closures,
   hours: hours,
   editable: editable,
+  season,
 }: Props) {
   const router = useRouter();
   const dates = weekDays(monday);
-  const weekLink = (l: string) => `/planning?semaine=${l}`;
+  const weekLink = (l: string) => withSeason(`/planning?semaine=${l}`, season);
 
   const elements: CalendarElement[] = lessons.map((s) => ({
     id: s.id,
@@ -97,7 +101,8 @@ export function DatedWeek({
         <Button component={Link} href={weekLink(addDays(monday, 7))} variant="default" aria-label="Semaine suivante">
           →
         </Button>
-        <Button component={Link} href={weekLink(addDays(today, 1 - weekdayOf(today)))} variant="default">
+        {/* Today's week belongs to the current season: back to it, without `?saison=`. */}
+        <Button component={Link} href={`/planning?semaine=${addDays(today, 1 - weekdayOf(today))}`} variant="default">
           Cette semaine
         </Button>
         <Title order={2} size="h5">
@@ -128,7 +133,12 @@ export function DatedWeek({
         editable={editable}
         move={moveLesson}
         create={(day, d, duration) =>
-          router.push(`/planning/cours/nouveau?jour=${day}&heure=${toTime(d)}&duree=${duration}&date=${dates[day - 1]}`)
+          router.push(
+            withSeason(
+              `/planning/cours/nouveau?jour=${day}&heure=${toTime(d)}&duree=${duration}&date=${dates[day - 1]}`,
+              season,
+            ),
+          )
         }
       />
     </div>
