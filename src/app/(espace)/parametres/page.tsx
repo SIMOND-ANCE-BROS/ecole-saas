@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Paper, Text, Title } from "@mantine/core";
 import Link from "next/link";
 import { withSchool } from "@/db";
 import { listDisciplines, listPlaces, listSeasons } from "@/db/settings";
@@ -47,17 +48,23 @@ export default async function SettingsPage() {
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
       <div>
-        <h1 className="titre-page">Paramètres</h1>
-        <p className="text-sm text-doux">
+        <Title order={1} fz="xl">
+          Paramètres
+        </Title>
+        <Text size="sm" c="dimmed">
           Tout ce qui est propre à l’école : ses saisons, ses disciplines, ses lieux et ses tarifs.
-        </p>
+        </Text>
       </div>
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {sections.map((r) => (
           <li key={r.href}>
-            <Link href={r.href} className="panneau flex h-full flex-col gap-1 p-4 hover:border-accent">
-              <span className="font-semibold">{r.title}</span>
-              <span className="text-sm text-doux">{r.detail}</span>
+            <Link href={r.href} className="block h-full rounded-md">
+              <Paper withBorder p="md" className="flex h-full flex-col gap-1 hover:border-accent">
+                <span className="font-semibold">{r.title}</span>
+                <Text span size="sm" c="dimmed">
+                  {r.detail}
+                </Text>
+              </Paper>
             </Link>
           </li>
         ))}

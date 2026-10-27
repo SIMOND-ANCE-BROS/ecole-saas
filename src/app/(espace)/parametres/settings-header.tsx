@@ -1,18 +1,26 @@
-import Link from "next/link";
+import { Text, Title } from "@mantine/core";
+import { TextLink } from "../_ui/text-link";
 
 /** Breadcrumb and title of a settings section. */
 export function SettingsHeader({ title: title, help: help }: { title: string; help: string }) {
   return (
     <>
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <Link href="/parametres" className="lien">
+        <TextLink href="/parametres" size="sm">
           Paramètres
-        </Link>
-        <span className="text-doux"> / {title}</span>
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" "}
+          / {title}
+        </Text>
       </nav>
       <div>
-        <h1 className="titre-page">{title}</h1>
-        <p className="text-sm text-doux">{help}</p>
+        <Title order={1} fz="xl">
+          {title}
+        </Title>
+        <Text size="sm" c="dimmed">
+          {help}
+        </Text>
       </div>
     </>
   );

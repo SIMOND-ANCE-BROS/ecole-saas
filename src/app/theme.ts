@@ -1,4 +1,10 @@
-import { createTheme, type CSSVariablesResolver, type MantineColorsTuple } from "@mantine/core";
+import {
+  createTheme,
+  defaultVariantColorsResolver,
+  type CSSVariablesResolver,
+  type MantineColorsTuple,
+  type VariantColorsResolver,
+} from "@mantine/core";
 
 /**
  * Mantine theme (#107), aligned with the `globals.css` tokens: the interface
@@ -48,6 +54,16 @@ const dark: MantineColorsTuple = [
   "#0b0d12",
 ];
 
+/**
+ * Text of filled buttons and badges: Mantine always writes it white, but the
+ * dark-mode shades (4) are light, white on them reads at 3:1 (#185). It
+ * follows the colour scheme through `--filled-text` (cssVariablesResolver).
+ */
+const variantColorResolver: VariantColorsResolver = (input) => {
+  const colors = defaultVariantColorsResolver(input);
+  return input.variant === "filled" ? { ...colors, color: "var(--filled-text)" } : colors;
+};
+
 export const theme = createTheme({
   primaryColor: "accent",
   primaryShade: { light: 6, dark: 4 },
@@ -55,11 +71,14 @@ export const theme = createTheme({
   fontFamily: "var(--font-geist-sans), system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
   fontFamilyMonospace: "var(--font-geist-mono), ui-monospace, monospace",
   headings: { fontWeight: "600" },
+  variantColorResolver,
   defaultRadius: "md",
   radius: { xs: "4px", sm: "6px", md: "8px", lg: "12px", xl: "16px" },
   // Front-desk density: compact fields and tables.
   components: {
     Table: { defaultProps: { verticalSpacing: "xs", highlightOnHover: true } },
+    // Sentence case like the rest of the copy (DESIGN.md), not Mantine's capitals.
+    Badge: { defaultProps: { tt: "none" } },
   },
 });
 
@@ -71,10 +90,14 @@ export const theme = createTheme({
  */
 export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
   variables: {},
-  light: {},
-  dark: Object.fromEntries(
-    Object.keys(t.colors)
-      .filter((c) => c !== "dark")
-      .map((c) => [`--mantine-color-${c}-light-color`, `var(--mantine-color-${c}-3)`]),
-  ),
+  light: { "--filled-text": "var(--mantine-color-white)" },
+  dark: {
+    ...Object.fromEntries(
+      Object.keys(t.colors)
+        .filter((c) => c !== "dark")
+        .map((c) => [`--mantine-color-${c}-light-color`, `var(--mantine-color-${c}-3)`]),
+    ),
+    // Near-black on the light dark-mode fills, as the old `--sur-accent` (#11131a).
+    "--filled-text": "var(--mantine-color-dark-8)",
+  },
 });

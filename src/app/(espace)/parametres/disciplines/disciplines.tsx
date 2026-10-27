@@ -1,5 +1,6 @@
 "use client";
 
+import { Button, Group, Paper, Text, TextInput } from "@mantine/core";
 import { useState, useTransition } from "react";
 import type { DisciplineRow } from "@/db/settings";
 import { newDiscipline, rename, removeDiscipline } from "../actions";
@@ -28,35 +29,32 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
           );
         }}
       >
-        <div className="flex flex-col gap-1">
-          <label htmlFor="nouvelle-discipline" className="text-sm font-medium">
-            Nouvelle discipline
-          </label>
-          <input
-            id="nouvelle-discipline"
-            className="champ"
-            placeholder="Hip-hop"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-        <button type="submit" className="bouton-principal" disabled={inProgress || !name.trim()}>
+        <TextInput
+          label="Nouvelle discipline"
+          placeholder="Hip-hop"
+          value={name}
+          onChange={(e) => setName(e.currentTarget.value)}
+        />
+        <Button type="submit" loading={inProgress} disabled={!name.trim()}>
           Ajouter
-        </button>
+        </Button>
       </form>
       {message && (
-        <p role="alert" className="text-sm text-erreur">
+        <Text role="alert" size="sm" c="red">
           {message}
-        </p>
+        </Text>
       )}
       {disciplines.length === 0 ? (
-        <p className="text-sm text-doux">Aucune discipline pour l’instant.</p>
+        <Text size="sm" c="dimmed">
+          Aucune discipline pour l’instant.
+        </Text>
       ) : (
-        <ul className="panneau divide-y divide-bordure text-sm">
+        <Paper withBorder component="ul" className="divide-y divide-bordure text-sm">
           {disciplines.map((d) => (
             <li key={d.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2">
               {edition?.id === d.id ? (
                 <form
+                  onKeyDown={(e) => e.key === "Escape" && setEdition(null)}
                   className="flex flex-wrap items-center gap-2"
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -66,50 +64,59 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
                     );
                   }}
                 >
-                  <label className="sr-only" htmlFor={`nom-${d.id}`}>
-                    Nom
-                  </label>
-                  <input
-                    id={`nom-${d.id}`}
-                    className="champ"
+                  <TextInput
+                    aria-label="Nom"
                     autoFocus
                     value={edition.name}
-                    onChange={(e) => setEdition({ ...edition, name: e.target.value })}
+                    onChange={(e) => setEdition({ ...edition, name: e.currentTarget.value })}
                   />
-                  <button type="submit" className="lien" disabled={inProgress}>
+                  <Button type="submit" size="compact-sm" loading={inProgress}>
                     Enregistrer
-                  </button>
-                  <button type="button" className="lien text-doux" onClick={() => setEdition(null)}>
+                  </Button>
+                  <Button
+                    type="button"
+                    size="compact-sm"
+                    variant="subtle"
+                    color="gray"
+                    onClick={() => setEdition(null)}
+                  >
                     Annuler
-                  </button>
+                  </Button>
                 </form>
               ) : (
                 <span className="font-medium">{d.name}</span>
               )}
-              <span className="text-doux">
+              <Text span size="sm" c="dimmed">
                 {d.course} cours
                 {d.tariffs > 0 && `, ${d.tariffs} tarif${d.tariffs > 1 ? "s" : ""} dédié${d.tariffs > 1 ? "s" : ""}`}
-              </span>
+              </Text>
               {edition?.id !== d.id && (
-                <span className="ml-auto flex gap-3">
-                  <button type="button" className="lien" onClick={() => setEdition({ id: d.id, name: d.name })}>
+                <Group gap="xs" className="ml-auto">
+                  <Button
+                    size="compact-sm"
+                    variant="subtle"
+                    aria-label={`Renommer ${d.name}`}
+                    onClick={() => setEdition({ id: d.id, name: d.name })}
+                  >
                     Renommer
-                  </button>
+                  </Button>
                   {d.course === 0 && d.tariffs === 0 && (
-                    <button
-                      type="button"
-                      className="lien text-doux"
+                    <Button
+                      size="compact-sm"
+                      variant="subtle"
+                      color="gray"
                       disabled={inProgress}
+                      aria-label={`Retirer ${d.name}`}
                       onClick={() => act(() => removeDiscipline(d.id))}
                     >
                       Retirer
-                    </button>
+                    </Button>
                   )}
-                </span>
+                </Group>
               )}
             </li>
           ))}
-        </ul>
+        </Paper>
       )}
     </div>
   );

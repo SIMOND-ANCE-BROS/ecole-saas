@@ -6,6 +6,7 @@ import { currentSeason } from "@/db/schedule";
 import { seasonGrid, readSiblings, listLessonPacks } from "@/db/tariffs";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
+import { TextLink } from "../../_ui/text-link";
 import { SettingsHeader } from "../settings-header";
 import { LessonPacks, Siblings, Grid } from "./tariffs";
 
@@ -38,11 +39,7 @@ export default async function TariffsPage({ searchParams }: PageProps<"/parametr
       />
       {!parsed ? (
         <p className="text-sm">
-          Créez d’abord une{" "}
-          <Link href="/parametres/saisons" className="lien">
-            saison
-          </Link>
-          .
+          Créez d’abord une <TextLink href="/parametres/saisons">saison</TextLink>.
         </p>
       ) : (
         <>

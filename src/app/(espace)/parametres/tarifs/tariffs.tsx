@@ -1,5 +1,19 @@
 "use client";
 
+import {
+  Badge,
+  Button,
+  Checkbox,
+  Group,
+  NumberInput,
+  Paper,
+  SegmentedControl,
+  Select,
+  Table,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
 import { useState, useTransition } from "react";
 import type { Siblings as SiblingsRule, LessonPackRow, GridRow, Period, Audience } from "@/db/tariffs";
 import { combinationLabel } from "@/domain/tariff/compute";
@@ -18,6 +32,8 @@ const PERIODS: [Period, string][] = [
   ["single", "À l’unité"],
 ];
 const DURATIONS = [30, 45, 60, 75, 90, 120];
+/** Amounts are read right-aligned, in tabular figures (DESIGN.md). */
+const AMOUNT = { input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } } as const;
 
 /** Cents → euro input (« 110 », « 112,50 »), without floating-point numbers. */
 const inEuros = (c: number) => `${Math.trunc(c / 100)}${c % 100 ? `,${String(c % 100).padStart(2, "0")}` : ""}`;
@@ -74,29 +90,48 @@ function PriceCell({
   return (
     <div className="flex flex-col items-end gap-0.5">
       <div className="flex items-center gap-1">
-        <input
+        <TextInput
           aria-label={label}
           inputMode="decimal"
-          className={`champ w-24 text-right tabular-nums ${state === "error" ? "border-erreur" : ""}`}
+          size="xs"
+          w={96}
+          styles={AMOUNT}
+          error={state === "error"}
           value={value}
           placeholder="—"
           disabled={inProgress}
           onChange={(e) => {
-            setValue(e.target.value);
+            setValue(e.currentTarget.value);
             setState(null);
           }}
           onBlur={save}
-          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), e.currentTarget.blur())}
+          data-price-cell={period}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            // Like a spreadsheet: Enter saves (on leaving the field) and goes down to the same column.
+            e.preventDefault();
+            const column = [...document.querySelectorAll<HTMLInputElement>(`input[data-price-cell="${period}"]`)];
+            const below = column[column.indexOf(e.currentTarget) + 1];
+            if (below) below.focus();
+            else e.currentTarget.blur();
+          }}
         />
         <span className="w-3 text-xs" aria-hidden>
           {state === "saved" ? "✓" : "€"}
         </span>
-      </div>
-      {current?.used && <span className="text-[11px] text-doux">déjà utilisé</span>}
-      {message && (
-        <span role="alert" className="max-w-40 text-right text-[11px] text-erreur">
-          {message}
+        <span role="status" className="sr-only">
+          {state === "saved" ? "Enregistré" : ""}
         </span>
+      </div>
+      {current?.used && (
+        <Text span size="xs" c="dimmed">
+          déjà utilisé
+        </Text>
+      )}
+      {message && (
+        <Text span role="alert" size="xs" c="red" maw={160} ta="right">
+          {message}
+        </Text>
       )}
     </div>
   );
@@ -162,163 +197,151 @@ export function Grid({
 
   return (
     <section aria-labelledby="grille" className="flex flex-col gap-3">
-      <h2 id="grille" className="text-base font-semibold">
+      <Title order={2} size="h5" id="grille">
         Grille des forfaits
-      </h2>
-      <div role="tablist" aria-label="Public" className="flex flex-wrap gap-1">
-        {AUDIENCES.map(([p, label]) => (
-          <button
-            key={p}
-            type="button"
-            role="tab"
-            aria-selected={chosenAudience === p}
-            className="rounded-md border border-bordure px-3 py-1.5 text-sm aria-selected:border-accent aria-selected:bg-accent-doux aria-selected:font-medium"
-            onClick={() => setAudience(p)}
-          >
-            {label} <span className="text-doux">({grid.filter((l) => l.audience === p).length})</span>
-          </button>
-        ))}
-      </div>
+      </Title>
+      <SegmentedControl
+        aria-label="Public"
+        className="self-start"
+        value={chosenAudience}
+        onChange={(p) => setAudience(p as Audience)}
+        data={AUDIENCES.map(([p, label]) => ({
+          value: p,
+          label: `${label} (${grid.filter((l) => l.audience === p).length})`,
+        }))}
+      />
 
-      <div className="panneau overflow-x-auto">
-        <table className="tableau">
-          <thead>
-            <tr>
-              <th>Cours de la semaine</th>
+      <Paper withBorder className="relative overflow-x-auto">
+        <Table>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Cours de la semaine</Table.Th>
               {PERIODS.map(([p, label]) => (
-                <th key={p} className="text-right">
+                <Table.Th key={p} className="text-right">
                   {label}
-                </th>
+                </Table.Th>
               ))}
-              <th>
+              <Table.Th>
                 <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+              </Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
             {rows.length === 0 && (
-              <tr>
-                <td colSpan={5} className="text-doux">
-                  Aucun forfait pour ce public : ajoutez une ligne ci-dessous.
-                </td>
-              </tr>
+              <Table.Tr>
+                <Table.Td colSpan={5}>
+                  <Text size="sm" c="dimmed">
+                    Aucun forfait pour ce public : ajoutez une ligne ci-dessous.
+                  </Text>
+                </Table.Td>
+              </Table.Tr>
             )}
             {rows.map((l) => {
               const key = `${l.audience}|${l.combination.join("+")}|${l.disciplineId ?? ""}`;
               const label = combinationLabel(l.combination);
               const used = PERIODS.some(([p]) => l.price[p]?.used);
               return (
-                <tr key={key}>
-                  <td>
+                <Table.Tr key={key}>
+                  <Table.Td>
                     <span className="font-medium">{label}</span>
                     {l.discipline && (
-                      <span className="ml-2 rounded bg-accent-doux px-1.5 text-xs">{l.discipline} seulement</span>
+                      <Badge variant="light" ml="xs">
+                        {l.discipline} seulement
+                      </Badge>
                     )}
-                  </td>
+                  </Table.Td>
                   {PERIODS.map(([p, periodLabel]) => (
-                    <td key={`${key}-${p}`}>
+                    <Table.Td key={`${key}-${p}`}>
                       <PriceCell seasonId={seasonId} row={l} period={p} label={`${label}, ${periodLabel}`} />
-                    </td>
+                    </Table.Td>
                   ))}
-                  <td className="text-right">
+                  <Table.Td className="text-right">
                     {!used && (
-                      <button
-                        type="button"
-                        className="lien text-xs text-doux"
+                      <Button
+                        size="compact-sm"
+                        variant="subtle"
+                        color="gray"
                         disabled={inProgress}
                         onClick={() => removeRow(l)}
                         aria-label={`Retirer la ligne ${label}`}
                       >
                         Retirer
-                      </button>
+                      </Button>
                     )}
-                  </td>
-                </tr>
+                  </Table.Td>
+                </Table.Tr>
               );
             })}
-          </tbody>
-        </table>
-      </div>
+          </Table.Tbody>
+        </Table>
+      </Paper>
 
-      <div className="panneau flex flex-col gap-3 p-4 text-sm">
-        <p className="font-semibold">
+      <Paper withBorder p="md" className="flex flex-col gap-3 text-sm">
+        <Text size="sm" fw={600}>
           Nouvelle ligne ({AUDIENCES.find(([p]) => p === chosenAudience)?.[1].toLowerCase()})
-        </p>
+        </Text>
         <div className="flex flex-wrap items-end gap-2">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="duree">Cours de</label>
-            <select id="duree" className="champ" value={duration} onChange={(e) => setDuration(e.target.value)}>
-              {DURATIONS.map((d) => (
-                <option key={d} value={d}>
-                  {combinationLabel([d])}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button
-            type="button"
-            className="bouton-secondaire"
+          <Select
+            label="Cours de"
+            w={120}
+            allowDeselect={false}
+            data={DURATIONS.map((d) => ({ value: String(d), label: combinationLabel([d]) }))}
+            value={duration}
+            onChange={(d) => d && setDuration(d)}
+          />
+          <Button
+            variant="default"
             onClick={() => setCombination([...combination, Number(duration)].sort((a, b) => a - b))}
           >
             Ajouter ce cours
-          </button>
+          </Button>
           <span className="pb-2" aria-live="polite">
             {combination.length === 0 ? (
-              <span className="text-doux">Aucun cours choisi.</span>
+              <Text span size="sm" c="dimmed">
+                Aucun cours choisi.
+              </Text>
             ) : (
               <>
                 <span className="font-medium">{combinationLabel(combination)}</span>{" "}
-                <button type="button" className="lien text-xs" onClick={() => setCombination([])}>
+                <Button size="compact-xs" variant="subtle" onClick={() => setCombination([])}>
                   Effacer
-                </button>
+                </Button>
               </>
             )}
           </span>
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="discipline-ligne">Discipline</label>
-            <select
-              id="discipline-ligne"
-              className="champ"
-              value={disciplineId}
-              onChange={(e) => setDisciplineId(e.target.value)}
-            >
-              <option value="">Toutes</option>
-              {disciplines.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} seulement
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Discipline"
+            allowDeselect={false}
+            data={[
+              { value: "", label: "Toutes" },
+              ...disciplines.map((d) => ({ value: d.id, label: `${d.name} seulement` })),
+            ]}
+            value={disciplineId}
+            onChange={(d) => setDisciplineId(d ?? "")}
+          />
           {PERIODS.map(([p, label]) => (
-            <div key={p} className="flex flex-col gap-1">
-              <label htmlFor={`prix-${p}`}>{label} (€)</label>
-              <input
-                id={`prix-${p}`}
-                inputMode="decimal"
-                className="champ w-28 text-right"
-                value={newPrices[p]}
-                onChange={(e) => setNewPrice({ ...newPrices, [p]: e.target.value })}
-              />
-            </div>
+            <TextInput
+              key={p}
+              label={`${label} (€)`}
+              inputMode="decimal"
+              w={112}
+              styles={AMOUNT}
+              value={newPrices[p]}
+              onChange={(e) => setNewPrice({ ...newPrices, [p]: e.currentTarget.value })}
+            />
           ))}
-          <button
-            type="button"
-            className="bouton-principal"
-            disabled={inProgress || combination.length === 0}
-            onClick={addRow}
-          >
+          <Button loading={inProgress} disabled={combination.length === 0} onClick={addRow}>
             Ajouter la ligne
-          </button>
+          </Button>
         </div>
         {message && (
-          <p role="alert" className="text-erreur">
+          <Text role="alert" size="sm" c="red">
             {message}
-          </p>
+          </Text>
         )}
-      </div>
+      </Paper>
     </section>
   );
 }
@@ -362,92 +385,75 @@ export function Siblings({
     });
 
   return (
-    <section aria-labelledby="fratrie" className="panneau flex flex-col gap-3 p-4 text-sm">
-      <h2 id="fratrie" className="text-base font-semibold">
+    <Paper withBorder component="section" aria-labelledby="fratrie" p="md" className="flex flex-col gap-3 text-sm">
+      <Title order={2} size="h5" id="fratrie">
         Réduction fratrie
-      </h2>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={v.active} onChange={(e) => setV({ ...v, active: e.target.checked })} />
-        Accorder une réduction aux élèves d’un même payeur
-      </label>
+      </Title>
+      <Checkbox
+        label="Accorder une réduction aux élèves d’un même payeur"
+        checked={v.active}
+        onChange={(e) => setV({ ...v, active: e.currentTarget.checked })}
+      />
       {v.active && (
         <>
           <div className="flex flex-wrap items-end gap-2">
-            <div className="flex flex-col gap-1">
-              <label htmlFor="fratrie-valeur">Réduction</label>
-              <input
-                id="fratrie-valeur"
-                inputMode="decimal"
-                className="champ w-24 text-right"
-                value={v.value}
-                onChange={(e) => setV({ ...v, value: e.target.value })}
-              />
-            </div>
-            <label className="sr-only" htmlFor="fratrie-mode">
-              Unité
-            </label>
-            <select
-              id="fratrie-mode"
-              className="champ"
-              value={v.mode}
-              onChange={(e) => setV({ ...v, mode: e.target.value })}
-            >
-              <option value="rate">% par élève</option>
-              <option value="amount">€ par élève</option>
-            </select>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="fratrie-seuil">À partir de</label>
-              <select
-                id="fratrie-seuil"
-                className="champ"
-                value={v.threshold}
-                onChange={(e) => setV({ ...v, threshold: e.target.value })}
-              >
-                {[2, 3, 4].map((n) => (
-                  <option key={n} value={n}>
-                    {n} élèves
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <fieldset className="flex flex-wrap gap-x-4 gap-y-1">
-            <legend className="mb-1">Pour les publics</legend>
-            {AUDIENCES.map(([p, label]) => (
-              <label key={p} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={v.audiences.includes(p)}
-                  onChange={(e) =>
-                    setV({
-                      ...v,
-                      audiences: e.target.checked ? [...v.audiences, p] : v.audiences.filter((x) => x !== p),
-                    })
-                  }
-                />
-                {label}
-              </label>
-            ))}
-          </fieldset>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={v.combinable}
-              onChange={(e) => setV({ ...v, combinable: e.target.checked })}
+            <TextInput
+              label="Réduction"
+              inputMode="decimal"
+              w={96}
+              styles={AMOUNT}
+              value={v.value}
+              onChange={(e) => setV({ ...v, value: e.currentTarget.value })}
             />
-            Cumulable avec un forfait de plusieurs disciplines
-          </label>
+            <Select
+              aria-label="Unité"
+              w={140}
+              allowDeselect={false}
+              data={[
+                { value: "rate", label: "% par élève" },
+                { value: "amount", label: "€ par élève" },
+              ]}
+              value={v.mode}
+              onChange={(mode) => mode && setV({ ...v, mode })}
+            />
+            <Select
+              label="À partir de"
+              w={120}
+              allowDeselect={false}
+              data={[2, 3, 4].map((n) => ({ value: String(n), label: `${n} élèves` }))}
+              value={v.threshold}
+              onChange={(threshold) => threshold && setV({ ...v, threshold })}
+            />
+          </div>
+          <Checkbox.Group
+            label="Pour les publics"
+            value={v.audiences}
+            onChange={(values) =>
+              setV({ ...v, audiences: AUDIENCES.flatMap(([p]) => (values.includes(p) ? [p] : [])) })
+            }
+          >
+            <Group gap="md" mt={4}>
+              {AUDIENCES.map(([p, label]) => (
+                <Checkbox key={p} value={p} label={label} />
+              ))}
+            </Group>
+          </Checkbox.Group>
+          <Checkbox
+            label="Cumulable avec un forfait de plusieurs disciplines"
+            checked={v.combinable}
+            onChange={(e) => setV({ ...v, combinable: e.currentTarget.checked })}
+          />
         </>
       )}
-      <button type="button" className="bouton-principal self-start" disabled={inProgress} onClick={save}>
+      <Button className="self-start" loading={inProgress} onClick={save}>
         Enregistrer
-      </button>
+      </Button>
       {message && (
-        <p role={message.error ? "alert" : "status"} className={message.error ? "text-erreur" : ""}>
+        <Text role={message.error ? "alert" : "status"} size="sm" c={message.error ? "red" : undefined}>
           {message.text}
-        </p>
+        </Text>
       )}
-    </section>
+    </Paper>
   );
 }
 
@@ -469,29 +475,35 @@ export function LessonPacks({
     });
 
   return (
-    <section aria-labelledby="carnets" className="panneau flex flex-col gap-3 p-4 text-sm">
-      <h2 id="carnets" className="text-base font-semibold">
+    <Paper withBorder component="section" aria-labelledby="carnets" p="md" className="flex flex-col gap-3 text-sm">
+      <Title order={2} size="h5" id="carnets">
         Carnets de cours particuliers
-      </h2>
+      </Title>
       {lessonPacks.length === 0 ? (
-        <p className="text-doux">Aucun carnet pour cette saison.</p>
+        <Text size="sm" c="dimmed">
+          Aucun carnet pour cette saison.
+        </Text>
       ) : (
         <ul className="divide-y divide-bordure rounded-md border border-bordure">
           {lessonPacks.map((c) => (
-            <li key={c.id} className="flex flex-wrap items-baseline gap-x-3 px-3 py-2">
+            <li key={c.id} className="flex flex-wrap items-center gap-x-3 px-3 py-2">
               <span className="font-medium">
                 {c.lessonCount} séance{c.lessonCount > 1 ? "s" : ""}
               </span>
-              <span className="text-doux">{c.maxPeople === 1 ? "1 personne" : `jusqu’à ${c.maxPeople} personnes`}</span>
+              <Text span size="sm" c="dimmed">
+                {c.maxPeople === 1 ? "1 personne" : `jusqu’à ${c.maxPeople} personnes`}
+              </Text>
               <span className="tabular-nums">{formatEuros(c.priceCents)}</span>
-              <button
-                type="button"
-                className="lien ml-auto text-xs text-doux"
+              <Button
+                size="compact-sm"
+                variant="subtle"
+                color="gray"
+                className="ml-auto"
                 disabled={inProgress}
                 onClick={() => act(() => removeLessonPack(c.id))}
               >
                 Retirer
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
@@ -513,48 +525,42 @@ export function LessonPacks({
           );
         }}
       >
-        <div className="flex flex-col gap-1">
-          <label htmlFor="carnet-seances">Séances</label>
-          <input
-            id="carnet-seances"
-            type="number"
-            min={1}
-            className="champ w-20"
-            value={v.lessonCount}
-            onChange={(e) => setV({ ...v, lessonCount: e.target.value })}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="carnet-personnes">Personnes (max)</label>
-          <input
-            id="carnet-personnes"
-            type="number"
-            min={1}
-            className="champ w-20"
-            value={v.maxPeople}
-            onChange={(e) => setV({ ...v, maxPeople: e.target.value })}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="carnet-prix">Prix (€)</label>
-          <input
-            id="carnet-prix"
-            inputMode="decimal"
-            className="champ w-28 text-right"
-            value={v.price}
-            onChange={(e) => setV({ ...v, price: e.target.value })}
-          />
-        </div>
-        <button type="submit" className="bouton-secondaire" disabled={inProgress}>
+        <NumberInput
+          label="Séances"
+          w={88}
+          min={1}
+          allowDecimal={false}
+          value={v.lessonCount}
+          onChange={(n) => setV({ ...v, lessonCount: String(n) })}
+        />
+        <NumberInput
+          label="Personnes (max)"
+          w={120}
+          min={1}
+          allowDecimal={false}
+          value={v.maxPeople}
+          onChange={(n) => setV({ ...v, maxPeople: String(n) })}
+        />
+        <TextInput
+          label="Prix (€)"
+          inputMode="decimal"
+          w={112}
+          styles={AMOUNT}
+          value={v.price}
+          onChange={(e) => setV({ ...v, price: e.currentTarget.value })}
+        />
+        <Button type="submit" variant="default" loading={inProgress}>
           Enregistrer le carnet
-        </button>
+        </Button>
       </form>
-      <p className="text-xs text-doux">Même nombre de séances et de personnes : le prix est mis à jour.</p>
+      <Text size="xs" c="dimmed">
+        Même nombre de séances et de personnes : le prix est mis à jour.
+      </Text>
       {message && (
-        <p role="alert" className="text-erreur">
+        <Text role="alert" size="sm" c="red">
           {message}
-        </p>
+        </Text>
       )}
-    </section>
+    </Paper>
   );
 }
