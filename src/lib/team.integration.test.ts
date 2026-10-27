@@ -137,13 +137,59 @@ describe("invitation", () => {
       invite(tx, diana, { email: `x-${suffix}@exemple.test`, name: "X", role: "front_desk" }, new Date()),
     );
     if (!r.ok) throw new Error(r.message);
-    expect((await withSchool(school, (tx) => revokeInvitation(tx, r.id))).ok).toBe(true);
+    expect((await withSchool(school, (tx) => revokeInvitation(tx, diana, r.id))).ok).toBe(true);
     expect(await openLink(school, r.token)).toBeNull();
     const old = await withSchool(school, (tx) =>
       invite(tx, diana, { email: `y-${suffix}@exemple.test`, name: "Y", role: "front_desk" }, new Date("2020-01-01")),
     );
     if (!old.ok) throw new Error(old.message);
     expect(await openLink(school, old.token)).toBeNull();
+  });
+});
+
+describe("audit log of links (#178)", () => {
+  const entries = (id: string) =>
+    admin`SELECT action, actor, before, after FROM audit_log WHERE target_table = 'invitation' AND row_id = ${id} ORDER BY id`;
+
+  it("records the creation, the replacement and the revocation of an invitation, without token or hash", async () => {
+    const email = `journal-${suffix}@exemple.test`;
+    const first = await withSchool(school, (tx) =>
+      invite(tx, diana, { email, name: "Journal", role: "front_desk" }, new Date("2026-10-01T10:00:00Z")),
+    );
+    const second = await withSchool(school, (tx) =>
+      invite(tx, diana, { email, name: "Journal", role: "director" }, new Date("2026-10-01T10:00:00Z")),
+    );
+    if (!first.ok || !second.ok) throw new Error("invitation refusée");
+    expect(await entries(first.id)).toEqual([
+      {
+        action: "insert",
+        actor: dianaMember,
+        before: null,
+        after: { type: "invitation", email, role: "front_desk", userId: null, expiresAt: "2026-10-08T10:00:00.000Z" },
+      },
+      { action: "delete", actor: dianaMember, before: expect.objectContaining({ role: "front_desk" }), after: null },
+    ]);
+    expect((await withSchool(school, (tx) => revokeInvitation(tx, diana, second.id))).ok).toBe(true);
+    expect((await entries(second.id)).map((e) => e.action)).toEqual(["insert", "delete"]);
+    const [{ tokenHash }] =
+      await admin`SELECT encode(sha256(convert_to(${second.token}, 'UTF8')), 'hex') AS "tokenHash"`;
+    const [{ n }] = await admin`SELECT count(*)::int AS n FROM audit_log
+      WHERE school_id = ${school} AND (concat(before, after) LIKE ${`%${second.token}%`} OR concat(before, after) LIKE ${`%${tokenHash}%`})`;
+    expect(n).toBe(0);
+  });
+
+  it("refuses a revocation by someone outside management, without deleting anything", async () => {
+    const r = await withSchool(school, (tx) =>
+      invite(tx, diana, { email: `garde-${suffix}@exemple.test`, name: "Garde", role: "front_desk" }, new Date()),
+    );
+    if (!r.ok) throw new Error(r.message);
+    const frontDesk = await member(newMemberEmail);
+    expect(await withSchool(school, (tx) => revokeInvitation(tx, frontDesk.userId, r.id))).toEqual({
+      ok: false,
+      message: "Accès refusé.",
+    });
+    expect(await openLink(school, r.token)).not.toBeNull();
+    expect((await withSchool(school, (tx) => revokeInvitation(tx, diana, r.id))).ok).toBe(true);
   });
 });
 
@@ -236,7 +282,7 @@ describe("links of a director who leaves management", () => {
     expect(await openLink(school, link)).not.toBeNull();
     await withSchool(school, async (tx) => {
       const i = (await pendingInvitations(tx, new Date())).find((x) => x.name === "Porte Deux");
-      if (i) await revokeInvitation(tx, i.id);
+      if (i) await revokeInvitation(tx, diana, i.id);
     });
   });
 });
@@ -265,6 +311,12 @@ describe("password reset", () => {
     const r = await createResetLink(school, diana, n.id);
     if (!r.ok) throw new Error(r.message);
     expect(await openLink(school, r.token)).toMatchObject({ type: "reset", email: newMemberEmail });
+    const [logged] =
+      await admin`SELECT actor, after FROM audit_log WHERE target_table = 'invitation' AND row_id = ${r.id} AND action = 'insert'`;
+    expect(logged).toMatchObject({
+      actor: dianaMember,
+      after: { type: "reset", email: newMemberEmail, userId: n.userId },
+    });
     const next = "un tout nouveau mot de passe";
     expect(await acceptLink(school, r.token, entry(next))).toEqual({
       ok: true,

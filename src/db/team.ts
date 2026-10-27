@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { changeRefusal, INVITABLE_ROLES, ROLE_VALUES, type Role } from "../domain/team/rules";
+import { rowsOf } from "./columns-of";
 import type { Tx } from "./index";
 import { school, invitation, auditLog, member, user } from "./schema";
 
@@ -23,6 +24,46 @@ export const RESET_DURATION = DAY;
 
 export type Result = { ok: true; id: string } | { ok: false; message: string };
 export type RelationshipResult = { ok: true; id: string; token: string } | { ok: false; message: string };
+
+/** What the audit log keeps of a link: never its token nor its hash (#178). */
+const LOGGED_LINK = {
+  id: invitation.id,
+  type: invitation.type,
+  email: invitation.email,
+  role: invitation.role,
+  userId: invitation.userId,
+  expiresAt: invitation.expiresAt,
+};
+type LoggedLink = {
+  id: string;
+  type: "invitation" | "reset";
+  email: string;
+  role: Role | null;
+  userId: string | null;
+  expiresAt: Date;
+};
+
+/** Records links created or deleted (revoked, replaced, or dropped with their author) by `actor`. */
+async function logLinks(tx: Tx, actor: string, action: "insert" | "delete", links: LoggedLink[]) {
+  if (links.length === 0) return;
+  await tx.insert(auditLog).values(
+    rowsOf(
+      auditLog,
+      links.map(({ id, ...l }) => {
+        const entry = { ...l, expiresAt: l.expiresAt.toISOString() };
+        return {
+          schoolId: CURRENT_SCHOOL,
+          actor,
+          targetTable: "invitation",
+          rowId: id,
+          action,
+          before: action === "delete" ? entry : null,
+          after: action === "insert" ? entry : null,
+        };
+      }),
+    ),
+  );
+}
 
 /** Active member of management: the only one who manages the team (checked here too, not only by the page). */
 async function memberOf(tx: Tx, userId: string) {
@@ -125,11 +166,13 @@ export async function invite(
     .innerJoin(user, eq(user.id, member.userId))
     .where(eq(user.email, s.data.email));
   if (already?.active) return { ok: false, message: "Cette personne fait déjà partie de l’équipe." };
-  await tx
+  const replaced = await tx
     .delete(invitation)
-    .where(and(eq(invitation.type, "invitation"), eq(invitation.email, s.data.email), isNull(invitation.usedAt)));
+    .where(and(eq(invitation.type, "invitation"), eq(invitation.email, s.data.email), isNull(invitation.usedAt)))
+    .returning(LOGGED_LINK);
+  await logLinks(tx, who, "delete", replaced);
   const token = newToken();
-  const [{ id }] = await tx
+  const [created] = await tx
     .insert(invitation)
     .values({
       email: s.data.email,
@@ -141,17 +184,21 @@ export async function invite(
       expiresAt: new Date(now.getTime() + INVITATION_DURATION),
       createdBy: who,
     })
-    .returning({ id: invitation.id });
-  return { ok: true, id, token };
+    .returning(LOGGED_LINK);
+  await logLinks(tx, who, "insert", [created]);
+  return { ok: true, id: created.id, token };
 }
 
 /** Revokes an invitation not yet used: the link stops working immediately. */
-export async function revokeInvitation(tx: Tx, id: string): Promise<Result> {
+export async function revokeInvitation(tx: Tx, userId: string, id: string): Promise<Result> {
   if (!isUuid(id)) return { ok: false, message: "Cette invitation n’existe plus." };
+  const who = await memberOf(tx, userId);
+  if (!who) return { ok: false, message: "Accès refusé." };
   const rows = await tx
     .delete(invitation)
     .where(and(eq(invitation.id, id), isNull(invitation.usedAt)))
-    .returning({ id: invitation.id });
+    .returning(LOGGED_LINK);
+  await logLinks(tx, who, "delete", rows);
   return rows.length === 1 ? { ok: true, id } : { ok: false, message: "Cette invitation n’existe plus." };
 }
 
@@ -173,13 +220,19 @@ export async function updateMember(
   await tx.update(member).set({ role: after.role, active: after.active }).where(eq(member.id, memberId));
   if (!after.active || after.role !== "director") {
     // Their links stop working anyway (AUTHOR_STILL_DIRECTOR): removed so they leave the pending list too.
-    await tx.delete(invitation).where(and(eq(invitation.createdBy, memberId), isNull(invitation.usedAt)));
+    const dropped = await tx
+      .delete(invitation)
+      .where(and(eq(invitation.createdBy, memberId), isNull(invitation.usedAt)))
+      .returning(LOGGED_LINK);
+    await logLinks(tx, who, "delete", dropped);
   }
   if (!after.active && target) {
     // A deactivated member has nothing to sign in to: their pending reset link goes too.
-    await tx
+    const dropped = await tx
       .delete(invitation)
-      .where(and(eq(invitation.type, "reset"), eq(invitation.userId, target), isNull(invitation.usedAt)));
+      .where(and(eq(invitation.type, "reset"), eq(invitation.userId, target), isNull(invitation.usedAt)))
+      .returning(LOGGED_LINK);
+    await logLinks(tx, who, "delete", dropped);
   }
   await tx.insert(auditLog).values({
     schoolId: CURRENT_SCHOOL,
@@ -209,11 +262,13 @@ export async function resetLink(tx: Tx, userId: string, memberId: string, now: D
     .where(and(eq(member.id, memberId), eq(member.active, true)));
   if (!m) return { ok: false, message: "Réactivez d’abord ce membre, ou il n’existe plus." };
   if (await elsewhereAccount(tx, m.userId)) return { ok: false, message: SHARED };
-  await tx
+  const replaced = await tx
     .delete(invitation)
-    .where(and(eq(invitation.type, "reset"), eq(invitation.userId, m.userId), isNull(invitation.usedAt)));
+    .where(and(eq(invitation.type, "reset"), eq(invitation.userId, m.userId), isNull(invitation.usedAt)))
+    .returning(LOGGED_LINK);
+  await logLinks(tx, who, "delete", replaced);
   const token = newToken();
-  const [{ id }] = await tx
+  const [created] = await tx
     .insert(invitation)
     .values({
       schoolId: CURRENT_SCHOOL,
@@ -225,8 +280,9 @@ export async function resetLink(tx: Tx, userId: string, memberId: string, now: D
       expiresAt: new Date(now.getTime() + RESET_DURATION),
       createdBy: who,
     })
-    .returning({ id: invitation.id });
-  return { ok: true, id, token };
+    .returning(LOGGED_LINK);
+  await logLinks(tx, who, "insert", [created]);
+  return { ok: true, id: created.id, token };
 }
 
 export type OpenedLink = {
