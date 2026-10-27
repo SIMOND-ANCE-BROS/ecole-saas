@@ -54,6 +54,7 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
             <li key={d.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2">
               {edition?.id === d.id ? (
                 <form
+                  onKeyDown={(e) => e.key === "Escape" && setEdition(null)}
                   className="flex flex-wrap items-center gap-2"
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -91,7 +92,12 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
               </Text>
               {edition?.id !== d.id && (
                 <Group gap="xs" className="ml-auto">
-                  <Button size="compact-sm" variant="subtle" onClick={() => setEdition({ id: d.id, name: d.name })}>
+                  <Button
+                    size="compact-sm"
+                    variant="subtle"
+                    aria-label={`Renommer ${d.name}`}
+                    onClick={() => setEdition({ id: d.id, name: d.name })}
+                  >
                     Renommer
                   </Button>
                   {d.course === 0 && d.tariffs === 0 && (
@@ -100,6 +106,7 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
                       variant="subtle"
                       color="gray"
                       disabled={inProgress}
+                      aria-label={`Retirer ${d.name}`}
                       onClick={() => act(() => removeDiscipline(d.id))}
                     >
                       Retirer

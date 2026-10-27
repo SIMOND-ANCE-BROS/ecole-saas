@@ -52,6 +52,7 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
           >
             {editionSite?.id === s.id ? (
               <form
+                onKeyDown={(e) => e.key === "Escape" && setEditionSite(null)}
                 className="grid gap-2 sm:grid-cols-[1fr_2fr_auto_auto] sm:items-end"
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -108,7 +109,12 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                 </Text>
                 {s.permanence && <Badge variant="light">accueil sur place</Badge>}
                 <Group gap="xs" className="ml-auto">
-                  <Button size="compact-sm" variant="subtle" onClick={() => setEditionSite(s)}>
+                  <Button
+                    size="compact-sm"
+                    variant="subtle"
+                    aria-label={`Modifier le site ${s.name}`}
+                    onClick={() => setEditionSite(s)}
+                  >
                     Modifier
                   </Button>
                   {s.rooms.length === 0 && (
@@ -117,6 +123,7 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                       variant="subtle"
                       color="gray"
                       disabled={inProgress}
+                      aria-label={`Retirer le site ${s.name}`}
                       onClick={() => act(() => removeSite(s.id))}
                     >
                       Retirer
@@ -133,6 +140,13 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                 roomEditing?.id === x.id ? (
                   <li key={x.id} className="px-3 py-2">
                     <form
+                      // Escape first closes an open list (the site choice), then cancels.
+                      onKeyDown={(e) =>
+                        e.key === "Escape" &&
+                        e.target instanceof HTMLElement &&
+                        e.target.getAttribute("aria-expanded") !== "true" &&
+                        setRoomEdition(null)
+                      }
                       className="flex flex-wrap items-end gap-2"
                       onSubmit={(e) => {
                         e.preventDefault();
@@ -176,7 +190,6 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                       <Button
                         type="button"
                         size="compact-sm"
-
                         variant="subtle"
                         color="gray"
                         onClick={() => setRoomEdition(null)}
@@ -195,6 +208,7 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                       <Button
                         size="compact-sm"
                         variant="subtle"
+                        aria-label={`Modifier la salle ${x.name}`}
                         onClick={() =>
                           setRoomEdition({
                             id: x.id,
@@ -212,6 +226,7 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                           variant="subtle"
                           color="gray"
                           disabled={inProgress}
+                          aria-label={`Retirer la salle ${x.name}`}
                           onClick={() => act(() => removeRoom(x.id))}
                         >
                           Retirer

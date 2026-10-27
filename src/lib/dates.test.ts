@@ -9,6 +9,12 @@ describe("parseTypedDate", () => {
     expect(parseTypedDate("01-09-2027")).toBe("2027-09-01");
   });
 
+  it("reads a two-digit year as 20xx, and eight digits without separators", () => {
+    expect(parseTypedDate("1/9/27")).toBe("2027-09-01");
+    expect(parseTypedDate("12092027")).toBe("2027-09-12");
+    expect(parseTypedDate("1209202")).toBeNull();
+  });
+
   it("accepts a pasted ISO date", () => {
     expect(parseTypedDate("2027-09-12")).toBe("2027-09-12");
   });

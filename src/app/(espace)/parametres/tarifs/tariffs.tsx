@@ -105,10 +105,22 @@ function PriceCell({
             setState(null);
           }}
           onBlur={save}
-          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), e.currentTarget.blur())}
+          data-price-cell={period}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            // Like a spreadsheet: Enter saves (on leaving the field) and goes down to the same column.
+            e.preventDefault();
+            const column = [...document.querySelectorAll<HTMLInputElement>(`input[data-price-cell="${period}"]`)];
+            const below = column[column.indexOf(e.currentTarget) + 1];
+            if (below) below.focus();
+            else e.currentTarget.blur();
+          }}
         />
         <span className="w-3 text-xs" aria-hidden>
           {state === "saved" ? "✓" : "€"}
+        </span>
+        <span role="status" className="sr-only">
+          {state === "saved" ? "Enregistré" : ""}
         </span>
       </div>
       {current?.used && (
@@ -199,7 +211,7 @@ export function Grid({
         }))}
       />
 
-      <Paper withBorder className="overflow-x-auto">
+      <Paper withBorder className="relative overflow-x-auto">
         <Table>
           <Table.Thead>
             <Table.Tr>
@@ -416,7 +428,9 @@ export function Siblings({
           <Checkbox.Group
             label="Pour les publics"
             value={v.audiences}
-            onChange={(audiences) => setV({ ...v, audiences: audiences as Audience[] })}
+            onChange={(values) =>
+              setV({ ...v, audiences: AUDIENCES.flatMap(([p]) => (values.includes(p) ? [p] : [])) })
+            }
           >
             <Group gap="md" mt={4}>
               {AUDIENCES.map(([p, label]) => (

@@ -37,10 +37,16 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
       if (!r.message) after?.();
     });
 
+  const saveEdition = (id: string, e: { label: string; startDate: string; endDate: string }) =>
+    act(
+      () => changeSeason(id, { label: e.label, startDate: e.startDate, endDate: e.endDate }),
+      () => setEdition(null),
+    );
+
   return (
     <div className="flex flex-col gap-5">
       {seasons.length > 0 && (
-        <Paper withBorder className="overflow-x-auto">
+        <Paper withBorder className="relative overflow-x-auto">
           <Table>
             <Table.Thead>
               <Table.Tr>
@@ -57,7 +63,17 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
             <Table.Tbody>
               {seasons.map((s) =>
                 edition?.id === s.id ? (
-                  <Table.Tr key={s.id}>
+                  <Table.Tr
+                    key={s.id}
+                    // A table row cannot hold a form: Enter saves and Escape cancels by hand.
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
+                        e.preventDefault();
+                        saveEdition(s.id, edition);
+                      }
+                      if (e.key === "Escape") setEdition(null);
+                    }}
+                  >
                     <Table.Td>
                       <TextInput
                         aria-label="Libellé"
@@ -89,18 +105,9 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
                       <Group gap="xs" wrap="nowrap">
                         <Button
                           size="compact-sm"
+                          variant="light"
                           loading={inProgress}
-                          onClick={() =>
-                            act(
-                              () =>
-                                changeSeason(s.id, {
-                                  label: edition.label,
-                                  startDate: edition.startDate,
-                                  endDate: edition.endDate,
-                                }),
-                              () => setEdition(null),
-                            )
-                          }
+                          onClick={() => saveEdition(s.id, edition)}
                         >
                           Enregistrer
                         </Button>
@@ -118,7 +125,12 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
                     <Table.Td className="text-right tabular-nums">{s.course}</Table.Td>
                     <Table.Td className="text-right tabular-nums">{s.tariffs}</Table.Td>
                     <Table.Td>
-                      <Button size="compact-sm" variant="subtle" onClick={() => setEdition(s)}>
+                      <Button
+                        size="compact-sm"
+                        variant="subtle"
+                        aria-label={`Modifier la saison ${s.label}`}
+                        onClick={() => setEdition(s)}
+                      >
                         Modifier
                       </Button>
                     </Table.Td>
