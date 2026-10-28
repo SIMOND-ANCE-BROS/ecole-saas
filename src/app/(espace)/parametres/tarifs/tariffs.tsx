@@ -17,11 +17,10 @@ import {
 import { useState, useTransition } from "react";
 import type { Siblings as SiblingsRule, LessonPackRow, GridRow, Period, Audience } from "@/db/tariffs";
 import { combinationLabel } from "@/domain/tariff/compute";
-import { NOT_SAVED, type ActionResult } from "@/lib/action-result";
+import { notSent, type ActionResult, settle } from "@/lib/action-result";
 import { formatEuros, parseEuros } from "@/lib/money";
 import { ConfirmRemoval, type Removal } from "../../_ui/confirm-removal";
 import { PHONE_LABEL, PHONE_TABLE } from "../../_ui/phone-table";
-import { settle } from "../../_ui/settle";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { lessonPack, cellPrice, siblingsRule, removeLessonPack } from "../actions";
 
@@ -94,7 +93,7 @@ function PriceCell({
       setState(r.ok ? "saved" : "error");
       setMessage(r.ok ? null : r.message);
       // A refused price goes back to the saved one; a lost connection keeps what was typed (#243).
-      if (!r.ok && r.message !== NOT_SAVED) setValue(initial);
+      if (!r.ok && !notSent(r)) setValue(initial);
     });
   };
 
@@ -208,8 +207,8 @@ export function Grid({
           }),
         );
         if (!r.ok) {
-          // Refused: focus stays on the row's « Retirer » (#243).
-          focusAfter(`[data-remove="${rowKey(l)}"]`);
+          // Refused: focus stays on the row's « Retirer », or the grid's heading if the row is gone (#243).
+          focusAfter(`[data-remove="${rowKey(l)}"]`, "#grille");
           return setMessage(r.message);
         }
       }
@@ -554,12 +553,12 @@ export function LessonPacks({
                     title: `Retirer le carnet ${packName(c)} ?`,
                     body: "Il ne sera plus proposé à la vente pour cette saison.",
                     // The pack goes away with its « Retirer »: focus moves to the section heading;
-                    // refused, it stays on « Retirer ».
+                    // refused, it stays on « Retirer » (or the heading, if the pack is already gone).
                     run: () =>
                       act(
                         () => removeLessonPack(c.id),
                         () => focusAfter("#carnets"),
-                        () => focusAfter(`[data-remove="${c.id}"]`),
+                        () => focusAfter(`[data-remove="${c.id}"]`, "#carnets"),
                       ),
                   })
                 }

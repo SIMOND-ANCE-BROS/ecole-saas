@@ -3,9 +3,8 @@
 import { Button, Group, Paper, Text, TextInput } from "@mantine/core";
 import { useState, useTransition } from "react";
 import type { DisciplineRow } from "@/db/settings";
-import type { ActionResult } from "@/lib/action-result";
+import { type ActionResult, settle } from "@/lib/action-result";
 import { ConfirmRemoval, type Removal } from "../../_ui/confirm-removal";
-import { settle } from "../../_ui/settle";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { newDiscipline, rename, removeDiscipline } from "../actions";
 
@@ -130,12 +129,12 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
                           title: `Retirer la discipline ${d.name} ?`,
                           body: "Elle n’a ni cours ni tarif dédié. Vous pourrez la recréer plus tard.",
                           // Its row goes away: focus moves to the list, or to the new-discipline field if empty;
-                          // refused, it stays on « Retirer ».
+                          // refused, it stays on « Retirer » (or the list, if the row is already gone).
                           run: () =>
                             act(
                               () => removeDiscipline(d.id),
                               () => focusAfter("[data-after-removal]", "#new-discipline"),
-                              () => focusAfter(`[data-remove="${d.id}"]`),
+                              () => focusAfter(`[data-remove="${d.id}"]`, "[data-after-removal]", "#new-discipline"),
                             ),
                         })
                       }

@@ -7,8 +7,7 @@ import { DateField, refusedDateField } from "../../_ui/date-field";
 import { PHONE_LABEL, PHONE_TABLE } from "../../_ui/phone-table";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { changeSeason, newSeason } from "../actions";
-import { settle } from "../../_ui/settle";
-import type { ActionResult } from "@/lib/action-result";
+import { type ActionResult, settle } from "@/lib/action-result";
 
 const date = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const day = (iso: string) => date.format(new Date(`${iso}T00:00:00Z`));

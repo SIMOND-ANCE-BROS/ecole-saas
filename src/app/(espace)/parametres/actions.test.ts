@@ -64,7 +64,9 @@ describe("settings actions", () => {
       message: "L’heure de fermeture doit suivre l’ouverture.",
     });
     expect(await actions.newDiscipline(any<string>(null))).toEqual({ ok: false, message: "Nom obligatoire" });
-    expect(await actions.newSeason(any({ label: "2027" }), "not-a-uuid")).toMatchObject({ ok: false });
+    expect(
+      await actions.newSeason({ label: "2027-2028", startDate: "2027-09-01", endDate: "2028-06-30" }, "not-a-uuid"),
+    ).toEqual({ ok: false, message: "Saison de référence introuvable." });
     expect(withSchool).not.toHaveBeenCalled();
   });
 

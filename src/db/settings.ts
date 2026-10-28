@@ -15,7 +15,7 @@ import { issuePath } from "../lib/form-errors";
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const isUuid = (v: string) => z.uuid().safeParse(v).success;
 export type Result = { ok: true; id: string } | { ok: false; message: string };
-const validName = z.string().trim().min(1, "Nom obligatoire").max(100);
+export const validName = z.string().trim().min(1, "Nom obligatoire").max(100);
 const account = (query: SQL) => sql<number>`(${query})::int`;
 
 // ---------------------------------------------------------------------------

@@ -5,8 +5,8 @@ import { notifications } from "@mantine/notifications";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { MemberListItem, PendingInvitation } from "@/db/team";
 import { INVITABLE_ROLES, ROLE_LABELS, type Role } from "@/domain/team/rules";
-import { settle } from "../../_ui/settle";
 import { type Back, changeMember, inviteMember, type LinkBack, resetPassword, revoke } from "./actions";
+import { settle } from "@/lib/action-result";
 
 type Member = Omit<MemberListItem, "userId"> & { me: boolean };
 type Invitation = Omit<PendingInvitation, "expiresAt"> & { expiresAt: string };

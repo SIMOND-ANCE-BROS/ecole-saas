@@ -5,7 +5,7 @@ import { TimeInput } from "@mantine/dates";
 import { useState, useTransition } from "react";
 import type { Hours } from "@/domain/schedule/hours";
 import { changeHours } from "../actions";
-import { settle } from "../../_ui/settle";
+import { settle } from "@/lib/action-result";
 
 const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 type Day = { open: boolean; opening: string; closure: string };

@@ -21,6 +21,7 @@ import {
   validRoomInput,
   validSeasonInput,
   validSiteInput,
+  validName,
 } from "@/db/settings";
 import { syncRoomSeasons } from "@/db/lessons";
 import { todayInParis } from "@/domain/people/age";
@@ -41,7 +42,9 @@ type Write = (tx: Tx) => Promise<{ ok: true } | { ok: false; message: string }>;
 // Typed for the call sites; still parsed, since a server action receives whatever the browser sends.
 // The database layer parses again and refuses with the same messages.
 const validId = z.uuid();
-const validName = z.string();
+
+/** A discipline name: the database layer's schema; anything but text is refused with its message too. */
+const nameRefusal = (name: unknown) => (typeof name === "string" ? refusal(validName, name) : "Nom obligatoire");
 
 /** The first French message of a refused input, or null when it is acceptable. */
 function refusal(schema: z.ZodType, value: unknown, message?: string): string | null {
@@ -86,14 +89,14 @@ export async function changeSeason(id: string, entry: z.input<typeof validSeason
 export async function newDiscipline(name: string) {
   return act(
     "disciplines",
-    () => refusal(validName, name, "Nom obligatoire"),
+    () => nameRefusal(name),
     (tx) => createDiscipline(tx, name),
   );
 }
 export async function rename(id: string, name: string) {
   return act(
     "disciplines",
-    () => refusal(validName, name, "Nom obligatoire") ?? refusal(validId, id, DISCIPLINE_GONE),
+    () => nameRefusal(name) ?? refusal(validId, id, DISCIPLINE_GONE),
     (tx) => renameDiscipline(tx, id, name),
   );
 }
