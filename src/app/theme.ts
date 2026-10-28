@@ -118,6 +118,9 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
     "--mantine-color-error": "#b42318",
     "--mantine-color-red-light-color": "#b42318",
     "--mantine-color-red-outline": "#b42318",
+    // White on the filled red 6 reads at 3.3:1: the confirmations « Retirer » use red 9 (5.8:1) (#186).
+    "--mantine-color-red-filled": "var(--mantine-color-red-9)",
+    "--mantine-color-red-filled-hover": "#a51d1d",
   },
   dark: {
     ...Object.fromEntries(
