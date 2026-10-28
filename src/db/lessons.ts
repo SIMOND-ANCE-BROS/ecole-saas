@@ -45,28 +45,32 @@ const ATTENDANCE_STATUSES = ["active", "trial"] as const;
  */
 export type Closure = ScopedClosure & { id: string; label: string; targets: string[] };
 
-export const validClosureInput = z.discriminatedUnion("scope", [
-  z.object({
-    scope: z.literal("school"),
-    label: z.string().trim().min(1, "Libellé obligatoire").max(100),
-    start: z.iso.date("Date invalide"),
-    end: z.iso.date("Date invalide"),
-  }),
-  z.object({
-    scope: z.literal("sites"),
-    label: z.string().trim().min(1, "Libellé obligatoire").max(100),
-    start: z.iso.date("Date invalide"),
-    end: z.iso.date("Date invalide"),
-    siteIds: z.array(z.uuid("Site inconnu")).min(1, "Choisissez au moins un site.").max(50),
-  }),
-  z.object({
-    scope: z.literal("courses"),
-    label: z.string().trim().min(1, "Libellé obligatoire").max(100),
-    start: z.iso.date("Date invalide"),
-    end: z.iso.date("Date invalide"),
-    courseIds: z.array(z.uuid("Cours inconnu")).min(1, "Choisissez au moins un cours.").max(500),
-  }),
-]);
+export const validClosureInput = z.discriminatedUnion(
+  "scope",
+  [
+    z.object({
+      scope: z.literal("school"),
+      label: z.string().trim().min(1, "Libellé obligatoire").max(100),
+      start: z.iso.date("Date invalide"),
+      end: z.iso.date("Date invalide"),
+    }),
+    z.object({
+      scope: z.literal("sites"),
+      label: z.string().trim().min(1, "Libellé obligatoire").max(100),
+      start: z.iso.date("Date invalide"),
+      end: z.iso.date("Date invalide"),
+      siteIds: z.array(z.uuid("Site inconnu")).min(1, "Choisissez au moins un site.").max(50),
+    }),
+    z.object({
+      scope: z.literal("courses"),
+      label: z.string().trim().min(1, "Libellé obligatoire").max(100),
+      start: z.iso.date("Date invalide"),
+      end: z.iso.date("Date invalide"),
+      courseIds: z.array(z.uuid("Cours inconnu")).min(1, "Choisissez au moins un cours.").max(500),
+    }),
+  ],
+  { error: "Choix invalide." },
+);
 
 /** The season's dates and closures, to compute lesson dates (overlap warnings, #96); null if unknown. */
 export async function seasonCalendar(tx: Tx, seasonId: string, today: string): Promise<SeasonCalendar | null> {
@@ -334,6 +338,15 @@ export async function syncLessons(
   return { added: added.length, removed: toRemove.length };
 }
 
+/**
+ * Brings in line the lessons of every season with a course in the room: a
+ * room moved to another site changes which site closures cover its courses (#200).
+ */
+export async function syncRoomSeasons(tx: Tx, roomId: string, today: string): Promise<void> {
+  const seasons = await tx.selectDistinct({ id: course.seasonId }).from(course).where(eq(course.roomId, roomId));
+  for (const s of seasons) await syncLessons(tx, s.id, today);
+}
+
 // ---------------------------------------------------------------------------
 // Reads
 // ---------------------------------------------------------------------------
@@ -584,6 +597,8 @@ export type ScheduleLesson = {
   status: "planned" | "done" | "cancelled";
   /** Moved individually (other date or other time than planned). */
   moved: boolean;
+  /** Original date of a moved lesson, otherwise its date: what closures are checked against, as in `syncLessons`. */
+  plannedDate: string;
   recurrence: "weekly" | "biweekly" | "dates";
   discipline: string;
   roomId: string;
@@ -611,6 +626,7 @@ export async function weekLessons(tx: Tx, monday: string): Promise<ScheduleLesso
       status: lesson.status,
       // Moved itself (not merely frozen before a course change): it keeps its original date.
       moved: sql<boolean>`${lesson.plannedDate} IS NOT NULL`,
+      plannedDate: sql<string>`coalesce(${lesson.plannedDate}, ${lesson.date})::text`,
       recurrence: course.recurrence,
       discipline: discipline.name,
       roomId: course.roomId,

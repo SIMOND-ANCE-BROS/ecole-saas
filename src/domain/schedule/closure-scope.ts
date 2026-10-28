@@ -50,7 +50,14 @@ export function closedCourseLabel(c: {
   return `${name} – ${day} ${c.startTime} – ${c.room}`;
 }
 
-/** Periods of the closures that cover the course. */
-export function closuresOf(closures: ScopedClosure[], c: ClosedCourse): Period[] {
-  return closures.filter((f) => covers(f.scope, c)).map((f) => f.period);
+/**
+ * Periods of the closures that cover the course, split as `courseDates()`
+ * applies them: school-wide ones, and the ones aimed at its site or at itself.
+ */
+export function closuresOf(closures: ScopedClosure[], c: ClosedCourse): { school: Period[]; scoped: Period[] } {
+  const covering = closures.filter((f) => covers(f.scope, c));
+  return {
+    school: covering.filter((f) => f.scope.kind === "school").map((f) => f.period),
+    scoped: covering.filter((f) => f.scope.kind !== "school").map((f) => f.period),
+  };
 }

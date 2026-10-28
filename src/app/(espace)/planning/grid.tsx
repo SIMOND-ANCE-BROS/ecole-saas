@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import type { ScheduleCourse } from "@/db/schedule";
 import type { Closure, ScheduleLesson } from "@/db/lessons";
 import type { Hours } from "@/domain/schedule/hours";
+import type { Period } from "@/domain/schedule/lessons";
 import { ages, end, DAYS, recurrenceBadge, recurrenceText } from "./format";
 import { EMPTY_FILTERS, filterSchedule } from "./filters";
 import { DatedWeek } from "./dated-week";
@@ -39,6 +40,8 @@ type Props = {
   today: string;
   lessons: ScheduleLesson[];
   closures: Closure[];
+  /** Dates of the season shown: which days a partial closure actually takes a lesson away (#200). */
+  seasonPeriod: Period;
   /** Opening hours per site (#90): they bound the calendar. */
   hours: Record<string, Hours[]>;
   /** Chosen season when it is not the current one (`?saison=`, #189), kept in links. */
@@ -58,6 +61,7 @@ export function ScheduleGrid({
   today: today,
   lessons: lessons,
   closures: closures,
+  seasonPeriod,
   season,
 }: Props) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
@@ -182,6 +186,8 @@ export function ScheduleGrid({
           monday={monday}
           today={today}
           closures={closures}
+          courses={cours}
+          seasonPeriod={seasonPeriod}
           hours={displayedHours}
           editable={editable}
           season={season}

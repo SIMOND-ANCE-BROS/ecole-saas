@@ -15,7 +15,10 @@ import {
   deleteDiscipline,
   deleteRoom,
   deleteSite,
+  roomSiteId,
 } from "@/db/settings";
+import { syncRoomSeasons } from "@/db/lessons";
+import { todayInParis } from "@/domain/people/age";
 import { saveLessonPack, saveSiblings, savePrice, deleteLessonPack } from "@/db/tariffs";
 import { requireRole } from "@/lib/session";
 
@@ -68,7 +71,15 @@ export async function newRoom(entry: unknown) {
   return act("lieux", (tx) => createRoom(tx, entry as never));
 }
 export async function changeRoom(id: string, entry: unknown) {
-  return act("lieux", (tx) => updateRoom(tx, id, entry as never));
+  const r = await act("lieux", async (tx) => {
+    const before = await roomSiteId(tx, id);
+    const result = await updateRoom(tx, id, entry as never);
+    // Another site: its closures, not the old site's, now cover the room's courses (#200).
+    if (result.ok && before !== (await roomSiteId(tx, id))) await syncRoomSeasons(tx, id, todayInParis());
+    return result;
+  });
+  revalidatePath("/planning");
+  return r;
 }
 export async function removeRoom(id: string) {
   return act("lieux", (tx) => deleteRoom(tx, id));

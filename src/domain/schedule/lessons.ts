@@ -76,17 +76,36 @@ export function lessonDatesOf(
 }
 
 /**
+ * Whether the course meets on `date` when no closure applies: a partial
+ * closure (#200) is only shown on the days it actually takes a lesson away.
+ */
+export function meetsOn(c: Parameters<typeof recurrenceOf>[0], season: Period, date: string): boolean {
+  const r = recurrenceOf(c);
+  return !!r && courseDates(r, season, []).includes(date);
+}
+
+/**
  * Lesson dates of a course in the season. A closure removes the lesson of a
  * regular course without shifting the alternation of an "every other week"
- * course (anchored on its first date). Specific dates ignore closures: a
- * workshop often takes place during the holidays.
+ * course (anchored on its first date). Specific dates ignore school-wide
+ * closures, since a workshop often takes place during the holidays, but not
+ * a closure of their site or one naming the course (#200).
+ *
+ * `closures`: school-wide closures, or the split given by `closuresOf()`.
  */
-export function courseDates(r: Recurrence, season: Period, closures: Period[]): string[] {
-  if (r.type === "dates") return [...new Set(r.dates)].filter((d) => season.start <= d && d <= season.end).sort();
+export function courseDates(
+  r: Recurrence,
+  season: Period,
+  closures: Period[] | { school: Period[]; scoped: Period[] },
+): string[] {
+  const { school, scoped } = Array.isArray(closures) ? { school: closures, scoped: [] } : closures;
+  const open = (date: string, periods: Period[]) => !periods.some((f) => f.start <= date && date <= f.end);
+  if (r.type === "dates")
+    return [...new Set(r.dates)].filter((d) => season.start <= d && d <= season.end && open(d, scoped)).sort();
   const start = r.startDate && r.startDate > season.start ? r.startDate : season.start;
   const end = r.endDate && r.endDate < season.end ? r.endDate : season.end;
   if (start > end) return [];
   const toutes = lessonDates({ start, end, weekday: r.weekday, closures: [] });
   const retained = r.type === "biweekly" ? toutes.filter((_, i) => i % 2 === 0) : toutes;
-  return retained.filter((date) => !closures.some((f) => f.start <= date && date <= f.end));
+  return retained.filter((date) => open(date, school) && open(date, scoped));
 }

@@ -2,7 +2,15 @@ import { sql } from "drizzle-orm";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
-import { addClosure, closuresBetween, courseLessons, deleteClosure, listClosures, syncLessons } from "./lessons";
+import {
+  addClosure,
+  closuresBetween,
+  courseLessons,
+  deleteClosure,
+  listClosures,
+  syncLessons,
+  syncRoomSeasons,
+} from "./lessons";
 
 /** Closures limited to some sites or some courses (#200), as the app does (app_user, RLS). Fictitious data. */
 
@@ -62,7 +70,17 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const t of ["lesson", "closure_course", "closure_site", "closure", "course", "instructor", "room", "site"]) {
+  for (const t of [
+    "lesson",
+    "closure_course",
+    "closure_site",
+    "closure",
+    "course_date",
+    "course",
+    "instructor",
+    "room",
+    "site",
+  ]) {
     await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [school, otherSchool]);
   }
   for (const t of ["discipline", "season"]) await admin.unsafe(`DELETE FROM ${t} WHERE school_id = $1`, [school]);
@@ -154,6 +172,30 @@ describe("closures limited to sites or courses (#200)", () => {
       withSchool(school, (tx) => tx.execute(sql`UPDATE closure SET scope = 'sites' WHERE id = ${id}`)),
     ).rejects.toThrow();
     await withSchool(school, (tx) => deleteClosure(tx, id));
+  });
+
+  it("keeps a workshop during the holidays, not on its closed site (owner, 2026-10-28)", async () => {
+    const [w] =
+      await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, recurrence, weekday, start_time, duration_minutes)
+      SELECT school_id, season_id, discipline_id, ${annexeRoom}, instructor_id, 'dates', NULL, '10:00', 120 FROM course WHERE id = ${jazz}
+      RETURNING id`;
+    await admin`INSERT INTO course_date (school_id, course_id, date) VALUES (${school}, ${w.id}, '2026-11-12'), (${school}, ${w.id}, '2026-11-19')`;
+    const holidays = await add({ scope: "school", label: "Zz vacances", start: "2026-11-19", end: "2026-11-19" });
+    const works = await add({ scope: "sites", label: "Zz travaux", ...dates, siteIds: [annexe] });
+    await sync();
+    expect(await datesOf(w.id)).toEqual(["2026-11-19"]);
+
+    // The room moves to the open site: the workshop's lesson comes back.
+    await admin`UPDATE room SET site_id = ${centre} WHERE id = ${annexeRoom}`;
+    await withSchool(school, (tx) => syncRoomSeasons(tx, annexeRoom, TODAY));
+    expect(await datesOf(w.id)).toEqual(["2026-11-12", "2026-11-19"]);
+    expect(await datesOf(ballet)).toContain("2026-11-12");
+    await admin`UPDATE room SET site_id = ${annexe} WHERE id = ${annexeRoom}`;
+
+    for (const r of [holidays, works]) await withSchool(school, (tx) => deleteClosure(tx, r.ok ? r.id : ""));
+    await admin`DELETE FROM lesson WHERE course_id = ${w.id}`;
+    await admin`DELETE FROM course WHERE id = ${w.id}`;
+    await sync();
   });
 
   it("forgets a deleted course without leaving a link behind", async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Input, MultiSelect, Paper, SegmentedControl, Text, TextInput } from "@mantine/core";
+import { Alert, Button, Input, MultiSelect, Paper, SegmentedControl, Text, TextInput } from "@mantine/core";
 import { useRef, useState, useTransition } from "react";
 import type { Closure } from "@/db/lessons";
 import type { ClosureScope } from "@/domain/schedule/closure-scope";
@@ -38,6 +38,8 @@ const EMPTY = {
   courseIds: [] as string[],
 };
 
+const isKind = (x: string): x is Kind => x === "school" || x === "sites" || x === "courses";
+
 /** What a closure covers, as the list says it. */
 function coverage(f: Closure): string {
   if (f.scope.kind === "school") return "Toute l’école";
@@ -56,10 +58,11 @@ export function ClosuresManagement({
   courses,
 }: Props) {
   const [v, setV] = useState(EMPTY);
-  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+  const [message, setMessage] = useState<{ text: string; tone: "ok" | "warning" | "error" } | null>(null);
   const [choiceError, setChoiceError] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
   const choice = useRef<HTMLInputElement>(null);
+  const label = useRef<HTMLInputElement>(null);
 
   // A single site is the whole school: « Certains sites » is only offered with two or more.
   const kinds = [
@@ -71,9 +74,34 @@ export function ClosuresManagement({
   const act = (action: () => Promise<{ message: string | null }>, success: string, after?: () => void) =>
     startTransition(async () => {
       const { message: error } = await action();
-      setMessage(error ? { text: error, error: true } : { text: success, error: false });
+      setMessage(error ? { text: error, tone: "error" } : { text: success, tone: "ok" });
       if (!error) after?.();
     });
+
+  // Saved: how many lessons left the planning; none means the closure covers nothing on those dates.
+  const add = (scope: Kind) => {
+    setMessage(null);
+    startTransition(async () => {
+      const r = await close(entry(), seasonId);
+      if (r.message) {
+        setMessage({ text: r.message, tone: "error" });
+        return;
+      }
+      const n = r.removed ?? 0;
+      setMessage(
+        n > 0
+          ? { text: `Fermeture ajoutée : ${n} séance${n > 1 ? "s" : ""} retirée${n > 1 ? "s" : ""}.`, tone: "ok" }
+          : {
+              text: `Fermeture ajoutée. Aucune séance ${
+                scope === "sites" ? "de ces sites " : scope === "courses" ? "de ces cours " : ""
+              }n’a lieu à ces dates.`,
+              tone: "warning",
+            },
+      );
+      setV(EMPTY);
+      label.current?.focus();
+    });
+  };
 
   const entry = () => {
     const base = { label: v.label, start: v.start, end: v.end || v.start };
@@ -104,11 +132,7 @@ export function ClosuresManagement({
             choice.current?.focus();
             return;
           }
-          act(
-            () => close(entry(), seasonId),
-            "Fermeture ajoutée, séances mises à jour.",
-            () => setV(EMPTY),
-          );
+          add(v.scope);
         }}
       >
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto] lg:items-start">
@@ -117,6 +141,7 @@ export function ClosuresManagement({
             className="sm:col-span-2 lg:col-span-1"
             placeholder="Vacances de la Toussaint"
             autoFocus
+            ref={label}
             value={v.label}
             onChange={(e) => setV({ ...v, label: e.currentTarget.value })}
           />
@@ -149,7 +174,7 @@ export function ClosuresManagement({
               value={v.scope}
               onChange={(scope) => {
                 setChoiceError(null);
-                setV({ ...v, scope: scope as Kind });
+                if (isKind(scope)) setV({ ...v, scope });
               }}
               className="max-w-full overflow-x-auto"
             />
@@ -161,6 +186,7 @@ export function ClosuresManagement({
               placeholder={v.siteIds.length === 0 ? "Choisir les sites" : undefined}
               className="min-w-[16rem] flex-1"
               data={sites}
+              description="Les séances de ces sites sont retirées du planning à ces dates."
               value={v.siteIds}
               onChange={(siteIds) => {
                 setChoiceError(null);
@@ -176,8 +202,10 @@ export function ClosuresManagement({
               placeholder={v.courseIds.length === 0 ? "Choisir les cours (tapez pour chercher)" : undefined}
               className="min-w-[16rem] flex-1"
               data={courses}
+              description="Les séances de ces cours sont retirées du planning à ces dates."
               value={v.courseIds}
               searchable
+              onSearchChange={() => setChoiceError(null)}
               nothingFoundMessage="Aucun cours trouvé"
               onChange={(courseIds) => {
                 setChoiceError(null);
@@ -192,11 +220,20 @@ export function ClosuresManagement({
         </Button>
       </Paper>
 
-      {message && (
-        <Text role={message.error ? "alert" : "status"} size="sm" c={message.error ? "red" : undefined}>
-          {message.text}
-        </Text>
-      )}
+      {message &&
+        (message.tone === "warning" ? (
+          <Alert role="status" color="yellow">
+            {message.text}
+          </Alert>
+        ) : (
+          <Text
+            role={message.tone === "error" ? "alert" : "status"}
+            size="sm"
+            c={message.tone === "error" ? "red" : undefined}
+          >
+            {message.text}
+          </Text>
+        ))}
 
       {closures.length === 0 ? (
         <Text size="sm" c="dimmed">
