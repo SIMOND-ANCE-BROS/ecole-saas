@@ -1,5 +1,5 @@
 {
-  "id": "b5bbf063-c363-4d2c-bde1-bed66f69eb40",
+  "id": "63a16844-c0ec-48c6-950f-89a019248c34",
   "prevId": "803ff3fa-0436-4df5-8f09-fe37f8c6a4cb",
   "version": "7",
   "dialect": "postgresql",
@@ -4538,7 +4538,7 @@
           "name": "instructor_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         }
       },
       "indexes": {
@@ -4599,7 +4599,7 @@
             "school_id",
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },

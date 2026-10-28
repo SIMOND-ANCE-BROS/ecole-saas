@@ -5,7 +5,8 @@ import { addClosure, changeInstructor, deleteClosure, moveLesson, syncLessons } 
 
 /**
  * A lesson removed by a closure comes back as it was once the closure is
- * removed (#206): its substitute, its own time, its new date. Fictitious data.
+ * removed (#206): its substitute, its own time, its new date. Each case has
+ * its own course and removes its own closure. Fictitious data.
  */
 
 const url = process.env.DATABASE_ADMIN_URL;
@@ -15,38 +16,41 @@ const admin = postgres(url, { max: 1, onnotice: () => {} });
 const suffix = Math.random().toString(36).slice(2, 8);
 let school: string;
 let season: string;
+let discipline: string;
+let room: string;
 let teacher: string;
+let otherTeacher: string;
 let substitute: string;
-let jazz: string; // Thursday 18:00
 
 const TODAY = "2026-11-02"; // a Monday
+
+const newInstructor = async (lastName: string) =>
+  (
+    await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
+      VALUES (${school}, ${lastName}, 'Zzprénom', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`
+  )[0].id as string;
 
 beforeAll(async () => {
   [{ id: school }] =
     await admin`INSERT INTO school (name, slug) VALUES ('Zz École reprise', ${`zzr-${suffix}`}) RETURNING id`;
   [{ id: season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${school}, '2026-2027', '2026-09-01', '2026-11-30') RETURNING id`;
-  const [d] = await admin`INSERT INTO discipline (school_id, name) VALUES (${school}, 'Zzjazz') RETURNING id`;
+  [{ id: discipline }] =
+    await admin`INSERT INTO discipline (school_id, name) VALUES (${school}, 'Zzjazz') RETURNING id`;
   const [s] =
     await admin`INSERT INTO site (school_id, name, address) VALUES (${school}, 'Zz Centre', '1 rue Zz') RETURNING id`;
-  const [r] =
+  [{ id: room }] =
     await admin`INSERT INTO room (school_id, site_id, name) VALUES (${school}, ${s.id}, 'Zz Studio') RETURNING id`;
-  const newInstructor = async (lastName: string) =>
-    (
-      await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
-        VALUES (${school}, ${lastName}, 'Zzprénom', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`
-    )[0].id as string;
   teacher = await newInstructor("Zzprof");
+  otherTeacher = await newInstructor("Zzautre");
   substitute = await newInstructor("Zzremplaçant");
-  [{ id: jazz }] =
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-      VALUES (${school}, ${season}, ${d.id}, ${r.id}, ${teacher}, 4, '18:00', 60) RETURNING id`;
 });
 
 afterAll(async () => {
   for (const t of [
     "suspended_lesson",
     "lesson",
+    "closure_course",
     "closure",
     "course",
     "instructor",
@@ -60,8 +64,17 @@ afterAll(async () => {
   await admin.end();
 });
 
+/** A Thursday 18:00 course of its own, with its lessons generated. */
+async function newCourse(): Promise<string> {
+  const [{ id }] =
+    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+      VALUES (${school}, ${season}, ${discipline}, ${room}, ${teacher}, 4, '18:00', 60) RETURNING id`;
+  await sync();
+  return id as string;
+}
+
 const sync = () => withSchool(school, (tx) => syncLessons(tx, season, TODAY));
-const lessons = () =>
+const lessons = (courseId: string) =>
   admin<
     {
       id: string;
@@ -74,67 +87,142 @@ const lessons = () =>
   >`
     SELECT id, date::text AS date, planned_date::text AS planned, to_char(start_time, 'HH24:MI') AS start,
            duration_minutes AS duration, instructor_id AS instructor
-    FROM lesson WHERE course_id = ${jazz} ORDER BY coalesce(planned_date, date)`;
-const lessonOn = async (reference: string) => (await lessons()).find((l) => (l.planned ?? l.date) === reference);
-const closeThursdays = async (end = "2026-11-19") => {
+    FROM lesson WHERE course_id = ${courseId} ORDER BY coalesce(planned_date, date)`;
+const lessonOn = async (courseId: string, reference: string) =>
+  (await lessons(courseId)).find((l) => (l.planned ?? l.date) === reference);
+const kept = async (courseId: string) =>
+  admin<{ reference: string; instructor: string | null }[]>`
+    SELECT reference_date::text AS reference, instructor_id AS instructor
+    FROM suspended_lesson WHERE course_id = ${courseId} ORDER BY reference_date`;
+const close = async (start: string, end: string, courseIds?: string[]) => {
   const r = await withSchool(school, (tx) =>
-    addClosure(tx, season, { scope: "school", label: "Zz vacances", start: "2026-11-12", end }),
+    addClosure(
+      tx,
+      season,
+      courseIds
+        ? { scope: "courses", label: "Zz gala", start, end, courseIds }
+        : { scope: "school", label: "Zz vacances", start, end },
+    ),
   );
   if (!r.ok) throw new Error(r.message);
   return r.id;
 };
+const reopen = async (closureId: string) => {
+  await withSchool(school, (tx) => deleteClosure(tx, closureId));
+  return sync();
+};
+const substituteOn = async (courseId: string, reference: string, instructorId = substitute) => {
+  const l = await lessonOn(courseId, reference);
+  if (!l) throw new Error(`no lesson on ${reference}`);
+  const r = await withSchool(school, (tx) => changeInstructor(tx, l.id, instructorId));
+  if (!r.ok) throw new Error(r.message);
+};
+const move = async (
+  courseId: string,
+  reference: string,
+  slot: { date: string; startTime: string; durationMinutes: number },
+) => {
+  const l = await lessonOn(courseId, reference);
+  if (!l) throw new Error(`no lesson on ${reference}`);
+  const r = await withSchool(school, (tx) => moveLesson(tx, l.id, slot, "lesson"));
+  if (r.status !== "ok") throw new Error("move refused");
+};
 
 describe("a lesson removed by a closure, then given back (#206)", () => {
   it("keeps its substitute, its own time and its new date", async () => {
-    await sync();
-    const substituted = await lessonOn("2026-11-12");
-    const moved = await lessonOn("2026-11-19");
-    if (!substituted || !moved) throw new Error("lessons not generated");
-    expect((await withSchool(school, (tx) => changeInstructor(tx, substituted.id, substitute))).ok).toBe(true);
-    const m = await withSchool(school, (tx) =>
-      moveLesson(tx, moved.id, { date: "2026-11-20", startTime: "19:00", durationMinutes: 45 }, "lesson"),
-    );
-    expect(m.status).toBe("ok");
+    const jazz = await newCourse();
+    await substituteOn(jazz, "2026-11-12");
+    await move(jazz, "2026-11-19", { date: "2026-11-20", startTime: "19:00", durationMinutes: 45 });
 
-    const closure = await closeThursdays();
-    expect(await sync()).toEqual({ added: 0, removed: 2 });
-    expect((await lessons()).map((l) => l.planned ?? l.date)).toEqual(["2026-11-05", "2026-11-26"]);
+    const closure = await close("2026-11-12", "2026-11-26");
+    expect(await sync()).toEqual({ added: 0, removed: 3 });
+    // 26/11 is a plain lesson: removed, but not kept aside; no instructor kept for the moved one.
+    expect(await kept(jazz)).toEqual([
+      { reference: "2026-11-12", instructor: substitute },
+      { reference: "2026-11-19", instructor: null },
+    ]);
 
-    await withSchool(school, (tx) => deleteClosure(tx, closure));
-    expect(await sync()).toEqual({ added: 2, removed: 0 });
-    expect(await lessonOn("2026-11-12")).toMatchObject({
+    expect(await reopen(closure)).toEqual({ added: 3, removed: 0 });
+    expect(await lessonOn(jazz, "2026-11-12")).toMatchObject({
       date: "2026-11-12",
-      planned: null,
       start: null,
       instructor: substitute,
     });
-    expect(await lessonOn("2026-11-19")).toMatchObject({
+    expect(await lessonOn(jazz, "2026-11-19")).toMatchObject({
       date: "2026-11-20",
       planned: "2026-11-19",
       start: "19:00",
       duration: 45,
       instructor: teacher,
     });
-    // Nothing left to restore once given back.
-    expect(await admin`SELECT 1 FROM suspended_lesson WHERE school_id = ${school}`).toHaveLength(0);
+    expect(await lessonOn(jazz, "2026-11-26")).toMatchObject({ planned: null, start: null, instructor: teacher });
+    expect(await kept(jazz)).toEqual([]);
   });
 
-  it("does not keep a plain lesson, and forgets a date the course no longer meets on", async () => {
-    const substituted = await lessonOn("2026-11-12");
-    if (!substituted) throw new Error("lesson missing");
-    // 26/11 is a plain lesson: removed, but not kept aside.
-    const closure = await closeThursdays("2026-11-26");
-    expect(await sync()).toEqual({ added: 0, removed: 3 });
-    // Only the substituted and the moved lessons are kept aside, not the plain ones.
-    expect(await admin`SELECT 1 FROM suspended_lesson WHERE school_id = ${school}`).toHaveLength(2);
+  it("works the same for a closure of some courses only", async () => {
+    const jazz = await newCourse();
+    await substituteOn(jazz, "2026-11-12");
+    const closure = await close("2026-11-12", "2026-11-12", [jazz]);
+    await sync();
+    expect(await lessonOn(jazz, "2026-11-12")).toBeUndefined();
+    expect(await kept(jazz)).toEqual([{ reference: "2026-11-12", instructor: substitute }]);
+    await reopen(closure);
+    expect(await lessonOn(jazz, "2026-11-12")).toMatchObject({ instructor: substitute });
+    expect(await kept(jazz)).toEqual([]);
+  });
 
-    // The course moves to Fridays while closed: its Thursday lessons are not restored.
+  it("gives the lesson to the course's main instructor of today, with no substitution", async () => {
+    const jazz = await newCourse();
+    // Own time on the same date, main instructor T1.
+    await move(jazz, "2026-11-12", { date: "2026-11-12", startTime: "19:30", durationMinutes: 60 });
+    const closure = await close("2026-11-12", "2026-11-12");
+    await sync();
+    await admin`UPDATE course SET instructor_id = ${otherTeacher} WHERE id = ${jazz}`;
+    await reopen(closure);
+    expect(await lessonOn(jazz, "2026-11-12")).toMatchObject({ start: "19:30", instructor: otherTeacher });
+  });
+
+  it("does not give back a substitute who is no longer active", async () => {
+    const jazz = await newCourse();
+    const leaving = await newInstructor("Zzparti");
+    await substituteOn(jazz, "2026-11-12", leaving);
+    const closure = await close("2026-11-12", "2026-11-12");
+    await sync();
+    await admin`UPDATE instructor SET active = false WHERE id = ${leaving}`;
+    await reopen(closure);
+    expect(await lessonOn(jazz, "2026-11-12")).toMatchObject({ instructor: teacher });
+    expect(await kept(jazz)).toEqual([]);
+  });
+
+  it("falls back to the plain lesson when its new date was taken meanwhile", async () => {
+    const jazz = await newCourse();
+    await substituteOn(jazz, "2026-11-19");
+    await move(jazz, "2026-11-19", { date: "2026-11-20", startTime: "19:00", durationMinutes: 45 });
+    const closure = await close("2026-11-19", "2026-11-19");
+    await sync();
+    // While 19/11 is closed, 12/11 is moved onto Friday 20/11.
+    await move(jazz, "2026-11-12", { date: "2026-11-20", startTime: "18:00", durationMinutes: 60 });
+    await reopen(closure);
+    expect(await lessonOn(jazz, "2026-11-19")).toMatchObject({
+      date: "2026-11-19",
+      planned: null,
+      start: null,
+      instructor: substitute,
+    });
+    expect(await lessonOn(jazz, "2026-11-12")).toMatchObject({ date: "2026-11-20" });
+    expect(await kept(jazz)).toEqual([]);
+  });
+
+  it("forgets a lesson the course no longer meets on", async () => {
+    const jazz = await newCourse();
+    await substituteOn(jazz, "2026-11-12");
+    const closure = await close("2026-11-12", "2026-11-12");
+    await sync();
+    // The course moves to Fridays while closed: its Thursday lesson is not given back.
     await admin`UPDATE course SET weekday = 5 WHERE id = ${jazz}`;
-    await withSchool(school, (tx) => deleteClosure(tx, closure));
-    await sync();
-    expect(await admin`SELECT 1 FROM suspended_lesson WHERE school_id = ${school}`).toHaveLength(0);
-    expect(await lessonOn("2026-11-13")).toMatchObject({ date: "2026-11-13", instructor: teacher, start: null });
-    await admin`UPDATE course SET weekday = 4 WHERE id = ${jazz}`;
-    await sync();
+    await reopen(closure);
+    expect(await kept(jazz)).toEqual([]);
+    expect(await lessonOn(jazz, "2026-11-12")).toBeUndefined();
+    expect(await lessonOn(jazz, "2026-11-13")).toMatchObject({ instructor: teacher, start: null });
   });
 });

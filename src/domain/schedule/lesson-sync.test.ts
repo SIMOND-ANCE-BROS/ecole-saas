@@ -1,0 +1,289 @@
+import { describe, expect, it } from "vitest";
+import type { ScopedClosure } from "./closure-scope";
+import {
+  planLessonSync,
+  seasonLessons,
+  type ExistingLesson,
+  type SuspendedLesson,
+  type SyncedCourse,
+} from "./lesson-sync";
+
+const SEASON = { start: "2026-09-01", end: "2026-11-30" };
+const TODAY = "2026-11-02"; // a Monday
+const T1 = "t1";
+const T2 = "t2";
+const SUB = "sub";
+const jazz: SyncedCourse = {
+  id: "jazz",
+  instructorId: T1,
+  siteId: "centre",
+  recurrence: { type: "weekly", weekday: 4, startDate: null, endDate: null },
+};
+const closed = (start: string, end: string, scope: ScopedClosure["scope"] = { kind: "school" }): ScopedClosure => ({
+  period: { start, end },
+  scope,
+});
+
+/** A planned lesson of `jazz` on its usual slot. */
+const lessonOn = (date: string, own: Partial<ExistingLesson> = {}): ExistingLesson => ({
+  id: `l-${date}`,
+  courseId: "jazz",
+  reference: date,
+  date,
+  plannedDate: null,
+  startTime: null,
+  durationMinutes: null,
+  instructorId: T1,
+  courseInstructorId: T1,
+  status: "planned",
+  attendanceSheet: false,
+  ...own,
+});
+const keptOn = (referenceDate: string, own: Partial<SuspendedLesson> = {}): SuspendedLesson => ({
+  courseId: "jazz",
+  referenceDate,
+  date: referenceDate,
+  plannedDate: null,
+  startTime: null,
+  durationMinutes: null,
+  instructorId: null,
+  ...own,
+});
+
+function plan(opts: {
+  courses?: SyncedCourse[];
+  closures?: ScopedClosure[];
+  existing?: ExistingLesson[];
+  suspended?: SuspendedLesson[];
+  start?: string;
+  active?: string[];
+}) {
+  const start = opts.start ?? TODAY;
+  const { expected, meets } = seasonLessons(opts.courses ?? [jazz], SEASON, opts.closures ?? [], start);
+  return planLessonSync({
+    start,
+    today: TODAY,
+    expected,
+    meets,
+    existing: opts.existing ?? [],
+    suspended: opts.suspended ?? [],
+    activeInstructors: new Set(opts.active ?? [T1, T2, SUB]),
+  });
+}
+
+const THURSDAYS = ["2026-11-05", "2026-11-12", "2026-11-19", "2026-11-26"];
+
+describe("lessons removed by a closure (#206)", () => {
+  it("keeps aside only what a lesson has of its own", () => {
+    const p = plan({
+      closures: [closed("2026-11-12", "2026-11-26")],
+      existing: [
+        lessonOn("2026-11-05"),
+        lessonOn("2026-11-12", { instructorId: SUB }),
+        lessonOn("2026-11-19", { date: "2026-11-20", plannedDate: "2026-11-19", startTime: "19:00:00" }),
+        lessonOn("2026-11-26"),
+      ],
+    });
+    expect(p.remove).toEqual(["l-2026-11-12", "l-2026-11-19", "l-2026-11-26"]);
+    expect(p.setAside).toEqual([
+      keptOn("2026-11-12", { instructorId: SUB }),
+      keptOn("2026-11-19", { date: "2026-11-20", plannedDate: "2026-11-19", startTime: "19:00:00" }),
+    ]);
+    expect(p.insert).toEqual([]);
+  });
+
+  it("keeps no instructor when the lesson had the course's own", () => {
+    const p = plan({
+      closures: [closed("2026-11-12", "2026-11-12")],
+      existing: [lessonOn("2026-11-12", { startTime: "19:00:00", durationMinutes: 45 })],
+    });
+    expect(p.setAside).toEqual([keptOn("2026-11-12", { startTime: "19:00:00", durationMinutes: 45 })]);
+  });
+
+  it("gives back the substitute, the own time and the new date, then forgets them", () => {
+    const p = plan({
+      existing: [lessonOn("2026-11-05"), lessonOn("2026-11-26")],
+      suspended: [
+        keptOn("2026-11-12", { instructorId: SUB }),
+        keptOn("2026-11-19", {
+          date: "2026-11-20",
+          plannedDate: "2026-11-19",
+          startTime: "19:00:00",
+          durationMinutes: 45,
+        }),
+      ],
+    });
+    expect(p.insert).toEqual([
+      {
+        courseId: "jazz",
+        date: "2026-11-12",
+        plannedDate: null,
+        startTime: null,
+        durationMinutes: null,
+        instructorId: SUB,
+      },
+      {
+        courseId: "jazz",
+        date: "2026-11-20",
+        plannedDate: "2026-11-19",
+        startTime: "19:00:00",
+        durationMinutes: 45,
+        instructorId: T1,
+      },
+    ]);
+    expect(p.forget).toEqual([
+      { courseId: "jazz", referenceDate: "2026-11-12" },
+      { courseId: "jazz", referenceDate: "2026-11-19" },
+    ]);
+  });
+
+  it("gives the lesson to the course's main instructor of today, not the one before the closure", () => {
+    const p = plan({
+      courses: [{ ...jazz, instructorId: T2 }],
+      existing: THURSDAYS.filter((d) => d !== "2026-11-12").map((d) =>
+        lessonOn(d, { instructorId: T2, courseInstructorId: T2 }),
+      ),
+      suspended: [keptOn("2026-11-12", { startTime: "19:00:00" })],
+    });
+    expect(p.insert).toEqual([
+      {
+        courseId: "jazz",
+        date: "2026-11-12",
+        plannedDate: null,
+        startTime: "19:00:00",
+        durationMinutes: null,
+        instructorId: T2,
+      },
+    ]);
+  });
+
+  it("does not give back a substitute who is no longer active", () => {
+    const p = plan({
+      existing: THURSDAYS.filter((d) => d !== "2026-11-12").map((d) => lessonOn(d)),
+      suspended: [keptOn("2026-11-12", { instructorId: SUB })],
+      active: [T1],
+    });
+    expect(p.insert).toMatchObject([{ date: "2026-11-12", instructorId: T1 }]);
+  });
+
+  it("falls back to the plain lesson when its new date was taken meanwhile", () => {
+    const p = plan({
+      existing: [
+        ...["2026-11-05", "2026-11-12", "2026-11-26"].map((d) => lessonOn(d)),
+        // Another lesson of the course, moved onto Friday 20/11 while 19/11 was closed.
+        lessonOn("2026-11-12", { id: "other", date: "2026-11-20", plannedDate: "2026-11-12" }),
+      ].filter((l) => l.id !== "l-2026-11-12"),
+      suspended: [
+        keptOn("2026-11-19", {
+          date: "2026-11-20",
+          plannedDate: "2026-11-19",
+          startTime: "19:00:00",
+          instructorId: SUB,
+        }),
+      ],
+    });
+    expect(p.insert).toEqual([
+      {
+        courseId: "jazz",
+        date: "2026-11-19",
+        plannedDate: null,
+        startTime: null,
+        durationMinutes: null,
+        instructorId: SUB,
+      },
+    ]);
+    expect(p.forget).toEqual([{ courseId: "jazz", referenceDate: "2026-11-19" }]);
+  });
+
+  it("a date freed by a removed lesson can be given back", () => {
+    const p = plan({
+      closures: [closed("2026-11-26", "2026-11-26")],
+      existing: [
+        lessonOn("2026-11-05"),
+        lessonOn("2026-11-12"),
+        // Moved from 26/11 (now closed) onto 20/11: removed, so 20/11 is free again.
+        lessonOn("2026-11-26", { id: "moved", date: "2026-11-20", plannedDate: "2026-11-26" }),
+      ],
+      suspended: [keptOn("2026-11-19", { date: "2026-11-20", plannedDate: "2026-11-19" })],
+    });
+    expect(p.remove).toEqual(["moved"]);
+    expect(p.insert).toMatchObject([{ date: "2026-11-20", plannedDate: "2026-11-19" }]);
+  });
+
+  it("forgets what is past, a day the course no longer meets on, and a lesson already there", () => {
+    const p = plan({
+      existing: THURSDAYS.map((d) => lessonOn(d)),
+      suspended: [
+        keptOn("2026-10-29", { instructorId: SUB }), // before today
+        keptOn("2026-11-13", { instructorId: SUB }), // a Friday: the course meets on Thursdays
+        keptOn("2026-11-19", { instructorId: SUB }), // its lesson is back already
+      ],
+    });
+    expect(p.forget.map((k) => k.referenceDate)).toEqual(["2026-10-29", "2026-11-13", "2026-11-19"]);
+    expect(p.insert).toEqual([]);
+  });
+
+  it("leaves alone what lies before `since`", () => {
+    const p = plan({
+      start: "2026-11-19",
+      closures: [closed("2026-11-12", "2026-11-26")],
+      existing: THURSDAYS.map((d) => lessonOn(d, { instructorId: SUB })),
+      suspended: [keptOn("2026-11-05", { instructorId: SUB })],
+    });
+    expect(p.remove).toEqual(["l-2026-11-19", "l-2026-11-26"]);
+    expect(p.setAside.map((k) => k.referenceDate)).toEqual(["2026-11-19", "2026-11-26"]);
+    // 05/11 is after today but before `since`: neither forgotten nor given back.
+    expect(p.forget).toEqual([]);
+  });
+
+  it("keeps aside only on the weeks a biweekly course meets", () => {
+    const biweekly: SyncedCourse = {
+      ...jazz,
+      recurrence: { type: "biweekly", weekday: 4, startDate: null, endDate: null },
+    };
+    const { expected, meets } = seasonLessons([biweekly], SEASON, [], TODAY);
+    const weeks = expected.map((a) => a.date);
+    expect(weeks).toHaveLength(2);
+    const p = plan({
+      courses: [biweekly],
+      closures: [closed("2026-11-01", "2026-11-30")],
+      existing: weeks.map((d) => lessonOn(d, { instructorId: SUB })),
+    });
+    expect(p.setAside.map((k) => k.referenceDate)).toEqual(weeks);
+    // A week off for the course is not one it meets on.
+    expect(meets.has("jazz 2026-11-12") !== meets.has("jazz 2026-11-05")).toBe(true);
+  });
+
+  it("follows the scope of the closure: sites and courses", () => {
+    const ballet: SyncedCourse = { ...jazz, id: "ballet", siteId: "annexe" };
+    const balletOn = (date: string) => ({
+      ...lessonOn(date, { instructorId: SUB }),
+      id: `b-${date}`,
+      courseId: "ballet",
+    });
+    const existing = [lessonOn("2026-11-12", { instructorId: SUB }), balletOn("2026-11-12")];
+    const bySite = plan({
+      courses: [jazz, ballet],
+      closures: [closed("2026-11-12", "2026-11-12", { kind: "sites", siteIds: ["annexe"] })],
+      existing,
+    });
+    expect(bySite.remove).toEqual(["b-2026-11-12"]);
+    expect(bySite.setAside).toMatchObject([{ courseId: "ballet", instructorId: SUB }]);
+    const byCourse = plan({
+      courses: [jazz, ballet],
+      closures: [closed("2026-11-12", "2026-11-12", { kind: "courses", courseIds: ["jazz"] })],
+      existing,
+    });
+    expect(byCourse.remove).toEqual(["l-2026-11-12"]);
+    expect(byCourse.setAside).toMatchObject([{ courseId: "jazz", instructorId: SUB }]);
+  });
+
+  it("does not keep aside a lesson the course no longer meets on (course changed, not closed)", () => {
+    const p = plan({
+      courses: [{ ...jazz, recurrence: { type: "weekly", weekday: 5, startDate: null, endDate: null } }],
+      existing: [lessonOn("2026-11-12", { instructorId: SUB })],
+    });
+    expect(p.remove).toEqual(["l-2026-11-12"]);
+    expect(p.setAside).toEqual([]);
+  });
+});
