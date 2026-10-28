@@ -3,7 +3,10 @@
 import { Alert, Autocomplete, Button, Fieldset, Group, NumberInput, Select, Text, TextInput } from "@mantine/core";
 import { TimeInput } from "@mantine/dates";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { type EditedCourse, RECURRENCES, type ScheduleReferential, COURSE_TYPES } from "@/db/courses";
+import { type CoursePay, type EditedCourse, RECURRENCES, type ScheduleReferential, COURSE_TYPES } from "@/db/courses";
+import { PAY_UNITS } from "@/db/instructors";
+import { courseRateAllowed } from "@/domain/payroll/rate";
+import { formatEuros, typedEuros } from "@/lib/money";
 import type { ScheduleCourse } from "@/db/schedule";
 import { conflicts } from "@/domain/schedule/overlap";
 import { lessonDatesOf, type SeasonCalendar } from "@/domain/schedule/lessons";
@@ -26,6 +29,8 @@ const shortDate = new Intl.DateTimeFormat("fr-FR", {
 type Props = {
   course: EditedCourse | null;
   referential: ScheduleReferential;
+  /** Instructors' pay modes and this course's own rate (#191): director pages only. */
+  pay: CoursePay;
   schedule: ScheduleCourse[];
   /** Season dates and closures: overlaps are checked on actual lesson dates (#96). */
   calendar: SeasonCalendar | null;
@@ -49,6 +54,7 @@ const whole = (v: string) => (v.trim() === "" ? null : Number(v));
 export function CourseForm({
   course,
   referential: referential,
+  pay,
   schedule: schedule,
   calendar,
   day: day,
@@ -80,6 +86,7 @@ export function CourseForm({
     ageMax: course?.ageMax?.toString() ?? "",
     level: course?.level ?? "",
     maxCapacity: course?.maxCapacity?.toString() ?? "",
+    instructorRate: pay.rateCents === null ? "" : typedEuros(pay.rateCents),
   });
   // Dates of a one-off course; one empty row to start with.
   const [dates, setDates] = useState<string[]>(course?.dates.length ? course.dates : [date ?? ""]);
@@ -90,6 +97,8 @@ export function CourseForm({
     if (refusal) form.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
   }, [refusal]);
   const [confirmDeletion, setConfirm] = useState(false);
+  // A rate typed for the previous instructor was just removed: say so.
+  const [rateCleared, setRateCleared] = useState(false);
   const set = (field: keyof typeof v) => (value: string | number | null) =>
     setV({ ...v, [field]: value === null ? "" : String(value) });
   const typed = (field: keyof typeof v) => (e: { currentTarget: { value: string } }) =>
@@ -102,6 +111,9 @@ export function CourseForm({
   // Mantine highlights the first option containing the text, in list order.
   const firstMatch = r.disciplines.find((d) => d.name.toLowerCase().includes(typedDiscipline));
   const startsADiscipline = typedDiscipline !== "" && !!firstMatch?.name.toLowerCase().startsWith(typedDiscipline);
+
+  const instructorPay = pay.instructors[v.instructorId];
+  const rateAllowed = instructorPay ? courseRateAllowed(instructorPay.payMode) : false;
 
   const entry = {
     discipline: existingDiscipline ? { id: existingDiscipline.id } : { name: v.discipline },
@@ -126,6 +138,8 @@ export function CourseForm({
     ageMax: whole(v.ageMax),
     level: v.level,
     maxCapacity: whole(v.maxCapacity),
+    // Not offered for a monthly flat instructor: nothing is sent, so no rate is kept (#192).
+    instructorRate: rateAllowed ? v.instructorRate : "",
   };
 
   const datesOf = (c: Parameters<typeof lessonDatesOf>[0]) => (calendar ? lessonDatesOf(c, calendar) : undefined);
@@ -234,7 +248,12 @@ export function CourseForm({
             label: `${i.firstName} ${i.name}${i.active ? "" : " (inactif)"}`,
           }))}
           value={v.instructorId || null}
-          onChange={set("instructorId")}
+          // The rate typed for this course was the previous instructor's: it goes with them.
+          onChange={(value) => {
+            if (!value || value === v.instructorId) return;
+            setRateCleared(v.instructorRate.trim() !== "");
+            setV({ ...v, instructorId: value, instructorRate: "" });
+          }}
           description={
             r.instructors.length === 0 ? (
               <>
@@ -244,6 +263,32 @@ export function CourseForm({
           }
           error={error("instructorId")}
         />
+        {instructorPay &&
+          (rateAllowed ? (
+            <TextInput
+              label="Tarif intervenant pour ce cours"
+              description={`${rateCleared ? "Le tarif saisi concernait l’intervenant précédent : il a été retiré. " : "Facultatif. "}Vide : son tarif habituel, ${formatEuros(instructorPay.rateCents)} / ${PAY_UNITS[instructorPay.payMode]}.`}
+              inputMode="decimal"
+              autoComplete="off"
+              rightSection={
+                <Text size="xs" c="dimmed" pr="xs">
+                  € / {PAY_UNITS[instructorPay.payMode]}
+                </Text>
+              }
+              rightSectionWidth={90}
+              styles={{ input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } }}
+              value={v.instructorRate}
+              onChange={(e) => {
+                setRateCleared(false);
+                typed("instructorRate")(e);
+              }}
+              error={error("instructorRate")}
+            />
+          ) : (
+            <Text size="sm" c="dimmed" className="self-end">
+              Payé au forfait mensuel : pas de tarif par cours pour l’instant.
+            </Text>
+          ))}
         <Select
           label="Type"
           allowDeselect={false}

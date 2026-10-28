@@ -280,6 +280,7 @@ describe("courses and lessons", () => {
       ageMax,
       level: level,
       maxCapacity: maxCapacity,
+      instructorRate: null,
     };
     const r = await withSchool(school, (tx) =>
       updateCourse(tx, wednesday, {
@@ -328,6 +329,7 @@ describe("recurrences (#90)", () => {
       startDate: null,
       endDate: null,
       dates: [],
+      instructorRate: null,
     };
     const closures = (await withSchool(school, (tx) => listClosures(tx, season))).map(({ start: start, end: end }) => ({
       start: start,
@@ -402,6 +404,7 @@ describe("recurrences (#90)", () => {
         level: level,
         maxCapacity: maxCapacity,
         dates: ["2026-11-21"],
+        instructorRate: null,
         discipline: { id: c.disciplineId },
         room: { id: c.roomId },
         instructorId: c.instructorId,

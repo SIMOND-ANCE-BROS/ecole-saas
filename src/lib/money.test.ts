@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyRate, formatEuros, parseEuros, split } from "./money";
+import { applyRate, formatEuros, parseEuros, split, typedEuros } from "./money";
 
 describe("applyRate", () => {
   it("computes a 10 % siblings discount", () => {
@@ -45,5 +45,15 @@ describe("parseEuros", () => {
     expect(parseEuros("-5")).toBeNull();
     expect(parseEuros("abc")).toBeNull();
     expect(parseEuros("")).toBeNull();
+  });
+});
+
+describe("typedEuros", () => {
+  it("writes cents as euros to edit, read back unchanged by parseEuros", () => {
+    expect(typedEuros(3500)).toBe("35");
+    expect(typedEuros(3550)).toBe("35,50");
+    expect(typedEuros(3505)).toBe("35,05");
+    expect(typedEuros(0)).toBe("0");
+    for (const cents of [0, 5, 99, 100, 3550, 123456]) expect(parseEuros(typedEuros(cents))).toBe(cents);
   });
 });

@@ -3,7 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { withSchool, type Tx } from "@/db";
-import { createCourse, moveCourse, readCourse, updateCourse, validCourseInput, deleteCourse } from "@/db/courses";
+import {
+  courseRate,
+  createCourse,
+  deleteCourse,
+  logCourseRate,
+  moveCourse,
+  readCourse,
+  updateCourse,
+  validCourseInput,
+} from "@/db/courses";
 import { slotConflicts } from "@/db/unavailabilities";
 import { hoursBySite } from "@/db/settings";
 import { chosenSeason, currentSeason, seasonById, seasonCourses } from "@/db/schedule";
@@ -27,7 +36,7 @@ type CourseFields = z.input<typeof validCourseInput>;
  * current one when none is given) or updates a course; management only.
  */
 export async function saveCourse(id: string | null, entry: unknown, seasonId?: unknown): Promise<Refusal> {
-  const { schoolId: schoolId } = await requireRole("director");
+  const { schoolId: schoolId, userId } = await requireRole("director");
   const parsed = validCourseInput.safeParse(entry);
   if (!parsed.success) {
     return {
@@ -53,7 +62,17 @@ export async function saveCourse(id: string | null, entry: unknown, seasonId?: u
               ? "Cette saison n’existe plus."
               : "Aucune saison n’est paramétrée.",
       };
+    const existing = id !== null ? await readCourse(tx, id) : null;
+    const before = existing
+      ? { instructorId: existing.instructorId, instructorRateCents: (await courseRate(tx, existing.id)) ?? null }
+      : null;
     const r = id !== null ? await updateCourse(tx, id, parsed.data) : await createCourse(tx, target, parsed.data);
+    // A change of the instructor's rate for this course is kept in the audit log (#191).
+    if (r.ok)
+      await logCourseRate(tx, userId, r.id, before, {
+        instructorId: parsed.data.instructorId,
+        instructorRateCents: parsed.data.instructorRate,
+      });
     // Upcoming lessons recomputed in the same transaction (day changed, new course…).
     if (r.ok) await syncLessons(tx, target, today);
     return r.ok ? { ...r, season: await seasonOfLink(tx, target, today) } : r;

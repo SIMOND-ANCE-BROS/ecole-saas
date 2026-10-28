@@ -1,11 +1,26 @@
-import { and, asc, eq, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, or, sql } from "drizzle-orm";
 import { columnsOf, rowsOf } from "./columns-of";
 import { z } from "zod";
 import type { Tx } from "./index";
 import { hoursBySite } from "./settings";
-import { course, courseDate, discipline, enrollmentCourse, instructor, attendance, room, lesson, site } from "./schema";
+import {
+  auditLog,
+  course,
+  courseDate,
+  discipline,
+  enrollmentCourse,
+  instructor,
+  attendance,
+  member,
+  room,
+  lesson,
+  season,
+  site,
+} from "./schema";
+import { courseRateAllowed, type PayMode } from "../domain/payroll/rate";
 import { issuePath } from "../lib/form-errors";
 import { has } from "../lib/has";
+import { parseEuros } from "../lib/money";
 
 /** Schedule editing (courses, disciplines, rooms), always within the `withSchool()` transaction (RLS). */
 
@@ -23,6 +38,21 @@ const integerOrNull = (min: number, max: number) =>
   z.int(between(min, max)).min(min, between(min, max)).max(max, between(min, max)).nullable();
 const duration = z.int(between(5, 600)).min(5, between(5, 600)).max(600, between(5, 600));
 const dateOrNull = z.iso.date("Date invalide").nullable();
+/** Typed in euros (« 35 », « 35,50 »), kept in integer cents; empty: none. */
+const euroRateOrNull = z
+  .string()
+  .max(20)
+  .optional()
+  .transform((v, ctx) => {
+    const typed = (v ?? "").trim();
+    if (typed === "") return null;
+    const cents = parseEuros(typed);
+    if (cents === null || cents > 100_000_00) {
+      ctx.addIssue({ code: "custom", message: "Montant en euros, par exemple 35 ou 35,50" });
+      return z.NEVER;
+    }
+    return cents;
+  });
 
 /** Offered recurrences (#90). */
 export const RECURRENCES = {
@@ -65,6 +95,8 @@ const courseFields = z.object({
     .nullable()
     .transform((v) => v || null),
   maxCapacity: integerOrNull(1, 1000),
+  /** Instructor's pay for this course (#191), director only; absent or empty: their default rate. */
+  instructorRate: euroRateOrNull,
 });
 
 export const validCourseInput = courseFields
@@ -215,7 +247,7 @@ async function resolveRoom(tx: Tx, s: CourseInput["room"]): Promise<string | nul
 /** Resolves discipline, room and instructor; an inactive instructor is accepted only if it is `guard`. */
 async function values(tx: Tx, entry: CourseInput, guard?: string) {
   const [i] = await tx
-    .select({ id: instructor.id })
+    .select({ id: instructor.id, payMode: instructor.payMode })
     .from(instructor)
     .where(
       and(
@@ -224,6 +256,8 @@ async function values(tx: Tx, entry: CourseInput, guard?: string) {
       ),
     );
   if (!i) return { ok: false as const, message: "Intervenant introuvable ou inactif." };
+  if (entry.instructorRate !== null && !courseRateAllowed(i.payMode))
+    return { ok: false as const, message: "Un intervenant au forfait mensuel n’a pas de tarif par cours." };
   const roomId = await resolveRoom(tx, entry.room);
   if (!roomId) return { ok: false as const, message: "Salle introuvable." };
   const disciplineId = await resolveDiscipline(tx, entry.discipline);
@@ -261,6 +295,7 @@ async function values(tx: Tx, entry: CourseInput, guard?: string) {
       ageMax,
       level: level,
       maxCapacity: maxCapacity,
+      instructorRateCents: entry.instructorRate,
     },
     dates: oneOff ? [...new Set(entry.dates)].sort() : [],
   };
@@ -310,6 +345,80 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
       );
   }
   return { ok: true, id };
+}
+
+/**
+ * Instructor's rate for this course (#191): director pages only, never read
+ * with the course for the front desk. undefined: no such course.
+ */
+export async function courseRate(tx: Tx, id: string): Promise<number | null | undefined> {
+  if (!z.uuid().safeParse(id).success) return undefined;
+  const [c] = await tx.select({ cents: course.instructorRateCents }).from(course).where(eq(course.id, id));
+  return c?.cents;
+}
+
+export type CoursePay = {
+  /** Pay mode and default rate of each instructor offered in the form. */
+  instructors: Record<string, { payMode: PayMode; rateCents: number }>;
+  /** The course's own instructor rate; null: none (or a new course). */
+  rateCents: number | null;
+};
+
+/** Pay data of the course form (#191), for the director's new and edit pages only. */
+export async function coursePay(tx: Tx, courseId: string | null): Promise<CoursePay> {
+  const rows = await tx
+    .select({ id: instructor.id, payMode: instructor.payMode, rateCents: instructor.rateCents })
+    .from(instructor);
+  return {
+    instructors: Object.fromEntries(rows.map((i) => [i.id, { payMode: i.payMode, rateCents: i.rateCents }])),
+    rateCents: courseId ? ((await courseRate(tx, courseId)) ?? null) : null,
+  };
+}
+
+/** Courses where the instructor has a specific rate (#191), newest season first: director's instructor page. */
+export function coursesWithOwnRate(tx: Tx, instructorId: string) {
+  return tx
+    .select({
+      id: course.id,
+      discipline: discipline.name,
+      level: course.level,
+      weekday: course.weekday,
+      startTime: sql<string>`to_char(${course.startTime}, 'HH24:MI')`,
+      season: season.label,
+      rateCents: sql<number>`${course.instructorRateCents}`,
+    })
+    .from(course)
+    .innerJoin(discipline, eq(discipline.id, course.disciplineId))
+    .innerJoin(season, eq(season.id, course.seasonId))
+    .where(and(eq(course.instructorId, instructorId), isNotNull(course.instructorRateCents)))
+    .orderBy(desc(season.startDate), sql`${course.weekday} NULLS LAST`, course.startTime, discipline.name);
+}
+
+/** Records a change of a course's instructor rate in the audit log; nothing when it did not change. */
+export async function logCourseRate(
+  tx: Tx,
+  userId: string,
+  courseId: string,
+  before: { instructorId: string; instructorRateCents: number | null } | null,
+  after: { instructorId: string; instructorRateCents: number | null },
+) {
+  const was = before?.instructorRateCents ?? null;
+  // A rate kept for a new instructor is a change too; no rate before and after is not.
+  if (was === after.instructorRateCents && (was === null || before?.instructorId === after.instructorId)) return;
+  const [who] = await tx.select({ id: member.id }).from(member).where(eq(member.userId, userId));
+  await tx.insert(auditLog).values(
+    rowsOf(auditLog, [
+      {
+        schoolId: CURRENT_SCHOOL,
+        actor: who?.id ?? null,
+        targetTable: "course",
+        rowId: courseId,
+        action: before ? "update" : "insert",
+        before,
+        after,
+      },
+    ]),
+  );
 }
 
 /** Refused as soon as an enrollment, whatever its status, concerns the course. */

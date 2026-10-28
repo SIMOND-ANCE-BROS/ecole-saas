@@ -225,6 +225,13 @@
       "when": 1792825814450,
       "tag": "0031_english_billing_values",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1793144335437,
+      "tag": "0032_course_instructor_rate",
+      "breakpoints": true
     }
   ]
 }

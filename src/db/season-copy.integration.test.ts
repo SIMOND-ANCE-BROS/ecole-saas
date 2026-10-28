@@ -87,11 +87,12 @@ beforeAll(async () => {
   gone = await insertCourse(school, source, a, a.inactive, 3, "18:00");
   const workshop = await insertCourse(school, source, a, a.active, null, "14:00");
   await admin`INSERT INTO course_date (school_id, course_id, date) VALUES (${school}, ${workshop}, '2027-02-13')`;
-  // Every column away from the defaults: type, recurrence, ages, level and places left empty, length.
+  // Every column away from the defaults: type, recurrence, ages, level and places left empty, length,
+  // the instructor's own rate for the course (#191).
   [{ id: competition }] = await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id,
-      type, recurrence, weekday, start_time, duration_minutes, level, age_min, age_max, max_capacity)
+      type, recurrence, weekday, start_time, duration_minutes, level, age_min, age_max, max_capacity, instructor_rate_cents)
     VALUES (${school}, ${source}, ${a.discipline}, ${a.room}, ${a.active},
-      'competition', 'biweekly', 6, '10:30', 90, NULL, 14, 25, NULL) RETURNING id`;
+      'competition', 'biweekly', 6, '10:30', 90, NULL, 14, 25, NULL, 4550) RETURNING id`;
   await insertCourse(otherSchool, foreignSeason, b, b.active, 2, "19:00");
 });
 

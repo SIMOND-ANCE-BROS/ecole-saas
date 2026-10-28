@@ -70,6 +70,7 @@ beforeAll(async () => {
     ageMax: 11,
     level: "Débutant",
     maxCapacity: 18,
+    instructorRate: null,
   };
 });
 

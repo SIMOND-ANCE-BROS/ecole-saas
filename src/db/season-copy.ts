@@ -35,6 +35,8 @@ const COPIED = {
   startTime: course.startTime,
   durationMinutes: course.durationMinutes,
   maxCapacity: course.maxCapacity,
+  // Belongs to the course and its instructor, both copied (#191).
+  instructorRateCents: course.instructorRateCents,
 } satisfies { [K in MustCopy]: (typeof course)[K] };
 
 async function coursesOf(tx: Tx, seasonId: string) {
