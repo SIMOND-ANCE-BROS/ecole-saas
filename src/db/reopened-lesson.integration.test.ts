@@ -225,4 +225,25 @@ describe("a lesson removed by a closure, then given back (#206)", () => {
     expect(await lessonOn(jazz, "2026-11-12")).toBeUndefined();
     expect(await lessonOn(jazz, "2026-11-13")).toMatchObject({ instructor: teacher, start: null });
   });
+
+  it("two closures added at the same time on the same season both go through", async () => {
+    // Each adds a closure (its foreign key takes KEY SHARE on the season), waits for the other, then syncs:
+    // with a FOR UPDATE lock on the season, the two syncs would wait on each other (deadlock).
+    let ready = 0;
+    const bothAdded = async () => {
+      ready += 1;
+      while (ready < 2) await new Promise((r) => setTimeout(r, 20));
+    };
+    const addThenSync = (day: string) =>
+      withSchool(school, async (tx) => {
+        const r = await addClosure(tx, season, { scope: "school", label: "Zz pont", start: day, end: day });
+        if (!r.ok) throw new Error(r.message);
+        await bothAdded();
+        await syncLessons(tx, season, TODAY);
+        return r.id;
+      });
+    const ids = await Promise.all([addThenSync("2026-11-10"), addThenSync("2026-11-11")]);
+    for (const id of ids) await withSchool(school, (tx) => deleteClosure(tx, id));
+    await sync();
+  });
 });

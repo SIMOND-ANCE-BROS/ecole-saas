@@ -261,11 +261,13 @@ export async function syncLessons(
   since?: string,
 ): Promise<{ added: number; removed: number }> {
   // One sync at a time per season: another one could take a lesson just kept aside for stale (#206).
+  // NO KEY UPDATE, not UPDATE: callers insert a course or a closure first, whose foreign key takes
+  // KEY SHARE on the season; FOR UPDATE would conflict with that of a concurrent caller (deadlock).
   const [s] = await tx
     .select({ start: season.startDate, end: season.endDate })
     .from(season)
     .where(eq(season.id, seasonId))
-    .for("update");
+    .for("no key update");
   if (!s) return { added: 0, removed: 0 };
   const start = [s.start, today, since ?? ""].reduce((a, b) => (b > a ? b : a));
   const closures = await readClosures(tx, eq(closure.seasonId, seasonId));
@@ -288,7 +290,7 @@ export async function syncLessons(
     .innerJoin(course, eq(course.id, courseDate.courseId))
     .where(eq(course.seasonId, seasonId));
 
-  const { expected, meets } = seasonLessons(
+  const { expected, meets, closed } = seasonLessons(
     tous.map((c) => ({
       ...c,
       recurrence: recurrenceOf({ ...c, dates: oneOff.filter((p) => p.courseId === c.id).map((p) => p.date) }),
@@ -337,6 +339,7 @@ export async function syncLessons(
     existing,
     suspended,
     activeInstructors: new Set(active.map((i) => i.id)),
+    closed,
   });
 
   // Removals first: a lesson given back may take the date a removed lesson leaves.
@@ -405,7 +408,12 @@ export async function syncLessons(
  * room moved to another site changes which site closures cover its courses (#200).
  */
 export async function syncRoomSeasons(tx: Tx, roomId: string, today: string): Promise<void> {
-  const seasons = await tx.selectDistinct({ id: course.seasonId }).from(course).where(eq(course.roomId, roomId));
+  // Always the same order: each sync locks its season, two such calls must not lock them crosswise.
+  const seasons = await tx
+    .selectDistinct({ id: course.seasonId })
+    .from(course)
+    .where(eq(course.roomId, roomId))
+    .orderBy(course.seasonId);
   for (const s of seasons) await syncLessons(tx, s.id, today);
 }
 

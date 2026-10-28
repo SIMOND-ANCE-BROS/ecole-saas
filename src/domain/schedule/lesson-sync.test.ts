@@ -59,12 +59,13 @@ function plan(opts: {
   active?: string[];
 }) {
   const start = opts.start ?? TODAY;
-  const { expected, meets } = seasonLessons(opts.courses ?? [jazz], SEASON, opts.closures ?? [], start);
+  const { expected, meets, closed } = seasonLessons(opts.courses ?? [jazz], SEASON, opts.closures ?? [], start);
   return planLessonSync({
     start,
     today: TODAY,
     expected,
     meets,
+    closed,
     existing: opts.existing ?? [],
     suspended: opts.suspended ?? [],
     activeInstructors: new Set(opts.active ?? [T1, T2, SUB]),
@@ -285,5 +286,81 @@ describe("lessons removed by a closure (#206)", () => {
     });
     expect(p.remove).toEqual(["l-2026-11-12"]);
     expect(p.setAside).toEqual([]);
+  });
+
+  it("never removes nor keeps aside a lesson whose attendance is taken, cancelled or done", () => {
+    const p = plan({
+      closures: [closed("2026-11-12", "2026-11-26")],
+      existing: [
+        lessonOn("2026-11-12", { instructorId: SUB, attendanceSheet: true }),
+        lessonOn("2026-11-19", { instructorId: SUB, status: "cancelled" }),
+        lessonOn("2026-11-26", { instructorId: SUB, status: "done" }),
+      ],
+    });
+    expect(p.remove).toEqual([]);
+    expect(p.setAside).toEqual([]);
+  });
+
+  it("judges a moved lesson on its original date, and keeps its new date aside", () => {
+    // Moved from 19/11 to 13/11: the closure of 19/11 removes it, one of 13/11 would not.
+    const moved = lessonOn("2026-11-19", { date: "2026-11-13", plannedDate: "2026-11-19" });
+    expect(plan({ closures: [closed("2026-11-13", "2026-11-13")], existing: [moved] }).remove).toEqual([]);
+    const p = plan({ closures: [closed("2026-11-19", "2026-11-19")], existing: [moved] });
+    expect(p.remove).toEqual(["l-2026-11-19"]);
+    expect(p.setAside).toEqual([keptOn("2026-11-19", { date: "2026-11-13", plannedDate: "2026-11-19" })]);
+  });
+
+  it("a one-off course keeps its dates under a school-wide closure, loses them under a course closure", () => {
+    const stage: SyncedCourse = { ...jazz, id: "stage", recurrence: { type: "dates", dates: ["2026-11-14"] } };
+    const lesson = { ...lessonOn("2026-11-14", { instructorId: SUB }), id: "s-14", courseId: "stage" };
+    const school = plan({ courses: [stage], closures: [closed("2026-11-14", "2026-11-14")], existing: [lesson] });
+    expect(school.remove).toEqual([]);
+    const course = plan({
+      courses: [stage],
+      closures: [closed("2026-11-14", "2026-11-14", { kind: "courses", courseIds: ["stage"] })],
+      existing: [lesson],
+    });
+    expect(course.remove).toEqual(["s-14"]);
+    expect(course.setAside).toMatchObject([{ courseId: "stage", referenceDate: "2026-11-14", instructorId: SUB }]);
+  });
+
+  it("does not give a lesson back onto a new date that is closed now", () => {
+    const p = plan({
+      // 20/11 closed; 19/11 open again.
+      closures: [closed("2026-11-20", "2026-11-20")],
+      existing: ["2026-11-05", "2026-11-12", "2026-11-26"].map((d) => lessonOn(d)),
+      suspended: [
+        keptOn("2026-11-19", {
+          date: "2026-11-20",
+          plannedDate: "2026-11-19",
+          startTime: "19:00:00",
+          instructorId: SUB,
+        }),
+      ],
+    });
+    expect(p.insert).toEqual([
+      {
+        courseId: "jazz",
+        date: "2026-11-19",
+        plannedDate: null,
+        startTime: null,
+        durationMinutes: null,
+        instructorId: SUB,
+      },
+    ]);
+    expect(p.forget).toEqual([{ courseId: "jazz", referenceDate: "2026-11-19" }]);
+  });
+
+  it("keeps one row per course and reference date", () => {
+    const p = plan({
+      closures: [closed("2026-11-12", "2026-11-12")],
+      existing: [
+        // Moved from 12/11 to 13/11, and another lesson moved onto 12/11 itself: both reference 12/11.
+        lessonOn("2026-11-12", { id: "a", date: "2026-11-13", plannedDate: "2026-11-12" }),
+        lessonOn("2026-11-12", { id: "b", startTime: "20:00:00" }),
+      ],
+    });
+    expect(p.remove).toEqual(["a", "b"]);
+    expect(p.setAside).toHaveLength(1);
   });
 });
