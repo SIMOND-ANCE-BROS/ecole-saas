@@ -122,7 +122,7 @@ src/
   db/schema.ts               data model (source of truth)
   db/index.ts                connection + withSchool() / schoolsOf()
   domain/<module>/           PURE business logic + tests
-  connectors/                one folder per external service (calendar; invoicing to come): common interface + one implementation per tool
+  connectors/                one folder per external service (calendar, business registry; invoicing to come): common interface + one implementation per tool
   jobs/                      background jobs, to come with pg-boss (invoicing sync, lesson generation)
   lib/                       cross-cutting utilities (money.ts…)
 migrations/                  drizzle-kit migrations + custom SQL migrations (RLS)

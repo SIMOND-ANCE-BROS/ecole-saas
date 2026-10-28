@@ -72,7 +72,7 @@ export function BusinessSearch({
     setText("");
     setResults([]);
     setStatus("idle");
-    setMessage(`${b.legalName} : champs remplis.`);
+    setMessage(`${b.legalName}${b.ceased ? " (entreprise fermée)" : ""} : champs remplis.`);
     combobox.closeDropdown();
   };
 
@@ -113,7 +113,8 @@ export function BusinessSearch({
                     <Text size="sm" fw={500} truncate>
                       {b.legalName}
                     </Text>
-                    <Text size="xs" c="dimmed">
+                    {/* The name's colour, lighter: stays readable on the highlighted option. */}
+                    <Text size="xs" c="inherit" opacity={0.8}>
                       {[spacedSiren(b.siren), b.legalForm, b.city].filter(Boolean).join(" — ")}
                     </Text>
                   </div>

@@ -7,6 +7,7 @@ import type { PersonRecord } from "@/db/people";
 import { createContact, updateIdentity, type Refusal } from "./actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
 import { DateField, refusedDateField } from "@/app/(espace)/_ui/date-field";
+import { BusinessSearch } from "@/app/(espace)/_ui/business-search";
 
 type Props = {
   /** Person being edited; null when creating a contact (a student is created with the guided form). */
@@ -109,6 +110,21 @@ export function PersonForm({ person: person, section: section, proposedName: pro
       <Fieldset legend="Identité">
         {pro ? (
           <div className="grid items-start gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <BusinessSearch
+                description="Nom, SIREN ou SIRET : choisir une entreprise remplit la raison sociale, le SIREN et l’adresse."
+                onPick={(b) =>
+                  setV((now) => ({
+                    ...now,
+                    companyName: b.legalName,
+                    siren: b.siren,
+                    address:
+                      [b.street, [b.postcode, b.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") ||
+                      now.address,
+                  }))
+                }
+              />
+            </div>
             {field("companyName", "Raison sociale", { autoFocus: !person })}
             {field("siren", "SIREN", { inputMode: "numeric", placeholder: "9 chiffres" })}
             <div className="sm:col-span-2">{field("name", "Contact (facultatif)")}</div>
