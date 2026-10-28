@@ -38,6 +38,7 @@ import {
 import { type ColumnDef, conditionLabel, readSort, type Sort, EMPTY } from "@/domain/filters/filters";
 import { pageCount, shownRange } from "@/domain/filters/pagination";
 import { todayInParis } from "@/domain/people/age";
+import { frenchDate } from "@/lib/dates";
 import { DateField } from "../_ui/date-field";
 import { saveColumns } from "./actions";
 import { type AddressFilter, useAddressFilter } from "./address-filter";
@@ -598,7 +599,7 @@ function CellContent({ def, value, link }: { def: ColumnDef; value: CellValue; l
     );
   }
   if (def.type === "date") {
-    const shown = t.slice(0, 10).split("-").reverse().join("/");
+    const shown = frenchDate(t);
     return link ? (
       <Anchor component={Link} href={link.href} aria-label={link.label} size="sm" className="whitespace-nowrap">
         {shown}

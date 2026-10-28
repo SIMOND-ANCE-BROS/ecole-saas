@@ -2,6 +2,7 @@
  * Bank deposits and payment log (#98): pure rules, in cents, dates
  * `YYYY-MM-DD`.
  */
+import { frenchDate } from "../../lib/dates";
 
 export const DEPOSIT_METHODS = ["cheque", "cash", "holiday_voucher"] as const;
 export type DepositMethod = (typeof DEPOSIT_METHODS)[number];
@@ -60,7 +61,7 @@ export type ExportRow = {
 
 const amount = (c: number) =>
   `${c < 0 ? "-" : ""}${Math.floor(Math.abs(c) / 100)},${String(Math.abs(c) % 100).padStart(2, "0")}`;
-const dateFr = (iso: string | null) => (iso ? iso.split("-").reverse().join("/") : "");
+const dateFr = (iso: string | null) => (iso ? frenchDate(iso) : "");
 /** Text cell: quoted if needed, and never interpreted as a formula by a spreadsheet. */
 function text(v: string | null): string {
   let t = v ?? "";

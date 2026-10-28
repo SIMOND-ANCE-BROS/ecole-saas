@@ -1,8 +1,9 @@
 "use client";
 
 import { Button, Group, Input, Text } from "@mantine/core";
-import { useRouter } from "next/navigation";
+import { unstable_rethrow, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { NOT_SAVED } from "@/lib/action-result";
 import { formatEuros, parseEuros, typedEuros } from "@/lib/money";
 import { correct } from "../paiements/actions";
 
@@ -72,9 +73,19 @@ export function CorrectPayment({ paymentId, remaining, back }: { paymentId: stri
         const cents = parseEuros(amount);
         if (refusal || !cents) return;
         startTransition(async () => {
-          const r = await correct(paymentId, cents, back);
-          setMessage(r.message);
-          if (r.message) return;
+          let r;
+          try {
+            r = await correct({ paymentId, amountCents: cents, back });
+          } catch (e) {
+            unstable_rethrow(e);
+            setMessage(NOT_SAVED);
+            return;
+          }
+          if (!r.ok) {
+            setMessage(r.message);
+            return;
+          }
+          setMessage(null);
           if (cents === remaining) {
             // Fully corrected: « Corriger » goes away with the refresh; the section keeps the focus.
             document.getElementById(PAYMENTS_HEADING)?.focus();

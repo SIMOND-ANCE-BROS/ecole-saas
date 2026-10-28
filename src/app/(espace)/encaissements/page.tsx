@@ -24,6 +24,8 @@ import { paymentLog, listDeposits, paymentsToDeposit } from "@/db/deposits";
 import { DEPOSIT_METHODS, totals } from "@/domain/payments/deposits";
 import { validDate } from "@/domain/schedule/week";
 import { todayInParis } from "@/domain/people/age";
+import { frenchDate } from "@/lib/dates";
+import { isKeyOf } from "@/lib/has";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
 import { ListTable } from "../_filters/list-table";
@@ -32,13 +34,12 @@ import { PageHeader } from "../_ui/page-header";
 import { TextLink } from "../_ui/text-link";
 import { JournalFilters } from "./journal-filters";
 import { ToDeposit } from "./to-deposit";
-import { isKeyOf } from "@/lib/has";
 
 export const metadata: Metadata = { title: "Encaissements" };
 
 const VIEWS = { journal: "Journal", remettre: "À remettre", remises: "Remises" } as const;
 type View = keyof typeof VIEWS;
-const day = (iso: string) => iso.split("-").reverse().join("/");
+const day = frenchDate;
 
 /** Payments (#98): log by period, payments to deposit at the bank, bank deposits and deposit slips. */
 export default async function PaymentsPage({ searchParams }: PageProps<"/encaissements">) {

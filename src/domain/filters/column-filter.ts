@@ -1,4 +1,5 @@
 import { type Condition, type ColumnDef, type Filter, SEPARATOR, EMPTY, amongValues } from "./filters";
+import { frenchDate } from "../../lib/dates";
 
 /**
  * A column's filter as shown by its header menu (#107), as in Excel:
@@ -48,7 +49,7 @@ export function writeColumnFilter(filter: Filter, def: ColumnDef, fc: Partial<Co
   return { mode: "et", conditions };
 }
 
-const date = (v: string) => v.split("-").reverse().join("/");
+const date = frenchDate;
 
 /**
  * Summary of a column's filter, for the chip above the table:

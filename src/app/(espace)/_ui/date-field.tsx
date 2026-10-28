@@ -2,7 +2,7 @@
 
 import { DateInput, type DateInputProps } from "@mantine/dates";
 import { useState } from "react";
-import { parseTypedDate, typedDateRefusal } from "@/lib/dates";
+import { frenchDate, parseTypedDate, typedDateRefusal } from "@/lib/dates";
 
 type Props = Omit<DateInputProps, "value" | "onChange" | "valueFormat" | "dateParser" | "minDate" | "maxDate"> & {
   /** `YYYY-MM-DD`, or "" when empty. */
@@ -168,7 +168,7 @@ export function DateField({
 }
 
 /** `YYYY-MM-DD` as typed in the field, « jj/mm/aaaa ». */
-const shownAs = (date: string | null) => (date ? date.split("-").reverse().join("/") : "");
+const shownAs = (date: string | null) => (date ? frenchDate(date) : "");
 
 /**
  * First date field of the form (or of an edited table row) whose text is

@@ -6,6 +6,7 @@
  * URL: `?f=column.operator.value` (repeated) and `mode=ou`; the value may
  * contain dots, only the first two separate.
  */
+import { frenchDate } from "../../lib/dates";
 
 /** `date`: day `YYYY-MM-DD` (date of birth…). */
 export type ColumnType = "text" | "number" | "phone" | "date";
@@ -270,7 +271,7 @@ export function conditionLabel(c: Condition, columns: readonly ColumnDef[]): str
   const op = operatorLabel(c.operator, def?.type ?? "text");
   const name = def?.label ?? c.column;
   if (withoutValue(c.operator)) return `${name} ${op}`;
-  if (def?.type === "date") return `${name} ${op} ${c.value.split("-").reverse().join("/")}`;
+  if (def?.type === "date") return `${name} ${op} ${frenchDate(c.value)}`;
   return def?.type === "number" ? `${name} ${op} ${c.value}` : `${name} ${op} « ${c.value} »`;
 }
 

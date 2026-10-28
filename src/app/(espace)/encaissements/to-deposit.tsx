@@ -18,11 +18,12 @@ import { useState, useTransition } from "react";
 import { PAYMENT_METHODS } from "@/db/payments";
 import type { AuditLogRow } from "@/db/deposits";
 import type { DepositMethod } from "@/domain/payments/deposits";
+import { frenchDate } from "@/lib/dates";
 import { formatEuros } from "@/lib/money";
 import { DateField, refusedDateField } from "../_ui/date-field";
 import { deposit } from "./actions";
 
-const day = (iso: string) => iso.split("-").reverse().join("/");
+const day = frenchDate;
 
 /**
  * Payments of one method to deposit (#98): all ticked by default; the bank deposit
