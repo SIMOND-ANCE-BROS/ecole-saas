@@ -15,10 +15,10 @@ export const returnKey = (list: RememberedList) => `list-return:${list}`;
 
 /**
  * Parameters that make up the state of a list: search, filters, filter mode,
- * sort. One-shot ones (`?enregistre=…` banners) are not kept: they would show
+ * sort, page. One-shot ones (`?enregistre=…` banners) are not kept: they would show
  * their message again on every return.
  */
-const LIST_STATE = ["q", "f", "mode", "sort", "order"] as const;
+const LIST_STATE = ["q", "f", "mode", "sort", "order", "page"] as const;
 
 /** The list's address to remember, from its current query string. */
 export function listAddress(list: RememberedList, query: string): string {

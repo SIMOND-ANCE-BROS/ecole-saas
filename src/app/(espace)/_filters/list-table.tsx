@@ -7,6 +7,7 @@ import {
   Checkbox,
   CloseButton,
   Loader,
+  Pagination,
   Paper,
   Table,
   Text,
@@ -35,6 +36,7 @@ import {
   resize,
 } from "@/domain/filters/layout";
 import { type ColumnDef, conditionLabel, readSort, type Sort, EMPTY } from "@/domain/filters/filters";
+import { pageCount, shownRange } from "@/domain/filters/pagination";
 import { DateField } from "../_ui/date-field";
 import { saveColumns } from "./actions";
 import { type AddressFilter, useAddressFilter } from "./address-filter";
@@ -71,6 +73,8 @@ type Props<Id extends string> = {
   choice?: Partial<Record<NoInfer<Id>, readonly string[]>>;
   /** Action offered when the list is empty without a filter (« Nouvel élève »). */
   emptyAction?: ReactNode;
+  /** Page shown and rows matching, all pages together (#107); absent: a single page. */
+  pagination?: { page: number; total: number };
 };
 
 /** Beyond this, the checkbox list gets its own search field. */
@@ -97,6 +101,7 @@ export function ListTable<Id extends string>({
   mobile,
   choice: choice = {},
   emptyAction: emptyAction,
+  pagination,
 }: Props<Id>) {
   const f = useAddressFilter(columns);
   const router = useRouter();
@@ -124,12 +129,30 @@ export function ListTable<Id extends string>({
     const p = new URLSearchParams(params.toString());
     p.delete("sort");
     p.delete("order");
+    p.delete("page");
     if (next) {
       p.set("sort", next.column);
       p.set("order", next.direction);
     }
     const text = p.toString();
     startSort(() => router.replace(text ? `${path}?${text}` : path, { scroll: false }));
+  }
+
+  /** Another page: a new history entry (browser back returns to the previous page). */
+  function goToPage(page: number) {
+    const p = new URLSearchParams(params.toString());
+    if (page > 1) p.set("page", String(page));
+    else p.delete("page");
+    const text = p.toString();
+    startSort(() => router.push(text ? `${path}?${text}` : path));
+  }
+
+  // Width from the keyboard (header menu): the column's current width, measured, plus or minus a step.
+  const thead = useRef<HTMLTableSectionElement>(null);
+  function nudgeWidth(id: string, step: number) {
+    const th = thead.current?.querySelector<HTMLElement>(`[data-col="${id}"]`);
+    const current = widthOf(id) ?? th?.getBoundingClientRect().width;
+    if (current) changeAvailability(resize(availability, id, current + step));
   }
 
   /** Click on a row: opens the record, except on a link or a button, or during a text selection. */
@@ -298,11 +321,12 @@ export function ListTable<Id extends string>({
       <Paper withBorder className={`overflow-x-auto ${mobile ? "hidden sm:block" : ""}`}>
         <Table verticalSpacing={5}>
           <caption className="sr-only">{caption}</caption>
-          <Table.Thead>
+          <Table.Thead ref={thead}>
             <Table.Tr>
               {visible.map((d) => (
                 <Table.Th
                   key={d.id}
+                  data-col={d.id}
                   scope="col"
                   aria-sort={
                     currentSort?.column === d.id
@@ -349,6 +373,11 @@ export function ListTable<Id extends string>({
                     hide={
                       visible.length > 1 && !d.required ? () => changeAvailability(toggle(availability, d.id)) : null
                     }
+                    width={{
+                      narrower: () => nudgeWidth(d.id, -WIDTH_STEP),
+                      wider: () => nudgeWidth(d.id, WIDTH_STEP),
+                      automatic: widthOf(d.id) ? () => changeAvailability(resize(availability, d.id, null)) : null,
+                    }}
                   />
                   <span
                     aria-hidden
@@ -463,7 +492,40 @@ export function ListTable<Id extends string>({
           </Table.Tbody>
         </Table>
       </Paper>
+      {pagination && pageCount(pagination.total) > 1 && (
+        <ListPages page={pagination.page} total={pagination.total} goTo={goToPage} />
+      )}
     </div>
+  );
+}
+
+/** Width step of « Plus étroite » / « Plus large », in pixels. */
+const WIDTH_STEP = 40;
+
+/** Pages of a long list: « 51–100 sur 134 » and the page numbers, under the table and the cards. */
+function ListPages({ page, total, goTo }: { page: number; total: number; goTo: (page: number) => void }) {
+  const { from, to } = shownRange(page, total);
+  return (
+    <nav aria-label="Pages" className="flex flex-wrap items-center justify-between gap-2">
+      <Text size="sm" c="dimmed" className="tabular-nums">
+        {from}–{to} sur {total}
+      </Text>
+      <Pagination
+        total={pageCount(total)}
+        value={page}
+        onChange={goTo}
+        size="sm"
+        siblings={1}
+        getControlProps={(control) =>
+          control === "previous"
+            ? { "aria-label": "Page précédente" }
+            : control === "next"
+              ? { "aria-label": "Page suivante" }
+              : {}
+        }
+        getItemProps={(n) => ({ "aria-label": `Page ${n}`, "aria-current": n === page ? "page" : undefined })}
+      />
+    </nav>
   );
 }
 
@@ -602,6 +664,7 @@ function TitleMenu({
   currentSort: currentSort,
   sort: sort,
   hide: hide,
+  width,
 }: {
   def: ColumnDef;
   choice: readonly string[] | undefined;
@@ -609,6 +672,8 @@ function TitleMenu({
   currentSort: "asc" | "desc" | null;
   sort: (direction: "asc" | "desc" | null) => void;
   hide: (() => void) | null;
+  /** Width from the keyboard; `automatic` is null when the width is already automatic. */
+  width: { narrower: () => void; wider: () => void; automatic: (() => void) | null };
 }) {
   const fc = readColumnFilter(f.filter, def);
   const filtered = columnFilterSummary(def, fc) !== null || fc.otherConditions.length > 0;
@@ -686,6 +751,26 @@ function TitleMenu({
             )}
           </div>
         )}
+        <div
+          role="group"
+          aria-label="Largeur de la colonne"
+          className="flex flex-wrap items-center gap-1 border-t border-bordure pt-2"
+        >
+          <Text size="xs" c="dimmed" className="w-full">
+            Largeur
+          </Text>
+          <Button size="compact-xs" variant="default" onClick={width.narrower}>
+            Plus étroite
+          </Button>
+          <Button size="compact-xs" variant="default" onClick={width.wider}>
+            Plus large
+          </Button>
+          {width.automatic && (
+            <Button size="compact-xs" variant="subtle" onClick={width.automatic}>
+              Automatique
+            </Button>
+          )}
+        </div>
         <div className="flex flex-wrap justify-between gap-2 border-t border-bordure pt-2 text-xs">
           {filtered ? (
             <Anchor

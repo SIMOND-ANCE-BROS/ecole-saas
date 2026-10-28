@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { withSchool } from "@/db";
-import { listContacts, MAX_RESULTS } from "@/db/students";
+import { countContacts, listContacts } from "@/db/students";
 import { readPreference } from "@/db/preferences";
 import { displayedName } from "@/db/people";
 import { CONTACT_COLUMNS } from "@/domain/filters/columns";
 import { readFilter, readSort } from "@/domain/filters/filters";
+import { readPage } from "@/domain/filters/pagination";
 import { requireRole } from "@/lib/session";
 import { ListTable } from "../_filters/list-table";
 import { NavigableResults } from "../_people/navigable-results";
@@ -18,13 +19,20 @@ export const metadata: Metadata = { title: "Contacts" };
 /** Parents, payers and organisations (CSE, companies). */
 export default async function PageContacts({ searchParams }: PageProps<"/contacts">) {
   const { schoolId: schoolId, userId } = await requireRole("director", "front_desk");
-  const { q, f, mode, sort, order } = await searchParams;
+  const { q, f, mode, sort, order, page: askedPage } = await searchParams;
   const entry = typeof q === "string" ? q.trim() : "";
   const filter = readFilter(f, mode, CONTACT_COLUMNS);
-  const { contacts, layout: layout } = await withSchool(schoolId, async (tx) => ({
-    contacts: await listContacts(tx, entry, { filter, currentSort: readSort(sort, order, CONTACT_COLUMNS) }),
-    layout: await readPreference(tx, userId, "contacts"),
-  }));
+  const { contacts, total, page, layout } = await withSchool(schoolId, async (tx) => {
+    const options = { filter, currentSort: readSort(sort, order, CONTACT_COLUMNS) };
+    const total = await countContacts(tx, entry, options);
+    const page = readPage(askedPage, total);
+    return {
+      contacts: await listContacts(tx, entry, { ...options, page }),
+      total,
+      page,
+      layout: await readPreference(tx, userId, "contacts"),
+    };
+  });
 
   const filtering = filter.conditions.length > 0;
   const plural = (n: number) => `${n} contact${n > 1 ? "s" : ""}`;
@@ -39,10 +47,8 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
         live
         description={
           <>
-            {entry ? `${plural(contacts.length)} pour « ${entry} »` : plural(contacts.length)}
+            {entry ? `${plural(total)} pour « ${entry} »` : plural(total)}
             {filtering && " avec ces filtres"}
-            {contacts.length >= MAX_RESULTS &&
-              ` : seuls les ${MAX_RESULTS} premiers sont affichés, précisez la recherche ou filtrez`}
             {!entry && !filtering && (
               <span className="hidden sm:inline">
                 . Parents, responsables, payeurs et organismes (CSE, entreprises).
@@ -69,6 +75,7 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
                   : "Aucun contact pour l’instant."
             }
             emptyAction={<ButtonLink href="/contacts/nouveau">Nouveau contact</ButtonLink>}
+            pagination={{ page, total }}
             rows={contacts.map((c) => ({
               id: c.id,
               href: `/contacts/${c.id}`,

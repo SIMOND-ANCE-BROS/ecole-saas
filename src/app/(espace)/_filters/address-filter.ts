@@ -40,6 +40,8 @@ export function useAddressFilter(columns: readonly ColumnDef[]) {
       const p = new URLSearchParams(params.toString());
       p.delete("f");
       p.delete("mode");
+      // Another filter, another list: back to its first page (#107).
+      p.delete("page");
       for (const [key, value] of toParams({ ...f, conditions: f.conditions.filter(complete) })) p.append(key, value);
       const text = p.toString();
       startTransition(() => router.replace(text ? `${path}?${text}` : path, { scroll: false }));

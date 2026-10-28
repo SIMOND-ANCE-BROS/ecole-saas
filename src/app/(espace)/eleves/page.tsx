@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import { Paper, Text, Title } from "@mantine/core";
 import { Suspense } from "react";
 import { withSchool } from "@/db";
-import { seasonCourseLabels, listContacts, listStudents, MAX_RESULTS } from "@/db/students";
+import { countStudents, seasonCourseLabels, listContacts, listStudents } from "@/db/students";
 import { currentSeason } from "@/db/schedule";
 import { readPreference } from "@/db/preferences";
 import { displayedName } from "@/db/people";
 import { STUDENT_COLUMNS } from "@/domain/filters/columns";
 import { readFilter, readSort } from "@/domain/filters/filters";
+import { readPage } from "@/domain/filters/pagination";
 import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { ListTable } from "../_filters/list-table";
@@ -23,7 +24,7 @@ export const metadata: Metadata = { title: "Élèves" };
 /** The school's students; a search also shows the matching contacts (parent, payer). */
 export default async function StudentsPage({ searchParams }: PageProps<"/eleves">) {
   const { schoolId: schoolId, userId } = await requireRole("director", "front_desk");
-  const { q, f, mode, sort, order } = await searchParams;
+  const { q, f, mode, sort, order, page: askedPage } = await searchParams;
   const entry = typeof q === "string" ? q.trim() : "";
   const filter = readFilter(f, mode, STUDENT_COLUMNS);
   const currentSort = readSort(sort, order, STUDENT_COLUMNS);
@@ -31,13 +32,21 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
   const today = todayInParis();
   const {
     students: students,
+    total,
+    page,
     contacts,
     layout: layout,
     courses,
   } = await withSchool(schoolId, async (tx) => {
     const season = await currentSeason(tx, today);
+    const options = { filter, currentSort, today, seasonId: season?.id };
+    const total = await countStudents(tx, entry, options);
+    // Clamped to the pages that exist: a filter may have shrunk the list since `?page=` was set.
+    const page = readPage(askedPage, total);
     return {
-      students: await listStudents(tx, entry, { filter, currentSort, today, seasonId: season?.id }),
+      students: await listStudents(tx, entry, { ...options, page }),
+      total,
+      page,
       courses: season ? await seasonCourseLabels(tx, season.id) : [],
       contacts: entry ? await listContacts(tx, entry) : [],
       layout: await readPreference(tx, userId, "eleves"),
@@ -63,10 +72,8 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
         live
         description={
           <>
-            {entry ? `${plural(students.length, "élève")} pour « ${entry} »` : plural(students.length, "élève")}
+            {entry ? `${plural(total, "élève")} pour « ${entry} »` : plural(total, "élève")}
             {filtering && " avec ces filtres"}
-            {students.length >= MAX_RESULTS &&
-              ` : seuls les ${MAX_RESULTS} premiers sont affichés, précisez la recherche ou filtrez`}
             {!entry && !filtering && (
               <span className="hidden sm:inline">. Recherche par nom, téléphone, ou nom d’un parent (Ctrl K).</span>
             )}
@@ -88,6 +95,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
             empty={emptyMessage}
             choice={{ cours: courses }}
             emptyAction={!entry && <ButtonLink href="/eleves/nouveau">Nouvel élève</ButtonLink>}
+            pagination={{ page, total }}
             rows={students.map((e) => ({
               id: e.id,
               href: `/eleves/${e.id}`,

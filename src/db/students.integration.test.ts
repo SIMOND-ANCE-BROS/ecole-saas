@@ -6,6 +6,8 @@ import {
   setBilling,
   readContact,
   readStudent,
+  countContacts,
+  countStudents,
   listContacts,
   listStudents,
   CreationRefusal,
@@ -182,6 +184,16 @@ describe("lists", () => {
     const contacts = await withSchool(school, (tx) => listContacts(tx));
     expect(contacts.map((c) => c.companyName ?? c.firstName)).toEqual(["CSE Ateliers", "Hélène"]);
     expect(contacts.find((c) => c.firstName === "Hélène")?.students.sort()).toEqual(["Noé", "Zoé"]);
+  });
+
+  it("counts all the matching rows and pages them (#107)", async () => {
+    expect(await withSchool(school, (tx) => countStudents(tx))).toBe(5);
+    expect(await withSchool(school, (tx) => countStudents(tx, "0612345678"))).toBe(2);
+    expect(await withSchool(school, (tx) => countStudents(tx, "x"))).toBe(0);
+    expect(await withSchool(school, (tx) => countContacts(tx))).toBe(2);
+    // Page 2 starts after the first PAGE_SIZE rows: empty for this small school.
+    expect(await withSchool(school, (tx) => listStudents(tx, "", { page: 2 }))).toEqual([]);
+    expect((await withSchool(school, (tx) => listStudents(tx, "", { page: 1 }))).length).toBe(5);
   });
 });
 
