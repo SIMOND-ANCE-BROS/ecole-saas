@@ -1,8 +1,10 @@
 "use client";
 
+import { Anchor, Badge, Button, Checkbox, Paper, Text, Title } from "@mantine/core";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { StudentRelative } from "@/db/students";
+import { ofName } from "@/lib/french";
 import { type Choice, PersonChoice, toInput } from "../../_people/person-choice";
 import { Telephone } from "../../_people/sections";
 import { addGuardianAction, notify, removeRelative } from "../actions";
@@ -38,12 +40,16 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
   const row = (p: StudentRelative) => (
     <li key={p.relationshipId} className="flex flex-col gap-1 px-3 py-2.5 text-sm">
       <div className="flex flex-wrap items-baseline gap-x-3">
-        <Link href={`/personnes/${p.id}`} className="lien font-medium">
+        <Anchor component={Link} href={`/personnes/${p.id}`} size="sm" fw={500}>
           {p.name}
-        </Link>
-        <span className="text-xs text-doux">{nature(p, firstName)}</span>
+        </Anchor>
+        <Text span size="xs" c="dimmed">
+          {nature(p, firstName)}
+        </Text>
         {p.paysFor && p.direction === "incoming" && (
-          <span className="rounded bg-accent-doux px-1.5 text-xs">payeur</span>
+          <Badge variant="light" size="sm" radius="sm" tt="none" fw={400}>
+            payeur
+          </Badge>
         )}
         {p.telephone && (
           <span className="ml-auto">
@@ -53,21 +59,20 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         {p.direction === "incoming" && (
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={p.toNotify}
-              disabled={inProgress}
-              onChange={(e) => act(() => notify(studentId, p.relationshipId, e.target.checked))}
-            />
-            À prévenir en cas d’urgence
-          </label>
+          <Checkbox
+            size="sm"
+            label="À prévenir en cas d’urgence"
+            checked={p.toNotify}
+            disabled={inProgress}
+            onChange={(e) => act(() => notify(studentId, p.relationshipId, e.currentTarget.checked))}
+          />
         )}
         {toRemove === p.relationshipId ? (
           <span className="flex items-center gap-2">
-            <button
-              type="button"
-              className="rounded-md border border-erreur px-2 py-0.5 text-xs text-erreur hover:bg-erreur/10"
+            <Button
+              size="compact-xs"
+              variant="outline"
+              color="red"
               disabled={inProgress}
               onClick={() =>
                 act(
@@ -77,19 +82,22 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
               }
             >
               Retirer {p.name} de la fiche
-            </button>
-            <button type="button" className="lien text-xs" onClick={() => setToRemove(null)}>
+            </Button>
+            <Anchor component="button" type="button" size="xs" onClick={() => setToRemove(null)}>
               Annuler
-            </button>
+            </Anchor>
           </span>
         ) : (
-          <button
+          <Anchor
+            component="button"
             type="button"
-            className="lien ml-auto text-xs text-doux"
+            size="xs"
+            c="dimmed"
+            ml="auto"
             onClick={() => setToRemove(p.relationshipId)}
           >
             Retirer
-          </button>
+          </Anchor>
         )}
       </div>
     </li>
@@ -99,34 +107,41 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
     <div className="flex flex-col gap-4">
       <section aria-labelledby="responsables" className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between gap-2">
-          <h2 id="responsables" className="text-base font-semibold">
+          <Title order={2} size="h5" id="responsables">
             Responsables
-          </h2>
+          </Title>
           {!addition && (
-            <button type="button" className="lien text-sm" onClick={() => setAddition(true)}>
+            <Anchor component="button" type="button" size="sm" onClick={() => setAddition(true)}>
               Ajouter un responsable
-            </button>
+            </Anchor>
           )}
         </div>
-        {guardians.length === 0 && !addition && <p className="text-sm text-doux">Aucun responsable indiqué.</p>}
-        {guardians.length > 0 && <ul className="panneau divide-y divide-bordure">{guardians.map(row)}</ul>}
+        {guardians.length === 0 && !addition && (
+          <Text size="sm" c="dimmed">
+            Aucun responsable indiqué.
+          </Text>
+        )}
+        {guardians.length > 0 && (
+          <Paper withBorder component="ul" className="divide-y divide-bordure">
+            {guardians.map(row)}
+          </Paper>
+        )}
         {addition && (
-          <div className="panneau flex flex-col gap-3 p-3 text-sm">
+          <Paper withBorder p="sm" className="flex flex-col gap-3 text-sm">
             <PersonChoice
               id="nouveau-responsable"
-              label={`Responsable légal de ${firstName} (parent, tuteur)`}
+              label={`Responsable légal ${ofName(firstName)} (parent, tuteur)`}
               value={choice}
               onChange={setChoice}
               exclude={[studentId]}
             />
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={toNotify} onChange={(e) => setToNotify(e.target.checked)} />À prévenir en
-              cas d’urgence
-            </label>
+            <Checkbox
+              label="À prévenir en cas d’urgence"
+              checked={toNotify}
+              onChange={(e) => setToNotify(e.currentTarget.checked)}
+            />
             <div className="flex gap-2">
-              <button
-                type="button"
-                className="bouton-principal"
+              <Button
                 disabled={inProgress || !choice}
                 onClick={() =>
                   choice &&
@@ -140,28 +155,30 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
                 }
               >
                 Ajouter
-              </button>
-              <button type="button" className="bouton-secondaire" onClick={() => setAddition(false)}>
+              </Button>
+              <Button variant="default" onClick={() => setAddition(false)}>
                 Annuler
-              </button>
+              </Button>
             </div>
-          </div>
+          </Paper>
         )}
       </section>
 
       {other.length > 0 && (
         <section aria-labelledby="proches" className="flex flex-col gap-2">
-          <h2 id="proches" className="text-base font-semibold">
+          <Title order={2} size="h5" id="proches">
             Autres proches
-          </h2>
-          <ul className="panneau divide-y divide-bordure">{other.map(row)}</ul>
+          </Title>
+          <Paper withBorder component="ul" className="divide-y divide-bordure">
+            {other.map(row)}
+          </Paper>
         </section>
       )}
 
       {message && (
-        <p role="alert" className="text-sm text-erreur">
+        <Text role="alert" size="sm" c="red">
           {message}
-        </p>
+        </Text>
       )}
     </div>
   );

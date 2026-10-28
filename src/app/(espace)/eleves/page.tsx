@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Paper, Text, Title } from "@mantine/core";
 import { Suspense } from "react";
 import { withSchool } from "@/db";
 import { seasonCourseLabels, listContacts, listStudents, MAX_RESULTS } from "@/db/students";
@@ -13,6 +13,8 @@ import { requireRole } from "@/lib/session";
 import { ListTable } from "../_filters/list-table";
 import { NavigableResults } from "../_people/navigable-results";
 import { Telephone } from "../_people/sections";
+import { ButtonLink } from "../_ui/button-link";
+import { TextLink } from "../_ui/text-link";
 
 export const metadata: Metadata = { title: "Élèves" };
 
@@ -53,8 +55,10 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
     <section className="flex w-full min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="titre-page">Élèves</h1>
-          <p className="text-sm text-doux" aria-live="polite">
+          <Title order={1} fz="xl">
+            Élèves
+          </Title>
+          <Text size="sm" c="dimmed" aria-live="polite">
             {entry ? `${plural(students.length, "élève")} pour « ${entry} »` : plural(students.length, "élève")}
             {filtering && " avec ces filtres"}
             {students.length >= MAX_RESULTS &&
@@ -62,11 +66,9 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
             {!entry && !filtering && (
               <span className="hidden sm:inline">. Recherche par nom, téléphone, ou nom d’un parent (Ctrl K).</span>
             )}
-          </p>
+          </Text>
         </div>
-        <Link href="/eleves/nouveau" className="bouton-principal">
-          Nouvel élève
-        </Link>
+        <ButtonLink href="/eleves/nouveau">Nouvel élève</ButtonLink>
       </div>
 
       <NavigableResults>
@@ -81,13 +83,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
             linkColumn="nom"
             empty={emptyMessage}
             choice={{ cours: courses }}
-            emptyAction={
-              !entry && (
-                <Link href="/eleves/nouveau" className="bouton-principal">
-                  Nouvel élève
-                </Link>
-              )
-            }
+            emptyAction={!entry && <ButtonLink href="/eleves/nouveau">Nouvel élève</ButtonLink>}
             rows={students.map((e) => ({
               id: e.id,
               href: `/eleves/${e.id}`,
@@ -106,21 +102,25 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
             }))}
             mobile={
               students.length === 0 ? (
-                <p className="text-sm">{emptyMessage}</p>
+                <Text size="sm">{emptyMessage}</Text>
               ) : (
-                <ul className="panneau divide-y divide-bordure">
+                <Paper withBorder component="ul" className="divide-y divide-bordure">
                   {students.map((e) => (
                     <li key={e.id} className="flex flex-col gap-0.5 px-3 py-2.5 text-sm">
                       <span className="flex items-baseline justify-between gap-2">
-                        <Link href={`/eleves/${e.id}`} className="lien text-base font-medium">
+                        <TextLink href={`/eleves/${e.id}`} fw={500}>
                           {[e.firstName, e.name].filter(Boolean).join(" ")}
-                        </Link>
+                        </TextLink>
                         {e.birthDate && (
-                          <span className="shrink-0 tabular-nums text-doux">{ageAt(e.birthDate, today)} ans</span>
+                          <Text span size="sm" c="dimmed" className="shrink-0 tabular-nums">
+                            {ageAt(e.birthDate, today)} ans
+                          </Text>
                         )}
                       </span>
                       {e.guardians.length > 0 && (
-                        <span className="text-doux">Responsable : {e.guardians.join(", ")}</span>
+                        <Text span size="sm" c="dimmed">
+                          Responsable : {e.guardians.join(", ")}
+                        </Text>
                       )}
                       {e.telephone && (
                         <span className="self-start py-1">
@@ -129,7 +129,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
                       )}
                     </li>
                   ))}
-                </ul>
+                </Paper>
               )
             }
           />
@@ -137,20 +137,24 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
 
         {contacts.length > 0 && (
           <section aria-labelledby="contacts-trouves" className="mt-6 flex flex-col gap-2">
-            <h2 id="contacts-trouves" className="text-base font-semibold">
+            <Title order={2} size="h5" id="contacts-trouves">
               Contacts pour « {entry} »
-            </h2>
-            <ul className="panneau divide-y divide-bordure text-sm">
+            </Title>
+            <Paper withBorder component="ul" className="divide-y divide-bordure text-sm">
               {contacts.map((c) => (
                 <li key={c.id} className="flex flex-wrap items-baseline gap-x-3 px-3 py-2">
-                  <Link href={`/contacts/${c.id}`} data-resultat className="lien font-medium">
+                  <TextLink href={`/contacts/${c.id}`} data-resultat size="sm" fw={500}>
                     {displayedName(c)}
-                  </Link>
-                  {c.students.length > 0 && <span className="text-doux">pour {c.students.join(", ")}</span>}
+                  </TextLink>
+                  {c.students.length > 0 && (
+                    <Text span size="sm" c="dimmed">
+                      pour {c.students.join(", ")}
+                    </Text>
+                  )}
                   {c.telephone && <span className="ml-auto tabular-nums">{c.telephone}</span>}
                 </li>
               ))}
-            </ul>
+            </Paper>
           </section>
         )}
       </NavigableResults>

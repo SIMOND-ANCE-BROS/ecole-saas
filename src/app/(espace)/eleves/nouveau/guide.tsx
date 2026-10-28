@@ -1,15 +1,29 @@
 "use client";
 
+import {
+  Alert,
+  Anchor,
+  Button,
+  Checkbox,
+  Fieldset,
+  Radio,
+  Text,
+  Textarea,
+  TextInput,
+  type TextInputProps,
+} from "@mantine/core";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { ageAt } from "@/domain/people/age";
 import { type Choice, PersonChoice, toInput } from "../../_people/person-choice";
 import { createStudentFromGuide, type StudentRefusal } from "../actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
+import { DateField, refusedDateField } from "@/app/(espace)/_ui/date-field";
 import type { StudentInput } from "@/db/students";
 import type { PersonInput } from "@/db/people";
 import type { FieldErrors, FieldPath } from "@/lib/form-errors";
 import { has } from "@/lib/has";
+import { ofName } from "@/lib/french";
 
 /** Checked against the server schema: a value renamed on one side fails to compile. */
 type Billing = StudentInput["billing"]["type"];
@@ -50,8 +64,8 @@ export function NewStudentGuide({
       : [guardian.newPerson.firstName, guardian.newPerson.name].filter(Boolean).join(" ") || "le responsable"
     : "le responsable";
 
-  const updated = (field: keyof typeof e) => (x: { target: { value: string } }) =>
-    setE({ ...e, [field]: x.target.value });
+  const updated = (field: keyof typeof e) => (x: { currentTarget: { value: string } }) =>
+    setE({ ...e, [field]: x.currentTarget.value });
   const error = (key: FieldPath<StudentInput>) => refusal?.errors[key];
   // Errors of a person sub-form (`guardian.newPerson.`), keyed by the person field.
   const sous = (prefix: `${FieldPath<StudentInput>}.`): FieldErrors<PersonInput> =>
@@ -79,22 +93,20 @@ export function NewStudentGuide({
       ),
     );
 
-  const field = (key: keyof typeof e, label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={key} className="text-sm font-medium">
-        {label}
-      </label>
-      <input
-        id={key}
-        className="champ"
-        autoComplete="off"
-        value={e[key]}
-        onChange={updated(key)}
-        aria-invalid={error(`student.${key}`) ? true : undefined}
-        {...props}
-      />
-      {error(`student.${key}`) && <p className="text-xs text-erreur">{error(`student.${key}`)}</p>}
-    </div>
+  const field = (
+    key: keyof typeof e,
+    label: string,
+    props: Pick<TextInputProps, "autoFocus" | "inputMode" | "type"> = {},
+  ) => (
+    <TextInput
+      id={key}
+      label={label}
+      autoComplete="off"
+      value={e[key]}
+      onChange={updated(key)}
+      error={error(`student.${key}`)}
+      {...props}
+    />
   );
 
   return (
@@ -104,34 +116,45 @@ export function NewStudentGuide({
       noValidate
       onSubmit={(x) => {
         x.preventDefault();
+        if (refusedDateField(x.currentTarget)) return;
         send(false);
       }}
     >
-      <fieldset className="panneau grid gap-3 p-4 sm:grid-cols-3">
-        <legend className="px-1 text-sm font-semibold">1. L’élève</legend>
-        {field("firstName", "Prénom", { autoFocus: true })}
-        {field("name", "Nom")}
-        {field("birthDate", "Date de naissance", { type: "date", max: today })}
-        {field("telephone", "Téléphone (facultatif)", { type: "tel", inputMode: "tel" })}
-        {field("email", "E-mail (facultatif)", { type: "email" })}
-        <p className="self-end pb-2 text-sm text-doux" aria-live="polite">
-          {age !== null && (minor ? `${age} ans : mineur, un responsable est demandé.` : `${age} ans.`)}
-        </p>
-        <div className="flex flex-col gap-1 sm:col-span-3">
-          <label htmlFor="notes" className="text-sm font-medium">
-            Santé, allergies, consignes (facultatif)
-          </label>
-          <textarea id="notes" rows={2} className="champ" value={e.notes} onChange={updated("notes")} />
+      <Fieldset legend="1. L’élève">
+        <div className="grid items-start gap-3 sm:grid-cols-3">
+          {field("firstName", "Prénom", { autoFocus: true })}
+          {field("name", "Nom")}
+          <DateField
+            id="birthDate"
+            label="Date de naissance"
+            maxDate={today}
+            value={e.birthDate}
+            onChange={(d) => setE({ ...e, birthDate: d })}
+            error={error("student.birthDate")}
+          />
+          {field("telephone", "Téléphone (facultatif)", { type: "tel", inputMode: "tel" })}
+          {field("email", "E-mail (facultatif)", { type: "email" })}
+          <Text size="sm" c="dimmed" aria-live="polite" className="self-center sm:pt-6">
+            {age !== null && (minor ? `${age} ans : mineur, un responsable est demandé.` : `${age} ans.`)}
+          </Text>
+          <Textarea
+            id="notes"
+            label="Santé, allergies, consignes (facultatif)"
+            className="sm:col-span-3"
+            autosize
+            minRows={2}
+            value={e.notes}
+            onChange={updated("notes")}
+          />
         </div>
-      </fieldset>
+      </Fieldset>
 
-      <fieldset className="panneau flex flex-col gap-3 p-4">
-        <legend className="px-1 text-sm font-semibold">2. Son responsable</legend>
+      <Fieldset legend="2. Son responsable" className="flex flex-col gap-3">
         {displayedGuardian ? (
           <>
             <PersonChoice
               id="responsable"
-              label={`Qui est le responsable légal de ${firstName} (parent, tuteur) ?`}
+              label={`Qui est le responsable légal ${ofName(firstName)} (parent, tuteur) ?`}
               value={guardian}
               onChange={(c) => {
                 // New person: same family name suggested once, when it is created.
@@ -144,28 +167,34 @@ export function NewStudentGuide({
               }}
               errors={sous("guardian.newPerson.")}
             />
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={toNotify} onChange={(x) => setToNotify(x.target.checked)} />À prévenir en
-              cas d’urgence
-            </label>
+            <Checkbox
+              label="À prévenir en cas d’urgence"
+              checked={toNotify}
+              onChange={(x) => setToNotify(x.currentTarget.checked)}
+            />
             {!minor && (
-              <button type="button" className="lien self-start text-sm" onClick={() => setWithGuardian(false)}>
+              <Anchor
+                component="button"
+                type="button"
+                size="sm"
+                className="self-start"
+                onClick={() => setWithGuardian(false)}
+              >
                 Pas de responsable
-              </button>
+              </Anchor>
             )}
           </>
         ) : (
-          <p className="flex flex-wrap items-center gap-2 text-sm text-doux">
+          <Text size="sm" c="dimmed" className="flex flex-wrap items-center gap-2">
             Pas de responsable pour un élève majeur.
-            <button type="button" className="lien" onClick={() => setWithGuardian(true)}>
+            <Anchor component="button" type="button" size="sm" onClick={() => setWithGuardian(true)}>
               En ajouter un quand même
-            </button>
-          </p>
+            </Anchor>
+          </Text>
         )}
-      </fieldset>
+      </Fieldset>
 
-      <fieldset className="panneau flex flex-col gap-2 p-4 text-sm">
-        <legend className="px-1 text-sm font-semibold">3. À qui facturer ?</legend>
+      <Fieldset legend="3. À qui facturer ?" className="flex flex-col gap-2">
         {(
           [
             ["self", `À ${firstName}`, !minor],
@@ -175,15 +204,13 @@ export function NewStudentGuide({
         )
           .filter(([, , visible]) => visible)
           .map(([value, label]) => (
-            <label key={value} className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="facturation"
-                checked={chosenBilling === value}
-                onChange={() => setBilling(value)}
-              />
-              {label}
-            </label>
+            <Radio
+              key={value}
+              name="facturation"
+              label={label}
+              checked={chosenBilling === value}
+              onChange={() => setBilling(value)}
+            />
           ))}
         {chosenBilling === "other" && (
           <PersonChoice
@@ -195,47 +222,51 @@ export function NewStudentGuide({
             errors={sous("billing.payer.newPerson.")}
           />
         )}
-        {error("billing") && <p className="text-xs text-erreur">{error("billing")}</p>}
-        <p className="text-xs text-doux">
+        {error("billing") && (
+          <Text size="xs" c="red">
+            {error("billing")}
+          </Text>
+        )}
+        <Text size="xs" c="dimmed">
           Les frères et sœurs facturés à la même personne bénéficient de la réduction fratrie.
-        </p>
-      </fieldset>
+        </Text>
+      </Fieldset>
 
       {refusal?.duplicates ? (
-        <div
-          tabIndex={-1}
-          role="alert"
-          className="flex flex-col gap-2 rounded-md bg-alerte-fond px-3 py-2 text-sm text-alerte-texte"
-        >
-          <p className="font-medium">{refusal.message} Vérifiez avant de créer un doublon :</p>
-          <ul className="flex flex-col gap-0.5">
-            {refusal.duplicates.map((d) => (
-              <li key={`${d.role}-${d.id}`}>
-                {d.role} :{" "}
-                <Link href={`/personnes/${d.id}`} className="lien" target="_blank">
-                  {d.name}
-                </Link>
-                {d.telephone && <span className="tabular-nums">, {d.telephone}</span>}
-              </li>
-            ))}
-          </ul>
-          <p>Pour réutiliser une personne existante, cherchez-la dans le champ correspondant.</p>
-          <button type="button" className="bouton-secondaire self-start" disabled={sending} onClick={() => send(true)}>
-            Créer quand même
-          </button>
-        </div>
+        <Alert tabIndex={-1} role="alert" color="yellow">
+          <div className="flex flex-col gap-2 text-sm">
+            <Text size="sm" fw={500}>
+              {refusal.message} Vérifiez avant de créer un doublon :
+            </Text>
+            <ul className="flex flex-col gap-0.5">
+              {refusal.duplicates.map((d) => (
+                <li key={`${d.role}-${d.id}`}>
+                  {d.role} :{" "}
+                  <Anchor component={Link} href={`/personnes/${d.id}`} size="sm" target="_blank">
+                    {d.name}
+                  </Anchor>
+                  {d.telephone && <span className="tabular-nums">, {d.telephone}</span>}
+                </li>
+              ))}
+            </ul>
+            <Text size="sm">Pour réutiliser une personne existante, cherchez-la dans le champ correspondant.</Text>
+            <Button variant="default" className="self-start" disabled={sending} onClick={() => send(true)}>
+              Créer quand même
+            </Button>
+          </div>
+        </Alert>
       ) : (
         refusal && (
-          <p tabIndex={-1} role="alert" className="text-sm text-erreur">
+          <Text tabIndex={-1} role="alert" size="sm" c="red">
             {refusal.message}
-          </p>
+          </Text>
         )
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-bordure pt-4">
-        <button type="submit" className="bouton-principal" disabled={sending}>
-          {sending ? "Enregistrement…" : "Créer l’élève"}
-        </button>
+        <Button type="submit" loading={sending}>
+          Créer l’élève
+        </Button>
         <Cancel href="/eleves" />
       </div>
     </form>

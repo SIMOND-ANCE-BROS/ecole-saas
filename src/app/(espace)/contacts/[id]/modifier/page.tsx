@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Text, Title } from "@mantine/core";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { readPerson, displayedName } from "@/db/people";
 import { requireRole } from "@/lib/session";
 import { PersonForm } from "../../../_people/person-form";
+import { TextLink } from "../../../_ui/text-link";
 
 export const metadata: Metadata = { title: "Modifier un contact" };
 
@@ -16,16 +17,23 @@ export default async function EditContactPage({ params }: PageProps<"/contacts/[
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <Link href="/contacts" className="lien">
+        <TextLink href="/contacts" size="sm">
           Contacts
-        </Link>
-        <span className="text-doux"> / </span>
-        <Link href={`/contacts/${record.id}`} className="lien">
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" / "}
+        </Text>
+        <TextLink href={`/contacts/${record.id}`} size="sm">
           {displayedName(record)}
-        </Link>
-        <span className="text-doux"> / Modifier</span>
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" "}
+          / Modifier
+        </Text>
       </nav>
-      <h1 className="titre-page">Modifier {displayedName(record)}</h1>
+      <Title order={1} fz="xl">
+        Modifier {displayedName(record)}
+      </Title>
       <PersonForm person={record} section="contacts" />
     </section>
   );
