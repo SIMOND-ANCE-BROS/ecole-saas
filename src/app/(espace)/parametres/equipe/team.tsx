@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import type { MemberListItem, PendingInvitation } from "@/db/team";
 import { INVITABLE_ROLES, ROLE_LABELS, type Role } from "@/domain/team/rules";
 import { type Back, changeMember, inviteMember, type LinkBack, resetPassword, revoke } from "./actions";
+import { settle } from "@/lib/action-result";
 
 type Member = Omit<MemberListItem, "userId"> & { me: boolean };
 type Invitation = Omit<PendingInvitation, "expiresAt"> & { expiresAt: string };
@@ -78,12 +79,17 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
   const [refusal, setRefusal] = useState<{ section: Section; text: string } | null>(null);
   const [shown, setShown] = useState<Shown | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
-  const [entry, setEntry] = useState({ name: "", email: "", role: "front_desk" });
+  const [entry, setEntry] = useState<{ name: string; email: string; role: (typeof INVITABLE_ROLES)[number] }>({
+    name: "",
+    email: "",
+    role: "front_desk",
+  });
   const refusalIn = (s: Section) => (refusal?.section === s ? refusal.text : undefined);
 
   const confirm = (p: Pending) =>
     startTransition(async () => {
-      const r = await p.action();
+      // A lost connection gives a French refusal in its section, not the error screen (#243).
+      const r = await settle(p.action);
       setPending(null);
       setRefusal(r.ok ? null : { section: p.section, text: r.message });
       if (r.ok) notifications.show({ message: p.done, color: "green" });
@@ -92,7 +98,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
     });
   const withLink = (section: Section, action: () => Promise<LinkBack>, kind: Shown["kind"], who: string) =>
     startTransition(async () => {
-      const r = await action();
+      const r = await settle(action);
       setRefusal(r.ok ? null : { section, text: r.message });
       setShown(r.ok ? { link: r.link, who, kind } : null);
     });
@@ -303,7 +309,10 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
             allowDeselect={false}
             data={INVITABLE}
             value={entry.role}
-            onChange={(role) => role && setEntry({ ...entry, role })}
+            onChange={(value) => {
+              const role = INVITABLE_ROLES.find((r) => r === value);
+              if (role) setEntry({ ...entry, role });
+            }}
           />
           <Button type="submit" variant={shown?.kind === "invitation" ? "default" : "filled"} loading={inProgress}>
             Créer le lien d’invitation

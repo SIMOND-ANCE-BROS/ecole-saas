@@ -2,13 +2,12 @@
 
 import { Anchor, Button, Loader, Paper, Radio, Text, Title } from "@mantine/core";
 import Link from "next/link";
-import { unstable_rethrow } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { StudentRecord, StudentRelative } from "@/db/students";
 import { has } from "@/lib/has";
 import { type Choice, PersonChoice, toInput } from "../../_people/person-choice";
 import { WARNING } from "../../_people/sections";
-import type { ActionResult } from "@/lib/action-result";
+import { notSent, settle, type ActionResult } from "@/lib/action-result";
 import { invoice, billNewPerson } from "../actions";
 
 type Props = {
@@ -88,15 +87,9 @@ export function Billing({
 
   const choose = (target: Payer, action: () => Promise<ActionResult>) =>
     startTransition(async () => {
-      let failure: string | null;
-      try {
-        const r = await action();
-        failure = r.ok ? null : r.message;
-      } catch (e) {
-        // A lost connection or a server error keeps the record on screen, with a way out.
-        unstable_rethrow(e);
-        failure = FAILED;
-      }
+      // A lost connection or a server error keeps the record on screen, with a way out.
+      const r = await settle(action);
+      const failure = r.ok ? null : notSent(r) ? FAILED : r.message;
       setMessage(failure);
       if (failure) {
         // Back to what can be retried: the « Facturer à … » button, else the selected choice.

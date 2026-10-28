@@ -5,6 +5,7 @@ import { TimeInput } from "@mantine/dates";
 import { useState, useTransition } from "react";
 import type { Hours } from "@/domain/schedule/hours";
 import { changeHours } from "../actions";
+import { settle } from "@/lib/action-result";
 
 const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 type Day = { open: boolean; opening: string; closure: string };
@@ -46,8 +47,8 @@ export function SiteHours({ siteId, name: name, hours: hours }: { siteId: string
             .filter((j) => days[j].open)
             .map((j) => ({ weekday: j, opening: days[j].opening, closure: days[j].closure }));
           startTransition(async () => {
-            const r = await changeHours(siteId, entry);
-            setMessage(r.message ? { ok: false, text: r.message } : { ok: true, text: "Horaires enregistrés." });
+            const r = await settle(() => changeHours(siteId, entry));
+            setMessage(r.ok ? { ok: true, text: "Horaires enregistrés." } : { ok: false, text: r.message });
           });
         }}
       >

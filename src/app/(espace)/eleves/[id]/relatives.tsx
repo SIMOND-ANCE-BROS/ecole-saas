@@ -2,10 +2,9 @@
 
 import { Anchor, Badge, Button, Checkbox, Paper, Text, Title } from "@mantine/core";
 import Link from "next/link";
-import { unstable_rethrow } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { StudentRelative } from "@/db/students";
-import { NOT_SAVED, type ActionResult } from "@/lib/action-result";
+import { settle, type ActionResult } from "@/lib/action-result";
 import { ofName } from "@/lib/french";
 import { type Choice, PersonChoice, toInput } from "../../_people/person-choice";
 import { Telephone } from "../../_people/sections";
@@ -46,15 +45,9 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
 
   const act = (action: () => Promise<ActionResult>, after?: () => void, failed?: () => void) =>
     startTransition(async () => {
-      let error: string | null;
-      try {
-        const r = await action();
-        error = r.ok ? null : r.message;
-      } catch (e) {
-        // A lost connection or a server error keeps the record on screen, with a way out.
-        unstable_rethrow(e);
-        error = NOT_SAVED;
-      }
+      // A lost connection or a server error keeps the record on screen, with a way out.
+      const r = await settle(action);
+      const error = r.ok ? null : r.message;
       setMessage(error);
       if (error) failed?.();
       else after?.();

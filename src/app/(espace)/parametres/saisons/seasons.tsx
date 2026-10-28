@@ -7,6 +7,7 @@ import { DateField, refusedDateField } from "../../_ui/date-field";
 import { PHONE_LABEL, PHONE_TABLE } from "../../_ui/phone-table";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { changeSeason, newSeason } from "../actions";
+import { type ActionResult, settle } from "@/lib/action-result";
 
 const date = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const day = (iso: string) => date.format(new Date(`${iso}T00:00:00Z`));
@@ -41,11 +42,12 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
     focusAfter(`[data-edit="${id}"]`);
     setEdition(null);
   };
-  const act = (action: () => Promise<{ message: string | null }>, after?: () => void) =>
+  // A refusal or a lost connection keeps what was typed, with its message (#243).
+  const act = (action: () => Promise<ActionResult>, after?: () => void) =>
     startTransition(async () => {
-      const r = await action();
-      setMessage(r.message);
-      if (!r.message) after?.();
+      const r = await settle(action);
+      setMessage(r.ok ? null : r.message);
+      if (r.ok) after?.();
     });
 
   const saveEdition = (id: string, e: { label: string; startDate: string; endDate: string }) =>

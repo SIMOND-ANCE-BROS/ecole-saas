@@ -17,11 +17,15 @@ import {
 import { useState, useTransition } from "react";
 import type { Siblings as SiblingsRule, LessonPackRow, GridRow, Period, Audience } from "@/db/tariffs";
 import { combinationLabel } from "@/domain/tariff/compute";
+import { notSent, type ActionResult, settle } from "@/lib/action-result";
 import { formatEuros, parseEuros } from "@/lib/money";
 import { ConfirmRemoval, type Removal } from "../../_ui/confirm-removal";
 import { PHONE_LABEL, PHONE_TABLE } from "../../_ui/phone-table";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { lessonPack, cellPrice, siblingsRule, removeLessonPack } from "../actions";
+
+/** A grid row: audience, courses and discipline (also its « Retirer »'s `data-remove`). */
+const rowKey = (l: GridRow) => `${l.audience}|${l.combination.join("+")}|${l.disciplineId ?? ""}`;
 
 const AUDIENCES: [Audience, string][] = [
   ["child", "Enfant"],
@@ -77,16 +81,19 @@ function PriceCell({
       return;
     }
     startTransition(async () => {
-      const r = await cellPrice(seasonId, {
-        audience: row.audience,
-        combination: row.combination,
-        disciplineId: row.disciplineId,
-        period: period,
-        priceCents: cents,
-      });
-      setState(r.message ? "error" : "saved");
-      setMessage(r.message);
-      if (r.message) setValue(initial);
+      const r = await settle(() =>
+        cellPrice(seasonId, {
+          audience: row.audience,
+          combination: row.combination,
+          disciplineId: row.disciplineId,
+          period: period,
+          priceCents: cents,
+        }),
+      );
+      setState(r.ok ? "saved" : "error");
+      setMessage(r.ok ? null : r.message);
+      // A refused price goes back to the saved one; a lost connection keeps what was typed (#243).
+      if (!r.ok && !notSent(r)) setValue(initial);
     });
   };
 
@@ -170,14 +177,16 @@ export function Grid({
       if (price.length === 0) return setMessage("Indiquez au moins un prix.");
       if (price.some(([, c]) => c === null)) return setMessage("Montant en euros, par exemple 110 ou 112,50.");
       for (const [period, cents] of price) {
-        const r = await cellPrice(seasonId, {
-          audience: chosenAudience,
-          combination: combination,
-          disciplineId: disciplineId || null,
-          period: period,
-          priceCents: cents,
-        });
-        if (r.message) return setMessage(r.message);
+        const r = await settle(() =>
+          cellPrice(seasonId, {
+            audience: chosenAudience,
+            combination: combination,
+            disciplineId: disciplineId || null,
+            period: period,
+            priceCents: cents,
+          }),
+        );
+        if (!r.ok) return setMessage(r.message);
       }
       setMessage(null);
       setCombination([]);
@@ -188,14 +197,20 @@ export function Grid({
     startTransition(async () => {
       for (const [period] of PERIODS) {
         if (!l.price[period]) continue;
-        const r = await cellPrice(seasonId, {
-          audience: l.audience,
-          combination: l.combination,
-          disciplineId: l.disciplineId,
-          period: period,
-          priceCents: null,
-        });
-        if (r.message) return setMessage(r.message);
+        const r = await settle(() =>
+          cellPrice(seasonId, {
+            audience: l.audience,
+            combination: l.combination,
+            disciplineId: l.disciplineId,
+            period: period,
+            priceCents: null,
+          }),
+        );
+        if (!r.ok) {
+          // Refused: focus stays on the row's « Retirer », or the grid's heading if the row is gone (#243).
+          focusAfter(`[data-remove="${rowKey(l)}"]`, "#grille");
+          return setMessage(r.message);
+        }
       }
       setMessage(null);
       // The row goes away with its « Retirer »: focus moves to the grid's heading.
@@ -245,7 +260,7 @@ export function Grid({
               </Table.Tr>
             )}
             {rows.map((l) => {
-              const key = `${l.audience}|${l.combination.join("+")}|${l.disciplineId ?? ""}`;
+              const key = rowKey(l);
               const label = combinationLabel(l.combination);
               const used = PERIODS.some(([p]) => l.price[p]?.used);
               return (
@@ -281,6 +296,7 @@ export function Grid({
                           })
                         }
                         aria-label={`Retirer la ligne ${label}`}
+                        data-remove={key}
                       >
                         Retirer
                       </Button>
@@ -386,19 +402,21 @@ export function Siblings({
       // Percentage entered as « 10 » or « 12,5 »: in basis points (1000 = 10 %), without floating-point numbers.
       const value = parseEuros(v.value);
       if (v.active && value === null) return setMessage({ text: "Valeur invalide.", error: true });
-      const r = await siblingsRule(
-        seasonId,
-        v.active
-          ? {
-              rateBps: v.mode === "rate" ? value : null,
-              amountCents: v.mode === "amount" ? value : null,
-              minStudents: Number(v.threshold),
-              audiences: v.audiences,
-              combinableWithMultiDiscipline: v.combinable,
-            }
-          : null,
+      const r = await settle(() =>
+        siblingsRule(
+          seasonId,
+          v.active
+            ? {
+                rateBps: v.mode === "rate" ? value : null,
+                amountCents: v.mode === "amount" ? value : null,
+                minStudents: Number(v.threshold),
+                audiences: v.audiences,
+                combinableWithMultiDiscipline: v.combinable,
+              }
+            : null,
+        ),
       );
-      setMessage(r.message ? { text: r.message, error: true } : { text: "Réduction enregistrée.", error: false });
+      setMessage(r.ok ? { text: "Réduction enregistrée.", error: false } : { text: r.message, error: true });
     });
 
   return (
@@ -492,11 +510,13 @@ export function LessonPacks({
   const [inProgress, startTransition] = useTransition();
   const [removal, setRemoval] = useState<Removal | null>(null);
   const focusAfter = useFocusAfter();
-  const act = (action: () => Promise<{ message: string | null }>, after?: () => void) =>
+  // A refusal or a lost connection keeps what was typed, with its message (#243).
+  const act = (action: () => Promise<ActionResult>, after?: () => void, failed?: () => void) =>
     startTransition(async () => {
-      const r = await action();
-      setMessage(r.message);
-      if (!r.message) after?.();
+      const r = await settle(action);
+      setMessage(r.ok ? null : r.message);
+      if (r.ok) after?.();
+      else failed?.();
     });
 
   return (
@@ -527,15 +547,18 @@ export function LessonPacks({
                 className="ml-auto"
                 disabled={inProgress}
                 aria-label={`Retirer le carnet ${packName(c)}`}
+                data-remove={c.id}
                 onClick={() =>
                   setRemoval({
                     title: `Retirer le carnet ${packName(c)} ?`,
                     body: "Il ne sera plus proposé à la vente pour cette saison.",
-                    // The pack goes away with its « Retirer »: focus moves to the section heading.
+                    // The pack goes away with its « Retirer »: focus moves to the section heading;
+                    // refused, it stays on « Retirer » (or the heading, if the pack is already gone).
                     run: () =>
                       act(
                         () => removeLessonPack(c.id),
                         () => focusAfter("#carnets"),
+                        () => focusAfter(`[data-remove="${c.id}"]`, "#carnets"),
                       ),
                   })
                 }

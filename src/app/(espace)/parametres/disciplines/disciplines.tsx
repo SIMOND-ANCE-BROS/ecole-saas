@@ -3,6 +3,7 @@
 import { Button, Group, Paper, Text, TextInput } from "@mantine/core";
 import { useState, useTransition } from "react";
 import type { DisciplineRow } from "@/db/settings";
+import { type ActionResult, settle } from "@/lib/action-result";
 import { ConfirmRemoval, type Removal } from "../../_ui/confirm-removal";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { newDiscipline, rename, removeDiscipline } from "../actions";
@@ -19,11 +20,13 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
     focusAfter(`[data-edit="${id}"]`);
     setEdition(null);
   };
-  const act = (action: () => Promise<{ message: string | null }>, after?: () => void) =>
+  // A refusal or a lost connection keeps what was typed, with its message (#243).
+  const act = (action: () => Promise<ActionResult>, after?: () => void, failed?: () => void) =>
     startTransition(async () => {
-      const r = await action();
-      setMessage(r.message);
-      if (!r.message) after?.();
+      const r = await settle(action);
+      setMessage(r.ok ? null : r.message);
+      if (r.ok) after?.();
+      else failed?.();
     });
 
   return (
@@ -120,15 +123,18 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
                       color="red"
                       disabled={inProgress}
                       aria-label={`Retirer ${d.name}`}
+                      data-remove={d.id}
                       onClick={() =>
                         setRemoval({
                           title: `Retirer la discipline ${d.name} ?`,
                           body: "Elle n’a ni cours ni tarif dédié. Vous pourrez la recréer plus tard.",
-                          // Its row goes away: focus moves to the list, or to the new-discipline field if empty.
+                          // Its row goes away: focus moves to the list, or to the new-discipline field if empty;
+                          // refused, it stays on « Retirer » (or the list, if the row is already gone).
                           run: () =>
                             act(
                               () => removeDiscipline(d.id),
                               () => focusAfter("[data-after-removal]", "#new-discipline"),
+                              () => focusAfter(`[data-remove="${d.id}"]`, "[data-after-removal]", "#new-discipline"),
                             ),
                         })
                       }
