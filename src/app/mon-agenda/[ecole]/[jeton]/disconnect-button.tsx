@@ -1,5 +1,6 @@
 "use client";
 
+import { Button, Text } from "@mantine/core";
 import { useState, useTransition } from "react";
 import { disconnectMyCalendar } from "./actions";
 
@@ -8,18 +9,18 @@ export function DisconnectButton({ schoolId: schoolId, token: token }: { schoolI
   const [inProgress, startTransition] = useTransition();
   return (
     <>
-      <button
-        type="button"
-        className="bouton-secondaire self-start"
+      <Button
+        variant="default"
+        className="self-start"
         disabled={inProgress}
         onClick={() => startTransition(async () => setMessage((await disconnectMyCalendar(schoolId, token)).message))}
       >
         Déconnecter mon agenda
-      </button>
+      </Button>
       {message && (
-        <p role="alert" className="text-erreur">
+        <Text role="alert" size="sm" c="red">
           {message}
-        </p>
+        </Text>
       )}
     </>
   );

@@ -20,9 +20,10 @@
   --accent-fort: #4338ca;
   --accent-doux: #eef0ff;
   --sur-accent: #ffffff;
-  --alerte-fond: #fff4dc;
-  --alerte-texte: #7a4b00;
-  --erreur: #b42318;
+  /* Warnings and errors: the Mantine theme's colours, light and dark (#115). */
+  --alerte-fond: var(--mantine-color-yellow-light);
+  --alerte-texte: var(--mantine-color-yellow-light-color);
+  --erreur: var(--mantine-color-red-text);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -36,9 +37,6 @@
     --accent-fort: #a5a8fa;
     --accent-doux: #252a45;
     --sur-accent: #11131a;
-    --alerte-fond: #3a2c10;
-    --alerte-texte: #f6d58e;
-    --erreur: #f19c94;
   }
 }
 
@@ -63,58 +61,6 @@ body {
   background: var(--fond);
   color: var(--texte);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
-}
-
-/* Composants communs : compacts (saisie rapide à l'accueil), focus toujours visible. */
-@layer components {
-  .champ {
-    @apply rounded-md border border-bordure bg-surface px-2 py-1.5 text-sm text-texte
-      placeholder:text-doux focus:outline-2 focus:outline-offset-1 focus:outline-accent;
-  }
-  .bouton-principal {
-    @apply inline-flex items-center justify-center rounded-md bg-accent px-3 py-1.5 text-sm font-medium
-      text-sur-accent hover:bg-accent-fort focus-visible:outline-2 focus-visible:outline-offset-2
-      focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50;
-  }
-  .bouton-secondaire {
-    @apply inline-flex items-center rounded-md border border-bordure bg-surface px-3 py-1.5 text-sm
-      hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
-  }
-  .lien {
-    @apply text-accent underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-accent;
-  }
-  /* Bloc de contenu : bordé, sans ombre. */
-  .panneau {
-    @apply rounded-lg border border-bordure bg-surface;
-  }
-  /* Tableau dense : lignes d'environ 32 px, en-têtes en casse normale. */
-  .tableau {
-    @apply w-full text-left text-sm;
-  }
-  .tableau th {
-    @apply border-b border-bordure px-3 py-2 text-xs font-medium text-doux;
-  }
-  .tableau td {
-    @apply border-b border-bordure px-3 py-1.5 align-top;
-  }
-  .tableau tbody tr:last-child td {
-    @apply border-b-0;
-  }
-  .tableau tbody tr:hover {
-    @apply bg-accent-doux/40;
-  }
-  .titre-page {
-    @apply text-xl font-semibold tracking-tight;
-  }
-}
-
-/* Écran tactile : cibles d'au moins 44 px, sans changer la densité à la souris. */
-@media (pointer: coarse) {
-  .champ,
-  .bouton-principal,
-  .bouton-secondaire {
-    min-height: 2.75rem;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

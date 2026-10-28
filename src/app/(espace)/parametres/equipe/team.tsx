@@ -67,9 +67,9 @@ function ShownLink({ shown, onClose }: { shown: Shown; onClose: () => void }) {
 
 function Refusal({ text }: { text: string | undefined }) {
   return text ? (
-    <p role="alert" className="text-sm text-erreur">
+    <Text role="alert" size="sm" c="red">
       {text}
-    </p>
+    </Text>
   ) : null;
 }
 

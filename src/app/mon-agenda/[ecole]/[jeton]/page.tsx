@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { Alert, Button, Paper, Text, TextInput, Title } from "@mantine/core";
 import { z } from "zod";
 import { PROVIDERS, credentials, PROVIDER_NAME } from "@/connectors/calendar/oauth";
 import { withSchool } from "@/db";
@@ -43,40 +44,48 @@ export default async function MyCalendarPage({ params, searchParams }: PageProps
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-6 p-4 sm:p-8">
       <header>
-        <p className="text-sm text-doux">{instructor.school}</p>
-        <h1 className="titre-page">Bonjour {instructor.firstName}</h1>
-        <p className="text-sm text-doux">Cette page vous est personnelle : ne partagez pas son adresse.</p>
+        <Text size="sm" c="dimmed">
+          {instructor.school}
+        </Text>
+        <Title order={1} fz="xl">
+          Bonjour {instructor.firstName}
+        </Title>
+        <Text size="sm" c="dimmed">
+          Cette page vous est personnelle : ne partagez pas son adresse.
+        </Text>
       </header>
 
       {banner && (
-        <p
-          role={banner.error ? "alert" : "status"}
-          className={`rounded-md px-3 py-2 text-sm ${banner.error ? "bg-alerte-fond text-alerte-texte" : "border border-accent bg-accent-doux"}`}
-        >
+        <Alert role={banner.error ? "alert" : "status"} color={banner.error ? "yellow" : undefined}>
           {banner.text}
-        </p>
+        </Alert>
       )}
 
-      <section aria-labelledby="seances" className="panneau flex flex-col gap-2 p-4 text-sm">
-        <h2 id="seances" className="text-base font-semibold">
+      <Paper withBorder component="section" aria-labelledby="seances" p="md" className="flex flex-col gap-2 text-sm">
+        <Title order={2} size="h5" id="seances">
           Mes séances dans mon agenda
-        </h2>
+        </Title>
         <p>
           Ajoutez une fois ce lien à votre agenda : cours, remplacements et annulations s’y mettent à jour d’eux-mêmes.
         </p>
-        <a href={ics.replace(/^https?:/, "webcal:")} className="bouton-principal self-start">
+        <Button component="a" href={ics.replace(/^https?:/, "webcal:")} className="self-start">
           S’abonner à mes séances
-        </a>
-        <label htmlFor="ics" className="text-doux">
-          Ou copiez l’adresse :
-        </label>
-        <input id="ics" readOnly className="champ font-mono text-xs" value={ics} />
-      </section>
+        </Button>
+        <TextInput
+          id="ics"
+          label="Ou copiez l’adresse :"
+          readOnly
+          value={ics}
+          ff="monospace"
+          size="xs"
+          styles={{ label: { fontWeight: 400, color: "var(--mantine-color-dimmed)" } }}
+        />
+      </Paper>
 
-      <section aria-labelledby="dispo" className="panneau flex flex-col gap-2 p-4 text-sm">
-        <h2 id="dispo" className="text-base font-semibold">
+      <Paper withBorder component="section" aria-labelledby="dispo" p="md" className="flex flex-col gap-2 text-sm">
+        <Title order={2} size="h5" id="dispo">
           Mes indisponibilités
-        </h2>
+        </Title>
         <p>
           Connectez votre agenda pour que l’école voie quand vous n’êtes pas disponible, sans rien d’autre : ni titre,
           ni lieu, ni participant. Cela évite qu’on vous propose un cours ou un remplacement à ces moments-là.
@@ -88,28 +97,32 @@ export default async function MyCalendarPage({ params, searchParams }: PageProps
               {connection.account && ` (${connection.account})`}.
             </p>
             {connection.error ? (
-              <p className="text-alerte-texte">{connection.error}</p>
+              <Text size="sm" c="var(--mantine-color-yellow-light-color)">
+                {connection.error}
+              </Text>
             ) : (
               connection.lastSyncedAt && (
-                <p className="text-doux">Dernière mise à jour le {dateTime.format(connection.lastSyncedAt)}.</p>
+                <Text size="sm" c="dimmed">
+                  Dernière mise à jour le {dateTime.format(connection.lastSyncedAt)}.
+                </Text>
               )
             )}
             <DisconnectButton schoolId={ecole} token={jeton} />
           </>
         ) : available.length === 0 ? (
-          <p className="text-doux">
+          <Text size="sm" c="dimmed">
             La connexion des agendas n’est pas encore ouverte. Prévenez l’école de vos absences.
-          </p>
+          </Text>
         ) : (
           <div className="flex flex-wrap gap-2">
             {available.map((f) => (
-              <a key={f} href={`/mon-agenda/${ecole}/${jeton}/connecter/${f}`} className="bouton-secondaire">
+              <Button key={f} component="a" href={`/mon-agenda/${ecole}/${jeton}/connecter/${f}`} variant="default">
                 Connecter {PROVIDER_NAME[f]}
-              </a>
+              </Button>
             ))}
           </div>
         )}
-      </section>
+      </Paper>
     </main>
   );
 }

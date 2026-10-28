@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Anchor } from "@mantine/core";
 import { Suspense } from "react";
 import { eq } from "drizzle-orm";
 import { withSchool } from "@/db";
@@ -7,6 +7,7 @@ import { schoolContext, currentSession } from "@/lib/session";
 import { signOut } from "./actions";
 import { Frame } from "./frame";
 import { Navigation, GlobalSearch } from "./navigation";
+import { TextLink } from "./_ui/text-link";
 
 const ROLE_LABEL = { director: "Direction", front_desk: "Accueil", teacher: "Professeur" } as const;
 
@@ -44,13 +45,13 @@ export default async function WorkspaceLayout({ children, modal }: LayoutProps<"
           <div className="mt-auto flex flex-col gap-1 border-t border-bordure pt-3 text-sm">
             <span className="px-1 font-medium">{user.name}</span>
             <span className="px-1 text-xs text-doux">{ROLE_LABEL[role]}</span>
-            <Link href="/ecoles" className="lien px-1 text-xs">
+            <TextLink href="/ecoles" size="xs" px={4} className="self-start">
               Changer d’école
-            </Link>
+            </TextLink>
             <form action={signOut}>
-              <button type="submit" className="lien px-1 text-xs">
+              <Anchor component="button" type="submit" size="xs" px={4}>
                 Se déconnecter
-              </button>
+              </Anchor>
             </form>
           </div>
         </>

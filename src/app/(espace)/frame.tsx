@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@mantine/core";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 
@@ -35,16 +36,16 @@ export function Frame({ pane: pane, header: header, children }: Props) {
         id="volet"
         className={`${open ? "fixed inset-0 z-40 flex overflow-y-auto" : "hidden"} shrink-0 flex-col gap-6 border-bordure bg-surface p-3 print:hidden md:sticky md:top-0 md:flex md:h-screen md:w-52 md:border-r`}
       >
-        <button type="button" className="bouton-secondaire self-end md:hidden" onClick={() => setOpen(false)}>
+        <Button variant="default" className="self-end md:hidden" onClick={() => setOpen(false)}>
           Fermer
-        </button>
+        </Button>
         {pane}
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-bordure bg-fond/90 px-3 py-2 backdrop-blur print:hidden md:px-4">
-          <button
-            type="button"
-            className="bouton-secondaire shrink-0 md:hidden"
+          <Button
+            variant="default"
+            className="shrink-0 md:hidden"
             aria-expanded={open}
             aria-controls="volet"
             onClick={() => {
@@ -53,7 +54,7 @@ export function Frame({ pane: pane, header: header, children }: Props) {
             }}
           >
             Menu
-          </button>
+          </Button>
           {header}
         </header>
         <main id="contenu" tabIndex={-1} className="w-full min-w-0 flex-1 p-3 sm:p-4 md:p-6">

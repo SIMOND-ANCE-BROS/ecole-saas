@@ -26,8 +26,9 @@ variables at the top of `src/app/globals.css`. Decision: ADR 0003.
 
 - **Mantine for every control**: `TextInput`, `Select`, `Checkbox`, `Button`,
   `Menu`, `Popover`, `Table`, `Modal`, `Drawer`, `DatePickerInput`,
-  notifications. No hand-made control class (`.champ`, `.bouton-principal`…
-  are being removed, #115).
+  notifications. No hand-made control class: the old `.champ`,
+  `.bouton-principal`… were removed in #115; colour tokens (`border-bordure`,
+  `text-doux`…) remain for layout.
 - **Tailwind for layout only**: flex, grid, gaps, responsive visibility.
 - One primary button per view (the main action); secondary actions are
   `variant="default"` or `subtle`; destructive actions use `color="red"` and
