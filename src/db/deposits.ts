@@ -55,11 +55,17 @@ function rows(tx: Tx) {
 
 /** Payments received between two dates (inclusive), optionally of a single method, oldest first. */
 export async function paymentLog(tx: Tx, from: string, to: string, method: Method | null): Promise<AuditLogRow[]> {
-  return rows(tx)
-    .where(
-      and(sql`${payment.date} BETWEEN ${from}::date AND ${to}::date`, method ? eq(payment.method, method) : undefined),
-    )
-    .orderBy(asc(payment.date), asc(payment.createdAt));
+  return (
+    rows(tx)
+      .where(
+        and(
+          sql`${payment.date} BETWEEN ${from}::date AND ${to}::date`,
+          method ? eq(payment.method, method) : undefined,
+        ),
+      )
+      // The id last: two payments entered in the same instant keep one order, on screen and in the export.
+      .orderBy(asc(payment.date), asc(payment.createdAt), asc(payment.id))
+  );
 }
 
 /** Cheques that have come due, cash and holiday vouchers not yet deposited, by method. */

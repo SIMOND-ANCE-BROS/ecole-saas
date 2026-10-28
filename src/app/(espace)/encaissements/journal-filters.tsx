@@ -1,6 +1,6 @@
 "use client";
 
-import { Anchor, Button, Paper } from "@mantine/core";
+import { Anchor, Button, Paper, Text } from "@mantine/core";
 import { useState } from "react";
 import { DateField, refusedDateField } from "../_ui/date-field";
 
@@ -9,7 +9,8 @@ type Props = {
   to: string;
   /** Column filters and sort of the table (`f`, `mode`, `sort`, `order`), kept when the period changes. */
   keep: [string, string][];
-  exportUrl: string;
+  /** Null when the period and filters leave nothing to export. */
+  exportUrl: string | null;
 };
 
 /**
@@ -42,9 +43,15 @@ export function JournalFilters({ from: shownFrom, to: shownTo, keep, exportUrl }
       <Button type="submit" variant="default" mt={25}>
         Afficher
       </Button>
-      <Anchor href={exportUrl} size="sm" mt={30} className="ml-auto">
-        Exporter (CSV)
-      </Anchor>
+      {exportUrl ? (
+        <Anchor href={exportUrl} size="sm" mt={30} className="ml-auto">
+          Exporter (CSV)
+        </Anchor>
+      ) : (
+        <Text span size="sm" c="dimmed" mt={30} className="ml-auto">
+          Rien à exporter
+        </Text>
+      )}
     </Paper>
   );
 }
