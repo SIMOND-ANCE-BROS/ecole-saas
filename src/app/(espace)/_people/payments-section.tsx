@@ -16,13 +16,8 @@ import { formatEuros } from "@/lib/money";
 import { ButtonLink } from "../_ui/button-link";
 import { CorrectPayment } from "./correct-payment";
 
-const shortDate = new Intl.DateTimeFormat("fr-FR", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
-const day = (iso: string) => shortDate.format(new Date(`${iso}T00:00:00Z`));
+// Tables show days as « 21/10/2026 », like the payment log and the lists (#201).
+const day = (iso: string) => iso.split("-").reverse().join("/");
 const OUTSIDE_CALCULATION = {
   dropped: "abandonnées",
   trial: "à l’essai",
@@ -52,7 +47,8 @@ export function PaymentsSection({
   return (
     <section aria-labelledby="paiements" className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-2">
-        <Title order={2} size="h5" id="paiements">
+        {/* Focusable: it keeps the focus when a fully corrected payment loses « Corriger ». */}
+        <Title order={2} size="h5" id="paiements" tabIndex={-1}>
           Paiements
         </Title>
         <ButtonLink href={`/paiements/nouveau?payeur=${payerId}`} size="sm">

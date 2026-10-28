@@ -121,6 +121,8 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
               label="Montant (€)"
               // « Reçu le » is already today: the amount is what gets typed first.
               data-panel-focus={i === 0 || undefined}
+              // Full page too (the panel focuses `data-panel-focus` itself).
+              autoFocus={i === 0}
               data-row-amount={l.id}
               inputMode="decimal"
               styles={{ input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } }}
