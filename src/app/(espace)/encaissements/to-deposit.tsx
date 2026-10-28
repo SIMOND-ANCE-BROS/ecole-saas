@@ -127,7 +127,9 @@ export function ToDeposit({
       >
         <DateField label="Date de la remise" required w={160} value={date} onChange={setDate} />
         <Button type="submit" loading={sending} disabled={selection.length === 0}>
-          {`Créer la remise : ${selection.length} × ${title.toLowerCase()}, ${formatEuros(total)}`}
+          {selection.length === 0
+            ? "Cochez les paiements à remettre"
+            : `Créer la remise : ${selection.length} × ${title.toLowerCase()}, ${formatEuros(total)}`}
         </Button>
         {message && (
           <Text role="alert" size="sm" c="red">

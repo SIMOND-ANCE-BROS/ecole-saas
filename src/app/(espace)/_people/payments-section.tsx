@@ -16,13 +16,8 @@ import { formatEuros } from "@/lib/money";
 import { ButtonLink } from "../_ui/button-link";
 import { CorrectPayment } from "./correct-payment";
 
-const shortDate = new Intl.DateTimeFormat("fr-FR", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
-const day = (iso: string) => shortDate.format(new Date(`${iso}T00:00:00Z`));
+// Tables show days as « 21/10/2026 », like the payment log and the lists (#201).
+const day = (iso: string) => iso.split("-").reverse().join("/");
 const OUTSIDE_CALCULATION = {
   dropped: "abandonnées",
   trial: "à l’essai",
