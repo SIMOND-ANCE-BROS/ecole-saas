@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Text, Title } from "@mantine/core";
 import { Suspense } from "react";
 import { withSchool } from "@/db";
 import { listContacts } from "@/db/students";
@@ -10,6 +10,7 @@ import { readFilter, readSort } from "@/domain/filters/filters";
 import { requireRole } from "@/lib/session";
 import { ListTable } from "../_filters/list-table";
 import { NavigableResults } from "../_people/navigable-results";
+import { ButtonLink } from "../_ui/button-link";
 
 export const metadata: Metadata = { title: "Contacts" };
 
@@ -28,12 +29,14 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
     <section className="flex w-full min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="titre-page">Contacts</h1>
-          <p className="text-sm text-doux">Parents, responsables, payeurs et organismes (CSE, entreprises).</p>
+          <Title order={1} fz="xl">
+            Contacts
+          </Title>
+          <Text size="sm" c="dimmed">
+            Parents, responsables, payeurs et organismes (CSE, entreprises).
+          </Text>
         </div>
-        <Link href="/contacts/nouveau" className="bouton-principal">
-          Nouveau contact
-        </Link>
+        <ButtonLink href="/contacts/nouveau">Nouveau contact</ButtonLink>
       </div>
       <NavigableResults>
         <Suspense>
@@ -51,11 +54,7 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
                   ? `Aucun contact ne correspond à « ${entry} ».`
                   : "Aucun contact pour l’instant."
             }
-            emptyAction={
-              <Link href="/contacts/nouveau" className="bouton-principal">
-                Nouveau contact
-              </Link>
-            }
+            emptyAction={<ButtonLink href="/contacts/nouveau">Nouveau contact</ButtonLink>}
             rows={contacts.map((c) => ({
               id: c.id,
               href: `/contacts/${c.id}`,

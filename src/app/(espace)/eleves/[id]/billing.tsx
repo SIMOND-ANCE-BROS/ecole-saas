@@ -1,5 +1,6 @@
 "use client";
 
+import { Anchor, Button, Paper, Radio, Text, Title } from "@mantine/core";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { StudentRecord, StudentRelative } from "@/db/students";
@@ -46,80 +47,81 @@ export function Billing({
     billedTo.type === "person" ? billedTo.name : billedTo.type === "self" ? `${firstName} (paie ses cours)` : null;
 
   return (
-    <section aria-labelledby="facture-a" className="panneau flex flex-col gap-2 p-4 text-sm">
-      <h2 id="facture-a" className="text-sm font-semibold">
+    <Paper withBorder p="md" component="section" aria-labelledby="facture-a" className="flex flex-col gap-2 text-sm">
+      <Title order={2} size="h6" id="facture-a">
         Facturé à
-      </h2>
+      </Title>
       {current ? (
-        <p className="text-base font-medium">
+        <Text fw={500}>
           {billedTo.type === "person" ? (
-            <Link href={`/personnes/${billedTo.id}`} className="lien">
+            <Anchor component={Link} href={`/personnes/${billedTo.id}`} inherit>
               {current}
-            </Link>
+            </Anchor>
           ) : (
             current
           )}
-        </p>
+        </Text>
       ) : (
-        <p role="alert" className="text-alerte-texte">
+        <Text role="alert" size="sm" c="var(--mantine-color-yellow-light-color)">
           Personne : {firstName} est mineur, indiquez à qui facturer.
-        </p>
+        </Text>
       )}
       {siblings.length > 0 && (
-        <p className="text-doux">
+        <Text size="sm" c="dimmed">
           Même payeur que{" "}
           {siblings.map((f, i) => (
             <span key={f.id}>
               {i > 0 && ", "}
-              <Link href={`/eleves/${f.id}`} className="lien">
+              <Anchor component={Link} href={`/eleves/${f.id}`} inherit>
                 {f.firstName}
-              </Link>
+              </Anchor>
             </span>
           ))}{" "}
           : réduction fratrie.
-        </p>
+        </Text>
       )}
 
       {!open ? (
-        <button type="button" className="bouton-secondaire self-start" onClick={() => setOpen(true)}>
+        <Button variant="default" className="self-start" onClick={() => setOpen(true)}>
           {current ? "Changer" : "Choisir"}
-        </button>
+        </Button>
       ) : (
-        <fieldset className="flex flex-col gap-1.5 border-t border-bordure pt-2">
+        <fieldset className="flex flex-col gap-2 border-t border-bordure pt-2">
           <legend className="sr-only">Facturer à</legend>
           {!minor && (
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="facturer"
-                checked={billedTo.type === "self"}
-                disabled={inProgress}
-                onChange={() => choose(() => invoice(studentId, { type: "self" }))}
-              />
-              {firstName}
-            </label>
+            <Radio
+              name="facturer"
+              label={firstName}
+              checked={billedTo.type === "self"}
+              disabled={inProgress}
+              onChange={() => choose(() => invoice(studentId, { type: "self" }))}
+            />
           )}
           {relatives.map((p) => (
-            <label key={p.id} className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="facturer"
-                checked={billedTo.type === "person" && billedTo.id === p.id}
-                disabled={inProgress}
-                onChange={() => choose(() => invoice(studentId, { type: "person", id: p.id }))}
-              />
-              {p.name}
-              <span className="text-xs text-doux">
-                {p.relation === "legal_guardian" ? "responsable" : p.relation === "partner" ? "conjoint" : "proche"}
-              </span>
-            </label>
+            <Radio
+              key={p.id}
+              name="facturer"
+              label={
+                <>
+                  {p.name}{" "}
+                  <Text span size="xs" c="dimmed">
+                    {p.relation === "legal_guardian" ? "responsable" : p.relation === "partner" ? "conjoint" : "proche"}
+                  </Text>
+                </>
+              }
+              checked={billedTo.type === "person" && billedTo.id === p.id}
+              disabled={inProgress}
+              onChange={() => choose(() => invoice(studentId, { type: "person", id: p.id }))}
+            />
           ))}
-          <label className="flex items-center gap-2">
-            <input type="radio" name="facturer" checked={seeOther} onChange={() => setSeeOther(true)} />
-            Un autre payeur : CSE, entreprise, proche…
-          </label>
+          <Radio
+            name="facturer"
+            label="Un autre payeur : CSE, entreprise, proche…"
+            checked={seeOther}
+            onChange={() => setSeeOther(true)}
+          />
           {seeOther && (
-            <div className="flex flex-col gap-2 pl-6">
+            <div className="flex flex-col gap-2 pl-7">
               <PersonChoice
                 id="autre-payeur"
                 label="Quel payeur ?"
@@ -128,26 +130,25 @@ export function Billing({
                 exclude={[studentId]}
                 organization
               />
-              <button
-                type="button"
-                className="bouton-principal self-start"
+              <Button
+                className="self-start"
                 disabled={inProgress || !other}
                 onClick={() => other && choose(() => billNewPerson(studentId, toInput(other)))}
               >
                 Facturer à ce payeur
-              </button>
+              </Button>
             </div>
           )}
-          <button type="button" className="lien self-start text-xs" onClick={() => setOpen(false)}>
+          <Anchor component="button" type="button" size="xs" className="self-start" onClick={() => setOpen(false)}>
             Fermer
-          </button>
+          </Anchor>
         </fieldset>
       )}
       {message && (
-        <p role="alert" className="text-erreur">
+        <Text role="alert" size="sm" c="red">
           {message}
-        </p>
+        </Text>
       )}
-    </section>
+    </Paper>
   );
 }

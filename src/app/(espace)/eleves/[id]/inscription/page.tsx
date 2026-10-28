@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Text, Title } from "@mantine/core";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { readStudent } from "@/db/students";
@@ -7,6 +7,7 @@ import { payableStudents, displayedName } from "@/db/people";
 import { seasonCourses, currentSeason } from "@/db/schedule";
 import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
+import { TextLink } from "../../../_ui/text-link";
 import { EnrollmentForm } from "./enrollment-form";
 
 export const metadata: Metadata = { title: "Nouvelle inscription" };
@@ -41,33 +42,40 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <Link href="/eleves" className="lien">
+        <TextLink href="/eleves" size="sm">
           Élèves
-        </Link>
-        <span className="text-doux"> / </span>
-        <Link href={`/eleves/${student.id}`} className="lien">
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" / "}
+        </Text>
+        <TextLink href={`/eleves/${student.id}`} size="sm">
           {name}
-        </Link>
-        <span className="text-doux"> / Nouvelle inscription</span>
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" "}
+          / Nouvelle inscription
+        </Text>
       </nav>
       <div>
-        <h1 className="titre-page">Nouvelle inscription{season && ` ${season.label}`}</h1>
+        <Title order={1} fz="xl">
+          Nouvelle inscription{season && ` ${season.label}`}
+        </Title>
         {payerId && (
-          <p className="text-sm text-doux">
+          <Text size="sm" c="dimmed">
             Facturée à {payer}. Pour changer, modifiez « Facturé à » sur la fiche de l’élève.
-          </p>
+          </Text>
         )}
       </div>
       {!season ? (
-        <p className="text-sm">Aucune saison n’est paramétrée.</p>
+        <Text size="sm">Aucune saison n’est paramétrée.</Text>
       ) : !payerId ? (
-        <p className="text-sm">
+        <Text size="sm">
           {student.firstName ?? name} est mineur et n’a pas de payeur.{" "}
-          <Link href={`/eleves/${student.id}`} className="lien">
+          <TextLink href={`/eleves/${student.id}`} size="sm" inherit>
             Indiquez à qui facturer sur sa fiche
-          </Link>
+          </TextLink>
           .
-        </p>
+        </Text>
       ) : (
         <EnrollmentForm
           payerId={payerId}

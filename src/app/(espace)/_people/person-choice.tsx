@@ -1,5 +1,6 @@
 "use client";
 
+import { Anchor, Paper, Text, TextInput, type TextInputProps, UnstyledButton } from "@mantine/core";
 import { useEffect, useState } from "react";
 import type { PersonInput, PersonResult } from "@/db/people";
 import type { FieldErrors } from "@/lib/form-errors";
@@ -96,45 +97,43 @@ export function PersonChoice({
     return (
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-medium">{value.name}</span>
-        <button type="button" className="lien text-sm" onClick={() => onChange(null)}>
+        <Anchor component="button" type="button" size="sm" onClick={() => onChange(null)}>
           Changer
-        </button>
+        </Anchor>
       </div>
     );
   }
 
   if (value && has(value, "newPerson")) {
     const n = value.newPerson;
-    const updated = (field: keyof typeof n) => (e: { target: { value: string } }) =>
-      onChange({ newPerson: { ...n, [field]: e.target.value } });
-    const field = (key: keyof typeof n, text: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
-      <div className="flex flex-col gap-1">
-        <label htmlFor={`${id}-${key}`} className="text-sm">
-          {text}
-        </label>
-        <input
-          id={`${id}-${key}`}
-          className="champ"
-          autoComplete="off"
-          value={n[key]}
-          onChange={updated(key)}
-          aria-invalid={errors[key] ? true : undefined}
-          {...props}
-        />
-        {errors[key] && <p className="text-xs text-erreur">{errors[key]}</p>}
-      </div>
+    const updated = (field: keyof typeof n) => (e: { currentTarget: { value: string } }) =>
+      onChange({ newPerson: { ...n, [field]: e.currentTarget.value } });
+    const field = (
+      key: keyof typeof n,
+      text: string,
+      props: Pick<TextInputProps, "autoFocus" | "inputMode" | "placeholder" | "type"> = {},
+    ) => (
+      <TextInput
+        id={`${id}-${key}`}
+        label={text}
+        autoComplete="off"
+        value={n[key]}
+        onChange={updated(key)}
+        error={errors[key]}
+        {...props}
+      />
     );
     return (
-      <div className="flex flex-col gap-2 rounded-md border border-bordure p-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-medium">
+      <Paper withBorder p="sm" className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Text size="sm" fw={500}>
             {n.type === "organisation" ? "Nouvel organisme" : "Nouvelle personne"}
-          </span>
-          <button type="button" className="lien text-sm" onClick={() => onChange(null)}>
+          </Text>
+          <Anchor component="button" type="button" size="sm" onClick={() => onChange(null)}>
             Chercher plutôt une personne connue
-          </button>
+          </Anchor>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid items-start gap-2 sm:grid-cols-2">
           {n.type === "organisation" ? (
             <>
               {field("companyName", "Raison sociale", { autoFocus: true })}
@@ -149,28 +148,25 @@ export function PersonChoice({
           {field("telephone", "Téléphone", { type: "tel", inputMode: "tel" })}
           {field("email", "E-mail", { type: "email" })}
         </div>
-      </div>
+      </Paper>
     );
   }
 
   return (
     <div className="flex flex-col gap-2">
-      <label htmlFor={`${id}-cherche`} className="text-sm">
-        {label}
-      </label>
-      <input
+      <TextInput
         id={`${id}-cherche`}
+        label={label}
         type="search"
-        className="champ"
         autoComplete="off"
         placeholder="Nom, prénom, téléphone…"
         value={entry}
         onChange={(e) => {
-          setInput(e.target.value);
+          setInput(e.currentTarget.value);
           setResults(null);
         }}
       />
-      <div role="status" className="text-xs text-doux">
+      <Text role="status" size="xs" c="dimmed">
         {active &&
           (error
             ? "Recherche indisponible, réessayez."
@@ -179,34 +175,43 @@ export function PersonChoice({
               : results.length === 0
                 ? "Personne de connu à ce nom."
                 : "")}
-      </div>
+      </Text>
       {active && results && results.length > 0 && (
-        <ul className="panneau max-h-56 divide-y divide-bordure overflow-y-auto text-sm">
+        <Paper withBorder component="ul" className="max-h-56 divide-y divide-bordure overflow-y-auto text-sm">
           {results.map((p) => (
             <li key={p.id}>
-              <button
-                type="button"
-                className="flex w-full flex-wrap gap-x-3 px-3 py-2 text-left hover:bg-accent-doux/40"
+              <UnstyledButton
+                className="flex w-full flex-wrap gap-x-3 px-3 py-2 text-left text-sm hover:bg-accent-doux/40 focus-visible:bg-accent-doux/40"
                 onClick={() => {
                   onChange({ id: p.id, name: displayedName(p) });
                   setInput("");
                 }}
               >
                 <span className="font-medium">{displayedName(p)}</span>
-                {p.telephone && <span className="tabular-nums text-doux">{p.telephone}</span>}
-                {p.liees.length > 0 && <span className="text-doux">liée à {p.liees.join(", ")}</span>}
-              </button>
+                {p.telephone && (
+                  <Text span size="sm" c="dimmed" className="tabular-nums">
+                    {p.telephone}
+                  </Text>
+                )}
+                {p.liees.length > 0 && (
+                  <Text span size="sm" c="dimmed">
+                    liée à {p.liees.join(", ")}
+                  </Text>
+                )}
+              </UnstyledButton>
             </li>
           ))}
-        </ul>
+        </Paper>
       )}
-      <button
+      <Anchor
+        component="button"
         type="button"
-        className="lien self-start text-sm"
+        size="sm"
+        className="self-start"
         onClick={() => onChange(newPerson(organization ? "organisation" : "individual"))}
       >
         {organization ? "Nouvel organisme (CSE, entreprise…)" : "Nouvelle personne"}
-      </button>
+      </Anchor>
     </div>
   );
 }

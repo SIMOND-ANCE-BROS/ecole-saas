@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Text, Title } from "@mantine/core";
 import { requireRole } from "@/lib/session";
 import { PersonForm } from "../../_people/person-form";
+import { TextLink } from "../../_ui/text-link";
 
 export const metadata: Metadata = { title: "Nouveau contact" };
 
@@ -10,19 +11,24 @@ export default async function NewContactPage() {
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <Link href="/contacts" className="lien">
+        <TextLink href="/contacts" size="sm">
           Contacts
-        </Link>
-        <span className="text-doux"> / Nouveau contact</span>
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" "}
+          / Nouveau contact
+        </Text>
       </nav>
-      <h1 className="titre-page">Nouveau contact</h1>
-      <p className="text-sm text-doux">
+      <Title order={1} fz="xl">
+        Nouveau contact
+      </Title>
+      <Text size="sm" c="dimmed">
         Pour un élève et son parent, utilisez plutôt{" "}
-        <Link href="/eleves/nouveau" className="lien">
+        <TextLink href="/eleves/nouveau" size="sm" inherit>
           « Nouvel élève »
-        </Link>{" "}
+        </TextLink>{" "}
         : le parent y est créé dans la foulée.
-      </p>
+      </Text>
       <PersonForm person={null} section="contacts" />
     </section>
   );

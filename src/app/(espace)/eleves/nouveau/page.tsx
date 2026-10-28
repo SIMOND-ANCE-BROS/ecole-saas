@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Text, Title } from "@mantine/core";
 import { withSchool } from "@/db";
 import { readPerson, displayedName } from "@/db/people";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
+import { TextLink } from "../../_ui/text-link";
 import { NewStudentGuide } from "./guide";
 
 export const metadata: Metadata = { title: "Nouvel élève" };
@@ -16,12 +17,17 @@ export default async function NewStudentPage({ searchParams }: PageProps<"/eleve
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <Link href="/eleves" className="lien">
+        <TextLink href="/eleves" size="sm">
           Élèves
-        </Link>
-        <span className="text-doux"> / Nouvel élève</span>
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" "}
+          / Nouvel élève
+        </Text>
       </nav>
-      <h1 className="titre-page">Nouvel élève</h1>
+      <Title order={1} fz="xl">
+        Nouvel élève
+      </Title>
       <NewStudentGuide today={todayInParis()} initialGuardian={r ? { id: r.id, name: displayedName(r) } : undefined} />
     </section>
   );

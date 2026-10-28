@@ -1,5 +1,6 @@
 "use client";
 
+import { Button, Text } from "@mantine/core";
 import { useState, useTransition } from "react";
 import { becomeStudent } from "../../eleves/actions";
 
@@ -9,18 +10,17 @@ export function BecomeStudent({ id, firstName: firstName }: { id: string; firstN
   const [inProgress, startTransition] = useTransition();
   return (
     <>
-      <button
-        type="button"
-        className="bouton-secondaire"
+      <Button
+        variant="default"
         disabled={inProgress}
         onClick={() => startTransition(async () => setMessage((await becomeStudent(id)).message))}
       >
         {firstName} prend aussi des cours
-      </button>
+      </Button>
       {message && (
-        <p role="alert" className="text-sm text-erreur">
+        <Text role="alert" size="sm" c="red">
           {message}
-        </p>
+        </Text>
       )}
     </>
   );

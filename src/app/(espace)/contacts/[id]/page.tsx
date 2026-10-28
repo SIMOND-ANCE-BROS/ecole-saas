@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Anchor, Paper, Text, Title } from "@mantine/core";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { readContact } from "@/db/students";
@@ -12,6 +12,8 @@ import { requireRole } from "@/lib/session";
 import { Banner, BilledEnrollments, Telephone } from "../../_people/sections";
 import { PaymentsSection } from "../../_people/payments-section";
 import { BecomeStudent } from "./become-student";
+import { ButtonLink } from "../../_ui/button-link";
+import { TextLink } from "../../_ui/text-link";
 
 export const metadata: Metadata = { title: "Fiche contact" };
 
@@ -50,29 +52,34 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
   return (
     <article className="flex w-full min-w-0 flex-col gap-5">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <Link href="/contacts" className="lien">
+        <TextLink href="/contacts" size="sm">
           Contacts
-        </Link>
-        <span className="text-doux"> / {name}</span>
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" "}
+          / {name}
+        </Text>
       </nav>
       <Banner text={collected(encaisse) ?? BANNERS[String(enregistre)]} />
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="titre-page">{name}</h1>
-          <p className="text-sm text-doux">
+          <Title order={1} fz="xl">
+            {name}
+          </Title>
+          <Text size="sm" c="dimmed">
             {c.type === "organisation" ? `Organisme${c.siren ? `, SIREN ${c.siren}` : ""}` : "Particulier"}
-          </p>
+          </Text>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href={`/contacts/${c.id}/modifier`} className="bouton-secondaire">
+          <ButtonLink href={`/contacts/${c.id}/modifier`} variant="default">
             Modifier
-          </Link>
+          </ButtonLink>
           {c.type === "individual" &&
             (c.isStudent ? (
-              <Link href={`/eleves/${c.id}`} className="bouton-secondaire">
+              <ButtonLink href={`/eleves/${c.id}`} variant="default">
                 Voir sa fiche élève
-              </Link>
+              </ButtonLink>
             ) : (
               <BecomeStudent id={c.id} firstName={firstName} />
             ))}
@@ -81,47 +88,65 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <aside aria-label="Coordonnées" className="order-first lg:order-last">
-          <section aria-labelledby="coordonnees" className="panneau flex flex-col gap-1 p-4 text-sm">
-            <h2 id="coordonnees" className="text-sm font-semibold">
+          <Paper
+            withBorder
+            p="md"
+            component="section"
+            aria-labelledby="coordonnees"
+            className="flex flex-col gap-1 text-sm"
+          >
+            <Title order={2} size="h6" id="coordonnees">
               Coordonnées
-            </h2>
-            {c.telephone ? <Telephone number={c.telephone} /> : <span className="text-doux">Pas de téléphone</span>}
-            {c.email ? (
-              <a href={`mailto:${c.email}`} className="lien break-all">
-                {c.email}
-              </a>
+            </Title>
+            {c.telephone ? (
+              <Telephone number={c.telephone} />
             ) : (
-              <span className="text-doux">Pas d’e-mail</span>
+              <Text span size="sm" c="dimmed">
+                Pas de téléphone
+              </Text>
+            )}
+            {c.email ? (
+              <Anchor href={`mailto:${c.email}`} size="sm" className="break-all">
+                {c.email}
+              </Anchor>
+            ) : (
+              <Text span size="sm" c="dimmed">
+                Pas d’e-mail
+              </Text>
             )}
             {c.address && <span>{c.address}</span>}
-          </section>
+          </Paper>
         </aside>
 
         <div className="flex min-w-0 flex-col gap-5">
           <section aria-labelledby="eleves" className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between gap-2">
-              <h2 id="eleves" className="text-base font-semibold">
+              <Title order={2} size="h5" id="eleves">
                 Élèves
-              </h2>
+              </Title>
               {c.type === "individual" && (
-                <Link href={`/eleves/nouveau?responsable=${c.id}`} className="lien text-sm">
+                <TextLink href={`/eleves/nouveau?responsable=${c.id}`} size="sm">
                   Ajouter un enfant
-                </Link>
+                </TextLink>
               )}
             </div>
             {c.students.length === 0 ? (
-              <p className="text-sm text-doux">Rattaché à aucun élève.</p>
+              <Text size="sm" c="dimmed">
+                Rattaché à aucun élève.
+              </Text>
             ) : (
-              <ul className="panneau divide-y divide-bordure text-sm">
+              <Paper withBorder component="ul" className="divide-y divide-bordure text-sm">
                 {c.students.map((e) => (
                   <li key={e.relationshipId} className="flex flex-wrap items-baseline gap-x-3 px-3 py-2">
-                    <Link href={`/eleves/${e.id}`} className="lien font-medium">
+                    <TextLink href={`/eleves/${e.id}`} size="sm" fw={500}>
                       {e.name}
-                    </Link>
-                    <span className="text-doux">{roles(e)}</span>
+                    </TextLink>
+                    <Text span size="sm" c="dimmed">
+                      {roles(e)}
+                    </Text>
                   </li>
                 ))}
-              </ul>
+              </Paper>
             )}
           </section>
           {season && <BilledEnrollments enrollments={billed} season={season.label} />}

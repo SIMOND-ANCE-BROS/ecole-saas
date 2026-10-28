@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Anchor, Paper, Text, Title } from "@mantine/core";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { readStudent } from "@/db/students";
@@ -13,6 +13,8 @@ import { PaymentsSection } from "../../_people/payments-section";
 import { Banner, FollowedCourses, Documents, BilledEnrollments, dayOf, Notes, Telephone } from "../../_people/sections";
 import { Billing } from "./billing";
 import { Relatives } from "./relatives";
+import { ButtonLink } from "../../_ui/button-link";
+import { TextLink } from "../../_ui/text-link";
 
 export const metadata: Metadata = { title: "Fiche élève" };
 
@@ -61,28 +63,31 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   return (
     <article className="flex w-full min-w-0 flex-col gap-5">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <Link href="/eleves" className="lien">
+        <TextLink href="/eleves" size="sm">
           Élèves
-        </Link>
-        <span className="text-doux"> / {name}</span>
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" "}
+          / {name}
+        </Text>
       </nav>
       <Banner text={collected(encaisse) ?? banner} />
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="titre-page">{name}</h1>
-          <p className="text-sm text-doux">
+          <Title order={1} fz="xl">
+            {name}
+          </Title>
+          <Text size="sm" c="dimmed">
             {e.birthDate ? `${age} ans, né(e) le ${dayOf(e.birthDate)}` : "Date de naissance non renseignée"}
             {!e.isStudent && " (contact : pas encore élève)"}
-          </p>
+          </Text>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href={`/eleves/${e.id}/modifier`} className="bouton-secondaire">
+          <ButtonLink href={`/eleves/${e.id}/modifier`} variant="default">
             Modifier l’identité
-          </Link>
-          <Link href={`/eleves/${e.id}/inscription`} className="bouton-principal">
-            Inscrire {firstName}
-          </Link>
+          </ButtonLink>
+          <ButtonLink href={`/eleves/${e.id}/inscription`}>Inscrire {firstName}</ButtonLink>
         </div>
       </header>
 
@@ -93,12 +98,20 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           aria-label="Contact et facturation"
           className="order-first flex flex-col gap-4 lg:sticky lg:top-20 lg:order-last"
         >
-          <section aria-labelledby="urgence" className="panneau flex flex-col gap-1 p-4 text-sm">
-            <h2 id="urgence" className="text-sm font-semibold">
+          <Paper
+            withBorder
+            p="md"
+            component="section"
+            aria-labelledby="urgence"
+            className="flex flex-col gap-1 text-sm"
+          >
+            <Title order={2} size="h6" id="urgence">
               En cas d’urgence
-            </h2>
+            </Title>
             {emergencyContacts.length === 0 ? (
-              <span className="text-doux">Personne à prévenir. Cochez « À prévenir » sur un responsable.</span>
+              <Text span size="sm" c="dimmed">
+                Personne à prévenir. Cochez « À prévenir » sur un responsable.
+              </Text>
             ) : (
               emergencyContacts.map((u) => (
                 <span key={u.relationshipId} className="flex flex-wrap gap-x-2">
@@ -106,12 +119,14 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
                   {u.telephone ? (
                     <Telephone number={u.telephone} />
                   ) : (
-                    <span className="text-erreur">sans téléphone</span>
+                    <Text span size="sm" c="red">
+                      sans téléphone
+                    </Text>
                   )}
                 </span>
               ))
             )}
-          </section>
+          </Paper>
           <Billing
             studentId={e.id}
             firstName={firstName}
@@ -120,20 +135,34 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             relatives={[...e.guardians, ...e.otherRelationships.filter((a) => a.direction === "incoming")]}
             siblings={e.siblings}
           />
-          <section aria-labelledby="coordonnees" className="panneau flex flex-col gap-1 p-4 text-sm">
-            <h2 id="coordonnees" className="text-sm font-semibold">
+          <Paper
+            withBorder
+            p="md"
+            component="section"
+            aria-labelledby="coordonnees"
+            className="flex flex-col gap-1 text-sm"
+          >
+            <Title order={2} size="h6" id="coordonnees">
               Coordonnées de {firstName}
-            </h2>
-            {e.telephone ? <Telephone number={e.telephone} /> : <span className="text-doux">Pas de téléphone</span>}
-            {e.email ? (
-              <a href={`mailto:${e.email}`} className="lien break-all">
-                {e.email}
-              </a>
+            </Title>
+            {e.telephone ? (
+              <Telephone number={e.telephone} />
             ) : (
-              <span className="text-doux">Pas d’e-mail</span>
+              <Text span size="sm" c="dimmed">
+                Pas de téléphone
+              </Text>
+            )}
+            {e.email ? (
+              <Anchor href={`mailto:${e.email}`} size="sm" className="break-all">
+                {e.email}
+              </Anchor>
+            ) : (
+              <Text span size="sm" c="dimmed">
+                Pas d’e-mail
+              </Text>
             )}
             {e.address && <span>{e.address}</span>}
-          </section>
+          </Paper>
         </aside>
 
         <div className="flex min-w-0 flex-col gap-5">
@@ -141,13 +170,13 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           <FollowedCourses courses={e.courses} />
           {season && <BilledEnrollments enrollments={billed} season={season.label} />}
           {e.billedTo.type === "person" ? (
-            <p className="text-sm text-doux">
+            <Text size="sm" c="dimmed">
               Paiements : sur la fiche de{" "}
-              <Link href={`/contacts/${e.billedTo.id}`} className="lien">
+              <TextLink href={`/contacts/${e.billedTo.id}`} size="sm" inherit>
                 {e.billedTo.name}
-              </Link>
+              </TextLink>
               , qui paie pour {firstName}.
-            </p>
+            </Text>
           ) : (
             <PaymentsSection
               payerId={e.id}
