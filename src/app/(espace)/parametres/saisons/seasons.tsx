@@ -4,6 +4,8 @@ import { Button, Group, Paper, Select, Table, Text, TextInput } from "@mantine/c
 import { useState, useTransition } from "react";
 import type { SeasonRow } from "@/db/settings";
 import { DateField, refusedDateField } from "../../_ui/date-field";
+import { PHONE_LABEL, PHONE_TABLE } from "../../_ui/phone-table";
+import { useFocusAfter } from "../../_ui/use-focus-after";
 import { changeSeason, newSeason } from "../actions";
 
 const date = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -22,7 +24,10 @@ function next(seasons: SeasonRow[]) {
   };
 }
 
-export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
+const cell = PHONE_TABLE.cell;
+const number = `${cell} text-right tabular-nums max-sm:text-left`;
+
+export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
   const [v, setV] = useState(next(seasons));
   const [copy, setCopy] = useState(seasons[0]?.id ?? "");
   const [edition, setEdition] = useState<{ id: string; label: string; startDate: string; endDate: string } | null>(
@@ -30,6 +35,12 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
   );
   const [message, setMessage] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
+  const focusAfter = useFocusAfter();
+  // Leaving the edit (saved, « Annuler », Escape): focus goes back to the row's « Modifier » (#186).
+  const closeEdit = (id: string) => {
+    focusAfter(`[data-edit="${id}"]`);
+    setEdition(null);
+  };
   const act = (action: () => Promise<{ message: string | null }>, after?: () => void) =>
     startTransition(async () => {
       const r = await action();
@@ -40,15 +51,15 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
   const saveEdition = (id: string, e: { label: string; startDate: string; endDate: string }) =>
     act(
       () => changeSeason(id, { label: e.label, startDate: e.startDate, endDate: e.endDate }),
-      () => setEdition(null),
+      () => closeEdit(id),
     );
 
   return (
     <div className="flex flex-col gap-5">
       {seasons.length > 0 && (
-        <Paper withBorder className="relative overflow-x-auto">
-          <Table>
-            <Table.Thead>
+        <Paper withBorder className="relative overflow-x-auto max-sm:overflow-visible">
+          <Table className={PHONE_TABLE.table}>
+            <Table.Thead className={PHONE_TABLE.head}>
               <Table.Tr>
                 <Table.Th>Saison</Table.Th>
                 <Table.Th>Du</Table.Th>
@@ -60,21 +71,22 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
                 </Table.Th>
               </Table.Tr>
             </Table.Thead>
-            <Table.Tbody>
+            <Table.Tbody className={PHONE_TABLE.body}>
               {seasons.map((s) =>
                 edition?.id === s.id ? (
                   <Table.Tr
                     key={s.id}
+                    className={PHONE_TABLE.row}
                     // A table row cannot hold a form: Enter saves and Escape cancels by hand.
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
                         e.preventDefault();
                         if (!refusedDateField(e.currentTarget)) saveEdition(s.id, edition);
                       }
-                      if (e.key === "Escape") setEdition(null);
+                      if (e.key === "Escape") closeEdit(s.id);
                     }}
                   >
-                    <Table.Td>
+                    <Table.Td className={`${cell} ${PHONE_TABLE.title}`}>
                       <TextInput
                         aria-label="Libellé"
                         w={128}
@@ -83,7 +95,10 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
                         onChange={(e) => setEdition({ ...edition, label: e.currentTarget.value })}
                       />
                     </Table.Td>
-                    <Table.Td>
+                    <Table.Td className={cell}>
+                      <span className={PHONE_LABEL} aria-hidden>
+                        Du
+                      </span>
                       <DateField
                         aria-label="Début"
                         w={140}
@@ -91,7 +106,10 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
                         onChange={(startDate) => setEdition({ ...edition, startDate })}
                       />
                     </Table.Td>
-                    <Table.Td>
+                    <Table.Td className={cell}>
+                      <span className={PHONE_LABEL} aria-hidden>
+                        Au
+                      </span>
                       <DateField
                         aria-label="Fin"
                         w={140}
@@ -99,9 +117,9 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
                         onChange={(endDate) => setEdition({ ...edition, endDate })}
                       />
                     </Table.Td>
-                    <Table.Td className="text-right tabular-nums">{s.course}</Table.Td>
-                    <Table.Td className="text-right tabular-nums">{s.tariffs}</Table.Td>
-                    <Table.Td>
+                    <Table.Td className={`${number} max-sm:hidden`}>{s.course}</Table.Td>
+                    <Table.Td className={`${number} max-sm:hidden`}>{s.tariffs}</Table.Td>
+                    <Table.Td className={`${cell} ${PHONE_TABLE.title}`}>
                       <Group gap="xs" wrap="nowrap">
                         <Button
                           size="compact-sm"
@@ -114,24 +132,37 @@ export function Seasons({ seasons: seasons }: { seasons: SeasonRow[] }) {
                         >
                           Enregistrer
                         </Button>
-                        <Button size="compact-sm" variant="subtle" color="gray" onClick={() => setEdition(null)}>
+                        <Button size="compact-sm" variant="subtle" color="gray" onClick={() => closeEdit(s.id)}>
                           Annuler
                         </Button>
                       </Group>
                     </Table.Td>
                   </Table.Tr>
                 ) : (
-                  <Table.Tr key={s.id}>
-                    <Table.Td className="font-medium">{s.label}</Table.Td>
-                    <Table.Td className="tabular-nums">{day(s.startDate)}</Table.Td>
-                    <Table.Td className="tabular-nums">{day(s.endDate)}</Table.Td>
-                    <Table.Td className="text-right tabular-nums">{s.course}</Table.Td>
-                    <Table.Td className="text-right tabular-nums">{s.tariffs}</Table.Td>
-                    <Table.Td>
+                  <Table.Tr key={s.id} className={PHONE_TABLE.row}>
+                    <Table.Td className={`${cell} ${PHONE_TABLE.title} font-medium`}>{s.label}</Table.Td>
+                    <Table.Td className={`${cell} tabular-nums`}>
+                      <span className={PHONE_LABEL}>Du</span>
+                      {day(s.startDate)}
+                    </Table.Td>
+                    <Table.Td className={`${cell} tabular-nums`}>
+                      <span className={PHONE_LABEL}>Au</span>
+                      {day(s.endDate)}
+                    </Table.Td>
+                    <Table.Td className={number}>
+                      <span className={PHONE_LABEL}>Cours</span>
+                      {s.course}
+                    </Table.Td>
+                    <Table.Td className={number}>
+                      <span className={PHONE_LABEL}>Tarifs</span>
+                      {s.tariffs}
+                    </Table.Td>
+                    <Table.Td className={`${cell} max-sm:ml-auto`}>
                       <Button
                         size="compact-sm"
                         variant="subtle"
                         aria-label={`Modifier la saison ${s.label}`}
+                        data-edit={s.id}
                         onClick={() => setEdition(s)}
                       >
                         Modifier

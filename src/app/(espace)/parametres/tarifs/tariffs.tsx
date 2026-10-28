@@ -18,6 +18,8 @@ import { useState, useTransition } from "react";
 import type { Siblings as SiblingsRule, LessonPackRow, GridRow, Period, Audience } from "@/db/tariffs";
 import { combinationLabel } from "@/domain/tariff/compute";
 import { formatEuros, parseEuros } from "@/lib/money";
+import { ConfirmRemoval, type Removal } from "../../_ui/confirm-removal";
+import { PHONE_LABEL, PHONE_TABLE } from "../../_ui/phone-table";
 import { lessonPack, cellPrice, siblingsRule, removeLessonPack } from "../actions";
 
 const AUDIENCES: [Audience, string][] = [
@@ -157,6 +159,7 @@ export function Grid({
   });
   const [message, setMessage] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
+  const [removal, setRemoval] = useState<Removal | null>(null);
   const rows = grid.filter((l) => l.audience === chosenAudience);
 
   const addRow = () =>
@@ -197,6 +200,7 @@ export function Grid({
 
   return (
     <section aria-labelledby="grille" className="flex flex-col gap-3">
+      <ConfirmRemoval removal={removal} onClose={() => setRemoval(null)} />
       <Title order={2} size="h5" id="grille">
         Grille des forfaits
       </Title>
@@ -211,9 +215,9 @@ export function Grid({
         }))}
       />
 
-      <Paper withBorder className="relative overflow-x-auto">
-        <Table>
-          <Table.Thead>
+      <Paper withBorder className="relative overflow-x-auto max-sm:overflow-visible">
+        <Table className={PHONE_TABLE.table}>
+          <Table.Thead className={PHONE_TABLE.head}>
             <Table.Tr>
               <Table.Th>Cours de la semaine</Table.Th>
               {PERIODS.map(([p, label]) => (
@@ -226,10 +230,10 @@ export function Grid({
               </Table.Th>
             </Table.Tr>
           </Table.Thead>
-          <Table.Tbody>
+          <Table.Tbody className={PHONE_TABLE.body}>
             {rows.length === 0 && (
-              <Table.Tr>
-                <Table.Td colSpan={5}>
+              <Table.Tr className={PHONE_TABLE.row}>
+                <Table.Td colSpan={5} className={PHONE_TABLE.cell}>
                   <Text size="sm" c="dimmed">
                     Aucun forfait pour ce public : ajoutez une ligne ci-dessous.
                   </Text>
@@ -241,8 +245,8 @@ export function Grid({
               const label = combinationLabel(l.combination);
               const used = PERIODS.some(([p]) => l.price[p]?.used);
               return (
-                <Table.Tr key={key}>
-                  <Table.Td>
+                <Table.Tr key={key} className={PHONE_TABLE.row}>
+                  <Table.Td className={`${PHONE_TABLE.cell} ${PHONE_TABLE.title}`}>
                     <span className="font-medium">{label}</span>
                     {l.discipline && (
                       <Badge variant="light" ml="xs">
@@ -251,18 +255,27 @@ export function Grid({
                     )}
                   </Table.Td>
                   {PERIODS.map(([p, periodLabel]) => (
-                    <Table.Td key={`${key}-${p}`}>
+                    <Table.Td key={`${key}-${p}`} className={PHONE_TABLE.cell}>
+                      <span className={PHONE_LABEL} aria-hidden>
+                        {periodLabel}
+                      </span>
                       <PriceCell seasonId={seasonId} row={l} period={p} label={`${label}, ${periodLabel}`} />
                     </Table.Td>
                   ))}
-                  <Table.Td className="text-right">
+                  <Table.Td className={`${PHONE_TABLE.cell} text-right max-sm:ml-auto`}>
                     {!used && (
                       <Button
                         size="compact-sm"
                         variant="subtle"
-                        color="gray"
+                        color="red"
                         disabled={inProgress}
-                        onClick={() => removeRow(l)}
+                        onClick={() =>
+                          setRemoval({
+                            title: `Retirer la ligne ${label} ?`,
+                            body: "Ses prix ne sont utilisés par aucune inscription. Vous pourrez la recréer plus tard.",
+                            run: () => removeRow(l),
+                          })
+                        }
                         aria-label={`Retirer la ligne ${label}`}
                       >
                         Retirer
@@ -467,6 +480,7 @@ export function LessonPacks({
   const [v, setV] = useState({ lessonCount: "5", maxPeople: "1", price: "" });
   const [message, setMessage] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
+  const [removal, setRemoval] = useState<Removal | null>(null);
   const act = (action: () => Promise<{ message: string | null }>, after?: () => void) =>
     startTransition(async () => {
       const r = await action();
@@ -476,6 +490,7 @@ export function LessonPacks({
 
   return (
     <Paper withBorder component="section" aria-labelledby="carnets" p="md" className="flex flex-col gap-3 text-sm">
+      <ConfirmRemoval removal={removal} onClose={() => setRemoval(null)} />
       <Title order={2} size="h5" id="carnets">
         Carnets de cours particuliers
       </Title>
@@ -497,10 +512,17 @@ export function LessonPacks({
               <Button
                 size="compact-sm"
                 variant="subtle"
-                color="gray"
+                color="red"
                 className="ml-auto"
                 disabled={inProgress}
-                onClick={() => act(() => removeLessonPack(c.id))}
+                aria-label={`Retirer le carnet de ${c.lessonCount} séance${c.lessonCount > 1 ? "s" : ""}`}
+                onClick={() =>
+                  setRemoval({
+                    title: `Retirer le carnet de ${c.lessonCount} séance${c.lessonCount > 1 ? "s" : ""} ?`,
+                    body: "Il ne sera plus proposé à la vente pour cette saison.",
+                    run: () => act(() => removeLessonPack(c.id)),
+                  })
+                }
               >
                 Retirer
               </Button>
