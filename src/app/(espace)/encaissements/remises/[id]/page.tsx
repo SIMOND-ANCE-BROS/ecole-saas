@@ -1,12 +1,25 @@
 import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import {
+  Alert,
+  Table,
+  TableCaption,
+  TableTbody,
+  TableTd,
+  TableTfoot,
+  TableTh,
+  TableThead,
+  TableTr,
+  Text,
+  Title,
+} from "@mantine/core";
 import { withSchool } from "@/db";
 import { readDeposit } from "@/db/deposits";
 import { school } from "@/db/schema";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
+import { TextLink } from "../../../_ui/text-link";
 import { CancelDeposit, Print } from "./buttons";
 
 export const metadata: Metadata = { title: "Bordereau de remise" };
@@ -29,66 +42,72 @@ export default async function DepositPage({ params, searchParams }: PageProps<"/
   return (
     <article className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm print:hidden">
-        <Link href="/encaissements?vue=remises" className="lien">
+        <TextLink href="/encaissements?vue=remises" size="sm">
           Encaissements
-        </Link>
-        <span className="text-doux"> / Remise du {day(r.date)}</span>
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" "}
+          / Remise du {day(r.date)}
+        </Text>
       </nav>
       {cree && (
-        <p role="status" className="rounded-md border border-accent bg-accent-doux px-3 py-2 text-sm print:hidden">
+        <Alert role="status" className="print:hidden">
           Remise créée : imprimez le bordereau et joignez-le au dépôt.
-        </p>
+        </Alert>
       )}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm text-doux">{parsed.school}</p>
-          <h1 className="titre-page">
+          <Text size="sm" c="dimmed">
+            {parsed.school}
+          </Text>
+          <Title order={1} fz="xl">
             Bordereau de remise de {DEPOSIT_KIND[r.method]} du {day(r.date)}
-          </h1>
-          <p className="text-sm">
+          </Title>
+          <Text size="sm">
             {r.count} {r.count > 1 ? "paiements" : "paiement"}, total{" "}
             <strong className="tabular-nums">{formatEuros(r.totalCents)}</strong>
-          </p>
+          </Text>
         </div>
         <div className="flex flex-col items-end gap-2 print:hidden">
           <Print />
           {role === "director" && <CancelDeposit id={r.id} />}
         </div>
       </header>
-      <table className="tableau">
-        <caption className="sr-only">Paiements remis</caption>
-        <thead>
-          <tr>
-            <th>Payeur</th>
-            {r.method !== "cash" && <th>N°</th>}
-            {r.method === "cheque" && <th>Banque ou titulaire</th>}
-            <th>Reçu le</th>
-            <th className="text-right">Montant</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableCaption className="sr-only">Paiements remis</TableCaption>
+        <TableThead>
+          <TableTr>
+            <TableTh>Payeur</TableTh>
+            {r.method !== "cash" && <TableTh>N°</TableTh>}
+            {r.method === "cheque" && <TableTh>Banque ou titulaire</TableTh>}
+            <TableTh>Reçu le</TableTh>
+            <TableTh ta="right">Montant</TableTh>
+          </TableTr>
+        </TableThead>
+        <TableTbody>
           {r.payments.map((p) => (
-            <tr key={p.id}>
-              <td>{p.payer}</td>
-              {r.method !== "cash" && <td>{p.reference ?? "—"}</td>}
-              {r.method === "cheque" && <td>{p.issuer ?? "—"}</td>}
-              <td className="whitespace-nowrap">{day(p.date)}</td>
-              <td className="text-right tabular-nums whitespace-nowrap">{formatEuros(p.amountCents)}</td>
-            </tr>
+            <TableTr key={p.id}>
+              <TableTd>{p.payer}</TableTd>
+              {r.method !== "cash" && <TableTd>{p.reference ?? "—"}</TableTd>}
+              {r.method === "cheque" && <TableTd>{p.issuer ?? "—"}</TableTd>}
+              <TableTd className="whitespace-nowrap">{day(p.date)}</TableTd>
+              <TableTd ta="right" className="tabular-nums whitespace-nowrap">
+                {formatEuros(p.amountCents)}
+              </TableTd>
+            </TableTr>
           ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td
-              colSpan={r.method === "cheque" ? 4 : r.method === "cash" ? 2 : 3}
-              className="px-3 py-2 text-right font-semibold"
-            >
+        </TableTbody>
+        <TableTfoot>
+          <TableTr>
+            <TableTd colSpan={r.method === "cheque" ? 4 : r.method === "cash" ? 2 : 3} ta="right" fw={600}>
               Total
-            </td>
-            <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatEuros(r.totalCents)}</td>
-          </tr>
-        </tfoot>
-      </table>
+            </TableTd>
+            <TableTd ta="right" fw={600} className="tabular-nums">
+              {formatEuros(r.totalCents)}
+            </TableTd>
+          </TableTr>
+        </TableTfoot>
+      </Table>
     </article>
   );
 }

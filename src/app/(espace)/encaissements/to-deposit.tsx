@@ -1,10 +1,25 @@
 "use client";
 
+import {
+  Button,
+  Checkbox,
+  Paper,
+  Table,
+  TableCaption,
+  TableTbody,
+  TableTd,
+  TableTh,
+  TableThead,
+  TableTr,
+  Text,
+  Title,
+} from "@mantine/core";
 import { useState, useTransition } from "react";
 import { PAYMENT_METHODS } from "@/db/payments";
 import type { AuditLogRow } from "@/db/deposits";
 import type { DepositMethod } from "@/domain/payments/deposits";
 import { formatEuros } from "@/lib/money";
+import { DateField, refusedDateField } from "../_ui/date-field";
 import { deposit } from "./actions";
 
 const day = (iso: string) => iso.split("-").reverse().join("/");
@@ -38,93 +53,86 @@ export function ToDeposit({
 
   return (
     <section aria-labelledby={`remettre-${method}`} className="flex flex-col gap-2">
-      <h2 id={`remettre-${method}`} className="text-base font-semibold">
-        {title} <span className="text-sm font-normal text-doux">— {payments.length} à remettre</span>
-      </h2>
-      <div className="panneau overflow-x-auto">
-        <table className="tableau">
-          <caption className="sr-only">{title} à remettre</caption>
-          <thead>
-            <tr>
-              <th>
-                <input
-                  type="checkbox"
+      <Title order={2} size="h5" id={`remettre-${method}`}>
+        {title}{" "}
+        <Text span size="sm" c="dimmed">
+          — {payments.length} à remettre
+        </Text>
+      </Title>
+      <Paper withBorder className="overflow-x-auto">
+        <Table highlightOnHover>
+          <TableCaption className="sr-only">{title} à remettre</TableCaption>
+          <TableThead>
+            <TableTr>
+              <TableTh w={40}>
+                <Checkbox
                   aria-label={`Tout sélectionner (${title.toLowerCase()})`}
                   checked={chosen.size === payments.length}
-                  onChange={(e) => setChosen(new Set(e.target.checked ? payments.map((p) => p.id) : []))}
+                  indeterminate={chosen.size > 0 && chosen.size < payments.length}
+                  onChange={(e) => setChosen(new Set(e.currentTarget.checked ? payments.map((p) => p.id) : []))}
                 />
-              </th>
-              <th>Payeur</th>
-              {method !== "cash" && <th>N°</th>}
-              {method === "cheque" && <th>Banque ou titulaire</th>}
-              <th>Reçu le</th>
-              {method === "cheque" && <th>À encaisser le</th>}
-              <th className="text-right">Montant</th>
-            </tr>
-          </thead>
-          <tbody>
+              </TableTh>
+              <TableTh>Payeur</TableTh>
+              {method !== "cash" && <TableTh>N°</TableTh>}
+              {method === "cheque" && <TableTh>Banque ou titulaire</TableTh>}
+              <TableTh>Reçu le</TableTh>
+              {method === "cheque" && <TableTh>À encaisser le</TableTh>}
+              <TableTh ta="right">Montant</TableTh>
+            </TableTr>
+          </TableThead>
+          <TableTbody>
             {payments.map((p) => (
-              <tr key={p.id}>
-                <td>
-                  <input
-                    type="checkbox"
+              <TableTr key={p.id}>
+                <TableTd>
+                  <Checkbox
                     aria-label={`Remettre le paiement de ${p.payer}, ${formatEuros(p.amountCents)}`}
                     checked={chosen.has(p.id)}
                     onChange={() => toggle(p.id)}
                   />
-                </td>
-                <td>{p.payer}</td>
-                {method !== "cash" && <td>{p.reference ?? "—"}</td>}
-                {method === "cheque" && <td>{p.issuer ?? "—"}</td>}
-                <td className="whitespace-nowrap">{day(p.date)}</td>
+                </TableTd>
+                <TableTd>{p.payer}</TableTd>
+                {method !== "cash" && <TableTd>{p.reference ?? "—"}</TableTd>}
+                {method === "cheque" && <TableTd>{p.issuer ?? "—"}</TableTd>}
+                <TableTd className="whitespace-nowrap">{day(p.date)}</TableTd>
                 {method === "cheque" && (
-                  <td className="whitespace-nowrap">{p.plannedPayment ? day(p.plannedPayment) : "—"}</td>
+                  <TableTd className="whitespace-nowrap">{p.plannedPayment ? day(p.plannedPayment) : "—"}</TableTd>
                 )}
-                <td className="text-right tabular-nums whitespace-nowrap">
+                <TableTd ta="right" className="tabular-nums whitespace-nowrap">
                   {formatEuros(p.amountCents)}
                   {p.correctedCents > 0 && (
                     <span className="block text-xs text-alerte-texte">
                       dont {formatEuros(p.correctedCents)} corrigés
                     </span>
                   )}
-                </td>
-              </tr>
+                </TableTd>
+              </TableTr>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TableTbody>
+        </Table>
+      </Paper>
       <form
         className="flex flex-wrap items-end gap-3"
         onSubmit={(e) => {
           e.preventDefault();
+          if (refusedDateField(e.currentTarget)) return;
+          if (!date) {
+            setMessage("Indiquez la date de la remise.");
+            return;
+          }
           setMessage(null);
           startTransition(async () =>
             setMessage((await deposit({ date, method: method, paymentIds: selection.map((p) => p.id) })).message),
           );
         }}
       >
-        <div className="flex flex-col gap-1">
-          <label htmlFor={`date-remise-${method}`} className="text-xs text-doux">
-            Date de la remise
-          </label>
-          <input
-            id={`date-remise-${method}`}
-            type="date"
-            className="champ"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            required
-          />
-        </div>
-        <button type="submit" className="bouton-principal" disabled={sending || selection.length === 0}>
-          {sending
-            ? "Création…"
-            : `Créer la remise : ${selection.length} × ${title.toLowerCase()}, ${formatEuros(total)}`}
-        </button>
+        <DateField label="Date de la remise" required w={160} value={date} onChange={setDate} />
+        <Button type="submit" loading={sending} disabled={selection.length === 0}>
+          {`Créer la remise : ${selection.length} × ${title.toLowerCase()}, ${formatEuros(total)}`}
+        </Button>
         {message && (
-          <p role="alert" className="text-sm text-erreur">
+          <Text role="alert" size="sm" c="red">
             {message}
-          </p>
+          </Text>
         )}
       </form>
     </section>

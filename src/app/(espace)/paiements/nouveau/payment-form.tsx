@@ -1,13 +1,16 @@
 "use client";
 
+import { ActionIcon, Button, Fieldset, NativeSelect, Paper, Text, TextInput } from "@mantine/core";
 import { useState, useTransition } from "react";
 import { Cancel } from "@/app/(espace)/_panel/panel";
 import { PAYMENT_METHODS, type Method } from "@/db/payments";
 import { formatEuros, parseEuros } from "@/lib/money";
+import { DateField, refusedDateField } from "../../_ui/date-field";
 import { collectPayments } from "../actions";
 
 type Row = { method: Method; amount: string; reference: string; issuer: string; payment: string };
 const EMPTY_ROW: Row = { method: "cheque", amount: "", reference: "", issuer: "", payment: "" };
+const METHOD_OPTIONS = Object.entries(PAYMENT_METHODS).map(([value, label]) => ({ value, label }));
 
 type Props = { payerId: string; payer: string; remaining: number | null; today: string; back: string };
 
@@ -33,6 +36,11 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
       className="flex flex-col gap-4"
       onSubmit={(e) => {
         e.preventDefault();
+        if (refusedDateField(e.currentTarget)) return;
+        if (!date) {
+          setMessage("Indiquez la date de réception.");
+          return;
+        }
         if (amounts.some((m) => !m)) {
           setMessage("Indiquez un montant pour chaque règlement.");
           return;
@@ -49,10 +57,10 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
         startTransition(async () => setMessage((await collectPayments(payerId, entry, back)).message));
       }}
     >
-      <p className="text-sm">
+      <Text size="sm">
         Payeur : <strong>{payer}</strong>
         {remaining !== null && (
-          <span className="text-doux">
+          <Text span size="sm" c="dimmed">
             {" "}
             —{" "}
             {remaining > 0
@@ -60,115 +68,78 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
               : remaining < 0
                 ? `trop-perçu ${formatEuros(-remaining)}`
                 : "à jour"}
-          </span>
+          </Text>
         )}
-      </p>
-      <div className="flex flex-col gap-1 sm:max-w-xs">
-        <label htmlFor="date-reception" className="text-sm font-medium">
-          Reçu le
-        </label>
-        <input
-          id="date-reception"
-          type="date"
-          className="champ"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          required
-        />
-      </div>
+      </Text>
+      <DateField label="Reçu le" required w={160} value={date} onChange={setDate} />
 
-      <fieldset className="flex flex-col gap-3">
-        <legend className="mb-1 text-sm font-semibold">Règlements</legend>
+      <Fieldset
+        legend={
+          <Text component="span" size="sm" fw={600}>
+            Règlements
+          </Text>
+        }
+        variant="unstyled"
+        className="flex flex-col gap-3"
+      >
         {rows.map((l, i) => (
-          <div key={i} className="panneau grid gap-2 p-3 sm:grid-cols-[10rem_8rem_1fr_auto] sm:items-end">
-            <div className="flex flex-col gap-1">
-              <label htmlFor={`moyen-${i}`} className="text-xs text-doux">
-                Moyen
-              </label>
-              <select
-                id={`moyen-${i}`}
-                className="champ"
-                value={l.method}
-                onChange={(e) => updated(i, { method: e.target.value as Method })}
-              >
-                {Object.entries(PAYMENT_METHODS).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor={`montant-${i}`} className="text-xs text-doux">
-                Montant (€)
-              </label>
-              <input
-                id={`montant-${i}`}
-                // « Reçu le » is already today: the amount is what gets typed first.
-                data-panel-focus={i === 0 || undefined}
-                inputMode="decimal"
-                className="champ text-right tabular-nums"
-                value={l.amount}
-                onChange={(e) => updated(i, { amount: e.target.value })}
-                aria-invalid={invalides[i] || undefined}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor={`reference-${i}`} className="text-xs text-doux">
-                {l.method === "cheque" ? "N° de chèque" : "Référence (facultatif)"}
-              </label>
-              <input
-                id={`reference-${i}`}
-                className="champ"
-                value={l.reference}
-                onChange={(e) => updated(i, { reference: e.target.value })}
-              />
-            </div>
+          <Paper key={i} withBorder p="sm" className="grid gap-2 sm:grid-cols-[10rem_8rem_1fr_auto] sm:items-end">
+            <NativeSelect
+              label="Moyen"
+              data={METHOD_OPTIONS}
+              value={l.method}
+              onChange={(e) => updated(i, { method: e.currentTarget.value as Method })}
+            />
+            <TextInput
+              label="Montant (€)"
+              // « Reçu le » is already today: the amount is what gets typed first.
+              data-panel-focus={i === 0 || undefined}
+              inputMode="decimal"
+              styles={{ input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } }}
+              value={l.amount}
+              onChange={(e) => updated(i, { amount: e.currentTarget.value })}
+              error={invalides[i] ? "Montant non reconnu" : undefined}
+            />
+            <TextInput
+              label={l.method === "cheque" ? "N° de chèque" : "Référence (facultatif)"}
+              value={l.reference}
+              onChange={(e) => updated(i, { reference: e.currentTarget.value })}
+            />
             {rows.length > 1 ? (
-              <button
-                type="button"
-                className="bouton-secondaire px-2"
+              <ActionIcon
+                variant="default"
+                size="input-sm"
                 aria-label={`Retirer le règlement ${i + 1}`}
                 onClick={() => setRows(rows.filter((_, j) => j !== i))}
               >
                 ×
-              </button>
+              </ActionIcon>
             ) : (
               <span />
             )}
             {l.method === "cheque" && (
               <>
-                <div className="flex flex-col gap-1 sm:col-span-2">
-                  <label htmlFor={`emetteur-${i}`} className="text-xs text-doux">
-                    Banque ou titulaire (facultatif)
-                  </label>
-                  <input
-                    id={`emetteur-${i}`}
-                    className="champ"
-                    value={l.issuer}
-                    onChange={(e) => updated(i, { issuer: e.target.value })}
-                  />
-                </div>
-                <div className="flex flex-col gap-1 sm:col-span-2">
-                  <label htmlFor={`encaissement-${i}`} className="text-xs text-doux">
-                    À encaisser le (vide : tout de suite)
-                  </label>
-                  <input
-                    id={`encaissement-${i}`}
-                    type="date"
-                    min={date}
-                    className="champ"
-                    value={l.payment}
-                    onChange={(e) => updated(i, { payment: e.target.value })}
-                  />
-                </div>
+                <TextInput
+                  className="sm:col-span-2"
+                  label="Banque ou titulaire (facultatif)"
+                  value={l.issuer}
+                  onChange={(e) => updated(i, { issuer: e.currentTarget.value })}
+                />
+                <DateField
+                  className="sm:col-span-2"
+                  label="À encaisser le (vide : tout de suite)"
+                  minDate={date || undefined}
+                  value={l.payment}
+                  onChange={(payment) => updated(i, { payment })}
+                />
               </>
             )}
-          </div>
+          </Paper>
         ))}
-        <button
-          type="button"
-          className="lien self-start text-sm"
+        <Button
+          variant="subtle"
+          size="compact-sm"
+          className="self-start"
           disabled={rows.length >= 24}
           onClick={() =>
             setRows([
@@ -178,24 +149,27 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
           }
         >
           Ajouter un règlement
-        </button>
-      </fieldset>
+        </Button>
+      </Fieldset>
 
-      <p className="text-sm" aria-live="polite">
+      <Text size="sm" aria-live="polite">
         Total : <strong className="tabular-nums">{formatEuros(total)}</strong>
         {remaining !== null && remaining > 0 && total !== remaining && (
-          <span className="text-doux"> (reste à payer : {formatEuros(remaining)})</span>
+          <Text span size="sm" c="dimmed">
+            {" "}
+            (reste à payer : {formatEuros(remaining)})
+          </Text>
         )}
-      </p>
+      </Text>
       {message && (
-        <p role="alert" className="text-sm text-erreur">
+        <Text role="alert" size="sm" c="red">
           {message}
-        </p>
+        </Text>
       )}
       <div className="flex flex-wrap gap-2 border-t border-bordure pt-4">
-        <button type="submit" className="bouton-principal" disabled={sending || total === 0}>
-          {sending ? "Enregistrement…" : `Encaisser ${formatEuros(total)}`}
-        </button>
+        <Button type="submit" loading={sending} disabled={total === 0}>
+          {`Encaisser ${formatEuros(total)}`}
+        </Button>
         <Cancel href={back} />
       </div>
     </form>

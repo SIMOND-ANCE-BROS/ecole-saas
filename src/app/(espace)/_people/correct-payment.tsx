@@ -1,5 +1,6 @@
 "use client";
 
+import { Button, Text, TextInput } from "@mantine/core";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { formatEuros, parseEuros } from "@/lib/money";
@@ -25,15 +26,15 @@ export function CorrectPayment({
   const [sending, startTransition] = useTransition();
   if (!open) {
     return (
-      <button type="button" className="lien text-xs" onClick={() => setOpen(true)}>
+      <Button variant="subtle" size="compact-xs" onClick={() => setOpen(true)}>
         Corriger
-      </button>
+      </Button>
     );
   }
   const cents = parseEuros(amount);
   return (
     <form
-      className="flex flex-wrap items-center gap-2 text-xs"
+      className="flex flex-wrap items-center gap-2"
       onSubmit={(e) => {
         e.preventDefault();
         if (!cents) return;
@@ -47,26 +48,38 @@ export function CorrectPayment({
         });
       }}
     >
-      <label htmlFor={`correction-${paymentId}`}>Annuler</label>
-      <input
+      <Text component="label" htmlFor={`correction-${paymentId}`} size="xs">
+        Annuler
+      </Text>
+      <TextInput
         id={`correction-${paymentId}`}
+        size="xs"
+        w={96}
         inputMode="decimal"
-        className="champ w-24 text-right"
+        styles={{ input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } }}
         value={amount}
-        onChange={(e) => setAmount(e.target.value)}
+        onChange={(e) => setAmount(e.currentTarget.value)}
         autoFocus
       />
-      <span className="text-doux">€ sur {formatEuros(remaining)}</span>
-      <button type="submit" className="bouton-secondaire" disabled={sending || !cents || cents > remaining}>
+      <Text span size="xs" c="dimmed">
+        € sur {formatEuros(remaining)}
+      </Text>
+      <Button
+        type="submit"
+        variant="default"
+        size="compact-xs"
+        loading={sending}
+        disabled={!cents || cents > remaining}
+      >
         Enregistrer la correction
-      </button>
-      <button type="button" className="lien" onClick={() => setOpen(false)}>
+      </Button>
+      <Button variant="subtle" size="compact-xs" onClick={() => setOpen(false)}>
         Fermer
-      </button>
+      </Button>
       {message && (
-        <span role="alert" className="text-erreur">
+        <Text span role="alert" size="xs" c="red">
           {message}
-        </span>
+        </Text>
       )}
     </form>
   );
