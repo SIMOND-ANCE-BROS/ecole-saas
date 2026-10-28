@@ -73,8 +73,11 @@ type Props<Id extends string> = {
   choice?: Partial<Record<NoInfer<Id>, readonly string[]>>;
   /** Action offered when the list is empty without a filter (« Nouvel élève »). */
   emptyAction?: ReactNode;
-  /** Page shown and rows matching, all pages together (#107); absent: a single page. */
-  pagination?: { page: number; total: number };
+  /**
+   * Page shown and rows matching, all pages together (#107); absent: a single page.
+   * `noun` starts the counter (« Élèves 51 à 100 sur 134 »), the caption by default.
+   */
+  pagination?: { page: number; total: number; noun?: string };
 };
 
 /** Beyond this, the checkbox list gets its own search field. */
@@ -110,7 +113,10 @@ export function ListTable<Id extends string>({
   const [sortPending, startSort] = useTransition();
   const currentSort = readSort(params.get("sort"), params.get("order"), columns);
   const [availability, setAvailability] = useState<Layout>(() => readLayout(columns, layout));
-  const [saving, startTransition] = useTransition();
+  // Its own state, not a transition: an aborted action can leave a transition pending for good.
+  const [saving, setSaving] = useState(false);
+  // Only the latest save speaks: an older one finishing late must not overwrite its result.
+  const lastSave = useRef(0);
   // Why the last layout save failed, or null; the list keeps the layout shown either way (#212).
   const [failure, setFailure] = useState<{ message: string; retryable: boolean } | null>(null);
   const columnsMenu = useRef<HTMLSpanElement>(null);
@@ -165,24 +171,34 @@ export function ListTable<Id extends string>({
 
   function changeAvailability(d: Layout) {
     setAvailability(d);
-    startTransition(async () => {
-      // A rejected call (network down) must not reach the error boundary and take the list away.
-      try {
-        const saved = await saveColumns(list, writeLayout(d));
-        if (saved.ok) {
-          // Retried from « Réessayer », which now goes away: focus back on « Colonnes ».
-          if (document.activeElement === retryButton.current) columnsMenu.current?.querySelector("button")?.focus();
-          setFailure(null);
-        } else setFailure({ message: saved.message, retryable: saved.retryable });
-      } catch (e) {
-        // A redirect thrown by the action is Next's to handle.
-        unstable_rethrow(e);
-        // Without a session cookie the proxy answers the action with the sign-in page, which fails
-        // like a network error: an expired session goes to sign-in, without the message.
-        if (await sessionExpired()) return router.push("/connexion");
+    void saveLayout(d);
+  }
+
+  /** Saves the layout; every outcome (saved, refused, failed, no answer) clears « Enregistrement… ». */
+  async function saveLayout(d: Layout) {
+    const id = ++lastSave.current;
+    setSaving(true);
+    // A rejected call (network down, aborted request) must not reach the error boundary and take
+    // the list away; one that never answers counts as failed after SAVE_TIMEOUT.
+    try {
+      const saved = await withTimeout(saveColumns(list, writeLayout(d)), SAVE_TIMEOUT);
+      if (id !== lastSave.current) return;
+      if (saved.ok) {
+        // Retried from « Réessayer », which now goes away: focus back on « Colonnes ».
+        if (document.activeElement === retryButton.current) columnsMenu.current?.querySelector("button")?.focus();
+        setFailure(null);
+      } else setFailure({ message: saved.message, retryable: saved.retryable });
+    } catch (e) {
+      // A redirect thrown by the action is Next's to handle.
+      unstable_rethrow(e);
+      // Without a session cookie the proxy answers the action with the sign-in page, which fails
+      // like a network error: an expired session goes to sign-in, without the message.
+      if (await sessionExpired()) return router.push("/connexion");
+      if (id === lastSave.current)
         setFailure({ message: "Colonnes non enregistrées : vérifiez la connexion et réessayez.", retryable: true });
-      }
-    });
+    } finally {
+      if (id === lastSave.current) setSaving(false);
+    }
   }
 
   // Drag and drop of a header (mouse); with the keyboard, the arrows of the « Colonnes » menu.
@@ -493,22 +509,52 @@ export function ListTable<Id extends string>({
         </Table>
       </Paper>
       {pagination && pageCount(pagination.total) > 1 && (
-        <ListPages page={pagination.page} total={pagination.total} goTo={goToPage} />
+        <ListPages noun={pagination.noun ?? caption} page={pagination.page} total={pagination.total} goTo={goToPage} />
       )}
     </div>
   );
 }
 
+/** Beyond this, a column save that has not answered is reported as failed. */
+const SAVE_TIMEOUT = 15_000;
+
+/** `promise`, or a rejection after `ms`: a request that never answers must not leave « Enregistrement… » on screen. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timeout")), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e: unknown) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 /** Width step of « Plus étroite » / « Plus large », in pixels. */
 const WIDTH_STEP = 40;
 
-/** Pages of a long list: « 51–100 sur 134 » and the page numbers, under the table and the cards. */
-function ListPages({ page, total, goTo }: { page: number; total: number; goTo: (page: number) => void }) {
+/** Pages of a long list: « Élèves 51 à 100 sur 134 » and the page numbers, under the table and the cards. */
+function ListPages({
+  noun,
+  page,
+  total,
+  goTo,
+}: {
+  noun: string;
+  page: number;
+  total: number;
+  goTo: (page: number) => void;
+}) {
   const { from, to } = shownRange(page, total);
   return (
     <nav aria-label="Pages" className="flex flex-wrap items-center justify-between gap-2">
       <Text size="sm" c="dimmed" className="tabular-nums">
-        {from}–{to} sur {total}
+        {noun} {from} à {to} sur {total}
       </Text>
       <Pagination
         total={pageCount(total)}
@@ -771,25 +817,28 @@ function TitleMenu({
             </Button>
           )}
         </div>
-        <div className="flex flex-wrap justify-between gap-2 border-t border-bordure pt-2 text-xs">
-          {filtered ? (
-            <Anchor
-              component="button"
-              type="button"
-              size="xs"
-              onClick={() => f.change(writeColumnFilter(f.filter, def, {}))}
-            >
-              Effacer ce filtre
-            </Anchor>
-          ) : (
-            <span />
-          )}
-          {hide && (
-            <Anchor component="button" type="button" size="xs" c="dimmed" onClick={hide}>
-              Masquer la colonne
-            </Anchor>
-          )}
-        </div>
+        {/* Nothing to clear nor to hide (a required column, unfiltered): no empty strip. */}
+        {(filtered || hide) && (
+          <div className="flex flex-wrap justify-between gap-2 border-t border-bordure pt-2 text-xs">
+            {filtered ? (
+              <Anchor
+                component="button"
+                type="button"
+                size="xs"
+                onClick={() => f.change(writeColumnFilter(f.filter, def, {}))}
+              >
+                Effacer ce filtre
+              </Anchor>
+            ) : (
+              <span />
+            )}
+            {hide && (
+              <Anchor component="button" type="button" size="xs" c="dimmed" onClick={hide}>
+                Masquer la colonne
+              </Anchor>
+            )}
+          </div>
+        )}
       </div>
     </Popover>
   );
@@ -929,7 +978,7 @@ function TitleFilter({
 /** True when the server answers that nobody is signed in; false if it cannot be reached. */
 async function sessionExpired(): Promise<boolean> {
   try {
-    const r = await fetch("/api/auth/get-session", { cache: "no-store" });
+    const r = await fetch("/api/auth/get-session", { cache: "no-store", signal: AbortSignal.timeout(5000) });
     return r.ok && (await r.json()) === null;
   } catch {
     return false;

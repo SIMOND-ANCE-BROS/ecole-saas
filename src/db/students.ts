@@ -70,8 +70,10 @@ export type ListOptions = {
   currentSort?: Sort | null;
   today?: string;
   seasonId?: string | null;
-  /** Page of `PAGE_SIZE` rows, from 1 (#107). */
+  /** Page of `pageSize` rows, from 1 (#107). */
   page?: number;
+  /** Rows per page; `PAGE_SIZE` by default. */
+  pageSize?: number;
 };
 
 // Computed list columns: the same expressions serve for display and for filters.
@@ -205,8 +207,8 @@ export async function listStudents(tx: Tx, entry = "", options: ListOptions = {}
     .from(person)
     .where(scope.where)
     .orderBy(...(scope.order ? [scope.order] : []), asc(person.lastName), asc(person.firstName), asc(person.id))
-    .limit(PAGE_SIZE)
-    .offset(offsetOf(options.page ?? 1));
+    .limit(options.pageSize ?? PAGE_SIZE)
+    .offset(offsetOf(options.page ?? 1, options.pageSize ?? PAGE_SIZE));
 }
 
 /** How many students match the search and filters, all pages together. */
@@ -271,8 +273,8 @@ export async function listContacts(tx: Tx, entry = "", options: ListOptions = {}
     .from(person)
     .where(scope.where)
     .orderBy(...(scope.order ? [scope.order] : []), asc(person.lastName), asc(person.firstName), asc(person.id))
-    .limit(PAGE_SIZE)
-    .offset(offsetOf(options.page ?? 1));
+    .limit(options.pageSize ?? PAGE_SIZE)
+    .offset(offsetOf(options.page ?? 1, options.pageSize ?? PAGE_SIZE));
 }
 
 /** How many contacts match the search and filters, all pages together. */

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Paper, Text, Title } from "@mantine/core";
 import { Suspense } from "react";
 import { withSchool } from "@/db";
-import { countStudents, seasonCourseLabels, listContacts, listStudents } from "@/db/students";
+import { countContacts, countStudents, seasonCourseLabels, listContacts, listStudents } from "@/db/students";
 import { currentSeason } from "@/db/schedule";
 import { readPreference } from "@/db/preferences";
 import { displayedName } from "@/db/people";
@@ -21,6 +21,9 @@ import { TextLink } from "../_ui/text-link";
 
 export const metadata: Metadata = { title: "Élèves" };
 
+/** Contacts shown under the students during a search: a few, the full list is on « Contacts ». */
+const CONTACTS_IN_SEARCH = 20;
+
 /** The school's students; a search also shows the matching contacts (parent, payer). */
 export default async function StudentsPage({ searchParams }: PageProps<"/eleves">) {
   const { schoolId: schoolId, userId } = await requireRole("director", "front_desk");
@@ -35,6 +38,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
     total,
     page,
     contacts,
+    contactCount,
     layout: layout,
     courses,
   } = await withSchool(schoolId, async (tx) => {
@@ -48,7 +52,8 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
       total,
       page,
       courses: season ? await seasonCourseLabels(tx, season.id) : [],
-      contacts: entry ? await listContacts(tx, entry) : [],
+      contacts: entry ? await listContacts(tx, entry, { pageSize: CONTACTS_IN_SEARCH }) : [],
+      contactCount: entry ? await countContacts(tx, entry) : 0,
       layout: await readPreference(tx, userId, "eleves"),
     };
   });
@@ -152,6 +157,15 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
             <Title order={2} size="h5" id="contacts-trouves">
               Contacts pour « {entry} »
             </Title>
+            {contactCount > contacts.length && (
+              <Text size="sm" c="dimmed">
+                Les {contacts.length} premiers sur {contactCount} :{" "}
+                <TextLink href={`/contacts?q=${encodeURIComponent(entry)}`} size="sm" inherit>
+                  voir tous les contacts pour « {entry} »
+                </TextLink>
+                .
+              </Text>
+            )}
             <Paper withBorder component="ul" className="divide-y divide-bordure text-sm">
               {contacts.map((c) => (
                 <li key={c.id} className="flex flex-wrap items-baseline gap-x-3 px-3 py-2">

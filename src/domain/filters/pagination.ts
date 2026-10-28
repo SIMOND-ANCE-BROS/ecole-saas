@@ -19,7 +19,8 @@ export function pageCount(total: number, size = PAGE_SIZE): number {
  */
 export function readPage(value: string | string[] | null | undefined, total: number, size = PAGE_SIZE): number {
   const raw = Array.isArray(value) ? value[0] : value;
-  const asked = raw && /^\d{1,6}$/.test(raw) ? Number(raw) : 1;
+  // Digits only; any length: `Number` of a huge one is just large (or Infinity), then clamped.
+  const asked = raw && /^\d+$/.test(raw) ? Number(raw) : 1;
   return Math.min(Math.max(1, asked), pageCount(total, size));
 }
 

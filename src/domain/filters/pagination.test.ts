@@ -20,6 +20,10 @@ describe("readPage", () => {
   it("clamps a page past the end to the last page (after a filter shrinks the list)", () =>
     expect(readPage("9", 120)).toBe(3));
   it("stays on page 1 for an empty list", () => expect(readPage("4", 0)).toBe(1));
+  it("sends a huge page number to the last page", () => {
+    expect(readPage("9999999", 120)).toBe(3);
+    expect(readPage("9".repeat(400), 120)).toBe(3);
+  });
 });
 
 describe("offsetOf and shownRange", () => {

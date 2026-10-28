@@ -83,7 +83,8 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
           ) : (
             <>
               {plural(total)}, dont {active} actif{active > 1 ? "s" : ""}
-              {season && ` ; cours de la saison ${season.label}`}
+              {/* « 2026–2027 » with word joiners: the season never breaks across two lines. */}
+              {season && `. Cours de la saison ${season.label.replace(/-/g, "\u2060–\u2060")}`}
             </>
           )
         }
