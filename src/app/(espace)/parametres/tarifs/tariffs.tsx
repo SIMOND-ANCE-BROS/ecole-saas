@@ -20,6 +20,7 @@ import { combinationLabel } from "@/domain/tariff/compute";
 import { formatEuros, parseEuros } from "@/lib/money";
 import { ConfirmRemoval, type Removal } from "../../_ui/confirm-removal";
 import { PHONE_LABEL, PHONE_TABLE } from "../../_ui/phone-table";
+import { useFocusAfter } from "../../_ui/use-focus-after";
 import { lessonPack, cellPrice, siblingsRule, removeLessonPack } from "../actions";
 
 const AUDIENCES: [Audience, string][] = [
@@ -160,6 +161,7 @@ export function Grid({
   const [message, setMessage] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
   const [removal, setRemoval] = useState<Removal | null>(null);
+  const focusAfter = useFocusAfter();
   const rows = grid.filter((l) => l.audience === chosenAudience);
 
   const addRow = () =>
@@ -196,12 +198,14 @@ export function Grid({
         if (r.message) return setMessage(r.message);
       }
       setMessage(null);
+      // The row goes away with its « Retirer »: focus moves to the grid's heading.
+      focusAfter("#grille");
     });
 
   return (
     <section aria-labelledby="grille" className="flex flex-col gap-3">
       <ConfirmRemoval removal={removal} onClose={() => setRemoval(null)} />
-      <Title order={2} size="h5" id="grille">
+      <Title order={2} size="h5" id="grille" tabIndex={-1}>
         Grille des forfaits
       </Title>
       <SegmentedControl
@@ -470,6 +474,12 @@ export function Siblings({
   );
 }
 
+/** « de 5 séances (jusqu’à 2 personnes, 90,00 €) »: tells two packs of the same size apart. */
+const packName = (c: LessonPackRow) =>
+  `de ${c.lessonCount} séance${c.lessonCount > 1 ? "s" : ""} (${
+    c.maxPeople === 1 ? "1 personne" : `jusqu’à ${c.maxPeople} personnes`
+  }, ${formatEuros(c.priceCents)})`;
+
 export function LessonPacks({
   seasonId: seasonId,
   lessonPacks: lessonPacks,
@@ -481,6 +491,7 @@ export function LessonPacks({
   const [message, setMessage] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
   const [removal, setRemoval] = useState<Removal | null>(null);
+  const focusAfter = useFocusAfter();
   const act = (action: () => Promise<{ message: string | null }>, after?: () => void) =>
     startTransition(async () => {
       const r = await action();
@@ -491,7 +502,7 @@ export function LessonPacks({
   return (
     <Paper withBorder component="section" aria-labelledby="carnets" p="md" className="flex flex-col gap-3 text-sm">
       <ConfirmRemoval removal={removal} onClose={() => setRemoval(null)} />
-      <Title order={2} size="h5" id="carnets">
+      <Title order={2} size="h5" id="carnets" tabIndex={-1}>
         Carnets de cours particuliers
       </Title>
       {lessonPacks.length === 0 ? (
@@ -515,12 +526,17 @@ export function LessonPacks({
                 color="red"
                 className="ml-auto"
                 disabled={inProgress}
-                aria-label={`Retirer le carnet de ${c.lessonCount} séance${c.lessonCount > 1 ? "s" : ""}`}
+                aria-label={`Retirer le carnet ${packName(c)}`}
                 onClick={() =>
                   setRemoval({
-                    title: `Retirer le carnet de ${c.lessonCount} séance${c.lessonCount > 1 ? "s" : ""} ?`,
+                    title: `Retirer le carnet ${packName(c)} ?`,
                     body: "Il ne sera plus proposé à la vente pour cette saison.",
-                    run: () => act(() => removeLessonPack(c.id)),
+                    // The pack goes away with its « Retirer »: focus moves to the section heading.
+                    run: () =>
+                      act(
+                        () => removeLessonPack(c.id),
+                        () => focusAfter("#carnets"),
+                      ),
                   })
                 }
               >

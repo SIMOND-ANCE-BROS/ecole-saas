@@ -87,6 +87,9 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
                     }}
                   >
                     <Table.Td className={`${cell} ${PHONE_TABLE.title}`}>
+                      <span className={PHONE_LABEL} aria-hidden>
+                        Libellé
+                      </span>
                       <TextInput
                         aria-label="Libellé"
                         w={128}

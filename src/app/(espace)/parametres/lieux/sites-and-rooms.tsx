@@ -109,7 +109,7 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
               </form>
             ) : (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <Title order={2} size="h5" id={`site-${s.id}`}>
+                <Title order={2} size="h5" id={`site-${s.id}`} tabIndex={-1}>
                   {s.name}
                 </Title>
                 <Text span size="sm" c="dimmed">
@@ -137,7 +137,12 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                         setRemoval({
                           title: `Retirer le site ${s.name} ?`,
                           body: "Il n’a plus de salle. Ses horaires d’ouverture sont retirés avec lui.",
-                          run: () => act(() => removeSite(s.id)),
+                          // The site goes away: focus moves to the first site left, or to the new-site form.
+                          run: () =>
+                            act(
+                              () => removeSite(s.id),
+                              () => focusAfter("section h2[tabindex]", "#new-site"),
+                            ),
                         })
                       }
                     >
@@ -247,7 +252,12 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                             setRemoval({
                               title: `Retirer la salle ${x.name} ?`,
                               body: "Aucun cours n’y a lieu. Vous pourrez la recréer plus tard.",
-                              run: () => act(() => removeRoom(x.id)),
+                              // The room goes away: focus moves to its site's heading.
+                              run: () =>
+                                act(
+                                  () => removeRoom(x.id),
+                                  () => focusAfter(`#site-${s.id}`),
+                                ),
                             })
                           }
                         >
@@ -308,7 +318,12 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
         <Text size="sm" fw={600} className="sm:col-span-4">
           Nouveau site
         </Text>
-        <TextInput label="Nom" value={site.name} onChange={(e) => setSite({ ...site, name: e.currentTarget.value })} />
+        <TextInput
+          id="new-site"
+          label="Nom"
+          value={site.name}
+          onChange={(e) => setSite({ ...site, name: e.currentTarget.value })}
+        />
         <TextInput
           label="Adresse"
           value={site.address}

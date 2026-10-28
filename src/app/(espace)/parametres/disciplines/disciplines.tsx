@@ -40,6 +40,7 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
         }}
       >
         <TextInput
+          id="new-discipline"
           label="Nouvelle discipline"
           placeholder="Hip-hop"
           value={name}
@@ -59,7 +60,14 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
           Aucune discipline pour l’instant.
         </Text>
       ) : (
-        <Paper withBorder component="ul" className="divide-y divide-bordure text-sm">
+        <Paper
+          withBorder
+          component="ul"
+          aria-label="Disciplines"
+          tabIndex={-1}
+          data-after-removal
+          className="divide-y divide-bordure text-sm"
+        >
           {disciplines.map((d) => (
             <li key={d.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2">
               {edition?.id === d.id ? (
@@ -116,7 +124,12 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
                         setRemoval({
                           title: `Retirer la discipline ${d.name} ?`,
                           body: "Elle n’a ni cours ni tarif dédié. Vous pourrez la recréer plus tard.",
-                          run: () => act(() => removeDiscipline(d.id)),
+                          // Its row goes away: focus moves to the list, or to the new-discipline field if empty.
+                          run: () =>
+                            act(
+                              () => removeDiscipline(d.id),
+                              () => focusAfter("[data-after-removal]", "#new-discipline"),
+                            ),
                         })
                       }
                     >
