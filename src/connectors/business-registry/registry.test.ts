@@ -75,7 +75,20 @@ describe("toBusiness", () => {
 describe("businessesOf", () => {
   it("refuses a response of another shape", () => {
     expect(() => businessesOf({ resultats: [] })).toThrow(RegistryUnavailable);
-    expect(() => businessesOf({ results: [{ siren: "12" }] })).toThrow(RegistryUnavailable);
+  });
+
+  it("leaves out a row of another shape and keeps the others", () => {
+    expect(businessesOf({ results: [{ siren: "12" }, ZZ_DANSE, null] }).map((b) => b.siren)).toEqual(["000000001"]);
+  });
+
+  it("lists open companies first, in the registry's order", () => {
+    const closed = { ...ZZ_DANSE, siren: "000000002", etat_administratif: "C" };
+    const other = { ...ZZ_DANSE, siren: "000000003" };
+    expect(businessesOf({ results: [closed, ZZ_DANSE, other] }).map((b) => b.siren)).toEqual([
+      "000000001",
+      "000000003",
+      "000000002",
+    ]);
   });
 });
 
@@ -88,9 +101,20 @@ describe("searchRegistry", () => {
     expect(url.searchParams.get("per_page")).toBe("8");
   });
 
-  it("tries again once after a refusal for load, then gives up", async () => {
-    const twice = fake(new Response("", { status: 429 }), ok({ results: [ZZ_DANSE] }));
+  it("does not try again after a « slow down », and passes on how long to wait", async () => {
+    const f = fake(new Response("", { status: 429, headers: { "Retry-After": "12" } }));
+    await expect(searchRegistry("zz danse", { fetch: f, pauseMs: 0 })).rejects.toMatchObject({
+      reason: "throttled",
+      retryAfterMs: 12_000,
+    });
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("tries again once after a server error, then gives up, releasing each unread body", async () => {
+    const first = new Response("busy", { status: 503 });
+    const twice = fake(first, ok({ results: [ZZ_DANSE] }));
     expect(await searchRegistry("zz danse", { fetch: twice, pauseMs: 0 })).toHaveLength(1);
+    expect(first.bodyUsed || first.body?.locked).toBeTruthy();
 
     const always = fake(new Response("", { status: 503 }), new Response("", { status: 503 }));
     await expect(searchRegistry("zz danse", { fetch: always, pauseMs: 0 })).rejects.toMatchObject({
@@ -115,6 +139,21 @@ describe("searchRegistry", () => {
     const f = fake(ok({ results: [] }));
     await searchRegistry("zz danse", { fetch: f });
     expect(f.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("counts a body that does not arrive in time as a timeout", async () => {
+    const slow = new Response(
+      new ReadableStream({
+        start(c) {
+          c.enqueue(new TextEncoder().encode('{"results": ['));
+        },
+      }),
+      { status: 200 },
+    );
+    const f = fake(slow);
+    await expect(searchRegistry("zz danse", { fetch: f, timeoutMs: 50 })).rejects.toMatchObject({
+      reason: "timeout",
+    });
   });
 
   it("refuses a body that is not JSON", async () => {

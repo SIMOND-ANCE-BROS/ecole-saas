@@ -138,6 +138,7 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
           <>
             <div className="sm:col-span-2">
               <BusinessSearch
+                filled="SIREN rempli."
                 description="Nom de l’entreprise ou de l’intervenant, SIREN ou SIRET : choisir une entreprise remplit le SIREN."
                 onPick={(b) => {
                   setSiren(b.siren);

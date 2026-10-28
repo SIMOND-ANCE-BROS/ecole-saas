@@ -26,7 +26,11 @@ export type Business = {
 
 /** The registry did not answer usably (timeout, refusal, unexpected response). */
 export class RegistryUnavailable extends Error {
-  constructor(readonly reason: "timeout" | "status" | "network" | "format") {
+  constructor(
+    readonly reason: "timeout" | "status" | "network" | "format" | "throttled",
+    /** For « throttled »: how long the registry asks to wait (Retry-After), if it says. */
+    readonly retryAfterMs: number | null = null,
+  ) {
     super(`Business registry unavailable (${reason})`);
   }
 }
@@ -34,26 +38,23 @@ export class RegistryUnavailable extends Error {
 // Only what is read; unknown keys are dropped. Optional or null everywhere:
 // sole traders who refused publication come back with parts missing.
 const text = z.string().nullish();
-const RESPONSE = z.object({
-  results: z.array(
-    z.object({
-      siren: z.string().regex(/^\d{9}$/),
-      nom_complet: text,
-      nom_raison_sociale: text,
-      nature_juridique: text,
-      etat_administratif: text,
-      siege: z
-        .object({
-          siret: text,
-          adresse: text,
-          code_postal: text,
-          libelle_commune: text,
-        })
-        .nullish(),
-    }),
-  ),
+const ROW = z.object({
+  siren: z.string().regex(/^\d{9}$/),
+  nom_complet: text,
+  nom_raison_sociale: text,
+  nature_juridique: text,
+  etat_administratif: text,
+  siege: z
+    .object({
+      siret: text,
+      adresse: text,
+      code_postal: text,
+      libelle_commune: text,
+    })
+    .nullish(),
 });
-type Result = z.infer<typeof RESPONSE>["results"][number];
+const RESPONSE = z.object({ results: z.array(z.unknown()) });
+type Result = z.infer<typeof ROW>;
 
 /** Most common legal forms (INSEE « catégories juridiques »); others are left out. */
 const LEGAL_FORMS: Record<string, string> = {
@@ -96,57 +97,88 @@ export function toBusiness(r: Result): Business {
   };
 }
 
-/** Parsed response; `RegistryUnavailable("format")` if it is not the expected shape. */
+/**
+ * Parsed response, active companies first; a row of another shape is left
+ * out rather than losing the whole search. `RegistryUnavailable("format")`
+ * if the response itself is not the expected shape.
+ */
 export function businessesOf(json: unknown): Business[] {
   const parsed = RESPONSE.safeParse(json);
   if (!parsed.success) throw new RegistryUnavailable("format");
-  return parsed.data.results.map(toBusiness);
+  const businesses = parsed.data.results.flatMap((row) => {
+    const r = ROW.safeParse(row);
+    return r.success ? [toBusiness(r.data)] : [];
+  });
+  // The registry's order is kept inside each group.
+  return [...businesses.filter((b) => !b.ceased), ...businesses.filter((b) => b.ceased)];
 }
 
-const retried = (status: number) => status === 429 || status >= 500;
+/** Query as sent: a SIREN or SIRET typed with spaces loses them. */
+export const normalisedQuery = (query: string) => (/^[\d\s]+$/.test(query) ? query.replace(/\s/g, "") : query.trim());
+
+const isTimeout = (e: unknown) => e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError");
+
+/** « Retry-After » in seconds or as a date; null when absent or unreadable. */
+function retryAfter(response: Response, now = Date.now()): number | null {
+  const h = response.headers.get("retry-after");
+  if (!h) return null;
+  const seconds = Number(h);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const at = Date.parse(h);
+  return Number.isNaN(at) ? null : Math.max(0, at - now);
+}
 
 /**
  * Companies matching a name, a SIREN or a SIRET (spaces ignored). One retry
- * on a refusal for load (429) or a server error, after a short pause.
+ * on a server error or a network failure, after a short pause; none on a
+ * « slow down » (429), which the caller turns into a pause of every search.
  */
 export async function searchRegistry(
   query: string,
   o: { fetch?: typeof fetch; timeoutMs?: number; pauseMs?: number } = {},
 ): Promise<Business[]> {
   const call = o.fetch ?? fetch;
-  const q = /^[\d\s]+$/.test(query) ? query.replace(/\s/g, "") : query.trim();
-  const url = `${URL_SEARCH}?${new URLSearchParams({ q, per_page: String(RESULTS), page: "1" })}`;
+  const url = `${URL_SEARCH}?${new URLSearchParams({ q: normalisedQuery(query), per_page: String(RESULTS), page: "1" })}`;
   for (let attempt = 0; ; attempt++) {
+    // One time budget for the answer and its body.
+    const signal = AbortSignal.timeout(o.timeoutMs ?? TIMEOUT_MS);
     let response: Response;
     try {
-      response = await call(url, {
-        headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(o.timeoutMs ?? TIMEOUT_MS),
-        cache: "no-store",
-      });
+      response = await call(url, { headers: { Accept: "application/json" }, signal, cache: "no-store" });
     } catch (e) {
-      const timeout = e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError");
-      if (attempt === 0 && !timeout) {
+      if (isTimeout(e)) throw new RegistryUnavailable("timeout");
+      if (attempt === 0) {
         await pause(o.pauseMs);
         continue;
       }
-      throw new RegistryUnavailable(timeout ? "timeout" : "network");
+      throw new RegistryUnavailable("network");
     }
     if (response.ok) {
       let json: unknown;
       try {
-        json = await response.json();
-      } catch {
-        throw new RegistryUnavailable("format");
+        // The same deadline for a body that stops arriving.
+        json = await Promise.race([response.json(), rejectedWhenAborted(signal)]);
+      } catch (e) {
+        if (!response.bodyUsed) await response.body?.cancel().catch(() => undefined);
+        throw new RegistryUnavailable(isTimeout(e) || signal.aborted ? "timeout" : "format");
       }
       return businessesOf(json);
     }
-    if (attempt === 0 && retried(response.status)) {
+    // The body is not read: released before trying again or giving up.
+    await response.body?.cancel().catch(() => undefined);
+    if (response.status === 429) throw new RegistryUnavailable("throttled", retryAfter(response));
+    if (attempt === 0 && response.status >= 500) {
       await pause(o.pauseMs);
       continue;
     }
     throw new RegistryUnavailable("status");
   }
 }
+
+const rejectedWhenAborted = (signal: AbortSignal) =>
+  new Promise<never>((_, reject) => {
+    if (signal.aborted) reject(signal.reason);
+    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+  });
 
 const pause = (ms = 400) => new Promise((resolve) => setTimeout(resolve, ms));

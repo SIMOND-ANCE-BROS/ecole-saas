@@ -112,20 +112,25 @@ export function PersonForm({ person: person, section: section, proposedName: pro
           <div className="grid items-start gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <BusinessSearch
+                filled={(b) =>
+                  b.street ? "raison sociale, SIREN et adresse remplis." : "raison sociale et SIREN remplis."
+                }
+                autoFocus={!person}
                 description="Nom, SIREN ou SIRET : choisir une entreprise remplit la raison sociale, le SIREN et l’adresse."
                 onPick={(b) =>
                   setV((now) => ({
                     ...now,
                     companyName: b.legalName,
                     siren: b.siren,
-                    address:
-                      [b.street, [b.postcode, b.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") ||
-                      now.address,
+                    // Without a public street (sole trader), the address typed is kept.
+                    address: b.street
+                      ? [b.street, [b.postcode, b.city].filter(Boolean).join(" ")].filter(Boolean).join(", ")
+                      : now.address,
                   }))
                 }
               />
             </div>
-            {field("companyName", "Raison sociale", { autoFocus: !person })}
+            {field("companyName", "Raison sociale")}
             {field("siren", "SIREN", { inputMode: "numeric", placeholder: "9 chiffres" })}
             <div className="sm:col-span-2">{field("name", "Contact (facultatif)")}</div>
           </div>
