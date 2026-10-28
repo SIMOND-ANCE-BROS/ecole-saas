@@ -18,6 +18,7 @@ import {
   type StudentInput,
 } from "@/db/students";
 import { deleteRelationship } from "@/db/people";
+import { actionResult, type ActionResult } from "@/lib/action-result";
 import { errorsOf, type FieldErrors } from "@/lib/form-errors";
 import { requireRole } from "@/lib/session";
 
@@ -26,8 +27,6 @@ export type StudentRefusal = {
   errors: FieldErrors<StudentInput>;
   duplicates?: DuplicateWithRole[];
 };
-type Back = { message: string | null };
-const back = (r: { ok: true } | { ok: false; message: string }): Back => ({ message: r.ok ? null : r.message });
 
 /** Student, guardian and payer in a single entry; without `confirmed`, first returns the likely duplicates. */
 export async function createStudentFromGuide(entry: unknown, confirmed: boolean): Promise<StudentRefusal> {
@@ -46,9 +45,9 @@ export async function createStudentFromGuide(entry: unknown, confirmed: boolean)
   redirect(`/eleves/${r.id}?enregistre=cree`);
 }
 
-export type ActionResult = { ok: true } | { ok: false; message: string };
-const result = (r: { ok: true } | { ok: false; message: string }): ActionResult =>
-  r.ok ? { ok: true } : { ok: false, message: r.message };
+// Typed for the call sites; still parsed, since a server action receives whatever the browser sends.
+const validId = z.uuid();
+const NO_LINK = "Ce lien n’existe plus.";
 
 const validBillingTarget = z.discriminatedUnion("type", [
   z.object({ type: z.literal("self") }),
@@ -56,54 +55,72 @@ const validBillingTarget = z.discriminatedUnion("type", [
 ]);
 
 /** « Facturé à »: the student themselves or a person already linked to them. */
-// Typed for the call sites; still parsed, since a server action receives whatever the browser sends.
 export async function invoice(studentId: string, target: z.input<typeof validBillingTarget>): Promise<ActionResult> {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
-  const id = z.uuid().safeParse(studentId);
+  const id = validId.safeParse(studentId);
   const t = validBillingTarget.safeParse(target);
   if (!id.success || !t.success) return { ok: false, message: "Choix de facturation invalide." };
   const r = await withSchool(schoolId, (tx) => setBilling(tx, id.data, t.data));
   revalidatePath(`/eleves/${id.data}`);
-  return result(r);
+  return actionResult(r);
 }
 
 /** Invoice a known person or one just created (organisation, other relative). */
 export async function billNewPerson(studentId: string, payer: z.input<typeof otherValidPerson>): Promise<ActionResult> {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
-  const id = z.uuid().safeParse(studentId);
+  const id = validId.safeParse(studentId);
   if (!id.success) return { ok: false, message: "Choix de facturation invalide." };
   const p = otherValidPerson.safeParse(payer);
   if (!p.success) return { ok: false, message: "Vérifiez les informations du payeur." };
   const r = await withSchool(schoolId, (tx) => billTo(tx, id.data, p.data));
   revalidatePath(`/eleves/${id.data}`);
-  return result(r);
+  return actionResult(r);
 }
 
-export async function addGuardianAction(studentId: string, guardian: unknown, toNotify: boolean): Promise<Back> {
-  const { schoolId: schoolId } = await requireRole("director", "front_desk");
-  const r = await withSchool(schoolId, (tx) => addGuardian(tx, studentId, guardian as never, toNotify));
-  revalidatePath(`/eleves/${studentId}`);
-  return back(r);
+export async function addGuardianAction(
+  studentId: string,
+  guardian: z.input<typeof otherValidPerson>,
+  toNotify: boolean,
+): Promise<ActionResult> {
+  const { schoolId } = await requireRole("director", "front_desk");
+  const id = validId.safeParse(studentId);
+  if (!id.success) return { ok: false, message: "Cet élève n’existe plus." };
+  const g = otherValidPerson.safeParse(guardian);
+  const n = z.boolean().safeParse(toNotify);
+  if (!g.success || !n.success) return { ok: false, message: "Vérifiez les informations du responsable." };
+  const r = await withSchool(schoolId, (tx) => addGuardian(tx, id.data, g.data, n.data));
+  revalidatePath(`/eleves/${id.data}`);
+  return actionResult(r);
 }
 
-export async function notify(studentId: string, relationshipId: string, toNotify: boolean): Promise<Back> {
-  const { schoolId: schoolId } = await requireRole("director", "front_desk");
-  const r = await withSchool(schoolId, (tx) => changeNotify(tx, relationshipId, toNotify));
-  revalidatePath(`/eleves/${studentId}`);
-  return back(r);
+export async function notify(studentId: string, relationshipId: string, toNotify: boolean): Promise<ActionResult> {
+  const { schoolId } = await requireRole("director", "front_desk");
+  const id = validId.safeParse(studentId);
+  const link = validId.safeParse(relationshipId);
+  if (!id.success || !link.success) return { ok: false, message: NO_LINK };
+  const n = z.boolean().safeParse(toNotify);
+  if (!n.success) return { ok: false, message: "Saisie invalide." };
+  const r = await withSchool(schoolId, (tx) => changeNotify(tx, link.data, n.data));
+  revalidatePath(`/eleves/${id.data}`);
+  return actionResult(r);
 }
 
-export async function removeRelative(studentId: string, relationshipId: string): Promise<Back> {
-  const { schoolId: schoolId } = await requireRole("director", "front_desk");
-  const r = await withSchool(schoolId, (tx) => deleteRelationship(tx, relationshipId));
-  revalidatePath(`/eleves/${studentId}`);
-  return back(r);
+export async function removeRelative(studentId: string, relationshipId: string): Promise<ActionResult> {
+  const { schoolId } = await requireRole("director", "front_desk");
+  const id = validId.safeParse(studentId);
+  const link = validId.safeParse(relationshipId);
+  if (!id.success || !link.success) return { ok: false, message: NO_LINK };
+  const r = await withSchool(schoolId, (tx) => deleteRelationship(tx, link.data));
+  revalidatePath(`/eleves/${id.data}`);
+  return actionResult(r);
 }
 
-/** A contact (a parent who also dances) becomes a student. */
-export async function becomeStudent(id: string): Promise<Back> {
-  const { schoolId: schoolId } = await requireRole("director", "front_desk");
-  const r = await withSchool(schoolId, (tx) => markStudent(tx, id, true));
-  if (!r.ok) return back(r);
-  redirect(`/eleves/${id}`);
+/** A contact (a parent who also dances) becomes a student; on success the student record opens. */
+export async function becomeStudent(personId: string): Promise<ActionResult> {
+  const { schoolId } = await requireRole("director", "front_desk");
+  const id = validId.safeParse(personId);
+  if (!id.success) return { ok: false, message: "Personne introuvable." };
+  const r = await withSchool(schoolId, (tx) => markStudent(tx, id.data, true));
+  if (!r.ok) return actionResult(r);
+  redirect(`/eleves/${id.data}`);
 }

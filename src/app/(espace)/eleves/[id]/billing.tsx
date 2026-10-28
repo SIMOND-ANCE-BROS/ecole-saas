@@ -8,7 +8,8 @@ import type { StudentRecord, StudentRelative } from "@/db/students";
 import { has } from "@/lib/has";
 import { type Choice, PersonChoice, toInput } from "../../_people/person-choice";
 import { WARNING } from "../../_people/sections";
-import { invoice, billNewPerson, type ActionResult } from "../actions";
+import type { ActionResult } from "@/lib/action-result";
+import { invoice, billNewPerson } from "../actions";
 
 type Props = {
   studentId: string;
