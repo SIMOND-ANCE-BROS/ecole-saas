@@ -14,7 +14,7 @@ import {
 } from "@mantine/core";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { ageAt } from "@/domain/people/age";
+import { ageAt, isMinor } from "@/domain/people/age";
 import { type Choice, PersonChoice, toInput } from "../../_people/person-choice";
 import { createStudentFromGuide, type StudentRefusal } from "../actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
@@ -57,17 +57,22 @@ export function NewStudentGuide({
     form.current?.querySelector<HTMLElement>(selector)?.focus();
   });
   const showGuardian = (shown: boolean) => {
-    focusNext.current = shown ? "#responsable-cherche, #responsable-firstName" : "[data-sans-responsable] button";
+    // The guardian block comes back as it was left: search, new person, or a person picked.
+    focusNext.current = shown
+      ? "#responsable-cherche, #responsable-firstName, #responsable-change"
+      : "[data-no-guardian] button";
     setWithGuardian(shown);
   };
   useEffect(() => {
     if (refusal) form.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
   }, [refusal]);
 
-  const age = /^\d{4}-\d{2}-\d{2}$/.test(e.birthDate) ? ageAt(e.birthDate, today) : null;
-  const minor = age !== null && age < 18;
-  // By default: a minor has a guardian who pays; an adult pays for themself. The front desk can change it.
-  const displayedGuardian = withGuardian ?? minor;
+  const birthDate = /^\d{4}-\d{2}-\d{2}$/.test(e.birthDate) ? e.birthDate : null;
+  const age = birthDate ? ageAt(birthDate, today) : null;
+  const minor = isMinor(birthDate, today);
+  // By default: a minor has a guardian who pays; an adult pays for themself. A minor always
+  // has the guardian block, even if « Pas de responsable » was chosen before the date.
+  const displayedGuardian = minor || (withGuardian ?? false);
   const chosenBilling: Billing = billing ?? (displayedGuardian ? "guardian" : "self");
   const firstName = e.firstName.trim() || "l’élève";
   const guardianName = guardian
@@ -181,7 +186,7 @@ export function NewStudentGuide({
                 );
               }}
               errors={sous("guardian.newPerson.")}
-              adultsOnly
+              flagMinors
             />
             <Checkbox
               label="À prévenir en cas d’urgence"
@@ -201,7 +206,7 @@ export function NewStudentGuide({
             )}
           </>
         ) : (
-          <Text size="sm" c="dimmed" className="flex flex-wrap items-center gap-2" data-sans-responsable>
+          <Text size="sm" c="dimmed" className="flex flex-wrap items-center gap-2" data-no-guardian>
             {/* No date yet: whether a guardian is needed is not known. */}
             {age === null
               ? "Un responsable est demandé pour un élève mineur : indiquez sa date de naissance."

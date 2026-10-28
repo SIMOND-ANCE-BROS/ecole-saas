@@ -22,7 +22,18 @@ export function BecomeStudent({ id, firstName: firstName }: { id: string; firstN
   return (
     <>
       {asking ? (
-        <Paper withBorder p="sm" className="flex flex-col gap-2">
+        // Escape cancels, like « Annuler »: focus goes back to the button that asked.
+        <Paper
+          withBorder
+          p="sm"
+          className="flex flex-col gap-2"
+          onKeyDown={(e) => {
+            if (e.key !== "Escape" || inProgress) return;
+            e.preventDefault();
+            e.stopPropagation();
+            setAsking(false);
+          }}
+        >
           <Text size="sm">
             {firstName} rejoint la liste des élèves, avec sa fiche élève pour l’inscrire. Ses liens et ses paiements
             restent les mêmes.

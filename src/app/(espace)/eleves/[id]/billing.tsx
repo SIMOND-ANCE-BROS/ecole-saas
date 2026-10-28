@@ -34,15 +34,12 @@ export function Billing({
   const [inProgress, startTransition] = useTransition();
   const box = useRef<HTMLElement>(null);
   // Opening and closing swap « Changer » and the choices: focus follows, never back to the page.
+  // On opening it lands on the group, not on a radio: arrow keys there would change the payer at once.
   const opened = useRef(open);
   useEffect(() => {
     if (opened.current === open) return;
     opened.current = open;
-    const find = (selector: string) => box.current?.querySelector<HTMLElement>(selector);
-    (open
-      ? (find('input[name="facturer"]:checked') ?? find('input[name="facturer"]'))
-      : find("[data-changer]")
-    )?.focus();
+    box.current?.querySelector<HTMLElement>(open ? "[data-choices]" : "[data-change]")?.focus();
   }, [open]);
 
   const choose = (action: () => Promise<{ message: string | null }>) =>
@@ -102,11 +99,15 @@ export function Billing({
       )}
 
       {!open ? (
-        <Button variant="default" className="self-start" data-changer onClick={() => setOpen(true)}>
+        <Button variant="default" className="self-start" data-change onClick={() => setOpen(true)}>
           {current ? "Changer" : "Choisir"}
         </Button>
       ) : (
-        <fieldset className="flex flex-col gap-2 border-t border-bordure pt-2">
+        <fieldset
+          data-choices
+          tabIndex={-1}
+          className="flex flex-col gap-2 border-t border-bordure pt-2 outline-offset-2"
+        >
           <legend className="sr-only">Facturer à</legend>
           {!minor && (
             <Radio

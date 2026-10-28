@@ -7,7 +7,7 @@ import { enrollmentsPaidBy } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
 import { displayedName } from "@/db/people";
 import { currentSeason } from "@/db/schedule";
-import { ageAt, todayInParis } from "@/domain/people/age";
+import { ageAt, isMinor, todayInParis } from "@/domain/people/age";
 import { ofName } from "@/lib/french";
 import { requireRole } from "@/lib/session";
 import { PaymentsSection } from "../../_people/payments-section";
@@ -55,7 +55,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   const name = displayedName(e);
   const firstName = e.firstName ?? name;
   const age = e.birthDate ? ageAt(e.birthDate, today) : null;
-  const minor = age !== null && age < 18;
+  const minor = isMinor(e.birthDate, today);
   const emergencyContacts = e.guardians
     .filter((r) => r.toNotify)
     .concat(e.otherRelationships.filter((a) => a.toNotify && a.direction === "incoming"));

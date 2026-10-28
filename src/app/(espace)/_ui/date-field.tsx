@@ -78,6 +78,8 @@ export function DateField({
   };
   return (
     <DateInput
+      // A redrawn field is a new input: with `autoFocus` it would take focus back
+      // from the next field, so a field with `autoFocus` is never redrawn (onBlur).
       key={drawn}
       valueFormat="DD/MM/YYYY"
       placeholder="jj/mm/aaaa"
@@ -137,7 +139,10 @@ export function DateField({
       onBlur={(e) => {
         const text = e.currentTarget.value;
         setOpen(false);
-        if (!settle(text) && text.trim() !== "" && text.trim() !== shownAs(parseTypedDate(text)))
+        const accepted = !settle(text) && text.trim() !== "";
+        // Not when the window itself loses focus (Alt-Tab): the browser gives focus back
+        // to this input on return, and a redrawn one would not get it.
+        if (accepted && document.hasFocus() && !props.autoFocus && text.trim() !== shownAs(parseTypedDate(text)))
           setDrawn((n) => n + 1);
         onBlur?.(e);
       }}
