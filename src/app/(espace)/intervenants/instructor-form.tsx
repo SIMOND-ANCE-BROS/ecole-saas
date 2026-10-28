@@ -63,6 +63,8 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
   const [mode, setMode] = useState(v.payMode as Mode);
   const e = state.errors;
   const form = useRef<HTMLFormElement>(null);
+  // Empty rate: said before sending, like a missing required field.
+  const [tariffMissing, setTariffMissing] = useState(false);
 
   // After a rejection, focus goes to the first field in error.
   useEffect(() => {
@@ -72,11 +74,25 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
   const field = (name: InstructorField, label: string, props: TextInputProps = {}) => (
     <TextInput id={name} name={INSTRUCTOR.name(name)} label={label} defaultValue={v[name]} error={e[name]} {...props} />
   );
+  // Capitalised in the menu only (« à l’heure » stays lower case inside sentences).
   const options = (labels: Record<string, string>) =>
-    Object.entries(labels).map(([value, label]) => ({ value, label }));
+    Object.entries(labels).map(([value, label]) => ({ value, label: label.charAt(0).toUpperCase() + label.slice(1) }));
 
   return (
-    <form ref={form} action={send} className="flex w-full min-w-0 flex-col gap-5" noValidate>
+    <form
+      ref={form}
+      action={send}
+      className="flex w-full min-w-0 flex-col gap-5"
+      noValidate
+      onSubmit={(ev) => {
+        const tariff = ev.currentTarget.elements.namedItem(INSTRUCTOR.name("tariff"));
+        if (tariff instanceof HTMLInputElement && tariff.value.trim() === "") {
+          ev.preventDefault();
+          setTariffMissing(true);
+          tariff.focus();
+        }
+      }}
+    >
       {e.form && (
         <Alert color="red" role="alert">
           {e.form}
@@ -95,7 +111,7 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
         </div>
       </Fieldset>
 
-      <Fieldset legend="Statut" className="grid gap-3 sm:grid-cols-2">
+      <Fieldset legend="Statut et TVA" className="grid gap-3 sm:grid-cols-2">
         <Select
           id="status"
           label="Statut"
@@ -141,6 +157,8 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
           inputMode: "decimal",
           autoComplete: "off",
           required: true,
+          error: tariffMissing ? "Tarif obligatoire" : e.tariff,
+          onChange: () => setTariffMissing(false),
           styles: { input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } },
         })}
       </Fieldset>

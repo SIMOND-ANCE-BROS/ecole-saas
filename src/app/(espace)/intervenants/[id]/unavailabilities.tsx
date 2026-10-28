@@ -53,14 +53,17 @@ export function Unavailabilities({
   const [message, setMessage] = useState<string | null>(null);
   // Missing start or an end before the start, shown on the field itself.
   const [dateError, setDateError] = useState<{ field: "fromDate" | "toDate"; text: string } | null>(null);
-  const refuse = (field: "fromDate" | "toDate", text: string) => {
-    setDateError({ field, text });
-    const input = document.getElementById(field === "fromDate" ? "indispo-du" : "indispo-au");
-    // As refusedDateField(): no calendar over the message.
+  // As refusedDateField(): focus without the calendar opening over a message.
+  const focusDate = (id: "indispo-du" | "indispo-au") => {
+    const input = document.getElementById(id);
     if (input && document.activeElement !== input) {
       input.dataset.quietFocus = "1";
       input.focus();
     }
+  };
+  const refuse = (field: "fromDate" | "toDate", text: string) => {
+    setDateError({ field, text });
+    focusDate(field === "fromDate" ? "indispo-du" : "indispo-au");
   };
   const [inProgress, startTransition] = useTransition();
   const updated = (field: keyof typeof v) => (e: { currentTarget: { value: string } }) =>
@@ -110,7 +113,11 @@ export function Unavailabilities({
                   disabled={inProgress}
                   aria-label={`Retirer l’indisponibilité du ${range(i.start, i.end)}`}
                   onClick={() =>
-                    startTransition(async () => setMessage((await removeUnavailability(instructorId, i.id)).message))
+                    startTransition(async () => {
+                      setMessage((await removeUnavailability(instructorId, i.id)).message);
+                      // The button leaves with its row: focus goes back to the entry, not to the page.
+                      focusDate("indispo-du");
+                    })
                   }
                 >
                   Retirer
@@ -137,7 +144,11 @@ export function Unavailabilities({
               toDate: v.toDate || v.fromDate,
             });
             setMessage(error);
-            if (!error) setV({ fromDate: "", toDate: "", fromTime: "", toTime: "", label: "" });
+            if (!error) {
+              setV({ fromDate: "", toDate: "", fromTime: "", toTime: "", label: "" });
+              // Ready for the next one.
+              focusDate("indispo-du");
+            }
           });
         }}
       >
@@ -164,7 +175,7 @@ export function Unavailabilities({
           error={dateError?.field === "toDate" ? dateError.text : undefined}
         />
         <TimeInput label="De (facultatif)" value={v.fromTime} onChange={updated("fromTime")} />
-        <TimeInput label="À" value={v.toTime} onChange={updated("toTime")} />
+        <TimeInput label="À (facultatif)" value={v.toTime} onChange={updated("toTime")} />
         <TextInput
           label="Motif (facultatif)"
           className="sm:col-span-3"

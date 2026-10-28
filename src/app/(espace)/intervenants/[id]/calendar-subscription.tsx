@@ -60,7 +60,7 @@ export function CalendarSubscription({
         </Title>
         <Text size="sm" c="dimmed">
           Une page privée pour {firstName} : s’abonner à ses séances (Google, Apple, Outlook) et connecter son agenda
-          pour que ses indisponibilités remontent ici. Aucun nom d’élève n’en sort ; seules ses plages occupées y
+          pour que ses indisponibilités remontent ici. Aucun nom d’élève n’en sort ; seules ses plages occupées y
           entrent.
         </Text>
       </div>
