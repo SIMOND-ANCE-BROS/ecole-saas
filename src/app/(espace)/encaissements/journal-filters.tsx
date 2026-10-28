@@ -1,23 +1,31 @@
 "use client";
 
-import { Anchor, Button, NativeSelect, Paper } from "@mantine/core";
+import { Anchor, Button, Paper, Text } from "@mantine/core";
 import { useState } from "react";
-import { PAYMENT_METHODS, type Method } from "@/db/payments";
 import { DateField, refusedDateField } from "../_ui/date-field";
 
-type Props = { from: string; to: string; method: Method | null; exportUrl: string };
+type Props = {
+  from: string;
+  to: string;
+  /** Column filters and sort of the table (`f`, `mode`, `sort`, `order`), kept when the period changes. */
+  keep: [string, string][];
+  /** Null when the period and filters leave nothing to export. */
+  exportUrl: string | null;
+};
 
 /**
- * Period and method of the payment log (#98), sent in the address
- * (`?du=&au=&moyen=`) like before: the page reads them on the server.
+ * Period of the payment log (#98), sent in the address (`?du=&au=`): the page
+ * reads it on the server. The method and the other criteria are the table's
+ * column filters (#107).
  */
-export function JournalFilters({ from: shownFrom, to: shownTo, method, exportUrl }: Props) {
+export function JournalFilters({ from: shownFrom, to: shownTo, keep, exportUrl }: Props) {
   const [from, setFrom] = useState(shownFrom);
   const [to, setTo] = useState(shownTo);
   return (
     <Paper
       component="form"
       role="search"
+      aria-label="Période"
       withBorder
       p="sm"
       // Aligned on the top of the fields: a date message does not shift the others.
@@ -27,23 +35,23 @@ export function JournalFilters({ from: shownFrom, to: shownTo, method, exportUrl
       }}
     >
       <input type="hidden" name="vue" value="journal" />
+      {keep.map(([name, value], i) => (
+        <input key={`${name}-${i}`} type="hidden" name={name} value={value} />
+      ))}
       <DateField label="Du" name="du" w={180} value={from} onChange={setFrom} />
       <DateField label="Au" name="au" w={180} minDate={from || undefined} value={to} onChange={setTo} />
-      <NativeSelect
-        label="Moyen"
-        name="moyen"
-        defaultValue={method ?? ""}
-        data={[
-          { value: "", label: "Tous" },
-          ...Object.entries(PAYMENT_METHODS).map(([value, label]) => ({ value, label })),
-        ]}
-      />
       <Button type="submit" variant="default" mt={25}>
         Afficher
       </Button>
-      <Anchor href={exportUrl} size="sm" mt={30} className="ml-auto">
-        Exporter (CSV)
-      </Anchor>
+      {exportUrl ? (
+        <Anchor href={exportUrl} size="sm" mt={30} className="ml-auto">
+          Exporter (CSV)
+        </Anchor>
+      ) : (
+        <Text span size="sm" c="dimmed" mt={30} className="ml-auto">
+          Rien à exporter
+        </Text>
+      )}
     </Paper>
   );
 }

@@ -42,6 +42,8 @@ import { saveColumns } from "./actions";
 import { type AddressFilter, useAddressFilter } from "./address-filter";
 
 export type CellValue = string | number | string[] | null;
+/** A cell's own link; `label` names it for screen readers when the text alone is a bare date. */
+export type CellLink = { href: string; label?: string };
 /** `Id`: the list column ids, so a cell keyed by a wrong id fails to compile (#138). */
 export type TableRow<Id extends string = string> = {
   id: string;
@@ -52,6 +54,8 @@ export type TableRow<Id extends string = string> = {
   /** Small badge after the name (« inactif », « organisme »). */
   badge?: string;
   cells: Record<Id, CellValue>;
+  /** A cell's own link, other than the record (« Remise » → its deposit slip). */
+  links?: Partial<Record<Id, CellLink>>;
 };
 
 type Props<Id extends string> = {
@@ -497,7 +501,7 @@ export function ListTable<Id extends string>({
                           )}
                         </>
                       ) : (
-                        <CellContent def={d} value={l.cells[d.id] ?? null} />
+                        <CellContent def={d} value={l.cells[d.id] ?? null} link={l.links?.[d.id]} />
                       )}
                     </Table.Td>
                   ))}
@@ -577,7 +581,7 @@ function ListPages({
 
 const text = (v: CellValue) => (Array.isArray(v) ? v.join(", ") : v == null ? "" : String(v));
 
-function CellContent({ def, value: value }: { def: ColumnDef; value: CellValue }) {
+function CellContent({ def, value: value, link }: { def: ColumnDef; value: CellValue; link?: CellLink }) {
   const t = text(value);
   if (t === "")
     return (
@@ -592,7 +596,23 @@ function CellContent({ def, value: value }: { def: ColumnDef; value: CellValue }
       </Anchor>
     );
   }
-  if (def.type === "date") return t.slice(0, 10).split("-").reverse().join("/");
+  if (def.type === "date") {
+    const shown = t.slice(0, 10).split("-").reverse().join("/");
+    return link ? (
+      <Anchor component={Link} href={link.href} aria-label={link.label} size="sm" className="whitespace-nowrap">
+        {shown}
+      </Anchor>
+    ) : (
+      <span className="whitespace-nowrap">{shown}</span>
+    );
+  }
+  if (link) {
+    return (
+      <Anchor component={Link} href={link.href} aria-label={link.label} size="sm">
+        {t}
+      </Anchor>
+    );
+  }
   if (def.email) {
     return (
       <Anchor href={`mailto:${t}`} size="sm" className="break-all">
