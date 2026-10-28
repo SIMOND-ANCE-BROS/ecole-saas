@@ -1,5 +1,6 @@
 "use client";
 
+import { Button, Group, List, Paper, Text, TextInput, Title } from "@mantine/core";
 import { useState, useTransition } from "react";
 import { createCalendarLink, disconnectCalendar, revokeCalendarLink, syncNow } from "../actions";
 import { has } from "@/lib/has";
@@ -46,113 +47,131 @@ export function CalendarSubscription({
     });
 
   return (
-    <section aria-labelledby="agenda" className="panneau flex w-full min-w-0 flex-col gap-3 p-4 text-sm">
+    <Paper
+      withBorder
+      p="md"
+      component="section"
+      aria-labelledby="agenda"
+      className="flex w-full min-w-0 flex-col gap-3"
+    >
       <div>
-        <h2 id="agenda" className="text-base font-semibold">
+        <Title order={2} size="h5" id="agenda">
           Agenda de {firstName}
-        </h2>
-        <p className="text-doux">
+        </Title>
+        <Text size="sm" c="dimmed">
           Une page privée pour {firstName} : s’abonner à ses séances (Google, Apple, Outlook) et connecter son agenda
-          pour que ses indisponibilités remontent ici. Aucun nom d’élève n’en sort ; seules ses plages occupées y
+          pour que ses indisponibilités remontent ici. Aucun nom d’élève n’en sort ; seules ses plages occupées y
           entrent.
-        </p>
+        </Text>
       </div>
 
       {url ? (
         <div className="flex flex-col gap-2">
-          <label htmlFor="lien-agenda" className="font-medium">
-            Page à transmettre à {firstName} (affichée une seule fois)
-          </label>
-          <div className="flex gap-2">
-            <input
-              id="lien-agenda"
+          <div className="flex items-end gap-2">
+            <TextInput
+              label={`Page à transmettre à ${firstName} (affichée une seule fois)`}
               readOnly
-              className="champ min-w-0 flex-1 font-mono text-xs"
+              className="min-w-0 flex-1"
+              styles={{
+                input: { fontFamily: "var(--mantine-font-family-monospace)", fontSize: "var(--mantine-font-size-xs)" },
+              }}
               value={url.page}
               onFocus={(e) => e.currentTarget.select()}
             />
-            <button
-              type="button"
-              className="bouton-secondaire shrink-0"
+            <Button
+              variant="default"
+              className="shrink-0"
               onClick={async () => {
                 await navigator.clipboard.writeText(url.page);
                 setCopy(true);
               }}
             >
               {copy ? "Copié" : "Copier"}
-            </button>
+            </Button>
           </div>
-          <p className="text-doux">
-            Abonnement direct, sans la page : <span className="font-mono text-xs break-all">{url.url}</span>
-          </p>
-          <ul className="list-disc pl-5 text-doux">
-            <li>Google Agenda (ordinateur) : « Autres agendas », « + », « À partir de l’URL », puis coller le lien.</li>
-            <li>
+          <Text size="sm" c="dimmed">
+            Abonnement direct, sans la page :{" "}
+            <Text span ff="monospace" size="xs" className="break-all">
+              {url.url}
+            </Text>
+          </Text>
+          <List size="sm" c="dimmed" listStyleType="disc" withPadding>
+            <List.Item>
+              Google Agenda (ordinateur) : « Autres agendas », « + », « À partir de l’URL », puis coller le lien.
+            </List.Item>
+            <List.Item>
               iPhone : Réglages, Calendrier, Comptes, « Ajouter un compte », « Autre », « Ajouter un calendrier avec
               abonnement ».
-            </li>
-            <li>Outlook : « Ajouter un calendrier », « S’abonner à partir du web ».</li>
-          </ul>
-          <p className="text-doux">Les agendas se mettent à jour toutes les quelques heures (selon l’application).</p>
+            </List.Item>
+            <List.Item>Outlook : « Ajouter un calendrier », « S’abonner à partir du web ».</List.Item>
+          </List>
+          <Text size="sm" c="dimmed">
+            Les agendas se mettent à jour toutes les quelques heures (selon l’application).
+          </Text>
         </div>
       ) : (
-        <p>
+        <Text size="sm">
           {activeSince
             ? `Lien actif depuis le ${shortDate.format(new Date(activeSince))}.`
             : "Aucun lien pour l’instant."}
-        </p>
+        </Text>
       )}
 
       {connection ? (
-        <div className="flex flex-col gap-1 rounded-md border border-bordure p-3">
-          <p>
+        <Paper withBorder p="sm" className="flex flex-col gap-1">
+          <Text size="sm">
             Agenda connecté : {connection.provider}
             {connection.account && ` (${connection.account})`}.
-          </p>
+          </Text>
           {connection.error ? (
-            <p className="text-alerte-texte">{connection.error}</p>
+            <Text size="sm" c="red">
+              {connection.error}
+            </Text>
           ) : (
             connection.lastSyncedAt && (
-              <p className="text-doux">Dernière mise à jour : {dateTime.format(new Date(connection.lastSyncedAt))}.</p>
+              <Text size="sm" c="dimmed">
+                Dernière mise à jour : {dateTime.format(new Date(connection.lastSyncedAt))}.
+              </Text>
             )
           )}
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="bouton-secondaire"
+          <Group gap="xs" mt="xs">
+            <Button
+              variant="default"
               disabled={inProgress}
               onClick={() => startTransition(async () => setMessage((await syncNow(instructorId)).message))}
             >
               Synchroniser maintenant
-            </button>
-            <button
-              type="button"
-              className="bouton-secondaire"
+            </Button>
+            <Button
+              variant="default"
               disabled={inProgress}
               onClick={() => startTransition(async () => setMessage((await disconnectCalendar(instructorId)).message))}
             >
               Déconnecter
-            </button>
-          </div>
-        </div>
+            </Button>
+          </Group>
+        </Paper>
       ) : (
-        activeSince && <p className="text-doux">Aucun agenda connecté par {firstName} pour l’instant.</p>
+        activeSince && (
+          <Text size="sm" c="dimmed">
+            Aucun agenda connecté par {firstName} pour l’instant.
+          </Text>
+        )
       )}
 
       {message && (
-        <p role="status" className="font-medium">
+        <Text role="status" size="sm" fw={500}>
           {message}
-        </p>
+        </Text>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className="bouton-principal" disabled={inProgress} onClick={create}>
+      <Group gap="xs">
+        <Button disabled={inProgress} onClick={create}>
           {activeSince || url ? "Remplacer le lien" : "Créer le lien"}
-        </button>
+        </Button>
         {(activeSince || url) && (
-          <button
-            type="button"
-            className="bouton-secondaire"
+          <Button
+            variant="default"
             disabled={inProgress}
             onClick={() =>
               startTransition(async () => {
@@ -163,12 +182,14 @@ export function CalendarSubscription({
             }
           >
             Révoquer
-          </button>
+          </Button>
         )}
-      </div>
+      </Group>
       {(activeSince || url) && (
-        <p className="text-xs text-doux">Remplacer ou révoquer le lien coupe aussitôt l’ancien abonnement.</p>
+        <Text size="xs" c="dimmed">
+          Remplacer ou révoquer le lien coupe aussitôt l’ancien abonnement.
+        </Text>
       )}
-    </section>
+    </Paper>
   );
 }

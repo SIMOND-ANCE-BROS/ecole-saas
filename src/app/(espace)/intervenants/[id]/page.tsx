@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { Paper, Table, TableTbody, TableTd, TableTh, TableThead, TableTr, Text, Title } from "@mantine/core";
-import Link from "next/link";
+import { Anchor, Paper, Table, TableTbody, TableTd, TableTh, TableThead, TableTr, Text, Title } from "@mantine/core";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { calendarState } from "@/db/calendar-feed";
@@ -10,6 +9,7 @@ import { listUnavailabilities } from "@/db/unavailabilities";
 import { readInstructor, PAY_MODES, VAT_REGIMES, STATUSES, PAY_UNITS } from "@/db/instructors";
 import { coursesWithOwnRate } from "@/db/courses";
 import { DAY_NAMES } from "@/domain/schedule/days";
+import { ButtonLink } from "@/app/(espace)/_ui/button-link";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { end } from "@/app/(espace)/planning/format";
 import { courseRateAllowed } from "@/domain/payroll/rate";
@@ -48,62 +48,79 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <Link href="/intervenants" className="lien">
+        <TextLink href="/intervenants" size="sm">
           Intervenants
-        </Link>
-        <span className="text-doux"> / {name}</span>
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" "}
+          / {name}
+        </Text>
       </nav>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="titre-page">{name}</h1>
-          <p className="text-sm text-doux">
+          <Title order={1} fz="xl">
+            {name}
+          </Title>
+          <Text size="sm" c="dimmed">
             {instructor.active ? "Actif" : "Inactif"}
             {instructor.isOwner && ", dirigeant de l’école"}
-          </p>
+          </Text>
         </div>
-        <Link href={`/intervenants/${id}/modifier`} className="bouton-secondaire">
+        <ButtonLink href={`/intervenants/${id}/modifier`} variant="default">
           Modifier la fiche
-        </Link>
+        </ButtonLink>
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="panneau p-4" aria-labelledby="identite">
-          <h2 id="identite" className="mb-3 font-semibold">
+        <Paper withBorder p="md" component="section" aria-labelledby="identite">
+          <Title order={2} size="h5" id="identite" mb="sm">
             Coordonnées et statut
-          </h2>
+          </Title>
           <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 text-sm">
-            <dt className="text-doux">E-mail</dt>
+            <Text component="dt" size="sm" c="dimmed">
+              E-mail
+            </Text>
             <dd className="break-all">
               {instructor.email ? (
-                <a className="lien" href={`mailto:${instructor.email}`}>
+                <Anchor href={`mailto:${instructor.email}`} size="sm">
                   {instructor.email}
-                </a>
+                </Anchor>
               ) : (
                 "Non renseigné"
               )}
             </dd>
-            <dt className="text-doux">Statut</dt>
+            <Text component="dt" size="sm" c="dimmed">
+              Statut
+            </Text>
             <dd>{STATUSES[instructor.status]}</dd>
             {instructor.status !== "employee" && (
               <>
-                <dt className="text-doux">SIREN</dt>
+                <Text component="dt" size="sm" c="dimmed">
+                  SIREN
+                </Text>
                 <dd>{instructor.siren || "Non renseigné"}</dd>
               </>
             )}
-            <dt className="text-doux">TVA</dt>
+            <Text component="dt" size="sm" c="dimmed">
+              TVA
+            </Text>
             <dd>{VAT_REGIMES[instructor.vatRegime]}</dd>
           </dl>
-        </section>
-        <section className="panneau p-4" aria-labelledby="remuneration">
-          <h2 id="remuneration" className="mb-3 font-semibold">
+        </Paper>
+        <Paper withBorder p="md" component="section" aria-labelledby="remuneration">
+          <Title order={2} size="h5" id="remuneration" mb="sm">
             Rémunération
-          </h2>
-          <p className="text-sm">{PAY_MODES[instructor.payMode]}</p>
-          <p className="mt-2 text-xl font-semibold tabular-nums">
+          </Title>
+          <Text size="sm">{PAY_MODES[instructor.payMode]}</Text>
+          <Text mt="xs" size="xl" fw={600} className="tabular-nums">
             {formatEuros(instructor.rateCents)}{" "}
-            <span className="text-sm font-normal text-doux">/ {PAY_UNITS[instructor.payMode]}</span>
-          </p>
-          <p className="mt-2 text-xs text-doux">Tarif de référence. Ce montant n’est pas un relevé à payer.</p>
-        </section>
+            <Text span size="sm" fw={400} c="dimmed">
+              / {PAY_UNITS[instructor.payMode]}
+            </Text>
+          </Text>
+          <Text mt="xs" size="xs" c="dimmed">
+            Tarif de référence. Ce montant n’est pas un relevé à payer.
+          </Text>
+        </Paper>
       </div>
       {ownRates.length > 0 && (
         <Paper withBorder p="md" component="section" aria-labelledby="tarifs-cours">

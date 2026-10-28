@@ -1,6 +1,9 @@
 "use client";
 
+import { Button, Paper, Text, TextInput, Title } from "@mantine/core";
+import { TimeInput } from "@mantine/dates";
 import { useState, useTransition } from "react";
+import { DateField, refusedDateField } from "@/app/(espace)/_ui/date-field";
 import { addUnavailabilityAction, removeUnavailability } from "../actions";
 
 export type DisplayedUnavailability = {
@@ -48,122 +51,150 @@ export function Unavailabilities({
 }) {
   const [v, setV] = useState({ fromDate: "", toDate: "", fromTime: "", toTime: "", label: "" });
   const [message, setMessage] = useState<string | null>(null);
+  // Missing start or an end before the start, shown on the field itself.
+  const [dateError, setDateError] = useState<{ field: "fromDate" | "toDate"; text: string } | null>(null);
+  // As refusedDateField(): focus without the calendar opening over a message.
+  const focusDate = (id: "indispo-du" | "indispo-au") => {
+    const input = document.getElementById(id);
+    if (input && document.activeElement !== input) {
+      input.dataset.quietFocus = "1";
+      input.focus();
+    }
+  };
+  const refuse = (field: "fromDate" | "toDate", text: string) => {
+    setDateError({ field, text });
+    focusDate(field === "fromDate" ? "indispo-du" : "indispo-au");
+  };
   const [inProgress, startTransition] = useTransition();
-  const updated = (field: keyof typeof v) => (e: { target: { value: string } }) =>
-    setV({ ...v, [field]: e.target.value });
+  const updated = (field: keyof typeof v) => (e: { currentTarget: { value: string } }) =>
+    setV({ ...v, [field]: e.currentTarget.value });
 
   return (
-    <section aria-labelledby="indisponibilites" className="panneau flex min-w-0 flex-col gap-3 p-4 text-sm">
+    <Paper
+      withBorder
+      p="md"
+      component="section"
+      aria-labelledby="indisponibilites"
+      className="flex min-w-0 flex-col gap-3"
+    >
       <div>
-        <h2 id="indisponibilites" className="text-base font-semibold">
+        <Title order={2} size="h5" id="indisponibilites">
           Indisponibilités de {firstName}
-        </h2>
-        <p className="text-doux">
+        </Title>
+        <Text size="sm" c="dimmed">
           Elles signalent les séances en conflit et écartent {firstName} des remplaçants proposés.
-        </p>
+        </Text>
       </div>
 
       {unavailabilities.length === 0 ? (
-        <p className="text-doux">Aucune indisponibilité à venir.</p>
+        <Text size="sm" c="dimmed">
+          Aucune indisponibilité à venir.
+        </Text>
       ) : (
-        <ul className="divide-y divide-bordure rounded-md border border-bordure">
+        <Paper withBorder component="ul" className="divide-y divide-bordure text-sm">
           {unavailabilities.map((i) => (
-            <li key={i.id} className="flex flex-wrap items-baseline gap-x-3 px-3 py-2">
+            <li key={i.id} className="flex flex-wrap items-center gap-x-3 px-3 py-1.5">
               <span className="tabular-nums">{range(i.start, i.end)}</span>
-              {i.label && <span className="text-doux">{i.label}</span>}
+              {i.label && (
+                <Text span size="sm" c="dimmed">
+                  {i.label}
+                </Text>
+              )}
               {SOURCE[i.source] ? (
-                <span className="ml-auto text-xs text-doux">{SOURCE[i.source]}</span>
+                <Text span size="xs" c="dimmed" className="ml-auto">
+                  {SOURCE[i.source]}
+                </Text>
               ) : (
-                <button
-                  type="button"
-                  className="lien ml-auto text-xs text-doux"
+                <Button
+                  size="compact-sm"
+                  variant="subtle"
+                  color="gray"
+                  className="ml-auto"
                   disabled={inProgress}
+                  aria-label={`Retirer l’indisponibilité du ${range(i.start, i.end)}`}
                   onClick={() =>
-                    startTransition(async () => setMessage((await removeUnavailability(instructorId, i.id)).message))
+                    startTransition(async () => {
+                      setMessage((await removeUnavailability(instructorId, i.id)).message);
+                      // The button leaves with its row: focus goes back to the entry, not to the page.
+                      focusDate("indispo-du");
+                    })
                   }
                 >
                   Retirer
-                </button>
+                </Button>
               )}
             </li>
           ))}
-        </ul>
+        </Paper>
       )}
 
       <form
-        className="grid gap-2 sm:grid-cols-4"
+        className="grid gap-3 sm:grid-cols-4 sm:items-start"
+        noValidate
         onSubmit={(e) => {
           e.preventDefault();
+          // A date shown as refused is never sent as empty.
+          if (refusedDateField(e.currentTarget)) return;
+          if (!v.fromDate) return refuse("fromDate", "Indiquez la date de début.");
+          if (v.toDate && v.toDate < v.fromDate) return refuse("toDate", "La fin doit suivre le début.");
+          setDateError(null);
           startTransition(async () => {
             const { message: error } = await addUnavailabilityAction(instructorId, {
               ...v,
               toDate: v.toDate || v.fromDate,
             });
             setMessage(error);
-            if (!error) setV({ fromDate: "", toDate: "", fromTime: "", toTime: "", label: "" });
+            if (!error) {
+              setV({ fromDate: "", toDate: "", fromTime: "", toTime: "", label: "" });
+              // Ready for the next one.
+              focusDate("indispo-du");
+            }
           });
         }}
       >
-        <div className="flex flex-col gap-1">
-          <label htmlFor="indispo-du" className="font-medium">
-            Du
-          </label>
-          <input
-            id="indispo-du"
-            type="date"
-            className="champ"
-            required
-            value={v.fromDate}
-            onChange={updated("fromDate")}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="indispo-au" className="font-medium">
-            Au (inclus)
-          </label>
-          <input
-            id="indispo-au"
-            type="date"
-            className="champ"
-            min={v.fromDate}
-            value={v.toDate}
-            onChange={updated("toDate")}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="indispo-de" className="font-medium">
-            De (facultatif)
-          </label>
-          <input id="indispo-de" type="time" className="champ" value={v.fromTime} onChange={updated("fromTime")} />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="indispo-a" className="font-medium">
-            À
-          </label>
-          <input id="indispo-a" type="time" className="champ" value={v.toTime} onChange={updated("toTime")} />
-        </div>
-        <div className="flex flex-col gap-1 sm:col-span-3">
-          <label htmlFor="indispo-libelle" className="font-medium">
-            Motif (facultatif)
-          </label>
-          <input
-            id="indispo-libelle"
-            className="champ"
-            placeholder="Stage, congé, rendez-vous…"
-            value={v.label}
-            onChange={updated("label")}
-          />
-        </div>
-        <button type="submit" className="bouton-secondaire self-end" disabled={inProgress}>
+        <DateField
+          id="indispo-du"
+          label="Du"
+          required
+          value={v.fromDate}
+          onChange={(fromDate) => {
+            setDateError(null);
+            setV({ ...v, fromDate });
+          }}
+          error={dateError?.field === "fromDate" ? dateError.text : undefined}
+        />
+        <DateField
+          id="indispo-au"
+          label="Au (inclus)"
+          minDate={v.fromDate || undefined}
+          value={v.toDate}
+          onChange={(toDate) => {
+            setDateError(null);
+            setV({ ...v, toDate });
+          }}
+          error={dateError?.field === "toDate" ? dateError.text : undefined}
+        />
+        <TimeInput label="De (facultatif)" value={v.fromTime} onChange={updated("fromTime")} />
+        <TimeInput label="À (facultatif)" value={v.toTime} onChange={updated("toTime")} />
+        <TextInput
+          label="Motif (facultatif)"
+          className="sm:col-span-3"
+          placeholder="Stage, congé, rendez-vous…"
+          value={v.label}
+          onChange={updated("label")}
+        />
+        <Button type="submit" variant="default" loading={inProgress} className="sm:self-end sm:justify-self-start">
           Ajouter
-        </button>
+        </Button>
       </form>
-      <p className="text-xs text-doux">Sans heures : journées entières. Heures de Paris.</p>
+      <Text size="xs" c="dimmed">
+        Sans heures : journées entières. Heures de Paris.
+      </Text>
       {message && (
-        <p role="alert" className="text-erreur">
+        <Text role="alert" size="sm" c="red">
           {message}
-        </p>
+        </Text>
       )}
-    </section>
+    </Paper>
   );
 }
