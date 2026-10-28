@@ -6,6 +6,8 @@ import { type Instructor, PAY_MODES, VAT_REGIMES, STATUSES, PAY_UNITS } from "@/
 import { saveInstructor, type FormState } from "./actions";
 import { INSTRUCTOR, type InstructorField } from "./fields";
 import { Cancel } from "@/app/(espace)/_panel/panel";
+import { BusinessSearch } from "@/app/(espace)/_ui/business-search";
+import type { Business } from "@/connectors/business-registry/registry";
 
 type Mode = keyof typeof PAY_UNITS;
 
@@ -61,6 +63,9 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
   const v = state.values ?? initial;
   const [status, setStatus] = useState(v.status);
   const [mode, setMode] = useState(v.payMode as Mode);
+  const [siren, setSiren] = useState(v.siren);
+  // Company picked in the registry: shown under the SIREN to check it is the right one.
+  const [found, setFound] = useState<Business | null>(null);
   const e = state.errors;
   const form = useRef<HTMLFormElement>(null);
   // Empty rate: said before sending, like a missing required field.
@@ -111,7 +116,7 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
         </div>
       </Fieldset>
 
-      <Fieldset legend="Statut et TVA" className="grid gap-3 sm:grid-cols-2">
+      <Fieldset legend="Statut et TVA" className="grid items-start gap-3 sm:grid-cols-2">
         <Select
           id="status"
           label="Statut"
@@ -121,11 +126,6 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
           defaultValue={v.status}
           onChange={(x) => x && setStatus(x)}
         />
-        {status !== "employee" ? (
-          field("siren", "SIREN (facultatif)", { inputMode: "numeric", autoComplete: "off", placeholder: "9 chiffres" })
-        ) : (
-          <input type="hidden" name={INSTRUCTOR.name("siren")} value="" />
-        )}
         <Select
           id="vatRegime"
           label="TVA"
@@ -134,6 +134,37 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
           data={options(VAT_REGIMES)}
           defaultValue={v.vatRegime}
         />
+        {status !== "employee" ? (
+          <>
+            <div className="sm:col-span-2">
+              <BusinessSearch
+                description="Nom de l’entreprise ou de l’intervenant, SIREN ou SIRET : choisir une entreprise remplit le SIREN."
+                onPick={(b) => {
+                  setSiren(b.siren);
+                  setFound(b);
+                }}
+              />
+            </div>
+            {field("siren", "SIREN (facultatif)", {
+              inputMode: "numeric",
+              autoComplete: "off",
+              placeholder: "9 chiffres",
+              value: siren,
+              defaultValue: undefined,
+              onChange: (ev) => {
+                setSiren(ev.currentTarget.value);
+                setFound(null);
+              },
+              description: found
+                ? [found.legalName, found.legalForm, found.city].filter(Boolean).join(" — ") +
+                  (found.ceased ? " — entreprise fermée" : "")
+                : undefined,
+              inputWrapperOrder: ["label", "input", "description", "error"],
+            })}
+          </>
+        ) : (
+          <input type="hidden" name={INSTRUCTOR.name("siren")} value="" />
+        )}
         <Checkbox
           className="self-end pb-2"
           name={INSTRUCTOR.name("isOwner")}
