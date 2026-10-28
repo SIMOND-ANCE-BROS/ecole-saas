@@ -97,7 +97,7 @@ export default async function MyCalendarPage({ params, searchParams }: PageProps
               {connection.account && ` (${connection.account})`}.
             </p>
             {connection.error ? (
-              <Text size="sm" c="var(--mantine-color-yellow-light-color)">
+              <Text size="sm" className="text-alerte-texte">
                 {connection.error}
               </Text>
             ) : (

@@ -35,7 +35,8 @@ export function Navigation({ role }: { role: Role }) {
           active={active(l.href)}
           aria-current={active(l.href) ? "page" : undefined}
           className="rounded-md"
-          py={6}
+          // 44 px touch target on phones, compact with a mouse.
+          py={{ base: 10, md: 6 }}
         />
       ))}
     </nav>
@@ -116,7 +117,6 @@ export function GlobalSearch() {
         autoComplete="off"
         placeholder={list?.example ?? "Élève, parent, téléphone…"}
         defaultValue={search}
-        aria-describedby="etat-recherche"
         autoFocus={onList}
         onChange={(e) => {
           if (onList) go(e.currentTarget.value, true);

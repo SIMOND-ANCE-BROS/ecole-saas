@@ -250,7 +250,7 @@ export function ListTable<Id extends string>({
 
       {mobile && <div className="sm:hidden">{mobile}</div>}
       <Paper withBorder className={`overflow-x-auto ${mobile ? "hidden sm:block" : ""}`}>
-        <Table>
+        <Table verticalSpacing={5}>
           <caption className="sr-only">{caption}</caption>
           <Table.Thead>
             <Table.Tr>
@@ -517,7 +517,11 @@ function Popover({
           positionPopover();
           requestAnimationFrame(() => {
             positionPopover();
-            popover.current?.querySelector<HTMLElement>("input, button")?.focus();
+            const first = popover.current?.querySelector<HTMLElement>("input, button");
+            // A date field first (column filterable, not sortable): focused
+            // without opening its calendar over the menu (see `DateField`).
+            if (first?.classList.contains("mantine-DateInput-input")) first.dataset.quietFocus = "1";
+            first?.focus();
           });
         }}
       >
@@ -577,7 +581,7 @@ function TitleMenu({
     <Popover
       title={`Trier ou filtrer « ${def.label} »`}
       buttonLabel={`${def.label} : trier ou filtrer${state ? ` (${state})` : ""}`}
-      plainClass={`-mx-1 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-1 rounded px-1 py-0.5 hover:bg-accent-doux ${def.right ? "justify-end" : ""} ${currentSort || filtered ? "text-accent" : ""}`}
+      plainClass={`-mx-1 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-1 rounded px-1 py-0.5 text-xs font-medium hover:bg-accent-doux ${def.right ? "justify-end" : ""} ${currentSort || filtered ? "text-accent" : "text-doux"}`}
       width="w-72"
       button={
         <>

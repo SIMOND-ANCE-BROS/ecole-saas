@@ -149,12 +149,16 @@ export default async function FrontDesk() {
             </Text>
           ) : (
             <Paper withBorder className="overflow-x-auto">
-              <Table>
+              <Table verticalSpacing={5}>
                 <TableThead>
                   <TableTr>
-                    <TableTh scope="col">Payeur</TableTh>
-                    <TableTh scope="col">Danseur</TableTh>
-                    <TableTh scope="col" ta="right">
+                    <TableTh scope="col" fz="xs" fw={500} c="dimmed">
+                      Payeur
+                    </TableTh>
+                    <TableTh scope="col" fz="xs" fw={500} c="dimmed">
+                      Danseur
+                    </TableTh>
+                    <TableTh scope="col" ta="right" fz="xs" fw={500} c="dimmed">
                       Prix
                     </TableTh>
                   </TableTr>
@@ -189,12 +193,16 @@ export default async function FrontDesk() {
             </Text>
           ) : (
             <Paper withBorder className="overflow-x-auto">
-              <Table>
+              <Table verticalSpacing={5}>
                 <TableThead>
                   <TableTr>
-                    <TableTh scope="col">Cours</TableTh>
-                    <TableTh scope="col">Créneau</TableTh>
-                    <TableTh scope="col" ta="right">
+                    <TableTh scope="col" fz="xs" fw={500} c="dimmed">
+                      Cours
+                    </TableTh>
+                    <TableTh scope="col" fz="xs" fw={500} c="dimmed">
+                      Créneau
+                    </TableTh>
+                    <TableTh scope="col" ta="right" fz="xs" fw={500} c="dimmed">
                       Occupation
                     </TableTh>
                   </TableTr>

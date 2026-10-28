@@ -91,7 +91,8 @@ export const theme = createTheme({
  *
  * Light mode: yellow 6 on white or on its pale tint reads at 2:1, a pressed
  * « Absent » or a « Complet » badge looked disabled (#187). A dark amber
- * (6:1 on white) keeps the hue.
+ * (6:1 on white) keeps the hue. Red 6, used for red text and field errors,
+ * reads at 3.2:1 on white (#188): a darker red (6.6:1) replaces it.
  */
 export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
   variables: {},
@@ -99,6 +100,8 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
     "--filled-text": "var(--mantine-color-white)",
     "--mantine-color-yellow-light-color": "#8f5500",
     "--mantine-color-yellow-outline": "#8f5500",
+    "--mantine-color-red-text": "#b42318",
+    "--mantine-color-error": "#b42318",
   },
   dark: {
     ...Object.fromEntries(

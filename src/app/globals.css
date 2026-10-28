@@ -20,10 +20,9 @@
   --accent-fort: #4338ca;
   --accent-doux: #eef0ff;
   --sur-accent: #ffffff;
-  /* Warnings and errors: the Mantine theme's colours, light and dark (#115). */
+  /* Warnings: the Mantine theme's colours, light and dark (#115). */
   --alerte-fond: var(--mantine-color-yellow-light);
   --alerte-texte: var(--mantine-color-yellow-light-color);
-  --erreur: var(--mantine-color-red-text);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -52,7 +51,6 @@
   --color-sur-accent: var(--sur-accent);
   --color-alerte-fond: var(--alerte-fond);
   --color-alerte-texte: var(--alerte-texte);
-  --color-erreur: var(--erreur);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -61,6 +59,19 @@ body {
   background: var(--fond);
   color: var(--texte);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Touch screen: targets of at least 44 px, without changing the mouse density (DESIGN.md). */
+@media (pointer: coarse) {
+  .mantine-Button-root,
+  .mantine-Input-input {
+    min-height: 2.75rem;
+  }
+  .mantine-ActionIcon-root,
+  .mantine-CloseButton-root {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
