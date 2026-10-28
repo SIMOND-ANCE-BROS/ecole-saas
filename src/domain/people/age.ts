@@ -6,6 +6,11 @@ export function ageAt(birthDate: string, day: string): number {
   return year - yearN - (beforeBirthday ? 1 : 0);
 }
 
+/** Under 18 on the given day; false when the birth date is unknown. */
+export function isMinor(birthDate: string | null, day: string): boolean {
+  return birthDate !== null && ageAt(birthDate, day) < 18;
+}
+
 const formatParis = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Europe/Paris",
   year: "numeric",

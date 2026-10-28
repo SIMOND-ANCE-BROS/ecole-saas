@@ -2,7 +2,7 @@
 
 import { Anchor, Badge, Button, Checkbox, Paper, Text, Title } from "@mantine/core";
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { StudentRelative } from "@/db/students";
 import { ofName } from "@/lib/french";
 import { type Choice, PersonChoice, toInput } from "../../_people/person-choice";
@@ -29,6 +29,18 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
   const [toRemove, setToRemove] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
+  const box = useRef<HTMLDivElement>(null);
+  // Control to focus once the change is drawn, so focus never falls back to the page.
+  const focusNext = useRef<string | null>(null);
+  useEffect(() => {
+    const selector = focusNext.current;
+    if (!selector) return;
+    focusNext.current = null;
+    (box.current?.querySelector<HTMLElement>(selector) ?? box.current?.querySelector<HTMLElement>("h2"))?.focus();
+  });
+  const focusAfter = (selector: string) => {
+    focusNext.current = selector;
+  };
 
   const act = (action: () => Promise<{ message: string | null }>, after?: () => void) =>
     startTransition(async () => {
@@ -68,50 +80,82 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
           />
         )}
         {toRemove === p.relationshipId ? (
-          <span className="flex items-center gap-2">
+          // Escape cancels, like « Annuler », and gives focus back to « Retirer ».
+          <span
+            className="flex items-center gap-2"
+            onKeyDown={(e) => {
+              if (e.key !== "Escape") return;
+              e.preventDefault();
+              e.stopPropagation();
+              setToRemove(null);
+              focusAfter(`[data-remove="${p.relationshipId}"]`);
+            }}
+          >
             <Button
-              size="compact-xs"
+              size="compact-sm"
               variant="outline"
               color="red"
               disabled={inProgress}
+              data-confirm-removal
               onClick={() =>
                 act(
                   () => removeRelative(studentId, p.relationshipId),
-                  () => setToRemove(null),
+                  () => {
+                    setToRemove(null);
+                    focusAfter("[data-add-guardian]");
+                  },
                 )
               }
             >
               Retirer {p.name} de la fiche
             </Button>
-            <Anchor component="button" type="button" size="xs" onClick={() => setToRemove(null)}>
+            <Button
+              size="compact-sm"
+              variant="default"
+              onClick={() => {
+                setToRemove(null);
+                focusAfter(`[data-remove="${p.relationshipId}"]`);
+              }}
+            >
               Annuler
-            </Anchor>
+            </Button>
           </span>
         ) : (
-          <Anchor
-            component="button"
-            type="button"
-            size="xs"
-            c="dimmed"
+          <Button
+            variant="default"
+            size="compact-sm"
             ml="auto"
-            onClick={() => setToRemove(p.relationshipId)}
+            data-remove={p.relationshipId}
+            onClick={() => {
+              setToRemove(p.relationshipId);
+              focusAfter("[data-confirm-removal]");
+            }}
           >
             Retirer
-          </Anchor>
+          </Button>
         )}
       </div>
     </li>
   );
 
   return (
-    <div className="flex flex-col gap-4">
+    <div ref={box} className="flex flex-col gap-4">
       <section aria-labelledby="responsables" className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between gap-2">
-          <Title order={2} size="h5" id="responsables">
+          <Title order={2} size="h5" id="responsables" tabIndex={-1}>
             Responsables
           </Title>
           {!addition && (
-            <Anchor component="button" type="button" size="sm" onClick={() => setAddition(true)}>
+            <Anchor
+              component="button"
+              type="button"
+              size="sm"
+              data-add-guardian
+              onClick={() => {
+                setAddition(true);
+                focusAfter("#nouveau-responsable-cherche");
+              }}
+            >
               Ajouter un responsable
             </Anchor>
           )}
@@ -133,7 +177,9 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
               label={`Responsable légal ${ofName(firstName)} (parent, tuteur)`}
               value={choice}
               onChange={setChoice}
-              exclude={[studentId]}
+              // Already a guardian: offering them again would add the link twice.
+              exclude={[studentId, ...guardians.map((g) => g.id)]}
+              flagMinors
             />
             <Checkbox
               label="À prévenir en cas d’urgence"
@@ -150,13 +196,20 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
                     () => {
                       setAddition(false);
                       setChoice(null);
+                      focusAfter("[data-add-guardian]");
                     },
                   )
                 }
               >
                 Ajouter
               </Button>
-              <Button variant="default" onClick={() => setAddition(false)}>
+              <Button
+                variant="default"
+                onClick={() => {
+                  setAddition(false);
+                  focusAfter("[data-add-guardian]");
+                }}
+              >
                 Annuler
               </Button>
             </div>

@@ -250,7 +250,7 @@ export function EnrollmentForm({
             {sortedCourses.map((c) => {
               const restantes = c.maxCapacity === null ? null : c.maxCapacity - c.enrolled;
               return (
-                <li key={c.id} className={`border-b border-bordure last:border-0 ${adapted(c) ? "" : "opacity-60"}`}>
+                <li key={c.id} className="border-b border-bordure last:border-0">
                   {/* The whole row is the checkbox's label: one click target, the course as its name. */}
                   <Checkbox
                     radius="xs"
@@ -270,8 +270,13 @@ export function EnrollmentForm({
                           <span className="font-medium">{c.discipline}</span>
                           <Text span size="sm" c="dimmed" className="basis-full sm:basis-auto">
                             {c.durationMinutes} min{c.level ? `, ${c.level}` : ""}, {c.room}
-                            {!adapted(c) && ", hors tranche d’âge"}
                           </Text>
+                          {/* A tag rather than faded text: still readable, still selectable. */}
+                          {!adapted(c) && (
+                            <Badge color="gray" variant="light" radius="sm" tt="none" fw={400}>
+                              hors tranche d’âge
+                            </Badge>
+                          )}
                         </span>
                         {restantes !== null &&
                           (restantes <= 0 ? (

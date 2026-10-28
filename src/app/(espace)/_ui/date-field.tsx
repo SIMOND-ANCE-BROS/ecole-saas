@@ -30,6 +30,9 @@ type Props = Omit<DateInputProps, "value" | "onChange" | "valueFormat" | "datePa
  * save an old date. The message shows on Enter or when leaving the field,
  * not while typing. A field that is not `required` can be emptied.
  *
+ * An accepted date typed another way (« 12032016 », « 1/3/16 ») is shown
+ * again as « 12/03/2016 » when leaving the field.
+ *
  * Refused text also marks the input (`data-date-refused`): a form calls
  * `refusedDateField()` before saving, so Enter in another field cannot save
  * the form without that date either.
@@ -56,6 +59,10 @@ export function DateField({
   // The calendar is opened here rather than by Mantine, so that a refused
   // save can focus the field without the calendar covering the message.
   const [open, setOpen] = useState(false);
+  // Mantine only rewrites the text when the value changes with its calendar
+  // closed, never on blur without `fixOnBlur` (which would also wipe refused
+  // text): a new key redraws the field from its value, as « jj/mm/aaaa ».
+  const [drawn, setDrawn] = useState(0);
   // Refused text always empties the value: a value given back by the parent
   // (a row removed, another week) replaces the text, and the refusal with it.
   const refused = value === "" ? refusal : null;
@@ -71,6 +78,9 @@ export function DateField({
   };
   return (
     <DateInput
+      // A redrawn field is a new input: with `autoFocus` it would take focus back
+      // from the next field, so a field with `autoFocus` is never redrawn (onBlur).
+      key={drawn}
       valueFormat="DD/MM/YYYY"
       placeholder="jj/mm/aaaa"
       dateParser={parseTypedDate}
@@ -127,8 +137,13 @@ export function DateField({
         onClick?.(e);
       }}
       onBlur={(e) => {
+        const text = e.currentTarget.value;
         setOpen(false);
-        settle(e.currentTarget.value);
+        const accepted = !settle(text) && text.trim() !== "";
+        // Not when the window itself loses focus (Alt-Tab): the browser gives focus back
+        // to this input on return, and a redrawn one would not get it.
+        if (accepted && document.hasFocus() && !props.autoFocus && text.trim() !== shownAs(parseTypedDate(text)))
+          setDrawn((n) => n + 1);
         onBlur?.(e);
       }}
       getDayProps={(day) => {
@@ -151,6 +166,9 @@ export function DateField({
     />
   );
 }
+
+/** `YYYY-MM-DD` as typed in the field, « jj/mm/aaaa ». */
+const shownAs = (date: string | null) => (date ? date.split("-").reverse().join("/") : "");
 
 /**
  * First date field of the form (or of an edited table row) whose text is
