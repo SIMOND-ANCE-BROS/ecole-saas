@@ -160,6 +160,7 @@ export function CourseForm({
     instructorRateFor: sentRate === undefined ? undefined : v.instructorId,
   };
 
+  const roomSite = r.rooms.find((s) => s.id === v.roomId)?.siteId;
   const datesOf = (c: Parameters<typeof lessonDatesOf>[0]) => (calendar ? lessonDatesOf(c, calendar) : undefined);
   const overlaps = conflicts(
     {
@@ -169,7 +170,8 @@ export function CourseForm({
       durationMinutes: entry.durationMinutes || 0,
       roomId: v.roomId,
       instructorId: v.instructorId,
-      lessonDates: datesOf(entry),
+      // Its own site and course closures apply too (#200).
+      lessonDates: datesOf({ ...entry, id: course?.id ?? null, siteId: roomSite }),
     },
     schedule.map((c) => ({ ...c, lessonDates: datesOf(c) })),
   ).map((c) => {
@@ -180,7 +182,6 @@ export function CourseForm({
   });
 
   // Slot outside the opening hours of the room's site (warning only: an exceptional course is still allowed).
-  const roomSite = r.rooms.find((s) => s.id === v.roomId)?.siteId;
   const outsideOpening =
     !oneOff && roomSite && entry.weekday && entry.durationMinutes > 0
       ? outsideHours(

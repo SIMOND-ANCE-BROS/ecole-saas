@@ -4,7 +4,10 @@ import { Button, Group, Text, Title } from "@mantine/core";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { ScheduleLesson } from "@/db/lessons";
+import type { Closure, ScheduleLesson } from "@/db/lessons";
+import type { ScheduleCourse } from "@/db/schedule";
+import { covers } from "@/domain/schedule/closure-scope";
+import { meetsOn, type Period } from "@/domain/schedule/lessons";
 import { toTime } from "@/domain/schedule/calendar";
 import { calendarFrame, type Hours } from "@/domain/schedule/hours";
 import { addDays, weekDays, weekdayOf } from "@/domain/schedule/week";
@@ -20,7 +23,11 @@ type Props = {
   /** Monday of the displayed week. */
   monday: string;
   today: string;
-  closures: { label: string; start: string; end: string }[];
+  /** Closures touching the week, each with what it covers (#200). */
+  closures: Closure[];
+  /** Courses and dates of the season shown: a partial closure is noted only on the days it takes a lesson away. */
+  courses: ScheduleCourse[];
+  seasonPeriod: Period;
   hours: Hours[];
   editable: boolean;
   /** Chosen season when it is not the current one (`?saison=`, #189), kept in links. */
@@ -40,6 +47,8 @@ export function DatedWeek({
   monday: monday,
   today: today,
   closures: closures,
+  courses,
+  seasonPeriod,
   hours: hours,
   editable: editable,
   season,
@@ -47,6 +56,16 @@ export function DatedWeek({
   const router = useRouter();
   const dates = weekDays(monday);
   const weekLink = (l: string) => withSeason(`/planning?semaine=${l}`, season);
+
+  const on = (date: string) => closures.filter((f) => f.period.start <= date && date <= f.period.end);
+  // A lesson kept during a partial closure (attendance already taken) says so. Like the
+  // lesson sync, a moved lesson is judged on its original date; a school-wide closure
+  // never removes a one-off course, so it is not flagged either. Limit: only this week's
+  // closures are loaded, so a lesson moved in from another week is not checked against
+  // a closure of its original week.
+  const closedFor = (s: ScheduleLesson) =>
+    on(s.plannedDate).find((f) => f.scope.kind !== "school" && covers(f.scope, { id: s.courseId, siteId: s.siteId }))
+      ?.label;
 
   const elements: CalendarElement[] = lessons.map((s) => ({
     id: s.id,
@@ -62,13 +81,42 @@ export function DatedWeek({
       [s.moved && "déplacée", s.recurrence === "dates" && "ponctuel", s.recurrence === "biweekly" && "1 sem. sur 2"]
         .filter(Boolean)
         .join(", ") || null,
-    alert: s.status === "cancelled" ? "annulée" : s.substitution ? "remplacement" : null,
+    alert:
+      s.status === "cancelled"
+        ? "annulée"
+        : closedFor(s)
+          ? `fermé : ${closedFor(s)}`
+          : s.substitution
+            ? "remplacement"
+            : null,
     bar: s.status === "cancelled",
     href: `/planning/seances/${s.id}`,
     movable: s.status === "planned",
   }));
   const { days: days, start: start, end: dayEnd } = calendarFrame(hours, elements);
-  const closedOn = (date: string) => closures.find((f) => f.start <= date && date <= f.end)?.label ?? null;
+  // The whole school closed: the day is hatched; closed only for some sites or courses: a note says which.
+  const closedOn = (date: string) => on(date).find((f) => f.scope.kind === "school")?.label ?? null;
+  // Noted only where a covered course would have met that day: « Site Centre fermé », « Jazz annulé ».
+  const partlyClosedOn = (date: string) => {
+    const notes = on(date).flatMap((f) => {
+      if (f.scope.kind === "school") return [];
+      const scope = f.scope;
+      const hit = courses.filter((c) => covers(scope, c) && meetsOn(c, seasonPeriod, date));
+      if (hit.length === 0) return [];
+      // Only the sites where a course would have met that day.
+      const sites = [...new Set(hit.map((c) => c.site))];
+      const text =
+        scope.kind === "sites"
+          ? `${sites.join(", ")} fermé${sites.length > 1 ? "s" : ""}`
+          : hit.length === 1
+            ? `${hit[0].discipline} annulé`
+            : `${hit.length} cours annulés`;
+      return [{ text, title: `${f.label} : ${f.targets.join(", ")}` }];
+    });
+    return notes.length === 0
+      ? null
+      : { text: notes.map((n) => n.text).join(" · "), title: notes.map((n) => n.title).join("\n") };
+  };
 
   async function moveLesson(id: string, slot: Slot, choice: string | null): Promise<CalendarResponse> {
     const s = lessons.find((x) => x.id === id);
@@ -126,6 +174,7 @@ export function DatedWeek({
           day: j,
           title: capital(shortDate(dates[j - 1], true)),
           closed: closedOn(dates[j - 1]),
+          note: partlyClosedOn(dates[j - 1]),
         }))}
         start={start}
         end={dayEnd}

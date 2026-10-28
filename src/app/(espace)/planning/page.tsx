@@ -150,6 +150,7 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
           hours={hours}
           monday={monday}
           today={today}
+          seasonPeriod={{ start: season.startDate, end: season.endDate }}
           lessons={lessons}
           closures={closures}
         />

@@ -47,7 +47,7 @@ export async function cancel(lessonId: string, cancelled: boolean): Promise<Back
 async function withSeasonOf(
   seasonId: unknown,
   action: (seasonId: string) => Parameters<typeof withSchool>[1],
-): Promise<Back> {
+): Promise<Back & { removed?: number }> {
   const { schoolId: schoolId } = await requireRole("director");
   const today = todayInParis();
   const r = await withSchool(schoolId, async (tx) => {
@@ -58,14 +58,16 @@ async function withSeasonOf(
         message: seasonId ? "Cette saison n’existe plus." : "Aucune saison n’est paramétrée.",
       };
     const result = (await action(season.id)(tx)) as { ok: true } | { ok: false; message: string };
-    if (result.ok) await syncLessons(tx, season.id, today);
-    return result;
+    if (!result.ok) return result;
+    const { removed } = await syncLessons(tx, season.id, today);
+    return { ok: true as const, removed };
   });
   revalidatePath("/planning/fermetures");
-  return back(r);
+  // How many lessons the closure took off the planning (#200): 0 says it covers nothing.
+  return { ...back(r), removed: r.ok ? r.removed : undefined };
 }
 
-export async function close(entry: unknown, seasonId?: unknown): Promise<Back> {
+export async function close(entry: unknown, seasonId?: unknown): Promise<Back & { removed?: number }> {
   return withSeasonOf(seasonId, (id) => (tx) => addClosure(tx, id, entry as never));
 }
 

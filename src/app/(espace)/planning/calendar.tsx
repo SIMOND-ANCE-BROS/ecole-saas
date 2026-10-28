@@ -31,8 +31,16 @@ export type CalendarElement = Slot & {
   movable: boolean;
 };
 
-/** Column of one day; `closed`: label of a closure covering the whole day. */
-export type CalendarColumn = { day: number; title: string; closed?: string | null };
+/**
+ * Column of one day; `closed`: label of a closure covering the whole school
+ * that day; `note`: closures of only some sites or courses (#200).
+ */
+export type CalendarColumn = {
+  day: number;
+  title: string;
+  closed?: string | null;
+  note?: { text: string; title: string } | null;
+};
 
 /** Response to a move: done, refused, or a choice to offer (« cette séance seulement »…). */
 export type CalendarResponse =
@@ -343,6 +351,11 @@ export function Calendar({
             <h2 key={c.day} className="border-b border-l border-bordure px-2 py-1.5 text-sm font-semibold">
               {c.title}
               {c.closed && <span className="block truncate text-xs font-normal text-alerte-texte">{c.closed}</span>}
+              {c.note && (
+                <span className="line-clamp-2 block text-xs font-normal text-alerte-texte" title={c.note.title}>
+                  {c.note.text}
+                </span>
+              )}
             </h2>
           ))}
 

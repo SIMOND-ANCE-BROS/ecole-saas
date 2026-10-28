@@ -114,7 +114,7 @@ describe("closures and lesson generation", () => {
   it("rejects a closure that ends before it starts", async () => {
     expect(
       await withSchool(school, (tx) =>
-        addClosure(tx, season, { label: "Erreur", start: "2026-11-02", end: "2026-11-01" }),
+        addClosure(tx, season, { scope: "school", label: "Erreur", start: "2026-11-02", end: "2026-11-01" }),
       ),
     ).toEqual({
       ok: false,
@@ -127,7 +127,9 @@ describe("closures and lesson generation", () => {
       ["2026-08-31", "2026-09-02"],
       ["2026-11-29", "2026-12-02"],
     ]) {
-      expect(await withSchool(school, (tx) => addClosure(tx, season, { label: "Hors saison", start, end }))).toEqual({
+      expect(
+        await withSchool(school, (tx) => addClosure(tx, season, { scope: "school", label: "Hors saison", start, end })),
+      ).toEqual({
         ok: false,
         message: "Les dates doivent être comprises dans la saison.",
       });
@@ -136,7 +138,7 @@ describe("closures and lesson generation", () => {
 
   it("removes the lessons of a closure, then restores them when it is deleted", async () => {
     const r = await withSchool(school, (tx) =>
-      addClosure(tx, season, { label: "Toussaint", start: "2026-10-17", end: "2026-11-01" }),
+      addClosure(tx, season, { scope: "school", label: "Toussaint", start: "2026-10-17", end: "2026-11-01" }),
     );
     expect(r.ok).toBe(true);
     expect(await sync()).toEqual({ added: 0, removed: 2 });
@@ -204,7 +206,7 @@ describe("attendance", () => {
 
   it("never removes a lesson whose attendance has been taken", async () => {
     await withSchool(school, (tx) =>
-      addClosure(tx, season, { label: "Grève", start: "2026-10-21", end: "2026-10-21" }),
+      addClosure(tx, season, { scope: "school", label: "Grève", start: "2026-10-21", end: "2026-10-21" }),
     );
     expect(await sync()).toEqual({ added: 0, removed: 0 });
     expect((await dates())[0]).toBe("2026-10-21");
@@ -331,10 +333,7 @@ describe("recurrences (#90)", () => {
       dates: [],
       instructorRate: null,
     };
-    const closures = (await withSchool(school, (tx) => listClosures(tx, season))).map(({ start: start, end: end }) => ({
-      start: start,
-      end: end,
-    }));
+    const closures = (await withSchool(school, (tx) => listClosures(tx, season))).map(({ period }) => period);
     const create = (entry: Parameters<typeof createCourse>[2]) =>
       withSchool(school, async (tx) => {
         const r = await createCourse(tx, season, entry);

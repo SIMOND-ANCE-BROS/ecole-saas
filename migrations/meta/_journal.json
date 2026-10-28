@@ -232,6 +232,13 @@
       "when": 1793144335437,
       "tag": "0032_course_instructor_rate",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1793178388369,
+      "tag": "0033_closure_scope",
+      "breakpoints": true
     }
   ]
 }

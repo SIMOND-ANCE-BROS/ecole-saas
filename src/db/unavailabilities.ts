@@ -158,10 +158,12 @@ export async function slotConflicts(
     .from(season)
     .where(eq(season.id, entry.seasonId));
   if (!s) return [];
+  // School-wide closures only (#200): the slot's room is not known here, so a
+  // site or course closure may still be warned about (a warning, never a refusal).
   const closures = await tx
     .select({ start: closure.startDate, end: closure.endDate })
     .from(closure)
-    .where(eq(closure.seasonId, entry.seasonId));
+    .where(and(eq(closure.seasonId, entry.seasonId), eq(closure.scope, "school")));
   const dates = lessonDates({
     start: s.start > today ? s.start : today,
     end: s.end,

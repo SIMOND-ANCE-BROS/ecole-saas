@@ -370,6 +370,13 @@ export async function updateRoom(tx: Tx, id: string, entry: z.input<typeof valid
   return rows.length === 1 ? { ok: true, id } : { ok: false, message: "Cette salle n’existe plus." };
 }
 
+/** Site of a room, or null if it does not exist. */
+export async function roomSiteId(tx: Tx, id: string): Promise<string | null> {
+  if (!isUuid(id)) return null;
+  const [r] = await tx.select({ siteId: room.siteId }).from(room).where(eq(room.id, id));
+  return r?.siteId ?? null;
+}
+
 /** Refused while a course (of any season) takes place in the room. */
 export async function deleteRoom(tx: Tx, id: string): Promise<Result> {
   if (!isUuid(id)) return { ok: false, message: "Cette salle n’existe plus." };
