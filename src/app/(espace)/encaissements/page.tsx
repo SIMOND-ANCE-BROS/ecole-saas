@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import {
   Alert,
@@ -16,9 +17,9 @@ import { withSchool } from "@/db";
 import { PAYMENT_METHODS, type Method } from "@/db/payments";
 import { readPreference } from "@/db/preferences";
 import { PAYMENT_COLUMNS } from "@/domain/filters/columns";
-import { readFilter, readSort, toParams } from "@/domain/filters/filters";
+import { toParams } from "@/domain/filters/filters";
 import { offsetOf, PAGE_SIZE, readPage } from "@/domain/filters/pagination";
-import { futureCashing, referenceOf, shownJournal } from "@/domain/payments/journal";
+import { futureCashing, paymentLogQuery, referenceOf, shownPaymentLog } from "@/domain/payments/payment-log";
 import { paymentLog, listDeposits, paymentsToDeposit } from "@/db/deposits";
 import { DEPOSIT_METHODS, totals } from "@/domain/payments/deposits";
 import { validDate } from "@/domain/schedule/week";
@@ -47,8 +48,18 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
   const today = todayInParis();
   const from = validDate(p.du) ?? `${today.slice(0, 8)}01`;
   const to = validDate(p.au) ?? today;
-  const filter = readFilter(p.f, p.mode, PAYMENT_COLUMNS);
-  const currentSort = readSort(p.sort, p.order, PAYMENT_COLUMNS);
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(p))
+    for (const v of Array.isArray(value) ? value : value === undefined ? [] : [value]) params.append(key, v);
+  const { filter, sort: currentSort, legacy } = paymentLogQuery(params, PAYMENT_METHODS);
+  // An older `?moyen=` link: the same list, written with the column filter.
+  if (legacy) {
+    params.delete("moyen");
+    params.delete("f");
+    params.delete("mode");
+    for (const [key, value] of toParams(filter)) params.append(key, value);
+    redirect(`/encaissements?${params}`);
+  }
 
   const parsed = await withSchool(schoolId, async (tx) => ({
     journal: view === "journal" ? await paymentLog(tx, from, to, null) : [],
@@ -57,7 +68,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
     remises: view === "remises" ? await listDeposits(tx) : [],
   }));
   // The column filters and sort (#107), the same rules as the CSV export.
-  const shown = shownJournal(
+  const shown = shownPaymentLog(
     parsed.journal.map((l) => ({ ...l, methodLabel: PAYMENT_METHODS[l.method] })),
     filter,
     currentSort,
@@ -108,26 +119,36 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
 
       {view === "journal" && (
         <>
-          <JournalFilters key={`${from}|${to}`} from={from} to={to} keep={listState} exportUrl={exportUrl} />
+          <JournalFilters
+            key={`${from}|${to}`}
+            from={from}
+            to={to}
+            keep={listState}
+            // Nothing to export: no link to an empty file.
+            exportUrl={shown.length > 0 ? exportUrl : null}
+          />
           <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
             <div>
               <Text component="dt" size="sm" className="inline" c="dimmed">
-                Total :{" "}
+                {filtering ? "Total (filtres appliqués)" : "Total"} :{" "}
               </Text>
               <Text component="dd" size="sm" fw={600} className="inline tabular-nums">
                 {formatEuros(t.total)}
               </Text>
             </div>
-            {Object.entries(t.byMethod).map(([m, c]) => (
-              <div key={m}>
-                <Text component="dt" size="sm" className="inline" c="dimmed">
-                  {PAYMENT_METHODS[m as Method]} :{" "}
-                </Text>
-                <Text component="dd" size="sm" className="inline tabular-nums">
-                  {formatEuros(c)}
-                </Text>
-              </div>
-            ))}
+            {/* Always in the same order; a method netting to zero (a payment and its correction) is left out. */}
+            {(Object.keys(PAYMENT_METHODS) as Method[])
+              .filter((m) => (t.byMethod[m] ?? 0) !== 0)
+              .map((m) => (
+                <div key={m}>
+                  <Text component="dt" size="sm" className="inline" c="dimmed">
+                    {PAYMENT_METHODS[m]} :{" "}
+                  </Text>
+                  <Text component="dd" size="sm" className="inline tabular-nums">
+                    {formatEuros(t.byMethod[m] ?? 0)}
+                  </Text>
+                </div>
+              ))}
           </dl>
           {/* useSearchParams requires a Suspense boundary. */}
           <Suspense>
@@ -144,7 +165,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
                   : "Aucun encaissement ne correspond à ces filtres."
               }
               choice={{ moyen: Object.values(PAYMENT_METHODS) }}
-              pagination={{ page, total: shown.length }}
+              pagination={{ page, total: shown.length, noun: "Encaissements" }}
               rows={shown.slice(offsetOf(page), offsetOf(page) + PAGE_SIZE).map((l) => ({
                 id: l.id,
                 href: `/personnes/${l.payerId}`,
@@ -159,7 +180,15 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
                   encaissement: futureCashing(l, today),
                   remise: l.dateDeposit,
                 },
-                links: l.depositId ? { remise: `/encaissements/remises/${l.depositId}` } : undefined,
+                links:
+                  l.depositId && l.dateDeposit
+                    ? {
+                        remise: {
+                          href: `/encaissements/remises/${l.depositId}`,
+                          label: `Bordereau de la remise du ${day(l.dateDeposit)}`,
+                        },
+                      }
+                    : undefined,
               }))}
             />
           </Suspense>
