@@ -2,7 +2,8 @@
 
 import { Alert, Anchor, Badge, Button, Paper, Select, Text } from "@mantine/core";
 import Link from "next/link";
-import { useRef, useState, useTransition } from "react";
+import { unstable_rethrow } from "next/navigation";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { Attendance } from "@/db/lessons";
 import { cancel, doAttendance, replace } from "../actions";
 
@@ -23,6 +24,23 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
   const [inProgress, startTransition] = useTransition();
   const rows = useRef<(HTMLLIElement | null)[]>([]);
   const cancelled = attendance.status === "cancelled";
+
+  // The instructor being saved, shown at once; a refusal goes back to the saved one (#188).
+  const [instructorId, setInstructorId] = useState<string | null>(null);
+  const [instructorError, setInstructorError] = useState<string | null>(null);
+  const shownInstructor = instructorId ?? attendance.instructorId;
+  const instructorField = useRef<HTMLInputElement>(null);
+  // The field is disabled while saving: once a refusal is shown, focus goes back to it for a retry.
+  useEffect(() => {
+    if (instructorError && !inProgress) instructorField.current?.focus();
+  }, [instructorError, inProgress]);
+
+  // P and A work at once: the first row takes focus, unless the user is already typing somewhere.
+  useEffect(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.matches("input, textarea, select, [contenteditable='true']")) return;
+    rows.current[0]?.focus();
+  }, []);
 
   const unmarked = attendance.students.filter((d) => attendances[d.id] === null).length;
   const presents = attendance.students.filter((d) => attendances[d.id] === true).length;
@@ -160,20 +178,37 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
 
       <Paper withBorder component="aside" p="sm" className="flex flex-col gap-3 self-start text-sm">
         <Select
+          ref={instructorField}
           label="Intervenant de la séance"
           allowDeselect={false}
           searchable
-          defaultValue={attendance.instructorId}
+          value={shownInstructor}
           disabled={inProgress}
           data={instructors.map((i) => ({
             value: i.id,
             label: `${i.name}${i.id === attendance.regularInstructorId ? " (titulaire)" : ""}`,
           }))}
-          onChange={(id) => id && act(() => replace(attendance.id, id), "Intervenant de la séance changé.")}
+          onChange={(id) => {
+            if (!id || id === shownInstructor) return;
+            setInstructorId(id);
+            setInstructorError(null);
+            startTransition(async () => {
+              let error: string | null;
+              try {
+                error = (await replace(attendance.id, id)).message;
+              } catch (e) {
+                unstable_rethrow(e);
+                error = "Intervenant non enregistré : réessayez.";
+              }
+              if (error) {
+                setInstructorId(null);
+                setInstructorError(error);
+              } else setMessage({ text: "Intervenant de la séance changé.", error: false });
+            });
+          }}
+          error={instructorError}
           description={
-            attendance.instructorId !== attendance.regularInstructorId
-              ? "Remplacement pour cette séance seulement."
-              : undefined
+            shownInstructor !== attendance.regularInstructorId ? "Remplacement pour cette séance seulement." : undefined
           }
           inputWrapperOrder={["label", "input", "description", "error"]}
         />
