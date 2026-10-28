@@ -2,8 +2,10 @@
 
 import { Anchor, Button, Paper, Radio, Text, Title } from "@mantine/core";
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { StudentRecord, StudentRelative } from "@/db/students";
+import { has } from "@/lib/has";
 import { type Choice, PersonChoice, toInput } from "../../_people/person-choice";
 import { WARNING } from "../../_people/sections";
 import { invoice, billNewPerson } from "../actions";
@@ -18,7 +20,19 @@ type Props = {
   siblings: StudentRecord["siblings"];
 };
 
-/** « Facturé à »: a single payer, changed in one gesture. */
+/** Name of a payer picked or typed in the person search, for the confirmation. */
+const choiceName = (c: Choice) =>
+  has(c, "id")
+    ? c.name
+    : c.newPerson.type === "organisation"
+      ? c.newPerson.companyName
+      : `${c.newPerson.firstName} ${c.newPerson.name}`.trim();
+
+/**
+ * « Facturé à »: a single payer. A mouse click on a choice bills it at once;
+ * with the keyboard the arrow keys only move the selection, and Enter or the
+ * « Facturer à … » button bills it (#221).
+ */
 export function Billing({
   studentId: studentId,
   firstName: firstName,
@@ -27,14 +41,18 @@ export function Billing({
   relatives: relatives,
   siblings: siblings,
 }: Props) {
+  const currentKey = billedTo.type === "self" ? "self" : billedTo.type === "person" ? `p:${billedTo.id}` : null;
   const [open, setOpen] = useState(false);
+  // The choice selected in the group, billed only on an explicit action.
+  const [selected, setSelected] = useState<string | null>(currentKey);
   const [other, setOther] = useState<Choice | null>(null);
-  const [seeOther, setSeeOther] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
   const box = useRef<HTMLElement>(null);
+  // Whether the last gesture in the choices was a pointer (click, tap) rather than a key.
+  const pointer = useRef(false);
   // Opening and closing swap « Changer » and the choices: focus follows, never back to the page.
-  // On opening it lands on the group, not on a radio: arrow keys there would change the payer at once.
   const opened = useRef(open);
   useEffect(() => {
     if (opened.current === open) return;
@@ -42,16 +60,41 @@ export function Billing({
     box.current?.querySelector<HTMLElement>(open ? "[data-choices]" : "[data-change]")?.focus();
   }, [open]);
 
-  const choose = (action: () => Promise<{ message: string | null }>) =>
+  const options = [
+    ...(minor ? [] : [{ key: "self", name: firstName, bill: () => invoice(studentId, { type: "self" }) }]),
+    ...relatives.map((p) => ({
+      key: `p:${p.id}`,
+      name: p.name,
+      bill: () => invoice(studentId, { type: "person", id: p.id }),
+    })),
+  ];
+  const chosen = options.find((o) => o.key === selected && o.key !== currentKey);
+
+  const choose = (name: string, action: () => Promise<{ message: string | null }>) =>
     startTransition(async () => {
-      const r = await action();
+      let r: { message: string | null };
+      try {
+        r = await action();
+      } catch (e) {
+        // A lost connection keeps the record on screen, with a way out.
+        unstable_rethrow(e);
+        setMessage("Payeur non enregistré : vérifiez la connexion et réessayez.");
+        return;
+      }
       setMessage(r.message);
       if (!r.message) {
+        setDone(`Facturé à ${name}.`);
         setOpen(false);
-        setSeeOther(false);
         setOther(null);
       }
     });
+
+  const select = (key: string) => {
+    setSelected(key);
+    const option = options.find((o) => o.key === key);
+    // A click bills at once; an arrow key only moves the selection.
+    if (pointer.current && option && key !== currentKey) choose(option.name, option.bill);
+  };
 
   const current =
     billedTo.type === "person" ? billedTo.name : billedTo.type === "self" ? `${firstName} (paie ses cours)` : null;
@@ -99,71 +142,106 @@ export function Billing({
       )}
 
       {!open ? (
-        <Button variant="default" className="self-start" data-change onClick={() => setOpen(true)}>
+        <Button
+          variant="default"
+          className="self-start"
+          data-change
+          onClick={() => {
+            setSelected(currentKey);
+            setMessage(null);
+            setDone(null);
+            setOpen(true);
+          }}
+        >
           {current ? "Changer" : "Choisir"}
         </Button>
       ) : (
-        <fieldset
-          data-choices
-          tabIndex={-1}
-          className="flex flex-col gap-2 border-t border-bordure pt-2 outline-offset-2"
+        <form
+          onSubmit={(e) => {
+            // Enter on a choice bills the selected payer.
+            e.preventDefault();
+            if (chosen && !inProgress) choose(chosen.name, chosen.bill);
+          }}
         >
-          <legend className="sr-only">Facturer à</legend>
-          {!minor && (
+          <fieldset
+            data-choices
+            tabIndex={-1}
+            className="flex flex-col gap-2 border-t border-bordure pt-2 outline-offset-2"
+            onPointerDownCapture={() => (pointer.current = true)}
+            onKeyDownCapture={() => (pointer.current = false)}
+          >
+            <legend className="sr-only">Facturer à</legend>
+            {options.map((o) => {
+              const p = relatives.find((r) => `p:${r.id}` === o.key);
+              return (
+                <Radio
+                  key={o.key}
+                  name="facturer"
+                  label={
+                    p ? (
+                      <>
+                        {p.name}{" "}
+                        <Text span size="xs" c="dimmed">
+                          {p.relation === "legal_guardian"
+                            ? "responsable"
+                            : p.relation === "partner"
+                              ? "conjoint"
+                              : "proche"}
+                        </Text>
+                      </>
+                    ) : (
+                      o.name
+                    )
+                  }
+                  checked={selected === o.key}
+                  disabled={inProgress}
+                  onChange={() => select(o.key)}
+                />
+              );
+            })}
             <Radio
               name="facturer"
-              label={firstName}
-              checked={billedTo.type === "self"}
+              label="Un autre payeur : CSE, entreprise, proche…"
+              checked={selected === "other"}
               disabled={inProgress}
-              onChange={() => choose(() => invoice(studentId, { type: "self" }))}
+              onChange={() => setSelected("other")}
             />
-          )}
-          {relatives.map((p) => (
-            <Radio
-              key={p.id}
-              name="facturer"
-              label={
-                <>
-                  {p.name}{" "}
-                  <Text span size="xs" c="dimmed">
-                    {p.relation === "legal_guardian" ? "responsable" : p.relation === "partner" ? "conjoint" : "proche"}
-                  </Text>
-                </>
-              }
-              checked={billedTo.type === "person" && billedTo.id === p.id}
-              disabled={inProgress}
-              onChange={() => choose(() => invoice(studentId, { type: "person", id: p.id }))}
-            />
-          ))}
-          <Radio
-            name="facturer"
-            label="Un autre payeur : CSE, entreprise, proche…"
-            checked={seeOther}
-            onChange={() => setSeeOther(true)}
-          />
-          {seeOther && (
-            <div className="flex flex-col gap-2 pl-7">
-              <PersonChoice
-                id="autre-payeur"
-                label="Quel payeur ?"
-                value={other}
-                onChange={setOther}
-                exclude={[studentId]}
-                organization
-              />
-              <Button
-                className="self-start"
-                disabled={inProgress || !other}
-                onClick={() => other && choose(() => billNewPerson(studentId, toInput(other)))}
-              >
-                Facturer à ce payeur
-              </Button>
+            {selected === "other" && (
+              <div className="flex flex-col gap-2 pl-7">
+                <PersonChoice
+                  id="autre-payeur"
+                  label="Quel payeur ?"
+                  value={other}
+                  onChange={setOther}
+                  exclude={[studentId]}
+                  organization
+                />
+                <Button
+                  className="self-start"
+                  disabled={inProgress || !other}
+                  onClick={() => other && choose(choiceName(other), () => billNewPerson(studentId, toInput(other)))}
+                >
+                  Facturer à ce payeur
+                </Button>
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-3">
+              {chosen && (
+                <Button type="submit" loading={inProgress}>
+                  Facturer à {chosen.name}
+                </Button>
+              )}
+              <Anchor component="button" type="button" size="xs" onClick={() => setOpen(false)}>
+                Fermer
+              </Anchor>
             </div>
-          )}
-          <Anchor component="button" type="button" size="xs" className="self-start" onClick={() => setOpen(false)}>
-            Fermer
-          </Anchor>
-        </fieldset>
+          </fieldset>
+        </form>
+      )}
+      {done && (
+        <Text role="status" size="sm">
+          {done}
+        </Text>
       )}
       {message && (
         <Text role="alert" size="sm" c="red">
