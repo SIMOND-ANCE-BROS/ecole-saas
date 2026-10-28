@@ -58,10 +58,14 @@ const dark: MantineColorsTuple = [
  * Text of filled buttons and badges: Mantine always writes it white, but the
  * dark-mode shades (4) are light, white on them reads at 3:1 (#185). It
  * follows the colour scheme through `--filled-text` (cssVariablesResolver).
+ * The primary colour is the exception: its dark-mode fill is the deep indigo
+ * (shade 6, see cssVariablesResolver), so its text stays white (#211).
  */
 const variantColorResolver: VariantColorsResolver = (input) => {
   const colors = defaultVariantColorsResolver(input);
-  return input.variant === "filled" ? { ...colors, color: "var(--filled-text)" } : colors;
+  if (input.variant !== "filled") return colors;
+  const primary = !input.color || input.color === input.theme.primaryColor;
+  return { ...colors, color: primary ? "var(--mantine-color-white)" : "var(--filled-text)" };
 };
 
 export const theme = createTheme({
@@ -92,7 +96,17 @@ export const theme = createTheme({
  * Light mode: yellow 6 on white or on its pale tint reads at 2:1, a pressed
  * « Absent » or a « Complet » badge looked disabled (#187). A dark amber
  * (6:1 on white) keeps the hue. Red 6, used for red text and field errors,
- * reads at 3.2:1 on white (#188): a darker red (6.6:1) replaces it.
+ * reads at 3.2:1 on white (#188): a darker red (6.6:1) replaces it, also for
+ * the `outline`, `light` and `subtle` red buttons (« Retirer … de la fiche »).
+ *
+ * Dark mode, primary colour: many Mantine parts write white on the primary
+ * fill without going through the variant resolver (highlighted option of a
+ * list, selected day of a calendar, checked boxes, segmented controls). On
+ * shade 4 that reads at 3:1 (#211); on the deep indigo of light mode (shade 6)
+ * white text and ticks read at 6.3:1 (shade 5 would fall below 4.5:1). The
+ * fill itself stands out less from the dark page (2.9:1): its white content
+ * carries the meaning. Focus rings and focused field borders keep the bright
+ * `--accent` (globals.css).
  */
 export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
   variables: {},
@@ -102,6 +116,8 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
     "--mantine-color-yellow-outline": "#8f5500",
     "--mantine-color-red-text": "#b42318",
     "--mantine-color-error": "#b42318",
+    "--mantine-color-red-light-color": "#b42318",
+    "--mantine-color-red-outline": "#b42318",
   },
   dark: {
     ...Object.fromEntries(
@@ -114,5 +130,8 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
     ),
     // Near-black on the light dark-mode fills, as the old `--sur-accent` (#11131a).
     "--filled-text": "var(--mantine-color-dark-8)",
+    // The primary fill takes the deep indigo, with white text (#211).
+    [`--mantine-color-${t.primaryColor}-filled`]: `var(--mantine-color-${t.primaryColor}-6)`,
+    [`--mantine-color-${t.primaryColor}-filled-hover`]: `var(--mantine-color-${t.primaryColor}-7)`,
   },
 });
