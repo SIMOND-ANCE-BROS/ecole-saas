@@ -20,14 +20,15 @@ export function JournalFilters({ from: shownFrom, to: shownTo, method, exportUrl
       role="search"
       withBorder
       p="sm"
-      className="flex flex-wrap items-end gap-3"
+      // Aligned on the top of the fields: a date message does not shift the others.
+      className="flex flex-wrap items-start gap-3"
       onSubmit={(e) => {
         if (refusedDateField(e.currentTarget)) e.preventDefault();
       }}
     >
       <input type="hidden" name="vue" value="journal" />
-      <DateField label="Du" name="du" w={150} value={from} onChange={setFrom} />
-      <DateField label="Au" name="au" w={150} value={to} onChange={setTo} />
+      <DateField label="Du" name="du" w={180} value={from} onChange={setFrom} />
+      <DateField label="Au" name="au" w={180} minDate={from || undefined} value={to} onChange={setTo} />
       <NativeSelect
         label="Moyen"
         name="moyen"
@@ -37,10 +38,10 @@ export function JournalFilters({ from: shownFrom, to: shownTo, method, exportUrl
           ...Object.entries(PAYMENT_METHODS).map(([value, label]) => ({ value, label })),
         ]}
       />
-      <Button type="submit" variant="default">
+      <Button type="submit" variant="default" mt={25}>
         Afficher
       </Button>
-      <Anchor href={exportUrl} size="sm" className="ml-auto pb-2">
+      <Anchor href={exportUrl} size="sm" mt={30} className="ml-auto">
         Exporter (CSV)
       </Anchor>
     </Paper>

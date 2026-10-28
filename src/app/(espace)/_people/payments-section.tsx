@@ -85,7 +85,8 @@ export function PaymentsSection({
               component="dd"
               size="sm"
               fw={600}
-              className={`tabular-nums ${balance.remaining > 0 ? "text-alerte-texte" : ""}`}
+              c={balance.remaining > 0 ? "red" : undefined}
+              className="tabular-nums"
             >
               {formatEuros(Math.abs(balance.remaining))}
             </Text>

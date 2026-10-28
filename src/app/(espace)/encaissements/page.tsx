@@ -62,7 +62,8 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
             key={v}
             href={`/encaissements?vue=${v}`}
             aria-current={view === v ? "page" : undefined}
-            variant={view === v ? "filled" : "default"}
+            // Not a filled button: it would compete with « Créer la remise ».
+            variant={view === v ? "light" : "default"}
             size="sm"
           >
             {VIEWS[v]}
@@ -72,7 +73,13 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
 
       {view === "journal" && (
         <>
-          <JournalFilters key={`${from}|${to}`} from={from} to={to} method={method} exportUrl={exportUrl} />
+          <JournalFilters
+            key={`${from}|${to}|${method ?? ""}`}
+            from={from}
+            to={to}
+            method={method}
+            exportUrl={exportUrl}
+          />
           <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
             <div>
               <Text component="dt" size="sm" className="inline" c="dimmed">

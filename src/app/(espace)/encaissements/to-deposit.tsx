@@ -100,9 +100,9 @@ export function ToDeposit({
                 <TableTd ta="right" className="tabular-nums whitespace-nowrap">
                   {formatEuros(p.amountCents)}
                   {p.correctedCents > 0 && (
-                    <span className="block text-xs text-alerte-texte">
+                    <Text component="span" size="xs" c="red" className="block">
                       dont {formatEuros(p.correctedCents)} corrigés
-                    </span>
+                    </Text>
                   )}
                 </TableTd>
               </TableTr>

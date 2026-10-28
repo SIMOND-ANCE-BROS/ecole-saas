@@ -73,41 +73,43 @@ export default async function DepositPage({ params, searchParams }: PageProps<"/
           {role === "director" && <CancelDeposit id={r.id} />}
         </div>
       </header>
-      <Table>
-        <TableCaption className="sr-only">Paiements remis</TableCaption>
-        <TableThead>
-          <TableTr>
-            <TableTh>Payeur</TableTh>
-            {r.method !== "cash" && <TableTh>N°</TableTh>}
-            {r.method === "cheque" && <TableTh>Banque ou titulaire</TableTh>}
-            <TableTh>Reçu le</TableTh>
-            <TableTh ta="right">Montant</TableTh>
-          </TableTr>
-        </TableThead>
-        <TableTbody>
-          {r.payments.map((p) => (
-            <TableTr key={p.id}>
-              <TableTd>{p.payer}</TableTd>
-              {r.method !== "cash" && <TableTd>{p.reference ?? "—"}</TableTd>}
-              {r.method === "cheque" && <TableTd>{p.issuer ?? "—"}</TableTd>}
-              <TableTd className="whitespace-nowrap">{day(p.date)}</TableTd>
-              <TableTd ta="right" className="tabular-nums whitespace-nowrap">
-                {formatEuros(p.amountCents)}
+      <div className="overflow-x-auto">
+        <Table>
+          <TableCaption className="sr-only">Paiements remis</TableCaption>
+          <TableThead>
+            <TableTr>
+              <TableTh>Payeur</TableTh>
+              {r.method !== "cash" && <TableTh>N°</TableTh>}
+              {r.method === "cheque" && <TableTh>Banque ou titulaire</TableTh>}
+              <TableTh>Reçu le</TableTh>
+              <TableTh ta="right">Montant</TableTh>
+            </TableTr>
+          </TableThead>
+          <TableTbody>
+            {r.payments.map((p) => (
+              <TableTr key={p.id}>
+                <TableTd>{p.payer}</TableTd>
+                {r.method !== "cash" && <TableTd>{p.reference ?? "—"}</TableTd>}
+                {r.method === "cheque" && <TableTd>{p.issuer ?? "—"}</TableTd>}
+                <TableTd className="whitespace-nowrap">{day(p.date)}</TableTd>
+                <TableTd ta="right" className="tabular-nums whitespace-nowrap">
+                  {formatEuros(p.amountCents)}
+                </TableTd>
+              </TableTr>
+            ))}
+          </TableTbody>
+          <TableTfoot>
+            <TableTr>
+              <TableTd colSpan={r.method === "cheque" ? 4 : r.method === "cash" ? 2 : 3} ta="right" fw={600}>
+                Total
+              </TableTd>
+              <TableTd ta="right" fw={600} className="tabular-nums">
+                {formatEuros(r.totalCents)}
               </TableTd>
             </TableTr>
-          ))}
-        </TableTbody>
-        <TableTfoot>
-          <TableTr>
-            <TableTd colSpan={r.method === "cheque" ? 4 : r.method === "cash" ? 2 : 3} ta="right" fw={600}>
-              Total
-            </TableTd>
-            <TableTd ta="right" fw={600} className="tabular-nums">
-              {formatEuros(r.totalCents)}
-            </TableTd>
-          </TableTr>
-        </TableTfoot>
-      </Table>
+          </TableTfoot>
+        </Table>
+      </div>
     </article>
   );
 }
