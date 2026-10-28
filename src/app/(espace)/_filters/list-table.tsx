@@ -707,6 +707,12 @@ function Popover({
   );
 }
 
+/**
+ * Years back where a birth-date calendar opens: most students are children. Adults
+ * are a decade or more further, a click on « ‹ »; typing the date stays faster.
+ */
+const BIRTH_YEARS_BACK = 10;
+
 /** Element inside the open popover where its calendars render (see `Popover`). */
 const PopoverPortal = createContext<HTMLElement | null>(null);
 
@@ -933,16 +939,25 @@ function TitleFilter({
   if (def.type === "date") {
     // A day picked or a date typed in full filters at once; a refused or
     // half-typed date empties that bound, as an empty field did before.
-    // Birth dates: the calendar opens on the decade of a child's birth, a year then a day away.
-    const yearsBack = def.yearsBack
-      ? { defaultLevel: "decade" as const, defaultDate: `${Number(todayInParis().slice(0, 4)) - 10}-01-01` }
-      : {};
+    // Birth dates: the calendar opens on a decade (decade → year → month → day), the one of a
+    // child born BIRTH_YEARS_BACK years ago; « au » opens on the year chosen in « du ».
+    const yearsBack = (key: "min" | "max") =>
+      !def.yearsBack
+        ? {}
+        : key === "max" && fc.min
+          ? { defaultLevel: "year" as const, defaultDate: fc.min }
+          : {
+              defaultLevel: "decade" as const,
+              defaultDate: `${Number(todayInParis().slice(0, 4)) - BIRTH_YEARS_BACK}-01-01`,
+            };
     const bound = (key: "min" | "max", word: string) => (
       <DateField
+        // Mantine reads the opening date once: « au » is drawn again when « du » changes.
+        key={def.yearsBack && key === "max" ? `max-${fc.min}` : key}
         id={`${id}-${key}`}
         size="xs"
         className="min-w-0 flex-1"
-        {...yearsBack}
+        {...yearsBack(key)}
         // Fixed: placed on the screen, not clipped by the scrolling popover around it.
         // Above the fields: below, it would cover « Effacer ce filtre » and « Masquer la colonne ».
         popoverProps={{
