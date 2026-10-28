@@ -248,7 +248,7 @@ export async function updateMember(
     rowId: memberId,
     action: "update",
     before: { role: before.role, active: before.active },
-    after: after,
+    after,
   });
   return { ok: true, id: memberId };
 }

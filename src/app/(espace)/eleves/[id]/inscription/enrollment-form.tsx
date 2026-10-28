@@ -41,12 +41,7 @@ type Props = {
   initialStudent?: string;
 };
 
-export function EnrollmentForm({
-  payerId: payerId,
-  students: students,
-  courses,
-  initialStudent: initialStudent,
-}: Props) {
+export function EnrollmentForm({ payerId, students, courses, initialStudent }: Props) {
   const initial = students.find((d) => d.id === initialStudent) ?? (students.length === 1 ? students[0] : undefined);
   const [studentIds, setStudentIds] = useState<string[]>(initial ? [initial.id] : []);
   const [chosenAudience, setAudience] = useState<FormInput["audience"]>(
@@ -67,11 +62,11 @@ export function EnrollmentForm({
 
   const entry: FormInput = useMemo(
     () => ({
-      payerId: payerId,
-      studentIds: studentIds,
+      payerId,
+      studentIds,
       audience: chosenAudience,
-      period: period,
-      courseIds: courseIds,
+      period,
+      courseIds,
     }),
     [payerId, studentIds, chosenAudience, period, courseIds],
   );

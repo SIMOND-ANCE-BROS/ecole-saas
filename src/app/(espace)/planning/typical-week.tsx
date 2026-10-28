@@ -28,18 +28,11 @@ type Props = {
  * time; moving a course changes the course (and its upcoming lessons).
  * Courses on specific dates are listed below.
  */
-export function TypicalWeek({
-  courses,
-  allCourses,
-  editable: editable,
-  highlighted: highlighted,
-  hours: hours,
-  season,
-}: Props) {
+export function TypicalWeek({ courses, allCourses, editable, highlighted, hours, season }: Props) {
   const router = useRouter();
   const regular = courses.filter((c) => c.weekday !== null);
   const oneOff = courses.filter((c) => c.weekday === null);
-  const { days: days, start: start, end: dayEnd } = calendarFrame(hours, allCourses);
+  const { days, start, end: dayEnd } = calendarFrame(hours, allCourses);
 
   const elements: CalendarElement[] = regular.map((c) => ({
     id: c.id,

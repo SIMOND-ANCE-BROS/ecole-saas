@@ -40,8 +40,8 @@ const DUPLICATE_ROLE: Record<DuplicateWithRole["role"], string> = {
  * (known or new) and whether to notify them; then whom to invoice.
  */
 export function NewStudentGuide({
-  today: today,
-  initialGuardian: initialGuardian,
+  today,
+  initialGuardian,
 }: {
   today: string;
   initialGuardian?: { id: string; name: string };
@@ -106,7 +106,7 @@ export function NewStudentGuide({
           {
             student: { type: "individual", companyName: "", siren: "", address: "", ...e },
             guardian: displayedGuardian && guardian ? toInput(guardian) : null,
-            toNotify: toNotify,
+            toNotify,
             billing:
               chosenBilling === "other"
                 ? { type: "other", payer: payer ? toInput(payer) : null }

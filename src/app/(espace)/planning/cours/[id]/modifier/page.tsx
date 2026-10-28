@@ -14,7 +14,7 @@ import { coursePlanning } from "../../../course-planning";
 export const metadata: Metadata = { title: "Modifier un cours" };
 
 export default async function EditCoursePage({ params }: PageProps<"/planning/cours/[id]/modifier">) {
-  const { schoolId: schoolId } = await requireRole("director");
+  const { schoolId } = await requireRole("director");
   const { id } = await params;
   const parsed = await withSchool(schoolId, async (tx) => {
     const course = await readCourse(tx, id);

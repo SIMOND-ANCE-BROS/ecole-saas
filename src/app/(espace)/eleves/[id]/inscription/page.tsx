@@ -18,7 +18,7 @@ export const metadata: Metadata = { title: "Nouvelle inscription" };
  * Their siblings, invoiced to the same person, can be enrolled right after.
  */
 export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]/inscription">) {
-  const { schoolId: schoolId } = await requireRole("director", "front_desk");
+  const { schoolId } = await requireRole("director", "front_desk");
   const { id } = await params;
   const today = todayInParis();
   const parsed = await withSchool(schoolId, async (tx) => {
@@ -28,15 +28,15 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
       student.billedTo.type === "person" ? student.billedTo.id : student.billedTo.type === "self" ? student.id : null;
     const season = await currentSeason(tx, today);
     return {
-      student: student,
-      payerId: payerId,
-      season: season,
+      student,
+      payerId,
+      season,
       students: payerId ? await payableStudents(tx, payerId) : [],
       courses: season ? await seasonCourses(tx, season.id) : [],
     };
   });
   if (!parsed) notFound();
-  const { student: student, payerId: payerId, season: season, students: students, courses } = parsed;
+  const { student, payerId, season, students, courses } = parsed;
   const name = displayedName(student);
   const payer = student.billedTo.type === "person" ? student.billedTo.name : name;
 

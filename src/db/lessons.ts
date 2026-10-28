@@ -201,7 +201,7 @@ export async function addClosure(tx: Tx, seasonId: string, entry: z.input<typeof
       startDate: f.data.start,
       endDate: f.data.end,
       scope: f.data.scope,
-      seasonId: seasonId,
+      seasonId,
       schoolId: CURRENT_SCHOOL,
     })
     .returning({ id: closure.id });
@@ -451,7 +451,7 @@ export async function courseLessons(tx: Tx, courseId: string): Promise<CourseLes
     .innerJoin(instructor, eq(instructor.id, lesson.instructorId))
     .where(eq(lesson.courseId, courseId))
     .orderBy(asc(lesson.date));
-  return rows.map(({ firstName: firstName, name: name, ...l }) => ({ ...l, instructor: `${firstName} ${name}` }));
+  return rows.map(({ firstName, name, ...l }) => ({ ...l, instructor: `${firstName} ${name}` }));
 }
 
 export type DayLesson = {
@@ -490,7 +490,7 @@ export async function dayLessons(tx: Tx, date: string): Promise<DayLesson[]> {
     .innerJoin(instructor, eq(instructor.id, lesson.instructorId))
     .where(eq(lesson.date, date))
     .orderBy(effectiveTime, asc(discipline.name));
-  return rows.map(({ firstName: firstName, name: name, startTime: startTime, ...l }) => ({
+  return rows.map(({ firstName, name, startTime, ...l }) => ({
     ...l,
     startTime: startTime.slice(0, 5),
     instructor: `${firstName} ${name}`,
@@ -599,7 +599,7 @@ export async function saveAttendance(
           rows.data.map((l) => ({
             studentId: l.studentId,
             present: l.present,
-            lessonId: lessonId,
+            lessonId,
             schoolId: CURRENT_SCHOOL,
           })),
         ),
@@ -623,7 +623,7 @@ export async function changeInstructor(tx: Tx, lessonId: string, instructorId: s
   if (!i) return { ok: false, message: "Intervenant introuvable ou inactif." };
   const rows = await tx
     .update(lesson)
-    .set({ instructorId: instructorId })
+    .set({ instructorId })
     .where(eq(lesson.id, lessonId))
     .returning({ id: lesson.id });
   return rows.length === 1 ? { ok: true, id: lessonId } : { ok: false, message: "Cette séance n’existe plus." };
@@ -720,7 +720,7 @@ export async function weekLessons(tx: Tx, monday: string): Promise<ScheduleLesso
     .innerJoin(instructor, eq(instructor.id, lesson.instructorId))
     .where(and(sql`${lesson.date} >= ${monday}::date`, sql`${lesson.date} <= ${sunday}`))
     .orderBy(asc(lesson.date), sql`coalesce(${lesson.startTime}, ${course.startTime})`, asc(discipline.name));
-  return rows.map(({ firstName: firstName, name: name, ...l }) => ({ ...l, instructor: `${firstName} ${name}` }));
+  return rows.map(({ firstName, name, ...l }) => ({ ...l, instructor: `${firstName} ${name}` }));
 }
 
 /** Closures (all seasons) that touch the period, with what they cover (#200). */
@@ -764,7 +764,7 @@ export async function moveLesson(
     return { status: "refused", message: "Indiquez s’il faut déplacer cette séance seulement ou aussi les suivantes." };
   const c = validLessonSlot.safeParse(slot);
   if (!c.success) return { status: "refused", message: c.error.issues[0].message };
-  const { date, startTime: startTime, durationMinutes: durationMinutes } = c.data;
+  const { date, startTime, durationMinutes } = c.data;
   if (Number(startTime.slice(0, 2)) * 60 + Number(startTime.slice(3)) + durationMinutes > 24 * 60) {
     return { status: "refused", message: "La séance finirait après minuit." };
   }
@@ -846,10 +846,7 @@ export async function moveLesson(
       and(eq(lesson.courseId, s.courseId), sql`coalesce(${lesson.plannedDate}, ${lesson.date}) < ${reference}::date`),
     );
   // 2. The course takes the new slot.
-  await tx
-    .update(course)
-    .set({ weekday: newDay, startTime: startTime, durationMinutes: durationMinutes })
-    .where(eq(course.id, s.courseId));
+  await tx.update(course).set({ weekday: newDay, startTime, durationMinutes }).where(eq(course.id, s.courseId));
   // 3. Later lessons that can still be changed move to the new day of their week, without their own time.
   const following = await tx
     .select({ id: lesson.id, reference: sql<string>`coalesce(${lesson.plannedDate}, ${lesson.date})::text` })

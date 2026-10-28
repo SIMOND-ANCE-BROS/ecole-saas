@@ -29,7 +29,7 @@ function toValues(i: Instructor | null): Record<InstructorField, string> {
   };
 }
 
-export function InstructorForm({ instructor: instructor }: { instructor: Instructor | null }) {
+export function InstructorForm({ instructor }: { instructor: Instructor | null }) {
   const action = saveInstructor.bind(null, instructor?.id ?? null);
   const [state, send, inProgress] = useActionState<FormState, FormData>(action, {
     attempt: 0,
@@ -59,7 +59,7 @@ type FieldsProps = {
   initial: Record<InstructorField, string>;
 };
 
-function Fields({ state: state, send: send, inProgress: inProgress, edition, initial, back: back }: FieldsProps) {
+function Fields({ state, send, inProgress, edition, initial, back }: FieldsProps) {
   const v = state.values ?? initial;
   const [status, setStatus] = useState(v.status);
   const [mode, setMode] = useState(v.payMode as Mode);

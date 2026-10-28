@@ -30,7 +30,7 @@ let school: string;
 let otherSchool: string;
 let foreign: string;
 
-const person = (champs: Partial<PersonInput>): PersonInput => ({
+const person = (fields: Partial<PersonInput>): PersonInput => ({
   type: "individual",
   name: "",
   firstName: null,
@@ -41,13 +41,13 @@ const person = (champs: Partial<PersonInput>): PersonInput => ({
   telephone: null,
   address: null,
   notes: null,
-  ...champs,
+  ...fields,
 });
 
 const create = (s: StudentInput, confirmed = false) => withSchool(school, (tx) => createStudent(tx, s, confirmed));
 const record = (id: string) => withSchool(school, (tx) => readStudent(tx, id, TODAY));
-const idDe = (r: Awaited<ReturnType<typeof create>>) => {
-  if (r.status !== "ok") throw new Error("création refusée");
+const idOf = (r: Awaited<ReturnType<typeof create>>) => {
+  if (r.status !== "ok") throw new Error("creation refused");
   return r.id;
 };
 
@@ -71,7 +71,7 @@ afterAll(async () => {
 
 describe("guided creation", () => {
   it("creates a minor with a new guardian, emergency contact and payer", async () => {
-    zoe = idDe(
+    zoe = idOf(
       await create({
         student: person({ name: "Lefèvre", firstName: "Zoé", birthDate: "2015-03-10" }),
         guardian: { newPerson: person({ name: "Lefèvre", firstName: "Hélène", telephone: "06 12 34 56 78" }) },
@@ -105,13 +105,13 @@ describe("guided creation", () => {
       status: "duplicates",
       duplicates: [{ role: "guardian", id: helene }],
     });
-    const id = idDe(await create({ ...noe, guardian: { id: helene } }));
+    const id = idOf(await create({ ...noe, guardian: { id: helene } }));
     expect((await record(id))?.siblings).toEqual([{ id: zoe, firstName: "Zoé" }]);
     expect((await record(zoe))?.siblings.map((f) => f.firstName)).toEqual(["Noé"]);
   });
 
   it("creates an adult on their own who pays for themselves, and flags a minor without a payer", async () => {
-    const ines = idDe(
+    const ines = idOf(
       await create({
         student: person({ name: "Moreau", firstName: "Inès", birthDate: "1992-07-14" }),
         guardian: null,
@@ -120,7 +120,7 @@ describe("guided creation", () => {
       }),
     );
     expect((await record(ines))?.billedTo).toEqual({ type: "self" });
-    const lou = idDe(
+    const lou = idOf(
       await create({
         student: person({ name: "Petit", firstName: "Lou", birthDate: "2020-01-01" }),
         guardian: null,
@@ -132,7 +132,7 @@ describe("guided creation", () => {
   });
 
   it("bills an organisation created on the fly", async () => {
-    const paul = idDe(
+    const paul = idOf(
       await create({
         student: person({ name: "Durand", firstName: "Paul", birthDate: "1980-01-01" }),
         guardian: null,

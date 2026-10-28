@@ -48,7 +48,7 @@ const lessonDate = new Intl.DateTimeFormat("fr-FR", {
 const shortDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
 
 export default async function CoursePage({ params, searchParams }: PageProps<"/planning/cours/[id]">) {
-  const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
+  const { schoolId, role } = await requireRole("director", "front_desk");
   const [{ id }, { modifie }] = await Promise.all([params, searchParams]);
   const parsed = await withSchool(schoolId, async (tx) => {
     const course = await scheduleCourse(tx, id);
@@ -65,7 +65,7 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
       : null;
   });
   if (!parsed) notFound();
-  const { course, enrolled: enrolled, lessons: lessons, inConflict: inConflict } = parsed;
+  const { course, enrolled, lessons, inConflict } = parsed;
   const today = todayInParis();
 
   const active = enrolled.filter((i) => i.status === "active").length;

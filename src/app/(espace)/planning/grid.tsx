@@ -51,16 +51,16 @@ type Props = {
 /** Weekly schedule, filterable by discipline, site, room and instructor, with the headcount of each course. */
 export function ScheduleGrid({
   courses,
-  editable: editable,
-  highlighted: highlighted,
+  editable,
+  highlighted,
   view: initialView,
   day: initialDay,
   rooms: allRooms,
-  hours: hours,
-  monday: monday,
-  today: today,
-  lessons: lessons,
-  closures: closures,
+  hours,
+  monday,
+  today,
+  lessons,
+  closures,
   seasonPeriod,
   season,
 }: Props) {
@@ -85,7 +85,7 @@ export function ScheduleGrid({
     setDay(d);
     window.history.replaceState(null, "", address("salles", d));
   };
-  const { discipline, site, roomId: roomId, instructorId: instructorId } = filters;
+  const { discipline, site, roomId, instructorId } = filters;
   const disciplines = useMemo(() => [...new Set(courses.map((c) => c.discipline))].sort(), [courses]);
   const sites = useMemo(() => [...new Set(courses.map((c) => c.site))].sort(), [courses]);
   const rooms = [

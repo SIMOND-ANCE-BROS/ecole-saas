@@ -325,7 +325,7 @@ const adult = (birthDate: string | null, today: string) => {
 export async function readStudent(tx: Tx, id: string, today: string): Promise<StudentRecord | null> {
   const p = await readPerson(tx, id);
   if (!p) return null;
-  const [{ student: student }] = await tx.select({ student: person.isStudent }).from(person).where(eq(person.id, id));
+  const [{ student }] = await tx.select({ student: person.isStudent }).from(person).where(eq(person.id, id));
   const relative = (l: PersonRecord["relationships"][number]): StudentRelative => ({
     relationshipId: l.id,
     id: l.other.id,
@@ -350,7 +350,7 @@ export async function readStudent(tx: Tx, id: string, today: string): Promise<St
           .filter((d) => d.id !== id && d.id !== billedTo.id)
           .map((d) => ({ id: d.id, firstName: d.firstName }))
       : [];
-  const { relationships: relationships, ...rest } = p;
+  const { relationships, ...rest } = p;
   return {
     ...rest,
     isStudent: student,
@@ -380,8 +380,8 @@ export type ContactRecord = Omit<PersonRecord, "relationships"> & {
 export async function readContact(tx: Tx, id: string): Promise<ContactRecord | null> {
   const p = await readPerson(tx, id);
   if (!p) return null;
-  const [{ student: student }] = await tx.select({ student: person.isStudent }).from(person).where(eq(person.id, id));
-  const { relationships: relationships, ...rest } = p;
+  const [{ student }] = await tx.select({ student: person.isStudent }).from(person).where(eq(person.id, id));
+  const { relationships, ...rest } = p;
   return {
     ...rest,
     isStudent: student,
