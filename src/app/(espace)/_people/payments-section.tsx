@@ -47,7 +47,8 @@ export function PaymentsSection({
   return (
     <section aria-labelledby="paiements" className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-2">
-        <Title order={2} size="h5" id="paiements">
+        {/* Focusable: it keeps the focus when a fully corrected payment loses « Corriger ». */}
+        <Title order={2} size="h5" id="paiements" tabIndex={-1}>
           Paiements
         </Title>
         <ButtonLink href={`/paiements/nouveau?payeur=${payerId}`} size="sm">

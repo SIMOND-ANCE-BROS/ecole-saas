@@ -1,10 +1,22 @@
 "use client";
 
-import { Button, Text, TextInput } from "@mantine/core";
+import { Button, Group, Input, Text } from "@mantine/core";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { formatEuros, parseEuros } from "@/lib/money";
+import { formatEuros, parseEuros, typedEuros } from "@/lib/money";
 import { correct } from "../paiements/actions";
+
+/** Heading of the payments section (`payments-section.tsx`), focused when a fully corrected payment loses its button. */
+const PAYMENTS_HEADING = "paiements";
+
+/** Why a typed correction cannot be saved, or null. */
+function refusalOf(amount: string, remaining: number): string | null {
+  const cents = parseEuros(amount);
+  if (amount.trim() === "" || cents === 0 || (cents !== null && cents < 0)) return "Indiquez un montant supérieur à 0";
+  if (cents === null) return "Montant non reconnu";
+  if (cents > remaining) return "Montant trop élevé";
+  return null;
+}
 
 /**
  * Correcting a payment (management): a payment is never modified, a negative
@@ -13,11 +25,13 @@ import { correct } from "../paiements/actions";
 export function CorrectPayment({ paymentId, remaining, back }: { paymentId: string; remaining: number; back: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [amount, setAmount] = useState((remaining / 100).toFixed(2).replace(".", ","));
+  const [amount, setAmount] = useState(typedEuros(remaining));
+  // The refusal shows on Enter or when leaving the field, not while typing « 12, ».
+  const [shown, setShown] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [sending, startTransition] = useTransition();
   const opener = useRef<HTMLButtonElement>(null);
-  // Closed by « Fermer » or Escape: the focus goes back to « Corriger », not to the page.
+  // Closed by « Fermer », Escape or a saved correction: the focus goes back to « Corriger », not to the page.
   const [closed, setClosed] = useState(false);
   useEffect(() => {
     if (closed && !open) opener.current?.focus();
@@ -34,6 +48,7 @@ export function CorrectPayment({ paymentId, remaining, back }: { paymentId: stri
         size="compact-xs"
         onClick={() => {
           setClosed(false);
+          setShown(false);
           setOpen(true);
         }}
       >
@@ -41,19 +56,10 @@ export function CorrectPayment({ paymentId, remaining, back }: { paymentId: stri
       </Button>
     );
   }
-  const cents = parseEuros(amount);
-  // Said under the field rather than a silently disabled button.
-  const refusal =
-    amount.trim() === ""
-      ? null
-      : cents === null || cents <= 0
-        ? "Montant non reconnu"
-        : cents > remaining
-          ? "Montant trop élevé"
-          : null;
+  const refusal = refusalOf(amount, remaining);
+  const id = `correction-${paymentId}`;
   return (
     <form
-      className="flex flex-wrap items-start gap-2"
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.preventDefault();
@@ -62,43 +68,57 @@ export function CorrectPayment({ paymentId, remaining, back }: { paymentId: stri
       }}
       onSubmit={(e) => {
         e.preventDefault();
-        if (!cents || refusal) return;
+        setShown(true);
+        const cents = parseEuros(amount);
+        if (refusal || !cents) return;
         startTransition(async () => {
           const r = await correct(paymentId, cents, back);
           setMessage(r.message);
-          if (!r.message) {
+          if (r.message) return;
+          if (cents === remaining) {
+            // Fully corrected: « Corriger » goes away with the refresh; the section keeps the focus.
+            document.getElementById(PAYMENTS_HEADING)?.focus();
             setOpen(false);
-            router.refresh();
-          }
+          } else close();
+          router.refresh();
         });
       }}
     >
-      <TextInput
-        id={`correction-${paymentId}`}
+      <Input.Wrapper
+        id={id}
         label="Montant de la correction (€)"
         description={`Au plus ${formatEuros(remaining)}`}
+        error={shown ? refusal : null}
         size="xs"
-        w={170}
-        inputMode="decimal"
-        styles={{ input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } }}
-        value={amount}
-        onChange={(e) => setAmount(e.currentTarget.value)}
-        error={refusal}
-        autoFocus
-      />
-      <Button
-        type="submit"
-        variant="default"
-        size="compact-xs"
-        mt={36}
-        loading={sending}
-        disabled={!cents || refusal !== null}
+        // Readable: no smaller than the rest of the table's small text.
+        styles={{ description: { fontSize: "var(--mantine-font-size-xs)" } }}
       >
-        Enregistrer la correction
-      </Button>
-      <Button variant="subtle" size="compact-xs" mt={36} onClick={close}>
-        Fermer
-      </Button>
+        {/* The buttons sit beside the field, or wrap under it with no extra gap. */}
+        <Group gap="xs" wrap="wrap" align="center">
+          <Input
+            id={id}
+            size="xs"
+            w={110}
+            inputMode="decimal"
+            styles={{ input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } }}
+            value={amount}
+            onChange={(e) => {
+              setAmount(e.currentTarget.value);
+              setShown(false);
+            }}
+            onBlur={() => setShown(true)}
+            // Mantine links it to « Au plus … » and the message through the wrapper's id.
+            error={shown && refusal !== null}
+            autoFocus
+          />
+          <Button type="submit" variant="default" size="compact-xs" loading={sending}>
+            Enregistrer la correction
+          </Button>
+          <Button variant="subtle" size="compact-xs" onClick={close}>
+            Fermer
+          </Button>
+        </Group>
+      </Input.Wrapper>
       {message && (
         <Text span role="alert" size="xs" c="red">
           {message}

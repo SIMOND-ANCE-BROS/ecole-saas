@@ -126,11 +126,22 @@ export function ToDeposit({
         }}
       >
         <DateField label="Date de la remise" required w={160} value={date} onChange={setDate} />
-        <Button type="submit" loading={sending} disabled={selection.length === 0}>
+        <Button
+          type="submit"
+          loading={sending}
+          disabled={selection.length === 0}
+          aria-describedby={selection.length === 0 ? `${method}-nothing-ticked` : undefined}
+        >
           {selection.length === 0
-            ? "Cochez les paiements à remettre"
+            ? "Créer la remise"
             : `Créer la remise : ${selection.length} × ${title.toLowerCase()}, ${formatEuros(total)}`}
         </Button>
+        {/* Said in plain text: a disabled button's label is too faint to carry the instruction. */}
+        {selection.length === 0 && (
+          <Text id={`${method}-nothing-ticked`} size="sm" className="self-center">
+            Cochez les paiements à remettre.
+          </Text>
+        )}
         {message && (
           <Text role="alert" size="sm" c="red">
             {message}

@@ -48,6 +48,8 @@ export function CancelDeposit({ id }: { id: string }) {
       justify="flex-end"
       role="group"
       aria-label="Annuler la remise"
+      // The question is read with the group, not only the button names.
+      aria-describedby={`${id}-question`}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.preventDefault();
@@ -55,7 +57,9 @@ export function CancelDeposit({ id }: { id: string }) {
         }
       }}
     >
-      <Text size="sm">Annuler cette remise ? Ses paiements redeviendront à remettre.</Text>
+      <Text id={`${id}-question`} size="sm">
+        Annuler cette remise ? Ses paiements redeviendront à remettre.
+      </Text>
       <Button
         variant="outline"
         color="red"
