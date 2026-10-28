@@ -15,11 +15,11 @@ export const VAT_REGIMES = {
 } as const;
 export const PAY_MODES = {
   hourly: "à l’heure",
-  per_lesson: "au cours",
+  per_lesson: "à la séance",
   monthly_flat: "forfait mensuel",
 } as const;
 /** Rate unit according to the pay mode. */
-export const PAY_UNITS = { hourly: "heure", per_lesson: "cours", monthly_flat: "mois" } as const;
+export const PAY_UNITS = { hourly: "heure", per_lesson: "séance", monthly_flat: "mois" } as const;
 
 const keys = <T extends object>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
 
