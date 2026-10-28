@@ -166,7 +166,7 @@ export function CalendarSubscription({
       )}
 
       <Group gap="xs">
-        <Button loading={inProgress} onClick={create}>
+        <Button disabled={inProgress} onClick={create}>
           {activeSince || url ? "Remplacer le lien" : "Créer le lien"}
         </Button>
         {(activeSince || url) && (

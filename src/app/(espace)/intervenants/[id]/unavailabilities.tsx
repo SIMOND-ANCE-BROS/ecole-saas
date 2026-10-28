@@ -51,6 +51,17 @@ export function Unavailabilities({
 }) {
   const [v, setV] = useState({ fromDate: "", toDate: "", fromTime: "", toTime: "", label: "" });
   const [message, setMessage] = useState<string | null>(null);
+  // Missing start or an end before the start, shown on the field itself.
+  const [dateError, setDateError] = useState<{ field: "fromDate" | "toDate"; text: string } | null>(null);
+  const refuse = (field: "fromDate" | "toDate", text: string) => {
+    setDateError({ field, text });
+    const input = document.getElementById(field === "fromDate" ? "indispo-du" : "indispo-au");
+    // As refusedDateField(): no calendar over the message.
+    if (input && document.activeElement !== input) {
+      input.dataset.quietFocus = "1";
+      input.focus();
+    }
+  };
   const [inProgress, startTransition] = useTransition();
   const updated = (field: keyof typeof v) => (e: { currentTarget: { value: string } }) =>
     setV({ ...v, [field]: e.currentTarget.value });
@@ -117,6 +128,9 @@ export function Unavailabilities({
           e.preventDefault();
           // A date shown as refused is never sent as empty.
           if (refusedDateField(e.currentTarget)) return;
+          if (!v.fromDate) return refuse("fromDate", "Indiquez la date de début.");
+          if (v.toDate && v.toDate < v.fromDate) return refuse("toDate", "La fin doit suivre le début.");
+          setDateError(null);
           startTransition(async () => {
             const { message: error } = await addUnavailabilityAction(instructorId, {
               ...v,
@@ -127,12 +141,27 @@ export function Unavailabilities({
           });
         }}
       >
-        <DateField label="Du" required value={v.fromDate} onChange={(fromDate) => setV({ ...v, fromDate })} />
         <DateField
+          id="indispo-du"
+          label="Du"
+          required
+          value={v.fromDate}
+          onChange={(fromDate) => {
+            setDateError(null);
+            setV({ ...v, fromDate });
+          }}
+          error={dateError?.field === "fromDate" ? dateError.text : undefined}
+        />
+        <DateField
+          id="indispo-au"
           label="Au (inclus)"
           minDate={v.fromDate || undefined}
           value={v.toDate}
-          onChange={(toDate) => setV({ ...v, toDate })}
+          onChange={(toDate) => {
+            setDateError(null);
+            setV({ ...v, toDate });
+          }}
+          error={dateError?.field === "toDate" ? dateError.text : undefined}
         />
         <TimeInput label="De (facultatif)" value={v.fromTime} onChange={updated("fromTime")} />
         <TimeInput label="À" value={v.toTime} onChange={updated("toTime")} />
@@ -143,7 +172,7 @@ export function Unavailabilities({
           value={v.label}
           onChange={updated("label")}
         />
-        <Button type="submit" variant="default" loading={inProgress} className="sm:mt-[25px] sm:justify-self-start">
+        <Button type="submit" variant="default" loading={inProgress} className="sm:self-end sm:justify-self-start">
           Ajouter
         </Button>
       </form>

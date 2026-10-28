@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, Checkbox, Fieldset, Group, Select, Text, TextInput, type TextInputProps } from "@mantine/core";
+import { Alert, Button, Checkbox, Fieldset, Group, Select, TextInput, type TextInputProps } from "@mantine/core";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { type Instructor, PAY_MODES, VAT_REGIMES, STATUSES, PAY_UNITS } from "@/db/instructors";
 import { saveInstructor, type FormState } from "./actions";
@@ -136,16 +136,11 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
           defaultValue={v.payMode}
           onChange={(x) => x && setMode(x as Mode)}
         />
-        {field("tariff", "Tarif", {
+        {/* Unit in the label: read with the field (Mantine replaces any aria-describedby given to the input). */}
+        {field("tariff", `Tarif (€ / ${PAY_UNITS[mode]})`, {
           inputMode: "decimal",
           autoComplete: "off",
           required: true,
-          rightSection: (
-            <Text size="xs" c="dimmed" pr="xs">
-              € / {PAY_UNITS[mode]}
-            </Text>
-          ),
-          rightSectionWidth: 80,
           styles: { input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } },
         })}
       </Fieldset>
