@@ -88,9 +88,13 @@ input[type="checkbox"],
 input[type="radio"] {
   accent-color: var(--accent);
 }
-:where(a, button, input, select, summary):focus-visible {
+:where(a, button, input, select, textarea, summary):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
+}
+/* Dark mode: the focused field's border keeps the bright accent, not the deep primary fill (#211). */
+[data-mantine-color-scheme="dark"] .mantine-Input-input {
+  --input-bd-focus: var(--accent);
 }
 
 /* Panneau latéral (routes interceptées) : à droite, plein écran sur téléphone. */

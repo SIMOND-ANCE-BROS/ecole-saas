@@ -35,7 +35,7 @@ export default async function WorkspaceLayout({ children, modal }: LayoutProps<"
           <div className="flex items-center gap-2 px-1">
             <span
               aria-hidden
-              className="grid size-8 shrink-0 place-items-center rounded-md bg-accent text-sm font-semibold text-sur-accent"
+              className="grid size-8 shrink-0 place-items-center rounded-md bg-(--mantine-primary-color-filled) text-sm font-semibold text-white"
             >
               {name.charAt(0)}
             </span>

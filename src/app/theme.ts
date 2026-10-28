@@ -102,9 +102,11 @@ export const theme = createTheme({
  * Dark mode, primary colour: many Mantine parts write white on the primary
  * fill without going through the variant resolver (highlighted option of a
  * list, selected day of a calendar, checked boxes, segmented controls). On
- * shade 4 that reads at 3:1 (#211); the deep indigo of light mode (shade 6)
- * reads at 6.3:1 and stays visible on the dark background. The focus ring
- * keeps the bright `--accent` (globals.css).
+ * shade 4 that reads at 3:1 (#211); on the deep indigo of light mode (shade 6)
+ * white text and ticks read at 6.3:1 (shade 5 would fall below 4.5:1). The
+ * fill itself stands out less from the dark page (2.9:1): its white content
+ * carries the meaning. Focus rings and focused field borders keep the bright
+ * `--accent` (globals.css).
  */
 export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
   variables: {},
