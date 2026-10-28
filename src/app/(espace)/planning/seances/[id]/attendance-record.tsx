@@ -30,16 +30,19 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
   const [instructorError, setInstructorError] = useState<string | null>(null);
   const shownInstructor = instructorId ?? attendance.instructorId;
   const instructorField = useRef<HTMLInputElement>(null);
-  // The field is disabled while saving: once a refusal is shown, focus goes back to it for a retry.
+  // The field is disabled while saving: once, after a refusal, focus goes back to it for a retry.
+  const refocus = useRef(false);
   useEffect(() => {
-    if (instructorError && !inProgress) instructorField.current?.focus();
-  }, [instructorError, inProgress]);
+    if (inProgress || !refocus.current) return;
+    refocus.current = false;
+    instructorField.current?.focus();
+  }, [inProgress]);
 
   // P and A work at once: the first row takes focus, unless the user is already typing somewhere.
   useEffect(() => {
     const active = document.activeElement;
     if (active instanceof HTMLElement && active.matches("input, textarea, select, [contenteditable='true']")) return;
-    rows.current[0]?.focus();
+    rows.current[0]?.focus({ preventScroll: true });
   }, []);
 
   const unmarked = attendance.students.filter((d) => attendances[d.id] === null).length;
@@ -49,7 +52,14 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
 
   const act = (action: () => Promise<{ message: string | null }>, success: string) =>
     startTransition(async () => {
-      const { message: error } = await action();
+      let error: string | null;
+      try {
+        error = (await action()).message;
+      } catch (e) {
+        // A lost connection or a server error keeps the sheet on screen, with a way out.
+        unstable_rethrow(e);
+        error = "Non enregistré : réessayez. Si le problème continue, vérifiez la connexion.";
+      }
       setMessage(error ? { text: error, error: true } : { text: success, error: false });
     });
   const save = () =>
@@ -200,13 +210,17 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
                 unstable_rethrow(e);
                 error = "Intervenant non enregistré : réessayez.";
               }
+              // Back to the saved instructor either way: the refreshed record shows the new one.
+              setInstructorId(null);
               if (error) {
-                setInstructorId(null);
+                refocus.current = true;
                 setInstructorError(error);
               } else setMessage({ text: "Intervenant de la séance changé.", error: false });
             });
           }}
           error={instructorError}
+          // Focus comes back here after a refusal: the list must not cover the message.
+          openOnFocus={!instructorError}
           description={
             shownInstructor !== attendance.regularInstructorId ? "Remplacement pour cette séance seulement." : undefined
           }
