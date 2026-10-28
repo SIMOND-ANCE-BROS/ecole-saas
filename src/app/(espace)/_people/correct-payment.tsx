@@ -3,14 +3,12 @@
 import { Button, Group, Input, Text } from "@mantine/core";
 import { unstable_rethrow, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { NOT_SAVED } from "@/lib/action-result";
 import { formatEuros, parseEuros, typedEuros } from "@/lib/money";
 import { correct } from "../paiements/actions";
 
 /** Heading of the payments section (`payments-section.tsx`), focused when a fully corrected payment loses its button. */
 const PAYMENTS_HEADING = "paiements";
-
-/** A lost connection or a server error: nothing was saved. */
-const NOT_SAVED = "Correction non enregistrée : réessayez. Si le problème continue, vérifiez la connexion.";
 
 /** Why a typed correction cannot be saved, or null. */
 function refusalOf(amount: string, remaining: number): string | null {

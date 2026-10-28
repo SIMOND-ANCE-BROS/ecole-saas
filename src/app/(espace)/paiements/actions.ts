@@ -6,6 +6,7 @@ import { z } from "zod";
 import { withSchool } from "@/db";
 import { correctPayment, collect } from "@/db/payments";
 import { todayInParis } from "@/domain/people/age";
+import { type ActionResult, actionResult } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
 
 /** Return to the payer's record: only a student or contact record. */
@@ -21,8 +22,6 @@ export async function collectPayments(payerId: string, entry: unknown, back: unk
   redirect(`${safeReturnPath(back) ?? `/personnes/${payerId}`}?encaisse=${r.ids.length}`);
 }
 
-export type ActionResult = { ok: true } | { ok: false; message: string };
-
 /** What the correction form sends: the payment, the amount in cents and the record to refresh. */
 const validCorrection = z.object({
   paymentId: z.uuid(),
@@ -37,7 +36,7 @@ export async function correct(correction: z.input<typeof validCorrection>): Prom
   if (!c.success) return { ok: false, message: "Montant de la correction invalide." };
   const { paymentId, amountCents, back } = c.data;
   const r = await withSchool(schoolId, (tx) => correctPayment(tx, userId, paymentId, amountCents, todayInParis()));
-  if (!r.ok) return { ok: false, message: r.message };
+  if (!r.ok) return actionResult(r);
   const path = safeReturnPath(back);
   if (path) revalidatePath(path);
   revalidatePath("/encaissements");

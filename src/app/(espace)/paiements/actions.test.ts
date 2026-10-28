@@ -11,6 +11,7 @@ vi.mock("next/cache", () => ({ revalidatePath: (...args: unknown[]) => revalidat
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/db/payments", () => ({ correctPayment: vi.fn(), collect: vi.fn() }));
 vi.mock("@/domain/people/age", () => import("../../../domain/people/age"));
+vi.mock("@/lib/action-result", () => import("../../../lib/action-result"));
 
 const { correct } = await import("./actions");
 
