@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@mantine/core";
+import { Button, MantineThemeProvider, type MantineThemeOverride } from "@mantine/core";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, type ReactNode, use, useEffect, useRef, useState } from "react";
@@ -15,6 +15,17 @@ type Props = { title: string; children: ReactNode };
  * else its first text field or list (not a radio or checkbox, such as « Particulier / Professionnel »).
  */
 const FIRST_FIELD = "input:enabled:not([type=hidden],[type=radio],[type=checkbox]), select:enabled, textarea:enabled";
+
+/** Where the panel's drop-down lists, calendars and menus are rendered. */
+const PORTAL_ID = "panneau-portail";
+/**
+ * The dialog is in the top layer: a Mantine dropdown portaled to `<body>`
+ * (the default) would sit behind it, out of reach. Inside the panel, every
+ * `Portal` (Select, Autocomplete, DateInput, Menu…) renders into the dialog.
+ */
+const IN_DIALOG: MantineThemeOverride = {
+  components: { Portal: { defaultProps: { target: `#${PORTAL_ID}` } } },
+};
 
 /**
  * Side panel opened by an intercepted route (`@modal`): the original page
@@ -72,6 +83,15 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
         close();
       }}
       onClick={(e) => e.target === e.currentTarget && close()}
+      onKeyDownCapture={(e) => {
+        // Escape with a list, calendar or menu open closes only that (Mantine does
+        // it): without its default action, the dialog gets no « cancel » and stays
+        // open. Open dropdowns are the visible children of the panel's portal
+        // (Autocomplete sets no aria-expanded).
+        const portal = document.getElementById(PORTAL_ID);
+        const listOpen = [...(portal?.children ?? [])].some((c) => c.checkVisibility());
+        if (e.key === "Escape" && listOpen) e.preventDefault();
+      }}
     >
       <div className="flex h-full flex-col">
         <div className="flex items-center justify-end gap-2 border-b border-bordure px-4 py-2">
@@ -84,9 +104,12 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
           </button>
         </div>
         <div ref={body} className="flex-1 overflow-y-auto overscroll-contain p-4">
-          <InPanel value>{children}</InPanel>
+          <MantineThemeProvider theme={IN_DIALOG}>
+            <InPanel value>{children}</InPanel>
+          </MantineThemeProvider>
         </div>
       </div>
+      <div id={PORTAL_ID} />
     </dialog>
   );
 }
