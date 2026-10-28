@@ -12,7 +12,8 @@ const entry = z.object({
   columns: z.array(z.string().max(40)).max(40),
 });
 
-export type SaveColumnsResult = { ok: true } | { ok: false; message: string };
+/** `retryable`: false when trying again cannot help (input refused, not a member of the school). */
+export type SaveColumnsResult = { ok: true } | { ok: false; message: string; retryable: boolean };
 
 const NOT_SAVED = "Colonnes non enregistrées : réessayez.";
 
@@ -20,15 +21,15 @@ const NOT_SAVED = "Colonnes non enregistrées : réessayez.";
 export async function saveColumns(list: unknown, columns: unknown): Promise<SaveColumnsResult> {
   const { schoolId: schoolId, userId } = await schoolContext();
   const v = entry.safeParse({ list: list, columns: columns });
-  if (!v.success) return { ok: false, message: NOT_SAVED };
+  if (!v.success) return { ok: false, message: NOT_SAVED, retryable: false };
   // Normalised: known columns only, at least one visible.
   const own = writeLayout(readLayout(LISTS[v.data.list], v.data.columns));
   try {
     const saved = await withSchool(schoolId, (tx) => savePreference(tx, userId, v.data.list, own));
-    return saved ? { ok: true } : { ok: false, message: NOT_SAVED };
+    return saved ? { ok: true } : { ok: false, message: NOT_SAVED, retryable: false };
   } catch (e) {
     // A layout preference is not worth an error page (#212); technical ids only in the log.
     console.error("saveColumns failed", { list: v.data.list, error: e instanceof Error ? e.name : "unknown" });
-    return { ok: false, message: NOT_SAVED };
+    return { ok: false, message: NOT_SAVED, retryable: true };
   }
 }
