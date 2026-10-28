@@ -101,8 +101,19 @@ export function DateField({
         onInput?.(e);
       }}
       onKeyDown={(e) => {
-        if (e.key === "Escape") setOpen(false);
-        if (e.key === "Enter" && settle(e.currentTarget.value)) e.preventDefault();
+        // Escape closes the calendar only: inside a side panel (`<dialog>`), it
+        // would also cancel the dialog and lose what was typed. A second
+        // Escape, calendar closed, reaches the panel.
+        if (e.key === "Escape" && open) {
+          setOpen(false);
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        // Refused text: the message shows, the calendar no longer covers it.
+        if (e.key === "Enter" && settle(e.currentTarget.value)) {
+          e.preventDefault();
+          setOpen(false);
+        }
         onKeyDown?.(e);
       }}
       onFocus={(e) => {

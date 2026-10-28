@@ -1,7 +1,19 @@
-import Link from "next/link";
+import {
+  Paper,
+  Table,
+  TableCaption,
+  TableTbody,
+  TableTd,
+  TableTh,
+  TableThead,
+  TableTr,
+  Text,
+  Title,
+} from "@mantine/core";
 import { type PaymentRow, PAYMENT_METHODS } from "@/db/payments";
 import type { Balance } from "@/domain/payments/balance";
 import { formatEuros } from "@/lib/money";
+import { ButtonLink } from "../_ui/button-link";
 import { CorrectPayment } from "./correct-payment";
 
 const shortDate = new Intl.DateTimeFormat("fr-FR", {
@@ -40,89 +52,111 @@ export function PaymentsSection({
   return (
     <section aria-labelledby="paiements" className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 id="paiements" className="text-base font-semibold">
+        <Title order={2} size="h5" id="paiements">
           Paiements
-        </h2>
-        <Link href={`/paiements/nouveau?payeur=${payerId}`} className="bouton-principal">
+        </Title>
+        <ButtonLink href={`/paiements/nouveau?payeur=${payerId}`} size="sm">
           Encaisser
-        </Link>
+        </ButtonLink>
       </div>
       {balance && (
-        <dl className="panneau grid grid-cols-3 gap-2 p-3 text-sm">
+        <Paper component="dl" withBorder p="sm" className="grid grid-cols-3 gap-2">
           <div>
-            <dt className="text-xs text-doux">Dû</dt>
-            <dd className="font-medium tabular-nums">{formatEuros(balance.due)}</dd>
+            <Text component="dt" size="xs" c="dimmed">
+              Dû
+            </Text>
+            <Text component="dd" size="sm" fw={500} className="tabular-nums">
+              {formatEuros(balance.due)}
+            </Text>
           </div>
           <div>
-            <dt className="text-xs text-doux">Payé</dt>
-            <dd className="font-medium tabular-nums">{formatEuros(balance.paid)}</dd>
+            <Text component="dt" size="xs" c="dimmed">
+              Payé
+            </Text>
+            <Text component="dd" size="sm" fw={500} className="tabular-nums">
+              {formatEuros(balance.paid)}
+            </Text>
           </div>
           <div>
-            <dt className="text-xs text-doux">{balance.remaining < 0 ? "Trop-perçu" : "Reste à payer"}</dt>
-            <dd className={`font-semibold tabular-nums ${balance.remaining > 0 ? "text-alerte-texte" : ""}`}>
+            <Text component="dt" size="xs" c="dimmed">
+              {balance.remaining < 0 ? "Trop-perçu" : "Reste à payer"}
+            </Text>
+            <Text
+              component="dd"
+              size="sm"
+              fw={600}
+              c={balance.remaining > 0 ? "red" : undefined}
+              className="tabular-nums"
+            >
               {formatEuros(Math.abs(balance.remaining))}
-            </dd>
+            </Text>
           </div>
           {balance.toCollect > 0 && (
-            <p className="col-span-3 text-xs text-doux">
+            <Text size="xs" c="dimmed" className="col-span-3">
               Dont {formatEuros(balance.toCollect)} en chèques à encaisser plus tard.
-            </p>
+            </Text>
           )}
           {Object.entries(balance.outsideCalculation).map(([status, amount]) => (
-            <p key={status} className="col-span-3 text-xs text-doux">
+            <Text key={status} size="xs" c="dimmed" className="col-span-3">
               Inscriptions {OUTSIDE_CALCULATION[status as keyof typeof OUTSIDE_CALCULATION] ?? status} :{" "}
               {formatEuros(amount ?? 0)}, non comptées dans le dû.
-            </p>
+            </Text>
           ))}
-        </dl>
+        </Paper>
       )}
       {payments.length === 0 ? (
-        <p className="text-sm text-doux">Aucun paiement enregistré.</p>
+        <Text size="sm" c="dimmed">
+          Aucun paiement enregistré.
+        </Text>
       ) : (
-        <div className="panneau overflow-x-auto">
-          <table className="tableau">
-            <caption className="sr-only">Paiements reçus</caption>
-            <thead>
-              <tr>
-                <th>Reçu le</th>
-                <th>Moyen</th>
-                <th>Référence</th>
-                <th className="text-right">Montant</th>
-                <th>Encaissement</th>
-                {isDirector && <th>Correction</th>}
-              </tr>
-            </thead>
-            <tbody>
+        <Paper withBorder className="overflow-x-auto">
+          <Table highlightOnHover>
+            <TableCaption className="sr-only">Paiements reçus</TableCaption>
+            <TableThead>
+              <TableTr>
+                <TableTh>Reçu le</TableTh>
+                <TableTh>Moyen</TableTh>
+                <TableTh>Référence</TableTh>
+                <TableTh ta="right">Montant</TableTh>
+                <TableTh>Encaissement</TableTh>
+                {isDirector && <TableTh>Correction</TableTh>}
+              </TableTr>
+            </TableThead>
+            <TableTbody>
               {payments.map((p) => {
                 const remaining = p.amountCents - p.correctedCents;
                 return (
-                  <tr key={p.id} className={p.amountCents < 0 ? "text-doux" : ""}>
-                    <td className="whitespace-nowrap">{day(p.date)}</td>
-                    <td>{PAYMENT_METHODS[p.method]}</td>
-                    <td>{[p.reference, p.issuer].filter(Boolean).join(", ") || "—"}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">{formatEuros(p.amountCents)}</td>
-                    <td className="whitespace-nowrap">
+                  <TableTr key={p.id} c={p.amountCents < 0 ? "dimmed" : undefined}>
+                    <TableTd className="whitespace-nowrap">{day(p.date)}</TableTd>
+                    <TableTd>{PAYMENT_METHODS[p.method]}</TableTd>
+                    <TableTd>{[p.reference, p.issuer].filter(Boolean).join(", ") || "—"}</TableTd>
+                    <TableTd ta="right" className="tabular-nums whitespace-nowrap">
+                      {formatEuros(p.amountCents)}
+                    </TableTd>
+                    <TableTd className="whitespace-nowrap">
                       {p.amountCents < 0
                         ? "correction"
                         : p.plannedPayment && p.plannedPayment > today
                           ? `le ${day(p.plannedPayment)}`
                           : "encaissé"}
-                    </td>
+                    </TableTd>
                     {isDirector && (
-                      <td>
+                      <TableTd>
                         {p.amountCents > 0 && remaining > 0 ? (
                           <CorrectPayment paymentId={p.id} remaining={remaining} back={back} />
                         ) : p.correctedCents > 0 ? (
-                          <span className="text-xs text-doux">corrigé</span>
+                          <Text span size="xs" c="dimmed">
+                            corrigé
+                          </Text>
                         ) : null}
-                      </td>
+                      </TableTd>
                     )}
-                  </tr>
+                  </TableTr>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+            </TableTbody>
+          </Table>
+        </Paper>
       )}
     </section>
   );

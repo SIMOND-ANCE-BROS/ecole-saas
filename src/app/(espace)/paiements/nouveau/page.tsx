@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Text, Title } from "@mantine/core";
 import { withSchool } from "@/db";
 import { isStudent } from "@/db/students";
 import { balanceOf } from "@/db/payments";
 import { readPerson, displayedName } from "@/db/people";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
+import { TextLink } from "../../_ui/text-link";
 import { PaymentForm } from "./payment-form";
 
 export const metadata: Metadata = { title: "Encaisser" };
@@ -30,12 +31,17 @@ export default async function CollectPaymentPage({ searchParams }: PageProps<"/p
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <Link href={back} className="lien">
+        <TextLink href={back} size="sm">
           {displayedName(p)}
-        </Link>
-        <span className="text-doux"> / Encaisser</span>
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" "}
+          / Encaisser
+        </Text>
       </nav>
-      <h1 className="titre-page">Encaisser</h1>
+      <Title order={1} fz="xl">
+        Encaisser
+      </Title>
       <PaymentForm
         payerId={p.id}
         payer={displayedName(p)}

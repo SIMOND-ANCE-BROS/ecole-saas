@@ -1,14 +1,11 @@
 "use client";
 
+import { Button, Group, Text } from "@mantine/core";
 import { useState, useTransition } from "react";
 import { cancel } from "../../actions";
 
 export function Print() {
-  return (
-    <button type="button" className="bouton-principal" onClick={() => window.print()}>
-      Imprimer le bordereau
-    </button>
-  );
+  return <Button onClick={() => window.print()}>Imprimer le bordereau</Button>;
 }
 
 /** Cancellation of a bank deposit made by mistake (management), after confirmation. */
@@ -18,30 +15,31 @@ export function CancelDeposit({ id }: { id: string }) {
   const [sending, startTransition] = useTransition();
   if (!confirm) {
     return (
-      <button type="button" className="lien text-sm text-erreur" onClick={() => setConfirm(true)}>
+      <Button variant="subtle" color="red" size="compact-sm" onClick={() => setConfirm(true)}>
         Annuler la remise
-      </button>
+      </Button>
     );
   }
   return (
-    <span className="flex flex-wrap items-center gap-2 text-sm">
-      Annuler cette remise ? Ses paiements redeviendront à remettre.
-      <button
-        type="button"
-        className="bouton-secondaire"
-        disabled={sending}
+    <Group gap="xs" justify="flex-end">
+      <Text size="sm">Annuler cette remise ? Ses paiements redeviendront à remettre.</Text>
+      <Button
+        variant="outline"
+        color="red"
+        size="compact-sm"
+        loading={sending}
         onClick={() => startTransition(async () => setMessage((await cancel(id)).message))}
       >
         Oui, annuler
-      </button>
-      <button type="button" className="lien" onClick={() => setConfirm(false)}>
+      </Button>
+      <Button variant="subtle" size="compact-sm" onClick={() => setConfirm(false)}>
         Non
-      </button>
+      </Button>
       {message && (
-        <span role="alert" className="text-erreur">
+        <Text role="alert" size="sm" c="red">
           {message}
-        </span>
+        </Text>
       )}
-    </span>
+    </Group>
   );
 }

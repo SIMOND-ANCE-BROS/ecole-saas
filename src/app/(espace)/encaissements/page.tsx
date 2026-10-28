@@ -1,5 +1,17 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import {
+  Alert,
+  Paper,
+  Table,
+  TableCaption,
+  TableTbody,
+  TableTd,
+  TableTh,
+  TableThead,
+  TableTr,
+  Text,
+  Title,
+} from "@mantine/core";
 import { withSchool } from "@/db";
 import { PAYMENT_METHODS, type Method } from "@/db/payments";
 import { paymentLog, listDeposits, paymentsToDeposit } from "@/db/deposits";
@@ -8,6 +20,9 @@ import { validDate } from "@/domain/schedule/week";
 import { todayInParis } from "@/domain/people/age";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
+import { ButtonLink } from "../_ui/button-link";
+import { TextLink } from "../_ui/text-link";
+import { JournalFilters } from "./journal-filters";
 import { ToDeposit } from "./to-deposit";
 import { isKeyOf } from "@/lib/has";
 
@@ -37,132 +52,117 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
 
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
-      <h1 className="titre-page">Encaissements</h1>
-      {p.annulee && (
-        <p role="status" className="rounded-md border border-accent bg-accent-doux px-3 py-2 text-sm">
-          Remise annulée : ses paiements sont de nouveau à remettre.
-        </p>
-      )}
-      <nav aria-label="Vues" className="flex overflow-hidden self-start rounded-md border border-bordure text-sm">
+      <Title order={1} fz="xl">
+        Encaissements
+      </Title>
+      {p.annulee && <Alert role="status">Remise annulée : ses paiements sont de nouveau à remettre.</Alert>}
+      <nav aria-label="Vues" className="flex flex-wrap gap-2">
         {(Object.keys(VIEWS) as View[]).map((v) => (
-          <Link
+          <ButtonLink
             key={v}
             href={`/encaissements?vue=${v}`}
             aria-current={view === v ? "page" : undefined}
-            className={`px-3 py-1.5 ${view === v ? "bg-accent text-sur-accent" : "hover:bg-accent-doux"}`}
+            // Not a filled button: it would compete with « Créer la remise ».
+            variant={view === v ? "light" : "default"}
+            size="sm"
           >
             {VIEWS[v]}
-          </Link>
+          </ButtonLink>
         ))}
       </nav>
 
       {view === "journal" && (
         <>
-          <form className="panneau flex flex-wrap items-end gap-3 p-3 text-sm" role="search">
-            <input type="hidden" name="vue" value="journal" />
-            <div className="flex flex-col gap-1">
-              <label htmlFor="du" className="text-xs text-doux">
-                Du
-              </label>
-              <input id="du" name="du" type="date" className="champ" defaultValue={from} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="au" className="text-xs text-doux">
-                Au
-              </label>
-              <input id="au" name="au" type="date" className="champ" defaultValue={to} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="moyen" className="text-xs text-doux">
-                Moyen
-              </label>
-              <select id="moyen" name="moyen" className="champ" defaultValue={method ?? ""}>
-                <option value="">Tous</option>
-                {Object.entries(PAYMENT_METHODS).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button type="submit" className="bouton-secondaire">
-              Afficher
-            </button>
-            <a href={exportUrl} className="lien ml-auto pb-1.5">
-              Exporter (CSV)
-            </a>
-          </form>
+          <JournalFilters
+            key={`${from}|${to}|${method ?? ""}`}
+            from={from}
+            to={to}
+            method={method}
+            exportUrl={exportUrl}
+          />
           <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
             <div>
-              <dt className="inline text-doux">Total : </dt>
-              <dd className="inline font-semibold tabular-nums">{formatEuros(t.total)}</dd>
+              <Text component="dt" size="sm" className="inline" c="dimmed">
+                Total :{" "}
+              </Text>
+              <Text component="dd" size="sm" fw={600} className="inline tabular-nums">
+                {formatEuros(t.total)}
+              </Text>
             </div>
             {Object.entries(t.byMethod).map(([m, c]) => (
               <div key={m}>
-                <dt className="inline text-doux">{PAYMENT_METHODS[m as Method]} : </dt>
-                <dd className="inline tabular-nums">{formatEuros(c)}</dd>
+                <Text component="dt" size="sm" className="inline" c="dimmed">
+                  {PAYMENT_METHODS[m as Method]} :{" "}
+                </Text>
+                <Text component="dd" size="sm" className="inline tabular-nums">
+                  {formatEuros(c)}
+                </Text>
               </div>
             ))}
           </dl>
           {parsed.journal.length === 0 ? (
-            <p className="text-sm text-doux">Aucun encaissement sur cette période.</p>
+            <Text size="sm" c="dimmed">
+              Aucun encaissement sur cette période.
+            </Text>
           ) : (
-            <div className="panneau overflow-x-auto">
-              <table className="tableau">
-                <caption className="sr-only">
+            <Paper withBorder className="overflow-x-auto">
+              <Table highlightOnHover>
+                <TableCaption className="sr-only">
                   Encaissements du {day(from)} au {day(to)}
-                </caption>
-                <thead>
-                  <tr>
-                    <th>Reçu le</th>
-                    <th>Payeur</th>
-                    <th>Moyen</th>
-                    <th>Référence</th>
-                    <th className="text-right">Montant</th>
-                    <th>Encaissement</th>
-                    <th>Remise</th>
-                  </tr>
-                </thead>
-                <tbody>
+                </TableCaption>
+                <TableThead>
+                  <TableTr>
+                    <TableTh>Reçu le</TableTh>
+                    <TableTh>Payeur</TableTh>
+                    <TableTh>Moyen</TableTh>
+                    <TableTh>Référence</TableTh>
+                    <TableTh ta="right">Montant</TableTh>
+                    <TableTh>Encaissement</TableTh>
+                    <TableTh>Remise</TableTh>
+                  </TableTr>
+                </TableThead>
+                <TableTbody>
                   {parsed.journal.map((l) => (
-                    <tr key={l.id} className={l.amountCents < 0 ? "text-doux" : ""}>
-                      <td className="whitespace-nowrap">{day(l.date)}</td>
-                      <td>
-                        <Link href={`/personnes/${l.payerId}`} className="lien">
+                    <TableTr key={l.id} c={l.amountCents < 0 ? "dimmed" : undefined}>
+                      <TableTd className="whitespace-nowrap">{day(l.date)}</TableTd>
+                      <TableTd>
+                        <TextLink href={`/personnes/${l.payerId}`} size="sm">
                           {l.payer}
-                        </Link>
-                      </td>
-                      <td>{PAYMENT_METHODS[l.method]}</td>
-                      <td>{[l.reference, l.issuer].filter(Boolean).join(", ") || "—"}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatEuros(l.amountCents)}</td>
-                      <td className="whitespace-nowrap">
+                        </TextLink>
+                      </TableTd>
+                      <TableTd>{PAYMENT_METHODS[l.method]}</TableTd>
+                      <TableTd>{[l.reference, l.issuer].filter(Boolean).join(", ") || "—"}</TableTd>
+                      <TableTd ta="right" className="tabular-nums whitespace-nowrap">
+                        {formatEuros(l.amountCents)}
+                      </TableTd>
+                      <TableTd className="whitespace-nowrap">
                         {l.plannedPayment && l.plannedPayment > today ? `le ${day(l.plannedPayment)}` : "—"}
-                      </td>
-                      <td className="whitespace-nowrap">
+                      </TableTd>
+                      <TableTd className="whitespace-nowrap">
                         {l.depositId ? (
-                          <Link href={`/encaissements/remises/${l.depositId}`} className="lien">
+                          <TextLink href={`/encaissements/remises/${l.depositId}`} size="sm">
                             {day(l.dateDeposit as string)}
-                          </Link>
+                          </TextLink>
                         ) : (
                           "—"
                         )}
-                      </td>
-                    </tr>
+                      </TableTd>
+                    </TableTr>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TableTbody>
+              </Table>
+            </Paper>
           )}
         </>
       )}
 
       {view === "remettre" && parsed.toDeposit && (
         <>
-          <p className="text-sm text-doux">
+          <Text size="sm" c="dimmed">
             Chèques dont la date d’encaissement est arrivée, espèces et chèques vacances pas encore déposés.
-          </p>
+          </Text>
           {DEPOSIT_METHODS.every((m) => parsed.toDeposit![m].length === 0) && (
-            <p className="text-sm">Rien à remettre pour l’instant.</p>
+            <Text size="sm">Rien à remettre pour l’instant.</Text>
           )}
           {DEPOSIT_METHODS.filter((m) => parsed.toDeposit![m].length > 0).map((m) => (
             <ToDeposit key={m} method={m} payments={parsed.toDeposit![m]} today={today} />
@@ -172,35 +172,41 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
 
       {view === "remises" &&
         (parsed.remises.length === 0 ? (
-          <p className="text-sm text-doux">Aucune remise pour l’instant.</p>
+          <Text size="sm" c="dimmed">
+            Aucune remise pour l’instant.
+          </Text>
         ) : (
-          <div className="panneau overflow-x-auto">
-            <table className="tableau">
-              <caption className="sr-only">Remises en banque</caption>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Moyen</th>
-                  <th className="text-right">Paiements</th>
-                  <th className="text-right">Total</th>
-                </tr>
-              </thead>
-              <tbody>
+          <Paper withBorder className="overflow-x-auto">
+            <Table highlightOnHover>
+              <TableCaption className="sr-only">Remises en banque</TableCaption>
+              <TableThead>
+                <TableTr>
+                  <TableTh>Date</TableTh>
+                  <TableTh>Moyen</TableTh>
+                  <TableTh ta="right">Paiements</TableTh>
+                  <TableTh ta="right">Total</TableTh>
+                </TableTr>
+              </TableThead>
+              <TableTbody>
                 {parsed.remises.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <Link href={`/encaissements/remises/${r.id}`} className="lien">
+                  <TableTr key={r.id}>
+                    <TableTd>
+                      <TextLink href={`/encaissements/remises/${r.id}`} size="sm">
                         {day(r.date)}
-                      </Link>
-                    </td>
-                    <td>{PAYMENT_METHODS[r.method]}</td>
-                    <td className="text-right tabular-nums">{r.count}</td>
-                    <td className="text-right tabular-nums">{formatEuros(r.totalCents)}</td>
-                  </tr>
+                      </TextLink>
+                    </TableTd>
+                    <TableTd>{PAYMENT_METHODS[r.method]}</TableTd>
+                    <TableTd ta="right" className="tabular-nums">
+                      {r.count}
+                    </TableTd>
+                    <TableTd ta="right" className="tabular-nums">
+                      {formatEuros(r.totalCents)}
+                    </TableTd>
+                  </TableTr>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </TableTbody>
+            </Table>
+          </Paper>
         ))}
     </section>
   );
