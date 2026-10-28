@@ -20,6 +20,7 @@ import {
   season,
   room,
   lesson,
+  suspendedLesson,
 } from "./schema";
 
 /**
@@ -248,7 +249,9 @@ const withAttendance = sql`EXISTS (SELECT 1 FROM attendance p WHERE p.lesson_id 
  * those whose attendance is taken are never touched. A moved lesson
  * (#90) is identified by its original date (`planned_date`): it is neither recreated
  * on that date nor removed. `since`: only regenerate from that date on
- * (moving a lesson « et des suivantes »).
+ * (moving a lesson « et des suivantes »). A lesson removed by a closure
+ * keeps aside what it had of its own (substitute, time, new date) and gets
+ * it back when the closure no longer covers it (#206).
  */
 export async function syncLessons(
   tx: Tx,
@@ -284,19 +287,29 @@ export async function syncLessons(
     .where(eq(course.seasonId, seasonId));
 
   // The whole season, then from `start` on: the « une semaine sur deux » alternation is aligned on the first date.
-  const expected = tous.flatMap((c) => {
+  const period = { start: s.start, end: s.end };
+  const expected: { courseId: string; date: string; instructorId: string }[] = [];
+  // Dates each course would meet on without any closure: a lesson removed only by a closure is kept aside (#206).
+  const meets = new Set<string>();
+  for (const c of tous) {
     const r = recurrenceOf({ ...c, dates: oneOff.filter((p) => p.courseId === c.id).map((p) => p.date) });
-    if (!r) return [];
-    return courseDates(r, { start: s.start, end: s.end }, closuresOf(closures, c))
-      .filter((date) => date >= start)
-      .map((date) => ({ courseId: c.id, date, instructorId: c.instructorId }));
-  });
+    if (!r) continue;
+    for (const date of courseDates(r, period, closuresOf(closures, c)))
+      if (date >= start) expected.push({ courseId: c.id, date, instructorId: c.instructorId });
+    for (const date of courseDates(r, period, [])) meets.add(`${c.id} ${date}`);
+  }
   const reference = sql<string>`coalesce(${lesson.plannedDate}, ${lesson.date})::text`;
   const existing = await tx
     .select({
       id: lesson.id,
       courseId: lesson.courseId,
       reference: reference,
+      date: sql<string>`${lesson.date}::text`,
+      plannedDate: sql<string | null>`${lesson.plannedDate}::text`,
+      startTime: sql<string | null>`${lesson.startTime}::text`,
+      durationMinutes: lesson.durationMinutes,
+      instructorId: lesson.instructorId,
+      courseInstructorId: course.instructorId,
       status: lesson.status,
       attendanceSheet: sql<boolean>`${withAttendance}`,
     })
@@ -304,6 +317,28 @@ export async function syncLessons(
     .innerJoin(course, eq(course.id, lesson.courseId))
     .where(eq(course.seasonId, seasonId));
   const presentes = new Set(existing.map((e) => `${e.courseId} ${e.reference}`));
+
+  // What lessons removed by a closure had of their own, to give them back as they were.
+  const suspended = await tx
+    .select({
+      courseId: suspendedLesson.courseId,
+      referenceDate: sql<string>`${suspendedLesson.referenceDate}::text`,
+      date: sql<string>`${suspendedLesson.date}::text`,
+      plannedDate: sql<string | null>`${suspendedLesson.plannedDate}::text`,
+      startTime: sql<string | null>`${suspendedLesson.startTime}::text`,
+      durationMinutes: suspendedLesson.durationMinutes,
+      instructorId: suspendedLesson.instructorId,
+    })
+    .from(suspendedLesson)
+    .innerJoin(course, eq(course.id, suspendedLesson.courseId))
+    .where(eq(course.seasonId, seasonId));
+  const kept = new Map(suspended.map((k) => [`${k.courseId} ${k.referenceDate}`, k]));
+  // Past, or the course no longer meets that day, or its lesson is back: nothing left to give back.
+  const stale = suspended.filter((k) => {
+    const key = `${k.courseId} ${k.referenceDate}`;
+    return k.referenceDate < today || (k.referenceDate >= start && (!meets.has(key) || presentes.has(key)));
+  });
+
   const missing = expected.filter((a) => !presentes.has(`${a.courseId} ${a.date}`));
   const added =
     missing.length === 0
@@ -313,29 +348,81 @@ export async function syncLessons(
           .values(
             rowsOf(
               lesson,
-              missing.map((a) => ({
-                courseId: a.courseId,
-                date: a.date,
-                instructorId: a.instructorId,
-                schoolId: CURRENT_SCHOOL,
-              })),
+              missing.map((a) => {
+                const k = kept.get(`${a.courseId} ${a.date}`);
+                return {
+                  courseId: a.courseId,
+                  date: k?.date ?? a.date,
+                  plannedDate: k?.plannedDate ?? null,
+                  startTime: k?.startTime ?? null,
+                  durationMinutes: k?.durationMinutes ?? null,
+                  instructorId: k?.instructorId ?? a.instructorId,
+                  schoolId: CURRENT_SCHOOL,
+                };
+              }),
             ),
           )
           .onConflictDoNothing()
-          .returning({ id: lesson.id });
+          .returning({ courseId: lesson.courseId, reference: reference });
+  const givenBack = added.filter((a) => kept.has(`${a.courseId} ${a.reference}`));
+  for (const k of [...stale, ...givenBack.map((a) => ({ courseId: a.courseId, referenceDate: a.reference }))])
+    await tx
+      .delete(suspendedLesson)
+      .where(and(eq(suspendedLesson.courseId, k.courseId), eq(suspendedLesson.referenceDate, k.referenceDate)));
 
   const wanted = new Set(expected.map((a) => `${a.courseId} ${a.date}`));
-  const toRemove = existing
-    .filter(
-      (e) =>
-        e.reference >= start &&
-        e.status === "planned" &&
-        !e.attendanceSheet &&
-        !wanted.has(`${e.courseId} ${e.reference}`),
-    )
-    .map((e) => e.id);
-  if (toRemove.length > 0) await tx.delete(lesson).where(inArray(lesson.id, toRemove));
-  return { added: added.length, removed: toRemove.length };
+  const removed = existing.filter(
+    (e) =>
+      e.reference >= start &&
+      e.status === "planned" &&
+      !e.attendanceSheet &&
+      !wanted.has(`${e.courseId} ${e.reference}`),
+  );
+  // Removed by a closure (the course still meets that day) with something of its own: kept aside.
+  const toKeep = removed.filter(
+    (e) =>
+      meets.has(`${e.courseId} ${e.reference}`) &&
+      (e.plannedDate !== null ||
+        e.startTime !== null ||
+        e.durationMinutes !== null ||
+        e.instructorId !== e.courseInstructorId),
+  );
+  if (toKeep.length > 0)
+    await tx
+      .insert(suspendedLesson)
+      .values(
+        rowsOf(
+          suspendedLesson,
+          toKeep.map((e) => ({
+            courseId: e.courseId,
+            referenceDate: e.reference,
+            date: e.date,
+            plannedDate: e.plannedDate,
+            startTime: e.startTime,
+            durationMinutes: e.durationMinutes,
+            instructorId: e.instructorId,
+            schoolId: CURRENT_SCHOOL,
+          })),
+        ),
+      )
+      .onConflictDoUpdate({
+        target: [suspendedLesson.courseId, suspendedLesson.referenceDate],
+        set: {
+          date: sql`excluded.date`,
+          plannedDate: sql`excluded.planned_date`,
+          startTime: sql`excluded.start_time`,
+          durationMinutes: sql`excluded.duration_minutes`,
+          instructorId: sql`excluded.instructor_id`,
+        },
+      });
+  if (removed.length > 0)
+    await tx.delete(lesson).where(
+      inArray(
+        lesson.id,
+        removed.map((e) => e.id),
+      ),
+    );
+  return { added: added.length, removed: removed.length };
 }
 
 /**

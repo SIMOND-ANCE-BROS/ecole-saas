@@ -538,6 +538,34 @@ export const lesson = pgTable(
   ],
 );
 
+/**
+ * What a lesson removed by a closure had of its own (#206): its substitute,
+ * its own time, its new date if it was moved. Kept by `syncLessons` only
+ * for such lessons, and used to give the lesson back as it was when the
+ * closure no longer covers it. Keyed like the sync: course + reference date
+ * (the original date of a moved lesson, otherwise its date); the other
+ * columns are the lesson's own, copied as they were.
+ */
+export const suspendedLesson = pgTable(
+  "suspended_lesson",
+  {
+    schoolId: schoolIdColumn(),
+    courseId: uuid("course_id").notNull(),
+    referenceDate: date("reference_date").notNull(),
+    date: date("date").notNull(),
+    plannedDate: date("planned_date"),
+    startTime: time("start_time"),
+    durationMinutes: integer("duration_minutes"),
+    instructorId: uuid("instructor_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.courseId, t.referenceDate] }),
+    index().on(t.instructorId),
+    sameSchool(t, t.courseId, course).onDelete("cascade"),
+    sameSchool(t, t.instructorId, instructor).onDelete("cascade"),
+  ],
+);
+
 export const attendance = pgTable(
   "attendance",
   {
