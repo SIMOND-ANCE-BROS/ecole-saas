@@ -51,6 +51,8 @@ export const courseType = pgEnum("course_type", ["group", "private", "competitio
 export const lessonStatus = pgEnum("lesson_status", ["planned", "done", "cancelled"]);
 /** Every week, every other week, or on specific dates (#90). */
 export const courseRecurrence = pgEnum("course_recurrence", ["weekly", "biweekly", "dates"]);
+/** What a closure covers (#200): the whole school, the sites of `closure_site` or the courses of `closure_course`. */
+export const closureScope = pgEnum("closure_scope", ["school", "sites", "courses"]);
 export const unavailabilitySource = pgEnum("unavailability_source", ["manual", "google", "microsoft"]);
 export const calendarProvider = pgEnum("calendar_provider", ["google", "microsoft"]);
 export const tariffAudience = pgEnum("tariff_audience", ["child", "adult", "couple", "student"]);
@@ -270,8 +272,25 @@ export const closure = pgTable(
     label: text("label").notNull(),
     startDate: date("start_date").notNull(),
     endDate: date("end_date").notNull(),
+    scope: closureScope("scope").notNull().default("school"),
   },
-  (t) => [sameSchool(t, t.seasonId, season)],
+  (t) => [sameSchoolTarget(t), sameSchool(t, t.seasonId, season)],
+);
+
+/** Sites closed by a closure of scope « sites » (#200). */
+export const closureSite = pgTable(
+  "closure_site",
+  {
+    schoolId: schoolIdColumn(),
+    closureId: uuid("closure_id").notNull(),
+    siteId: uuid("site_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.closureId, t.siteId] }),
+    index().on(t.siteId),
+    sameSchool(t, t.closureId, closure).onDelete("cascade"),
+    sameSchool(t, t.siteId, site).onDelete("cascade"),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -476,6 +495,22 @@ export const courseDate = pgTable(
     date: date("date").notNull(),
   },
   (t) => [primaryKey({ columns: [t.courseId, t.date] }), sameSchool(t, t.courseId, course).onDelete("cascade")],
+);
+
+/** Courses cancelled by a closure of scope « courses » (#200). */
+export const closureCourse = pgTable(
+  "closure_course",
+  {
+    schoolId: schoolIdColumn(),
+    closureId: uuid("closure_id").notNull(),
+    courseId: uuid("course_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.closureId, t.courseId] }),
+    index().on(t.courseId),
+    sameSchool(t, t.closureId, closure).onDelete("cascade"),
+    sameSchool(t, t.courseId, course).onDelete("cascade"),
+  ],
 );
 
 export const lesson = pgTable(

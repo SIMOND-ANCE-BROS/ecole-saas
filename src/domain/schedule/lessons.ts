@@ -1,3 +1,5 @@
+import { closuresOf, type ClosedCourse, type ScopedClosure } from "./closure-scope";
+
 /**
  * Lesson dates of a weekly course. Public holidays are not deducted
  * automatically: the school enters them as closures, just like holidays,
@@ -51,16 +53,26 @@ export function recurrenceOf(c: {
 }
 
 /**
- * What lesson dates are computed from: the season and its closures. Dates before
- * `from` (today) are left out: a lesson already given can no longer clash.
+ * What lesson dates are computed from: the season and its closures, each with
+ * its scope (#200). Dates before `from` (today) are left out: a lesson already
+ * given can no longer clash.
  */
-export type SeasonCalendar = { period: Period; closures: Period[]; from: string };
+export type SeasonCalendar = { period: Period; closures: ScopedClosure[]; from: string };
 
-/** Lesson dates of a stored course; undefined without a recurrence (regular course without a day). */
-export function lessonDatesOf(c: Parameters<typeof recurrenceOf>[0], calendar: SeasonCalendar): string[] | undefined {
+/**
+ * Lesson dates of a stored course; undefined without a recurrence (regular
+ * course without a day). `id` and `siteId` say which site or course closures
+ * apply to it; without them only the school-wide closures do.
+ */
+export function lessonDatesOf(
+  c: Parameters<typeof recurrenceOf>[0] & ClosedCourse,
+  calendar: SeasonCalendar,
+): string[] | undefined {
   const r = recurrenceOf(c);
   // The whole season first: the « une semaine sur deux » alternation is anchored on its first date.
-  return r ? courseDates(r, calendar.period, calendar.closures).filter((d) => d >= calendar.from) : undefined;
+  return r
+    ? courseDates(r, calendar.period, closuresOf(calendar.closures, c)).filter((d) => d >= calendar.from)
+    : undefined;
 }
 
 /**

@@ -4,7 +4,7 @@ import { Anchor, Badge, Button, Paper, Progress, SegmentedControl, Select, Text,
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ScheduleCourse } from "@/db/schedule";
-import type { ScheduleLesson } from "@/db/lessons";
+import type { Closure, ScheduleLesson } from "@/db/lessons";
 import type { Hours } from "@/domain/schedule/hours";
 import { ages, end, DAYS, recurrenceBadge, recurrenceText } from "./format";
 import { EMPTY_FILTERS, filterSchedule } from "./filters";
@@ -38,7 +38,7 @@ type Props = {
   monday: string;
   today: string;
   lessons: ScheduleLesson[];
-  closures: { label: string; start: string; end: string }[];
+  closures: Closure[];
   /** Opening hours per site (#90): they bound the calendar. */
   hours: Record<string, Hours[]>;
   /** Chosen season when it is not the current one (`?saison=`, #189), kept in links. */

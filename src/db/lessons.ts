@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { rowsOf } from "./columns-of";
 import { z } from "zod";
+import { closedCourseLabel, closuresOf, type ScopedClosure } from "../domain/schedule/closure-scope";
 import { courseDates, recurrenceOf, type SeasonCalendar } from "../domain/schedule/lessons";
 import type { Tx } from "./index";
 import {
@@ -8,6 +9,9 @@ import {
   courseDate,
   discipline,
   closure,
+  closureCourse,
+  closureSite,
+  site,
   enrollment,
   enrollmentCourse,
   instructor,
@@ -34,13 +38,35 @@ const ATTENDANCE_STATUSES = ["active", "trial"] as const;
 // Closures
 // ---------------------------------------------------------------------------
 
-export type Closure = { id: string; label: string; start: string; end: string };
+/**
+ * A closure with its scope (#200) and, for display, what it covers: the
+ * names of its sites, or its courses as « Jazz débutant – mardi 18:00 –
+ * Salle 1 »; empty for the whole school.
+ */
+export type Closure = ScopedClosure & { id: string; label: string; targets: string[] };
 
-export const validClosureInput = z.object({
-  label: z.string().trim().min(1, "Libellé obligatoire").max(100),
-  start: z.iso.date("Date invalide"),
-  end: z.iso.date("Date invalide"),
-});
+export const validClosureInput = z.discriminatedUnion("scope", [
+  z.object({
+    scope: z.literal("school"),
+    label: z.string().trim().min(1, "Libellé obligatoire").max(100),
+    start: z.iso.date("Date invalide"),
+    end: z.iso.date("Date invalide"),
+  }),
+  z.object({
+    scope: z.literal("sites"),
+    label: z.string().trim().min(1, "Libellé obligatoire").max(100),
+    start: z.iso.date("Date invalide"),
+    end: z.iso.date("Date invalide"),
+    siteIds: z.array(z.uuid("Site inconnu")).min(1, "Choisissez au moins un site.").max(50),
+  }),
+  z.object({
+    scope: z.literal("courses"),
+    label: z.string().trim().min(1, "Libellé obligatoire").max(100),
+    start: z.iso.date("Date invalide"),
+    end: z.iso.date("Date invalide"),
+    courseIds: z.array(z.uuid("Cours inconnu")).min(1, "Choisissez au moins un cours.").max(500),
+  }),
+]);
 
 /** The season's dates and closures, to compute lesson dates (overlap warnings, #96); null if unknown. */
 export async function seasonCalendar(tx: Tx, seasonId: string, today: string): Promise<SeasonCalendar | null> {
@@ -49,16 +75,90 @@ export async function seasonCalendar(tx: Tx, seasonId: string, today: string): P
     .from(season)
     .where(eq(season.id, seasonId));
   if (!s) return null;
-  const closures = await listClosures(tx, seasonId);
-  return { period: s, closures: closures.map(({ start, end }) => ({ start, end })), from: today };
+  const closures = await readClosures(tx, eq(closure.seasonId, seasonId));
+  return { period: s, closures: closures.map(({ period, scope }) => ({ period, scope })), from: today };
 }
 
-export function listClosures(tx: Tx, seasonId: string): Promise<Closure[]> {
-  return tx
-    .select({ id: closure.id, label: closure.label, start: closure.startDate, end: closure.endDate })
+/** Closures of a season, by start date, with what they cover. */
+export async function listClosures(tx: Tx, seasonId: string): Promise<Closure[]> {
+  return named(tx, await readClosures(tx, eq(closure.seasonId, seasonId)));
+}
+
+/** Closures matching `filter`, by start date, with their scope (#200). */
+async function readClosures(tx: Tx, filter: SQL): Promise<(ScopedClosure & { id: string; label: string })[]> {
+  const rows = await tx
+    .select({
+      id: closure.id,
+      label: closure.label,
+      start: closure.startDate,
+      end: closure.endDate,
+      scope: closure.scope,
+    })
     .from(closure)
-    .where(eq(closure.seasonId, seasonId))
-    .orderBy(asc(closure.startDate));
+    .where(filter)
+    .orderBy(asc(closure.startDate), asc(closure.label));
+  const ids = rows.filter((r) => r.scope !== "school").map((r) => r.id);
+  const [sites, courses] =
+    ids.length === 0
+      ? [[], []]
+      : await Promise.all([
+          tx
+            .select({ closureId: closureSite.closureId, id: closureSite.siteId })
+            .from(closureSite)
+            .where(inArray(closureSite.closureId, ids)),
+          tx
+            .select({ closureId: closureCourse.closureId, id: closureCourse.courseId })
+            .from(closureCourse)
+            .where(inArray(closureCourse.closureId, ids)),
+        ]);
+  const of = (links: { closureId: string; id: string }[], closureId: string) =>
+    links.filter((l) => l.closureId === closureId).map((l) => l.id);
+  return rows.map((r) => ({
+    id: r.id,
+    label: r.label,
+    period: { start: r.start, end: r.end },
+    scope:
+      r.scope === "sites"
+        ? { kind: "sites", siteIds: of(sites, r.id) }
+        : r.scope === "courses"
+          ? { kind: "courses", courseIds: of(courses, r.id) }
+          : { kind: "school" },
+  }));
+}
+
+/** Adds the names of what each closure covers. */
+async function named(tx: Tx, closures: (ScopedClosure & { id: string; label: string })[]): Promise<Closure[]> {
+  const siteIds = closures.flatMap((f) => (f.scope.kind === "sites" ? f.scope.siteIds : []));
+  const courseIds = closures.flatMap((f) => (f.scope.kind === "courses" ? f.scope.courseIds : []));
+  const [sites, courses] = await Promise.all([
+    siteIds.length === 0 ? [] : tx.select({ id: site.id, name: site.name }).from(site).where(inArray(site.id, siteIds)),
+    courseIds.length === 0
+      ? []
+      : tx
+          .select({
+            id: course.id,
+            discipline: discipline.name,
+            level: course.level,
+            weekday: course.weekday,
+            startTime: course.startTime,
+            room: room.name,
+          })
+          .from(course)
+          .innerJoin(discipline, eq(discipline.id, course.disciplineId))
+          .innerJoin(room, eq(room.id, course.roomId))
+          .where(inArray(course.id, courseIds)),
+  ]);
+  const names = new Map<string, string>([
+    ...sites.map((s) => [s.id, s.name] as const),
+    ...courses.map((c) => [c.id, closedCourseLabel({ ...c, startTime: c.startTime.slice(0, 5) })] as const),
+  ]);
+  return closures.map((f) => ({
+    ...f,
+    targets: (f.scope.kind === "sites" ? f.scope.siteIds : f.scope.kind === "courses" ? f.scope.courseIds : [])
+      .map((id) => names.get(id) ?? "")
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "fr")),
+  }));
 }
 
 export async function addClosure(tx: Tx, seasonId: string, entry: z.input<typeof validClosureInput>): Promise<Result> {
@@ -73,16 +173,46 @@ export async function addClosure(tx: Tx, seasonId: string, entry: z.input<typeof
   // A closure belongs to one season (#189): its lessons are the ones it cancels.
   if (f.data.start < s.start || f.data.end > s.end)
     return { ok: false, message: "Les dates doivent être comprises dans la saison." };
+  // The chosen sites, or courses of this season, must still exist (RLS: only this school's).
+  const siteIds = f.data.scope === "sites" ? [...new Set(f.data.siteIds)] : [];
+  const courseIds = f.data.scope === "courses" ? [...new Set(f.data.courseIds)] : [];
+  if (siteIds.length > 0) {
+    const found = await tx.select({ id: site.id }).from(site).where(inArray(site.id, siteIds));
+    if (found.length !== siteIds.length) return { ok: false, message: "Un des sites choisis n’existe plus." };
+  }
+  if (courseIds.length > 0) {
+    const found = await tx
+      .select({ id: course.id })
+      .from(course)
+      .where(and(inArray(course.id, courseIds), eq(course.seasonId, seasonId)));
+    if (found.length !== courseIds.length)
+      return { ok: false, message: "Un des cours choisis n’existe plus dans cette saison." };
+  }
   const [{ id }] = await tx
     .insert(closure)
     .values({
       label: f.data.label,
       startDate: f.data.start,
       endDate: f.data.end,
+      scope: f.data.scope,
       seasonId: seasonId,
       schoolId: CURRENT_SCHOOL,
     })
     .returning({ id: closure.id });
+  if (siteIds.length > 0)
+    await tx.insert(closureSite).values(
+      rowsOf(
+        closureSite,
+        siteIds.map((siteId) => ({ closureId: id, siteId, schoolId: CURRENT_SCHOOL })),
+      ),
+    );
+  if (courseIds.length > 0)
+    await tx.insert(closureCourse).values(
+      rowsOf(
+        closureCourse,
+        courseIds.map((courseId) => ({ closureId: id, courseId, schoolId: CURRENT_SCHOOL })),
+      ),
+    );
   return { ok: true, id };
 }
 
@@ -128,7 +258,8 @@ export async function syncLessons(
     .where(eq(season.id, seasonId));
   if (!s) return { added: 0, removed: 0 };
   const start = [s.start, today, since ?? ""].reduce((a, b) => (b > a ? b : a));
-  const closures = await listClosures(tx, seasonId);
+  // Each course only loses the dates of the closures covering it (#200): its site, itself, or the whole school.
+  const closures = await readClosures(tx, eq(closure.seasonId, seasonId));
   const tous = await tx
     .select({
       id: course.id,
@@ -137,8 +268,10 @@ export async function syncLessons(
       startDate: course.startDate,
       endDate: course.endDate,
       instructorId: course.instructorId,
+      siteId: room.siteId,
     })
     .from(course)
+    .innerJoin(room, eq(room.id, course.roomId))
     .where(eq(course.seasonId, seasonId));
   const oneOff = await tx
     .select({ courseId: courseDate.courseId, date: courseDate.date })
@@ -150,7 +283,7 @@ export async function syncLessons(
   const expected = tous.flatMap((c) => {
     const r = recurrenceOf({ ...c, dates: oneOff.filter((p) => p.courseId === c.id).map((p) => p.date) });
     if (!r) return [];
-    return courseDates(r, { start: s.start, end: s.end }, closures)
+    return courseDates(r, { start: s.start, end: s.end }, closuresOf(closures, c))
       .filter((date) => date >= start)
       .map((date) => ({ courseId: c.id, date, instructorId: c.instructorId }));
   });
@@ -504,17 +637,12 @@ export async function weekLessons(tx: Tx, monday: string): Promise<ScheduleLesso
   return rows.map(({ firstName: firstName, name: name, ...l }) => ({ ...l, instructor: `${firstName} ${name}` }));
 }
 
-/** Closures (all seasons) that touch the period. */
-export function closuresBetween(
-  tx: Tx,
-  start: string,
-  end: string,
-): Promise<{ label: string; start: string; end: string }[]> {
-  return tx
-    .select({ label: closure.label, start: closure.startDate, end: closure.endDate })
-    .from(closure)
-    .where(and(sql`${closure.startDate} <= ${end}::date`, sql`${closure.endDate} >= ${start}::date`))
-    .orderBy(asc(closure.startDate));
+/** Closures (all seasons) that touch the period, with what they cover (#200). */
+export async function closuresBetween(tx: Tx, start: string, end: string): Promise<Closure[]> {
+  return named(
+    tx,
+    await readClosures(tx, sql`${closure.startDate} <= ${end}::date AND ${closure.endDate} >= ${start}::date`),
+  );
 }
 
 export const validLessonSlot = z.object({

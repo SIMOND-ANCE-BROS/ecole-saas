@@ -124,7 +124,7 @@ describe("recurrenceOf", () => {
 describe("lessonDatesOf (#96)", () => {
   const calendar = {
     period: { start: "2026-09-01", end: "2027-06-30" },
-    closures: [{ start: "2026-10-17", end: "2026-11-01" }],
+    closures: [{ period: { start: "2026-10-17", end: "2026-11-01" }, scope: { kind: "school" as const } }],
     from: "2026-09-01",
   };
   const biweekly = (startDate: string) => ({
