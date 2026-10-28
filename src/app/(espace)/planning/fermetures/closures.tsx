@@ -1,9 +1,11 @@
 "use client";
 
 import { Alert, Button, Input, MultiSelect, Paper, SegmentedControl, Text, TextInput } from "@mantine/core";
+import { unstable_rethrow } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import type { Closure } from "@/db/lessons";
 import type { ClosureScope } from "@/domain/schedule/closure-scope";
+import { NOT_SAVED, type ActionResult } from "@/lib/action-result";
 import { DateField, refusedDateField } from "../../_ui/date-field";
 import { close, updateLessons, reopen } from "../seances/actions";
 
@@ -71,9 +73,17 @@ export function ClosuresManagement({
     { value: "courses", label: "Certains cours", disabled: courses.length === 0 },
   ];
 
-  const act = (action: () => Promise<{ message: string | null }>, success: string, after?: () => void) =>
+  const act = (action: () => Promise<ActionResult>, success: string, after?: () => void) =>
     startTransition(async () => {
-      const { message: error } = await action();
+      let error: string | null;
+      try {
+        const r = await action();
+        error = r.ok ? null : r.message;
+      } catch (e) {
+        // A lost connection or a server error keeps the page on screen, with a way out.
+        unstable_rethrow(e);
+        error = NOT_SAVED;
+      }
       setMessage(error ? { text: error, tone: "error" } : { text: success, tone: "ok" });
       if (!error) after?.();
     });
@@ -82,12 +92,19 @@ export function ClosuresManagement({
   const add = (scope: Kind) => {
     setMessage(null);
     startTransition(async () => {
-      const r = await close(entry(), seasonId);
-      if (r.message) {
+      let r;
+      try {
+        r = await close(entry(), seasonId);
+      } catch (e) {
+        unstable_rethrow(e);
+        setMessage({ text: NOT_SAVED, tone: "error" });
+        return;
+      }
+      if (!r.ok) {
         setMessage({ text: r.message, tone: "error" });
         return;
       }
-      const n = r.removed ?? 0;
+      const n = r.removed;
       setMessage(
         n > 0
           ? { text: `Fermeture ajoutée : ${n} séance${n > 1 ? "s" : ""} retirée${n > 1 ? "s" : ""}.`, tone: "ok" }

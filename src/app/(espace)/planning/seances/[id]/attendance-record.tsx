@@ -5,6 +5,7 @@ import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { Attendance } from "@/db/lessons";
+import { NOT_SAVED, type ActionResult } from "@/lib/action-result";
 import { cancel, doAttendance, replace } from "../actions";
 
 type Props = {
@@ -50,15 +51,16 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
   const mark = (id: string, present: boolean) => setAttendances((p) => ({ ...p, [id]: present }));
   const go = (i: number) => rows.current[Math.max(0, Math.min(i, attendance.students.length - 1))]?.focus();
 
-  const act = (action: () => Promise<{ message: string | null }>, success: string) =>
+  const act = (action: () => Promise<ActionResult>, success: string) =>
     startTransition(async () => {
       let error: string | null;
       try {
-        error = (await action()).message;
+        const r = await action();
+        error = r.ok ? null : r.message;
       } catch (e) {
         // A lost connection or a server error keeps the sheet on screen, with a way out.
         unstable_rethrow(e);
-        error = "Non enregistré : réessayez. Si le problème continue, vérifiez la connexion.";
+        error = NOT_SAVED;
       }
       setMessage(error ? { text: error, error: true } : { text: success, error: false });
     });
@@ -205,7 +207,8 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
             startTransition(async () => {
               let error: string | null;
               try {
-                error = (await replace(attendance.id, id)).message;
+                const r = await replace(attendance.id, id);
+                error = r.ok ? null : r.message;
               } catch (e) {
                 unstable_rethrow(e);
                 error = "Intervenant non enregistré : réessayez.";

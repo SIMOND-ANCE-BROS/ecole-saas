@@ -1,7 +1,9 @@
 "use client";
 
 import { Button, Group, Paper, Text } from "@mantine/core";
+import { unstable_rethrow } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { NOT_SAVED } from "@/lib/action-result";
 import { becomeStudent } from "../../eleves/actions";
 
 /** A parent who also takes courses: they join the student list, once confirmed. */
@@ -42,7 +44,18 @@ export function BecomeStudent({ id, firstName: firstName }: { id: string; firstN
             <Button
               ref={confirm}
               loading={inProgress}
-              onClick={() => startTransition(async () => setMessage((await becomeStudent(id)).message))}
+              onClick={() =>
+                startTransition(async () => {
+                  try {
+                    // On success the action opens the student record.
+                    const r = await becomeStudent(id);
+                    setMessage(r.ok ? null : r.message);
+                  } catch (e) {
+                    unstable_rethrow(e);
+                    setMessage(NOT_SAVED);
+                  }
+                })
+              }
             >
               Ajouter aux élèves
             </Button>

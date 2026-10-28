@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { has } from "../../../lib/has";
 
-// The session and the database are stubbed: this checks what the « Facturé à » actions accept (#227).
+// The session and the database are stubbed: this checks what the record actions accept (#227, #233).
 vi.mock("@/lib/session", () => ({
   requireRole: async () => ({ schoolId: "school-a", userId: "user-a" }),
 }));
@@ -27,8 +27,9 @@ vi.mock("@/domain/people/name", () => import("../../../domain/people/name"));
 vi.mock("@/domain/people/age", () => import("../../../domain/people/age"));
 vi.mock("@/lib/deferred-query", () => ({ deferredQuery: vi.fn() }));
 vi.mock("@/lib/has", () => import("../../../lib/has"));
+vi.mock("@/lib/action-result", () => import("../../../lib/action-result"));
 
-const { invoice, billNewPerson } = await import("./actions");
+const { invoice, billNewPerson, addGuardianAction, notify, removeRelative, becomeStudent } = await import("./actions");
 const { newPerson, toInput } = await import("../_people/person-choice");
 
 const STUDENT = "8d2c6c1e-3f4a-4b5c-9d6e-7f8091a2b3c4";
@@ -36,6 +37,7 @@ const PAYER = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 // Whatever the browser may send, which the types of the call sites never allow.
 const target = (v: unknown) => v as Parameters<typeof invoice>[1];
 const payer = (v: unknown) => v as Parameters<typeof billNewPerson>[1];
+const flag = (v: unknown) => v as boolean;
 
 beforeEach(() => withSchool.mockReset());
 
@@ -102,5 +104,60 @@ describe("billNewPerson", () => {
       message: "Vérifiez les informations du payeur.",
     });
     expect(withSchool).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("addGuardianAction", () => {
+  it("refuses an invalid student id or guardian without touching the database", async () => {
+    expect(await addGuardianAction("x", { id: PAYER }, false)).toEqual({
+      ok: false,
+      message: "Cet élève n’existe plus.",
+    });
+    for (const g of [{ id: "x" }, {}, null]) {
+      expect(await addGuardianAction(STUDENT, payer(g), false)).toEqual({
+        ok: false,
+        message: "Vérifiez les informations du responsable.",
+      });
+    }
+    expect(await addGuardianAction(STUDENT, { id: PAYER }, flag("yes"))).toEqual({
+      ok: false,
+      message: "Vérifiez les informations du responsable.",
+    });
+    expect(withSchool).not.toHaveBeenCalled();
+  });
+
+  it("returns ok without the internal id when the guardian is added", async () => {
+    withSchool.mockResolvedValueOnce({ ok: true, id: PAYER });
+
+    expect(await addGuardianAction(STUDENT, { id: PAYER }, true)).toEqual({ ok: true });
+  });
+});
+
+describe("notify and removeRelative", () => {
+  it("refuse an invalid link without touching the database", async () => {
+    const refusal = { ok: false, message: "Ce lien n’existe plus." };
+    expect(await notify(STUDENT, "x", true)).toEqual(refusal);
+    expect(await notify(STUDENT, PAYER, flag(1))).toEqual(refusal);
+    expect(await removeRelative("x", PAYER)).toEqual(refusal);
+    expect(withSchool).not.toHaveBeenCalled();
+  });
+
+  it("pass the refusal message of the database layer through", async () => {
+    withSchool.mockResolvedValueOnce({ ok: false, message: "Ce lien n’existe plus." });
+
+    expect(await removeRelative(STUDENT, PAYER)).toEqual({ ok: false, message: "Ce lien n’existe plus." });
+  });
+});
+
+describe("becomeStudent", () => {
+  it("refuses an invalid person id without touching the database", async () => {
+    expect(await becomeStudent("x")).toEqual({ ok: false, message: "Personne introuvable." });
+    expect(withSchool).not.toHaveBeenCalled();
+  });
+
+  it("passes the refusal of the database layer through instead of opening the record", async () => {
+    withSchool.mockResolvedValueOnce({ ok: false, message: "Personne introuvable." });
+
+    expect(await becomeStudent(PAYER)).toEqual({ ok: false, message: "Personne introuvable." });
   });
 });
