@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 import { withSchool } from "@/db";
 import {
   addGuardian,
@@ -12,6 +13,7 @@ import {
   type DuplicateWithRole,
   markStudent,
   CreationRefusal,
+  otherValidPerson,
   validStudentInput,
   type StudentInput,
 } from "@/db/students";
@@ -44,22 +46,37 @@ export async function createStudentFromGuide(entry: unknown, confirmed: boolean)
   redirect(`/eleves/${r.id}?enregistre=cree`);
 }
 
-export async function invoice(
-  studentId: string,
-  target: { type: "self" } | { type: "person"; id: string },
-): Promise<Back> {
+export type ActionResult = { ok: true } | { ok: false; message: string };
+const result = (r: { ok: true } | { ok: false; message: string }): ActionResult =>
+  r.ok ? { ok: true } : { ok: false, message: r.message };
+
+const validBillingTarget = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("self") }),
+  z.object({ type: z.literal("person"), id: z.uuid() }),
+]);
+
+/** « Facturé à »: the student themselves or a person already linked to them. */
+// Typed for the call sites; still parsed, since a server action receives whatever the browser sends.
+export async function invoice(studentId: string, target: z.input<typeof validBillingTarget>): Promise<ActionResult> {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
-  const r = await withSchool(schoolId, (tx) => setBilling(tx, studentId, target));
-  revalidatePath(`/eleves/${studentId}`);
-  return back(r);
+  const id = z.uuid().safeParse(studentId);
+  const t = validBillingTarget.safeParse(target);
+  if (!id.success || !t.success) return { ok: false, message: "Choix de facturation invalide." };
+  const r = await withSchool(schoolId, (tx) => setBilling(tx, id.data, t.data));
+  revalidatePath(`/eleves/${id.data}`);
+  return result(r);
 }
 
 /** Invoice a known person or one just created (organisation, other relative). */
-export async function billNewPerson(studentId: string, payer: unknown): Promise<Back> {
+export async function billNewPerson(studentId: string, payer: z.input<typeof otherValidPerson>): Promise<ActionResult> {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
-  const r = await withSchool(schoolId, (tx) => billTo(tx, studentId, payer as never));
-  revalidatePath(`/eleves/${studentId}`);
-  return back(r);
+  const id = z.uuid().safeParse(studentId);
+  if (!id.success) return { ok: false, message: "Choix de facturation invalide." };
+  const p = otherValidPerson.safeParse(payer);
+  if (!p.success) return { ok: false, message: "Vérifiez les informations du payeur." };
+  const r = await withSchool(schoolId, (tx) => billTo(tx, id.data, p.data));
+  revalidatePath(`/eleves/${id.data}`);
+  return result(r);
 }
 
 export async function addGuardianAction(studentId: string, guardian: unknown, toNotify: boolean): Promise<Back> {

@@ -600,7 +600,7 @@ export async function isStudent(tx: Tx, id: string): Promise<boolean | null> {
 }
 
 /** Bill a known person or one just created (organisation, other relative). */
-export async function billTo(tx: Tx, studentId: string, payer: z.input<typeof otherValidPerson>): Promise<Result> {
+export async function billTo(tx: Tx, studentId: string, payer: unknown): Promise<Result> {
   const p = otherValidPerson.safeParse(payer);
   if (!p.success) return { ok: false, message: "Vérifiez les informations du payeur." };
   const id = await resolve(tx, p.data);

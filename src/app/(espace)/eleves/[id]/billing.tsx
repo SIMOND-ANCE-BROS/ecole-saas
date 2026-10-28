@@ -8,7 +8,7 @@ import type { StudentRecord, StudentRelative } from "@/db/students";
 import { has } from "@/lib/has";
 import { type Choice, PersonChoice, toInput } from "../../_people/person-choice";
 import { WARNING } from "../../_people/sections";
-import { invoice, billNewPerson } from "../actions";
+import { invoice, billNewPerson, type ActionResult } from "../actions";
 
 type Props = {
   studentId: string;
@@ -85,11 +85,12 @@ export function Billing({
   ];
   const chosen = options.find((o) => o.key === selected && o.key !== currentKey);
 
-  const choose = (target: Payer, action: () => Promise<{ message: string | null }>) =>
+  const choose = (target: Payer, action: () => Promise<ActionResult>) =>
     startTransition(async () => {
       let failure: string | null;
       try {
-        failure = (await action()).message;
+        const r = await action();
+        failure = r.ok ? null : r.message;
       } catch (e) {
         // A lost connection or a server error keeps the record on screen, with a way out.
         unstable_rethrow(e);
