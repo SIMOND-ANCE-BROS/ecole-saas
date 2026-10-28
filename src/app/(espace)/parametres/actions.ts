@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { withSchool, type Tx } from "@/db";
 import {
   createDiscipline,
@@ -16,84 +17,181 @@ import {
   deleteRoom,
   deleteSite,
   roomSiteId,
+  validHours,
+  validRoomInput,
+  validSeasonInput,
+  validSiteInput,
 } from "@/db/settings";
 import { syncRoomSeasons } from "@/db/lessons";
 import { todayInParis } from "@/domain/people/age";
-import { saveLessonPack, saveSiblings, savePrice, deleteLessonPack } from "@/db/tariffs";
+import {
+  saveLessonPack,
+  saveSiblings,
+  savePrice,
+  deleteLessonPack,
+  validCell,
+  validLessonPack,
+  validSiblings,
+} from "@/db/tariffs";
+import { actionResult, type ActionResult } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
 
-type Back = { message: string | null };
+type Write = (tx: Tx) => Promise<{ ok: true } | { ok: false; message: string }>;
 
-/** Settings: management only; each action revalidates the page concerned. */
-async function act(
-  page: string,
-  action: (tx: Tx) => Promise<{ ok: true } | { ok: false; message: string }>,
-): Promise<Back> {
-  const { schoolId: schoolId } = await requireRole("director");
-  const r = await withSchool(schoolId, action);
+// Typed for the call sites; still parsed, since a server action receives whatever the browser sends.
+// The database layer parses again and refuses with the same messages.
+const validId = z.uuid();
+const validName = z.string();
+
+/** The first French message of a refused input, or null when it is acceptable. */
+function refusal(schema: z.ZodType, value: unknown, message?: string): string | null {
+  const r = schema.safeParse(value);
+  return r.success ? null : (message ?? r.error.issues[0]?.message ?? "Saisie invalide.");
+}
+
+/**
+ * Settings: management only, checked before anything else; a refused input
+ * never reaches the database; each action revalidates the page concerned.
+ */
+async function act(page: string, refused: () => string | null, write: Write): Promise<ActionResult> {
+  const { schoolId } = await requireRole("director");
+  const message = refused();
+  if (message) return { ok: false, message };
+  const r = await withSchool(schoolId, write);
   revalidatePath(`/parametres/${page}`);
-  return { message: r.ok ? null : r.message };
+  return actionResult(r);
 }
 
-export async function newSeason(entry: unknown, copyFrom: string | null) {
-  return act("saisons", (tx) => createSeason(tx, entry as never, copyFrom));
+const SEASON_GONE = "Cette saison n’existe plus.";
+const DISCIPLINE_GONE = "Cette discipline n’existe plus.";
+const SITE_GONE = "Ce site n’existe plus.";
+const ROOM_GONE = "Cette salle n’existe plus.";
+const NO_SEASON = "Saison introuvable.";
+
+export async function newSeason(entry: z.input<typeof validSeasonInput>, copyFrom: string | null) {
+  return act(
+    "saisons",
+    () => refusal(validSeasonInput, entry) ?? refusal(validId.nullable(), copyFrom, "Saison de référence introuvable."),
+    (tx) => createSeason(tx, entry, copyFrom),
+  );
 }
-export async function changeSeason(id: string, entry: unknown) {
-  return act("saisons", (tx) => updateSeason(tx, id, entry as never));
+export async function changeSeason(id: string, entry: z.input<typeof validSeasonInput>) {
+  return act(
+    "saisons",
+    () => refusal(validSeasonInput, entry) ?? refusal(validId, id, SEASON_GONE),
+    (tx) => updateSeason(tx, id, entry),
+  );
 }
 
 export async function newDiscipline(name: string) {
-  return act("disciplines", (tx) => createDiscipline(tx, name));
+  return act(
+    "disciplines",
+    () => refusal(validName, name, "Nom obligatoire"),
+    (tx) => createDiscipline(tx, name),
+  );
 }
 export async function rename(id: string, name: string) {
-  return act("disciplines", (tx) => renameDiscipline(tx, id, name));
+  return act(
+    "disciplines",
+    () => refusal(validName, name, "Nom obligatoire") ?? refusal(validId, id, DISCIPLINE_GONE),
+    (tx) => renameDiscipline(tx, id, name),
+  );
 }
 export async function removeDiscipline(id: string) {
-  return act("disciplines", (tx) => deleteDiscipline(tx, id));
+  return act(
+    "disciplines",
+    () => refusal(validId, id, DISCIPLINE_GONE),
+    (tx) => deleteDiscipline(tx, id),
+  );
 }
 
-export async function newSite(entry: unknown) {
-  return act("lieux", (tx) => createSite(tx, entry as never));
+export async function newSite(entry: z.input<typeof validSiteInput>) {
+  return act(
+    "lieux",
+    () => refusal(validSiteInput, entry),
+    (tx) => createSite(tx, entry),
+  );
 }
-export async function changeSite(id: string, entry: unknown) {
-  return act("lieux", (tx) => updateSite(tx, id, entry as never));
+export async function changeSite(id: string, entry: z.input<typeof validSiteInput>) {
+  return act(
+    "lieux",
+    () => refusal(validSiteInput, entry) ?? refusal(validId, id, SITE_GONE),
+    (tx) => updateSite(tx, id, entry),
+  );
 }
-export async function changeHours(siteId: string, hours: unknown) {
-  const r = await act("lieux", (tx) => saveHours(tx, siteId, hours as never));
+export async function changeHours(siteId: string, hours: z.input<typeof validHours>) {
+  const r = await act(
+    "lieux",
+    () => refusal(validHours, hours) ?? refusal(validId, siteId, SITE_GONE),
+    (tx) => saveHours(tx, siteId, hours),
+  );
   // The schedule calendar depends on the opening hours.
   revalidatePath("/planning");
   return r;
 }
 export async function removeSite(id: string) {
-  return act("lieux", (tx) => deleteSite(tx, id));
+  return act(
+    "lieux",
+    () => refusal(validId, id, SITE_GONE),
+    (tx) => deleteSite(tx, id),
+  );
 }
-export async function newRoom(entry: unknown) {
-  return act("lieux", (tx) => createRoom(tx, entry as never));
+export async function newRoom(entry: z.input<typeof validRoomInput>) {
+  return act(
+    "lieux",
+    () => refusal(validRoomInput, entry),
+    (tx) => createRoom(tx, entry),
+  );
 }
-export async function changeRoom(id: string, entry: unknown) {
-  const r = await act("lieux", async (tx) => {
-    const before = await roomSiteId(tx, id);
-    const result = await updateRoom(tx, id, entry as never);
-    // Another site: its closures, not the old site's, now cover the room's courses (#200).
-    if (result.ok && before !== (await roomSiteId(tx, id))) await syncRoomSeasons(tx, id, todayInParis());
-    return result;
-  });
+export async function changeRoom(id: string, entry: z.input<typeof validRoomInput>) {
+  const r = await act(
+    "lieux",
+    () => refusal(validRoomInput, entry) ?? refusal(validId, id, ROOM_GONE),
+    async (tx) => {
+      const before = await roomSiteId(tx, id);
+      const result = await updateRoom(tx, id, entry);
+      // Another site: its closures, not the old site's, now cover the room's courses (#200).
+      if (result.ok && before !== (await roomSiteId(tx, id))) await syncRoomSeasons(tx, id, todayInParis());
+      return result;
+    },
+  );
   revalidatePath("/planning");
   return r;
 }
 export async function removeRoom(id: string) {
-  return act("lieux", (tx) => deleteRoom(tx, id));
+  return act(
+    "lieux",
+    () => refusal(validId, id, ROOM_GONE),
+    (tx) => deleteRoom(tx, id),
+  );
 }
 
-export async function cellPrice(seasonId: string, entry: unknown) {
-  return act("tarifs", (tx) => savePrice(tx, seasonId, entry as never));
+export async function cellPrice(seasonId: string, entry: z.input<typeof validCell>) {
+  return act(
+    "tarifs",
+    () => refusal(validCell, entry) ?? refusal(validId, seasonId, NO_SEASON),
+    (tx) => savePrice(tx, seasonId, entry),
+  );
 }
-export async function siblingsRule(seasonId: string, entry: unknown) {
-  return act("tarifs", (tx) => saveSiblings(tx, seasonId, entry as never));
+/** Siblings discount rule of the season; null removes it. */
+export async function siblingsRule(seasonId: string, entry: z.input<typeof validSiblings> | null) {
+  return act(
+    "tarifs",
+    () => refusal(validId, seasonId, NO_SEASON) ?? (entry === null ? null : refusal(validSiblings, entry)),
+    (tx) => saveSiblings(tx, seasonId, entry),
+  );
 }
-export async function lessonPack(seasonId: string, entry: unknown) {
-  return act("tarifs", (tx) => saveLessonPack(tx, seasonId, entry as never));
+export async function lessonPack(seasonId: string, entry: z.input<typeof validLessonPack>) {
+  return act(
+    "tarifs",
+    () => refusal(validLessonPack, entry) ?? refusal(validId, seasonId, NO_SEASON),
+    (tx) => saveLessonPack(tx, seasonId, entry),
+  );
 }
 export async function removeLessonPack(id: string) {
-  return act("tarifs", (tx) => deleteLessonPack(tx, id));
+  return act(
+    "tarifs",
+    () => refusal(validId, id, "Ce carnet n’existe plus."),
+    (tx) => deleteLessonPack(tx, id),
+  );
 }
