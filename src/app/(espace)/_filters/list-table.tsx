@@ -105,7 +105,8 @@ export function ListTable<Id extends string>({
   const currentSort = readSort(params.get("sort"), params.get("order"), columns);
   const [availability, setAvailability] = useState<Layout>(() => readLayout(columns, layout));
   const [saving, startTransition] = useTransition();
-  const [failure, setFailure] = useState(false);
+  // Why the last layout save failed, or null; the list keeps the layout shown either way (#212).
+  const [failure, setFailure] = useState<string | null>(null);
   const defs = new Map<string, ColumnDef<Id>>(columns.map((c) => [c.id, c]));
   const visible = availability.filter((d) => d.visible).flatMap((d) => defs.get(d.id) ?? []);
   const masquees = availability.filter((d) => !d.visible).flatMap((d) => defs.get(d.id) ?? []);
@@ -138,8 +139,16 @@ export function ListTable<Id extends string>({
 
   function changeAvailability(d: Layout) {
     setAvailability(d);
-    setFailure(false);
-    startTransition(async () => setFailure(!(await saveColumns(list, writeLayout(d)))));
+    setFailure(null);
+    startTransition(async () => {
+      // A rejected call (network down) must not reach the error boundary and take the list away.
+      try {
+        const saved = await saveColumns(list, writeLayout(d));
+        setFailure(saved.ok ? null : saved.message);
+      } catch {
+        setFailure("Colonnes non enregistrées : vérifiez la connexion et réessayez.");
+      }
+    });
   }
 
   // Drag and drop of a header (mouse); with the keyboard, the arrows of the « Colonnes » menu.
@@ -220,15 +229,14 @@ export function ListTable<Id extends string>({
           </Text>
         )}
         <span className="flex items-center gap-2 sm:ml-auto">
-          <Text span size="xs" c="dimmed" role="status">
-            {f.inProgress || sortPending
-              ? "Mise à jour…"
-              : saving
-                ? "Enregistrement des colonnes…"
-                : failure
-                  ? "Disposition non enregistrée : réessayez."
-                  : ""}
+          <Text span size="xs" c={failure && !saving ? "red" : "dimmed"} role="status">
+            {f.inProgress || sortPending ? "Mise à jour…" : saving ? "Enregistrement des colonnes…" : (failure ?? "")}
           </Text>
+          {failure && !saving && (
+            <Button size="compact-xs" variant="subtle" onClick={() => changeAvailability(availability)}>
+              Réessayer
+            </Button>
+          )}
           {/* On phones, cards: no columns to adjust. */}
           <span className={mobile ? "hidden sm:inline" : ""}>
             <Popover
