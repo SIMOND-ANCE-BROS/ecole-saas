@@ -7,6 +7,7 @@ import type { PersonRecord } from "@/db/people";
 import { createContact, updateIdentity, type Refusal } from "./actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
 import { DateField, refusedDateField } from "@/app/(espace)/_ui/date-field";
+import { BusinessSearch } from "@/app/(espace)/_ui/business-search";
 
 type Props = {
   /** Person being edited; null when creating a contact (a student is created with the guided form). */
@@ -42,8 +43,16 @@ export function PersonForm({ person: person, section: section, proposedName: pro
     if (refusal) form.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
   }, [refusal]);
   const pro = v.type === "organisation";
-  const updated = (field: keyof typeof v) => (e: { currentTarget: { value: string } }) =>
+  // Company picked in the registry: its confirmation goes once its name or SIREN is edited by hand.
+  const [picked, setPicked] = useState(false);
+  const [searchKey, setSearchKey] = useState(0);
+  const updated = (field: keyof typeof v) => (e: { currentTarget: { value: string } }) => {
+    if (picked && (field === "companyName" || field === "siren")) {
+      setPicked(false);
+      setSearchKey((k) => k + 1);
+    }
     setV({ ...v, [field]: e.currentTarget.value });
+  };
 
   const entry = {
     ...v,
@@ -109,7 +118,29 @@ export function PersonForm({ person: person, section: section, proposedName: pro
       <Fieldset legend="Identité">
         {pro ? (
           <div className="grid items-start gap-3 sm:grid-cols-2">
-            {field("companyName", "Raison sociale", { autoFocus: !person })}
+            <div className="sm:col-span-2">
+              <BusinessSearch
+                key={searchKey}
+                filled={(b) =>
+                  b.street ? "raison sociale, SIREN et adresse remplis." : "raison sociale et SIREN remplis."
+                }
+                autoFocus={!person}
+                description="Nom, SIREN ou SIRET : choisir une entreprise remplit la raison sociale, le SIREN et l’adresse."
+                onPick={(b) => {
+                  setPicked(true);
+                  setV((now) => ({
+                    ...now,
+                    companyName: b.legalName,
+                    siren: b.siren,
+                    // Without a public street (sole trader), the address typed is kept.
+                    address: b.street
+                      ? [b.street, [b.postcode, b.city].filter(Boolean).join(" ")].filter(Boolean).join(", ")
+                      : now.address,
+                  }));
+                }}
+              />
+            </div>
+            {field("companyName", "Raison sociale")}
             {field("siren", "SIREN", { inputMode: "numeric", placeholder: "9 chiffres" })}
             <div className="sm:col-span-2">{field("name", "Contact (facultatif)")}</div>
           </div>

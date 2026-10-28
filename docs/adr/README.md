@@ -10,6 +10,7 @@ old one gets `Status: Superseded by NNNN`).
 | [0002](0002-invoicing-delegated-to-the-school-tool.md) | Invoicing delegated to the school's invoicing tool        | Accepted |
 | [0003](0003-mantine-for-the-interface.md)              | Mantine for every interface control, Tailwind for layout  | Accepted |
 | [0004](0004-english-code-french-interface.md)          | English code and process, French interface                | Accepted |
+| [0005](0005-business-registry-search.md)               | Business registry search, server-side and optional        | Accepted |
 
 ## Template
 
