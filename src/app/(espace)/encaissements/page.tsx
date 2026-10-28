@@ -24,6 +24,8 @@ import { paymentLog, listDeposits, paymentsToDeposit } from "@/db/deposits";
 import { DEPOSIT_METHODS, totals } from "@/domain/payments/deposits";
 import { validDate } from "@/domain/schedule/week";
 import { todayInParis } from "@/domain/people/age";
+import { frenchDate } from "@/lib/dates";
+import { isKeyOf } from "@/lib/has";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
 import { ListTable } from "../_filters/list-table";
@@ -32,8 +34,6 @@ import { PageHeader } from "../_ui/page-header";
 import { TextLink } from "../_ui/text-link";
 import { JournalFilters } from "./journal-filters";
 import { ToDeposit } from "./to-deposit";
-import { isKeyOf } from "@/lib/has";
-import { frenchDate } from "@/lib/dates";
 
 export const metadata: Metadata = { title: "Encaissements" };
 

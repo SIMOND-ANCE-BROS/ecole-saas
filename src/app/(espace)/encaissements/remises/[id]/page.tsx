@@ -17,11 +17,11 @@ import {
 import { withSchool } from "@/db";
 import { readDeposit } from "@/db/deposits";
 import { school } from "@/db/schema";
+import { frenchDate } from "@/lib/dates";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
 import { TextLink } from "../../../_ui/text-link";
 import { CancelDeposit, Print } from "./buttons";
-import { frenchDate } from "@/lib/dates";
 
 export const metadata: Metadata = { title: "Bordereau de remise" };
 

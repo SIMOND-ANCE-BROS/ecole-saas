@@ -38,10 +38,10 @@ import {
 import { type ColumnDef, conditionLabel, readSort, type Sort, EMPTY } from "@/domain/filters/filters";
 import { pageCount, shownRange } from "@/domain/filters/pagination";
 import { todayInParis } from "@/domain/people/age";
+import { frenchDate } from "@/lib/dates";
 import { DateField } from "../_ui/date-field";
 import { saveColumns } from "./actions";
 import { type AddressFilter, useAddressFilter } from "./address-filter";
-import { frenchDate } from "@/lib/dates";
 
 export type CellValue = string | number | string[] | null;
 /** A cell's own link; `label` names it for screen readers when the text alone is a bare date. */

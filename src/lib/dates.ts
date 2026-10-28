@@ -44,7 +44,14 @@ export function typedDateRefusal(input: string, min: string | null, max: string 
   return null;
 }
 
-/** A `YYYY-MM-DD` date (or a timestamp starting with one) as shown in French: « 21/10/2026 ». */
+/**
+ * A `YYYY-MM-DD` date (or a timestamp starting with one) as shown in French:
+ * « 21/10/2026 ». A partial value keeps reading the same way (« 2026-10 » →
+ * « 10/2026 », as a half-typed filter value); anything else after a full
+ * date is returned unchanged rather than shown as a clean date.
+ */
 export function frenchDate(iso: string): string {
-  return iso.slice(0, 10).split("-").reverse().join("/");
+  const full = /^(\d{4}-\d{2}-\d{2})(.*)$/.exec(iso);
+  if (full && full[2] !== "" && !/^[T ]/.test(full[2])) return iso;
+  return (full ? full[1] : iso).split("-").reverse().join("/");
 }

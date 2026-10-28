@@ -66,5 +66,15 @@ describe("frenchDate", () => {
 
   it("keeps only the day of a timestamp", () => {
     expect(frenchDate("2026-10-21T08:30:00.000Z")).toBe("21/10/2026");
+    expect(frenchDate("2026-10-21 08:30:00")).toBe("21/10/2026");
+  });
+
+  it("reads an empty or partial value as before", () => {
+    expect(frenchDate("")).toBe("");
+    expect(frenchDate("2026-10")).toBe("10/2026");
+  });
+
+  it("returns a tampered value unchanged rather than a clean date", () => {
+    expect(frenchDate("2026-10-21xyz")).toBe("2026-10-21xyz");
   });
 });

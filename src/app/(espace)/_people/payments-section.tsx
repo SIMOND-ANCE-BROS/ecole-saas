@@ -12,8 +12,8 @@ import {
 } from "@mantine/core";
 import { type PaymentRow, PAYMENT_METHODS } from "@/db/payments";
 import type { Balance } from "@/domain/payments/balance";
-import { formatEuros } from "@/lib/money";
 import { frenchDate } from "@/lib/dates";
+import { formatEuros } from "@/lib/money";
 import { ButtonLink } from "../_ui/button-link";
 import { CorrectPayment } from "./correct-payment";
 

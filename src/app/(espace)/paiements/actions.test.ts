@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // The session and the database are stubbed: this checks what the correction action accepts (#242).
-vi.mock("@/lib/session", () => ({
-  requireRole: async () => ({ schoolId: "school-a", userId: "user-a" }),
-}));
+const requireRole = vi.fn();
+vi.mock("@/lib/session", () => ({ requireRole: (...args: unknown[]) => requireRole(...args) }));
+vi.mock("@/lib/form-errors", () => import("../../../lib/form-errors"));
 const withSchool = vi.fn();
 vi.mock("@/db", () => ({ withSchool: (...args: unknown[]) => withSchool(...args) }));
 const revalidatePath = vi.fn();
@@ -20,15 +20,25 @@ const RECORD = "/eleves/1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 // Whatever the browser may send, which the types of the call site never allow.
 const entry = (v: unknown) => v as Parameters<typeof correct>[0];
 const REFUSED = { ok: false, message: "Montant de la correction invalide." };
+const TAMPERED = { ok: false, message: "Correction impossible : rechargez la fiche." };
 
 beforeEach(() => {
   withSchool.mockReset();
   revalidatePath.mockReset();
+  requireRole.mockReset();
+  requireRole.mockResolvedValue({ schoolId: "school-a", userId: "user-a" });
 });
 
 describe("correct", () => {
+  it("checks the role before reading anything", async () => {
+    requireRole.mockRejectedValueOnce(new Error("redirect /"));
+    await expect(correct(entry({ paymentId: "not-a-uuid", amountCents: -1, back: 42 }))).rejects.toThrow("redirect /");
+    expect(requireRole).toHaveBeenCalledWith("director");
+    expect(withSchool).not.toHaveBeenCalled();
+  });
+
   it("refuses an invalid payment id without touching the database", async () => {
-    expect(await correct({ paymentId: "not-a-uuid", amountCents: 1000, back: RECORD })).toEqual(REFUSED);
+    expect(await correct({ paymentId: "not-a-uuid", amountCents: 1000, back: RECORD })).toEqual(TAMPERED);
     expect(withSchool).not.toHaveBeenCalled();
   });
 
@@ -40,7 +50,7 @@ describe("correct", () => {
   });
 
   it("refuses a return path that is not text", async () => {
-    expect(await correct(entry({ paymentId: PAYMENT, amountCents: 1000, back: 42 }))).toEqual(REFUSED);
+    expect(await correct(entry({ paymentId: PAYMENT, amountCents: 1000, back: 42 }))).toEqual(TAMPERED);
     expect(withSchool).not.toHaveBeenCalled();
   });
 

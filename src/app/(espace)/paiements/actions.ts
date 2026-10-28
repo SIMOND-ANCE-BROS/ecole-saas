@@ -7,6 +7,7 @@ import { withSchool } from "@/db";
 import { correctPayment, collect } from "@/db/payments";
 import { todayInParis } from "@/domain/people/age";
 import { type ActionResult, actionResult } from "@/lib/action-result";
+import { topErrorsOf } from "@/lib/form-errors";
 import { requireRole } from "@/lib/session";
 
 /** Return to the payer's record: only a student or contact record. */
@@ -33,7 +34,15 @@ const validCorrection = z.object({
 export async function correct(correction: z.input<typeof validCorrection>): Promise<ActionResult> {
   const { schoolId: schoolId, userId } = await requireRole("director");
   const c = validCorrection.safeParse(correction);
-  if (!c.success) return { ok: false, message: "Montant de la correction invalide." };
+  if (!c.success) {
+    // Only the amount is typed by the user; a tampered id or return path cannot be fixed in the field.
+    const errors = topErrorsOf(c.error);
+    const onlyAmount = errors.amountCents !== undefined && Object.keys(errors).length === 1;
+    return {
+      ok: false,
+      message: onlyAmount ? "Montant de la correction invalide." : "Correction impossible : rechargez la fiche.",
+    };
+  }
   const { paymentId, amountCents, back } = c.data;
   const r = await withSchool(schoolId, (tx) => correctPayment(tx, userId, paymentId, amountCents, todayInParis()));
   if (!r.ok) return actionResult(r);
