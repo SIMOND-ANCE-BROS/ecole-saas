@@ -141,3 +141,33 @@ describe("collect", () => {
     });
   });
 });
+
+describe("correctPayment under concurrency (#247)", () => {
+  it("two corrections saved at the same time never correct more than the payment", async () => {
+    const r = await withSchool(school, (tx) => collect(tx, frontDesk, payer, [cheque(10000, null, "0247")]));
+    if (!r.ok) throw new Error(r.message);
+    const [id] = r.ids;
+
+    // A corrects 60,00 € and keeps its transaction open; B corrects 60,00 € meanwhile.
+    let firstDone!: () => void;
+    const firstCorrected = new Promise<void>((resolve) => (firstDone = resolve));
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const first = withSchool(school, async (tx) => {
+      const result = await correctPayment(tx, frontDesk, id, 6000, TODAY);
+      firstDone();
+      await released;
+      return result;
+    });
+    await firstCorrected;
+    const second = withSchool(school, (tx) => correctPayment(tx, frontDesk, id, 6000, TODAY));
+    // Without a lock, B reads the total before A commits and goes through at once.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    release();
+
+    expect((await first).ok).toBe(true);
+    expect(await second).toEqual({ ok: false, message: "La correction dépasse le montant encore non corrigé." });
+    const rows = await withSchool(school, (tx) => paymentsOf(tx, payer));
+    expect(rows.find((l) => l.id === id)?.correctedCents).toBe(6000);
+  });
+});
