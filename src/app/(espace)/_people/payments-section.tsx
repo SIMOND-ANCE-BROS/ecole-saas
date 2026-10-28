@@ -13,11 +13,36 @@ import {
 import { type PaymentRow, PAYMENT_METHODS } from "@/db/payments";
 import type { Balance } from "@/domain/payments/balance";
 import { formatEuros } from "@/lib/money";
+import { frenchDate } from "@/lib/dates";
 import { ButtonLink } from "../_ui/button-link";
 import { CorrectPayment } from "./correct-payment";
 
 // Tables show days as « 21/10/2026 », like the payment log and the lists (#201).
-const day = (iso: string) => iso.split("-").reverse().join("/");
+const day = frenchDate;
+
+/** Cheque number and bank, or the reference given. */
+const reference = (p: PaymentRow) => [p.reference, p.issuer].filter(Boolean).join(", ");
+
+/** When the money is in: a correction, a cheque to cash later, or cashed. */
+const cashing = (p: PaymentRow, today: string) =>
+  p.amountCents < 0
+    ? "correction"
+    : p.plannedPayment && p.plannedPayment > today
+      ? `le ${day(p.plannedPayment)}`
+      : "encaissé";
+
+/** « Corriger » while something is left to correct, « corrigé » once it is all corrected. */
+function Correction({ payment: p, back }: { payment: PaymentRow; back: string }) {
+  const remaining = p.amountCents - p.correctedCents;
+  if (p.amountCents > 0 && remaining > 0) return <CorrectPayment paymentId={p.id} remaining={remaining} back={back} />;
+  if (p.correctedCents > 0)
+    return (
+      <Text span size="xs" c="dimmed">
+        corrigé
+      </Text>
+    );
+  return null;
+}
 const OUTSIDE_CALCULATION = {
   dropped: "abandonnées",
   trial: "à l’essai",
@@ -105,54 +130,63 @@ export function PaymentsSection({
           Aucun paiement enregistré.
         </Text>
       ) : (
-        <Paper withBorder className="overflow-x-auto">
-          <Table highlightOnHover>
-            <TableCaption className="sr-only">Paiements reçus</TableCaption>
-            <TableThead>
-              <TableTr>
-                <TableTh>Reçu le</TableTh>
-                <TableTh>Moyen</TableTh>
-                <TableTh>Référence</TableTh>
-                <TableTh ta="right">Montant</TableTh>
-                <TableTh>Encaissement</TableTh>
-                {isDirector && <TableTh>Correction</TableTh>}
-              </TableTr>
-            </TableThead>
-            <TableTbody>
-              {payments.map((p) => {
-                const remaining = p.amountCents - p.correctedCents;
-                return (
+        <>
+          {/* On a phone, one card per payment: nothing hides off-screen (#242). */}
+          <ul aria-label="Paiements reçus" className="flex flex-col gap-2 sm:hidden">
+            {payments.map((p) => (
+              <Paper component="li" key={p.id} withBorder p="sm" c={p.amountCents < 0 ? "dimmed" : undefined}>
+                <div className="flex items-baseline justify-between gap-2">
+                  <Text size="sm" fw={500}>
+                    {day(p.date)} · {PAYMENT_METHODS[p.method]}
+                  </Text>
+                  <Text size="sm" fw={500} className="tabular-nums whitespace-nowrap">
+                    {formatEuros(p.amountCents)}
+                  </Text>
+                </div>
+                <Text size="xs" c="dimmed">
+                  {/* A correction's reference already says « Correction ». */}
+                  {p.amountCents < 0
+                    ? reference(p) || cashing(p, today)
+                    : [reference(p), cashing(p, today)].filter(Boolean).join(" · ")}
+                </Text>
+                {isDirector && <Correction payment={p} back={back} />}
+              </Paper>
+            ))}
+          </ul>
+          <Paper withBorder className="hidden overflow-x-auto sm:block">
+            <Table highlightOnHover>
+              <TableCaption className="sr-only">Paiements reçus</TableCaption>
+              <TableThead>
+                <TableTr>
+                  <TableTh>Reçu le</TableTh>
+                  <TableTh>Moyen</TableTh>
+                  <TableTh>Référence</TableTh>
+                  <TableTh ta="right">Montant</TableTh>
+                  <TableTh>Encaissement</TableTh>
+                  {isDirector && <TableTh>Correction</TableTh>}
+                </TableTr>
+              </TableThead>
+              <TableTbody>
+                {payments.map((p) => (
                   <TableTr key={p.id} c={p.amountCents < 0 ? "dimmed" : undefined}>
                     <TableTd className="whitespace-nowrap">{day(p.date)}</TableTd>
                     <TableTd>{PAYMENT_METHODS[p.method]}</TableTd>
-                    <TableTd>{[p.reference, p.issuer].filter(Boolean).join(", ") || "—"}</TableTd>
+                    <TableTd>{reference(p) || "—"}</TableTd>
                     <TableTd ta="right" className="tabular-nums whitespace-nowrap">
                       {formatEuros(p.amountCents)}
                     </TableTd>
-                    <TableTd className="whitespace-nowrap">
-                      {p.amountCents < 0
-                        ? "correction"
-                        : p.plannedPayment && p.plannedPayment > today
-                          ? `le ${day(p.plannedPayment)}`
-                          : "encaissé"}
-                    </TableTd>
+                    <TableTd className="whitespace-nowrap">{cashing(p, today)}</TableTd>
                     {isDirector && (
                       <TableTd>
-                        {p.amountCents > 0 && remaining > 0 ? (
-                          <CorrectPayment paymentId={p.id} remaining={remaining} back={back} />
-                        ) : p.correctedCents > 0 ? (
-                          <Text span size="xs" c="dimmed">
-                            corrigé
-                          </Text>
-                        ) : null}
+                        <Correction payment={p} back={back} />
                       </TableTd>
                     )}
                   </TableTr>
-                );
-              })}
-            </TableTbody>
-          </Table>
-        </Paper>
+                ))}
+              </TableTbody>
+            </Table>
+          </Paper>
+        </>
       )}
     </section>
   );

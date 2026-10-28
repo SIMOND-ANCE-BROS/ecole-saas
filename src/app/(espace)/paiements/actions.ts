@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 import { withSchool } from "@/db";
 import { correctPayment, collect } from "@/db/payments";
 import { todayInParis } from "@/domain/people/age";
@@ -20,17 +21,25 @@ export async function collectPayments(payerId: string, entry: unknown, back: unk
   redirect(`${safeReturnPath(back) ?? `/personnes/${payerId}`}?encaisse=${r.ids.length}`);
 }
 
+export type ActionResult = { ok: true } | { ok: false; message: string };
+
+/** What the correction form sends: the payment, the amount in cents and the record to refresh. */
+const validCorrection = z.object({
+  paymentId: z.uuid(),
+  amountCents: z.number().int().positive(),
+  back: z.string().max(200).nullable(),
+});
+
 /** Corrects a payment with a negative payment: management only. */
-export async function correct(
-  paymentId: string,
-  amountCents: number,
-  back: unknown,
-): Promise<{ message: string | null }> {
+export async function correct(correction: z.input<typeof validCorrection>): Promise<ActionResult> {
   const { schoolId: schoolId, userId } = await requireRole("director");
+  const c = validCorrection.safeParse(correction);
+  if (!c.success) return { ok: false, message: "Montant de la correction invalide." };
+  const { paymentId, amountCents, back } = c.data;
   const r = await withSchool(schoolId, (tx) => correctPayment(tx, userId, paymentId, amountCents, todayInParis()));
-  if (!r.ok) return { message: r.message };
+  if (!r.ok) return { ok: false, message: r.message };
   const path = safeReturnPath(back);
   if (path) revalidatePath(path);
   revalidatePath("/encaissements");
-  return { message: null };
+  return { ok: true };
 }

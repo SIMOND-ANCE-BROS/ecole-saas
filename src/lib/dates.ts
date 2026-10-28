@@ -43,3 +43,8 @@ export function typedDateRefusal(input: string, min: string | null, max: string 
   if (max && date > max) return `Choisissez une date jusqu’au ${shown(max)}`;
   return null;
 }
+
+/** A `YYYY-MM-DD` date (or a timestamp starting with one) as shown in French: « 21/10/2026 ». */
+export function frenchDate(iso: string): string {
+  return iso.slice(0, 10).split("-").reverse().join("/");
+}

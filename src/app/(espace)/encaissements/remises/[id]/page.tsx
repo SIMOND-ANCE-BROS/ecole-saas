@@ -21,10 +21,11 @@ import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
 import { TextLink } from "../../../_ui/text-link";
 import { CancelDeposit, Print } from "./buttons";
+import { frenchDate } from "@/lib/dates";
 
 export const metadata: Metadata = { title: "Bordereau de remise" };
 
-const day = (iso: string) => iso.split("-").reverse().join("/");
+const day = frenchDate;
 const DEPOSIT_KIND = { cheque: "chèques", cash: "espèces", holiday_voucher: "chèques vacances" } as const;
 
 /** Deposit slip of a bank deposit (#98), to print and enclose with the deposit. */

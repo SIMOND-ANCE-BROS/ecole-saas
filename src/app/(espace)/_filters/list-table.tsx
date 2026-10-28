@@ -41,6 +41,7 @@ import { todayInParis } from "@/domain/people/age";
 import { DateField } from "../_ui/date-field";
 import { saveColumns } from "./actions";
 import { type AddressFilter, useAddressFilter } from "./address-filter";
+import { frenchDate } from "@/lib/dates";
 
 export type CellValue = string | number | string[] | null;
 /** A cell's own link; `label` names it for screen readers when the text alone is a bare date. */
@@ -598,7 +599,7 @@ function CellContent({ def, value, link }: { def: ColumnDef; value: CellValue; l
     );
   }
   if (def.type === "date") {
-    const shown = t.slice(0, 10).split("-").reverse().join("/");
+    const shown = frenchDate(t);
     return link ? (
       <Anchor component={Link} href={link.href} aria-label={link.label} size="sm" className="whitespace-nowrap">
         {shown}

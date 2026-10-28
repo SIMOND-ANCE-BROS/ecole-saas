@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseTypedDate, typedDateRefusal } from "./dates";
+import { frenchDate, parseTypedDate, typedDateRefusal } from "./dates";
 
 describe("parseTypedDate", () => {
   it("reads a French date, with or without leading zeros and with the usual separators", () => {
@@ -55,5 +55,16 @@ describe("typedDateRefusal", () => {
     expect(typedDateRefusal("01/07/2028", "2027-09-01", null)).toBeNull();
     expect(typedDateRefusal("31/08/2027", "2027-09-01", null)).toBe("Choisissez une date à partir du 1 sept. 2027");
     expect(typedDateRefusal("01/07/2028", null, "2028-06-30")).toBe("Choisissez une date jusqu’au 30 juin 2028");
+  });
+});
+
+describe("frenchDate", () => {
+  it("shows a stored date as day/month/year", () => {
+    expect(frenchDate("2026-10-21")).toBe("21/10/2026");
+    expect(frenchDate("2027-01-05")).toBe("05/01/2027");
+  });
+
+  it("keeps only the day of a timestamp", () => {
+    expect(frenchDate("2026-10-21T08:30:00.000Z")).toBe("21/10/2026");
   });
 });

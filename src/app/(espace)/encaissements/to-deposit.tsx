@@ -21,8 +21,9 @@ import type { DepositMethod } from "@/domain/payments/deposits";
 import { formatEuros } from "@/lib/money";
 import { DateField, refusedDateField } from "../_ui/date-field";
 import { deposit } from "./actions";
+import { frenchDate } from "@/lib/dates";
 
-const day = (iso: string) => iso.split("-").reverse().join("/");
+const day = frenchDate;
 
 /**
  * Payments of one method to deposit (#98): all ticked by default; the bank deposit
