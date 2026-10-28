@@ -224,6 +224,8 @@ export function EnrollmentForm({
           <TextInput
             id="filtre-cours"
             type="search"
+            // The courses are what changes most from one enrollment to the next: typing starts here.
+            autoFocus
             aria-label="Filtrer les cours"
             className="max-w-xs"
             placeholder="Filtrer : jazz, mercredi, adultes…"
@@ -249,33 +251,41 @@ export function EnrollmentForm({
               const restantes = c.maxCapacity === null ? null : c.maxCapacity - c.enrolled;
               return (
                 <li key={c.id} className={`border-b border-bordure last:border-0 ${adapted(c) ? "" : "opacity-60"}`}>
-                  <label className="flex cursor-pointer items-start gap-2 px-2 py-2 text-sm hover:bg-accent-doux/40 sm:items-center sm:py-1">
-                    <Checkbox
-                      size="xs"
-                      className="mt-0.5 sm:mt-0"
-                      checked={courseIds.includes(c.id)}
-                      onChange={() => setCourseIds(toggle(courseIds, c.id))}
-                    />
-                    <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
-                      <span className="w-20 shrink-0">{c.weekday ? DAYS[c.weekday] : "Stage"}</span>
-                      <span className="w-12 shrink-0 tabular-nums">{c.startTime}</span>
-                      <span className="font-medium">{c.discipline}</span>
-                      <Text span size="sm" c="dimmed" className="basis-full sm:basis-auto">
-                        {c.durationMinutes} min{c.level ? `, ${c.level}` : ""}, {c.room}
-                        {!adapted(c) && ", hors tranche d’âge"}
-                      </Text>
-                    </span>
-                    {restantes !== null &&
-                      (restantes <= 0 ? (
-                        <Badge color="yellow" variant="light" radius="sm" tt="none" className="shrink-0">
-                          complet
-                        </Badge>
-                      ) : (
-                        <Text span size="xs" c="dimmed" className="shrink-0 tabular-nums">
-                          {restantes} place{restantes > 1 ? "s" : ""}
-                        </Text>
-                      ))}
-                  </label>
+                  {/* The whole row is the checkbox's label: one click target, the course as its name. */}
+                  <Checkbox
+                    radius="xs"
+                    checked={courseIds.includes(c.id)}
+                    onChange={() => setCourseIds(toggle(courseIds, c.id))}
+                    classNames={{
+                      root: "hover:bg-accent-doux/40",
+                      body: "items-start px-2 py-2 sm:items-center sm:py-1",
+                      labelWrapper: "min-w-0 flex-1",
+                      label: "flex cursor-pointer items-baseline gap-2 text-sm",
+                    }}
+                    label={
+                      <>
+                        <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+                          <span className="w-20 shrink-0">{c.weekday ? DAYS[c.weekday] : "Stage"}</span>
+                          <span className="w-12 shrink-0 tabular-nums">{c.startTime}</span>
+                          <span className="font-medium">{c.discipline}</span>
+                          <Text span size="sm" c="dimmed" className="basis-full sm:basis-auto">
+                            {c.durationMinutes} min{c.level ? `, ${c.level}` : ""}, {c.room}
+                            {!adapted(c) && ", hors tranche d’âge"}
+                          </Text>
+                        </span>
+                        {restantes !== null &&
+                          (restantes <= 0 ? (
+                            <Badge color="yellow" variant="light" radius="sm" tt="none" className="shrink-0">
+                              complet
+                            </Badge>
+                          ) : (
+                            <Text span size="xs" c="dimmed" className="shrink-0 tabular-nums">
+                              {restantes} place{restantes > 1 ? "s" : ""}
+                            </Text>
+                          ))}
+                      </>
+                    }
+                  />
                 </li>
               );
             })}

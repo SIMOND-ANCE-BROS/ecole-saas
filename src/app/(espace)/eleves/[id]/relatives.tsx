@@ -4,6 +4,7 @@ import { Anchor, Badge, Button, Checkbox, Paper, Text, Title } from "@mantine/co
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { StudentRelative } from "@/db/students";
+import { ofName } from "@/lib/french";
 import { type Choice, PersonChoice, toInput } from "../../_people/person-choice";
 import { Telephone } from "../../_people/sections";
 import { addGuardianAction, notify, removeRelative } from "../actions";
@@ -129,7 +130,7 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
           <Paper withBorder p="sm" className="flex flex-col gap-3 text-sm">
             <PersonChoice
               id="nouveau-responsable"
-              label={`Responsable légal de ${firstName} (parent, tuteur)`}
+              label={`Responsable légal ${ofName(firstName)} (parent, tuteur)`}
               value={choice}
               onChange={setChoice}
               exclude={[studentId]}

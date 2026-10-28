@@ -23,6 +23,7 @@ import type { StudentInput } from "@/db/students";
 import type { PersonInput } from "@/db/people";
 import type { FieldErrors, FieldPath } from "@/lib/form-errors";
 import { has } from "@/lib/has";
+import { ofName } from "@/lib/french";
 
 /** Checked against the server schema: a value renamed on one side fails to compile. */
 type Billing = StudentInput["billing"]["type"];
@@ -153,7 +154,7 @@ export function NewStudentGuide({
           <>
             <PersonChoice
               id="responsable"
-              label={`Qui est le responsable légal de ${firstName} (parent, tuteur) ?`}
+              label={`Qui est le responsable légal ${ofName(firstName)} (parent, tuteur) ?`}
               value={guardian}
               onChange={(c) => {
                 // New person: same family name suggested once, when it is created.

@@ -30,7 +30,7 @@ const DOCUMENT = {
 const PERIOD = { quarter: "trimestre", year: "année", single: "unité" } as const;
 const PUBLIC = { child: "Enfant", adult: "Adulte", couple: "Couple", student: "Étudiant" } as const;
 /** Text that needs attention (absences, expired document): the theme's readable amber, both modes. */
-const WARNING = "var(--mantine-color-yellow-light-color)";
+export const WARNING = "var(--mantine-color-yellow-light-color)";
 
 const longDate = new Intl.DateTimeFormat("fr-FR", {
   day: "numeric",

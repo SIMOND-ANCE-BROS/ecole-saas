@@ -8,6 +8,7 @@ import { paymentsOf, balanceOf } from "@/db/payments";
 import { displayedName } from "@/db/people";
 import { currentSeason } from "@/db/schedule";
 import { ageAt, todayInParis } from "@/domain/people/age";
+import { ofName } from "@/lib/french";
 import { requireRole } from "@/lib/session";
 import { PaymentsSection } from "../../_people/payments-section";
 import { Banner, FollowedCourses, Documents, BilledEnrollments, dayOf, Notes, Telephone } from "../../_people/sections";
@@ -110,7 +111,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             </Title>
             {emergencyContacts.length === 0 ? (
               <Text span size="sm" c="dimmed">
-                Personne à prévenir. Cochez « À prévenir » sur un responsable.
+                Aucune personne à prévenir. Cochez « À prévenir » sur un responsable.
               </Text>
             ) : (
               emergencyContacts.map((u) => (
@@ -143,7 +144,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             className="flex flex-col gap-1 text-sm"
           >
             <Title order={2} size="h6" id="coordonnees">
-              Coordonnées de {firstName}
+              Coordonnées {ofName(firstName)}
             </Title>
             {e.telephone ? (
               <Telephone number={e.telephone} />

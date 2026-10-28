@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { StudentRecord, StudentRelative } from "@/db/students";
 import { type Choice, PersonChoice, toInput } from "../../_people/person-choice";
+import { WARNING } from "../../_people/sections";
 import { invoice, billNewPerson } from "../actions";
 
 type Props = {
@@ -62,7 +63,7 @@ export function Billing({
           )}
         </Text>
       ) : (
-        <Text role="alert" size="sm" c="var(--mantine-color-yellow-light-color)">
+        <Text role="alert" size="sm" c={WARNING}>
           Personne : {firstName} est mineur, indiquez à qui facturer.
         </Text>
       )}
