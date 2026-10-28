@@ -44,7 +44,7 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
     focusNext.current = selector;
   };
 
-  const act = (action: () => Promise<ActionResult>, after?: () => void) =>
+  const act = (action: () => Promise<ActionResult>, after?: () => void, failed?: () => void) =>
     startTransition(async () => {
       let error: string | null;
       try {
@@ -56,7 +56,8 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
         error = NOT_SAVED;
       }
       setMessage(error);
-      if (!error) after?.();
+      if (error) failed?.();
+      else after?.();
     });
 
   const row = (p: StudentRelative) => (
@@ -114,6 +115,8 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
                     setToRemove(null);
                     focusAfter("[data-add-guardian]");
                   },
+                  // Refused or not sent: the confirmation stays, focus back on it for a retry.
+                  () => focusAfter("[data-confirm-removal]"),
                 )
               }
             >

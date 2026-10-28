@@ -20,6 +20,13 @@ export function BecomeStudent({ id, firstName: firstName }: { id: string; firstN
     shown.current = asking;
     (asking ? confirm : start).current?.focus();
   }, [asking]);
+  // The button is disabled while saving: after a refusal or a lost connection, focus comes back to it.
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (inProgress || !refocus.current) return;
+    refocus.current = false;
+    confirm.current?.focus();
+  }, [inProgress, message]);
 
   return (
     <>
@@ -49,9 +56,11 @@ export function BecomeStudent({ id, firstName: firstName }: { id: string; firstN
                   try {
                     // On success the action opens the student record.
                     const r = await becomeStudent(id);
+                    refocus.current = !r.ok;
                     setMessage(r.ok ? null : r.message);
                   } catch (e) {
                     unstable_rethrow(e);
+                    refocus.current = true;
                     setMessage(NOT_SAVED);
                   }
                 })

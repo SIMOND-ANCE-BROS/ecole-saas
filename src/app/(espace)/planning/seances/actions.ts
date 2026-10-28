@@ -22,6 +22,7 @@ import { requireRole } from "@/lib/session";
 // Typed for the call sites; still parsed, since a server action receives whatever the browser sends.
 const validId = z.uuid();
 const NO_LESSON = "Cette séance n’existe plus.";
+const INVALID = "Saisie invalide.";
 
 /** Attendance of a lesson: front desk and management. */
 export async function doAttendance(
@@ -32,7 +33,7 @@ export async function doAttendance(
   const id = validId.safeParse(lessonId);
   if (!id.success) return { ok: false, message: NO_LESSON };
   const a = validAttendance.safeParse(attendances);
-  if (!a.success) return { ok: false, message: "Saisie invalide." };
+  if (!a.success) return { ok: false, message: INVALID };
   const r = await withSchool(schoolId, (tx) => saveAttendance(tx, id.data, a.data));
   revalidatePath(`/planning/seances/${id.data}`);
   return actionResult(r);
@@ -52,8 +53,9 @@ export async function replace(lessonId: string, instructorId: string): Promise<A
 export async function cancel(lessonId: string, cancelled: boolean): Promise<ActionResult> {
   const { schoolId } = await requireRole("director", "front_desk");
   const id = validId.safeParse(lessonId);
+  if (!id.success) return { ok: false, message: NO_LESSON };
   const c = z.boolean().safeParse(cancelled);
-  if (!id.success || !c.success) return { ok: false, message: NO_LESSON };
+  if (!c.success) return { ok: false, message: INVALID };
   const r = await withSchool(schoolId, (tx) => (c.data ? cancelLesson(tx, id.data) : restoreLesson(tx, id.data)));
   revalidatePath(`/planning/seances/${id.data}`);
   return actionResult(r);

@@ -97,8 +97,9 @@ export async function notify(studentId: string, relationshipId: string, toNotify
   const { schoolId } = await requireRole("director", "front_desk");
   const id = validId.safeParse(studentId);
   const link = validId.safeParse(relationshipId);
+  if (!id.success || !link.success) return { ok: false, message: NO_LINK };
   const n = z.boolean().safeParse(toNotify);
-  if (!id.success || !link.success || !n.success) return { ok: false, message: NO_LINK };
+  if (!n.success) return { ok: false, message: "Saisie invalide." };
   const r = await withSchool(schoolId, (tx) => changeNotify(tx, link.data, n.data));
   revalidatePath(`/eleves/${id.data}`);
   return actionResult(r);

@@ -137,7 +137,7 @@ describe("notify and removeRelative", () => {
   it("refuse an invalid link without touching the database", async () => {
     const refusal = { ok: false, message: "Ce lien n’existe plus." };
     expect(await notify(STUDENT, "x", true)).toEqual(refusal);
-    expect(await notify(STUDENT, PAYER, flag(1))).toEqual(refusal);
+    expect(await notify(STUDENT, PAYER, flag(1))).toEqual({ ok: false, message: "Saisie invalide." });
     expect(await removeRelative("x", PAYER)).toEqual(refusal);
     expect(withSchool).not.toHaveBeenCalled();
   });
