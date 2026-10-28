@@ -4,6 +4,7 @@ import { Anchor, Button, MantineThemeProvider, type MantineThemeOverride } from 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, type ReactNode, use, useEffect, useRef, useState } from "react";
+import { FOCUS_SEARCH } from "../_ui/focus-search";
 import { useListReturn } from "../_ui/list-return";
 
 /** True inside a panel: « Annuler » goes back there instead of navigating. */
@@ -54,6 +55,11 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
   const body = useRef<HTMLDivElement>(null);
   /** Element that had focus before opening (recorded once only: the effect may run again). */
   const before = useRef<HTMLElement | null>(null);
+  /**
+   * Ctrl K closed the panel (#244): the modal dialog makes the page inert, so the
+   * search can only take the focus once the panel is gone, as after Escape.
+   */
+  const toSearch = useRef(false);
 
   useEffect(() => {
     const d = dialogue.current;
@@ -68,7 +74,8 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
       field?.focus();
     }
     return () => {
-      if (before.current?.isConnected) before.current.focus();
+      if (toSearch.current) window.dispatchEvent(new Event(FOCUS_SEARCH));
+      else if (before.current?.isConnected) before.current.focus();
     };
   }, []);
 
@@ -92,6 +99,11 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
         const portal = document.getElementById(PORTAL_ID);
         const listOpen = [...(portal?.children ?? [])].some((c) => c.checkVisibility());
         if (e.key === "Escape" && listOpen) e.preventDefault();
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+          e.preventDefault();
+          toSearch.current = true;
+          close();
+        }
       }}
     >
       <div className="flex h-full flex-col">

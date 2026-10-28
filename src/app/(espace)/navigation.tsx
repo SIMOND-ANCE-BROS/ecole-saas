@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useTransition } from "react";
 import type { Role } from "@/domain/team/rules";
+import { FOCUS_SEARCH } from "./_ui/focus-search";
 
 const LINKS = [
   { href: "/", label: "Accueil" },
@@ -85,15 +86,23 @@ export function GlobalSearch() {
   }, [onList, path]);
 
   useEffect(() => {
+    const focus = () => {
+      field.current?.focus();
+      field.current?.select();
+    };
     const shortcut = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        field.current?.focus();
-        field.current?.select();
+        focus();
       }
     };
     window.addEventListener("keydown", shortcut);
-    return () => window.removeEventListener("keydown", shortcut);
+    // A side panel closed by Ctrl K hands the focus over once it is gone (#244).
+    window.addEventListener(FOCUS_SEARCH, focus);
+    return () => {
+      window.removeEventListener("keydown", shortcut);
+      window.removeEventListener(FOCUS_SEARCH, focus);
+    };
   }, []);
 
   const go = (q: string, replace: boolean) => {

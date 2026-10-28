@@ -51,6 +51,16 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
   const mark = (id: string, present: boolean) => setAttendances((p) => ({ ...p, [id]: present }));
   const go = (i: number) => rows.current[Math.max(0, Math.min(i, attendance.students.length - 1))]?.focus();
 
+  // Cancelling is immediate (refused once attendance is taken, undone with « Rétablir »):
+  // focus stays on that button, disabled while saving, so the undo is one key away (#244).
+  const toggle = useRef<HTMLButtonElement>(null);
+  const refocusToggle = useRef(false);
+  useEffect(() => {
+    if (inProgress || !refocusToggle.current) return;
+    refocusToggle.current = false;
+    toggle.current?.focus();
+  }, [inProgress, cancelled]);
+
   const act = (action: () => Promise<ActionResult>, success: string) =>
     startTransition(async () => {
       let error: string | null;
@@ -230,13 +240,18 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
           inputWrapperOrder={["label", "input", "description", "error"]}
         />
         <Button
+          ref={toggle}
           variant="subtle"
           size="compact-sm"
           className="self-start"
           disabled={inProgress}
-          onClick={() =>
-            act(() => cancel(attendance.id, !cancelled), cancelled ? "Séance rétablie." : "Séance annulée.")
-          }
+          onClick={() => {
+            refocusToggle.current = true;
+            act(
+              () => cancel(attendance.id, !cancelled),
+              cancelled ? "Séance rétablie." : "Séance annulée. « Rétablir la séance » la remet au planning.",
+            );
+          }}
         >
           {cancelled ? "Rétablir la séance" : "Annuler la séance"}
         </Button>
