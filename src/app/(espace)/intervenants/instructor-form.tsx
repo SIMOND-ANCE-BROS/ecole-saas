@@ -1,5 +1,6 @@
 "use client";
 
+import { Alert, Button, Checkbox, Fieldset, Group, Select, Text, TextInput, type TextInputProps } from "@mantine/core";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { type Instructor, PAY_MODES, VAT_REGIMES, STATUSES, PAY_UNITS } from "@/db/instructors";
 import { saveInstructor, type FormState } from "./actions";
@@ -65,41 +66,24 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
 
   // After a rejection, focus goes to the first field in error.
   useEffect(() => {
-    if (state.attempt > 0) form.current?.querySelector<HTMLElement>("[aria-invalid]")?.focus();
+    if (state.attempt > 0) form.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
   }, [state.attempt]);
 
-  const field = (name: InstructorField, label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={name} className="text-sm font-medium">
-        {label}
-      </label>
-      <input
-        id={name}
-        name={name}
-        className="champ"
-        defaultValue={v[name]}
-        aria-invalid={e[name] ? true : undefined}
-        aria-describedby={e[name] ? `${name}-erreur` : undefined}
-        {...props}
-      />
-      {e[name] && (
-        <p id={`${name}-erreur`} className="text-xs text-erreur">
-          {e[name]}
-        </p>
-      )}
-    </div>
+  const field = (name: InstructorField, label: string, props: TextInputProps = {}) => (
+    <TextInput id={name} name={INSTRUCTOR.name(name)} label={label} defaultValue={v[name]} error={e[name]} {...props} />
   );
+  const options = (labels: Record<string, string>) =>
+    Object.entries(labels).map(([value, label]) => ({ value, label }));
 
   return (
     <form ref={form} action={send} className="flex w-full min-w-0 flex-col gap-5" noValidate>
       {e.form && (
-        <p role="alert" className="text-sm text-erreur">
+        <Alert color="red" role="alert">
           {e.form}
-        </p>
+        </Alert>
       )}
 
-      <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
-        <legend className="px-1 text-sm font-semibold">Identité</legend>
+      <Fieldset legend="Identité" className="grid gap-3 sm:grid-cols-2">
         {field("firstName", "Prénom", {
           autoComplete: "off",
           autoFocus: !edition && state.attempt === 0,
@@ -109,101 +93,78 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
         <div className="sm:col-span-2">
           {field("email", "E-mail (facultatif, pour l’agenda et les relevés)", { type: "email", autoComplete: "off" })}
         </div>
-      </fieldset>
+      </Fieldset>
 
-      <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
-        <legend className="px-1 text-sm font-semibold">Statut</legend>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="status" className="text-sm font-medium">
-            Statut
-          </label>
-          <select
-            id="status"
-            name={INSTRUCTOR.name("status")}
-            className="champ"
-            defaultValue={v.status}
-            onChange={(x) => setStatus(x.target.value)}
-          >
-            {Object.entries(STATUSES).map(([k, l]) => (
-              <option key={k} value={k}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </div>
+      <Fieldset legend="Statut" className="grid gap-3 sm:grid-cols-2">
+        <Select
+          id="status"
+          label="Statut"
+          name={INSTRUCTOR.name("status")}
+          allowDeselect={false}
+          data={options(STATUSES)}
+          defaultValue={v.status}
+          onChange={(x) => x && setStatus(x)}
+        />
         {status !== "employee" ? (
           field("siren", "SIREN (facultatif)", { inputMode: "numeric", autoComplete: "off", placeholder: "9 chiffres" })
         ) : (
           <input type="hidden" name={INSTRUCTOR.name("siren")} value="" />
         )}
-        <div className="flex flex-col gap-1">
-          <label htmlFor="vatRegime" className="text-sm font-medium">
-            TVA
-          </label>
-          <select id="vatRegime" name={INSTRUCTOR.name("vatRegime")} className="champ" defaultValue={v.vatRegime}>
-            {Object.entries(VAT_REGIMES).map(([k, l]) => (
-              <option key={k} value={k}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </div>
-        <label className="flex items-center gap-2 self-end pb-1.5 text-sm">
-          <input type="checkbox" name={INSTRUCTOR.name("isOwner")} defaultChecked={v.isOwner === "on"} />
-          Dirigeant de l’école
-        </label>
-      </fieldset>
+        <Select
+          id="vatRegime"
+          label="TVA"
+          name={INSTRUCTOR.name("vatRegime")}
+          allowDeselect={false}
+          data={options(VAT_REGIMES)}
+          defaultValue={v.vatRegime}
+        />
+        <Checkbox
+          className="self-end pb-2"
+          name={INSTRUCTOR.name("isOwner")}
+          defaultChecked={v.isOwner === "on"}
+          label="Dirigeant de l’école"
+        />
+      </Fieldset>
 
-      <fieldset className="panneau p-4 grid gap-3 sm:grid-cols-2">
-        <legend className="px-1 text-sm font-semibold">Rémunération</legend>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="payMode" className="text-sm font-medium">
-            Mode de rémunération
-          </label>
-          <select
-            id="payMode"
-            name={INSTRUCTOR.name("payMode")}
-            className="champ"
-            defaultValue={v.payMode}
-            onChange={(x) => setMode(x.target.value as Mode)}
-          >
-            {Object.entries(PAY_MODES).map(([k, l]) => (
-              <option key={k} value={k}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </div>
-        {field("tariff", `Tarif (€ / ${PAY_UNITS[mode]})`, {
+      <Fieldset legend="Rémunération" className="grid gap-3 sm:grid-cols-2">
+        <Select
+          id="payMode"
+          label="Mode de rémunération"
+          name={INSTRUCTOR.name("payMode")}
+          allowDeselect={false}
+          data={options(PAY_MODES)}
+          defaultValue={v.payMode}
+          onChange={(x) => x && setMode(x as Mode)}
+        />
+        {field("tariff", "Tarif", {
           inputMode: "decimal",
           autoComplete: "off",
           required: true,
+          rightSection: (
+            <Text size="xs" c="dimmed" pr="xs">
+              € / {PAY_UNITS[mode]}
+            </Text>
+          ),
+          rightSectionWidth: 80,
+          styles: { input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } },
         })}
-      </fieldset>
+      </Fieldset>
 
       {edition && (
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            name={INSTRUCTOR.name("active")}
-            defaultChecked={v.active === "on"}
-            className="mt-0.5"
-          />
-          <span>
-            Actif
-            <span className="block text-xs text-doux">
-              Décocher quand l’intervenant quitte l’école : son historique est conservé.
-            </span>
-          </span>
-        </label>
+        <Checkbox
+          name={INSTRUCTOR.name("active")}
+          defaultChecked={v.active === "on"}
+          label="Actif"
+          description="Décocher quand l’intervenant quitte l’école : son historique est conservé."
+        />
       )}
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-bordure pt-4">
-        <button type="submit" className="bouton-principal" disabled={inProgress}>
-          {inProgress ? "Enregistrement…" : edition ? "Enregistrer les modifications" : "Ajouter l’intervenant"}
-        </button>
+      <Group gap="xs" className="border-t border-bordure pt-4">
+        <Button type="submit" loading={inProgress}>
+          {edition ? "Enregistrer les modifications" : "Ajouter l’intervenant"}
+        </Button>
         <Cancel href={back} />
-      </div>
+      </Group>
     </form>
   );
 }

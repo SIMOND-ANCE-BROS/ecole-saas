@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Text, Title } from "@mantine/core";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { readInstructor } from "@/db/instructors";
 import { requireRole } from "@/lib/session";
+import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { InstructorForm } from "../../instructor-form";
 
 export const metadata: Metadata = { title: "Modifier un intervenant" };
@@ -17,16 +18,21 @@ export default async function UpdateInstructor({ params }: PageProps<"/intervena
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <Link className="lien" href="/intervenants">
+        <TextLink href="/intervenants" size="sm">
           Intervenants
-        </Link>
+        </TextLink>
         <span> / </span>
-        <Link className="lien" href={`/intervenants/${id}`}>
+        <TextLink href={`/intervenants/${id}`} size="sm">
           {name}
-        </Link>
-        <span className="text-doux"> / Modifier</span>
+        </TextLink>
+        <Text span size="sm" c="dimmed">
+          {" "}
+          / Modifier
+        </Text>
       </nav>
-      <h1 className="titre-page">Modifier {name}</h1>
+      <Title order={1} fz="xl">
+        Modifier {name}
+      </Title>
       <InstructorForm instructor={instructor} />
     </section>
   );

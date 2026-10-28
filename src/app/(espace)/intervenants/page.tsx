@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Alert, Text, Title } from "@mantine/core";
 import { Suspense } from "react";
 import { withSchool } from "@/db";
 import { listInstructors, PAY_MODES, STATUSES } from "@/db/instructors";
@@ -11,6 +11,7 @@ import { todayInParis } from "@/domain/people/age";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
 import { ListTable } from "../_filters/list-table";
+import { ButtonLink } from "../_ui/button-link";
 
 export const metadata: Metadata = { title: "Intervenants" };
 
@@ -60,30 +61,28 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
     <section className="flex w-full min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="titre-page">Intervenants</h1>
-          <p className="text-sm text-doux">
+          <Title order={1} fz="xl">
+            Intervenants
+          </Title>
+          <Text size="sm" c="dimmed">
             {instructors.filter((i) => i.active).length} actif
             {instructors.filter((i) => i.active).length > 1 ? "s" : ""}
             {season && `, cours de la saison ${season.label}`}
-          </p>
+          </Text>
         </div>
-        {isDirector && (
-          <Link href="/intervenants/nouveau" className="bouton-principal">
-            Ajouter un intervenant
-          </Link>
-        )}
+        {isDirector && <ButtonLink href="/intervenants/nouveau">Ajouter un intervenant</ButtonLink>}
       </div>
 
       {confirmed && (
-        <p role="status" className="rounded-md border border-accent bg-accent-doux px-3 py-2 text-sm">
+        <Alert role="status">
           {confirmed.firstName} {confirmed.name} enregistré.
-        </p>
+        </Alert>
       )}
 
       {instructors.length === 0 ? (
-        <p className="text-sm text-doux">
+        <Text size="sm" c="dimmed">
           Aucun intervenant pour l’instant.{isDirector && " Ajoutez les professeurs avant de construire le planning."}
-        </p>
+        </Text>
       ) : (
         <Suspense>
           <ListTable
