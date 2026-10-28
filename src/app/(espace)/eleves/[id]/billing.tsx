@@ -2,7 +2,7 @@
 
 import { Anchor, Button, Paper, Radio, Text, Title } from "@mantine/core";
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { StudentRecord, StudentRelative } from "@/db/students";
 import { type Choice, PersonChoice, toInput } from "../../_people/person-choice";
 import { WARNING } from "../../_people/sections";
@@ -32,6 +32,18 @@ export function Billing({
   const [seeOther, setSeeOther] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
+  const box = useRef<HTMLElement>(null);
+  // Opening and closing swap « Changer » and the choices: focus follows, never back to the page.
+  const opened = useRef(open);
+  useEffect(() => {
+    if (opened.current === open) return;
+    opened.current = open;
+    const find = (selector: string) => box.current?.querySelector<HTMLElement>(selector);
+    (open
+      ? (find('input[name="facturer"]:checked') ?? find('input[name="facturer"]'))
+      : find("[data-changer]")
+    )?.focus();
+  }, [open]);
 
   const choose = (action: () => Promise<{ message: string | null }>) =>
     startTransition(async () => {
@@ -48,7 +60,14 @@ export function Billing({
     billedTo.type === "person" ? billedTo.name : billedTo.type === "self" ? `${firstName} (paie ses cours)` : null;
 
   return (
-    <Paper withBorder p="md" component="section" aria-labelledby="facture-a" className="flex flex-col gap-2 text-sm">
+    <Paper
+      ref={box}
+      withBorder
+      p="md"
+      component="section"
+      aria-labelledby="facture-a"
+      className="flex flex-col gap-2 text-sm"
+    >
       <Title order={2} size="h6" id="facture-a">
         Facturé à
       </Title>
@@ -83,7 +102,7 @@ export function Billing({
       )}
 
       {!open ? (
-        <Button variant="default" className="self-start" onClick={() => setOpen(true)}>
+        <Button variant="default" className="self-start" data-changer onClick={() => setOpen(true)}>
           {current ? "Changer" : "Choisir"}
         </Button>
       ) : (

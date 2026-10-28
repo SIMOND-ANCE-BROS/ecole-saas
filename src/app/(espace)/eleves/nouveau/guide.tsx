@@ -48,6 +48,18 @@ export function NewStudentGuide({
   const [refusal, setRefusal] = useState<StudentRefusal | null>(null);
   const [sending, startTransition] = useTransition();
   const form = useRef<HTMLFormElement>(null);
+  // Control to focus once a guardian choice is drawn: the link clicked has gone.
+  const focusNext = useRef<string | null>(null);
+  useEffect(() => {
+    const selector = focusNext.current;
+    if (!selector) return;
+    focusNext.current = null;
+    form.current?.querySelector<HTMLElement>(selector)?.focus();
+  });
+  const showGuardian = (shown: boolean) => {
+    focusNext.current = shown ? "#responsable-cherche, #responsable-firstName" : "[data-sans-responsable] button";
+    setWithGuardian(shown);
+  };
   useEffect(() => {
     if (refusal) form.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
   }, [refusal]);
@@ -124,19 +136,22 @@ export function NewStudentGuide({
         <div className="grid items-start gap-3 sm:grid-cols-3">
           {field("firstName", "Prénom", { autoFocus: true })}
           {field("name", "Nom")}
-          <DateField
-            id="birthDate"
-            label="Date de naissance"
-            maxDate={today}
-            value={e.birthDate}
-            onChange={(d) => setE({ ...e, birthDate: d })}
-            error={error("student.birthDate")}
-          />
+          <div className="flex flex-col gap-1">
+            <DateField
+              id="birthDate"
+              label="Date de naissance"
+              maxDate={today}
+              value={e.birthDate}
+              onChange={(d) => setE({ ...e, birthDate: d })}
+              error={error("student.birthDate")}
+            />
+            {/* Right under the date it comes from, also at phone width. */}
+            <Text size="xs" c="dimmed" aria-live="polite">
+              {age !== null && (minor ? `${age} ans : mineur, un responsable est demandé.` : `${age} ans.`)}
+            </Text>
+          </div>
           {field("telephone", "Téléphone (facultatif)", { type: "tel", inputMode: "tel" })}
           {field("email", "E-mail (facultatif)", { type: "email" })}
-          <Text size="sm" c="dimmed" aria-live="polite" className="self-center sm:pt-6">
-            {age !== null && (minor ? `${age} ans : mineur, un responsable est demandé.` : `${age} ans.`)}
-          </Text>
           <Textarea
             id="notes"
             label="Santé, allergies, consignes (facultatif)"
@@ -166,6 +181,7 @@ export function NewStudentGuide({
                 );
               }}
               errors={sous("guardian.newPerson.")}
+              adultsOnly
             />
             <Checkbox
               label="À prévenir en cas d’urgence"
@@ -178,17 +194,20 @@ export function NewStudentGuide({
                 type="button"
                 size="sm"
                 className="self-start"
-                onClick={() => setWithGuardian(false)}
+                onClick={() => showGuardian(false)}
               >
                 Pas de responsable
               </Anchor>
             )}
           </>
         ) : (
-          <Text size="sm" c="dimmed" className="flex flex-wrap items-center gap-2">
-            Pas de responsable pour un élève majeur.
-            <Anchor component="button" type="button" size="sm" onClick={() => setWithGuardian(true)}>
-              En ajouter un quand même
+          <Text size="sm" c="dimmed" className="flex flex-wrap items-center gap-2" data-sans-responsable>
+            {/* No date yet: whether a guardian is needed is not known. */}
+            {age === null
+              ? "Un responsable est demandé pour un élève mineur : indiquez sa date de naissance."
+              : "Pas de responsable pour un élève majeur."}
+            <Anchor component="button" type="button" size="sm" onClick={() => showGuardian(true)}>
+              {age === null ? "Ajouter un responsable" : "En ajouter un quand même"}
             </Anchor>
           </Text>
         )}

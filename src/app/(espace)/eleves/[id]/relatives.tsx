@@ -2,7 +2,7 @@
 
 import { Anchor, Badge, Button, Checkbox, Paper, Text, Title } from "@mantine/core";
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { StudentRelative } from "@/db/students";
 import { ofName } from "@/lib/french";
 import { type Choice, PersonChoice, toInput } from "../../_people/person-choice";
@@ -29,6 +29,20 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
   const [toRemove, setToRemove] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
+  const section = useRef<HTMLElement>(null);
+  // Control to focus once the change is drawn, so focus never falls back to the page.
+  const focusNext = useRef<string | null>(null);
+  useEffect(() => {
+    const selector = focusNext.current;
+    if (!selector) return;
+    focusNext.current = null;
+    (
+      section.current?.querySelector<HTMLElement>(selector) ?? section.current?.querySelector<HTMLElement>("h2")
+    )?.focus();
+  });
+  const focusAfter = (selector: string) => {
+    focusNext.current = selector;
+  };
 
   const act = (action: () => Promise<{ message: string | null }>, after?: () => void) =>
     startTransition(async () => {
@@ -74,30 +88,44 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
               variant="outline"
               color="red"
               disabled={inProgress}
+              data-confirmer-retrait
               onClick={() =>
                 act(
                   () => removeRelative(studentId, p.relationshipId),
-                  () => setToRemove(null),
+                  () => {
+                    setToRemove(null);
+                    focusAfter("[data-ajouter-responsable]");
+                  },
                 )
               }
             >
               Retirer {p.name} de la fiche
             </Button>
-            <Anchor component="button" type="button" size="xs" onClick={() => setToRemove(null)}>
+            <Anchor
+              component="button"
+              type="button"
+              size="xs"
+              onClick={() => {
+                setToRemove(null);
+                focusAfter(`[data-retirer="${p.relationshipId}"]`);
+              }}
+            >
               Annuler
             </Anchor>
           </span>
         ) : (
-          <Anchor
-            component="button"
-            type="button"
-            size="xs"
-            c="dimmed"
+          <Button
+            variant="default"
+            size="compact-sm"
             ml="auto"
-            onClick={() => setToRemove(p.relationshipId)}
+            data-retirer={p.relationshipId}
+            onClick={() => {
+              setToRemove(p.relationshipId);
+              focusAfter("[data-confirmer-retrait]");
+            }}
           >
             Retirer
-          </Anchor>
+          </Button>
         )}
       </div>
     </li>
@@ -105,13 +133,22 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
 
   return (
     <div className="flex flex-col gap-4">
-      <section aria-labelledby="responsables" className="flex flex-col gap-2">
+      <section ref={section} aria-labelledby="responsables" className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between gap-2">
-          <Title order={2} size="h5" id="responsables">
+          <Title order={2} size="h5" id="responsables" tabIndex={-1}>
             Responsables
           </Title>
           {!addition && (
-            <Anchor component="button" type="button" size="sm" onClick={() => setAddition(true)}>
+            <Anchor
+              component="button"
+              type="button"
+              size="sm"
+              data-ajouter-responsable
+              onClick={() => {
+                setAddition(true);
+                focusAfter("#nouveau-responsable-cherche");
+              }}
+            >
               Ajouter un responsable
             </Anchor>
           )}
@@ -134,6 +171,7 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
               value={choice}
               onChange={setChoice}
               exclude={[studentId]}
+              adultsOnly
             />
             <Checkbox
               label="À prévenir en cas d’urgence"
@@ -150,13 +188,20 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
                     () => {
                       setAddition(false);
                       setChoice(null);
+                      focusAfter("[data-ajouter-responsable]");
                     },
                   )
                 }
               >
                 Ajouter
               </Button>
-              <Button variant="default" onClick={() => setAddition(false)}>
+              <Button
+                variant="default"
+                onClick={() => {
+                  setAddition(false);
+                  focusAfter("[data-ajouter-responsable]");
+                }}
+              >
                 Annuler
               </Button>
             </div>
