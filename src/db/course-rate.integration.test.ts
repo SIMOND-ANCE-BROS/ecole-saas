@@ -10,6 +10,7 @@ import {
   validCourseInput,
   type CourseInput,
 } from "./courses";
+import { updateInstructor, type InstructorInput } from "./instructors";
 import { withSchool } from "./index";
 
 /**
@@ -103,7 +104,8 @@ describe("instructor rate per course (#191)", () => {
     expect(parse("45,50").data?.instructorRate).toBe(4550);
     expect(parse(" 45 ").data?.instructorRate).toBe(4500);
     expect(parse("").data?.instructorRate).toBeNull();
-    expect(parse(undefined).data?.instructorRate).toBeNull();
+    // Not sent (field not offered): left to the stored rate.
+    expect(parse(undefined).data?.instructorRate).toBeUndefined();
     for (const wrong of ["abc", "-5", "45,505", "100001"]) expect(parse(wrong).success).toBe(false);
   });
 
@@ -120,8 +122,78 @@ describe("instructor rate per course (#191)", () => {
     const r = await withSchool(school, (tx) =>
       createCourse(tx, season, { ...base, instructorId: flat, instructorRate: 4000 }),
     );
-    expect(r).toEqual({ ok: false, message: "Un intervenant au forfait mensuel n’a pas de tarif par cours." });
-    expect((await create({ ...base, instructorId: flat, weekday: 4 })).length).toBeGreaterThan(0);
+    expect(r).toEqual({ ok: false, message: "Pas de tarif par cours pour un forfait mensuel." });
+    expect(
+      (await create({ ...base, instructorId: flat, weekday: 4, instructorRate: undefined })).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("keeps the stored rate when the form does not send one, for the same instructor", async () => {
+    const id = await create({ ...base, weekday: 6, instructorRate: 4200 });
+    await withSchool(school, (tx) => updateCourse(tx, id, { ...base, weekday: 6, instructorRate: undefined }));
+    expect(await withSchool(school, (tx) => courseRate(tx, id))).toBe(4200);
+  });
+
+  it("drops the previous instructor's rate on a change of instructor, even sent back unchanged", async () => {
+    const other = (
+      await admin.unsafe(
+        `INSERT INTO instructor ${INSTRUCTOR} VALUES ($1, 'Zzfaux', 'Autre', 'employee', 'not_applicable', 'hourly', 2500, true)
+         RETURNING id`,
+        [school],
+      )
+    )[0].id as string;
+    const id = await create({ ...base, weekday: 7, instructorRate: 4200 });
+    const r = await withSchool(school, (tx) =>
+      updateCourse(tx, id, { ...base, weekday: 7, instructorId: other, instructorRate: 4200 }),
+    );
+    expect(r).toMatchObject({ ok: true, instructorRateCents: null });
+    expect(await withSchool(school, (tx) => courseRate(tx, id))).toBeNull();
+    // A new amount for the new instructor is kept; switching to a monthly flat one sends nothing and clears it.
+    await withSchool(school, (tx) =>
+      updateCourse(tx, id, { ...base, weekday: 7, instructorId: hourly, instructorRate: 3900 }),
+    );
+    expect(await withSchool(school, (tx) => courseRate(tx, id))).toBe(3900);
+    await withSchool(school, (tx) =>
+      updateCourse(tx, id, { ...base, weekday: 7, instructorId: flat, instructorRate: undefined }),
+    );
+    expect(await withSchool(school, (tx) => courseRate(tx, id))).toBeNull();
+  });
+
+  it("refuses to change an instructor's pay mode while courses carry their own rate", async () => {
+    const teacher = (
+      await admin.unsafe(
+        `INSERT INTO instructor ${INSTRUCTOR} VALUES ($1, 'Zzfaux', 'Mode', 'employee', 'not_applicable', 'hourly', 3000, true)
+         RETURNING id`,
+        [school],
+      )
+    )[0].id as string;
+    const entry: InstructorInput = {
+      firstName: "Mode",
+      name: "Zzfaux",
+      email: null,
+      status: "employee",
+      siren: null,
+      vatRegime: "not_applicable",
+      isOwner: false,
+      payMode: "per_lesson",
+      rateCents: 3000,
+      active: true,
+    };
+    const id = await create({ ...base, instructorId: teacher, weekday: 1, startTime: "09:00", instructorRate: 4000 });
+    await create({ ...base, instructorId: teacher, weekday: 1, startTime: "10:00", instructorRate: 4100 });
+    expect(await withSchool(school, (tx) => updateInstructor(tx, teacher, entry))).toEqual({
+      ok: false,
+      message:
+        "2 cours ont un tarif propre pour cet intervenant : videz ces tarifs dans les fiches des cours avant de changer son mode de rémunération.",
+    });
+    // Other changes still go through with the same pay mode.
+    expect(
+      await withSchool(school, (tx) => updateInstructor(tx, teacher, { ...entry, payMode: "hourly", rateCents: 3200 })),
+    ).toEqual({ ok: true });
+    await withSchool(school, (tx) =>
+      updateCourse(tx, id, { ...base, instructorId: teacher, weekday: 1, startTime: "09:00", instructorRate: null }),
+    );
+    expect((await withSchool(school, (tx) => updateInstructor(tx, teacher, entry))).ok).toBe(false);
   });
 
   it("lists the instructor's courses with their own rate, and pay data, within the school only", async () => {

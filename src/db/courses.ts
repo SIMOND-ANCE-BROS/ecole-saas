@@ -17,7 +17,7 @@ import {
   season,
   site,
 } from "./schema";
-import { courseRateAllowed, type PayMode } from "../domain/payroll/rate";
+import { courseRateAllowed, rateAfterUpdate, type PayMode } from "../domain/payroll/rate";
 import { issuePath } from "../lib/form-errors";
 import { has } from "../lib/has";
 import { parseEuros } from "../lib/money";
@@ -38,13 +38,17 @@ const integerOrNull = (min: number, max: number) =>
   z.int(between(min, max)).min(min, between(min, max)).max(max, between(min, max)).nullable();
 const duration = z.int(between(5, 600)).min(5, between(5, 600)).max(600, between(5, 600));
 const dateOrNull = z.iso.date("Date invalide").nullable();
-/** Typed in euros (« 35 », « 35,50 »), kept in integer cents; empty: none. */
+/**
+ * Typed in euros (« 35 », « 35,50 »), kept in integer cents. Empty: none;
+ * absent (field not offered, monthly flat instructor): the stored rate is kept.
+ */
 const euroRateOrNull = z
   .string()
   .max(20)
   .optional()
   .transform((v, ctx) => {
-    const typed = (v ?? "").trim();
+    if (v === undefined) return undefined;
+    const typed = v.trim();
     if (typed === "") return null;
     const cents = parseEuros(typed);
     if (cents === null || cents > 100_000_00) {
@@ -119,6 +123,8 @@ export const validCourseInput = courseFields
 
 export type CourseInput = z.output<typeof validCourseInput>;
 export type Result = { ok: true; id: string } | { ok: false; message: string };
+/** Saved course, with the instructor rate it now carries (#191). */
+export type SaveResult = { ok: true; id: string; instructorRateCents: number | null } | { ok: false; message: string };
 
 export type EditedCourse = {
   id: string;
@@ -256,8 +262,8 @@ async function values(tx: Tx, entry: CourseInput, guard?: string) {
       ),
     );
   if (!i) return { ok: false as const, message: "Intervenant introuvable ou inactif." };
-  if (entry.instructorRate !== null && !courseRateAllowed(i.payMode))
-    return { ok: false as const, message: "Un intervenant au forfait mensuel n’a pas de tarif par cours." };
+  if (entry.instructorRate != null && !courseRateAllowed(i.payMode))
+    return { ok: false as const, message: "Pas de tarif par cours pour un forfait mensuel." };
   const roomId = await resolveRoom(tx, entry.room);
   if (!roomId) return { ok: false as const, message: "Salle introuvable." };
   const disciplineId = await resolveDiscipline(tx, entry.discipline);
@@ -295,21 +301,21 @@ async function values(tx: Tx, entry: CourseInput, guard?: string) {
       ageMax,
       level: level,
       maxCapacity: maxCapacity,
-      instructorRateCents: entry.instructorRate,
     },
     dates: oneOff ? [...new Set(entry.dates)].sort() : [],
   };
 }
 
-export async function createCourse(tx: Tx, seasonId: string, entry: CourseInput): Promise<Result> {
+export async function createCourse(tx: Tx, seasonId: string, entry: CourseInput): Promise<SaveResult> {
   const r = await values(tx, entry);
   if (!r.ok) return r;
+  const instructorRateCents = entry.instructorRate ?? null;
   const [{ id }] = await tx
     .insert(course)
-    .values(columnsOf(course, { ...r.values, schoolId: CURRENT_SCHOOL, seasonId: seasonId }))
+    .values(columnsOf(course, { ...r.values, instructorRateCents, schoolId: CURRENT_SCHOOL, seasonId: seasonId }))
     .returning({ id: course.id });
   await replaceDates(tx, id, r.dates);
-  return { ok: true, id };
+  return { ok: true, id, instructorRateCents };
 }
 
 async function replaceDates(tx: Tx, courseId: string, dates: string[]) {
@@ -323,12 +329,20 @@ async function replaceDates(tx: Tx, courseId: string, dates: string[]) {
     );
 }
 
-export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Promise<Result> {
+export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Promise<SaveResult> {
   const existing = await readCourse(tx, id);
   if (!existing) return { ok: false, message: "Ce cours n’existe plus." };
   const r = await values(tx, entry, existing.instructorId);
   if (!r.ok) return r;
-  await tx.update(course).set(columnsOf(course, r.values)).where(eq(course.id, id));
+  const instructorRateCents = rateAfterUpdate(
+    entry.instructorRate,
+    (await courseRate(tx, id)) ?? null,
+    r.values.instructorId !== existing.instructorId,
+  );
+  await tx
+    .update(course)
+    .set(columnsOf(course, { ...r.values, instructorRateCents }))
+    .where(eq(course.id, id));
   await replaceDates(tx, id, r.dates);
   // New main instructor: takes over the old one's upcoming lessons, not those of a substitute.
   if (r.values.instructorId !== existing.instructorId) {
@@ -344,7 +358,7 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
         ),
       );
   }
-  return { ok: true, id };
+  return { ok: true, id, instructorRateCents };
 }
 
 /**
@@ -355,6 +369,21 @@ export async function courseRate(tx: Tx, id: string): Promise<number | null | un
   if (!z.uuid().safeParse(id).success) return undefined;
   const [c] = await tx.select({ cents: course.instructorRateCents }).from(course).where(eq(course.id, id));
   return c?.cents;
+}
+
+/**
+ * The course's own instructor rate with its unit, when one applies (#191):
+ * null when none is set or the instructor's pay mode does not use it.
+ * Director only: callers check the role before reading it.
+ */
+export async function courseOwnRate(tx: Tx, id: string): Promise<{ cents: number; payMode: PayMode } | null> {
+  if (!z.uuid().safeParse(id).success) return null;
+  const [c] = await tx
+    .select({ cents: course.instructorRateCents, payMode: instructor.payMode })
+    .from(course)
+    .innerJoin(instructor, eq(instructor.id, course.instructorId))
+    .where(eq(course.id, id));
+  return c && c.cents !== null && courseRateAllowed(c.payMode) ? { cents: c.cents, payMode: c.payMode } : null;
 }
 
 export type CoursePay = {
@@ -384,7 +413,9 @@ export function coursesWithOwnRate(tx: Tx, instructorId: string) {
       level: course.level,
       weekday: course.weekday,
       startTime: sql<string>`to_char(${course.startTime}, 'HH24:MI')`,
+      durationMinutes: course.durationMinutes,
       season: season.label,
+      // Never null here: the query keeps only courses with a rate (isNotNull below).
       rateCents: sql<number>`${course.instructorRateCents}`,
     })
     .from(course)

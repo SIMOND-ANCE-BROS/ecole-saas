@@ -42,6 +42,7 @@ export function parseEuros(entry: string): number | null {
 
 /** Integer cents → text to edit in a field, read back by `parseEuros`: 3550 → « 35,50 », 3500 → « 35 ». */
 export function typedEuros(cents: number): string {
+  if (!Number.isInteger(cents) || cents < 0) throw new TypeError("Montant entier positif attendu");
   const euros = Math.trunc(cents / 100);
   const rest = cents % 100;
   return rest ? `${euros},${String(rest).padStart(2, "0")}` : String(euros);

@@ -11,6 +11,8 @@ import { readInstructor, PAY_MODES, VAT_REGIMES, STATUSES, PAY_UNITS } from "@/d
 import { coursesWithOwnRate } from "@/db/courses";
 import { DAY_NAMES } from "@/domain/schedule/days";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
+import { end } from "@/app/(espace)/planning/format";
+import { courseRateAllowed } from "@/domain/payroll/rate";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
 import { CalendarSubscription } from "./calendar-subscription";
@@ -109,7 +111,9 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
             Cours à un autre tarif
           </Title>
           <Text size="sm" c="dimmed" mb="sm">
-            Pour ces cours, ce tarif remplace le tarif habituel de {instructor.firstName}.
+            {courseRateAllowed(instructor.payMode)
+              ? `Pour ces cours, ce tarif remplace le tarif habituel de ${instructor.firstName}.`
+              : `Ces tarifs ne servent pas : la rémunération de ${instructor.firstName} est un forfait mensuel. Videz-les dans les fiches des cours.`}
           </Text>
           <div className="overflow-x-auto">
             <Table>
@@ -130,10 +134,20 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
                         {c.level ? ` ${c.level}` : ""}
                       </TextLink>
                     </TableTd>
-                    <TableTd>{c.weekday ? `${DAY_NAMES[c.weekday]} ${c.startTime}` : "À des dates précises"}</TableTd>
-                    <TableTd>{c.season}</TableTd>
+                    <TableTd>
+                      {c.weekday
+                        ? `${DAY_NAMES[c.weekday]} ${c.startTime}–${end(c.startTime, c.durationMinutes)}`
+                        : "À des dates précises"}
+                    </TableTd>
+                    <TableTd className="whitespace-nowrap">{c.season}</TableTd>
                     <TableTd ta="right" className="whitespace-nowrap tabular-nums">
-                      {formatEuros(c.rateCents)} / {PAY_UNITS[instructor.payMode]}
+                      {courseRateAllowed(instructor.payMode) ? (
+                        `${formatEuros(c.rateCents)} / ${PAY_UNITS[instructor.payMode]}`
+                      ) : (
+                        <Text span size="sm" c="dimmed" td="line-through">
+                          {formatEuros(c.rateCents)}
+                        </Text>
+                      )}
                     </TableTd>
                   </TableTr>
                 ))}

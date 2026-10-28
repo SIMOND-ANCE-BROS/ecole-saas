@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { type CoursePay, type EditedCourse, RECURRENCES, type ScheduleReferential, COURSE_TYPES } from "@/db/courses";
 import { PAY_UNITS } from "@/db/instructors";
 import { courseRateAllowed } from "@/domain/payroll/rate";
-import { formatEuros, typedEuros } from "@/lib/money";
+import { formatEuros, parseEuros, typedEuros } from "@/lib/money";
 import type { ScheduleCourse } from "@/db/schedule";
 import { conflicts } from "@/domain/schedule/overlap";
 import { lessonDatesOf, type SeasonCalendar } from "@/domain/schedule/lessons";
@@ -97,8 +97,8 @@ export function CourseForm({
     if (refusal) form.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
   }, [refusal]);
   const [confirmDeletion, setConfirm] = useState(false);
-  // A rate typed for the previous instructor was just removed: say so.
-  const [rateCleared, setRateCleared] = useState(false);
+  // A rate typed for the previous instructor, removed when another one was chosen: said in an alert.
+  const [rateCleared, setRateCleared] = useState<{ amount: string; instructor: string } | null>(null);
   const set = (field: keyof typeof v) => (value: string | number | null) =>
     setV({ ...v, [field]: value === null ? "" : String(value) });
   const typed = (field: keyof typeof v) => (e: { currentTarget: { value: string } }) =>
@@ -114,6 +114,13 @@ export function CourseForm({
 
   const instructorPay = pay.instructors[v.instructorId];
   const rateAllowed = instructorPay ? courseRateAllowed(instructorPay.payMode) : false;
+  const nameOf = (id: string) => r.instructors.find((i) => i.id === id);
+  // « 45,50 € / heure » for an amount typed for an instructor; the text as typed if it is not an amount.
+  const amountFor = (typedAmount: string, instructorId: string) => {
+    const cents = parseEuros(typedAmount);
+    const mode = pay.instructors[instructorId]?.payMode;
+    return cents === null || !mode ? typedAmount : `${formatEuros(cents)} / ${PAY_UNITS[mode]}`;
+  };
 
   const entry = {
     discipline: existingDiscipline ? { id: existingDiscipline.id } : { name: v.discipline },
@@ -139,7 +146,8 @@ export function CourseForm({
     level: v.level,
     maxCapacity: whole(v.maxCapacity),
     // Not offered for a monthly flat instructor: nothing is sent, so no rate is kept (#192).
-    instructorRate: rateAllowed ? v.instructorRate : "",
+    // Not offered for a monthly flat instructor: nothing is sent, and the server keeps or clears the stored rate.
+    instructorRate: rateAllowed ? v.instructorRate : undefined,
   };
 
   const datesOf = (c: Parameters<typeof lessonDatesOf>[0]) => (calendar ? lessonDatesOf(c, calendar) : undefined);
@@ -251,7 +259,26 @@ export function CourseForm({
           // The rate typed for this course was the previous instructor's: it goes with them.
           onChange={(value) => {
             if (!value || value === v.instructorId) return;
-            setRateCleared(v.instructorRate.trim() !== "");
+            // Back to the course's own instructor: their saved rate comes back.
+            if (value === course?.instructorId) {
+              setRateCleared(null);
+              setV({
+                ...v,
+                instructorId: value,
+                instructorRate: pay.rateCents === null ? "" : typedEuros(pay.rateCents),
+              });
+              return;
+            }
+            const previous = nameOf(v.instructorId);
+            const typedAmount = v.instructorRate.trim();
+            setRateCleared(
+              typedAmount && previous
+                ? {
+                    amount: amountFor(typedAmount, v.instructorId),
+                    instructor: `${previous.firstName} ${previous.name}`,
+                  }
+                : null,
+            );
             setV({ ...v, instructorId: value, instructorRate: "" });
           }}
           description={
@@ -263,32 +290,44 @@ export function CourseForm({
           }
           error={error("instructorId")}
         />
-        {instructorPay &&
-          (rateAllowed ? (
-            <TextInput
-              label="Tarif intervenant pour ce cours"
-              description={`${rateCleared ? "Le tarif saisi concernait l’intervenant précédent : il a été retiré. " : "Facultatif. "}Vide : son tarif habituel, ${formatEuros(instructorPay.rateCents)} / ${PAY_UNITS[instructorPay.payMode]}.`}
-              inputMode="decimal"
-              autoComplete="off"
-              rightSection={
-                <Text size="xs" c="dimmed" pr="xs">
-                  € / {PAY_UNITS[instructorPay.payMode]}
-                </Text>
-              }
-              rightSectionWidth={90}
-              styles={{ input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } }}
-              value={v.instructorRate}
-              onChange={(e) => {
-                setRateCleared(false);
-                typed("instructorRate")(e);
-              }}
-              error={error("instructorRate")}
-            />
-          ) : (
-            <Text size="sm" c="dimmed" className="self-end">
-              Payé au forfait mensuel : pas de tarif par cours pour l’instant.
-            </Text>
-          ))}
+        <div>
+          {instructorPay &&
+            (rateAllowed ? (
+              <TextInput
+                label="Tarif intervenant pour ce cours"
+                // Description under the field: its box lines up with « Intervenant ».
+                inputWrapperOrder={["label", "input", "description", "error"]}
+                description={`Vide : tarif habituel de ${nameOf(v.instructorId)?.firstName ?? "l’intervenant"}, ${formatEuros(instructorPay.rateCents)} / ${PAY_UNITS[instructorPay.payMode]}.`}
+                inputMode="decimal"
+                autoComplete="off"
+                rightSection={
+                  <Text size="xs" c="dimmed" pr="xs">
+                    € / {PAY_UNITS[instructorPay.payMode]}
+                  </Text>
+                }
+                rightSectionWidth={90}
+                styles={{ input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } }}
+                value={v.instructorRate}
+                onChange={(e) => {
+                  setRateCleared(null);
+                  typed("instructorRate")(e);
+                }}
+                error={error("instructorRate")}
+              />
+            ) : (
+              <Text size="sm" c="dimmed" pt={{ base: 0, sm: 28 }}>
+                Pas de tarif par cours pour un forfait mensuel.
+              </Text>
+            ))}
+          <div aria-live="polite">
+            {rateCleared && (
+              <Alert color="yellow" role="status" mt="xs" p="xs">
+                Le tarif de {rateCleared.amount} saisi pour {rateCleared.instructor} a été retiré : il ne vaut que pour
+                cet intervenant.
+              </Alert>
+            )}
+          </div>
+        </div>
         <Select
           label="Type"
           allowDeselect={false}

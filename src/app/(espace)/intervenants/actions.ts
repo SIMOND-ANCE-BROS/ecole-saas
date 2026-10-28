@@ -57,11 +57,13 @@ export async function saveInstructor(id: string | null, state: FormState, f: For
     return refusal(rateCents ? { ...errors, tariff: "Montant en euros, par exemple 35 ou 35,50" } : errors);
   }
 
-  const result = await withSchool(schoolId, async (tx) =>
-    id === null ? createInstructor(tx, parsed.data) : (await updateInstructor(tx, id, parsed.data)) ? id : null,
-  );
-  if (result === null) return refusal({ form: "Cet intervenant n’existe plus." });
-  redirect(`/intervenants?enregistre=${result}`);
+  const result = await withSchool(schoolId, async (tx) => {
+    if (id === null) return { ok: true as const, id: await createInstructor(tx, parsed.data) };
+    const r = await updateInstructor(tx, id, parsed.data);
+    return r.ok ? { ok: true as const, id } : r;
+  });
+  if (!result.ok) return refusal({ form: result.message });
+  redirect(`/intervenants?enregistre=${result.id}`);
 }
 
 /** Public address of the application, taken from the request (behind a proxy: X-Forwarded-* headers). */

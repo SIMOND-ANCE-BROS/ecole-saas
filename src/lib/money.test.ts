@@ -56,4 +56,9 @@ describe("typedEuros", () => {
     expect(typedEuros(0)).toBe("0");
     for (const cents of [0, 5, 99, 100, 3550, 123456]) expect(parseEuros(typedEuros(cents))).toBe(cents);
   });
+
+  it("refuses a negative or non-integer amount", () => {
+    expect(() => typedEuros(-1)).toThrow(TypeError);
+    expect(() => typedEuros(12.5)).toThrow(TypeError);
+  });
 });

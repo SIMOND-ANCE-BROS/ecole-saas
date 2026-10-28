@@ -46,9 +46,10 @@ export async function saveCourse(id: string | null, entry: unknown, seasonId?: u
   }
   const today = todayInParis();
   const result = await withSchool(schoolId, async (tx) => {
+    const existing = id !== null ? await readCourse(tx, id) : null;
     const target =
       id !== null
-        ? (await readCourse(tx, id))?.seasonId
+        ? existing?.seasonId
         : seasonId
           ? (await seasonById(tx, seasonId))?.id
           : (await currentSeason(tx, today))?.id;
@@ -62,7 +63,6 @@ export async function saveCourse(id: string | null, entry: unknown, seasonId?: u
               ? "Cette saison n’existe plus."
               : "Aucune saison n’est paramétrée.",
       };
-    const existing = id !== null ? await readCourse(tx, id) : null;
     const before = existing
       ? { instructorId: existing.instructorId, instructorRateCents: (await courseRate(tx, existing.id)) ?? null }
       : null;
@@ -71,7 +71,7 @@ export async function saveCourse(id: string | null, entry: unknown, seasonId?: u
     if (r.ok)
       await logCourseRate(tx, userId, r.id, before, {
         instructorId: parsed.data.instructorId,
-        instructorRateCents: parsed.data.instructorRate,
+        instructorRateCents: r.instructorRateCents,
       });
     // Upcoming lessons recomputed in the same transaction (day changed, new course…).
     if (r.ok) await syncLessons(tx, target, today);

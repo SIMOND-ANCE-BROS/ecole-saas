@@ -55,7 +55,8 @@ beforeAll(async () => {
     const teacher = async (active: boolean) =>
       (
         await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents, active)
-          VALUES (${schoolId}, 'Zzfaux', 'Prof', 'employee', 'not_applicable', 'hourly', 3000, ${active}) RETURNING id`
+          VALUES (${schoolId}, 'Zzfaux', 'Prof', 'employee', 'not_applicable',
+            ${active ? "hourly" : "monthly_flat"}, 3000, ${active}) RETURNING id`
       )[0].id as string;
     return {
       discipline: d.id as string,
@@ -85,6 +86,8 @@ beforeAll(async () => {
 
   weekly = await insertCourse(school, source, a, a.active, 1, "17:00", ["2026-10-01", "2027-03-31"]);
   gone = await insertCourse(school, source, a, a.inactive, 3, "18:00");
+  // A course rate its monthly flat instructor does not use (written before #191's checks, or imported).
+  await admin`UPDATE course SET instructor_rate_cents = 3000 WHERE id = ${gone}`;
   const workshop = await insertCourse(school, source, a, a.active, null, "14:00");
   await admin`INSERT INTO course_date (school_id, course_id, date) VALUES (${school}, ${workshop}, '2027-02-13')`;
   // Every column away from the defaults: type, recurrence, ages, level and places left empty, length,
@@ -157,11 +160,21 @@ describe("copy of a season's planning (#190)", () => {
     expect(pairs).toHaveLength(3);
     for (const { source: from, copy } of pairs) {
       const differ = Object.keys(from).filter((k) => JSON.stringify(from[k]) !== JSON.stringify(copy[k]));
+      // The monthly flat instructor's unused course rate is not carried over (#191).
+      const unusedRate = from.id === gone ? ["instructor_rate_cents"] : [];
       expect(differ.sort()).toEqual(
-        ["id", "season_id", ...(from.start_date ? ["start_date"] : []), ...(from.end_date ? ["end_date"] : [])].sort(),
+        [
+          "id",
+          "season_id",
+          ...(from.start_date ? ["start_date"] : []),
+          ...(from.end_date ? ["end_date"] : []),
+          ...unusedRate,
+        ].sort(),
       );
       expect(copy.season_id).toBe(target);
       expect([copy.start_date, copy.end_date]).toEqual([null, null]);
+      if (from.id === gone) expect(copy.instructor_rate_cents).toBeNull();
+      if (from.id === competition) expect(copy.instructor_rate_cents).toBe(4550);
     }
     // Lessons generated over the whole season: about 40 weeks, 20 for every other week.
     expect(pairs.map((p) => p.lessons).every((n) => n >= 15)).toBe(true);

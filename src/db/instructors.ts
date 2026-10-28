@@ -1,9 +1,9 @@
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { columnsOf } from "./columns-of";
 import { z } from "zod";
 import { deleteConnection } from "./calendar-connections";
 import type { Tx } from "./index";
-import { instructor } from "./schema";
+import { course, instructor } from "./schema";
 
 /** Instructors (teachers), always within the `withSchool()` transaction (RLS). */
 
@@ -104,9 +104,35 @@ export async function createInstructor(tx: Tx, entry: InstructorInput): Promise<
   return id;
 }
 
-/** false if the instructor does not exist in the current school. */
-export async function updateInstructor(tx: Tx, id: string, entry: InstructorInput): Promise<boolean> {
-  if (!z.uuid().safeParse(id).success) return false;
+/**
+ * Refused if the instructor does not exist in the current school, or if the
+ * pay mode changes while courses carry their own rate for them (#191): such a
+ * rate is in the unit of the old pay mode, and what it becomes is an open
+ * question (#192).
+ */
+export async function updateInstructor(
+  tx: Tx,
+  id: string,
+  entry: InstructorInput,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const gone = { ok: false as const, message: "Cet intervenant n’existe plus." };
+  if (!z.uuid().safeParse(id).success) return gone;
+  const [current] = await tx.select({ payMode: instructor.payMode }).from(instructor).where(eq(instructor.id, id));
+  if (!current) return gone;
+  if (current.payMode !== entry.payMode) {
+    const [{ n }] = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(course)
+      .where(and(eq(course.instructorId, id), isNotNull(course.instructorRateCents)));
+    if (n > 0)
+      return {
+        ok: false,
+        message:
+          n > 1
+            ? `${n} cours ont un tarif propre pour cet intervenant : videz ces tarifs dans les fiches des cours avant de changer son mode de rémunération.`
+            : "1 cours a un tarif propre pour cet intervenant : videz ce tarif dans la fiche du cours avant de changer son mode de rémunération.",
+      };
+  }
   // Deactivating an instructor also cuts off their subscription and connected calendar.
   const cutoff = entry.active ? {} : { calendarTokenHash: null, calendarTokenCreatedAt: null };
   const rows = await tx
@@ -115,5 +141,5 @@ export async function updateInstructor(tx: Tx, id: string, entry: InstructorInpu
     .where(eq(instructor.id, id))
     .returning({ id: instructor.id });
   if (rows.length === 1 && !entry.active) await deleteConnection(tx, id);
-  return rows.length === 1;
+  return rows.length === 1 ? { ok: true } : gone;
 }
