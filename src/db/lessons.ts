@@ -271,7 +271,7 @@ export async function syncLessons(
   if (!s) return { added: 0, removed: 0 };
   const start = [s.start, today, since ?? ""].reduce((a, b) => (b > a ? b : a));
   const closures = await readClosures(tx, eq(closure.seasonId, seasonId));
-  const tous = await tx
+  const allCourses = await tx
     .select({
       id: course.id,
       recurrence: course.recurrence,
@@ -291,7 +291,7 @@ export async function syncLessons(
     .where(eq(course.seasonId, seasonId));
 
   const { expected, meets, closed } = seasonLessons(
-    tous.map((c) => ({
+    allCourses.map((c) => ({
       ...c,
       recurrence: recurrenceOf({ ...c, dates: oneOff.filter((p) => p.courseId === c.id).map((p) => p.date) }),
     })),

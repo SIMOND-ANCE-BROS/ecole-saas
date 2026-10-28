@@ -337,14 +337,14 @@ export async function consumeLink(
   tx: Tx,
   relationship: OpenedLink,
   userId: string,
-): Promise<"ok" | "expire" | "partage"> {
-  if (relationship.type === "reset" && (await elsewhereAccount(tx, userId))) return "partage";
+): Promise<"ok" | "expired" | "shared"> {
+  if (relationship.type === "reset" && (await elsewhereAccount(tx, userId))) return "shared";
   const badge = await tx
     .update(invitation)
     .set({ usedAt: sql`now()` })
     .where(and(eq(invitation.id, relationship.id), isNull(invitation.usedAt), AUTHOR_STILL_DIRECTOR))
     .returning({ id: invitation.id });
-  if (badge.length !== 1) return "expire";
+  if (badge.length !== 1) return "expired";
   if (relationship.type === "invitation" && relationship.role) {
     await tx
       .insert(member)

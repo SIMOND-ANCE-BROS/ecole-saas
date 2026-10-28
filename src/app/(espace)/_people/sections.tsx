@@ -62,10 +62,10 @@ export function Notes({ notes }: { notes: string | null }) {
   );
 }
 
-export function FollowedCourses({ courses: cours }: { courses: PersonRecord["courses"] }) {
-  const season = cours[0]?.season;
-  const current = cours.filter((c) => c.season === season);
-  const history = cours.filter((c) => c.season !== season);
+export function FollowedCourses({ courses }: { courses: PersonRecord["courses"] }) {
+  const season = courses[0]?.season;
+  const current = courses.filter((c) => c.season === season);
+  const history = courses.filter((c) => c.season !== season);
   return (
     <>
       <section aria-labelledby="cours" className="flex flex-col gap-2">

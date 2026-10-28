@@ -38,7 +38,7 @@ export function InstructorForm({ instructor: instructor }: { instructor: Instruc
   });
   // Remounted after each rejection to restore the input returned by the server.
   return (
-    <Champs
+    <Fields
       key={state.attempt}
       state={state}
       send={send}
@@ -50,7 +50,7 @@ export function InstructorForm({ instructor: instructor }: { instructor: Instruc
   );
 }
 
-type PropsChamps = {
+type FieldsProps = {
   state: FormState;
   send: (f: FormData) => void;
   inProgress: boolean;
@@ -59,7 +59,7 @@ type PropsChamps = {
   initial: Record<InstructorField, string>;
 };
 
-function Champs({ state: state, send: send, inProgress: inProgress, edition, initial, back: back }: PropsChamps) {
+function Fields({ state: state, send: send, inProgress: inProgress, edition, initial, back: back }: FieldsProps) {
   const v = state.values ?? initial;
   const [status, setStatus] = useState(v.status);
   const [mode, setMode] = useState(v.payMode as Mode);

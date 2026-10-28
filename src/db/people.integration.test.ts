@@ -45,8 +45,8 @@ const empty: PersonInput = {
   notes: null,
 };
 
-async function insert(schoolId: string, champs: Record<string, string | null>) {
-  const [{ id }] = await admin`INSERT INTO person ${admin({ school_id: schoolId, ...champs })} RETURNING id`;
+async function insert(schoolId: string, fields: Record<string, string | null>) {
+  const [{ id }] = await admin`INSERT INTO person ${admin({ school_id: schoolId, ...fields })} RETURNING id`;
   return id as string;
 }
 

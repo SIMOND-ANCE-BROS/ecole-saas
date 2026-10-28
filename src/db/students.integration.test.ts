@@ -103,7 +103,7 @@ describe("guided creation", () => {
     };
     expect(await create(noe)).toMatchObject({
       status: "duplicates",
-      duplicates: [{ role: "responsable", id: helene }],
+      duplicates: [{ role: "guardian", id: helene }],
     });
     const id = idDe(await create({ ...noe, guardian: { id: helene } }));
     expect((await record(id))?.siblings).toEqual([{ id: zoe, firstName: "Zoé" }]);

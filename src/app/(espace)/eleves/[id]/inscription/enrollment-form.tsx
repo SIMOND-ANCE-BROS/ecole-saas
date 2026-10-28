@@ -44,7 +44,7 @@ type Props = {
 export function EnrollmentForm({
   payerId: payerId,
   students: students,
-  courses: cours,
+  courses,
   initialStudent: initialStudent,
 }: Props) {
   const initial = students.find((d) => d.id === initialStudent) ?? (students.length === 1 ? students[0] : undefined);
@@ -90,7 +90,7 @@ export function EnrollmentForm({
   const result = current?.result ?? null;
 
   const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
-  const visibleCourses = cours.filter((c) =>
+  const visibleCourses = courses.filter((c) =>
     `${c.discipline} ${c.level ?? ""} ${DAYS[c.weekday ?? 0]}`.toLowerCase().includes(filter.trim().toLowerCase()),
   );
   const next = result?.status === "ok" ? result.newEnrollment : null;
@@ -104,7 +104,7 @@ export function EnrollmentForm({
   const sortedCourses = [...visibleCourses.filter(adapted), ...visibleCourses.filter((c) => !adapted(c))];
 
   // Chosen courses that overlap on the same day.
-  const chosen = cours.filter((c) => courseIds.includes(c.id));
+  const chosen = courses.filter((c) => courseIds.includes(c.id));
   const overlappingCourses = chosen.flatMap((a, i) =>
     chosen
       .slice(i + 1)
@@ -236,7 +236,7 @@ export function EnrollmentForm({
             {sortedCourses.length === 0 && (
               <li className="flex flex-col items-start gap-2 p-3">
                 <Text size="sm" c="dimmed">
-                  {cours.length === 0
+                  {courses.length === 0
                     ? "Aucun cours n’est disponible pour cette saison."
                     : "Aucun cours ne correspond à votre recherche."}
                 </Text>

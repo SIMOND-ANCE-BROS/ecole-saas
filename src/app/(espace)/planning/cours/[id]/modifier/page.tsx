@@ -20,7 +20,7 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
     const course = await readCourse(tx, id);
     if (!course) return null;
     return {
-      cours: course,
+      course,
       planning: await coursePlanning(tx, course.id),
       referential: await scheduleReferential(tx, course.instructorId),
       pay: await coursePay(tx, course.id),
@@ -29,7 +29,7 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
     };
   });
   if (!parsed) notFound();
-  const { cours } = parsed;
+  const { course } = parsed;
 
   return (
     <section className="flex flex-col gap-4">
@@ -41,8 +41,8 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
           {" "}
           /{" "}
         </Text>
-        <TextLink href={`/planning/cours/${cours.id}`} size="sm">
-          {cours.discipline}
+        <TextLink href={`/planning/cours/${course.id}`} size="sm">
+          {course.discipline}
         </TextLink>
         <Text span size="sm" c="dimmed">
           {" "}
@@ -50,10 +50,10 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
         </Text>
       </nav>
       <Title order={1} fz="xl">
-        Modifier le cours : {cours.discipline}
+        Modifier le cours : {course.discipline}
       </Title>
       <CourseForm
-        course={cours}
+        course={course}
         referential={parsed.referential}
         pay={parsed.pay}
         schedule={parsed.schedule}

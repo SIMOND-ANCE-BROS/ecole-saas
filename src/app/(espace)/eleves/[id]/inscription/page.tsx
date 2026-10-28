@@ -36,7 +36,7 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
     };
   });
   if (!parsed) notFound();
-  const { student: student, payerId: payerId, season: season, students: students, courses: cours } = parsed;
+  const { student: student, payerId: payerId, season: season, students: students, courses } = parsed;
   const name = displayedName(student);
   const payer = student.billedTo.type === "person" ? student.billedTo.name : name;
 
@@ -85,7 +85,7 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
             firstName: d.firstName,
             age: d.birthDate ? ageAt(d.birthDate, today) : null,
           }))}
-          courses={cours}
+          courses={courses}
           initialStudent={student.id}
         />
       )}

@@ -105,7 +105,7 @@ export function courseDates(
   const start = r.startDate && r.startDate > season.start ? r.startDate : season.start;
   const end = r.endDate && r.endDate < season.end ? r.endDate : season.end;
   if (start > end) return [];
-  const toutes = lessonDates({ start, end, weekday: r.weekday, closures: [] });
-  const retained = r.type === "biweekly" ? toutes.filter((_, i) => i % 2 === 0) : toutes;
+  const all = lessonDates({ start, end, weekday: r.weekday, closures: [] });
+  const retained = r.type === "biweekly" ? all.filter((_, i) => i % 2 === 0) : all;
   return retained.filter((date) => open(date, school) && open(date, scoped));
 }

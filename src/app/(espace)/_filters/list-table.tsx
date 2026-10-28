@@ -886,8 +886,8 @@ function TitleFilter({
       change({ choice: checked.includes(v) ? checked.filter((x) => x !== v) : [...checked, v] });
     const label = (v: string) => (v === EMPTY ? `(${def.ifEmpty ?? "vide"})` : v);
     // « (aucune) » only for a column that can be empty (`ifEmpty`).
-    const toutes = def.ifEmpty ? [...choice, EMPTY] : [...choice];
-    const visible = search ? toutes.filter((v) => label(v).toLowerCase().includes(search.toLowerCase())) : toutes;
+    const all = def.ifEmpty ? [...choice, EMPTY] : [...choice];
+    const visible = search ? all.filter((v) => label(v).toLowerCase().includes(search.toLowerCase())) : all;
     return (
       <>
         {choice.length > CELLS_WITHOUT_SEARCH && (

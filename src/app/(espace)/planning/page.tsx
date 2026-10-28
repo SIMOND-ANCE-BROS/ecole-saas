@@ -31,7 +31,7 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
     seasons,
     courseCounts,
     monday,
-    courses: cours,
+    courses,
     hours: hours,
     lessons: lessons,
     closures: closures,
@@ -80,8 +80,8 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
   const isDirector = role === "director";
   const view = vue === "liste" || vue === "type" || vue === "salles" ? vue : "datee";
   const savedId = typeof enregistre === "string" ? enregistre : undefined;
-  const confirmed = cours.find((c) => c.id === savedId);
-  const copied = copiedCount(copie, cours.length);
+  const confirmed = courses.find((c) => c.id === savedId);
+  const copied = copiedCount(copie, courses.length);
   const copy = copyLink(season, seasons, courseCounts, current?.id);
 
   return (
@@ -120,7 +120,7 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
           change pour cette saison.
         </Alert>
       )}
-      {cours.length === 0 ? (
+      {courses.length === 0 ? (
         <Text size="sm" c="dimmed">
           Aucun cours pour cette saison.
           {isDirector &&
@@ -139,7 +139,7 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
         </Text>
       ) : (
         <ScheduleGrid
-          courses={cours}
+          courses={courses}
           editable={isDirector}
           highlighted={confirmed?.id}
           view={view}

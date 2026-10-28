@@ -426,7 +426,8 @@ export const validStudentInput = studentFields
   });
 
 export type StudentInput = z.output<typeof validStudentInput>;
-export type DuplicateWithRole = Duplicate & { role: "élève" | "responsable" | "payeur" };
+/** Who a likely duplicate would be in the new entry. */
+export type DuplicateWithRole = Duplicate & { role: "student" | "guardian" | "payer" };
 
 async function resolve(tx: Tx, p: z.output<typeof otherValidPerson>): Promise<string | null> {
   if (has(p, "id")) {
@@ -451,10 +452,10 @@ export async function createStudent(
   confirmed: boolean,
 ): Promise<{ status: "ok"; id: string } | { status: "duplicates"; duplicates: DuplicateWithRole[] }> {
   if (!confirmed) {
-    const nextItems: [DuplicateWithRole["role"], PersonInput][] = [["élève", entry.student]];
-    if (entry.guardian && has(entry.guardian, "newPerson")) nextItems.push(["responsable", entry.guardian.newPerson]);
+    const nextItems: [DuplicateWithRole["role"], PersonInput][] = [["student", entry.student]];
+    if (entry.guardian && has(entry.guardian, "newPerson")) nextItems.push(["guardian", entry.guardian.newPerson]);
     if (entry.billing.type === "other" && has(entry.billing.payer, "newPerson"))
-      nextItems.push(["payeur", entry.billing.payer.newPerson]);
+      nextItems.push(["payer", entry.billing.payer.newPerson]);
     const duplicates: DuplicateWithRole[] = [];
     for (const [role, s] of nextItems) duplicates.push(...(await likelyDuplicates(tx, s)).map((d) => ({ ...d, role })));
     if (duplicates.length > 0) return { status: "duplicates", duplicates };
