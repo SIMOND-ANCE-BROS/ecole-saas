@@ -7,6 +7,7 @@ import { payableStudents, displayedName } from "@/db/people";
 import { seasonCourses, currentSeason } from "@/db/schedule";
 import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
+import { BackToList } from "../../../_ui/list-return";
 import { TextLink } from "../../../_ui/text-link";
 import { EnrollmentForm } from "./enrollment-form";
 
@@ -42,9 +43,9 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <TextLink href="/eleves" size="sm">
+        <BackToList list="/eleves" size="sm">
           Élèves
-        </TextLink>
+        </BackToList>
         <Text span size="sm" c="dimmed">
           {" / "}
         </Text>

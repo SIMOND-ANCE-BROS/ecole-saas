@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import { Text, Title } from "@mantine/core";
 import { Suspense } from "react";
 import { withSchool } from "@/db";
-import { listContacts } from "@/db/students";
+import { listContacts, MAX_RESULTS } from "@/db/students";
 import { readPreference } from "@/db/preferences";
 import { displayedName } from "@/db/people";
 import { CONTACT_COLUMNS } from "@/domain/filters/columns";
@@ -11,6 +10,8 @@ import { requireRole } from "@/lib/session";
 import { ListTable } from "../_filters/list-table";
 import { NavigableResults } from "../_people/navigable-results";
 import { ButtonLink } from "../_ui/button-link";
+import { RememberList } from "../_ui/list-return";
+import { PageHeader } from "../_ui/page-header";
 
 export const metadata: Metadata = { title: "Contacts" };
 
@@ -25,19 +26,32 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
     layout: await readPreference(tx, userId, "contacts"),
   }));
 
+  const filtering = filter.conditions.length > 0;
+  const plural = (n: number) => `${n} contact${n > 1 ? "s" : ""}`;
+
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <Title order={1} fz="xl">
-            Contacts
-          </Title>
-          <Text size="sm" c="dimmed">
-            Parents, responsables, payeurs et organismes (CSE, entreprises).
-          </Text>
-        </div>
-        <ButtonLink href="/contacts/nouveau">Nouveau contact</ButtonLink>
-      </div>
+      <Suspense>
+        <RememberList list="/contacts" />
+      </Suspense>
+      <PageHeader
+        title="Contacts"
+        live
+        description={
+          <>
+            {entry ? `${plural(contacts.length)} pour « ${entry} »` : plural(contacts.length)}
+            {filtering && " avec ces filtres"}
+            {contacts.length >= MAX_RESULTS &&
+              ` : seuls les ${MAX_RESULTS} premiers sont affichés, précisez la recherche ou filtrez`}
+            {!entry && !filtering && (
+              <span className="hidden sm:inline">
+                . Parents, responsables, payeurs et organismes (CSE, entreprises).
+              </span>
+            )}
+          </>
+        }
+        actions={<ButtonLink href="/contacts/nouveau">Nouveau contact</ButtonLink>}
+      />
       <NavigableResults>
         <Suspense>
           <ListTable
@@ -48,7 +62,7 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
             layout={layout}
             linkColumn="nom"
             empty={
-              filter.conditions.length > 0
+              filtering
                 ? "Aucun contact ne correspond à ces filtres."
                 : entry
                   ? `Aucun contact ne correspond à « ${entry} ».`

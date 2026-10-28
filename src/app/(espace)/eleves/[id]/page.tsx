@@ -15,6 +15,7 @@ import { Banner, FollowedCourses, Documents, BilledEnrollments, dayOf, Notes, Te
 import { Billing } from "./billing";
 import { Relatives } from "./relatives";
 import { ButtonLink } from "../../_ui/button-link";
+import { BackToList } from "../../_ui/list-return";
 import { TextLink } from "../../_ui/text-link";
 
 export const metadata: Metadata = { title: "Fiche élève" };
@@ -64,9 +65,9 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   return (
     <article className="flex w-full min-w-0 flex-col gap-5">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <TextLink href="/eleves" size="sm">
+        <BackToList list="/eleves" size="sm">
           Élèves
-        </TextLink>
+        </BackToList>
         <Text span size="sm" c="dimmed">
           {" "}
           / {name}

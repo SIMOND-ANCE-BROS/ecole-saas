@@ -13,6 +13,7 @@ import { Banner, BilledEnrollments, Telephone } from "../../_people/sections";
 import { PaymentsSection } from "../../_people/payments-section";
 import { BecomeStudent } from "./become-student";
 import { ButtonLink } from "../../_ui/button-link";
+import { BackToList } from "../../_ui/list-return";
 import { TextLink } from "../../_ui/text-link";
 
 export const metadata: Metadata = { title: "Fiche contact" };
@@ -52,9 +53,9 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
   return (
     <article className="flex w-full min-w-0 flex-col gap-5">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <TextLink href="/contacts" size="sm">
+        <BackToList list="/contacts" size="sm">
           Contacts
-        </TextLink>
+        </BackToList>
         <Text span size="sm" c="dimmed">
           {" "}
           / {name}

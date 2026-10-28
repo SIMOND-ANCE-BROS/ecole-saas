@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Alert, Text, Title } from "@mantine/core";
+import { Alert, Text } from "@mantine/core";
 import { Suspense } from "react";
 import { withSchool } from "@/db";
 import { listInstructors, PAY_MODES, STATUSES } from "@/db/instructors";
@@ -12,6 +12,8 @@ import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
 import { ListTable } from "../_filters/list-table";
 import { ButtonLink } from "../_ui/button-link";
+import { RememberList } from "../_ui/list-return";
+import { PageHeader } from "../_ui/page-header";
 
 export const metadata: Metadata = { title: "Intervenants" };
 
@@ -59,19 +61,20 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
 
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <Title order={1} fz="xl">
-            Intervenants
-          </Title>
-          <Text size="sm" c="dimmed">
+      <Suspense>
+        <RememberList list="/intervenants" />
+      </Suspense>
+      <PageHeader
+        title="Intervenants"
+        description={
+          <>
             {instructors.filter((i) => i.active).length} actif
             {instructors.filter((i) => i.active).length > 1 ? "s" : ""}
             {season && `, cours de la saison ${season.label}`}
-          </Text>
-        </div>
-        {isDirector && <ButtonLink href="/intervenants/nouveau">Ajouter un intervenant</ButtonLink>}
-      </div>
+          </>
+        }
+        actions={isDirector && <ButtonLink href="/intervenants/nouveau">Nouvel intervenant</ButtonLink>}
+      />
 
       {confirmed && (
         <Alert role="status">

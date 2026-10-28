@@ -14,6 +14,8 @@ import { ListTable } from "../_filters/list-table";
 import { NavigableResults } from "../_people/navigable-results";
 import { Telephone } from "../_people/sections";
 import { ButtonLink } from "../_ui/button-link";
+import { RememberList } from "../_ui/list-return";
+import { PageHeader } from "../_ui/page-header";
 import { TextLink } from "../_ui/text-link";
 
 export const metadata: Metadata = { title: "Élèves" };
@@ -53,12 +55,14 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
 
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <Title order={1} fz="xl">
-            Élèves
-          </Title>
-          <Text size="sm" c="dimmed" aria-live="polite">
+      <Suspense>
+        <RememberList list="/eleves" />
+      </Suspense>
+      <PageHeader
+        title="Élèves"
+        live
+        description={
+          <>
             {entry ? `${plural(students.length, "élève")} pour « ${entry} »` : plural(students.length, "élève")}
             {filtering && " avec ces filtres"}
             {students.length >= MAX_RESULTS &&
@@ -66,10 +70,10 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
             {!entry && !filtering && (
               <span className="hidden sm:inline">. Recherche par nom, téléphone, ou nom d’un parent (Ctrl K).</span>
             )}
-          </Text>
-        </div>
-        <ButtonLink href="/eleves/nouveau">Nouvel élève</ButtonLink>
-      </div>
+          </>
+        }
+        actions={<ButtonLink href="/eleves/nouveau">Nouvel élève</ButtonLink>}
+      />
 
       <NavigableResults>
         {/* useSearchParams requires a Suspense boundary. */}

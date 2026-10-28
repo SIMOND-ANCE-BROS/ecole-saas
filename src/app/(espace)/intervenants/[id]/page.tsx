@@ -10,6 +10,7 @@ import { readInstructor, PAY_MODES, VAT_REGIMES, STATUSES, PAY_UNITS } from "@/d
 import { coursesWithOwnRate } from "@/db/courses";
 import { DAY_NAMES } from "@/domain/schedule/days";
 import { ButtonLink } from "@/app/(espace)/_ui/button-link";
+import { BackToList } from "@/app/(espace)/_ui/list-return";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { end } from "@/app/(espace)/planning/format";
 import { courseRateAllowed } from "@/domain/payroll/rate";
@@ -48,9 +49,9 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <TextLink href="/intervenants" size="sm">
+        <BackToList list="/intervenants" size="sm">
           Intervenants
-        </TextLink>
+        </BackToList>
         <Text span size="sm" c="dimmed">
           {" "}
           / {name}
