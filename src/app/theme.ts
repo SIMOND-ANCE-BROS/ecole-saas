@@ -130,6 +130,8 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
     ),
     // Near-black on the light dark-mode fills, as the old `--sur-accent` (#11131a).
     "--filled-text": "var(--mantine-color-dark-8)",
+    // Field errors take red 8 by default, 4.1:1 on the dark page (#188): the red of `c="red"` text instead.
+    "--mantine-color-error": "var(--mantine-color-red-text)",
     // The primary fill takes the deep indigo, with white text (#211).
     [`--mantine-color-${t.primaryColor}-filled`]: `var(--mantine-color-${t.primaryColor}-6)`,
     [`--mantine-color-${t.primaryColor}-filled-hover`]: `var(--mantine-color-${t.primaryColor}-7)`,
