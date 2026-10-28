@@ -1,5 +1,6 @@
 "use client";
 
+import { Kbd, NavLink, Text, TextInput } from "@mantine/core";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useTransition } from "react";
@@ -26,14 +27,17 @@ export function Navigation({ role }: { role: Role }) {
           (l.href !== "/parametres" || role === "director") &&
           (role !== "teacher" || !["/intervenants", "/eleves", "/contacts", "/encaissements"].includes(l.href)),
       ).map((l) => (
-        <Link
+        <NavLink
           key={l.href}
+          component={Link}
           href={l.href}
+          label={l.label}
+          active={active(l.href)}
           aria-current={active(l.href) ? "page" : undefined}
-          className="rounded-md border-l-[3px] border-transparent px-3 py-2.5 text-base md:py-1.5 md:text-sm text-doux hover:bg-accent-doux hover:text-texte focus-visible:outline-2 focus-visible:outline-accent aria-[current=page]:border-accent aria-[current=page]:bg-accent-doux aria-[current=page]:font-medium aria-[current=page]:text-texte"
-        >
-          {l.label}
-        </Link>
+          className="rounded-md"
+          // 44 px touch target on phones, compact with a mouse.
+          py={{ base: 10, md: 6 }}
+        />
       ))}
     </nav>
   );
@@ -104,21 +108,18 @@ export function GlobalSearch() {
         go(field.current?.value ?? "", onList);
       }}
     >
-      <label htmlFor="recherche-globale" className="sr-only">
-        {list?.label ?? "Rechercher un élève ou un parent"}
-      </label>
-      <input
+      <TextInput
         ref={field}
+        aria-label={list?.label ?? "Rechercher un élève ou un parent"}
+        className="w-full"
         id="recherche-globale"
         type="search"
         autoComplete="off"
         placeholder={list?.example ?? "Élève, parent, téléphone…"}
-        className="champ w-full"
         defaultValue={search}
-        aria-describedby="etat-recherche"
         autoFocus={onList}
         onChange={(e) => {
-          if (onList) go(e.target.value, true);
+          if (onList) go(e.currentTarget.value, true);
         }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" && !inProgress) {
@@ -130,12 +131,10 @@ export function GlobalSearch() {
           }
         }}
       />
-      <span id="etat-recherche" role="status" className="shrink-0 text-xs text-doux">
+      <Text span id="etat-recherche" role="status" size="xs" c="dimmed" className="shrink-0">
         {inProgress ? "Recherche…" : ""}
-      </span>
-      <kbd className="hidden shrink-0 rounded border border-bordure px-1.5 py-0.5 text-xs text-doux sm:inline">
-        Ctrl K
-      </kbd>
+      </Text>
+      <Kbd className="hidden shrink-0 sm:inline-block">Ctrl K</Kbd>
     </form>
   );
 }

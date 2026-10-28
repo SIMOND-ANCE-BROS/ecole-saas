@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, MantineThemeProvider, type MantineThemeOverride } from "@mantine/core";
+import { Anchor, Button, MantineThemeProvider, type MantineThemeOverride } from "@mantine/core";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, type ReactNode, use, useEffect, useRef, useState } from "react";
@@ -96,12 +96,12 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
       <div className="flex h-full flex-col">
         <div className="flex items-center justify-end gap-2 border-b border-bordure px-4 py-2">
           {/* Plain link: full reload, hence the whole page without a panel. */}
-          <a href={query ? `${path}?${query}` : path} className="lien text-sm">
+          <Anchor href={query ? `${path}?${query}` : path} size="sm">
             Ouvrir en pleine page
-          </a>
-          <button type="button" className="bouton-secondaire" onClick={close}>
+          </Anchor>
+          <Button variant="default" onClick={close}>
             Fermer
-          </button>
+          </Button>
         </div>
         <div ref={body} className="flex-1 overflow-y-auto overscroll-contain p-4">
           <MantineThemeProvider theme={IN_DIALOG}>

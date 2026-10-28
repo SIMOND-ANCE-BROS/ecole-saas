@@ -211,7 +211,7 @@ DESIGN.md                    interface rules
 Rules in `DESIGN.md`. In short:
 
 - Built for the front-desk PC first: keyboard-friendly forms, instant person search, few clicks for an enrollment.
-- Mantine components everywhere (ADR 0003); Tailwind only for layout. Custom control classes (`.champ`, `.bouton-principal`…) are being removed (#115).
+- Mantine components everywhere (ADR 0003); Tailwind only for layout. No custom control class: `.champ`, `.bouton-principal`… were removed in #115.
 - Lists work like Excel autofilters: each column header sorts and filters; one search bar at the top (Ctrl K).
 - Forms and course records: a real page, also opened as a **side panel** over the current page (intercepted route in `src/app/(espace)/@modal/(.)…`, component `Panel` in `_panel/panel.tsx`). The cancel button is `<Cancel href=…>` (back navigation inside a panel).
 - Accessible: labels on every field, sufficient contrast, dark mode.

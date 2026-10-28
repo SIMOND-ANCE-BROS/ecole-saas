@@ -1,7 +1,8 @@
 "use client";
 
+import { Button } from "@mantine/core";
 import { usePathname } from "next/navigation";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 type Props = { pane: ReactNode; header: ReactNode; children: ReactNode };
 
@@ -14,13 +15,23 @@ export function Frame({ pane: pane, header: header, children }: Props) {
   const [open, setOpen] = useState(false);
   const path = usePathname();
   const [openPath, setOpenPath] = useState(path);
+  const menu = useRef<HTMLButtonElement>(null);
   if (open && path !== openPath) setOpen(false);
+  // Closed by « Fermer » or Escape: focus goes back to « Menu », not to the page top.
+  const close = () => {
+    setOpen(false);
+    menu.current?.focus();
+  };
 
   useEffect(() => {
     if (!open) return;
-    const close = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
+    const closeOnEscape = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      menu.current?.focus();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
   }, [open]);
 
   return (
@@ -35,16 +46,17 @@ export function Frame({ pane: pane, header: header, children }: Props) {
         id="volet"
         className={`${open ? "fixed inset-0 z-40 flex overflow-y-auto" : "hidden"} shrink-0 flex-col gap-6 border-bordure bg-surface p-3 print:hidden md:sticky md:top-0 md:flex md:h-screen md:w-52 md:border-r`}
       >
-        <button type="button" className="bouton-secondaire self-end md:hidden" onClick={() => setOpen(false)}>
+        <Button variant="default" className="self-end md:hidden" onClick={close}>
           Fermer
-        </button>
+        </Button>
         {pane}
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-bordure bg-fond/90 px-3 py-2 backdrop-blur print:hidden md:px-4">
-          <button
-            type="button"
-            className="bouton-secondaire shrink-0 md:hidden"
+          <Button
+            ref={menu}
+            variant="default"
+            className="shrink-0 md:hidden"
             aria-expanded={open}
             aria-controls="volet"
             onClick={() => {
@@ -53,7 +65,7 @@ export function Frame({ pane: pane, header: header, children }: Props) {
             }}
           >
             Menu
-          </button>
+          </Button>
           {header}
         </header>
         <main id="contenu" tabIndex={-1} className="w-full min-w-0 flex-1 p-3 sm:p-4 md:p-6">

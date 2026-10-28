@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { Button, PasswordInput, Text, TextInput } from "@mantine/core";
+import { type KeyboardEvent, useActionState, useState } from "react";
 import { type ConnectionState, signIn } from "./actions";
 import { SIGN_IN } from "./fields";
 
@@ -8,45 +9,50 @@ const initialState: ConnectionState = { error: null, email: "" };
 
 export function SignInForm() {
   const [state, action, inProgress] = useActionState(signIn, initialState);
+  const [visible, setVisible] = useState(false);
 
   return (
     <form action={action} className="flex flex-col gap-4" noValidate>
-      <div className="flex flex-col gap-1">
-        <label htmlFor="email" className="text-sm font-medium">
-          Adresse e-mail
-        </label>
-        <input
-          id="email"
-          name={SIGN_IN.name("email")}
-          type="email"
-          autoComplete="username"
-          required
-          autoFocus
-          defaultValue={state.email}
-          className="champ"
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label htmlFor="password" className="text-sm font-medium">
-          Mot de passe
-        </label>
-        <input
-          id="password"
-          name={SIGN_IN.name("password")}
-          type="password"
-          autoComplete="current-password"
-          required
-          className="champ"
-        />
-      </div>
+      <TextInput
+        id="email"
+        label="Adresse e-mail"
+        name={SIGN_IN.name("email")}
+        type="email"
+        autoComplete="username"
+        required
+        withAsterisk={false}
+        autoFocus
+        defaultValue={state.email}
+      />
+      <PasswordInput
+        id="password"
+        label="Mot de passe"
+        name={SIGN_IN.name("password")}
+        autoComplete="current-password"
+        required
+        withAsterisk={false}
+        visible={visible}
+        onVisibilityChange={setVisible}
+        // Reachable with Tab and named, a toggle (`aria-pressed` set by Mantine):
+        // Mantine leaves the eye out of the keyboard order and toggles on Space only.
+        visibilityToggleButtonProps={{
+          tabIndex: 0,
+          "aria-label": "Afficher le mot de passe",
+          onKeyDown: (e: KeyboardEvent<HTMLButtonElement>) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            setVisible((v) => !v);
+          },
+        }}
+      />
       {state.error && (
-        <p role="alert" className="text-sm text-erreur">
+        <Text role="alert" size="sm" c="red">
           {state.error}
-        </p>
+        </Text>
       )}
-      <button type="submit" disabled={inProgress} className="bouton-principal">
-        {inProgress ? "Connexion…" : "Se connecter"}
-      </button>
+      <Button type="submit" loading={inProgress}>
+        Se connecter
+      </Button>
     </form>
   );
 }

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Paper, Table, TableTbody, TableTd, TableTh, TableThead, TableTr, Text, Title } from "@mantine/core";
 import { withSchool } from "@/db";
 import { seasonCourses, currentSeason } from "@/db/schedule";
 import { dayLessons } from "@/db/lessons";
@@ -6,6 +6,8 @@ import { seasonFigures, lastEnrollments } from "@/db/dashboard";
 import { todayInParis } from "@/domain/people/age";
 import { formatEuros } from "@/lib/money";
 import { schoolContext, currentSession } from "@/lib/session";
+import { ButtonLink } from "./_ui/button-link";
+import { TextLink } from "./_ui/text-link";
 
 const DAYS = ["", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
 /** Threshold from which a course is flagged « presque complet ». */
@@ -30,8 +32,12 @@ export default async function FrontDesk() {
   if (!parsed) {
     return (
       <section className="flex flex-col gap-2">
-        <h1 className="titre-page">Bonjour {firstName}</h1>
-        <p className="text-sm text-doux">Aucune saison n’est encore paramétrée : commencez par créer la saison.</p>
+        <Title order={1} fz="xl">
+          Bonjour {firstName}
+        </Title>
+        <Text size="sm" c="dimmed">
+          Aucune saison n’est encore paramétrée : commencez par créer la saison.
+        </Text>
       </section>
     );
   }
@@ -45,53 +51,65 @@ export default async function FrontDesk() {
     <section className="flex w-full min-w-0 flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="titre-page">Bonjour {firstName}</h1>
-          <p className="text-sm text-doux">Saison {season.label}</p>
+          <Title order={1} fz="xl">
+            Bonjour {firstName}
+          </Title>
+          <Text size="sm" c="dimmed">
+            Saison {season.label}
+          </Text>
         </div>
         <div className="flex gap-2">
-          {role !== "teacher" && (
-            <Link href="/eleves/nouveau" className="bouton-principal">
-              Nouvel élève
-            </Link>
-          )}
-          <Link href="/planning" className="bouton-secondaire">
+          {role !== "teacher" && <ButtonLink href="/eleves/nouveau">Nouvel élève</ButtonLink>}
+          <ButtonLink href="/planning" variant="default">
             Voir le planning
-          </Link>
+          </ButtonLink>
         </div>
       </div>
 
-      <dl className={`panneau grid divide-x divide-bordure ${role === "director" ? "grid-cols-3" : "grid-cols-2"}`}>
+      <Paper
+        withBorder
+        component="dl"
+        className={`grid divide-x divide-bordure ${role === "director" ? "grid-cols-3" : "grid-cols-2"}`}
+      >
         <div className="px-3 py-3 sm:px-4">
-          <dt className="text-xs text-doux">Inscriptions</dt>
+          <Text component="dt" size="xs" c="dimmed">
+            Inscriptions
+          </Text>
           <dd className="text-lg font-semibold tabular-nums sm:text-2xl">{digits.enrollments}</dd>
         </div>
         <div className="px-3 py-3 sm:px-4">
-          <dt className="text-xs text-doux">Danseurs inscrits</dt>
+          <Text component="dt" size="xs" c="dimmed">
+            Danseurs inscrits
+          </Text>
           <dd className="text-lg font-semibold tabular-nums sm:text-2xl">{digits.students}</dd>
         </div>
         {role === "director" && (
           <div className="px-3 py-3 sm:px-4">
-            <dt className="text-xs text-doux">Montant inscrit</dt>
+            <Text component="dt" size="xs" c="dimmed">
+              Montant inscrit
+            </Text>
             <dd className="text-lg font-semibold tabular-nums sm:text-2xl">{formatEuros(digits.netTotalCents)}</dd>
           </div>
         )}
-      </dl>
+      </Paper>
 
       <section aria-labelledby="jour" className="flex flex-col gap-2">
-        <h2 id="jour" className="text-base font-semibold">
+        <Title order={2} size="h5" id="jour">
           Séances du jour
-        </h2>
+        </Title>
         {ofDay.length > 0 && (
-          <p className="text-sm text-doux">
+          <Text size="sm" c="dimmed">
             {ofDay.filter((s) => s.status !== "cancelled" && !s.doneAttendance).length} appel(s) à faire ·{" "}
             {ofDay.filter((s) => s.status !== "cancelled" && s.doneAttendance).length} fait(s) ·{" "}
             {ofDay.filter((s) => s.status === "cancelled").length} séance(s) annulée(s)
-          </p>
+          </Text>
         )}
         {ofDay.length === 0 ? (
-          <p className="text-sm text-doux">Pas de cours aujourd’hui.</p>
+          <Text size="sm" c="dimmed">
+            Pas de cours aujourd’hui.
+          </Text>
         ) : (
-          <ul className="panneau divide-y divide-bordure text-sm">
+          <Paper withBorder component="ul" className="divide-y divide-bordure text-sm">
             {ofDay.map((s) => (
               <li
                 key={s.id}
@@ -105,95 +123,114 @@ export default async function FrontDesk() {
                 <span className="text-doux">
                   {s.room}, {s.instructor}
                 </span>
-                <Link
-                  href={`/planning/seances/${s.id}`}
-                  className={`ml-auto ${s.doneAttendance || s.status === "cancelled" ? "lien text-doux" : "bouton-secondaire"}`}
-                >
-                  {s.status === "cancelled" ? "Annulée" : s.doneAttendance ? "Appel fait" : "Faire l’appel"}
-                </Link>
+                {s.doneAttendance || s.status === "cancelled" ? (
+                  <TextLink href={`/planning/seances/${s.id}`} size="sm" c="dimmed" className="ml-auto">
+                    {s.status === "cancelled" ? "Annulée" : "Appel fait"}
+                  </TextLink>
+                ) : (
+                  <ButtonLink href={`/planning/seances/${s.id}`} variant="default" size="xs" className="ml-auto">
+                    Faire l’appel
+                  </ButtonLink>
+                )}
               </li>
             ))}
-          </ul>
+          </Paper>
         )}
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section aria-labelledby="dernieres" className="flex flex-col gap-2">
-          <h2 id="dernieres" className="text-base font-semibold">
+          <Title order={2} size="h5" id="dernieres">
             Dernières inscriptions
-          </h2>
+          </Title>
           {latest.length === 0 ? (
-            <p className="text-sm text-doux">
+            <Text size="sm" c="dimmed">
               Aucune inscription pour l’instant. Recherchez une personne pour commencer.
-            </p>
+            </Text>
           ) : (
-            <div className="panneau overflow-x-auto">
-              <table className="tableau">
-                <thead>
-                  <tr>
-                    <th>Payeur</th>
-                    <th>Danseur</th>
-                    <th className="text-right">Prix</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <Paper withBorder className="overflow-x-auto">
+              <Table verticalSpacing={5}>
+                <TableThead>
+                  <TableTr>
+                    <TableTh scope="col" fz="xs" fw={500} c="dimmed">
+                      Payeur
+                    </TableTh>
+                    <TableTh scope="col" fz="xs" fw={500} c="dimmed">
+                      Danseur
+                    </TableTh>
+                    <TableTh scope="col" ta="right" fz="xs" fw={500} c="dimmed">
+                      Prix
+                    </TableTh>
+                  </TableTr>
+                </TableThead>
+                <TableTbody>
                   {latest.map((d) => (
-                    <tr key={d.id}>
-                      <td>
-                        <Link href={`/personnes/${d.payerId}`} className="lien">
+                    <TableTr key={d.id}>
+                      <TableTd>
+                        <TextLink href={`/personnes/${d.payerId}`} size="sm">
                           {d.payer}
-                        </Link>
-                      </td>
-                      <td>{d.students}</td>
-                      <td className="text-right tabular-nums">{formatEuros(d.netPriceCents)}</td>
-                    </tr>
+                        </TextLink>
+                      </TableTd>
+                      <TableTd>{d.students}</TableTd>
+                      <TableTd ta="right" className="tabular-nums">
+                        {formatEuros(d.netPriceCents)}
+                      </TableTd>
+                    </TableTr>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TableTbody>
+              </Table>
+            </Paper>
           )}
         </section>
 
         <section aria-labelledby="complets" className="flex flex-col gap-2">
-          <h2 id="complets" className="text-base font-semibold">
+          <Title order={2} size="h5" id="complets">
             Cours presque complets
-          </h2>
+          </Title>
           {almostFull.length === 0 ? (
-            <p className="text-sm text-doux">Tous les cours ont encore de la place.</p>
+            <Text size="sm" c="dimmed">
+              Tous les cours ont encore de la place.
+            </Text>
           ) : (
-            <div className="panneau overflow-x-auto">
-              <table className="tableau">
-                <thead>
-                  <tr>
-                    <th>Cours</th>
-                    <th>Créneau</th>
-                    <th className="text-right">Occupation</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <Paper withBorder className="overflow-x-auto">
+              <Table verticalSpacing={5}>
+                <TableThead>
+                  <TableTr>
+                    <TableTh scope="col" fz="xs" fw={500} c="dimmed">
+                      Cours
+                    </TableTh>
+                    <TableTh scope="col" fz="xs" fw={500} c="dimmed">
+                      Créneau
+                    </TableTh>
+                    <TableTh scope="col" ta="right" fz="xs" fw={500} c="dimmed">
+                      Occupation
+                    </TableTh>
+                  </TableTr>
+                </TableThead>
+                <TableTbody>
                   {almostFull.map((c) => (
-                    <tr key={c.id}>
-                      <td>
-                        <Link className="lien" href={`/planning/cours/${c.id}`}>
+                    <TableTr key={c.id}>
+                      <TableTd>
+                        <TextLink href={`/planning/cours/${c.id}`} size="sm">
                           {c.discipline}
-                        </Link>
-                      </td>
-                      <td>
+                        </TextLink>
+                      </TableTd>
+                      <TableTd>
                         {c.weekday ? DAYS[c.weekday] : "stage"} {c.startTime}
-                      </td>
-                      <td className="text-right tabular-nums">
+                      </TableTd>
+                      <TableTd ta="right" className="tabular-nums">
                         {c.enrolled} / {c.maxCapacity}
-                        <span className="block text-xs text-doux">
+                        <Text span size="xs" c="dimmed" className="block">
                           {c.enrolled >= (c.maxCapacity ?? 0)
                             ? "Complet"
                             : `${(c.maxCapacity ?? 0) - c.enrolled} place(s) restante(s)`}
-                        </span>
-                      </td>
-                    </tr>
+                        </Text>
+                      </TableTd>
+                    </TableTr>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TableTbody>
+              </Table>
+            </Paper>
           )}
         </section>
       </div>

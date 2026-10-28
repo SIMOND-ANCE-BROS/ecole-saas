@@ -1,8 +1,21 @@
 "use client";
 
+import {
+  ActionIcon,
+  Anchor,
+  Button,
+  Checkbox,
+  CloseButton,
+  Paper,
+  Table,
+  Text,
+  TextInput,
+  UnstyledButton,
+  type ButtonProps,
+} from "@mantine/core";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, useId, useRef, useState, useTransition } from "react";
+import { createContext, type ReactNode, use, useId, useRef, useState, useTransition } from "react";
 import {
   writeColumnFilter,
   type ColumnFilter,
@@ -21,6 +34,7 @@ import {
   resize,
 } from "@/domain/filters/layout";
 import { type ColumnDef, conditionLabel, readSort, type Sort, EMPTY } from "@/domain/filters/filters";
+import { DateField } from "../_ui/date-field";
 import { saveColumns } from "./actions";
 import { type AddressFilter, useAddressFilter } from "./address-filter";
 
@@ -192,28 +206,21 @@ export function ListTable<Id extends string>({
                   className="flex items-center gap-1 rounded-full border border-accent bg-accent-doux py-0.5 pr-1 pl-2.5"
                 >
                   {p.text}
-                  <button
-                    type="button"
-                    className="rounded-full px-1.5 hover:bg-surface"
-                    aria-label={`Retirer le filtre ${p.text}`}
-                    onClick={p.remove}
-                  >
-                    ×
-                  </button>
+                  <CloseButton size="sm" radius="xl" aria-label={`Retirer le filtre ${p.text}`} onClick={p.remove} />
                 </li>
               ))}
             </ul>
-            <button type="button" className="lien" onClick={clearAll}>
+            <Anchor component="button" type="button" size="sm" onClick={clearAll}>
               Effacer les filtres
-            </button>
+            </Anchor>
           </>
         ) : (
-          <span className={`text-doux ${mobile ? "hidden sm:inline" : ""}`}>
+          <Text span size="sm" c="dimmed" className={mobile ? "hidden sm:inline" : ""}>
             Cliquez sur le titre d’une colonne pour trier ou filtrer.
-          </span>
+          </Text>
         )}
         <span className="flex items-center gap-2 sm:ml-auto">
-          <span className="text-xs text-doux" role="status">
+          <Text span size="xs" c="dimmed" role="status">
             {f.inProgress || sortPending
               ? "Mise à jour…"
               : saving
@@ -221,13 +228,13 @@ export function ListTable<Id extends string>({
                 : failure
                   ? "Disposition non enregistrée : réessayez."
                   : ""}
-          </span>
+          </Text>
           {/* On phones, cards: no columns to adjust. */}
           <span className={mobile ? "hidden sm:inline" : ""}>
             <Popover
               title={`Colonnes ${what}`}
               button={masquees.length ? `Colonnes (${masquees.length} de plus)` : "Colonnes"}
-              buttonClass="bouton-secondaire"
+              buttonProps={{ variant: "default" }}
               width="w-[22rem]"
             >
               <ColumnsMenu
@@ -242,13 +249,13 @@ export function ListTable<Id extends string>({
       </div>
 
       {mobile && <div className="sm:hidden">{mobile}</div>}
-      <div className={`panneau overflow-x-auto ${mobile ? "hidden sm:block" : ""}`}>
-        <table className="tableau">
+      <Paper withBorder className={`overflow-x-auto ${mobile ? "hidden sm:block" : ""}`}>
+        <Table verticalSpacing={5}>
           <caption className="sr-only">{caption}</caption>
-          <thead>
-            <tr>
+          <Table.Thead>
+            <Table.Tr>
               {visible.map((d) => (
-                <th
+                <Table.Th
                   key={d.id}
                   scope="col"
                   aria-sort={
@@ -305,65 +312,73 @@ export function ListTable<Id extends string>({
                     onPointerDown={(e) => startResize(e, d.id)}
                     onDoubleClick={() => changeAvailability(resize(availability, d.id, null))}
                   />
-                </th>
+                </Table.Th>
               ))}
-              <th scope="col" className="w-8 px-1 text-right">
+              <Table.Th scope="col" className="w-8 px-1 text-right">
                 <Popover
                   title="Ajouter une colonne"
                   buttonLabel="Ajouter une colonne"
                   button="+"
-                  buttonClass="rounded px-2 py-0.5 text-base leading-none text-accent hover:bg-accent-doux"
+                  plainClass="rounded px-2 py-0.5 text-base leading-none text-accent hover:bg-accent-doux"
                 >
-                  <p className="mb-2 font-medium">Ajouter une colonne</p>
+                  <Text size="sm" fw={500} mb="xs">
+                    Ajouter une colonne
+                  </Text>
                   {masquees.length === 0 ? (
-                    <p className="text-doux">Toutes les colonnes sont affichées.</p>
+                    <Text size="sm" c="dimmed">
+                      Toutes les colonnes sont affichées.
+                    </Text>
                   ) : (
                     <ul className="flex flex-col gap-1">
                       {masquees.map((c) => (
                         <li key={c.id}>
-                          <button
+                          <Anchor
+                            component="button"
                             type="button"
-                            className="lien"
+                            size="sm"
                             onClick={() => changeAvailability(place(toggle(availability, c.id), c.id, null))}
                           >
                             {c.label}
-                          </button>
+                          </Anchor>
                         </li>
                       ))}
                     </ul>
                   )}
-                  <p className="mt-2 text-xs text-doux">
+                  <Text size="xs" c="dimmed" mt="xs">
                     Pour retirer une colonne : cliquez sur son titre, puis « Masquer la colonne ».
-                  </p>
+                  </Text>
                 </Popover>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+              </Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
             {rows.length === 0 ? (
-              <tr>
-                <td colSpan={visible.length + 1} className="py-6 text-center">
-                  <p className="text-doux">{empty}</p>
+              <Table.Tr>
+                <Table.Td colSpan={visible.length + 1} className="py-6 text-center">
+                  <Text size="sm" c="dimmed">
+                    {empty}
+                  </Text>
                   <div className="mt-3 flex justify-center gap-3">
                     {filter ? (
-                      <button type="button" className="bouton-secondaire" onClick={clearAll}>
+                      <Button variant="default" onClick={clearAll}>
                         Effacer les filtres
-                      </button>
+                      </Button>
                     ) : (
                       emptyAction
                     )}
                   </div>
-                </td>
-              </tr>
+                </Table.Td>
+              </Table.Tr>
             ) : (
               rows.map((l) => (
-                <tr
+                <Table.Tr
                   key={l.id}
-                  className={`${l.dimmed ? "text-doux" : ""} ${l.href ? "cursor-pointer" : ""}`}
+                  c={l.dimmed ? "dimmed" : undefined}
+                  className={l.href ? "cursor-pointer" : undefined}
                   onClick={(e) => open(e, l.href)}
                 >
                   {visible.map((d) => (
-                    <td
+                    <Table.Td
                       key={d.id}
                       style={style(d.id)}
                       className={`${d.right ? "text-right tabular-nums" : ""} ${widthOf(d.id) ? "break-words" : ""}`}
@@ -371,30 +386,37 @@ export function ListTable<Id extends string>({
                       {d.id === linkColumn ? (
                         <>
                           {l.href ? (
-                            <Link href={l.href} data-resultat className="lien font-medium">
+                            <Anchor component={Link} href={l.href} data-resultat size="sm" fw={500}>
                               {text(l.cells[d.id] ?? null)}
-                            </Link>
+                            </Anchor>
                           ) : (
                             <span className="font-medium">{text(l.cells[d.id] ?? null)}</span>
                           )}
                           {l.badge && (
-                            <span className="ml-2 rounded border border-bordure px-1.5 text-xs font-normal text-doux">
+                            <Text
+                              span
+                              size="xs"
+                              c="dimmed"
+                              ml="xs"
+                              px={6}
+                              className="rounded border border-bordure font-normal"
+                            >
                               {l.badge}
-                            </span>
+                            </Text>
                           )}
                         </>
                       ) : (
                         <CellContent def={d} value={l.cells[d.id] ?? null} />
                       )}
-                    </td>
+                    </Table.Td>
                   ))}
-                  <td />
-                </tr>
+                  <Table.Td />
+                </Table.Tr>
               ))
             )}
-          </tbody>
-        </table>
-      </div>
+          </Table.Tbody>
+        </Table>
+      </Paper>
     </div>
   );
 }
@@ -403,20 +425,25 @@ const text = (v: CellValue) => (Array.isArray(v) ? v.join(", ") : v == null ? ""
 
 function CellContent({ def, value: value }: { def: ColumnDef; value: CellValue }) {
   const t = text(value);
-  if (t === "") return <span className="text-doux">{def.ifEmpty ?? "—"}</span>;
+  if (t === "")
+    return (
+      <Text span size="sm" c="dimmed">
+        {def.ifEmpty ?? "—"}
+      </Text>
+    );
   if (def.type === "phone") {
     return (
-      <a href={`tel:${t.replace(/\s/g, "")}`} className="lien whitespace-nowrap tabular-nums">
+      <Anchor href={`tel:${t.replace(/\s/g, "")}`} size="sm" className="whitespace-nowrap tabular-nums">
         {t}
-      </a>
+      </Anchor>
     );
   }
   if (def.type === "date") return t.slice(0, 10).split("-").reverse().join("/");
   if (def.email) {
     return (
-      <a href={`mailto:${t}`} className="lien break-all">
+      <Anchor href={`mailto:${t}`} size="sm" className="break-all">
         {t}
-      </a>
+      </Anchor>
     );
   }
   return t;
@@ -425,18 +452,24 @@ function CellContent({ def, value: value }: { def: ColumnDef; value: CellValue }
 /**
  * Native popover (`popover`): above everything, closed by Escape or a click
  * elsewhere, focus returns to the button. Placed under its button when opened.
+ * The trigger is a Mantine button (`buttonProps`), or an unstyled one laid
+ * out by `plainClass` (column headers, « + »). A calendar opened inside
+ * renders into `PopoverPortal`, inside the popover: rendered in `<body>`, it
+ * would sit behind the popover (top layer) and a click on it would close it.
  */
 function Popover({
   title: title,
   button: button,
-  buttonClass: buttonClass,
+  buttonProps,
+  plainClass,
   buttonLabel: buttonLabel,
   width: width = "w-80",
   children,
 }: {
   title: string;
   button: ReactNode;
-  buttonClass: string;
+  buttonProps?: ButtonProps;
+  plainClass?: string;
   buttonLabel?: string;
   width?: string;
   children: ReactNode;
@@ -444,6 +477,7 @@ function Popover({
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const popover = useRef<HTMLDivElement>(null);
+  const [portal, setPortal] = useState<HTMLDivElement | null>(null);
 
   function positionPopover() {
     const b = trigger.current?.getBoundingClientRect();
@@ -458,30 +492,48 @@ function Popover({
 
   return (
     <>
-      <button ref={trigger} type="button" popoverTarget={id} className={buttonClass} aria-label={buttonLabel}>
-        {button}
-      </button>
-      <div
+      {plainClass !== undefined ? (
+        <UnstyledButton ref={trigger} popoverTarget={id} className={plainClass} aria-label={buttonLabel}>
+          {button}
+        </UnstyledButton>
+      ) : (
+        <Button ref={trigger} popoverTarget={id} aria-label={buttonLabel} {...buttonProps}>
+          {button}
+        </Button>
+      )}
+      <Paper
         ref={popover}
         id={id}
         popover="auto"
         role="dialog"
         aria-label={title}
-        className={`panneau fixed m-0 max-h-[70vh] max-w-[calc(100vw-1rem)] overflow-y-auto p-3 text-sm font-normal text-texte shadow-lg [inset:auto] ${width}`}
+        withBorder
+        shadow="md"
+        p="sm"
+        // Paper sets `display`, which would beat the browser's rule hiding a closed popover.
+        className={`fixed m-0 max-h-[70vh] max-w-[calc(100vw-1rem)] overflow-y-auto text-sm font-normal [inset:auto] [&:not(:popover-open)]:hidden ${width}`}
         onToggle={(e) => {
           if (e.newState !== "open") return;
           positionPopover();
           requestAnimationFrame(() => {
             positionPopover();
-            popover.current?.querySelector<HTMLElement>("input, button")?.focus();
+            const first = popover.current?.querySelector<HTMLElement>("input, button");
+            // A date field first (column filterable, not sortable): focused
+            // without opening its calendar over the menu (see `DateField`).
+            if (first?.classList.contains("mantine-DateInput-input")) first.dataset.quietFocus = "1";
+            first?.focus();
           });
         }}
       >
-        {children}
-      </div>
+        <PopoverPortal value={portal}>{children}</PopoverPortal>
+        <div ref={setPortal} />
+      </Paper>
     </>
   );
 }
+
+/** Element inside the open popover where its calendars render (see `Popover`). */
+const PopoverPortal = createContext<HTMLElement | null>(null);
 
 /** Labels of the two sort directions, depending on the column's kind. */
 const SORT_LABELS: Record<ColumnDef["type"], [string, string]> = {
@@ -529,7 +581,7 @@ function TitleMenu({
     <Popover
       title={`Trier ou filtrer « ${def.label} »`}
       buttonLabel={`${def.label} : trier ou filtrer${state ? ` (${state})` : ""}`}
-      buttonClass={`-mx-1 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-1 rounded px-1 py-0.5 hover:bg-accent-doux ${def.right ? "justify-end" : ""} ${currentSort || filtered ? "text-accent" : ""}`}
+      plainClass={`-mx-1 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-1 rounded px-1 py-0.5 text-xs font-medium hover:bg-accent-doux ${def.right ? "justify-end" : ""} ${currentSort || filtered ? "text-accent" : "text-doux"}`}
       width="w-72"
       button={
         <>
@@ -544,9 +596,9 @@ function TitleMenu({
               <path d="M2 3h12l-4.5 5.5V13l-3 1.5V8.5z" />
             </svg>
           )}
-          <span aria-hidden className="text-xs text-doux">
+          <Text span aria-hidden size="xs" c="dimmed">
             ▾
-          </span>
+          </Text>
         </>
       }
     >
@@ -554,44 +606,57 @@ function TitleMenu({
         {sortable && (
           <div role="group" aria-label="Trier" className="flex flex-col gap-1">
             {(["asc", "desc"] as const).map((direction, i) => (
-              <button
+              <Button
                 key={direction}
-                type="button"
+                variant={currentSort === direction ? "light" : "subtle"}
+                color={currentSort === direction ? undefined : "gray"}
+                size="compact-sm"
+                justify="flex-start"
+                fullWidth
+                fw={currentSort === direction ? 500 : 400}
                 aria-pressed={currentSort === direction}
-                className={`flex items-center gap-2 rounded px-2 py-1 text-left hover:bg-accent-doux ${currentSort === direction ? "bg-accent-doux font-medium text-accent" : ""}`}
+                leftSection={
+                  <span aria-hidden className="w-3 text-xs">
+                    {direction === "asc" ? "▲" : "▼"}
+                  </span>
+                }
                 onClick={() => sort(currentSort === direction ? null : direction)}
               >
-                <span aria-hidden className="w-3 text-xs">
-                  {direction === "asc" ? "▲" : "▼"}
-                </span>
                 {SORT_LABELS[def.type][i]}
-              </button>
+              </Button>
             ))}
           </div>
         )}
         {filterable && (
           <div className={`flex flex-col gap-2 ${sortable ? "border-t border-bordure pt-3" : ""}`}>
-            <p className="font-medium">Filtrer</p>
+            <Text size="sm" fw={500}>
+              Filtrer
+            </Text>
             <TitleFilter def={def} choice={choice} fc={fc} change={change} />
             {fc.otherConditions.length > 0 && (
-              <p className="text-xs text-doux">
+              <Text size="xs" c="dimmed">
                 Aussi : {fc.otherConditions.map((c) => conditionLabel(c, [def])).join(", ")}
-              </p>
+              </Text>
             )}
           </div>
         )}
         <div className="flex flex-wrap justify-between gap-2 border-t border-bordure pt-2 text-xs">
           {filtered ? (
-            <button type="button" className="lien" onClick={() => f.change(writeColumnFilter(f.filter, def, {}))}>
+            <Anchor
+              component="button"
+              type="button"
+              size="xs"
+              onClick={() => f.change(writeColumnFilter(f.filter, def, {}))}
+            >
               Effacer ce filtre
-            </button>
+            </Anchor>
           ) : (
             <span />
           )}
           {hide && (
-            <button type="button" className="lien text-doux" onClick={hide}>
+            <Anchor component="button" type="button" size="xs" c="dimmed" onClick={hide}>
               Masquer la colonne
-            </button>
+            </Anchor>
           )}
         </div>
       </div>
@@ -613,6 +678,7 @@ function TitleFilter({
 }) {
   const id = useId();
   const [search, setSearch] = useState("");
+  const portal = use(PopoverPortal);
 
   if (def.type === "text" && choice) {
     const checked = fc.choice ?? [];
@@ -625,53 +691,89 @@ function TitleFilter({
     return (
       <>
         {choice.length > CELLS_WITHOUT_SEARCH && (
-          <input
+          <TextInput
             type="search"
-            className="champ"
+            size="xs"
             placeholder="Chercher…"
             aria-label={`Chercher dans « ${def.label} »`}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.currentTarget.value)}
           />
         )}
         <ul className="flex max-h-60 flex-col gap-0.5 overflow-y-auto">
           {visible.map((v) => (
             <li key={v}>
-              <label className="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-accent-doux">
-                <input type="checkbox" checked={checked.includes(v)} onChange={() => toggleChoice(v)} />
-                <span className={v === EMPTY ? "text-doux" : ""}>{label(v)}</span>
-              </label>
+              <Checkbox
+                size="xs"
+                radius="xs"
+                className="rounded px-1 py-1 hover:bg-accent-doux"
+                checked={checked.includes(v)}
+                onChange={() => toggleChoice(v)}
+                label={
+                  v === EMPTY ? (
+                    <Text span size="sm" c="dimmed">
+                      {label(v)}
+                    </Text>
+                  ) : (
+                    label(v)
+                  )
+                }
+              />
             </li>
           ))}
         </ul>
-        <p className="text-xs text-doux">
+        <Text size="xs" c="dimmed">
           {checked.length ? "Seules les valeurs cochées restent affichées." : "Cochez les valeurs à garder."}
-        </p>
+        </Text>
       </>
     );
   }
 
-  if (def.type === "number" || def.type === "date") {
-    const date = def.type === "date";
+  if (def.type === "date") {
+    // A day picked or a date typed in full filters at once; a refused or
+    // half-typed date empties that bound, as an empty field did before.
+    const bound = (key: "min" | "max", word: string) => (
+      <DateField
+        id={`${id}-${key}`}
+        size="xs"
+        className="min-w-0 flex-1"
+        // Fixed: placed on the screen, not clipped by the scrolling popover around it.
+        popoverProps={{ portalProps: { target: portal ?? undefined }, floatingStrategy: "fixed" }}
+        value={fc[key]}
+        onChange={(v) => change(key === "min" ? { min: v } : { max: v }, true)}
+        aria-label={`${def.label} : ${word}`}
+      />
+    );
     return (
       <div className="flex items-center gap-2">
-        <label htmlFor={`${id}-min`}>{date ? "Du" : "De"}</label>
-        <input
+        <span aria-hidden>Du</span>
+        {bound("min", "du")}
+        <span aria-hidden>au</span>
+        {bound("max", "au")}
+      </div>
+    );
+  }
+
+  if (def.type === "number") {
+    return (
+      <div className="flex items-center gap-2">
+        <label htmlFor={`${id}-min`}>De</label>
+        <TextInput
           id={`${id}-min`}
-          className="champ w-full min-w-0"
-          type={date ? "date" : "text"}
-          inputMode={date ? undefined : "numeric"}
+          size="xs"
+          className="min-w-0 flex-1"
+          inputMode="numeric"
           value={fc.min}
-          onChange={(e) => change({ min: e.target.value }, true)}
+          onChange={(e) => change({ min: e.currentTarget.value }, true)}
         />
-        <label htmlFor={`${id}-max`}>{date ? "au" : "à"}</label>
-        <input
+        <label htmlFor={`${id}-max`}>à</label>
+        <TextInput
           id={`${id}-max`}
-          className="champ w-full min-w-0"
-          type={date ? "date" : "text"}
-          inputMode={date ? undefined : "numeric"}
+          size="xs"
+          className="min-w-0 flex-1"
+          inputMode="numeric"
           value={fc.max}
-          onChange={(e) => change({ max: e.target.value }, true)}
+          onChange={(e) => change({ max: e.currentTarget.value }, true)}
         />
       </div>
     );
@@ -679,17 +781,15 @@ function TitleFilter({
 
   return (
     <>
-      <label htmlFor={`${id}-texte`} className="sr-only">
-        {def.label} contient
-      </label>
-      <input
+      <TextInput
         id={`${id}-texte`}
+        aria-label={`${def.label} contient`}
         type="search"
-        className="champ"
+        size="xs"
         placeholder="Contient…"
         inputMode={def.type === "phone" ? "tel" : undefined}
         value={fc.text}
-        onChange={(e) => change({ text: e.target.value }, true)}
+        onChange={(e) => change({ text: e.currentTarget.value }, true)}
       />
     </>
   );
@@ -710,47 +810,49 @@ function ColumnsMenu({
   const last = availability.filter((d) => d.visible).length === 1;
   return (
     <div className="flex flex-col gap-1">
-      <p className="mb-1 text-xs text-doux">Cochez les colonnes à afficher ; les flèches changent leur ordre.</p>
+      <Text size="xs" c="dimmed" mb={4}>
+        Cochez les colonnes à afficher ; les flèches changent leur ordre.
+      </Text>
       <ul className="flex flex-col divide-y divide-bordure">
         {availability.map((d, k) => {
           const def = columns.get(d.id);
           if (!def) return null;
           return (
             <li key={d.id} className="flex items-center gap-1 py-1.5">
-              <label className="flex flex-1 items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={d.visible}
-                  disabled={(d.visible && last) || def.required}
-                  onChange={() => change(toggle(availability, d.id))}
-                />
-                {def.label}
-              </label>
-              <button
-                type="button"
-                className="rounded px-1.5 hover:bg-accent-doux disabled:opacity-30"
+              <Checkbox
+                size="xs"
+                radius="xs"
+                className="flex-1"
+                label={def.label}
+                checked={d.visible}
+                disabled={(d.visible && last) || def.required}
+                onChange={() => change(toggle(availability, d.id))}
+              />
+              <ActionIcon
+                variant="subtle"
+                color="gray"
                 disabled={k === 0}
                 aria-label={`Monter « ${def.label} »`}
                 onClick={() => change(move(availability, d.id, -1))}
               >
                 ↑
-              </button>
-              <button
-                type="button"
-                className="rounded px-1.5 hover:bg-accent-doux disabled:opacity-30"
+              </ActionIcon>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
                 disabled={k === availability.length - 1}
                 aria-label={`Descendre « ${def.label} »`}
                 onClick={() => change(move(availability, d.id, 1))}
               >
                 ↓
-              </button>
+              </ActionIcon>
             </li>
           );
         })}
       </ul>
-      <button type="button" className="lien mt-1 self-start text-sm" onClick={byDefault}>
+      <Anchor component="button" type="button" size="sm" mt={4} className="self-start" onClick={byDefault}>
         Revenir à la disposition par défaut
-      </button>
+      </Anchor>
     </div>
   );
 }
