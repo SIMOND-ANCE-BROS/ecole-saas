@@ -16,12 +16,14 @@ const LINKS = [
   { href: "/parametres", label: "Paramètres" },
 ];
 
+const NAV_LABEL = "Navigation principale";
+
 /** Sidebar links; the current page is flagged (aria-current). */
 export function Navigation({ role }: { role: Role }) {
   const path = usePathname();
   const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
   return (
-    <nav aria-label="Navigation principale" className="flex flex-col gap-0.5">
+    <nav aria-label={NAV_LABEL} className="flex flex-col gap-0.5">
       {LINKS.filter(
         (l) =>
           (l.href !== "/parametres" || role === "director") &&
@@ -75,10 +77,11 @@ export function GlobalSearch() {
 
   // On a list the cursor starts in the search (#140): set here rather than with `autoFocus`,
   // which the server renders from its own pathname and which would take focus from an open
-  // panel. Only when nothing else has the focus yet.
+  // panel. Only when nothing has the focus yet (reload, Back) or the sidebar link that led here.
   useEffect(() => {
     const active = document.activeElement;
-    if (onList && (!active || active === document.body)) field.current?.focus();
+    const free = !active || active === document.body || active.closest(`nav[aria-label="${NAV_LABEL}"]`) !== null;
+    if (onList && free) field.current?.focus();
   }, [onList, path]);
 
   useEffect(() => {
