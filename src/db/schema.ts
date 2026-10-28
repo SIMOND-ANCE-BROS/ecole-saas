@@ -449,9 +449,12 @@ export const course = pgTable(
     startTime: time("start_time").notNull(),
     durationMinutes: integer("duration_minutes").notNull(),
     maxCapacity: integer("max_capacity"),
+    // Instructor's pay for this course, in the unit of their pay mode (#191); NULL: their default rate.
+    instructorRateCents: integer("instructor_rate_cents"),
   },
   (t) => [
     check("course_weekday", sql`${t.weekday} BETWEEN 1 AND 7`),
+    check("course_instructor_rate", sql`${t.instructorRateCents} >= 0`),
     check("course_recurrence_weekday", sql`(${t.recurrence} = 'dates') = (${t.weekday} IS NULL)`),
     check("course_period", sql`${t.startDate} IS NULL OR ${t.endDate} IS NULL OR ${t.startDate} <= ${t.endDate}`),
     check("course_duration", sql`${t.durationMinutes} > 0`),

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Text, Title } from "@mantine/core";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
-import { readCourse, scheduleReferential } from "@/db/courses";
+import { coursePay, readCourse, scheduleReferential } from "@/db/courses";
 import { seasonCourses } from "@/db/schedule";
 import { seasonCalendar } from "@/db/lessons";
 import { todayInParis } from "@/domain/people/age";
@@ -23,6 +23,7 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
       cours: course,
       planning: await coursePlanning(tx, course.id),
       referential: await scheduleReferential(tx, course.instructorId),
+      pay: await coursePay(tx, course.id),
       schedule: await seasonCourses(tx, course.seasonId),
       calendar: await seasonCalendar(tx, course.seasonId, todayInParis()),
     };
@@ -54,6 +55,7 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
       <CourseForm
         course={cours}
         referential={parsed.referential}
+        pay={parsed.pay}
         schedule={parsed.schedule}
         calendar={parsed.calendar}
       />

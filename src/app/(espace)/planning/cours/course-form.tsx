@@ -3,7 +3,10 @@
 import { Alert, Autocomplete, Button, Fieldset, Group, NumberInput, Select, Text, TextInput } from "@mantine/core";
 import { TimeInput } from "@mantine/dates";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { type EditedCourse, RECURRENCES, type ScheduleReferential, COURSE_TYPES } from "@/db/courses";
+import { type CoursePay, type EditedCourse, RECURRENCES, type ScheduleReferential, COURSE_TYPES } from "@/db/courses";
+import { PAY_UNITS } from "@/db/instructors";
+import { courseRateAllowed } from "@/domain/payroll/rate";
+import { formatEuros, parseEuros, typedEuros } from "@/lib/money";
 import type { ScheduleCourse } from "@/db/schedule";
 import { conflicts } from "@/domain/schedule/overlap";
 import { lessonDatesOf, type SeasonCalendar } from "@/domain/schedule/lessons";
@@ -26,6 +29,8 @@ const shortDate = new Intl.DateTimeFormat("fr-FR", {
 type Props = {
   course: EditedCourse | null;
   referential: ScheduleReferential;
+  /** Instructors' pay modes and this course's own rate (#191): director pages only. */
+  pay: CoursePay;
   schedule: ScheduleCourse[];
   /** Season dates and closures: overlaps are checked on actual lesson dates (#96). */
   calendar: SeasonCalendar | null;
@@ -49,6 +54,7 @@ const whole = (v: string) => (v.trim() === "" ? null : Number(v));
 export function CourseForm({
   course,
   referential: referential,
+  pay,
   schedule: schedule,
   calendar,
   day: day,
@@ -80,6 +86,7 @@ export function CourseForm({
     ageMax: course?.ageMax?.toString() ?? "",
     level: course?.level ?? "",
     maxCapacity: course?.maxCapacity?.toString() ?? "",
+    instructorRate: pay.rateCents === null ? "" : typedEuros(pay.rateCents),
   });
   // Dates of a one-off course; one empty row to start with.
   const [dates, setDates] = useState<string[]>(course?.dates.length ? course.dates : [date ?? ""]);
@@ -90,6 +97,8 @@ export function CourseForm({
     if (refusal) form.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
   }, [refusal]);
   const [confirmDeletion, setConfirm] = useState(false);
+  // A rate typed for the previous instructor, removed when another one was chosen: said in an alert.
+  const [rateCleared, setRateCleared] = useState<{ amount: string; instructor: string } | null>(null);
   const set = (field: keyof typeof v) => (value: string | number | null) =>
     setV({ ...v, [field]: value === null ? "" : String(value) });
   const typed = (field: keyof typeof v) => (e: { currentTarget: { value: string } }) =>
@@ -102,6 +111,25 @@ export function CourseForm({
   // Mantine highlights the first option containing the text, in list order.
   const firstMatch = r.disciplines.find((d) => d.name.toLowerCase().includes(typedDiscipline));
   const startsADiscipline = typedDiscipline !== "" && !!firstMatch?.name.toLowerCase().startsWith(typedDiscipline);
+
+  const instructorPay = pay.instructors[v.instructorId];
+  const rateAllowed = instructorPay ? courseRateAllowed(instructorPay.payMode) : false;
+  // A monthly flat instructor's course may still hold a rate (#192 Q2): the field stays, so it can be emptied.
+  const unusedRate = !rateAllowed && course?.instructorId === v.instructorId && pay.rateCents !== null;
+  const savedRate = pay.rateCents === null ? "" : typedEuros(pay.rateCents);
+  // What is sent: undefined lets the server keep (same instructor) or drop (new one) the stored rate.
+  const sentRate = rateAllowed
+    ? v.instructorRate
+    : unusedRate && v.instructorRate !== savedRate
+      ? v.instructorRate
+      : undefined;
+  const nameOf = (id: string) => r.instructors.find((i) => i.id === id);
+  // « 45,50 € / heure » for an amount typed for an instructor; the text as typed if it is not an amount.
+  const amountFor = (typedAmount: string, instructorId: string) => {
+    const cents = parseEuros(typedAmount);
+    const mode = pay.instructors[instructorId]?.payMode;
+    return cents === null || !mode ? typedAmount : `${formatEuros(cents)} / ${PAY_UNITS[mode]}`;
+  };
 
   const entry = {
     discipline: existingDiscipline ? { id: existingDiscipline.id } : { name: v.discipline },
@@ -126,6 +154,10 @@ export function CourseForm({
     ageMax: whole(v.ageMax),
     level: v.level,
     maxCapacity: whole(v.maxCapacity),
+    // Not offered for a monthly flat instructor: nothing is sent, so no rate is kept (#192).
+    instructorRate: sentRate,
+    // The instructor this rate was typed for: a rate left over from another one is not kept.
+    instructorRateFor: sentRate === undefined ? undefined : v.instructorId,
   };
 
   const datesOf = (c: Parameters<typeof lessonDatesOf>[0]) => (calendar ? lessonDatesOf(c, calendar) : undefined);
@@ -234,7 +266,31 @@ export function CourseForm({
             label: `${i.firstName} ${i.name}${i.active ? "" : " (inactif)"}`,
           }))}
           value={v.instructorId || null}
-          onChange={set("instructorId")}
+          // The rate typed for this course was the previous instructor's: it goes with them.
+          onChange={(value) => {
+            if (!value || value === v.instructorId) return;
+            // Back to the course's own instructor: their saved rate comes back.
+            if (value === course?.instructorId) {
+              setRateCleared(null);
+              setV({
+                ...v,
+                instructorId: value,
+                instructorRate: savedRate,
+              });
+              return;
+            }
+            const previous = nameOf(v.instructorId);
+            const typedAmount = v.instructorRate.trim();
+            setRateCleared(
+              typedAmount && previous
+                ? {
+                    amount: amountFor(typedAmount, v.instructorId),
+                    instructor: `${previous.firstName} ${previous.name}`,
+                  }
+                : null,
+            );
+            setV({ ...v, instructorId: value, instructorRate: "" });
+          }}
           description={
             r.instructors.length === 0 ? (
               <>
@@ -244,6 +300,48 @@ export function CourseForm({
           }
           error={error("instructorId")}
         />
+        <div>
+          {instructorPay &&
+            (rateAllowed || unusedRate ? (
+              <TextInput
+                label="Tarif intervenant pour ce cours"
+                // Description under the field: its box lines up with « Intervenant ».
+                inputWrapperOrder={["label", "input", "description", "error"]}
+                description={
+                  rateAllowed
+                    ? `Vide : tarif habituel de ${nameOf(v.instructorId)?.firstName ?? "l’intervenant"}, ${formatEuros(instructorPay.rateCents)} / ${PAY_UNITS[instructorPay.payMode]}.`
+                    : "Ce tarif ne s’applique pas pour l’instant (forfait mensuel, règle en attente)."
+                }
+                inputMode="decimal"
+                autoComplete="off"
+                rightSection={
+                  <Text size="xs" c="dimmed" pr="xs">
+                    {rateAllowed ? `€ / ${PAY_UNITS[instructorPay.payMode]}` : "€"}
+                  </Text>
+                }
+                rightSectionWidth={90}
+                styles={{ input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } }}
+                value={v.instructorRate}
+                onChange={(e) => {
+                  setRateCleared(null);
+                  typed("instructorRate")(e);
+                }}
+                error={error("instructorRate")}
+              />
+            ) : (
+              <Text size="sm" c="dimmed" pt={{ base: 0, sm: 28 }}>
+                Pas de tarif par cours pour un forfait mensuel pour l’instant (règle en attente).
+              </Text>
+            ))}
+          <div aria-live="polite">
+            {rateCleared && (
+              <Alert color="yellow" role="status" mt="xs" p="xs">
+                Le tarif de {rateCleared.amount} saisi pour {rateCleared.instructor} a été retiré : il ne vaut que pour
+                cet intervenant.
+              </Alert>
+            )}
+          </div>
+        </div>
         <Select
           label="Type"
           allowDeselect={false}

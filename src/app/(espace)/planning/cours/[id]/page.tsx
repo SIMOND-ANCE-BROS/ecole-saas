@@ -20,6 +20,9 @@ import { withSchool } from "@/db";
 import { scheduleCourse, enrolledInCourse } from "@/db/schedule";
 import { conflictingLessons } from "@/db/unavailabilities";
 import { courseLessons } from "@/db/lessons";
+import { courseOwnRate } from "@/db/courses";
+import { PAY_UNITS } from "@/db/instructors";
+import { formatEuros } from "@/lib/money";
 import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { ages, end, recurrenceText } from "../../format";
@@ -56,6 +59,8 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
           enrolled: await enrolledInCourse(tx, course.id),
           lessons: await courseLessons(tx, course.id),
           inConflict: await conflictingLessons(tx, course.id, todayInParis()),
+          // Pay data: read for management only, so it never reaches the front desk's page (#191).
+          ownRate: role === "director" ? await courseOwnRate(tx, course.id) : null,
         }
       : null;
   });
@@ -119,7 +124,15 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
         </div>
         <div>
           <dt className="text-xs text-doux">Intervenant</dt>
-          <dd>{cours.instructor}</dd>
+          <dd>
+            {cours.instructor}
+            {parsed.ownRate && (
+              <Text size="xs" c="dimmed" className="tabular-nums print:hidden">
+                Tarif intervenant : {formatEuros(parsed.ownRate.cents)} / {PAY_UNITS[parsed.ownRate.payMode]} (propre à
+                ce cours)
+              </Text>
+            )}
+          </dd>
         </div>
         <div>
           <dt className="text-xs text-doux">Public</dt>

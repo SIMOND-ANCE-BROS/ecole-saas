@@ -5,6 +5,7 @@ import type { Tx } from "./index";
 import { seasonById, type Season } from "./schedule";
 import { auditLog, course, discipline, instructor, member, room, season, site } from "./schema";
 import { planSeasonCopy, type SeasonCopyPlan } from "../domain/schedule/season-copy";
+import { courseRateAllowed } from "../domain/payroll/rate";
 
 /**
  * Copy of another season's planning (#190), always within the
@@ -35,6 +36,8 @@ const COPIED = {
   startTime: course.startTime,
   durationMinutes: course.durationMinutes,
   maxCapacity: course.maxCapacity,
+  // Belongs to the course and its instructor, both copied (#191).
+  instructorRateCents: course.instructorRateCents,
 } satisfies { [K in MustCopy]: (typeof course)[K] };
 
 async function coursesOf(tx: Tx, seasonId: string) {
@@ -50,6 +53,7 @@ async function coursesOf(tx: Tx, seasonId: string) {
       /** « Prénom Nom » */
       instructor: sql<string>`${instructor.firstName} || ' ' || ${instructor.lastName}`,
       instructorActive: instructor.active,
+      instructorPayMode: instructor.payMode,
     })
     .from(course)
     .innerJoin(discipline, eq(discipline.id, course.disciplineId))
@@ -59,7 +63,12 @@ async function coursesOf(tx: Tx, seasonId: string) {
     .where(eq(course.seasonId, seasonId))
     .orderBy(sql`${course.weekday} NULLS LAST`, course.startTime, discipline.name);
   // The fields the plan reads, next to the copied columns kept whole for the insert.
-  return rows.map((r) => ({ ...r, ...r.columns }));
+  return rows.map(({ instructorPayMode, ...r }) => {
+    // A rate the instructor's pay mode does not use (monthly flat) is not carried over. Otherwise it is,
+    // in the unit of their current pay mode: whether it should be is an open question (#192 Q4).
+    const columns = courseRateAllowed(instructorPayMode) ? r.columns : { ...r.columns, instructorRateCents: null };
+    return { ...r, columns, ...columns };
+  });
 }
 
 export type CourseToCopy = Awaited<ReturnType<typeof coursesOf>>[number];

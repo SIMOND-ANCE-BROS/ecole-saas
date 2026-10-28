@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Paper, Table, TableTbody, TableTd, TableTh, TableThead, TableTr, Text, Title } from "@mantine/core";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
@@ -7,6 +8,11 @@ import { PROVIDER_NAME } from "@/connectors/calendar/oauth";
 import { connectionState } from "@/db/calendar-connections";
 import { listUnavailabilities } from "@/db/unavailabilities";
 import { readInstructor, PAY_MODES, VAT_REGIMES, STATUSES, PAY_UNITS } from "@/db/instructors";
+import { coursesWithOwnRate } from "@/db/courses";
+import { DAY_NAMES } from "@/domain/schedule/days";
+import { TextLink } from "@/app/(espace)/_ui/text-link";
+import { end } from "@/app/(espace)/planning/format";
+import { courseRateAllowed } from "@/domain/payroll/rate";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
 import { CalendarSubscription } from "./calendar-subscription";
@@ -25,6 +31,7 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
           calendar: await calendarState(tx, i.id),
           connection: await connectionState(tx, i.id),
           unavailabilities: await listUnavailabilities(tx, i.id, new Date()),
+          ownRates: await coursesWithOwnRate(tx, i.id),
         }
       : null;
   });
@@ -34,6 +41,7 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
     calendar: calendar,
     connection: connection,
     unavailabilities: unavailabilities,
+    ownRates,
   } = parsed;
 
   const name = `${instructor.firstName} ${instructor.name}`;
@@ -97,6 +105,57 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
           <p className="mt-2 text-xs text-doux">Tarif de référence. Ce montant n’est pas un relevé à payer.</p>
         </section>
       </div>
+      {ownRates.length > 0 && (
+        <Paper withBorder p="md" component="section" aria-labelledby="tarifs-cours">
+          <Title order={2} size="h5" id="tarifs-cours" mb="xs">
+            Cours à un autre tarif
+          </Title>
+          <Text size="sm" c="dimmed" mb="sm">
+            {courseRateAllowed(instructor.payMode)
+              ? `Pour ces cours, ce tarif remplace le tarif habituel de ${instructor.firstName}.`
+              : "Ces tarifs ne s’appliquent pas pour l’instant (forfait mensuel, règle en attente)."}
+          </Text>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableThead>
+                <TableTr>
+                  <TableTh>Cours</TableTh>
+                  <TableTh>Créneau</TableTh>
+                  <TableTh>Saison</TableTh>
+                  <TableTh ta="right">Tarif</TableTh>
+                </TableTr>
+              </TableThead>
+              <TableTbody>
+                {ownRates.map((c) => (
+                  <TableTr key={c.id}>
+                    <TableTd>
+                      <TextLink href={`/planning/cours/${c.id}`} size="sm">
+                        {c.discipline}
+                        {c.level ? ` ${c.level}` : ""}
+                      </TextLink>
+                    </TableTd>
+                    <TableTd>
+                      {c.weekday
+                        ? `${DAY_NAMES[c.weekday]} ${c.startTime}–${end(c.startTime, c.durationMinutes)}`
+                        : "À des dates précises"}
+                    </TableTd>
+                    <TableTd className="whitespace-nowrap">{c.season}</TableTd>
+                    <TableTd ta="right" className="whitespace-nowrap tabular-nums">
+                      {courseRateAllowed(instructor.payMode) ? (
+                        `${formatEuros(c.rateCents)} / ${PAY_UNITS[instructor.payMode]}`
+                      ) : (
+                        <Text span size="sm" c="dimmed" td="line-through">
+                          {formatEuros(c.rateCents)}
+                        </Text>
+                      )}
+                    </TableTd>
+                  </TableTr>
+                ))}
+              </TableTbody>
+            </Table>
+          </div>
+        </Paper>
+      )}
       <Unavailabilities
         instructorId={instructor.id}
         firstName={instructor.firstName}

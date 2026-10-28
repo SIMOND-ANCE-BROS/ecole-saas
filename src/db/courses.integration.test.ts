@@ -70,6 +70,7 @@ beforeAll(async () => {
     ageMax: 11,
     level: "Débutant",
     maxCapacity: 18,
+    instructorRate: null,
   };
 });
 
@@ -148,7 +149,7 @@ describe("updateCourse", () => {
     const m = await withSchool(school, (tx) =>
       updateCourse(tx, id, { ...base, startTime: "18:15", maxCapacity: null }),
     );
-    expect(m).toEqual({ ok: true, id });
+    expect(m).toEqual({ ok: true, id, instructorRateCents: null });
     expect(await withSchool(school, (tx) => readCourse(tx, id))).toMatchObject({
       startTime: "18:15",
       maxCapacity: null,

@@ -72,7 +72,7 @@ describe("updateInstructor", () => {
       createInstructor(tx, { ...camille, firstName: "Inès", name: "Garnier" }),
     );
     const modified = { ...camille, firstName: "Inès", name: "Garnier", rateCents: 4500, active: false };
-    expect(await withSchool(school, (tx) => updateInstructor(tx, id, modified))).toBe(true);
+    expect(await withSchool(school, (tx) => updateInstructor(tx, id, modified))).toEqual({ ok: true });
     expect(await withSchool(school, (tx) => readInstructor(tx, id))).toMatchObject({
       rateCents: 4500,
       active: false,
@@ -80,7 +80,7 @@ describe("updateInstructor", () => {
   });
 
   it("does not update an instructor from another school", async () => {
-    expect(await withSchool(school, (tx) => updateInstructor(tx, foreign, camille))).toBe(false);
+    expect(await withSchool(school, (tx) => updateInstructor(tx, foreign, camille))).toMatchObject({ ok: false });
     const [{ last_name: name }] = await admin`SELECT last_name FROM instructor WHERE id = ${foreign}`;
     expect(name).toBe("Ailleurs");
   });
@@ -112,6 +112,6 @@ describe("listInstructors", () => {
 describe("invalid id", () => {
   it("reads and updates without an SQL error", async () => {
     expect(await withSchool(school, (tx) => readInstructor(tx, "pas-un-uuid"))).toBeNull();
-    expect(await withSchool(school, (tx) => updateInstructor(tx, "pas-un-uuid", camille))).toBe(false);
+    expect(await withSchool(school, (tx) => updateInstructor(tx, "pas-un-uuid", camille))).toMatchObject({ ok: false });
   });
 });
