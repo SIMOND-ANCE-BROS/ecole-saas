@@ -117,8 +117,14 @@ export async function updateInstructor(
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const gone = { ok: false as const, message: "Cet intervenant n’existe plus." };
   if (!z.uuid().safeParse(id).success) return gone;
-  const [current] = await tx.select({ payMode: instructor.payMode }).from(instructor).where(eq(instructor.id, id));
+  // Locked: a course rate saved meanwhile (FOR SHARE in courses.ts) waits, or makes this check see it.
+  const [current] = await tx
+    .select({ payMode: instructor.payMode })
+    .from(instructor)
+    .where(eq(instructor.id, id))
+    .for("update");
   if (!current) return gone;
+  // Courses of every season count, past ones included: whether those should block is #192 Q5.
   if (current.payMode !== entry.payMode) {
     const [{ n }] = await tx
       .select({ n: sql<number>`count(*)::int` })

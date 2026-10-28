@@ -101,6 +101,8 @@ const courseFields = z.object({
   maxCapacity: integerOrNull(1, 1000),
   /** Instructor's pay for this course (#191), director only; absent or empty: their default rate. */
   instructorRate: euroRateOrNull,
+  /** Instructor the rate was typed for: a rate left over from another instructor is not kept (#191). */
+  instructorRateFor: z.uuid().optional(),
 });
 
 export const validCourseInput = courseFields
@@ -252,7 +254,7 @@ async function resolveRoom(tx: Tx, s: CourseInput["room"]): Promise<string | nul
 
 /** Resolves discipline, room and instructor; an inactive instructor is accepted only if it is `guard`. */
 async function values(tx: Tx, entry: CourseInput, guard?: string) {
-  const [i] = await tx
+  const found = tx
     .select({ id: instructor.id, payMode: instructor.payMode })
     .from(instructor)
     .where(
@@ -261,6 +263,8 @@ async function values(tx: Tx, entry: CourseInput, guard?: string) {
         guard ? or(eq(instructor.active, true), eq(instructor.id, guard)) : eq(instructor.active, true),
       ),
     );
+  // Saving a rate: the pay mode it is checked against cannot change before the commit (see updateInstructor).
+  const [i] = entry.instructorRate != null ? await found.for("share") : await found;
   if (!i) return { ok: false as const, message: "Intervenant introuvable ou inactif." };
   if (entry.instructorRate != null && !courseRateAllowed(i.payMode))
     return { ok: false as const, message: "Pas de tarif par cours pour un forfait mensuel." };
@@ -334,11 +338,13 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
   if (!existing) return { ok: false, message: "Ce cours n’existe plus." };
   const r = await values(tx, entry, existing.instructorId);
   if (!r.ok) return r;
-  const instructorRateCents = rateAfterUpdate(
-    entry.instructorRate,
-    (await courseRate(tx, id)) ?? null,
-    r.values.instructorId !== existing.instructorId,
-  );
+  const instructorRateCents = rateAfterUpdate({
+    sent: entry.instructorRate,
+    typedFor: entry.instructorRateFor,
+    stored: (await courseRate(tx, id)) ?? null,
+    oldInstructor: existing.instructorId,
+    newInstructor: r.values.instructorId,
+  });
   await tx
     .update(course)
     .set(columnsOf(course, { ...r.values, instructorRateCents }))

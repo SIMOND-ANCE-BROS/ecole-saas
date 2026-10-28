@@ -113,7 +113,7 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
           <Text size="sm" c="dimmed" mb="sm">
             {courseRateAllowed(instructor.payMode)
               ? `Pour ces cours, ce tarif remplace le tarif habituel de ${instructor.firstName}.`
-              : `Ces tarifs ne servent pas : la rémunération de ${instructor.firstName} est un forfait mensuel. Videz-les dans les fiches des cours.`}
+              : "Ces tarifs ne s’appliquent pas pour l’instant (forfait mensuel, règle en attente)."}
           </Text>
           <div className="overflow-x-auto">
             <Table>

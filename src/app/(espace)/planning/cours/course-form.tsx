@@ -114,6 +114,15 @@ export function CourseForm({
 
   const instructorPay = pay.instructors[v.instructorId];
   const rateAllowed = instructorPay ? courseRateAllowed(instructorPay.payMode) : false;
+  // A monthly flat instructor's course may still hold a rate (#192 Q2): the field stays, so it can be emptied.
+  const unusedRate = !rateAllowed && course?.instructorId === v.instructorId && pay.rateCents !== null;
+  const savedRate = pay.rateCents === null ? "" : typedEuros(pay.rateCents);
+  // What is sent: undefined lets the server keep (same instructor) or drop (new one) the stored rate.
+  const sentRate = rateAllowed
+    ? v.instructorRate
+    : unusedRate && v.instructorRate !== savedRate
+      ? v.instructorRate
+      : undefined;
   const nameOf = (id: string) => r.instructors.find((i) => i.id === id);
   // « 45,50 € / heure » for an amount typed for an instructor; the text as typed if it is not an amount.
   const amountFor = (typedAmount: string, instructorId: string) => {
@@ -146,8 +155,9 @@ export function CourseForm({
     level: v.level,
     maxCapacity: whole(v.maxCapacity),
     // Not offered for a monthly flat instructor: nothing is sent, so no rate is kept (#192).
-    // Not offered for a monthly flat instructor: nothing is sent, and the server keeps or clears the stored rate.
-    instructorRate: rateAllowed ? v.instructorRate : undefined,
+    instructorRate: sentRate,
+    // The instructor this rate was typed for: a rate left over from another one is not kept.
+    instructorRateFor: sentRate === undefined ? undefined : v.instructorId,
   };
 
   const datesOf = (c: Parameters<typeof lessonDatesOf>[0]) => (calendar ? lessonDatesOf(c, calendar) : undefined);
@@ -265,7 +275,7 @@ export function CourseForm({
               setV({
                 ...v,
                 instructorId: value,
-                instructorRate: pay.rateCents === null ? "" : typedEuros(pay.rateCents),
+                instructorRate: savedRate,
               });
               return;
             }
@@ -292,17 +302,21 @@ export function CourseForm({
         />
         <div>
           {instructorPay &&
-            (rateAllowed ? (
+            (rateAllowed || unusedRate ? (
               <TextInput
                 label="Tarif intervenant pour ce cours"
                 // Description under the field: its box lines up with « Intervenant ».
                 inputWrapperOrder={["label", "input", "description", "error"]}
-                description={`Vide : tarif habituel de ${nameOf(v.instructorId)?.firstName ?? "l’intervenant"}, ${formatEuros(instructorPay.rateCents)} / ${PAY_UNITS[instructorPay.payMode]}.`}
+                description={
+                  rateAllowed
+                    ? `Vide : tarif habituel de ${nameOf(v.instructorId)?.firstName ?? "l’intervenant"}, ${formatEuros(instructorPay.rateCents)} / ${PAY_UNITS[instructorPay.payMode]}.`
+                    : "Ce tarif ne s’applique pas pour l’instant (forfait mensuel, règle en attente)."
+                }
                 inputMode="decimal"
                 autoComplete="off"
                 rightSection={
                   <Text size="xs" c="dimmed" pr="xs">
-                    € / {PAY_UNITS[instructorPay.payMode]}
+                    {rateAllowed ? `€ / ${PAY_UNITS[instructorPay.payMode]}` : "€"}
                   </Text>
                 }
                 rightSectionWidth={90}

@@ -65,7 +65,7 @@ async function coursesOf(tx: Tx, seasonId: string) {
   // The fields the plan reads, next to the copied columns kept whole for the insert.
   return rows.map(({ instructorPayMode, ...r }) => {
     // A rate the instructor's pay mode does not use (monthly flat) is not carried over. Otherwise it is,
-    // in the unit of their current pay mode: whether it should be is an open question (#192).
+    // in the unit of their current pay mode: whether it should be is an open question (#192 Q4).
     const columns = courseRateAllowed(instructorPayMode) ? r.columns : { ...r.columns, instructorRateCents: null };
     return { ...r, columns, ...columns };
   });

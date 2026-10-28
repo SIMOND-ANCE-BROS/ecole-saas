@@ -29,15 +29,24 @@ export function effectiveRate(course: RatedCourse, instructor: RatedInstructor):
 }
 
 /**
- * Rate the course keeps after an update (#191). Not sent (field not offered):
- * the stored one. A rate belongs to its instructor: with a new instructor, the
- * stored rate is dropped, also when it comes back unchanged from the form.
+ * Rate the course keeps after an update (#191). A rate belongs to the
+ * instructor it was typed for (`typedFor`):
+ * - not sent (field not offered): the stored rate with the same instructor,
+ *   none with a new one;
+ * - sent for the course's new instructor: kept, even if it equals the old
+ *   one's amount;
+ * - sent for anybody else after a change of instructor (a stale form): dropped.
  */
-export function rateAfterUpdate(
-  sent: number | null | undefined,
-  stored: number | null,
-  instructorChanged: boolean,
-): number | null {
-  if (!instructorChanged) return sent === undefined ? stored : sent;
-  return sent === undefined || sent === stored ? null : sent;
+export function rateAfterUpdate(change: {
+  sent: number | null | undefined;
+  typedFor: string | undefined;
+  stored: number | null;
+  oldInstructor: string;
+  newInstructor: string;
+}): number | null {
+  const { sent, typedFor, stored, oldInstructor, newInstructor } = change;
+  const sameInstructor = oldInstructor === newInstructor;
+  if (sent === undefined) return sameInstructor ? stored : null;
+  if (sameInstructor) return sent;
+  return typedFor === newInstructor ? sent : null;
 }

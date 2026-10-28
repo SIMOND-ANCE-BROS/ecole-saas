@@ -38,18 +38,26 @@ describe("effectiveRate", () => {
 });
 
 describe("rateAfterUpdate", () => {
+  const change = (sent: number | null | undefined, typedFor: string | undefined, stored: number | null, to: string) =>
+    rateAfterUpdate({ sent, typedFor, stored, oldInstructor: "x", newInstructor: to });
+
   it("same instructor: keeps the stored rate when none is sent, else takes the one sent", () => {
-    expect(rateAfterUpdate(undefined, 4550, false)).toBe(4550);
-    expect(rateAfterUpdate(5000, 4550, false)).toBe(5000);
-    expect(rateAfterUpdate(null, 4550, false)).toBeNull();
-    expect(rateAfterUpdate(4550, 4550, false)).toBe(4550);
+    expect(change(undefined, undefined, 4550, "x")).toBe(4550);
+    expect(change(5000, "x", 4550, "x")).toBe(5000);
+    expect(change(null, "x", 4550, "x")).toBeNull();
+    expect(change(4550, "x", 4550, "x")).toBe(4550);
   });
 
-  it("new instructor: drops the previous one's rate, even sent back unchanged", () => {
-    expect(rateAfterUpdate(undefined, 4550, true)).toBeNull();
-    expect(rateAfterUpdate(4550, 4550, true)).toBeNull();
-    expect(rateAfterUpdate(3800, 4550, true)).toBe(3800);
-    expect(rateAfterUpdate(3800, null, true)).toBe(3800);
-    expect(rateAfterUpdate(null, null, true)).toBeNull();
+  it("new instructor: keeps a rate typed for them, even the same amount typed deliberately", () => {
+    expect(change(3800, "y", 4550, "y")).toBe(3800);
+    expect(change(4550, "y", 4550, "y")).toBe(4550);
+    expect(change(3800, "y", null, "y")).toBe(3800);
+  });
+
+  it("new instructor: drops the previous one's rate, not sent or sent for someone else", () => {
+    expect(change(undefined, undefined, 4550, "y")).toBeNull();
+    expect(change(4550, "x", 4550, "y")).toBeNull();
+    expect(change(4550, undefined, 4550, "y")).toBeNull();
+    expect(change(null, "y", null, "y")).toBeNull();
   });
 });

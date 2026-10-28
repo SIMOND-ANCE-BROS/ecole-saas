@@ -134,7 +134,7 @@ describe("instructor rate per course (#191)", () => {
     expect(await withSchool(school, (tx) => courseRate(tx, id))).toBe(4200);
   });
 
-  it("drops the previous instructor's rate on a change of instructor, even sent back unchanged", async () => {
+  it("on a change of instructor, keeps only a rate typed for the new one", async () => {
     const other = (
       await admin.unsafe(
         `INSERT INTO instructor ${INSTRUCTOR} VALUES ($1, 'Zzfaux', 'Autre', 'employee', 'not_applicable', 'hourly', 2500, true)
@@ -142,20 +142,20 @@ describe("instructor rate per course (#191)", () => {
         [school],
       )
     )[0].id as string;
-    const id = await create({ ...base, weekday: 7, instructorRate: 4200 });
-    const r = await withSchool(school, (tx) =>
-      updateCourse(tx, id, { ...base, weekday: 7, instructorId: other, instructorRate: 4200 }),
-    );
-    expect(r).toMatchObject({ ok: true, instructorRateCents: null });
+    const id = await create({ ...base, weekday: 7, instructorRate: 4200, instructorRateFor: hourly });
+    const move = (instructorId: string, instructorRate: number | null | undefined, instructorRateFor?: string) =>
+      withSchool(school, (tx) =>
+        updateCourse(tx, id, { ...base, weekday: 7, instructorId, instructorRate, instructorRateFor }),
+      );
+    // The previous instructor's rate sent back by a stale form: dropped.
+    expect(await move(other, 4200, hourly)).toMatchObject({ ok: true, instructorRateCents: null });
     expect(await withSchool(school, (tx) => courseRate(tx, id))).toBeNull();
-    // A new amount for the new instructor is kept; switching to a monthly flat one sends nothing and clears it.
-    await withSchool(school, (tx) =>
-      updateCourse(tx, id, { ...base, weekday: 7, instructorId: hourly, instructorRate: 3900 }),
-    );
-    expect(await withSchool(school, (tx) => courseRate(tx, id))).toBe(3900);
-    await withSchool(school, (tx) =>
-      updateCourse(tx, id, { ...base, weekday: 7, instructorId: flat, instructorRate: undefined }),
-    );
+    // Back to the first instructor, then a new instructor with the same amount typed deliberately: kept.
+    await move(hourly, 4200, hourly);
+    expect(await move(other, 4200, other)).toMatchObject({ ok: true, instructorRateCents: 4200 });
+    expect(await withSchool(school, (tx) => courseRate(tx, id))).toBe(4200);
+    // A monthly flat instructor: nothing sent, the previous instructor's rate is dropped.
+    await move(flat, undefined);
     expect(await withSchool(school, (tx) => courseRate(tx, id))).toBeNull();
   });
 
