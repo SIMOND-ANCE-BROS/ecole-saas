@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { withSchool } from "@/db";
-import { listContacts } from "@/db/students";
+import { listContacts, MAX_RESULTS } from "@/db/students";
 import { readPreference } from "@/db/preferences";
 import { displayedName } from "@/db/people";
 import { CONTACT_COLUMNS } from "@/domain/filters/columns";
@@ -26,6 +26,9 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
     layout: await readPreference(tx, userId, "contacts"),
   }));
 
+  const filtering = filter.conditions.length > 0;
+  const plural = (n: number) => `${n} contact${n > 1 ? "s" : ""}`;
+
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
       <Suspense>
@@ -33,7 +36,20 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
       </Suspense>
       <PageHeader
         title="Contacts"
-        description="Parents, responsables, payeurs et organismes (CSE, entreprises)."
+        live
+        description={
+          <>
+            {entry ? `${plural(contacts.length)} pour « ${entry} »` : plural(contacts.length)}
+            {filtering && " avec ces filtres"}
+            {contacts.length >= MAX_RESULTS &&
+              ` : seuls les ${MAX_RESULTS} premiers sont affichés, précisez la recherche ou filtrez`}
+            {!entry && !filtering && (
+              <span className="hidden sm:inline">
+                . Parents, responsables, payeurs et organismes (CSE, entreprises).
+              </span>
+            )}
+          </>
+        }
         actions={<ButtonLink href="/contacts/nouveau">Nouveau contact</ButtonLink>}
       />
       <NavigableResults>
@@ -46,7 +62,7 @@ export default async function PageContacts({ searchParams }: PageProps<"/contact
             layout={layout}
             linkColumn="nom"
             empty={
-              filter.conditions.length > 0
+              filtering
                 ? "Aucun contact ne correspond à ces filtres."
                 : entry
                   ? `Aucun contact ne correspond à « ${entry} ».`

@@ -73,7 +73,7 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
             {season && `, cours de la saison ${season.label}`}
           </>
         }
-        actions={isDirector && <ButtonLink href="/intervenants/nouveau">Ajouter un intervenant</ButtonLink>}
+        actions={isDirector && <ButtonLink href="/intervenants/nouveau">Nouvel intervenant</ButtonLink>}
       />
 
       {confirmed && (

@@ -120,16 +120,16 @@ input[type="radio"] {
 }
 
 /* Loading state (#107): shown only when a page takes more than 300 ms, so a fast one does not flash. */
-.chargement-differe {
-  animation: apparition 150ms ease-out 300ms both;
+.delayed-loading {
+  animation: fade-in 150ms ease-out 300ms both;
 }
-@keyframes apparition {
+@keyframes fade-in {
   from {
     opacity: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .chargement-differe {
+  .delayed-loading {
     animation-duration: 0s;
   }
 }

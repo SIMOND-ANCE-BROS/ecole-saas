@@ -11,7 +11,23 @@ export function isRememberedList(path: string): path is RememberedList {
 }
 
 /** Key of the list's last address in sessionStorage. */
-export const returnKey = (list: RememberedList) => `retour-liste:${list}`;
+export const returnKey = (list: RememberedList) => `list-return:${list}`;
+
+/**
+ * Parameters that make up the state of a list: search, filters, filter mode,
+ * sort. One-shot ones (`?enregistre=…` banners) are not kept: they would show
+ * their message again on every return.
+ */
+const LIST_STATE = ["q", "f", "mode", "sort", "order"] as const;
+
+/** The list's address to remember, from its current query string. */
+export function listAddress(list: RememberedList, query: string): string {
+  const all = new URLSearchParams(query);
+  const kept = new URLSearchParams();
+  for (const key of LIST_STATE) for (const value of all.getAll(key)) kept.append(key, value);
+  const rest = kept.toString();
+  return rest ? `${list}?${rest}` : list;
+}
 
 /**
  * The address to go back to: the stored one when it is this very list with

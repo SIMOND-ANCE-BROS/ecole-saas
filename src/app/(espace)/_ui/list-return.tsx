@@ -1,9 +1,9 @@
 "use client";
 
 import { type AnchorProps } from "@mantine/core";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
-import { isRememberedList, listReturn, returnKey, type RememberedList } from "@/lib/list-return";
+import { isRememberedList, listAddress, listReturn, returnKey, type RememberedList } from "@/lib/list-return";
 import { TextLink } from "./text-link";
 
 /**
@@ -12,14 +12,17 @@ import { TextLink } from "./text-link";
  * unavailable (private window, blocked site data): nothing is remembered then.
  */
 export function RememberList({ list }: { list: RememberedList }) {
+  // A side panel opened over the list changes the address, not the list: not saved.
+  const shown = usePathname() === list;
   const query = useSearchParams().toString();
   useEffect(() => {
+    if (!shown) return;
     try {
-      sessionStorage.setItem(returnKey(list), query ? `${list}?${query}` : list);
+      sessionStorage.setItem(returnKey(list), listAddress(list, query));
     } catch {
       // Storage unavailable: the back link leads to the bare list.
     }
-  }, [list, query]);
+  }, [list, query, shown]);
   return null;
 }
 

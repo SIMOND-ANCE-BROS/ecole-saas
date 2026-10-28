@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isRememberedList, listReturn } from "./list-return";
+import { isRememberedList, listAddress, listReturn } from "./list-return";
 
 describe("listReturn", () => {
   it("goes back to the list with its filters and sort", () => {
@@ -39,5 +39,19 @@ describe("isRememberedList", () => {
       false,
       false,
     ]);
+  });
+});
+
+describe("listAddress", () => {
+  it("keeps search, filters, mode and sort", () => {
+    expect(listAddress("/eleves", "q=Ma&f=age.inf.12&f=cours.contient.Jazz&mode=ou&sort=nom&order=desc")).toBe(
+      "/eleves?q=Ma&f=age.inf.12&f=cours.contient.Jazz&mode=ou&sort=nom&order=desc",
+    );
+  });
+
+  it("drops one-shot banners and unknown parameters", () => {
+    expect(listAddress("/intervenants", "enregistre=abc&sort=nom&supprime=1&autre=x")).toBe("/intervenants?sort=nom");
+    expect(listAddress("/intervenants", "enregistre=abc")).toBe("/intervenants");
+    expect(listAddress("/contacts", "")).toBe("/contacts");
   });
 });
