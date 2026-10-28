@@ -31,6 +31,8 @@ export type ColumnDef<Id extends string = string> = {
   email?: boolean;
   /** Text of an empty cell (« l’élève » for « Facturé à »), otherwise a dash. */
   ifEmpty?: string;
+  /** Dates years back (birth dates): the filter's calendar opens on the years, not on this month. */
+  yearsBack?: boolean;
 };
 
 export type Operator =
