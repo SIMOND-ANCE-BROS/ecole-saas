@@ -19,7 +19,7 @@ import { type Choice, PersonChoice, toInput } from "../../_people/person-choice"
 import { createStudentFromGuide, type StudentRefusal } from "../actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
 import { DateField, refusedDateField } from "@/app/(espace)/_ui/date-field";
-import type { StudentInput } from "@/db/students";
+import type { DuplicateWithRole, StudentInput } from "@/db/students";
 import type { PersonInput } from "@/db/people";
 import type { FieldErrors, FieldPath } from "@/lib/form-errors";
 import { has } from "@/lib/has";
@@ -28,13 +28,20 @@ import { ofName } from "@/lib/french";
 /** Checked against the server schema: a value renamed on one side fails to compile. */
 type Billing = StudentInput["billing"]["type"];
 
+/** Who a likely duplicate would be, as written in the warning. */
+const DUPLICATE_ROLE: Record<DuplicateWithRole["role"], string> = {
+  student: "élève",
+  guardian: "responsable",
+  payer: "payeur",
+};
+
 /**
  * New student in a single entry: identity; if a minor, their guardian
  * (known or new) and whether to notify them; then whom to invoice.
  */
 export function NewStudentGuide({
-  today: today,
-  initialGuardian: initialGuardian,
+  today,
+  initialGuardian,
 }: {
   today: string;
   initialGuardian?: { id: string; name: string };
@@ -99,7 +106,7 @@ export function NewStudentGuide({
           {
             student: { type: "individual", companyName: "", siren: "", address: "", ...e },
             guardian: displayedGuardian && guardian ? toInput(guardian) : null,
-            toNotify: toNotify,
+            toNotify,
             billing:
               chosenBilling === "other"
                 ? { type: "other", payer: payer ? toInput(payer) : null }
@@ -265,7 +272,7 @@ export function NewStudentGuide({
             <ul className="flex flex-col gap-0.5">
               {refusal.duplicates.map((d) => (
                 <li key={`${d.role}-${d.id}`}>
-                  {d.role} :{" "}
+                  {DUPLICATE_ROLE[d.role]} :{" "}
                   <Anchor component={Link} href={`/personnes/${d.id}`} size="sm" target="_blank">
                     {d.name}
                   </Anchor>

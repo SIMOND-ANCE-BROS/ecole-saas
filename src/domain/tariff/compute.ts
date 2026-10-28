@@ -41,8 +41,8 @@ export function computeTariff(request: TariffRequest): TariffResult {
 }
 
 function price(enrollment: EnrollmentRequest, request: TariffRequest): EnrollmentResult {
-  const { reference, courses: cours } = enrollment;
-  if (cours.length === 0) {
+  const { reference, courses } = enrollment;
+  if (courses.length === 0) {
     return {
       reference,
       status: "error",
@@ -50,7 +50,7 @@ function price(enrollment: EnrollmentRequest, request: TariffRequest): Enrollmen
     };
   }
 
-  const combination = sort(cours.map((c) => c.durationMinutes));
+  const combination = sort(courses.map((c) => c.durationMinutes));
   const row = findRow(request.grid, enrollment, combination);
   if (!row) {
     return {
@@ -110,7 +110,7 @@ function findRow(
 
 type Decision = { status: "applied" | "rejected"; reason: string };
 
-function evaluate(rule: DiscountRule, enrollment: EnrollmentRequest, toutes: readonly EnrollmentRequest[]): Decision {
+function evaluate(rule: DiscountRule, enrollment: EnrollmentRequest, all: readonly EnrollmentRequest[]): Decision {
   if (rule.code !== "fratrie") {
     return { status: "rejected", reason: "Type de réduction non pris en charge par le moteur de tarif" };
   }
@@ -126,7 +126,7 @@ function evaluate(rule: DiscountRule, enrollment: EnrollmentRequest, toutes: rea
 
   // Distinct students of the payer in an eligible audience, including those whose
   // package is to be entered by hand or is a two-disciplines package.
-  const students = new Set(toutes.filter((i) => eligible(i.audience)).flatMap((i) => i.studentIds));
+  const students = new Set(all.filter((i) => eligible(i.audience)).flatMap((i) => i.studentIds));
   const countLabel = `${students.size} ${studentWord(rule, students.size)} du même payeur`;
   if (students.size < rule.minStudents) {
     return { status: "rejected", reason: `${countLabel}, ${rule.minStudents} requis` };

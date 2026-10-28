@@ -48,13 +48,13 @@ const lessonDate = new Intl.DateTimeFormat("fr-FR", {
 const shortDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
 
 export default async function CoursePage({ params, searchParams }: PageProps<"/planning/cours/[id]">) {
-  const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
+  const { schoolId, role } = await requireRole("director", "front_desk");
   const [{ id }, { modifie }] = await Promise.all([params, searchParams]);
   const parsed = await withSchool(schoolId, async (tx) => {
     const course = await scheduleCourse(tx, id);
     return course
       ? {
-          cours: course,
+          course,
           planning: await coursePlanning(tx, course.id),
           enrolled: await enrolledInCourse(tx, course.id),
           lessons: await courseLessons(tx, course.id),
@@ -65,16 +65,16 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
       : null;
   });
   if (!parsed) notFound();
-  const { cours, enrolled: enrolled, lessons: lessons, inConflict: inConflict } = parsed;
+  const { course, enrolled, lessons, inConflict } = parsed;
   const today = todayInParis();
 
   const active = enrolled.filter((i) => i.status === "active").length;
   const trials = enrolled.filter((i) => i.status === "trial").length;
   const waitlist = enrolled.filter((i) => i.status === "waitlist").length;
-  const full = cours.maxCapacity !== null && active >= cours.maxCapacity;
+  const full = course.maxCapacity !== null && active >= course.maxCapacity;
   // « Chaque lundi 17:00–18:00 », « Un mercredi sur deux… », « Le sam. 24 oct., … 10:00–12:00 » (#90).
-  const slot = `${recurrenceText(cours)}, ${cours.startTime}–${end(cours.startTime, cours.durationMinutes)}`;
-  const public_ = [ages(cours.ageMin, cours.ageMax), cours.level].filter(Boolean).join(", ");
+  const slot = `${recurrenceText(course)}, ${course.startTime}–${end(course.startTime, course.durationMinutes)}`;
+  const public_ = [ages(course.ageMin, course.ageMax), course.level].filter(Boolean).join(", ");
 
   return (
     <article className="flex w-full min-w-0 flex-col gap-5">
@@ -84,7 +84,7 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
         </TextLink>
         <Text span size="sm" c="dimmed">
           {" "}
-          / {cours.discipline}
+          / {course.discipline}
         </Text>
       </nav>
 
@@ -97,11 +97,11 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Title order={1} fz="xl">
-            {cours.discipline}
-            {cours.level && (
+            {course.discipline}
+            {course.level && (
               <Text span inherit fw={400} c="dimmed">
                 {" "}
-                {cours.level}
+                {course.level}
               </Text>
             )}
           </Title>
@@ -110,7 +110,7 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
         <div className="flex gap-2 print:hidden">
           <PrintButton />
           {role === "director" && (
-            <ButtonLink href={`/planning/cours/${cours.id}/modifier`}>Modifier le cours</ButtonLink>
+            <ButtonLink href={`/planning/cours/${course.id}/modifier`}>Modifier le cours</ButtonLink>
           )}
         </div>
       </header>
@@ -119,13 +119,13 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
         <div>
           <dt className="text-xs text-doux">Salle</dt>
           <dd>
-            {cours.room}, {cours.site}
+            {course.room}, {course.site}
           </dd>
         </div>
         <div>
           <dt className="text-xs text-doux">Intervenant</dt>
           <dd>
-            {cours.instructor}
+            {course.instructor}
             {parsed.ownRate && (
               <Text size="xs" c="dimmed" className="tabular-nums print:hidden">
                 Tarif intervenant : {formatEuros(parsed.ownRate.cents)} / {PAY_UNITS[parsed.ownRate.payMode]} (propre à
@@ -143,19 +143,19 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
           <dd className="flex flex-col gap-1">
             <span className="tabular-nums">
               {active}
-              {cours.maxCapacity !== null && ` / ${cours.maxCapacity}`} inscrit{active > 1 ? "s" : ""}
+              {course.maxCapacity !== null && ` / ${course.maxCapacity}`} inscrit{active > 1 ? "s" : ""}
               {full && (
                 <Badge color="yellow" variant="light" ml="xs">
                   Complet
                 </Badge>
               )}
             </span>
-            {cours.maxCapacity !== null && (
+            {course.maxCapacity !== null && (
               <Progress
                 aria-hidden
                 size="sm"
                 color={full ? "yellow" : undefined}
-                value={Math.min(1, active / cours.maxCapacity) * 100}
+                value={Math.min(1, active / course.maxCapacity) * 100}
               />
             )}
             {(trials > 0 || waitlist > 0) && (
@@ -239,7 +239,8 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
                   const age = i.birthDate ? ageAt(i.birthDate, today) : null;
                   const outsideBand =
                     age !== null &&
-                    ((cours.ageMin !== null && age < cours.ageMin) || (cours.ageMax !== null && age > cours.ageMax));
+                    ((course.ageMin !== null && age < course.ageMin) ||
+                      (course.ageMax !== null && age > course.ageMax));
                   return (
                     <TableTr key={i.studentId}>
                       <TableTd className="font-medium">

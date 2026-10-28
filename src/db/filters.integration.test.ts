@@ -175,7 +175,7 @@ describe("students", () => {
   });
 
   it("SQL and in-memory evaluation give the same result", async () => {
-    const toutes = await withSchool(school, (tx) => listStudents(tx, "", { today: TODAY }));
+    const allStudents = await withSchool(school, (tx) => listStudents(tx, "", { today: TODAY }));
     const columns = STUDENT_COLUMNS.map((c) => ({
       ...c,
       value: (e: StudentRow) => {
@@ -195,7 +195,7 @@ describe("students", () => {
       ["responsables.contient.moreau"],
       ["facture.non_vide", "telephone.commence.06"],
     ]) {
-      const inMemory = applyFilter(toutes, readFilter(f, null, STUDENT_COLUMNS), columns).map((e) => e.firstName);
+      const inMemory = applyFilter(allStudents, readFilter(f, null, STUDENT_COLUMNS), columns).map((e) => e.firstName);
       expect(await students(f), f.join(" ")).toEqual(inMemory);
     }
   });

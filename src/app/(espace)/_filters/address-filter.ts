@@ -31,8 +31,8 @@ export function useAddressFilter(columns: readonly ColumnDef[]) {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  const typeDe = (column: string) => columns.find((c) => c.id === column)?.type ?? "text";
-  const complete = (c: Condition) => normalizedValue(c, typeDe(c.column)) !== null;
+  const columnType = (column: string) => columns.find((c) => c.id === column)?.type ?? "text";
+  const complete = (c: Condition) => normalizedValue(c, columnType(c.column)) !== null;
 
   function publish(f: Filter, deferred = false) {
     clearTimeout(timer.current);
@@ -61,7 +61,7 @@ export function useAddressFilter(columns: readonly ColumnDef[]) {
     const conditions = filter.conditions.map((c, j) => {
       if (j !== i) return c;
       const next = { ...c, ...updated };
-      const ops = OPERATORS[typeDe(next.column)];
+      const ops = OPERATORS[columnType(next.column)];
       if (!ops.includes(next.operator)) next.operator = ops[0];
       if (withoutValue(next.operator)) next.value = "";
       return next;
@@ -73,7 +73,7 @@ export function useAddressFilter(columns: readonly ColumnDef[]) {
   function add(column: string) {
     setFilter({
       ...filter,
-      conditions: [...filter.conditions, { column, operator: OPERATORS[typeDe(column)][0], value: "" }],
+      conditions: [...filter.conditions, { column, operator: OPERATORS[columnType(column)][0], value: "" }],
     });
   }
 
@@ -87,15 +87,15 @@ export function useAddressFilter(columns: readonly ColumnDef[]) {
   }
 
   return {
-    filter: filter,
-    inProgress: inProgress,
-    typeDe,
+    filter,
+    inProgress,
+    columnType,
     complete,
-    change: change,
-    update: update,
-    add: add,
-    remove: remove,
-    clean: clean,
+    change,
+    update,
+    add,
+    remove,
+    clean,
     apply: () => publish(filter),
   };
 }

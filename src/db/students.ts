@@ -325,7 +325,7 @@ const adult = (birthDate: string | null, today: string) => {
 export async function readStudent(tx: Tx, id: string, today: string): Promise<StudentRecord | null> {
   const p = await readPerson(tx, id);
   if (!p) return null;
-  const [{ student: student }] = await tx.select({ student: person.isStudent }).from(person).where(eq(person.id, id));
+  const [{ student }] = await tx.select({ student: person.isStudent }).from(person).where(eq(person.id, id));
   const relative = (l: PersonRecord["relationships"][number]): StudentRelative => ({
     relationshipId: l.id,
     id: l.other.id,
@@ -350,7 +350,7 @@ export async function readStudent(tx: Tx, id: string, today: string): Promise<St
           .filter((d) => d.id !== id && d.id !== billedTo.id)
           .map((d) => ({ id: d.id, firstName: d.firstName }))
       : [];
-  const { relationships: relationships, ...rest } = p;
+  const { relationships, ...rest } = p;
   return {
     ...rest,
     isStudent: student,
@@ -380,8 +380,8 @@ export type ContactRecord = Omit<PersonRecord, "relationships"> & {
 export async function readContact(tx: Tx, id: string): Promise<ContactRecord | null> {
   const p = await readPerson(tx, id);
   if (!p) return null;
-  const [{ student: student }] = await tx.select({ student: person.isStudent }).from(person).where(eq(person.id, id));
-  const { relationships: relationships, ...rest } = p;
+  const [{ student }] = await tx.select({ student: person.isStudent }).from(person).where(eq(person.id, id));
+  const { relationships, ...rest } = p;
   return {
     ...rest,
     isStudent: student,
@@ -426,7 +426,8 @@ export const validStudentInput = studentFields
   });
 
 export type StudentInput = z.output<typeof validStudentInput>;
-export type DuplicateWithRole = Duplicate & { role: "élève" | "responsable" | "payeur" };
+/** Who a likely duplicate would be in the new entry. */
+export type DuplicateWithRole = Duplicate & { role: "student" | "guardian" | "payer" };
 
 async function resolve(tx: Tx, p: z.output<typeof otherValidPerson>): Promise<string | null> {
   if (has(p, "id")) {
@@ -451,10 +452,10 @@ export async function createStudent(
   confirmed: boolean,
 ): Promise<{ status: "ok"; id: string } | { status: "duplicates"; duplicates: DuplicateWithRole[] }> {
   if (!confirmed) {
-    const nextItems: [DuplicateWithRole["role"], PersonInput][] = [["élève", entry.student]];
-    if (entry.guardian && has(entry.guardian, "newPerson")) nextItems.push(["responsable", entry.guardian.newPerson]);
+    const nextItems: [DuplicateWithRole["role"], PersonInput][] = [["student", entry.student]];
+    if (entry.guardian && has(entry.guardian, "newPerson")) nextItems.push(["guardian", entry.guardian.newPerson]);
     if (entry.billing.type === "other" && has(entry.billing.payer, "newPerson"))
-      nextItems.push(["payeur", entry.billing.payer.newPerson]);
+      nextItems.push(["payer", entry.billing.payer.newPerson]);
     const duplicates: DuplicateWithRole[] = [];
     for (const [role, s] of nextItems) duplicates.push(...(await likelyDuplicates(tx, s)).map((d) => ({ ...d, role })));
     if (duplicates.length > 0) return { status: "duplicates", duplicates };

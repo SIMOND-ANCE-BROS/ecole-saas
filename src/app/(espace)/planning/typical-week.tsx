@@ -15,7 +15,7 @@ type Props = {
   /** Visible courses (filters applied). */
   courses: ScheduleCourse[];
   /** All courses of the season: a time range that stays stable whatever the filters. */
-  tous: ScheduleCourse[];
+  allCourses: ScheduleCourse[];
   editable: boolean;
   highlighted?: string;
   hours: Hours[];
@@ -28,18 +28,11 @@ type Props = {
  * time; moving a course changes the course (and its upcoming lessons).
  * Courses on specific dates are listed below.
  */
-export function TypicalWeek({
-  courses: cours,
-  tous,
-  editable: editable,
-  highlighted: highlighted,
-  hours: hours,
-  season,
-}: Props) {
+export function TypicalWeek({ courses, allCourses, editable, highlighted, hours, season }: Props) {
   const router = useRouter();
-  const regular = cours.filter((c) => c.weekday !== null);
-  const oneOff = cours.filter((c) => c.weekday === null);
-  const { days: days, start: start, end: dayEnd } = calendarFrame(hours, tous);
+  const regular = courses.filter((c) => c.weekday !== null);
+  const oneOff = courses.filter((c) => c.weekday === null);
+  const { days, start, end: dayEnd } = calendarFrame(hours, allCourses);
 
   const elements: CalendarElement[] = regular.map((c) => ({
     id: c.id,
@@ -59,7 +52,7 @@ export function TypicalWeek({
 
   const when = (c: Slot) => `${DAYS[c.weekday].toLowerCase()} ${c.startTime}–${end(c.startTime, c.durationMinutes)}`;
   async function moveCourse(id: string, slot: Slot, choice: string | null): Promise<CalendarResponse> {
-    const c = cours.find((x) => x.id === id);
+    const c = courses.find((x) => x.id === id);
     const r = await move(id, slot, choice === "yes");
     if (r.status === "confirm") {
       return {

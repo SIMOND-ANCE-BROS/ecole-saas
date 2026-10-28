@@ -50,23 +50,23 @@ type Props = {
 
 /** Weekly schedule, filterable by discipline, site, room and instructor, with the headcount of each course. */
 export function ScheduleGrid({
-  courses: cours,
-  editable: editable,
-  highlighted: highlighted,
+  courses,
+  editable,
+  highlighted,
   view: initialView,
   day: initialDay,
   rooms: allRooms,
-  hours: hours,
-  monday: monday,
-  today: today,
-  lessons: lessons,
-  closures: closures,
+  hours,
+  monday,
+  today,
+  lessons,
+  closures,
   seasonPeriod,
   season,
 }: Props) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [view, setView] = useState(initialView);
-  const weekDays = calendarFrame(Object.values(hours).flat(), cours).days;
+  const weekDays = calendarFrame(Object.values(hours).flat(), courses).days;
   const [day, setDay] = useState(weekDays.includes(initialDay) ? initialDay : (weekDays[0] ?? 1));
   const address = (v: ScheduleView, d: number) =>
     withSeason(
@@ -85,26 +85,26 @@ export function ScheduleGrid({
     setDay(d);
     window.history.replaceState(null, "", address("salles", d));
   };
-  const { discipline, site, roomId: roomId, instructorId: instructorId } = filters;
-  const disciplines = useMemo(() => [...new Set(cours.map((c) => c.discipline))].sort(), [cours]);
-  const sites = useMemo(() => [...new Set(cours.map((c) => c.site))].sort(), [cours]);
+  const { discipline, site, roomId, instructorId } = filters;
+  const disciplines = useMemo(() => [...new Set(courses.map((c) => c.discipline))].sort(), [courses]);
+  const sites = useMemo(() => [...new Set(courses.map((c) => c.site))].sort(), [courses]);
   const rooms = [
     ...new Map(
-      cours
+      courses
         .filter((c) => !site || c.site === site)
         .map((c) => [c.roomId, { id: c.roomId, label: `${c.room} · ${c.site}` }]),
     ).values(),
   ].sort((a, b) => a.label.localeCompare(b.label, "fr"));
-  const instructors = [...new Map(cours.map((c) => [c.instructorId, c.instructor])).entries()].sort((a, b) =>
+  const instructors = [...new Map(courses.map((c) => [c.instructorId, c.instructor])).entries()].sort((a, b) =>
     a[1].localeCompare(b[1], "fr"),
   );
-  const visible = filterSchedule(cours, filters);
+  const visible = filterSchedule(courses, filters);
   const activeFilters = Object.values(filters).some(Boolean);
   // Opening hours of the displayed sites: the filtered site (or the filtered room's site), otherwise all.
   const filteredSite = roomId
-    ? cours.find((c) => c.roomId === roomId)?.siteId
+    ? courses.find((c) => c.roomId === roomId)?.siteId
     : site
-      ? cours.find((c) => c.site === site)?.siteId
+      ? courses.find((c) => c.site === site)?.siteId
       : undefined;
   const displayedHours = filteredSite ? (hours[filteredSite] ?? []) : Object.values(hours).flat();
   const days = [...new Set(visible.map((c) => c.weekday))].sort((a, b) => (a ?? 8) - (b ?? 8));
@@ -154,7 +154,7 @@ export function ScheduleGrid({
           </Button>
         )}
         <Text size="sm" c="dimmed" pb={6} aria-live="polite">
-          {visible.length} cours sur {cours.length}
+          {visible.length} cours sur {courses.length}
         </Text>
         {/* Four views do not fit a phone width: the switcher scrolls there rather than overflowing. */}
         <div className="max-w-full overflow-x-auto sm:ml-auto">
@@ -170,7 +170,7 @@ export function ScheduleGrid({
       {visible.length === 0 ? (
         <Paper withBorder p="lg" className="flex flex-col items-start gap-3">
           <Text size="sm" c="dimmed">
-            {cours.length === 0
+            {courses.length === 0
               ? "Aucun cours n’est encore programmé."
               : "Aucun cours ne correspond à cette combinaison de filtres."}
           </Text>
@@ -186,7 +186,7 @@ export function ScheduleGrid({
           monday={monday}
           today={today}
           closures={closures}
-          courses={cours}
+          courses={courses}
           seasonPeriod={seasonPeriod}
           hours={displayedHours}
           editable={editable}
@@ -195,7 +195,7 @@ export function ScheduleGrid({
       ) : view === "salles" ? (
         <RoomsDay
           courses={visible}
-          allCourses={cours}
+          allCourses={courses}
           rooms={allRooms.filter((r) => (roomId ? r.id === roomId : !site || r.site === site))}
           day={day}
           days={weekDays}
@@ -208,7 +208,7 @@ export function ScheduleGrid({
       ) : view === "type" ? (
         <TypicalWeek
           courses={visible}
-          tous={cours}
+          allCourses={courses}
           editable={editable}
           season={season}
           highlighted={highlighted}

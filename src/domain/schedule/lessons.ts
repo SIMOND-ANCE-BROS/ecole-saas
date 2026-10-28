@@ -14,10 +14,10 @@ const toIso = (t: number) => new Date(t).toISOString().slice(0, 10);
 
 /** `YYYY-MM-DD` dates of `weekday` (1 = Monday … 7 = Sunday) between `start` and `end` inclusive, closures excluded. */
 export function lessonDates({
-  start: start,
-  end: end,
-  weekday: weekday,
-  closures: closures,
+  start,
+  end,
+  weekday,
+  closures,
 }: Period & { weekday: number; closures: Period[] }): string[] {
   const origin = toDay(start);
   const isoDay = ((new Date(origin).getUTCDay() + 6) % 7) + 1;
@@ -105,7 +105,7 @@ export function courseDates(
   const start = r.startDate && r.startDate > season.start ? r.startDate : season.start;
   const end = r.endDate && r.endDate < season.end ? r.endDate : season.end;
   if (start > end) return [];
-  const toutes = lessonDates({ start, end, weekday: r.weekday, closures: [] });
-  const retained = r.type === "biweekly" ? toutes.filter((_, i) => i % 2 === 0) : toutes;
+  const all = lessonDates({ start, end, weekday: r.weekday, closures: [] });
+  const retained = r.type === "biweekly" ? all.filter((_, i) => i % 2 === 0) : all;
   return retained.filter((date) => open(date, school) && open(date, scoped));
 }

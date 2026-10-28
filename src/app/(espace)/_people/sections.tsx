@@ -40,7 +40,7 @@ const longDate = new Intl.DateTimeFormat("fr-FR", {
 });
 export const dayOf = (iso: string) => longDate.format(new Date(`${iso}T00:00:00Z`));
 
-export const Telephone = ({ number: number }: { number: string }) => (
+export const Telephone = ({ number }: { number: string }) => (
   <Anchor href={`tel:${number.replace(/\s/g, "")}`} size="sm" className="tabular-nums">
     {number}
   </Anchor>
@@ -62,10 +62,10 @@ export function Notes({ notes }: { notes: string | null }) {
   );
 }
 
-export function FollowedCourses({ courses: cours }: { courses: PersonRecord["courses"] }) {
-  const season = cours[0]?.season;
-  const current = cours.filter((c) => c.season === season);
-  const history = cours.filter((c) => c.season !== season);
+export function FollowedCourses({ courses }: { courses: PersonRecord["courses"] }) {
+  const season = courses[0]?.season;
+  const current = courses.filter((c) => c.season === season);
+  const history = courses.filter((c) => c.season !== season);
   return (
     <>
       <section aria-labelledby="cours" className="flex flex-col gap-2">
@@ -125,7 +125,7 @@ export function FollowedCourses({ courses: cours }: { courses: PersonRecord["cou
   );
 }
 
-export function Documents({ documents, today: today }: { documents: PersonRecord["documents"]; today: string }) {
+export function Documents({ documents, today }: { documents: PersonRecord["documents"]; today: string }) {
   return (
     <section aria-labelledby="documents" className="flex flex-col gap-2">
       <Title order={2} size="h5" id="documents">
@@ -159,13 +159,7 @@ export function Documents({ documents, today: today }: { documents: PersonRecord
 }
 
 /** Enrollments invoiced to a person: a commitment, not a payment. */
-export function BilledEnrollments({
-  enrollments: enrollments,
-  season: season,
-}: {
-  enrollments: PaidEnrollment[];
-  season: string;
-}) {
+export function BilledEnrollments({ enrollments, season }: { enrollments: PaidEnrollment[]; season: string }) {
   if (enrollments.length === 0) return null;
   const total = enrollments.reduce((s, i) => s + i.netPriceCents, 0);
   return (

@@ -20,46 +20,34 @@ import { SeasonPicker } from "./season-picker";
 export const metadata: Metadata = { title: "Planning" };
 
 export default async function SchedulePage({ searchParams }: PageProps<"/planning">) {
-  const { schoolId: schoolId, role } = await schoolContext();
+  const { schoolId, role } = await schoolContext();
   const { enregistre, supprime, copie, vue, semaine, jour, saison } = await searchParams;
   const today = todayInParis();
-  const {
-    season: season,
-    moved,
-    outside,
-    current,
-    seasons,
-    courseCounts,
-    monday,
-    courses: cours,
-    hours: hours,
-    lessons: lessons,
-    closures: closures,
-    places,
-  } = await withSchool(schoolId, async (tx) => {
-    const asked = await chosenSeason(tx, saison, today);
-    const week = validDate(semaine);
-    // Another season opens on its first week, unless a week is asked for.
-    const shownDay = week ?? (asked && (today < asked.startDate || today > asked.endDate) ? asked.startDate : today);
-    const monday = mondayOf(shownDay);
-    // A week of another season shows that season; a week in no season keeps the chosen one.
-    const overlapping = week ? await seasonOverlapping(tx, monday, addDays(monday, 6)) : null;
-    const { season: s, moved, outside } = shownSeason(asked, week ? monday : null, overlapping);
-    return {
-      season: s,
-      moved,
-      outside,
-      current: await currentSeason(tx, today),
-      seasons: await schoolSeasons(tx),
-      courseCounts: await courseCountBySeason(tx),
-      monday,
-      courses: s ? await seasonCourses(tx, s.id) : [],
-      hours: await hoursBySite(tx),
-      lessons: await weekLessons(tx, monday),
-      closures: await closuresBetween(tx, monday, addDays(monday, 6)),
-      places: await listPlaces(tx),
-    };
-  });
+  const { season, moved, outside, current, seasons, courseCounts, monday, courses, hours, lessons, closures, places } =
+    await withSchool(schoolId, async (tx) => {
+      const asked = await chosenSeason(tx, saison, today);
+      const week = validDate(semaine);
+      // Another season opens on its first week, unless a week is asked for.
+      const shownDay = week ?? (asked && (today < asked.startDate || today > asked.endDate) ? asked.startDate : today);
+      const monday = mondayOf(shownDay);
+      // A week of another season shows that season; a week in no season keeps the chosen one.
+      const overlapping = week ? await seasonOverlapping(tx, monday, addDays(monday, 6)) : null;
+      const { season: s, moved, outside } = shownSeason(asked, week ? monday : null, overlapping);
+      return {
+        season: s,
+        moved,
+        outside,
+        current: await currentSeason(tx, today),
+        seasons: await schoolSeasons(tx),
+        courseCounts: await courseCountBySeason(tx),
+        monday,
+        courses: s ? await seasonCourses(tx, s.id) : [],
+        hours: await hoursBySite(tx),
+        lessons: await weekLessons(tx, monday),
+        closures: await closuresBetween(tx, monday, addDays(monday, 6)),
+        places: await listPlaces(tx),
+      };
+    });
 
   if (!season) {
     return (
@@ -80,8 +68,8 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
   const isDirector = role === "director";
   const view = vue === "liste" || vue === "type" || vue === "salles" ? vue : "datee";
   const savedId = typeof enregistre === "string" ? enregistre : undefined;
-  const confirmed = cours.find((c) => c.id === savedId);
-  const copied = copiedCount(copie, cours.length);
+  const confirmed = courses.find((c) => c.id === savedId);
+  const copied = copiedCount(copie, courses.length);
   const copy = copyLink(season, seasons, courseCounts, current?.id);
 
   return (
@@ -120,7 +108,7 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
           change pour cette saison.
         </Alert>
       )}
-      {cours.length === 0 ? (
+      {courses.length === 0 ? (
         <Text size="sm" c="dimmed">
           Aucun cours pour cette saison.
           {isDirector &&
@@ -139,7 +127,7 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
         </Text>
       ) : (
         <ScheduleGrid
-          courses={cours}
+          courses={courses}
           editable={isDirector}
           highlighted={confirmed?.id}
           view={view}

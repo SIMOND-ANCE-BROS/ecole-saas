@@ -97,17 +97,17 @@ const CELLS_WITHOUT_SEARCH = 8;
  * the page reads it back and queries the server.
  */
 export function ListTable<Id extends string>({
-  list: list,
-  what: what,
-  caption: caption,
-  columns: columns,
-  layout: layout,
-  rows: rows,
-  linkColumn: linkColumn,
+  list,
+  what,
+  caption,
+  columns,
+  layout,
+  rows,
+  linkColumn,
   empty,
   mobile,
   choice: choice = {},
-  emptyAction: emptyAction,
+  emptyAction,
   pagination,
 }: Props<Id>) {
   const f = useAddressFilter(columns);
@@ -581,7 +581,7 @@ function ListPages({
 
 const text = (v: CellValue) => (Array.isArray(v) ? v.join(", ") : v == null ? "" : String(v));
 
-function CellContent({ def, value: value, link }: { def: ColumnDef; value: CellValue; link?: CellLink }) {
+function CellContent({ def, value, link }: { def: ColumnDef; value: CellValue; link?: CellLink }) {
   const t = text(value);
   if (t === "")
     return (
@@ -632,11 +632,11 @@ function CellContent({ def, value: value, link }: { def: ColumnDef; value: CellV
  * would sit behind the popover (top layer) and a click on it would close it.
  */
 function Popover({
-  title: title,
-  button: button,
+  title,
+  button,
   buttonProps,
   plainClass,
-  buttonLabel: buttonLabel,
+  buttonLabel,
   width: width = "w-80",
   children,
 }: {
@@ -725,11 +725,11 @@ const SORT_LABELS: Record<ColumnDef["type"], [string, string]> = {
  */
 function TitleMenu({
   def,
-  choice: choice,
+  choice,
   f,
-  currentSort: currentSort,
-  sort: sort,
-  hide: hide,
+  currentSort,
+  sort,
+  hide,
   width,
 }: {
   def: ColumnDef;
@@ -867,9 +867,9 @@ function TitleMenu({
 /** A column's filter according to its kind: checkboxes, bounds, or contained text. */
 function TitleFilter({
   def,
-  choice: choice,
+  choice,
   fc,
-  change: change,
+  change,
 }: {
   def: ColumnDef;
   choice: readonly string[] | undefined;
@@ -886,8 +886,8 @@ function TitleFilter({
       change({ choice: checked.includes(v) ? checked.filter((x) => x !== v) : [...checked, v] });
     const label = (v: string) => (v === EMPTY ? `(${def.ifEmpty ?? "vide"})` : v);
     // « (aucune) » only for a column that can be empty (`ifEmpty`).
-    const toutes = def.ifEmpty ? [...choice, EMPTY] : [...choice];
-    const visible = search ? toutes.filter((v) => label(v).toLowerCase().includes(search.toLowerCase())) : toutes;
+    const all = def.ifEmpty ? [...choice, EMPTY] : [...choice];
+    const visible = search ? all.filter((v) => label(v).toLowerCase().includes(search.toLowerCase())) : all;
     return (
       <>
         {choice.length > CELLS_WITHOUT_SEARCH && (
@@ -1016,10 +1016,10 @@ function AlertIcon() {
 
 /** « Colonnes » menu: show, hide and move columns. */
 function ColumnsMenu({
-  columns: columns,
-  availability: availability,
-  change: change,
-  byDefault: byDefault,
+  columns,
+  availability,
+  change,
+  byDefault,
 }: {
   columns: Map<string, ColumnDef>;
   availability: Layout;

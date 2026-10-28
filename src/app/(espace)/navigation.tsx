@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useTransition } from "react";
 import type { Role } from "@/domain/team/rules";
 
-const LIENS = [
+const LINKS = [
   { href: "/", label: "Accueil" },
   { href: "/eleves", label: "Élèves" },
   { href: "/contacts", label: "Contacts" },
@@ -22,7 +22,7 @@ export function Navigation({ role }: { role: Role }) {
   const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
   return (
     <nav aria-label="Navigation principale" className="flex flex-col gap-0.5">
-      {LIENS.filter(
+      {LINKS.filter(
         (l) =>
           (l.href !== "/parametres" || role === "director") &&
           (role !== "teacher" || !["/intervenants", "/eleves", "/contacts", "/encaissements"].includes(l.href)),
