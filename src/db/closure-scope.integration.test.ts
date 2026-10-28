@@ -182,20 +182,23 @@ describe("closures limited to sites or courses (#200)", () => {
     await admin`INSERT INTO course_date (school_id, course_id, date) VALUES (${school}, ${w.id}, '2026-11-12'), (${school}, ${w.id}, '2026-11-19')`;
     const holidays = await add({ scope: "school", label: "Zz vacances", start: "2026-11-19", end: "2026-11-19" });
     const works = await add({ scope: "sites", label: "Zz travaux", ...dates, siteIds: [annexe] });
-    await sync();
-    expect(await datesOf(w.id)).toEqual(["2026-11-19"]);
+    try {
+      await sync();
+      expect(await datesOf(w.id)).toEqual(["2026-11-19"]);
 
-    // The room moves to the open site: the workshop's lesson comes back.
-    await admin`UPDATE room SET site_id = ${centre} WHERE id = ${annexeRoom}`;
-    await withSchool(school, (tx) => syncRoomSeasons(tx, annexeRoom, TODAY));
-    expect(await datesOf(w.id)).toEqual(["2026-11-12", "2026-11-19"]);
-    expect(await datesOf(ballet)).toContain("2026-11-12");
-    await admin`UPDATE room SET site_id = ${annexe} WHERE id = ${annexeRoom}`;
-
-    for (const r of [holidays, works]) await withSchool(school, (tx) => deleteClosure(tx, r.ok ? r.id : ""));
-    await admin`DELETE FROM lesson WHERE course_id = ${w.id}`;
-    await admin`DELETE FROM course WHERE id = ${w.id}`;
-    await sync();
+      // The room moves to the open site: the workshop's lesson comes back.
+      await admin`UPDATE room SET site_id = ${centre} WHERE id = ${annexeRoom}`;
+      await withSchool(school, (tx) => syncRoomSeasons(tx, annexeRoom, TODAY));
+      expect(await datesOf(w.id)).toEqual(["2026-11-12", "2026-11-19"]);
+      expect(await datesOf(ballet)).toContain("2026-11-12");
+    } finally {
+      // Whatever failed above, the next tests find the room and the closures as they were.
+      await admin`UPDATE room SET site_id = ${annexe} WHERE id = ${annexeRoom}`;
+      for (const r of [holidays, works]) await withSchool(school, (tx) => deleteClosure(tx, r.ok ? r.id : ""));
+      await admin`DELETE FROM lesson WHERE course_id = ${w.id}`;
+      await admin`DELETE FROM course WHERE id = ${w.id}`;
+      await sync();
+    }
   });
 
   it("forgets a deleted course without leaving a link behind", async () => {

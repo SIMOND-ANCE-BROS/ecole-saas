@@ -60,7 +60,9 @@ export function DatedWeek({
   const on = (date: string) => closures.filter((f) => f.period.start <= date && date <= f.period.end);
   // A lesson kept during a partial closure (attendance already taken) says so. Like the
   // lesson sync, a moved lesson is judged on its original date; a school-wide closure
-  // never removes a one-off course, so it is not flagged either.
+  // never removes a one-off course, so it is not flagged either. Limit: only this week's
+  // closures are loaded, so a lesson moved in from another week is not checked against
+  // a closure of its original week.
   const closedFor = (s: ScheduleLesson) =>
     on(s.plannedDate).find((f) => f.scope.kind !== "school" && covers(f.scope, { id: s.courseId, siteId: s.siteId }))
       ?.label;
@@ -101,9 +103,11 @@ export function DatedWeek({
       const scope = f.scope;
       const hit = courses.filter((c) => covers(scope, c) && meetsOn(c, seasonPeriod, date));
       if (hit.length === 0) return [];
+      // Only the sites where a course would have met that day.
+      const sites = [...new Set(hit.map((c) => c.site))];
       const text =
         scope.kind === "sites"
-          ? `${f.targets.join(", ")} fermé${f.targets.length > 1 ? "s" : ""}`
+          ? `${sites.join(", ")} fermé${sites.length > 1 ? "s" : ""}`
           : hit.length === 1
             ? `${hit[0].discipline} annulé`
             : `${hit.length} cours annulés`;

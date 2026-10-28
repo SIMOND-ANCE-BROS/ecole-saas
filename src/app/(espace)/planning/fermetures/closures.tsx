@@ -92,9 +92,10 @@ export function ClosuresManagement({
         n > 0
           ? { text: `Fermeture ajoutée : ${n} séance${n > 1 ? "s" : ""} retirée${n > 1 ? "s" : ""}.`, tone: "ok" }
           : {
-              text: `Fermeture ajoutée. Aucune séance ${
+              // Past lessons and those whose attendance is taken are never removed.
+              text: `Fermeture ajoutée. Aucune séance à venir ${
                 scope === "sites" ? "de ces sites " : scope === "courses" ? "de ces cours " : ""
-              }n’a lieu à ces dates.`,
+              }n’a été retirée.`,
               tone: "warning",
             },
       );
