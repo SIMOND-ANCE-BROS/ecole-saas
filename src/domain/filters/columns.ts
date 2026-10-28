@@ -23,7 +23,7 @@ export const STUDENT_COLUMNS = [
   { id: "cours", label: "Cours suivis", type: "text", ifEmpty: "aucun" },
   { id: "telephone", label: "Téléphone", type: "phone" },
   // Offered in « Colonnes », hidden by default (#89).
-  { id: "naissance", label: "Naissance", type: "date", byDefault: false },
+  { id: "naissance", label: "Naissance", type: "date", byDefault: false, yearsBack: true },
   { id: "email", label: "E-mail", type: "text", email: true, byDefault: false },
   { id: "prevenir", label: "À prévenir", type: "text", byDefault: false },
 ] as const satisfies readonly ColumnDef[];

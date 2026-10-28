@@ -37,6 +37,7 @@ import {
 } from "@/domain/filters/layout";
 import { type ColumnDef, conditionLabel, readSort, type Sort, EMPTY } from "@/domain/filters/filters";
 import { pageCount, shownRange } from "@/domain/filters/pagination";
+import { todayInParis } from "@/domain/people/age";
 import { DateField } from "../_ui/date-field";
 import { saveColumns } from "./actions";
 import { type AddressFilter, useAddressFilter } from "./address-filter";
@@ -932,13 +933,23 @@ function TitleFilter({
   if (def.type === "date") {
     // A day picked or a date typed in full filters at once; a refused or
     // half-typed date empties that bound, as an empty field did before.
+    // Birth dates: the calendar opens on the decade of a child's birth, a year then a day away.
+    const yearsBack = def.yearsBack
+      ? { defaultLevel: "decade" as const, defaultDate: `${Number(todayInParis().slice(0, 4)) - 10}-01-01` }
+      : {};
     const bound = (key: "min" | "max", word: string) => (
       <DateField
         id={`${id}-${key}`}
         size="xs"
         className="min-w-0 flex-1"
+        {...yearsBack}
         // Fixed: placed on the screen, not clipped by the scrolling popover around it.
-        popoverProps={{ portalProps: { target: portal ?? undefined }, floatingStrategy: "fixed" }}
+        // Above the fields: below, it would cover « Effacer ce filtre » and « Masquer la colonne ».
+        popoverProps={{
+          portalProps: { target: portal ?? undefined },
+          floatingStrategy: "fixed",
+          position: "top-start",
+        }}
         value={fc[key]}
         onChange={(v) => change(key === "min" ? { min: v } : { max: v }, true)}
         aria-label={`${def.label} : ${word}`}
