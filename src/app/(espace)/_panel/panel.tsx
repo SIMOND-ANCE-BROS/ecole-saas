@@ -1,6 +1,6 @@
 "use client";
 
-import { Anchor, Button, MantineThemeProvider, type MantineThemeOverride } from "@mantine/core";
+import { Anchor, Button, MantineThemeProvider, Text, type MantineThemeOverride } from "@mantine/core";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, type ReactNode, use, useEffect, useRef, useState } from "react";
@@ -60,6 +60,9 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
    * search can only take the focus once the panel is gone, as after Escape.
    */
   const toSearch = useRef(false);
+  /** Something was typed or chosen in the panel: Ctrl K must not throw it away. */
+  const edited = useRef(false);
+  const [keepHint, setKeepHint] = useState(false);
 
   useEffect(() => {
     const d = dialogue.current;
@@ -101,6 +104,11 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
         if (e.key === "Escape" && listOpen) e.preventDefault();
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
           e.preventDefault();
+          // Never lose what was typed (DESIGN.md): with input, the panel stays and says why.
+          if (edited.current) {
+            setKeepHint(true);
+            return;
+          }
           toSearch.current = true;
           close();
         }
@@ -108,6 +116,9 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
     >
       <div className="flex h-full flex-col">
         <div className="flex items-center justify-end gap-2 border-b border-bordure px-4 py-2">
+          <Text span role="status" size="sm" c="dimmed" className="mr-auto">
+            {keepHint ? "Enregistrez ou annulez avant de chercher." : ""}
+          </Text>
           {/* Plain link: full reload, hence the whole page without a panel. */}
           <Anchor href={query ? `${path}?${query}` : path} size="sm">
             Ouvrir en pleine page
@@ -116,7 +127,17 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
             Fermer
           </Button>
         </div>
-        <div ref={body} className="flex-1 overflow-y-auto overscroll-contain p-4">
+        <div
+          ref={body}
+          className="flex-1 overflow-y-auto overscroll-contain p-4"
+          // Typing, ticking, choosing a radio: the form now holds unsaved input.
+          onInputCapture={() => {
+            edited.current = true;
+          }}
+          onChangeCapture={() => {
+            edited.current = true;
+          }}
+        >
           <MantineThemeProvider theme={IN_DIALOG}>
             <InPanel value>{children}</InPanel>
           </MantineThemeProvider>
