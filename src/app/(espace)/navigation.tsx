@@ -73,6 +73,14 @@ export function GlobalSearch() {
     if (!inProgress && field.current && field.current.value.trim() !== search) field.current.value = search;
   }, [search, path, inProgress]);
 
+  // On a list the cursor starts in the search (#140): set here rather than with `autoFocus`,
+  // which the server renders from its own pathname and which would take focus from an open
+  // panel. Only when nothing else has the focus yet.
+  useEffect(() => {
+    const active = document.activeElement;
+    if (onList && (!active || active === document.body)) field.current?.focus();
+  }, [onList, path]);
+
   useEffect(() => {
     const shortcut = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
@@ -118,7 +126,6 @@ export function GlobalSearch() {
         autoComplete="off"
         placeholder={list?.example ?? "Élève, parent, téléphone…"}
         defaultValue={search}
-        autoFocus={onList}
         onChange={(e) => {
           if (onList) go(e.currentTarget.value, true);
         }}
