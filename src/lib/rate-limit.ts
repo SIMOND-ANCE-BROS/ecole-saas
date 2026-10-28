@@ -18,6 +18,11 @@ export class TokenBucket {
     this.at = now;
   }
 
+  /** Whether `take()` would succeed now, without taking anything. */
+  canTake(now: number): boolean {
+    return Math.min(this.capacity, this.tokens + ((now - this.at) / 1000) * this.perSecond) >= 1;
+  }
+
   /** Takes a token if there is one; false when the budget is spent. */
   take(now: number): boolean {
     this.tokens = Math.min(this.capacity, this.tokens + ((now - this.at) / 1000) * this.perSecond);
@@ -53,10 +58,16 @@ export class KeyedBuckets {
   constructor(
     private readonly capacity: number,
     private readonly perSecond: number,
+    /** Beyond this many keys, buckets full again are dropped. */
+    private readonly maxKeys = 1000,
   ) {}
 
+  get size(): number {
+    return this.buckets.size;
+  }
+
   take(key: string, now: number): boolean {
-    if (this.buckets.size > 1000) for (const [k, b] of this.buckets) if (b.idle(now)) this.buckets.delete(k);
+    if (this.buckets.size >= this.maxKeys) for (const [k, b] of this.buckets) if (b.idle(now)) this.buckets.delete(k);
     let bucket = this.buckets.get(key);
     if (!bucket) {
       bucket = new TokenBucket(this.capacity, this.perSecond, now);

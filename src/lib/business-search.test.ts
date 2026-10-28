@@ -75,6 +75,44 @@ describe("createBusinessSearch", () => {
     expect((await find(A, "zz c")).ok).toBe(true);
   });
 
+  it("does not believe a pause longer than 5 minutes", async () => {
+    const { find, search, at } = setup();
+    search.mockRejectedValueOnce(new RegistryUnavailable("throttled", 24 * 3600 * 1000));
+    await find(A, "zz a");
+    at(5 * 60 * 1000 - 1);
+    expect((await find(A, "zz b")).ok).toBe(false);
+    at(5 * 60 * 1000);
+    expect((await find(A, "zz c")).ok).toBe(true);
+  });
+
+  it("does not pause nor log when the browser gave up the search", async () => {
+    const { find, search, at } = setup();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    search.mockRejectedValueOnce(new RegistryUnavailable("cancelled"));
+    expect((await find(A, "zz a")).ok).toBe(false);
+    expect(warn).not.toHaveBeenCalled();
+    at(1000);
+    expect((await find(A, "zz b")).ok).toBe(true);
+    warn.mockRestore();
+  });
+
+  it("passes the browser's signal to the registry", async () => {
+    const { find, search } = setup();
+    const signal = new AbortController().signal;
+    await find(A, "zz a", signal);
+    expect(search).toHaveBeenCalledWith("zz a", signal);
+  });
+
+  it("does not spend a member's budget when the server's is spent", async () => {
+    const { find, at } = setup();
+    for (let i = 0; i < 5; i++) await find({ schoolId: "s", userId: `u${i}` }, `zz ${i}`);
+    // Server budget spent: the member is refused without losing a token.
+    for (let i = 0; i < 3; i++) expect((await find(A, `zz refused ${i}`)).ok).toBe(false);
+    at(1000);
+    // Five tokens back for the server; the member still has its whole burst.
+    for (let i = 0; i < 3; i++) expect((await find(A, `zz later ${i}`)).ok).toBe(true);
+  });
+
   it("does not pause after another failure", async () => {
     const { find, search, at } = setup();
     search.mockRejectedValueOnce(new RegistryUnavailable("status"));

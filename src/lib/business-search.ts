@@ -14,9 +14,11 @@ const CACHE_MS = 10 * 60 * 1000;
 const CACHE_SIZE = 200;
 /** After a 429 without Retry-After. */
 const PAUSE_MS = 30 * 1000;
+/** A Retry-After longer than this is not believed: searches come back after 5 minutes. */
+const MAX_PAUSE_MS = 5 * 60 * 1000;
 
 type Options = {
-  search?: (query: string) => Promise<Business[]>;
+  search?: (query: string, signal?: AbortSignal) => Promise<Business[]>;
   now?: () => number;
 };
 
@@ -27,29 +29,41 @@ type Options = {
  * pause of every search after a « slow down » keep below it. Over budget,
  * the member reads « type by hand », the registry is not called.
  */
-export function createBusinessSearch({ search = (q) => searchRegistry(q), now = Date.now }: Options = {}) {
+export function createBusinessSearch({
+  search = (q, signal) => searchRegistry(q, { signal }),
+  now = Date.now,
+}: Options = {}) {
   const everyone = new TokenBucket(5, 5, now());
   const members = new KeyedBuckets(3, 1);
   const breaker = new Breaker();
   const cache = new Map<string, { at: number; results: Business[] }>();
 
-  return async function find(who: { schoolId: string; userId: string }, query: string): Promise<RegistrySearch> {
+  /** `signal`: the browser's request, cancelled when a newer search replaces it. */
+  return async function find(
+    who: { schoolId: string; userId: string },
+    query: string,
+    signal?: AbortSignal,
+  ): Promise<RegistrySearch> {
     const t = now();
     // Per school: nothing seen by one school is served to another.
     const key = `${who.schoolId}:${normalisedQuery(query).toLowerCase()}`;
     const kept = cache.get(key);
     if (kept && t - kept.at < CACHE_MS) return { ok: true, results: kept.results };
-    if (breaker.isOpen(t) || !members.take(who.userId, t) || !everyone.take(t))
+    // The server's budget is looked at first: a refusal there costs the member nothing.
+    if (breaker.isOpen(t) || !everyone.canTake(t) || !members.take(who.userId, t) || !everyone.take(t))
       return { ok: false, message: UNAVAILABLE };
     try {
-      const results = await search(query);
+      const results = await search(query, signal);
       cache.delete(key);
       cache.set(key, { at: now(), results });
       // A Map keeps insertion order: the oldest goes first.
       if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value ?? "");
       return { ok: true, results };
     } catch (e) {
-      if (e instanceof RegistryUnavailable && e.reason === "throttled") breaker.open(now(), e.retryAfterMs ?? PAUSE_MS);
+      // Nobody is waiting for this answer any more: not a registry failure.
+      if (e instanceof RegistryUnavailable && e.reason === "cancelled") return { ok: false, message: UNAVAILABLE };
+      if (e instanceof RegistryUnavailable && e.reason === "throttled")
+        breaker.open(now(), Math.min(e.retryAfterMs ?? PAUSE_MS, MAX_PAUSE_MS));
       // The reason only: the query may be a person's name.
       console.warn(`business registry: ${e instanceof RegistryUnavailable ? e.reason : "unexpected error"}`);
       return { ok: false, message: UNAVAILABLE };

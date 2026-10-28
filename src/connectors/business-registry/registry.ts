@@ -27,7 +27,8 @@ export type Business = {
 /** The registry did not answer usably (timeout, refusal, unexpected response). */
 export class RegistryUnavailable extends Error {
   constructor(
-    readonly reason: "timeout" | "status" | "network" | "format" | "throttled",
+    /** « cancelled »: the caller gave up (browser search replaced), not a registry failure. */
+    readonly reason: "timeout" | "status" | "network" | "format" | "throttled" | "cancelled",
     /** For « throttled »: how long the registry asks to wait (Retry-After), if it says. */
     readonly retryAfterMs: number | null = null,
   ) {
@@ -135,17 +136,21 @@ function retryAfter(response: Response, now = Date.now()): number | null {
  */
 export async function searchRegistry(
   query: string,
-  o: { fetch?: typeof fetch; timeoutMs?: number; pauseMs?: number } = {},
+  o: { fetch?: typeof fetch; timeoutMs?: number; pauseMs?: number; signal?: AbortSignal } = {},
 ): Promise<Business[]> {
+  const cancelled = () => o.signal?.aborted === true;
   const call = o.fetch ?? fetch;
   const url = `${URL_SEARCH}?${new URLSearchParams({ q: normalisedQuery(query), per_page: String(RESULTS), page: "1" })}`;
   for (let attempt = 0; ; attempt++) {
-    // One time budget for the answer and its body.
-    const signal = AbortSignal.timeout(o.timeoutMs ?? TIMEOUT_MS);
+    if (cancelled()) throw new RegistryUnavailable("cancelled");
+    // One time budget for the answer and its body; the caller can also give up.
+    const timeout = AbortSignal.timeout(o.timeoutMs ?? TIMEOUT_MS);
+    const signal = o.signal ? AbortSignal.any([timeout, o.signal]) : timeout;
     let response: Response;
     try {
       response = await call(url, { headers: { Accept: "application/json" }, signal, cache: "no-store" });
     } catch (e) {
+      if (cancelled()) throw new RegistryUnavailable("cancelled");
       if (isTimeout(e)) throw new RegistryUnavailable("timeout");
       if (attempt === 0) {
         await pause(o.pauseMs);
@@ -160,6 +165,7 @@ export async function searchRegistry(
         json = await Promise.race([response.json(), rejectedWhenAborted(signal)]);
       } catch (e) {
         if (!response.bodyUsed) await response.body?.cancel().catch(() => undefined);
+        if (cancelled()) throw new RegistryUnavailable("cancelled");
         throw new RegistryUnavailable(isTimeout(e) || signal.aborted ? "timeout" : "format");
       }
       return businessesOf(json);

@@ -43,8 +43,16 @@ export function PersonForm({ person: person, section: section, proposedName: pro
     if (refusal) form.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
   }, [refusal]);
   const pro = v.type === "organisation";
-  const updated = (field: keyof typeof v) => (e: { currentTarget: { value: string } }) =>
+  // Company picked in the registry: its confirmation goes once its name or SIREN is edited by hand.
+  const [picked, setPicked] = useState(false);
+  const [searchKey, setSearchKey] = useState(0);
+  const updated = (field: keyof typeof v) => (e: { currentTarget: { value: string } }) => {
+    if (picked && (field === "companyName" || field === "siren")) {
+      setPicked(false);
+      setSearchKey((k) => k + 1);
+    }
     setV({ ...v, [field]: e.currentTarget.value });
+  };
 
   const entry = {
     ...v,
@@ -112,12 +120,14 @@ export function PersonForm({ person: person, section: section, proposedName: pro
           <div className="grid items-start gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <BusinessSearch
+                key={searchKey}
                 filled={(b) =>
                   b.street ? "raison sociale, SIREN et adresse remplis." : "raison sociale et SIREN remplis."
                 }
                 autoFocus={!person}
                 description="Nom, SIREN ou SIRET : choisir une entreprise remplit la raison sociale, le SIREN et l’adresse."
-                onPick={(b) =>
+                onPick={(b) => {
+                  setPicked(true);
                   setV((now) => ({
                     ...now,
                     companyName: b.legalName,
@@ -126,8 +136,8 @@ export function PersonForm({ person: person, section: section, proposedName: pro
                     address: b.street
                       ? [b.street, [b.postcode, b.city].filter(Boolean).join(" ")].filter(Boolean).join(", ")
                       : now.address,
-                  }))
-                }
+                  }));
+                }}
               />
             </div>
             {field("companyName", "Raison sociale")}

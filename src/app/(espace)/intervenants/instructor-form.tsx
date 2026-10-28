@@ -66,6 +66,8 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
   const [siren, setSiren] = useState(v.siren);
   // Company picked in the registry: shown under the SIREN to check it is the right one.
   const [found, setFound] = useState<Business | null>(null);
+  // Remounts the search: its « SIREN rempli. » no longer holds once the SIREN is edited by hand.
+  const [searchKey, setSearchKey] = useState(0);
   const e = state.errors;
   const form = useRef<HTMLFormElement>(null);
   // Empty rate: said before sending, like a missing required field.
@@ -138,6 +140,7 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
           <>
             <div className="sm:col-span-2">
               <BusinessSearch
+                key={searchKey}
                 filled="SIREN rempli."
                 description="Nom de l’entreprise ou de l’intervenant, SIREN ou SIRET : choisir une entreprise remplit le SIREN."
                 onPick={(b) => {
@@ -154,6 +157,7 @@ function Champs({ state: state, send: send, inProgress: inProgress, edition, ini
               defaultValue: undefined,
               onChange: (ev) => {
                 setSiren(ev.currentTarget.value);
+                if (found) setSearchKey((k) => k + 1);
                 setFound(null);
               },
               description: found

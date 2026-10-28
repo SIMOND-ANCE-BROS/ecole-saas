@@ -16,6 +16,15 @@ describe("TokenBucket", () => {
     expect(taken).toEqual([true, true, false]);
   });
 
+  it("says whether a token is there without taking it", () => {
+    const b = new TokenBucket(1, 1, 0);
+    expect(b.canTake(0)).toBe(true);
+    expect(b.canTake(0)).toBe(true);
+    b.take(0);
+    expect(b.canTake(500)).toBe(false);
+    expect(b.canTake(1000)).toBe(true);
+  });
+
   it("is idle once full again", () => {
     const b = new TokenBucket(2, 1, 0);
     b.take(0);
@@ -36,6 +45,25 @@ describe("Breaker", () => {
 });
 
 describe("KeyedBuckets", () => {
+  it("drops buckets full again beyond its size, and a key coming back starts full", () => {
+    const m = new KeyedBuckets(2, 1, 2);
+    m.take("a", 0);
+    m.take("b", 0);
+    expect(m.size).toBe(2);
+    // At 10 s both are full again: dropped when a third key arrives.
+    m.take("c", 10_000);
+    expect(m.size).toBe(1);
+    expect([m.take("a", 10_000), m.take("a", 10_000), m.take("a", 10_000)]).toEqual([true, true, false]);
+  });
+
+  it("keeps a bucket still in use", () => {
+    const m = new KeyedBuckets(2, 1, 1);
+    m.take("a", 0);
+    m.take("a", 0);
+    m.take("b", 100);
+    expect(m.take("a", 200)).toBe(false);
+  });
+
   it("gives each key its own budget", () => {
     const m = new KeyedBuckets(1, 1);
     expect(m.take("a", 0)).toBe(true);

@@ -156,6 +156,28 @@ describe("searchRegistry", () => {
     });
   });
 
+  it("stops when the caller gives up, without trying again", async () => {
+    const caller = new AbortController();
+    const f = vi.fn<typeof fetch>(async (_url, init) => {
+      caller.abort();
+      throw init?.signal?.reason ?? new DOMException("aborted", "AbortError");
+    });
+    await expect(searchRegistry("zz danse", { fetch: f, pauseMs: 0, signal: caller.signal })).rejects.toMatchObject({
+      reason: "cancelled",
+    });
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not call the registry for a search already given up", async () => {
+    const caller = new AbortController();
+    caller.abort();
+    const f = fake(ok({ results: [] }));
+    await expect(searchRegistry("zz danse", { fetch: f, signal: caller.signal })).rejects.toMatchObject({
+      reason: "cancelled",
+    });
+    expect(f).not.toHaveBeenCalled();
+  });
+
   it("refuses a body that is not JSON", async () => {
     const f = fake(new Response("<html>", { status: 200 }));
     await expect(searchRegistry("zz danse", { fetch: f })).rejects.toMatchObject({ reason: "format" });

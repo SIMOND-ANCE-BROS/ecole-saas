@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const { schoolId, userId } = await requireRole("director", "front_desk");
   const q = QUERY.safeParse(new URL(request.url).searchParams.get("q") ?? "");
   const body: RegistrySearch = q.success
-    ? await findBusinesses({ schoolId, userId }, q.data)
+    ? await findBusinesses({ schoolId, userId }, q.data, request.signal)
     : { ok: false, message: q.error.issues[0]?.message ?? "Recherche invalide." };
   return Response.json(body, { headers: { "Cache-Control": "no-store" } });
 }

@@ -76,6 +76,8 @@ export function BusinessSearch({
       setSearching(true);
       search(q, abort.signal)
         .then((r) => {
+          // A newer text has replaced this search: its answer is not shown.
+          if (abort.signal.aborted) return;
           if (r.ok) {
             setMoved(null);
             setResults(r.results);
@@ -127,7 +129,10 @@ export function BusinessSearch({
   return (
     <div>
       <Combobox store={combobox} onOptionSubmit={pick}>
-        <Combobox.Target aria-activedescendant={combobox.dropdownOpened && active >= 0 ? idOf(active) : undefined}>
+        <Combobox.Target
+          withExpandedAttribute
+          aria-activedescendant={combobox.dropdownOpened && active >= 0 ? idOf(active) : undefined}
+        >
           <TextInput
             role="combobox"
             label={label}

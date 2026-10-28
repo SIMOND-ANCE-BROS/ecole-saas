@@ -36,9 +36,11 @@ missing or partly masked (`[ND]`).
   every search after a 429 (Retry-After, else 30 seconds). Over budget, the
   registry is not called and the member types by hand.
 - **Privacy.** A search for a sole trader may send a person's name to the
-  State API. It is the public registry of that same data, the query is not
-  stored with the school's data, and it is never logged (only the failure
-  reason).
+  State API. It is the public registry of that same data, and the query is
+  not stored with the school's data. The application does not log it (only
+  the failure reason); but the query is in the URL of a GET, so the access
+  logs of the host or of a reverse proxy may record it. Kept as a GET for
+  the browser to cancel searches simply.
 
 ## Alternatives considered
 
