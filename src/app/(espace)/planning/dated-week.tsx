@@ -3,7 +3,7 @@
 import { Button, Group, Text, Title } from "@mantine/core";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Closure, ScheduleLesson } from "@/db/lessons";
 import type { ScheduleCourse } from "@/db/schedule";
 import { covers } from "@/domain/schedule/closure-scope";
@@ -54,6 +54,14 @@ export function DatedWeek({
   season,
 }: Props) {
   const router = useRouter();
+  // « Aller au » is drawn again for the week it led to: there it takes the focus back once (#220).
+  const [goToWeek, setGoToWeek] = useState<string | null>(null);
+  // Another week shown (arrows, browser back, a move that landed elsewhere): nothing to focus any more.
+  const [shownWeek, setShownWeek] = useState(monday);
+  if (shownWeek !== monday) {
+    setShownWeek(monday);
+    if (goToWeek !== monday) setGoToWeek(null);
+  }
   const dates = weekDays(monday);
   const weekLink = (l: string) => withSeason(`/planning?semaine=${l}`, season);
 
@@ -160,7 +168,16 @@ export function DatedWeek({
           <Text span size="sm" c="dimmed" id="aller-au">
             Aller au
           </Text>
-          <GoTo key={monday} monday={monday} onGo={(d) => router.push(weekLink(d))} />
+          <GoTo
+            key={monday}
+            monday={monday}
+            focus={goToWeek === monday}
+            onFocused={() => setGoToWeek(null)}
+            onGo={(d) => {
+              setGoToWeek(addDays(d, 1 - weekdayOf(d)));
+              router.push(weekLink(d));
+            }}
+          />
         </Group>
       </nav>
       {lessons.length === 0 && (
@@ -199,21 +216,48 @@ export function DatedWeek({
  * settled (Enter, leaving the field, a day picked), never on a half-typed
  * year such as « 12/09/20 ».
  */
-function GoTo({ monday, onGo }: { monday: string; onGo: (date: string) => void }) {
+function GoTo({
+  monday,
+  focus,
+  onFocused,
+  onGo,
+}: {
+  monday: string;
+  /** Drawn for the week it led to: takes the focus, calendar closed. */
+  focus: boolean;
+  onFocused: () => void;
+  onGo: (date: string) => void;
+}) {
   // Remounted for each week (key): whatever was typed, even with the cursor
   // still here when the browser goes back, gives way to the Monday shown.
   const [date, setDate] = useState(monday);
+  const wrapper = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const field = wrapper.current?.querySelector("input");
+    // Already focused: the effect ran twice (Strict Mode), nothing to do again.
+    if (!focus || !field || document.activeElement === field) return;
+    // Without opening the calendar again over the new week (see `DateField`).
+    field.dataset.quietFocus = "1";
+    field.focus();
+    // `DateField` consumes the marker on focus; never leave it behind.
+    delete field.dataset.quietFocus;
+    onFocused();
+    // Once, when this week's field appears.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
-    <DateField
-      aria-labelledby="aller-au"
-      // Picking the selected day again changes nothing rather than emptying the field.
-      required
-      w={140}
-      value={date}
-      onChange={setDate}
-      onCommit={(d) => {
-        if (addDays(d, 1 - weekdayOf(d)) !== monday) onGo(d);
-      }}
-    />
+    <span ref={wrapper} className="contents">
+      <DateField
+        aria-labelledby="aller-au"
+        // Picking the selected day again changes nothing rather than emptying the field.
+        required
+        w={140}
+        value={date}
+        onChange={setDate}
+        onCommit={(d) => {
+          if (addDays(d, 1 - weekdayOf(d)) !== monday) onGo(d);
+        }}
+      />
+    </span>
   );
 }
