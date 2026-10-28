@@ -118,3 +118,18 @@ input[type="radio"] {
     animation: none;
   }
 }
+
+/* Loading state (#107): shown only when a page takes more than 300 ms, so a fast one does not flash. */
+.chargement-differe {
+  animation: apparition 150ms ease-out 300ms both;
+}
+@keyframes apparition {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chargement-differe {
+    animation-duration: 0s;
+  }
+}

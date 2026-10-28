@@ -4,7 +4,7 @@ import { withSchool } from "@/db";
 import { readPerson, displayedName } from "@/db/people";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
-import { TextLink } from "../../_ui/text-link";
+import { BackToList } from "../../_ui/list-return";
 import { NewStudentGuide } from "./guide";
 
 export const metadata: Metadata = { title: "Nouvel élève" };
@@ -17,9 +17,9 @@ export default async function NewStudentPage({ searchParams }: PageProps<"/eleve
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <TextLink href="/eleves" size="sm">
+        <BackToList list="/eleves" size="sm">
           Élèves
-        </TextLink>
+        </BackToList>
         <Text span size="sm" c="dimmed">
           {" "}
           / Nouvel élève

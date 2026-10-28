@@ -5,6 +5,7 @@ import { withSchool } from "@/db";
 import { readPerson, displayedName } from "@/db/people";
 import { requireRole } from "@/lib/session";
 import { PersonForm } from "../../../_people/person-form";
+import { BackToList } from "../../../_ui/list-return";
 import { TextLink } from "../../../_ui/text-link";
 
 export const metadata: Metadata = { title: "Modifier un élève" };
@@ -18,9 +19,9 @@ export default async function EditStudentPage({ params }: PageProps<"/eleves/[id
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <TextLink href="/eleves" size="sm">
+        <BackToList list="/eleves" size="sm">
           Élèves
-        </TextLink>
+        </BackToList>
         <Text span size="sm" c="dimmed">
           {" / "}
         </Text>

@@ -10,7 +10,6 @@ import {
   TableThead,
   TableTr,
   Text,
-  Title,
 } from "@mantine/core";
 import { withSchool } from "@/db";
 import { PAYMENT_METHODS, type Method } from "@/db/payments";
@@ -21,6 +20,7 @@ import { todayInParis } from "@/domain/people/age";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
 import { ButtonLink } from "../_ui/button-link";
+import { PageHeader } from "../_ui/page-header";
 import { TextLink } from "../_ui/text-link";
 import { JournalFilters } from "./journal-filters";
 import { ToDeposit } from "./to-deposit";
@@ -52,9 +52,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
 
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
-      <Title order={1} fz="xl">
-        Encaissements
-      </Title>
+      <PageHeader title="Encaissements" />
       {p.annulee && <Alert role="status">Remise annulée : ses paiements sont de nouveau à remettre.</Alert>}
       <nav aria-label="Vues" className="flex flex-wrap gap-2">
         {(Object.keys(VIEWS) as View[]).map((v) => (

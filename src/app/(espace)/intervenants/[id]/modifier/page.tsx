@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { readInstructor } from "@/db/instructors";
 import { requireRole } from "@/lib/session";
+import { BackToList } from "@/app/(espace)/_ui/list-return";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { InstructorForm } from "../../instructor-form";
 
@@ -18,9 +19,9 @@ export default async function UpdateInstructor({ params }: PageProps<"/intervena
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <TextLink href="/intervenants" size="sm">
+        <BackToList list="/intervenants" size="sm">
           Intervenants
-        </TextLink>
+        </BackToList>
         <span> / </span>
         <TextLink href={`/intervenants/${id}`} size="sm">
           {name}

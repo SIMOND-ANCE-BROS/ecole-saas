@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Text, Title } from "@mantine/core";
 import { requireRole } from "@/lib/session";
-import { TextLink } from "@/app/(espace)/_ui/text-link";
+import { BackToList } from "@/app/(espace)/_ui/list-return";
 import { InstructorForm } from "../instructor-form";
 
 export const metadata: Metadata = { title: "Nouvel intervenant" };
@@ -11,9 +11,9 @@ export default async function NewInstructorPage() {
   return (
     <section className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
-        <TextLink href="/intervenants" size="sm">
+        <BackToList list="/intervenants" size="sm">
           Intervenants
-        </TextLink>
+        </BackToList>
         <Text span size="sm" c="dimmed">
           {" "}
           / Nouveau

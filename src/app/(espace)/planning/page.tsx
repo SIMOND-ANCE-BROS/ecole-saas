@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Alert, Text, Title } from "@mantine/core";
+import { Alert, Text } from "@mantine/core";
 import { withSchool } from "@/db";
 import { hoursBySite, listPlaces } from "@/db/settings";
 import { courseCountBySeason } from "@/db/season-copy";
@@ -11,6 +11,7 @@ import { todayInParis } from "@/domain/people/age";
 import { shownSeason } from "@/domain/schedule/shown-season";
 import { schoolContext } from "@/lib/session";
 import { ButtonLink } from "../_ui/button-link";
+import { PageHeader } from "../_ui/page-header";
 import { TextLink } from "../_ui/text-link";
 import { ScheduleGrid } from "./grid";
 import { copiedCount, copyLink, seasonParam as paramOf, withSeason } from "./season-link";
@@ -85,29 +86,27 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
 
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <Title order={1} fz="xl">
-            Planning {season.label}
-          </Title>
-          {seasons.length > 1 && (
-            <SeasonPicker seasons={seasons} chosen={season.id} current={current?.id ?? season.id} />
-          )}
-        </div>
-        {isDirector && (
-          <div className="flex flex-wrap gap-2">
-            {seasons.length > 1 && (
-              <ButtonLink href={copy.href} variant="default">
-                {copy.label}
+      <PageHeader
+        title={`Planning ${season.label}`}
+        beside={
+          seasons.length > 1 && <SeasonPicker seasons={seasons} chosen={season.id} current={current?.id ?? season.id} />
+        }
+        actions={
+          isDirector && (
+            <>
+              {seasons.length > 1 && (
+                <ButtonLink href={copy.href} variant="default">
+                  {copy.label}
+                </ButtonLink>
+              )}
+              <ButtonLink href={withSeason("/planning/fermetures", seasonParam)} variant="default">
+                Fermetures
               </ButtonLink>
-            )}
-            <ButtonLink href={withSeason("/planning/fermetures", seasonParam)} variant="default">
-              Fermetures
-            </ButtonLink>
-            <ButtonLink href={withSeason("/planning/cours/nouveau", seasonParam)}>Nouveau cours</ButtonLink>
-          </div>
-        )}
-      </div>
+              <ButtonLink href={withSeason("/planning/cours/nouveau", seasonParam)}>Nouveau cours</ButtonLink>
+            </>
+          )
+        }
+      />
       {outside && (
         <Alert role="status" color="yellow">
           Cette semaine n’appartient à aucune saison : le planning affiché reste celui de {season.label}.

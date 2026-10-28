@@ -4,6 +4,7 @@ import { Anchor, Button, MantineThemeProvider, type MantineThemeOverride } from 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, type ReactNode, use, useEffect, useRef, useState } from "react";
+import { useListReturn } from "../_ui/list-return";
 
 /** True inside a panel: « Annuler » goes back there instead of navigating. */
 const InPanel = createContext(false);
@@ -117,6 +118,8 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
 /** A form's « Annuler »: closes the panel, or leads to `href` as a full page. */
 export function Cancel({ href }: { href: string }) {
   const router = useRouter();
+  // A list keeps the filters and sort it had (#107).
+  const target = useListReturn(href);
   if (use(InPanel)) {
     return (
       <Button variant="default" onClick={() => router.back()}>
@@ -125,7 +128,7 @@ export function Cancel({ href }: { href: string }) {
     );
   }
   return (
-    <Button component={Link} href={href} variant="default">
+    <Button component={Link} href={target} variant="default">
       Annuler
     </Button>
   );
