@@ -122,7 +122,10 @@ describe("instructor rate per course (#191)", () => {
     const r = await withSchool(school, (tx) =>
       createCourse(tx, season, { ...base, instructorId: flat, instructorRate: 4000 }),
     );
-    expect(r).toEqual({ ok: false, message: "Pas de tarif par cours pour un forfait mensuel." });
+    expect(r).toEqual({
+      ok: false,
+      message: "Pas de tarif par cours pour un forfait mensuel pour l’instant (règle en attente).",
+    });
     expect(
       (await create({ ...base, instructorId: flat, weekday: 4, instructorRate: undefined })).length,
     ).toBeGreaterThan(0);

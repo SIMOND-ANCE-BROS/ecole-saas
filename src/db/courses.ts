@@ -267,7 +267,10 @@ async function values(tx: Tx, entry: CourseInput, guard?: string) {
   const [i] = entry.instructorRate != null ? await found.for("share") : await found;
   if (!i) return { ok: false as const, message: "Intervenant introuvable ou inactif." };
   if (entry.instructorRate != null && !courseRateAllowed(i.payMode))
-    return { ok: false as const, message: "Pas de tarif par cours pour un forfait mensuel." };
+    return {
+      ok: false as const,
+      message: "Pas de tarif par cours pour un forfait mensuel pour l’instant (règle en attente).",
+    };
   const roomId = await resolveRoom(tx, entry.room);
   if (!roomId) return { ok: false as const, message: "Salle introuvable." };
   const disciplineId = await resolveDiscipline(tx, entry.discipline);

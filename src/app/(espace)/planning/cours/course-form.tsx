@@ -330,7 +330,7 @@ export function CourseForm({
               />
             ) : (
               <Text size="sm" c="dimmed" pt={{ base: 0, sm: 28 }}>
-                Pas de tarif par cours pour un forfait mensuel.
+                Pas de tarif par cours pour un forfait mensuel pour l’instant (règle en attente).
               </Text>
             ))}
           <div aria-live="polite">
