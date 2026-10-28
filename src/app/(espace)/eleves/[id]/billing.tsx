@@ -1,6 +1,6 @@
 "use client";
 
-import { Anchor, Button, Paper, Radio, Text, Title } from "@mantine/core";
+import { Anchor, Button, Loader, Paper, Radio, Text, Title } from "@mantine/core";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -20,7 +20,12 @@ type Props = {
   siblings: StudentRecord["siblings"];
 };
 
-/** Name of a payer picked or typed in the person search, for the confirmation. */
+/** The payer shown in the card: `key` matches the choices (`self`, `p:<id>`). */
+type Payer = { key: string; name: string; href: string | null };
+
+const FAILED = "Payeur non enregistré : réessayez. Si le problème continue, vérifiez la connexion.";
+
+/** Name of a payer picked or typed in the person search. */
 const choiceName = (c: Choice) =>
   has(c, "id")
     ? c.name
@@ -31,7 +36,7 @@ const choiceName = (c: Choice) =>
 /**
  * « Facturé à »: a single payer. A mouse click on a choice bills it at once;
  * with the keyboard the arrow keys only move the selection, and Enter or the
- * « Facturer à … » button bills it (#221).
+ * « Facturer à … » button bills it (#221). Escape closes the choices.
  */
 export function Billing({
   studentId: studentId,
@@ -41,13 +46,23 @@ export function Billing({
   relatives: relatives,
   siblings: siblings,
 }: Props) {
-  const currentKey = billedTo.type === "self" ? "self" : billedTo.type === "person" ? `p:${billedTo.id}` : null;
+  const fromServer: Payer | null =
+    billedTo.type === "self"
+      ? { key: "self", name: `${firstName} (paie ses cours)`, href: null }
+      : billedTo.type === "person"
+        ? { key: `p:${billedTo.id}`, name: billedTo.name, href: `/personnes/${billedTo.id}` }
+        : null;
+  // The payer just saved, shown at once; it gives way as soon as the refreshed record says otherwise.
+  const [saved, setSaved] = useState<{ over: string | null; payer: Payer } | null>(null);
+  const payer = saved && saved.over === (fromServer?.key ?? null) ? saved.payer : fromServer;
+  const currentKey = payer?.key ?? null;
+
   const [open, setOpen] = useState(false);
   // The choice selected in the group, billed only on an explicit action.
   const [selected, setSelected] = useState<string | null>(currentKey);
   const [other, setOther] = useState<Choice | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
+  const [done, setDone] = useState("");
   const [inProgress, startTransition] = useTransition();
   const box = useRef<HTMLElement>(null);
   // Whether the last gesture in the choices was a pointer (click, tap) rather than a key.
@@ -70,34 +85,52 @@ export function Billing({
   ];
   const chosen = options.find((o) => o.key === selected && o.key !== currentKey);
 
-  const choose = (name: string, action: () => Promise<{ message: string | null }>) =>
+  const choose = (target: Payer, action: () => Promise<{ message: string | null }>) =>
     startTransition(async () => {
-      let r: { message: string | null };
+      let failure: string | null;
       try {
-        r = await action();
+        failure = (await action()).message;
       } catch (e) {
-        // A lost connection keeps the record on screen, with a way out.
+        // A lost connection or a server error keeps the record on screen, with a way out.
         unstable_rethrow(e);
-        setMessage("Payeur non enregistré : vérifiez la connexion et réessayez.");
+        failure = FAILED;
+      }
+      setMessage(failure);
+      if (failure) {
+        // Back to what can be retried: the « Facturer à … » button, else the selected choice.
+        requestAnimationFrame(() =>
+          (
+            box.current?.querySelector<HTMLElement>("[data-bill]") ??
+            box.current?.querySelector<HTMLElement>("input[type='radio']:checked")
+          )?.focus(),
+        );
         return;
       }
-      setMessage(r.message);
-      if (!r.message) {
-        setDone(`Facturé à ${name}.`);
-        setOpen(false);
-        setOther(null);
-      }
+      setSaved({ over: fromServer?.key ?? null, payer: target });
+      setDone(`Payeur changé : ${target.name}.`);
+      setOpen(false);
+      setOther(null);
     });
 
+  const hrefOf = (key: string) => (key.startsWith("p:") ? `/personnes/${key.slice(2)}` : null);
   const select = (key: string) => {
+    if (inProgress) return;
     setSelected(key);
     const option = options.find((o) => o.key === key);
     // A click bills at once; an arrow key only moves the selection.
-    if (pointer.current && option && key !== currentKey) choose(option.name, option.bill);
+    if (pointer.current && option && key !== currentKey) {
+      choose({ key: option.key, name: option.name, href: hrefOf(option.key) }, option.bill);
+    }
   };
-
-  const current =
-    billedTo.type === "person" ? billedTo.name : billedTo.type === "self" ? `${firstName} (paie ses cours)` : null;
+  const billChosen = () =>
+    chosen && !inProgress && choose({ key: chosen.key, name: chosen.name, href: hrefOf(chosen.key) }, chosen.bill);
+  const billOther = () => {
+    if (!other || inProgress) return;
+    const target: Payer = has(other, "id")
+      ? { key: `p:${other.id}`, name: other.name, href: `/personnes/${other.id}` }
+      : { key: "new", name: choiceName(other), href: null };
+    choose(target, () => billNewPerson(studentId, toInput(other)));
+  };
 
   return (
     <Paper
@@ -111,14 +144,14 @@ export function Billing({
       <Title order={2} size="h6" id="facture-a">
         Facturé à
       </Title>
-      {current ? (
+      {payer ? (
         <Text fw={500}>
-          {billedTo.type === "person" ? (
-            <Anchor component={Link} href={`/personnes/${billedTo.id}`} inherit>
-              {current}
+          {payer.href ? (
+            <Anchor component={Link} href={payer.href} inherit>
+              {payer.name}
             </Anchor>
           ) : (
-            current
+            payer.name
           )}
         </Text>
       ) : (
@@ -147,20 +180,21 @@ export function Billing({
           className="self-start"
           data-change
           onClick={() => {
+            pointer.current = false;
             setSelected(currentKey);
             setMessage(null);
-            setDone(null);
+            setDone("");
             setOpen(true);
           }}
         >
-          {current ? "Changer" : "Choisir"}
+          {payer ? "Changer" : "Choisir"}
         </Button>
       ) : (
         <form
           onSubmit={(e) => {
             // Enter on a choice bills the selected payer.
             e.preventDefault();
-            if (chosen && !inProgress) choose(chosen.name, chosen.bill);
+            billChosen();
           }}
         >
           <fieldset
@@ -169,6 +203,13 @@ export function Billing({
             className="flex flex-col gap-2 border-t border-bordure pt-2 outline-offset-2"
             onPointerDownCapture={() => (pointer.current = true)}
             onKeyDownCapture={() => (pointer.current = false)}
+            onKeyDown={(e) => {
+              // Like « Annuler »: back to « Changer », nothing billed.
+              if (e.key === "Escape" && !e.defaultPrevented && !inProgress) {
+                e.preventDefault();
+                setOpen(false);
+              }
+            }}
           >
             <legend className="sr-only">Facturer à</legend>
             {options.map((o) => {
@@ -194,7 +235,6 @@ export function Billing({
                     )
                   }
                   checked={selected === o.key}
-                  disabled={inProgress}
                   onChange={() => select(o.key)}
                 />
               );
@@ -203,8 +243,7 @@ export function Billing({
               name="facturer"
               label="Un autre payeur : CSE, entreprise, proche…"
               checked={selected === "other"}
-              disabled={inProgress}
-              onChange={() => setSelected("other")}
+              onChange={() => !inProgress && setSelected("other")}
             />
             {selected === "other" && (
               <div className="flex flex-col gap-2 pl-7">
@@ -217,9 +256,13 @@ export function Billing({
                   organization
                 />
                 <Button
+                  variant="light"
                   className="self-start"
-                  disabled={inProgress || !other}
-                  onClick={() => other && choose(choiceName(other), () => billNewPerson(studentId, toInput(other)))}
+                  data-bill={other ? "" : undefined}
+                  disabled={!other}
+                  aria-disabled={inProgress || undefined}
+                  rightSection={inProgress ? <Loader size="xs" /> : null}
+                  onClick={billOther}
                 >
                   Facturer à ce payeur
                 </Button>
@@ -227,22 +270,28 @@ export function Billing({
             )}
             <div className="flex flex-wrap items-center gap-3">
               {chosen && (
-                <Button type="submit" loading={inProgress}>
+                // Stays focusable while saving (aria-disabled, not disabled): focus never falls to the page.
+                <Button
+                  type="submit"
+                  variant="light"
+                  data-bill
+                  aria-disabled={inProgress || undefined}
+                  rightSection={inProgress ? <Loader size="xs" /> : null}
+                >
                   Facturer à {chosen.name}
                 </Button>
               )}
-              <Anchor component="button" type="button" size="xs" onClick={() => setOpen(false)}>
+              <Anchor component="button" type="button" size="xs" onClick={() => !inProgress && setOpen(false)}>
                 Fermer
               </Anchor>
             </div>
           </fieldset>
         </form>
       )}
-      {done && (
-        <Text role="status" size="sm">
-          {done}
-        </Text>
-      )}
+      {/* Always present, so screen readers announce the text when it appears. */}
+      <Text role="status" size="sm" className={done ? undefined : "sr-only"}>
+        {done}
+      </Text>
       {message && (
         <Text role="alert" size="sm" c="red">
           {message}
