@@ -7,6 +7,7 @@ import { readPreference } from "@/db/preferences";
 import { currentSeason } from "@/db/schedule";
 import { type ColumnId, INSTRUCTOR_COLUMNS } from "@/domain/filters/columns";
 import { applyFilter, type Cell, readFilter, readSort, normalizeText, sortRows } from "@/domain/filters/filters";
+import { offsetOf, PAGE_SIZE, readPage } from "@/domain/filters/pagination";
 import { todayInParis } from "@/domain/people/age";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
@@ -19,7 +20,7 @@ export const metadata: Metadata = { title: "Intervenants" };
 
 export default async function InstructorsPage({ searchParams }: PageProps<"/intervenants">) {
   const { schoolId: schoolId, role, userId } = await requireRole("director", "front_desk");
-  const { enregistre, f, mode, sort, order, q } = await searchParams;
+  const { enregistre, f, mode, sort, order, q, page: askedPage } = await searchParams;
   const entry = typeof q === "string" ? normalizeText(q) : "";
   const {
     season: season,
@@ -57,6 +58,12 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
       return c && values[c.id]?.(i);
     },
   );
+  const total = visible.length;
+  const page = readPage(askedPage, total);
+  const shown = visible.slice(offsetOf(page), offsetOf(page) + PAGE_SIZE);
+  const filtering = filter.conditions.length > 0;
+  const active = instructors.filter((i) => i.active).length;
+  const plural = (n: number) => `${n} intervenant${n > 1 ? "s" : ""}`;
   const confirmed = instructors.find((i) => i.id === enregistre);
 
   return (
@@ -66,12 +73,20 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
       </Suspense>
       <PageHeader
         title="Intervenants"
+        live
         description={
-          <>
-            {instructors.filter((i) => i.active).length} actif
-            {instructors.filter((i) => i.active).length > 1 ? "s" : ""}
-            {season && `, cours de la saison ${season.label}`}
-          </>
+          entry || filtering ? (
+            <>
+              {entry ? `${plural(total)} pour « ${typeof q === "string" ? q.trim() : ""} »` : plural(total)}
+              {filtering && " avec ces filtres"}
+            </>
+          ) : (
+            <>
+              {plural(total)}, dont {active} actif{active > 1 ? "s" : ""}
+              {/* « 2026–2027 » with word joiners: the season never breaks across two lines. */}
+              {season && `. Cours de la saison ${season.label.replace(/-/g, "\u2060–\u2060")}`}
+            </>
+          )
         }
         actions={isDirector && <ButtonLink href="/intervenants/nouveau">Nouvel intervenant</ButtonLink>}
       />
@@ -101,7 +116,8 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
                 : "Aucun intervenant ne correspond à ces filtres."
             }
             choice={{ statut: Object.values(STATUSES) }}
-            rows={visible.map((i) => ({
+            pagination={{ page, total }}
+            rows={shown.map((i) => ({
               id: i.id,
               href: isDirector ? `/intervenants/${i.id}` : undefined,
               dimmed: !i.active,

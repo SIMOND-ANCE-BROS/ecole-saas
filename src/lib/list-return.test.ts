@@ -49,6 +49,10 @@ describe("listAddress", () => {
     );
   });
 
+  it("keeps the page, so the way back lands on the same rows", () => {
+    expect(listAddress("/contacts", "q=Ma&page=3&enregistre=abc")).toBe("/contacts?q=Ma&page=3");
+  });
+
   it("drops one-shot banners and unknown parameters", () => {
     expect(listAddress("/intervenants", "enregistre=abc&sort=nom&supprime=1&autre=x")).toBe("/intervenants?sort=nom");
     expect(listAddress("/intervenants", "enregistre=abc")).toBe("/intervenants");

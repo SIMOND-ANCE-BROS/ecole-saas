@@ -91,6 +91,7 @@ export function GlobalSearch() {
       const p = new URLSearchParams(settings.toString());
       if (q.trim()) p.set("q", q.trim());
       else p.delete("q");
+      p.delete("page");
       target = p.size ? `${path}?${p}` : path;
     }
     navigate(() => {

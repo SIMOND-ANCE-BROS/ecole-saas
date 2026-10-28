@@ -7,6 +7,7 @@ import {
   Checkbox,
   CloseButton,
   Loader,
+  Pagination,
   Paper,
   Table,
   Text,
@@ -35,6 +36,7 @@ import {
   resize,
 } from "@/domain/filters/layout";
 import { type ColumnDef, conditionLabel, readSort, type Sort, EMPTY } from "@/domain/filters/filters";
+import { pageCount, shownRange } from "@/domain/filters/pagination";
 import { DateField } from "../_ui/date-field";
 import { saveColumns } from "./actions";
 import { type AddressFilter, useAddressFilter } from "./address-filter";
@@ -71,6 +73,11 @@ type Props<Id extends string> = {
   choice?: Partial<Record<NoInfer<Id>, readonly string[]>>;
   /** Action offered when the list is empty without a filter (« Nouvel élève »). */
   emptyAction?: ReactNode;
+  /**
+   * Page shown and rows matching, all pages together (#107); absent: a single page.
+   * `noun` starts the counter (« Élèves 51 à 100 sur 134 »), the caption by default.
+   */
+  pagination?: { page: number; total: number; noun?: string };
 };
 
 /** Beyond this, the checkbox list gets its own search field. */
@@ -97,6 +104,7 @@ export function ListTable<Id extends string>({
   mobile,
   choice: choice = {},
   emptyAction: emptyAction,
+  pagination,
 }: Props<Id>) {
   const f = useAddressFilter(columns);
   const router = useRouter();
@@ -105,7 +113,10 @@ export function ListTable<Id extends string>({
   const [sortPending, startSort] = useTransition();
   const currentSort = readSort(params.get("sort"), params.get("order"), columns);
   const [availability, setAvailability] = useState<Layout>(() => readLayout(columns, layout));
-  const [saving, startTransition] = useTransition();
+  // Its own state, not a transition: an aborted action can leave a transition pending for good.
+  const [saving, setSaving] = useState(false);
+  // Only the latest save speaks: an older one finishing late must not overwrite its result.
+  const lastSave = useRef(0);
   // Why the last layout save failed, or null; the list keeps the layout shown either way (#212).
   const [failure, setFailure] = useState<{ message: string; retryable: boolean } | null>(null);
   const columnsMenu = useRef<HTMLSpanElement>(null);
@@ -124,12 +135,30 @@ export function ListTable<Id extends string>({
     const p = new URLSearchParams(params.toString());
     p.delete("sort");
     p.delete("order");
+    p.delete("page");
     if (next) {
       p.set("sort", next.column);
       p.set("order", next.direction);
     }
     const text = p.toString();
     startSort(() => router.replace(text ? `${path}?${text}` : path, { scroll: false }));
+  }
+
+  /** Another page: a new history entry (browser back returns to the previous page). */
+  function goToPage(page: number) {
+    const p = new URLSearchParams(params.toString());
+    if (page > 1) p.set("page", String(page));
+    else p.delete("page");
+    const text = p.toString();
+    startSort(() => router.push(text ? `${path}?${text}` : path));
+  }
+
+  // Width from the keyboard (header menu): the column's current width, measured, plus or minus a step.
+  const thead = useRef<HTMLTableSectionElement>(null);
+  function nudgeWidth(id: string, step: number) {
+    const th = thead.current?.querySelector<HTMLElement>(`[data-col="${id}"]`);
+    const current = widthOf(id) ?? th?.getBoundingClientRect().width;
+    if (current) changeAvailability(resize(availability, id, current + step));
   }
 
   /** Click on a row: opens the record, except on a link or a button, or during a text selection. */
@@ -142,24 +171,34 @@ export function ListTable<Id extends string>({
 
   function changeAvailability(d: Layout) {
     setAvailability(d);
-    startTransition(async () => {
-      // A rejected call (network down) must not reach the error boundary and take the list away.
-      try {
-        const saved = await saveColumns(list, writeLayout(d));
-        if (saved.ok) {
-          // Retried from « Réessayer », which now goes away: focus back on « Colonnes ».
-          if (document.activeElement === retryButton.current) columnsMenu.current?.querySelector("button")?.focus();
-          setFailure(null);
-        } else setFailure({ message: saved.message, retryable: saved.retryable });
-      } catch (e) {
-        // A redirect thrown by the action is Next's to handle.
-        unstable_rethrow(e);
-        // Without a session cookie the proxy answers the action with the sign-in page, which fails
-        // like a network error: an expired session goes to sign-in, without the message.
-        if (await sessionExpired()) return router.push("/connexion");
+    void saveLayout(d);
+  }
+
+  /** Saves the layout; every outcome (saved, refused, failed, no answer) clears « Enregistrement… ». */
+  async function saveLayout(d: Layout) {
+    const id = ++lastSave.current;
+    setSaving(true);
+    // A rejected call (network down, aborted request) must not reach the error boundary and take
+    // the list away; one that never answers counts as failed after SAVE_TIMEOUT.
+    try {
+      const saved = await withTimeout(saveColumns(list, writeLayout(d)), SAVE_TIMEOUT);
+      if (id !== lastSave.current) return;
+      if (saved.ok) {
+        // Retried from « Réessayer », which now goes away: focus back on « Colonnes ».
+        if (document.activeElement === retryButton.current) columnsMenu.current?.querySelector("button")?.focus();
+        setFailure(null);
+      } else setFailure({ message: saved.message, retryable: saved.retryable });
+    } catch (e) {
+      // A redirect thrown by the action is Next's to handle.
+      unstable_rethrow(e);
+      // Without a session cookie the proxy answers the action with the sign-in page, which fails
+      // like a network error: an expired session goes to sign-in, without the message.
+      if (await sessionExpired()) return router.push("/connexion");
+      if (id === lastSave.current)
         setFailure({ message: "Colonnes non enregistrées : vérifiez la connexion et réessayez.", retryable: true });
-      }
-    });
+    } finally {
+      if (id === lastSave.current) setSaving(false);
+    }
   }
 
   // Drag and drop of a header (mouse); with the keyboard, the arrows of the « Colonnes » menu.
@@ -298,11 +337,12 @@ export function ListTable<Id extends string>({
       <Paper withBorder className={`overflow-x-auto ${mobile ? "hidden sm:block" : ""}`}>
         <Table verticalSpacing={5}>
           <caption className="sr-only">{caption}</caption>
-          <Table.Thead>
+          <Table.Thead ref={thead}>
             <Table.Tr>
               {visible.map((d) => (
                 <Table.Th
                   key={d.id}
+                  data-col={d.id}
                   scope="col"
                   aria-sort={
                     currentSort?.column === d.id
@@ -349,6 +389,11 @@ export function ListTable<Id extends string>({
                     hide={
                       visible.length > 1 && !d.required ? () => changeAvailability(toggle(availability, d.id)) : null
                     }
+                    width={{
+                      narrower: () => nudgeWidth(d.id, -WIDTH_STEP),
+                      wider: () => nudgeWidth(d.id, WIDTH_STEP),
+                      automatic: widthOf(d.id) ? () => changeAvailability(resize(availability, d.id, null)) : null,
+                    }}
                   />
                   <span
                     aria-hidden
@@ -463,7 +508,70 @@ export function ListTable<Id extends string>({
           </Table.Tbody>
         </Table>
       </Paper>
+      {pagination && pageCount(pagination.total) > 1 && (
+        <ListPages noun={pagination.noun ?? caption} page={pagination.page} total={pagination.total} goTo={goToPage} />
+      )}
     </div>
+  );
+}
+
+/** Beyond this, a column save that has not answered is reported as failed. */
+const SAVE_TIMEOUT = 15_000;
+
+/** `promise`, or a rejection after `ms`: a request that never answers must not leave « Enregistrement… » on screen. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timeout")), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e: unknown) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
+/** Width step of « Plus étroite » / « Plus large », in pixels. */
+const WIDTH_STEP = 40;
+
+/** Pages of a long list: « Élèves 51 à 100 sur 134 » and the page numbers, under the table and the cards. */
+function ListPages({
+  noun,
+  page,
+  total,
+  goTo,
+}: {
+  noun: string;
+  page: number;
+  total: number;
+  goTo: (page: number) => void;
+}) {
+  const { from, to } = shownRange(page, total);
+  return (
+    <nav aria-label="Pages" className="flex flex-wrap items-center justify-between gap-2">
+      <Text size="sm" c="dimmed" className="tabular-nums">
+        {noun} {from} à {to} sur {total}
+      </Text>
+      <Pagination
+        total={pageCount(total)}
+        value={page}
+        onChange={goTo}
+        size="sm"
+        siblings={1}
+        getControlProps={(control) =>
+          control === "previous"
+            ? { "aria-label": "Page précédente" }
+            : control === "next"
+              ? { "aria-label": "Page suivante" }
+              : {}
+        }
+        getItemProps={(n) => ({ "aria-label": `Page ${n}`, "aria-current": n === page ? "page" : undefined })}
+      />
+    </nav>
   );
 }
 
@@ -602,6 +710,7 @@ function TitleMenu({
   currentSort: currentSort,
   sort: sort,
   hide: hide,
+  width,
 }: {
   def: ColumnDef;
   choice: readonly string[] | undefined;
@@ -609,6 +718,8 @@ function TitleMenu({
   currentSort: "asc" | "desc" | null;
   sort: (direction: "asc" | "desc" | null) => void;
   hide: (() => void) | null;
+  /** Width from the keyboard; `automatic` is null when the width is already automatic. */
+  width: { narrower: () => void; wider: () => void; automatic: (() => void) | null };
 }) {
   const fc = readColumnFilter(f.filter, def);
   const filtered = columnFilterSummary(def, fc) !== null || fc.otherConditions.length > 0;
@@ -686,25 +797,48 @@ function TitleMenu({
             )}
           </div>
         )}
-        <div className="flex flex-wrap justify-between gap-2 border-t border-bordure pt-2 text-xs">
-          {filtered ? (
-            <Anchor
-              component="button"
-              type="button"
-              size="xs"
-              onClick={() => f.change(writeColumnFilter(f.filter, def, {}))}
-            >
-              Effacer ce filtre
-            </Anchor>
-          ) : (
-            <span />
-          )}
-          {hide && (
-            <Anchor component="button" type="button" size="xs" c="dimmed" onClick={hide}>
-              Masquer la colonne
-            </Anchor>
+        <div
+          role="group"
+          aria-label="Largeur de la colonne"
+          className="flex flex-wrap items-center gap-1 border-t border-bordure pt-2"
+        >
+          <Text size="xs" c="dimmed" className="w-full">
+            Largeur
+          </Text>
+          <Button size="compact-xs" variant="default" onClick={width.narrower}>
+            Plus étroite
+          </Button>
+          <Button size="compact-xs" variant="default" onClick={width.wider}>
+            Plus large
+          </Button>
+          {width.automatic && (
+            <Button size="compact-xs" variant="subtle" onClick={width.automatic}>
+              Automatique
+            </Button>
           )}
         </div>
+        {/* Nothing to clear nor to hide (a required column, unfiltered): no empty strip. */}
+        {(filtered || hide) && (
+          <div className="flex flex-wrap justify-between gap-2 border-t border-bordure pt-2 text-xs">
+            {filtered ? (
+              <Anchor
+                component="button"
+                type="button"
+                size="xs"
+                onClick={() => f.change(writeColumnFilter(f.filter, def, {}))}
+              >
+                Effacer ce filtre
+              </Anchor>
+            ) : (
+              <span />
+            )}
+            {hide && (
+              <Anchor component="button" type="button" size="xs" c="dimmed" onClick={hide}>
+                Masquer la colonne
+              </Anchor>
+            )}
+          </div>
+        )}
       </div>
     </Popover>
   );
@@ -844,7 +978,7 @@ function TitleFilter({
 /** True when the server answers that nobody is signed in; false if it cannot be reached. */
 async function sessionExpired(): Promise<boolean> {
   try {
-    const r = await fetch("/api/auth/get-session", { cache: "no-store" });
+    const r = await fetch("/api/auth/get-session", { cache: "no-store", signal: AbortSignal.timeout(5000) });
     return r.ok && (await r.json()) === null;
   } catch {
     return false;

@@ -3,6 +3,7 @@ import { issuePath } from "../lib/form-errors";
 import { z } from "zod";
 import { CONTACT_COLUMNS, STUDENT_COLUMNS } from "../domain/filters/columns";
 import { EMPTY_FILTER, type Filter, type Sort } from "../domain/filters/filters";
+import { offsetOf, PAGE_SIZE } from "../domain/filters/pagination";
 import { ENROLLMENT_STATUS_LABELS, STATUS_PRIORITY } from "../domain/enrollment/statuses";
 import { SHORT_DAYS } from "../domain/schedule/days";
 import { todayInParis } from "../domain/people/age";
@@ -31,8 +32,6 @@ import { has } from "../lib/has";
  * Always within the `withSchool()` transaction (RLS).
  */
 
-/** Maximum rows in a list: beyond that, the front desk refines the search or filters. */
-export const MAX_RESULTS = 200;
 const isUuid = (v: string) => z.uuid().safeParse(v).success;
 const currentId = sql`${person}.${sql.identifier("id")}`;
 const sqlName = (alias: string) =>
@@ -66,7 +65,16 @@ export type StudentRow = {
  * Column filters (#87); `today` (Paris) is used to compute the age,
  * `seasonId` for the « Cours suivis » and « Inscription » columns (#89).
  */
-export type ListOptions = { filter?: Filter; currentSort?: Sort | null; today?: string; seasonId?: string | null };
+export type ListOptions = {
+  filter?: Filter;
+  currentSort?: Sort | null;
+  today?: string;
+  seasonId?: string | null;
+  /** Page of `pageSize` rows, from 1 (#107). */
+  page?: number;
+  /** Rows per page; `PAGE_SIZE` by default. */
+  pageSize?: number;
+};
 
 // Computed list columns: the same expressions serve for display and for filters.
 const studentPhone = sql<string | null>`coalesce(${person.phone}, (
@@ -139,23 +147,17 @@ function studentEnrollment(seasonId: string | null): SQL<string | null> {
 }
 
 /**
- * Students of the school, by name. The search covers the student and their
- * relatives (name, phone…): a child can be found through their mother. Column
- * filters apply in SQL, before the list limit.
+ * What the students list shows: the search covers the student and their
+ * relatives (name, phone…), so a child can be found through their mother.
+ * Column filters apply in SQL, before paging. Null: the search cannot match.
  */
-export async function listStudents(
-  tx: Tx,
-  entry = "",
-  {
-    filter: filter = EMPTY_FILTER,
-    currentSort: currentSort = null,
-    today: today = todayInParis(),
-    seasonId: seasonId = null,
-  }: ListOptions = {},
-): Promise<StudentRow[]> {
+function studentScope(
+  entry: string,
+  { filter = EMPTY_FILTER, currentSort = null, today = todayInParis(), seasonId = null }: ListOptions,
+) {
   const studentCondition = searchCondition(entry);
   const relativeCondition = searchCondition(entry, "r");
-  if (entry.trim() && !studentCondition) return [];
+  if (entry.trim() && !studentCondition) return null;
   const validSeasonId = seasonId && isUuid(seasonId) ? seasonId : null;
   const seasonCourses = studentCourses(validSeasonId);
   const seasonStatus = studentEnrollment(validSeasonId);
@@ -171,8 +173,23 @@ export async function listStudents(
     inscription: { sql: seasonStatus },
     prevenir: { sql: studentToNotify, list: true },
   };
-  const columnsCondition = filterCondition(filter, STUDENT_COLUMNS, expressions);
-  const order = columnOrder(currentSort, STUDENT_COLUMNS, expressions);
+  const where = and(
+    eq(person.isStudent, true),
+    studentCondition
+      ? or(
+          studentCondition,
+          sql`EXISTS (SELECT 1 FROM relationship l JOIN person r ON r.id = l.person_id WHERE l.related_person_id = ${currentId} AND ${relativeCondition})`,
+        )
+      : undefined,
+    filterCondition(filter, STUDENT_COLUMNS, expressions),
+  );
+  return { where, order: columnOrder(currentSort, STUDENT_COLUMNS, expressions), seasonCourses, seasonStatus };
+}
+
+/** Students of the school, by name: one page of `PAGE_SIZE` rows (`page`, from 1). */
+export async function listStudents(tx: Tx, entry = "", options: ListOptions = {}): Promise<StudentRow[]> {
+  const scope = studentScope(entry, options);
+  if (!scope) return [];
   return tx
     .select({
       id: person.id,
@@ -183,25 +200,26 @@ export async function listStudents(
       guardians: studentGuardians,
       billedTo: studentBilledTo,
       email: studentEmail,
-      courses: seasonCourses,
-      enrollmentStatus: seasonStatus,
+      courses: scope.seasonCourses,
+      enrollmentStatus: scope.seasonStatus,
       toNotify: studentToNotify,
     })
     .from(person)
-    .where(
-      and(
-        eq(person.isStudent, true),
-        studentCondition
-          ? or(
-              studentCondition,
-              sql`EXISTS (SELECT 1 FROM relationship l JOIN person r ON r.id = l.person_id WHERE l.related_person_id = ${currentId} AND ${relativeCondition})`,
-            )
-          : undefined,
-        columnsCondition,
-      ),
-    )
-    .orderBy(...(order ? [order] : []), asc(person.lastName), asc(person.firstName))
-    .limit(MAX_RESULTS);
+    .where(scope.where)
+    .orderBy(...(scope.order ? [scope.order] : []), asc(person.lastName), asc(person.firstName), asc(person.id))
+    .limit(options.pageSize ?? PAGE_SIZE)
+    .offset(offsetOf(options.page ?? 1, options.pageSize ?? PAGE_SIZE));
+}
+
+/** How many students match the search and filters, all pages together. */
+export async function countStudents(tx: Tx, entry = "", options: ListOptions = {}): Promise<number> {
+  const scope = studentScope(entry, options);
+  if (!scope) return 0;
+  const [r] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(person)
+    .where(scope.where);
+  return r.n;
 }
 
 export type ContactRow = {
@@ -216,22 +234,31 @@ export type ContactRow = {
   students: string[];
 };
 
-/** Contacts: whoever is not a student, or is a guardian or payer of a student. */
-export async function listContacts(
-  tx: Tx,
-  entry = "",
-  { filter: filter = EMPTY_FILTER, currentSort: currentSort = null }: ListOptions = {},
-): Promise<ContactRow[]> {
+/** Contacts: whoever is not a student, or is a guardian or payer of a student. Null: the search cannot match. */
+function contactScope(entry: string, { filter = EMPTY_FILTER, currentSort = null }: ListOptions) {
   const condition = searchCondition(entry);
-  if (entry.trim() && !condition) return [];
+  if (entry.trim() && !condition) return null;
   const expressions = {
     nom: { sql: sqlName("person") },
     eleves: { sql: contactStudents, list: true },
     telephone: { sql: sql`${person.phone}` },
     email: { sql: sql`${person.email}` },
   };
-  const columnsCondition = filterCondition(filter, CONTACT_COLUMNS, expressions);
-  const order = columnOrder(currentSort, CONTACT_COLUMNS, expressions);
+  const where = and(
+    or(
+      eq(person.isStudent, false),
+      sql`EXISTS (SELECT 1 FROM relationship l WHERE l.person_id = ${currentId} AND (l.type = 'legal_guardian' OR l.pays_for))`,
+    ),
+    condition ?? undefined,
+    filterCondition(filter, CONTACT_COLUMNS, expressions),
+  );
+  return { where, order: columnOrder(currentSort, CONTACT_COLUMNS, expressions) };
+}
+
+/** Contacts by name: one page of `PAGE_SIZE` rows (`page`, from 1). */
+export async function listContacts(tx: Tx, entry = "", options: ListOptions = {}): Promise<ContactRow[]> {
+  const scope = contactScope(entry, options);
+  if (!scope) return [];
   return tx
     .select({
       id: person.id,
@@ -244,18 +271,21 @@ export async function listContacts(
       students: contactStudents,
     })
     .from(person)
-    .where(
-      and(
-        or(
-          eq(person.isStudent, false),
-          sql`EXISTS (SELECT 1 FROM relationship l WHERE l.person_id = ${currentId} AND (l.type = 'legal_guardian' OR l.pays_for))`,
-        ),
-        condition ?? undefined,
-        columnsCondition,
-      ),
-    )
-    .orderBy(...(order ? [order] : []), asc(person.lastName), asc(person.firstName))
-    .limit(MAX_RESULTS);
+    .where(scope.where)
+    .orderBy(...(scope.order ? [scope.order] : []), asc(person.lastName), asc(person.firstName), asc(person.id))
+    .limit(options.pageSize ?? PAGE_SIZE)
+    .offset(offsetOf(options.page ?? 1, options.pageSize ?? PAGE_SIZE));
+}
+
+/** How many contacts match the search and filters, all pages together. */
+export async function countContacts(tx: Tx, entry = "", options: ListOptions = {}): Promise<number> {
+  const scope = contactScope(entry, options);
+  if (!scope) return 0;
+  const [r] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(person)
+    .where(scope.where);
+  return r.n;
 }
 
 // ---------------------------------------------------------------------------

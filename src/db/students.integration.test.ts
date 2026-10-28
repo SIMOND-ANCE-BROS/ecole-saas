@@ -6,12 +6,16 @@ import {
   setBilling,
   readContact,
   readStudent,
+  countContacts,
+  countStudents,
   listContacts,
   listStudents,
   CreationRefusal,
   type StudentInput,
 } from "./students";
 import { withSchool } from "./index";
+import { STUDENT_COLUMNS } from "../domain/filters/columns";
+import { readFilter } from "../domain/filters/filters";
 import type { PersonInput } from "./people";
 
 /** Students and contacts (#77), as the application runs them (app_user, RLS). Fictitious data deleted at the end. */
@@ -182,6 +186,33 @@ describe("lists", () => {
     const contacts = await withSchool(school, (tx) => listContacts(tx));
     expect(contacts.map((c) => c.companyName ?? c.firstName)).toEqual(["CSE Ateliers", "Hélène"]);
     expect(contacts.find((c) => c.firstName === "Hélène")?.students.sort()).toEqual(["Noé", "Zoé"]);
+  });
+
+  it("counts all the matching rows and pages them (#107)", async () => {
+    expect(await withSchool(school, (tx) => countStudents(tx))).toBe(5);
+    expect(await withSchool(school, (tx) => countStudents(tx, "0612345678"))).toBe(2);
+    expect(await withSchool(school, (tx) => countStudents(tx, "x"))).toBe(0);
+    expect(await withSchool(school, (tx) => countContacts(tx))).toBe(2);
+    // Page 2 starts after the first PAGE_SIZE rows: empty for this small school.
+    expect(await withSchool(school, (tx) => listStudents(tx, "", { page: 2 }))).toEqual([]);
+    expect((await withSchool(school, (tx) => listStudents(tx, "", { page: 1 }))).length).toBe(5);
+  });
+
+  it("splits a filtered list into pages without losing or repeating a row", async () => {
+    // Names containing « e »: several students, so pages of 2 cross boundaries.
+    const filter = readFilter("nom.contient.e", null, STUDENT_COLUMNS);
+    const total = await withSchool(school, (tx) => countStudents(tx, "", { filter }));
+    expect(total).toBeGreaterThan(2);
+    const pages = await withSchool(school, async (tx) => {
+      const r = [];
+      for (let page = 1; page <= Math.ceil(total / 2) + 1; page++)
+        r.push(await listStudents(tx, "", { filter, page, pageSize: 2 }));
+      return r;
+    });
+    expect(pages.map((p) => p.length).reduce((a, b) => a + b, 0)).toBe(total);
+    expect(new Set(pages.flat().map((s) => s.id)).size).toBe(total);
+    // Past the last page: nothing.
+    expect(pages.at(-1)).toEqual([]);
   });
 });
 
