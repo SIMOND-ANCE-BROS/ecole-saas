@@ -239,6 +239,13 @@
       "when": 1793178388369,
       "tag": "0033_closure_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1793205387932,
+      "tag": "0034_suspended_lesson",
+      "breakpoints": true
     }
   ]
 }
