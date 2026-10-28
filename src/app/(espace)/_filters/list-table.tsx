@@ -6,6 +6,7 @@ import {
   Button,
   Checkbox,
   CloseButton,
+  Loader,
   Paper,
   Table,
   Text,
@@ -14,7 +15,7 @@ import {
   type ButtonProps,
 } from "@mantine/core";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { unstable_rethrow, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, type ReactNode, use, useId, useRef, useState, useTransition } from "react";
 import {
   writeColumnFilter,
@@ -105,7 +106,10 @@ export function ListTable<Id extends string>({
   const currentSort = readSort(params.get("sort"), params.get("order"), columns);
   const [availability, setAvailability] = useState<Layout>(() => readLayout(columns, layout));
   const [saving, startTransition] = useTransition();
-  const [failure, setFailure] = useState(false);
+  // Why the last layout save failed, or null; the list keeps the layout shown either way (#212).
+  const [failure, setFailure] = useState<{ message: string; retryable: boolean } | null>(null);
+  const columnsMenu = useRef<HTMLSpanElement>(null);
+  const retryButton = useRef<HTMLButtonElement>(null);
   const defs = new Map<string, ColumnDef<Id>>(columns.map((c) => [c.id, c]));
   const visible = availability.filter((d) => d.visible).flatMap((d) => defs.get(d.id) ?? []);
   const masquees = availability.filter((d) => !d.visible).flatMap((d) => defs.get(d.id) ?? []);
@@ -138,8 +142,24 @@ export function ListTable<Id extends string>({
 
   function changeAvailability(d: Layout) {
     setAvailability(d);
-    setFailure(false);
-    startTransition(async () => setFailure(!(await saveColumns(list, writeLayout(d)))));
+    startTransition(async () => {
+      // A rejected call (network down) must not reach the error boundary and take the list away.
+      try {
+        const saved = await saveColumns(list, writeLayout(d));
+        if (saved.ok) {
+          // Retried from « Réessayer », which now goes away: focus back on « Colonnes ».
+          if (document.activeElement === retryButton.current) columnsMenu.current?.querySelector("button")?.focus();
+          setFailure(null);
+        } else setFailure({ message: saved.message, retryable: saved.retryable });
+      } catch (e) {
+        // A redirect thrown by the action is Next's to handle.
+        unstable_rethrow(e);
+        // Without a session cookie the proxy answers the action with the sign-in page, which fails
+        // like a network error: an expired session goes to sign-in, without the message.
+        if (await sessionExpired()) return router.push("/connexion");
+        setFailure({ message: "Colonnes non enregistrées : vérifiez la connexion et réessayez.", retryable: true });
+      }
+    });
   }
 
   // Drag and drop of a header (mouse); with the keyboard, the arrows of the « Colonnes » menu.
@@ -220,17 +240,43 @@ export function ListTable<Id extends string>({
           </Text>
         )}
         <span className="flex items-center gap-2 sm:ml-auto">
-          <Text span size="xs" c="dimmed" role="status">
-            {f.inProgress || sortPending
-              ? "Mise à jour…"
-              : saving
-                ? "Enregistrement des colonnes…"
-                : failure
-                  ? "Disposition non enregistrée : réessayez."
-                  : ""}
+          <Text
+            span
+            size="xs"
+            c={failure && !saving ? "red" : "dimmed"}
+            role="status"
+            className="inline-flex items-center gap-1"
+          >
+            {f.inProgress || sortPending ? (
+              "Mise à jour…"
+            ) : saving ? (
+              "Enregistrement des colonnes…"
+            ) : failure ? (
+              <>
+                <AlertIcon />
+                {failure.message}
+              </>
+            ) : (
+              ""
+            )}
           </Text>
+          {/* Stays rendered and enabled while saving (`loading` would disable it and drop the focus). */}
+          {failure?.retryable && (
+            <Button
+              ref={retryButton}
+              size="compact-xs"
+              variant="subtle"
+              aria-disabled={saving || undefined}
+              leftSection={saving ? <Loader size={10} /> : null}
+              onClick={() => {
+                if (!saving) changeAvailability(availability);
+              }}
+            >
+              Réessayer
+            </Button>
+          )}
           {/* On phones, cards: no columns to adjust. */}
-          <span className={mobile ? "hidden sm:inline" : ""}>
+          <span ref={columnsMenu} className={mobile ? "hidden sm:inline" : ""}>
             <Popover
               title={`Colonnes ${what}`}
               button={masquees.length ? `Colonnes (${masquees.length} de plus)` : "Colonnes"}
@@ -792,6 +838,25 @@ function TitleFilter({
         onChange={(e) => change({ text: e.currentTarget.value }, true)}
       />
     </>
+  );
+}
+
+/** True when the server answers that nobody is signed in; false if it cannot be reached. */
+async function sessionExpired(): Promise<boolean> {
+  try {
+    const r = await fetch("/api/auth/get-session", { cache: "no-store" });
+    return r.ok && (await r.json()) === null;
+  } catch {
+    return false;
+  }
+}
+
+function AlertIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7.5v5.5M12 16.5v.01" />
+    </svg>
   );
 }
 
