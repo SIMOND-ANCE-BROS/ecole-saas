@@ -2,10 +2,9 @@
 
 import { Alert, Anchor, Badge, Button, Paper, Select, Text } from "@mantine/core";
 import Link from "next/link";
-import { unstable_rethrow } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { Attendance } from "@/db/lessons";
-import { NOT_SAVED, type ActionResult } from "@/lib/action-result";
+import { notSent, settle, type ActionResult } from "@/lib/action-result";
 import { cancel, doAttendance, replace } from "../actions";
 
 type Props = {
@@ -63,16 +62,9 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
 
   const act = (action: () => Promise<ActionResult>, success: string) =>
     startTransition(async () => {
-      let error: string | null;
-      try {
-        const r = await action();
-        error = r.ok ? null : r.message;
-      } catch (e) {
-        // A lost connection or a server error keeps the sheet on screen, with a way out.
-        unstable_rethrow(e);
-        error = NOT_SAVED;
-      }
-      setMessage(error ? { text: error, error: true } : { text: success, error: false });
+      // A lost connection or a server error keeps the sheet on screen, with a way out.
+      const r = await settle(action);
+      setMessage(r.ok ? { text: success, error: false } : { text: r.message, error: true });
     });
   const save = () =>
     act(
@@ -215,14 +207,8 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
             setInstructorId(id);
             setInstructorError(null);
             startTransition(async () => {
-              let error: string | null;
-              try {
-                const r = await replace(attendance.id, id);
-                error = r.ok ? null : r.message;
-              } catch (e) {
-                unstable_rethrow(e);
-                error = "Intervenant non enregistré : réessayez.";
-              }
+              const r = await settle(() => replace(attendance.id, id));
+              const error = r.ok ? null : notSent(r) ? "Intervenant non enregistré : réessayez." : r.message;
               // Back to the saved instructor either way: the refreshed record shows the new one.
               setInstructorId(null);
               if (error) {

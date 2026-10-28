@@ -18,6 +18,12 @@ type Props = { title: string; children: ReactNode };
  */
 const FIRST_FIELD = "input:enabled:not([type=hidden],[type=radio],[type=checkbox]), select:enabled, textarea:enabled";
 
+/** Keys that never change a value: moving between fields, closing, or a lone modifier. */
+const NOT_AN_EDIT = new Set(["Tab", "Escape", "Shift", "Control", "Meta", "Alt", "AltGraph", "CapsLock"]);
+/** Elements whose click may change a value (links and the panel's own background excluded). */
+const CONTROL =
+  "button, input, select, textarea, label, [role=button], [role=option], [role=checkbox], [role=radio], [role=switch], [role=slider]";
+
 /** Where the panel's drop-down lists, calendars and menus are rendered. */
 const PORTAL_ID = "panneau-portail";
 /**
@@ -83,6 +89,9 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
   }, []);
 
   const close = () => router.back();
+  const markEdited = () => {
+    edited.current = true;
+  };
 
   return (
     <dialog
@@ -104,6 +113,8 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
         if (e.key === "Escape" && listOpen) e.preventDefault();
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
           e.preventDefault();
+          // Held down or pressed twice: one Back only.
+          if (toSearch.current || e.repeat) return;
           // Never lose what was typed (DESIGN.md): with input, the panel stays and says why.
           if (edited.current) {
             setKeepHint(true);
@@ -111,31 +122,39 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
           }
           toSearch.current = true;
           close();
+        } else if (!NOT_AN_EDIT.has(e.key)) {
+          // Any other key may change a value (typing, arrows in a number field, Enter on
+          // an option): a false « edited » only shows the hint, a false « untouched » loses data.
+          edited.current = true;
         }
       }}
     >
       <div className="flex h-full flex-col">
-        <div className="flex items-center justify-end gap-2 border-b border-bordure px-4 py-2">
-          <Text span role="status" size="sm" c="dimmed" className="mr-auto">
+        <div className="border-b border-bordure px-4 py-2">
+          <div className="flex items-center justify-end gap-2">
+            {/* Plain link: full reload, hence the whole page without a panel. */}
+            <Anchor href={query ? `${path}?${query}` : path} size="sm">
+              Ouvrir en pleine page
+            </Anchor>
+            <Button variant="default" onClick={close}>
+              Fermer
+            </Button>
+          </div>
+          {/* On its own line, so it never squeezes the header's actions on a phone. */}
+          <Text role="status" size="sm" c="dimmed" className="mt-1 empty:hidden">
             {keepHint ? "Enregistrez ou annulez avant de chercher." : ""}
           </Text>
-          {/* Plain link: full reload, hence the whole page without a panel. */}
-          <Anchor href={query ? `${path}?${query}` : path} size="sm">
-            Ouvrir en pleine page
-          </Anchor>
-          <Button variant="default" onClick={close}>
-            Fermer
-          </Button>
         </div>
         <div
           ref={body}
           className="flex-1 overflow-y-auto overscroll-contain p-4"
           // Typing, ticking, choosing a radio: the form now holds unsaved input.
-          onInputCapture={() => {
-            edited.current = true;
-          }}
-          onChangeCapture={() => {
-            edited.current = true;
+          onInputCapture={markEdited}
+          onChangeCapture={markEdited}
+          // A click on a control may change a value without an input event (stepper,
+          // adding a row, a Select option or calendar day rendered in the portal below).
+          onPointerDownCapture={(e) => {
+            if (e.target instanceof Element && e.target.closest(CONTROL)) markEdited();
           }}
         >
           <MantineThemeProvider theme={IN_DIALOG}>
@@ -143,7 +162,8 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
           </MantineThemeProvider>
         </div>
       </div>
-      <div id={PORTAL_ID} />
+      {/* Every click in an open list, calendar or menu may pick a value. */}
+      <div id={PORTAL_ID} onPointerDownCapture={markEdited} />
     </dialog>
   );
 }

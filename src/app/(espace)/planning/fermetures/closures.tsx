@@ -1,11 +1,10 @@
 "use client";
 
 import { Alert, Button, Input, MultiSelect, Paper, SegmentedControl, Text, TextInput } from "@mantine/core";
-import { unstable_rethrow } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { Closure } from "@/db/lessons";
 import type { ClosureScope } from "@/domain/schedule/closure-scope";
-import { NOT_SAVED, type ActionResult } from "@/lib/action-result";
+import { settle, type ActionResult } from "@/lib/action-result";
 import { ConfirmRemoval, type Removal } from "../../_ui/confirm-removal";
 import { DateField, refusedDateField } from "../../_ui/date-field";
 import { close, updateLessons, reopen } from "../seances/actions";
@@ -88,31 +87,17 @@ export function ClosuresManagement({
 
   const act = (action: () => Promise<ActionResult>, success: string, after?: () => void) =>
     startTransition(async () => {
-      let error: string | null;
-      try {
-        const r = await action();
-        error = r.ok ? null : r.message;
-      } catch (e) {
-        // A lost connection or a server error keeps the page on screen, with a way out.
-        unstable_rethrow(e);
-        error = NOT_SAVED;
-      }
-      setMessage(error ? { text: error, tone: "error" } : { text: success, tone: "ok" });
-      if (!error) after?.();
+      // A lost connection or a server error keeps the page on screen, with a way out.
+      const r = await settle(action);
+      setMessage(r.ok ? { text: success, tone: "ok" } : { text: r.message, tone: "error" });
+      if (r.ok) after?.();
     });
 
   // Saved: how many lessons left the planning; none means the closure covers nothing on those dates.
   const add = (scope: Kind) => {
     setMessage(null);
     startTransition(async () => {
-      let r;
-      try {
-        r = await close(entry(), seasonId);
-      } catch (e) {
-        unstable_rethrow(e);
-        setMessage({ text: NOT_SAVED, tone: "error" });
-        return;
-      }
+      const r = await settle(() => close(entry(), seasonId));
       if (!r.ok) {
         setMessage({ text: r.message, tone: "error" });
         return;
@@ -294,7 +279,7 @@ export function ClosuresManagement({
                 onClick={() =>
                   setRemoval({
                     title: `Retirer la fermeture « ${f.label} » ?`,
-                    body: "Les séances de ces dates reviennent au planning, avec leur remplaçant et leur horaire s’ils en avaient.",
+                    body: "Les séances à venir de ces dates reviennent au planning (sauf si une autre fermeture les couvre), avec leur horaire et leur remplaçant s’ils en avaient ; un remplaçant archivé laisse la place à l’intervenant du cours.",
                     run: () => {
                       // Refused: focus comes back to this « Retirer ». Removed: it is gone with its
                       // row, so focus moves to the next closure (or the one before, or the form).
