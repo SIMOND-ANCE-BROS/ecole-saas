@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import {
   Alert,
   Paper,
@@ -13,12 +14,18 @@ import {
 } from "@mantine/core";
 import { withSchool } from "@/db";
 import { PAYMENT_METHODS, type Method } from "@/db/payments";
+import { readPreference } from "@/db/preferences";
+import { PAYMENT_COLUMNS } from "@/domain/filters/columns";
+import { readFilter, readSort, toParams } from "@/domain/filters/filters";
+import { offsetOf, PAGE_SIZE, readPage } from "@/domain/filters/pagination";
+import { futureCashing, referenceOf, shownJournal } from "@/domain/payments/journal";
 import { paymentLog, listDeposits, paymentsToDeposit } from "@/db/deposits";
 import { DEPOSIT_METHODS, totals } from "@/domain/payments/deposits";
 import { validDate } from "@/domain/schedule/week";
 import { todayInParis } from "@/domain/people/age";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
+import { ListTable } from "../_filters/list-table";
 import { ButtonLink } from "../_ui/button-link";
 import { PageHeader } from "../_ui/page-header";
 import { TextLink } from "../_ui/text-link";
@@ -34,25 +41,55 @@ const day = (iso: string) => iso.split("-").reverse().join("/");
 
 /** Payments (#98): log by period, payments to deposit at the bank, bank deposits and deposit slips. */
 export default async function PaymentsPage({ searchParams }: PageProps<"/encaissements">) {
-  const { schoolId: schoolId } = await requireRole("director", "front_desk");
+  const { schoolId: schoolId, userId } = await requireRole("director", "front_desk");
   const p = await searchParams;
   const view: View = typeof p.vue === "string" && isKeyOf(VIEWS, p.vue) ? p.vue : "journal";
   const today = todayInParis();
   const from = validDate(p.du) ?? `${today.slice(0, 8)}01`;
   const to = validDate(p.au) ?? today;
-  const method = typeof p.moyen === "string" && isKeyOf(PAYMENT_METHODS, p.moyen) ? p.moyen : null;
+  const filter = readFilter(p.f, p.mode, PAYMENT_COLUMNS);
+  const currentSort = readSort(p.sort, p.order, PAYMENT_COLUMNS);
 
   const parsed = await withSchool(schoolId, async (tx) => ({
-    journal: view === "journal" ? await paymentLog(tx, from, to, method) : [],
+    journal: view === "journal" ? await paymentLog(tx, from, to, null) : [],
+    layout: view === "journal" ? await readPreference(tx, userId, "encaissements") : null,
     toDeposit: view === "remettre" ? await paymentsToDeposit(tx, today) : null,
     remises: view === "remises" ? await listDeposits(tx) : [],
   }));
-  const t = totals(parsed.journal);
-  const exportUrl = `/encaissements/export?${new URLSearchParams({ du: from, au: to, ...(method ? { moyen: method } : {}) })}`;
+  // The column filters and sort (#107), the same rules as the CSV export.
+  const shown = shownJournal(
+    parsed.journal.map((l) => ({ ...l, methodLabel: PAYMENT_METHODS[l.method] })),
+    filter,
+    currentSort,
+    today,
+  );
+  const page = readPage(p.page, shown.length);
+  // Totals of every row shown, all pages together: what the filters select.
+  const t = totals(shown);
+  const filtering = filter.conditions.length > 0;
+  const listState: [string, string][] = [
+    ...toParams(filter),
+    ...(currentSort
+      ? ([
+          ["sort", currentSort.column],
+          ["order", currentSort.direction],
+        ] as [string, string][])
+      : []),
+  ];
+  const exportUrl = `/encaissements/export?${new URLSearchParams([["du", from], ["au", to], ...listState])}`;
+  const plural = (n: number) => `${n} encaissement${n > 1 ? "s" : ""}`;
 
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
-      <PageHeader title="Encaissements" />
+      <PageHeader
+        title="Encaissements"
+        live
+        description={
+          view === "journal"
+            ? `${plural(shown.length)} du ${day(from)} au ${day(to)}${filtering ? " avec ces filtres" : ""}`
+            : undefined
+        }
+      />
       {p.annulee && <Alert role="status">Remise annulée : ses paiements sont de nouveau à remettre.</Alert>}
       <nav aria-label="Vues" className="flex flex-wrap gap-2">
         {(Object.keys(VIEWS) as View[]).map((v) => (
@@ -71,13 +108,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
 
       {view === "journal" && (
         <>
-          <JournalFilters
-            key={`${from}|${to}|${method ?? ""}`}
-            from={from}
-            to={to}
-            method={method}
-            exportUrl={exportUrl}
-          />
+          <JournalFilters key={`${from}|${to}`} from={from} to={to} keep={listState} exportUrl={exportUrl} />
           <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
             <div>
               <Text component="dt" size="sm" className="inline" c="dimmed">
@@ -98,59 +129,40 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
               </div>
             ))}
           </dl>
-          {parsed.journal.length === 0 ? (
-            <Text size="sm" c="dimmed">
-              Aucun encaissement sur cette période.
-            </Text>
-          ) : (
-            <Paper withBorder className="overflow-x-auto">
-              <Table highlightOnHover>
-                <TableCaption className="sr-only">
-                  Encaissements du {day(from)} au {day(to)}
-                </TableCaption>
-                <TableThead>
-                  <TableTr>
-                    <TableTh>Reçu le</TableTh>
-                    <TableTh>Payeur</TableTh>
-                    <TableTh>Moyen</TableTh>
-                    <TableTh>Référence</TableTh>
-                    <TableTh ta="right">Montant</TableTh>
-                    <TableTh>Encaissement</TableTh>
-                    <TableTh>Remise</TableTh>
-                  </TableTr>
-                </TableThead>
-                <TableTbody>
-                  {parsed.journal.map((l) => (
-                    <TableTr key={l.id} c={l.amountCents < 0 ? "dimmed" : undefined}>
-                      <TableTd className="whitespace-nowrap">{day(l.date)}</TableTd>
-                      <TableTd>
-                        <TextLink href={`/personnes/${l.payerId}`} size="sm">
-                          {l.payer}
-                        </TextLink>
-                      </TableTd>
-                      <TableTd>{PAYMENT_METHODS[l.method]}</TableTd>
-                      <TableTd>{[l.reference, l.issuer].filter(Boolean).join(", ") || "—"}</TableTd>
-                      <TableTd ta="right" className="tabular-nums whitespace-nowrap">
-                        {formatEuros(l.amountCents)}
-                      </TableTd>
-                      <TableTd className="whitespace-nowrap">
-                        {l.plannedPayment && l.plannedPayment > today ? `le ${day(l.plannedPayment)}` : "—"}
-                      </TableTd>
-                      <TableTd className="whitespace-nowrap">
-                        {l.depositId ? (
-                          <TextLink href={`/encaissements/remises/${l.depositId}`} size="sm">
-                            {day(l.dateDeposit as string)}
-                          </TextLink>
-                        ) : (
-                          "—"
-                        )}
-                      </TableTd>
-                    </TableTr>
-                  ))}
-                </TableTbody>
-              </Table>
-            </Paper>
-          )}
+          {/* useSearchParams requires a Suspense boundary. */}
+          <Suspense>
+            <ListTable
+              list="encaissements"
+              what="des encaissements"
+              caption={`Encaissements du ${day(from)} au ${day(to)}`}
+              columns={PAYMENT_COLUMNS}
+              layout={parsed.layout}
+              linkColumn="payeur"
+              empty={
+                parsed.journal.length === 0
+                  ? "Aucun encaissement sur cette période."
+                  : "Aucun encaissement ne correspond à ces filtres."
+              }
+              choice={{ moyen: Object.values(PAYMENT_METHODS) }}
+              pagination={{ page, total: shown.length }}
+              rows={shown.slice(offsetOf(page), offsetOf(page) + PAGE_SIZE).map((l) => ({
+                id: l.id,
+                href: `/personnes/${l.payerId}`,
+                // A correction (negative amount) reads as such.
+                dimmed: l.amountCents < 0,
+                cells: {
+                  recu: l.date,
+                  payeur: l.payer,
+                  moyen: l.methodLabel,
+                  reference: referenceOf(l),
+                  montant: formatEuros(l.amountCents),
+                  encaissement: futureCashing(l, today),
+                  remise: l.dateDeposit,
+                },
+                links: l.depositId ? { remise: `/encaissements/remises/${l.depositId}` } : undefined,
+              }))}
+            />
+          </Suspense>
         </>
       )}
 

@@ -44,6 +44,21 @@ export const INSTRUCTOR_COLUMNS = [
   { id: "email", label: "E-mail", type: "text", email: true },
 ] as const satisfies readonly ColumnDef[];
 
+/**
+ * Payment log (#98, #107), for the period chosen above the table. The amount
+ * sorts but is not filtered: typed euros would need parsing into cents.
+ */
+export const PAYMENT_COLUMNS = [
+  { id: "recu", label: "Reçu le", type: "date", required: true },
+  { id: "payeur", label: "Payeur", type: "text", required: true },
+  // Checkboxes: the page supplies the method labels.
+  { id: "moyen", label: "Moyen", type: "text" },
+  { id: "reference", label: "Référence", type: "text" },
+  { id: "montant", label: "Montant", type: "number", right: true, filterable: false },
+  { id: "encaissement", label: "Encaissement", type: "date" },
+  { id: "remise", label: "Remise", type: "date", ifEmpty: "—" },
+] as const satisfies readonly ColumnDef[];
+
 /** Ids of a column list, to key its cells and SQL expressions. */
 export type ColumnId<C extends readonly ColumnDef[]> = C[number]["id"];
 
@@ -52,5 +67,6 @@ export const LISTS = {
   eleves: STUDENT_COLUMNS,
   contacts: CONTACT_COLUMNS,
   intervenants: INSTRUCTOR_COLUMNS,
+  encaissements: PAYMENT_COLUMNS,
 } as const;
 export type List = keyof typeof LISTS;

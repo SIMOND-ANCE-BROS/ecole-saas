@@ -52,6 +52,8 @@ export type TableRow<Id extends string = string> = {
   /** Small badge after the name (« inactif », « organisme »). */
   badge?: string;
   cells: Record<Id, CellValue>;
+  /** A cell's own link, other than the record (« Remise » → its deposit slip). */
+  links?: Partial<Record<Id, string>>;
 };
 
 type Props<Id extends string> = {
@@ -497,7 +499,7 @@ export function ListTable<Id extends string>({
                           )}
                         </>
                       ) : (
-                        <CellContent def={d} value={l.cells[d.id] ?? null} />
+                        <CellContent def={d} value={l.cells[d.id] ?? null} href={l.links?.[d.id]} />
                       )}
                     </Table.Td>
                   ))}
@@ -577,7 +579,7 @@ function ListPages({
 
 const text = (v: CellValue) => (Array.isArray(v) ? v.join(", ") : v == null ? "" : String(v));
 
-function CellContent({ def, value: value }: { def: ColumnDef; value: CellValue }) {
+function CellContent({ def, value: value, href }: { def: ColumnDef; value: CellValue; href?: string }) {
   const t = text(value);
   if (t === "")
     return (
@@ -592,7 +594,23 @@ function CellContent({ def, value: value }: { def: ColumnDef; value: CellValue }
       </Anchor>
     );
   }
-  if (def.type === "date") return t.slice(0, 10).split("-").reverse().join("/");
+  if (def.type === "date") {
+    const shown = t.slice(0, 10).split("-").reverse().join("/");
+    return href ? (
+      <Anchor component={Link} href={href} size="sm" className="whitespace-nowrap">
+        {shown}
+      </Anchor>
+    ) : (
+      <span className="whitespace-nowrap">{shown}</span>
+    );
+  }
+  if (href) {
+    return (
+      <Anchor component={Link} href={href} size="sm">
+        {t}
+      </Anchor>
+    );
+  }
   if (def.email) {
     return (
       <Anchor href={`mailto:${t}`} size="sm" className="break-all">
