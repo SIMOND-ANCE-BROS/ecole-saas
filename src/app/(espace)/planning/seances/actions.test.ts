@@ -9,10 +9,11 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 // Vitest has no `@/` alias here: the real modules, by relative path.
 vi.mock("@/db/lessons", () => import("../../../../db/lessons"));
 vi.mock("@/db/schedule", () => ({ currentSeason: vi.fn(), seasonById: vi.fn() }));
+vi.mock("@/db/lesson-packs", () => import("../../../../db/lesson-packs"));
 vi.mock("@/domain/people/age", () => import("../../../../domain/people/age"));
 vi.mock("@/lib/action-result", () => import("../../../../lib/action-result"));
 
-const { doAttendance, replace, cancel, close, reopen, updateLessons } = await import("./actions");
+const { doAttendance, replace, cancel, close, reopen, updateLessons, countOnPack } = await import("./actions");
 
 const LESSON = "8d2c6c1e-3f4a-4b5c-9d6e-7f8091a2b3c4";
 const PERSON = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
@@ -125,5 +126,26 @@ describe("reopen", () => {
   it("refuses an invalid closure id without touching the database", async () => {
     expect(await reopen("x")).toEqual({ ok: false, message: "Cette fermeture n’existe plus." });
     expect(withSchool).not.toHaveBeenCalled();
+  });
+});
+
+describe("countOnPack", () => {
+  it("refuses an invalid lesson, pack or flag without touching the database", async () => {
+    expect(await countOnPack("not-a-uuid", PERSON, true)).toEqual({
+      ok: false,
+      message: "Cette séance n’existe plus.",
+    });
+    expect(await countOnPack(LESSON, "not-a-uuid", true)).toEqual({ ok: false, message: "Ce carnet n’existe plus." });
+    expect(await countOnPack(LESSON, PERSON, anyValue<boolean>("oui"))).toEqual({
+      ok: false,
+      message: "Saisie invalide.",
+    });
+    expect(withSchool).not.toHaveBeenCalled();
+  });
+
+  it("is open to the front desk and management", async () => {
+    withSchool.mockResolvedValueOnce({ ok: true });
+    expect(await countOnPack(LESSON, PERSON, true)).toEqual({ ok: true });
+    expect(requireRole).toHaveBeenCalledWith("director", "front_desk");
   });
 });

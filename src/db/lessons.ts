@@ -23,6 +23,7 @@ import {
   room,
   lesson,
   suspendedLesson,
+  lessonPackUsage,
 } from "./schema";
 
 /**
@@ -521,6 +522,8 @@ export type Attendance = {
   room: string;
   instructorId: string;
   regularInstructorId: string;
+  /** Only a private course's lessons are counted on lesson packs (#286). */
+  courseType: "group" | "private" | "competition" | "workshop";
   students: {
     id: string;
     firstName: string;
@@ -551,6 +554,7 @@ export async function readAttendance(tx: Tx, lessonId: string): Promise<Attendan
       room: room.name,
       instructorId: lesson.instructorId,
       regularInstructorId: course.instructorId,
+      courseType: course.type,
     })
     .from(lesson)
     .innerJoin(course, eq(course.id, lesson.courseId))
@@ -655,6 +659,14 @@ export async function cancelLesson(tx: Tx, lessonId: string): Promise<Result> {
   if (!attendanceSheet) return { ok: false, message: "Cette séance n’existe plus." };
   if (attendanceSheet.students.some((d) => d.present !== null))
     return { ok: false, message: "L’appel de cette séance est déjà fait." };
+  // #286 Q2: a cancelled lesson is never counted on a pack; the count is undone first, on purpose.
+  // Row lock on the lesson: a count taken at the same moment is seen, or waits for the cancellation.
+  await tx.select({ id: lesson.id }).from(lesson).where(eq(lesson.id, lessonId)).for("no key update");
+  const [counted] = await tx
+    .select({ id: sql`1` })
+    .from(lessonPackUsage)
+    .where(eq(lessonPackUsage.lessonId, lessonId));
+  if (counted) return { ok: false, message: "Cette séance est décomptée d’un carnet : annulez d’abord le décompte." };
   await tx.update(lesson).set({ status: "cancelled" }).where(eq(lesson.id, lessonId));
   return { ok: true, id: lessonId };
 }

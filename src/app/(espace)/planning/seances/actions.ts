@@ -15,6 +15,7 @@ import {
   validAttendance,
   validClosureInput,
 } from "@/db/lessons";
+import { countLesson, uncountLesson } from "@/db/lesson-packs";
 import { todayInParis } from "@/domain/people/age";
 import { actionResult, type ActionResult } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
@@ -48,6 +49,25 @@ export async function replace(lessonId: string, instructorId: string): Promise<A
   const by = validId.safeParse(instructorId);
   if (!by.success) return { ok: false, message: "Intervenant introuvable ou inactif." };
   const r = await withSchool(schoolId, (tx) => changeInstructor(tx, id.data, by.data));
+  revalidatePath(`/planning/seances/${id.data}`);
+  return actionResult(r);
+}
+
+/**
+ * « Décompter sur un carnet » / « Annuler le décompte » (#286): front desk and management.
+ * The same count sent twice, or a count undone twice, changes nothing.
+ */
+export async function countOnPack(lessonId: string, packId: string, counted: boolean): Promise<ActionResult> {
+  const { schoolId, userId } = await requireRole("director", "front_desk");
+  const id = validId.safeParse(lessonId);
+  if (!id.success) return { ok: false, message: NO_LESSON };
+  const pack = validId.safeParse(packId);
+  if (!pack.success) return { ok: false, message: "Ce carnet n’existe plus." };
+  const c = z.boolean().safeParse(counted);
+  if (!c.success) return { ok: false, message: INVALID };
+  const r = await withSchool(schoolId, (tx) =>
+    c.data ? countLesson(tx, userId, id.data, pack.data) : uncountLesson(tx, userId, id.data, pack.data),
+  );
   revalidatePath(`/planning/seances/${id.data}`);
   return actionResult(r);
 }

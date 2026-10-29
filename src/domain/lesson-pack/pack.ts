@@ -43,6 +43,53 @@ export function packLabel(p: PackCount): string {
   return `${size} — ${left} restante${left > 1 ? "s" : ""}`;
 }
 
+export type LessonStatus = "planned" | "done" | "cancelled";
+export type CourseType = "group" | "private" | "competition" | "workshop";
+
+/**
+ * Q2 (a lesson missed by the student), default: a lesson is counted unless it is
+ * cancelled. A cancelled lesson is never counted, and a counted lesson cannot be
+ * cancelled before its count is undone (`lessons.ts`, `cancelLesson`).
+ * The school's rules (2026-10-29) add: « Les cours particuliers non annulés 48h à
+ * l’avance seront dus ». Pending its confirmation, a lesson cancelled late by the
+ * student is left planned and counted; one cancelled in time is cancelled.
+ */
+export const isCountable = (status: LessonStatus): boolean => status !== "cancelled";
+
+export const USED_UP = "Ce carnet est épuisé.";
+
+export const ALREADY_COUNTED_FOR_STUDENT = "Cette séance est déjà décomptée d’un carnet de cet élève.";
+export const NOT_A_STUDENT_OF_LESSON = "Ce carnet n’est à aucun élève de cette séance.";
+
+/**
+ * Why this lesson cannot be counted on this pack, or null. A lesson already counted on
+ * the pack is not counted twice (the caller answers it as done).
+ * Q3 default: one usage per lesson and student, whoever attends among the pack's
+ * students. Two students with a pack each may share a lesson (one usage on each pack),
+ * but a student's lesson is never counted on two packs naming that student.
+ * When the lesson's sheet names students, only a pack naming one of them is used; a
+ * private course often has no enrollment, and then any open pack may be chosen.
+ */
+export function usageRefusal(u: {
+  courseType: CourseType;
+  lessonStatus: LessonStatus;
+  pack: PackCount;
+  /** Students named on the pack. */
+  packStudentIds: readonly string[];
+  /** Students on the lesson's sheet (often none for a private course). */
+  lessonStudentIds: readonly string[];
+  /** Students named on the packs this lesson is already counted on. */
+  countedStudentIds: readonly string[];
+}): string | null {
+  if (u.courseType !== "private") return "Seules les séances de cours particulier se décomptent sur un carnet.";
+  if (!isCountable(u.lessonStatus)) return "Cette séance est annulée : elle ne se décompte pas.";
+  if (u.packStudentIds.some((id) => u.countedStudentIds.includes(id))) return ALREADY_COUNTED_FOR_STUDENT;
+  if (u.lessonStudentIds.length > 0 && !u.packStudentIds.some((id) => u.lessonStudentIds.includes(id)))
+    return NOT_A_STUDENT_OF_LESSON;
+  if (!isOpen(u.pack)) return USED_UP;
+  return null;
+}
+
 export type Sale = {
   lessonCount: number;
   /** People the pack is priced for (the grid's band). */
