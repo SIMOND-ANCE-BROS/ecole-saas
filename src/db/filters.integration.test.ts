@@ -6,6 +6,7 @@ import { applyFilter, type Cell, EMPTY_FILTER, readFilter, readSort, EMPTY, toPa
 import { ageAt } from "../domain/people/age";
 import { type StudentRow, seasonCourseLabels, listContacts, listStudents } from "./students";
 import { withSchool } from "./index";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /** Column filters translated to SQL (#87), as the app does (app_user, RLS). Fictitious data deleted at the end. */
 
@@ -20,9 +21,8 @@ let otherSchool: string;
 let season: string;
 
 beforeAll(async () => {
-  [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`fa-${suffix}`}) RETURNING id`;
-  [{ id: otherSchool }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`fb-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "École A", `fa-${suffix}`);
+  [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "École B", `fb-${suffix}`);
   const person = async (
     e: string,
     name: string,
@@ -67,16 +67,16 @@ beforeAll(async () => {
     await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
     VALUES (${school}, 'Prof', 'Lucas', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
   const [jazz] =
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-    VALUES (${school}, ${season}, ${d.id}, ${room.id}, ${teacher.id}, 1, '17:00', 60) RETURNING id`;
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+    VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${d.id}, ${room.id}, ${teacher.id}, 1, '17:00', 60) RETURNING id`;
   for (const [student, payer, status] of [
     [lea, sophie, "active"],
     [hugo, hugo, "waitlist"],
   ]) {
     const [i] =
-      await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status)
-      VALUES (${school}, ${season}, ${payer}, 'child', 'quarter', 10000, ${status}) RETURNING id`;
-    await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${school}, ${i.id}, ${student}, ${jazz.id})`;
+      await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents, status)
+      VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${payer}, 'child', 'quarter', 10000, ${status}) RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id) VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${i.id}), ${i.id}, ${student}, ${jazz.id})`;
   }
   // A Léa in another school: never visible.
   await person(otherSchool, "Ailleurs", "Léa", { birth: "2018-03-01", student: true });

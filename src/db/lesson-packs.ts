@@ -15,6 +15,7 @@ import { rowsOf } from "./columns-of";
 import type { Tx } from "./index";
 import { displayedName, payableStudents } from "./people";
 import { currentSeason } from "./schedule";
+import { defaultEntityId, NO_DEFAULT_ENTITY } from "./billing-entities";
 import { auditLog, course, lesson, lessonPack, lessonPackPerson, lessonPackUsage, member, person } from "./schema";
 import { readAttendance } from "./lessons";
 import { listLessonPacks } from "./tariffs";
@@ -107,11 +108,15 @@ export async function sellLessonPack(
   // priceRefusal returned null: the price is set.
   const priceCents = e.priceCents ?? 0;
   const changed = gridPriceCents !== null && priceCents !== gridPriceCents;
+  // Sold by the school's default entity until the sale form offers a choice (#299 follow-up).
+  const entity = await defaultEntityId(tx);
+  if (!entity) return { ok: false, message: NO_DEFAULT_ENTITY };
 
   const [{ id }] = await tx
     .insert(lessonPack)
     .values({
       schoolId: CURRENT_SCHOOL,
+      billingEntityId: entity,
       payerId,
       peopleCount: e.peopleCount,
       lessonCount: e.lessonCount,
@@ -154,6 +159,8 @@ export type PackRow = {
   usedCount: number;
   payerId: string;
   payer: string;
+  /** Business that sold it (#299): it is counted only on that business's courses. */
+  billingEntityId: string;
   /** Names of the students on the pack. */
   participants: { id: string; name: string }[];
 };
@@ -193,6 +200,7 @@ export async function packsOf(
       purchasedOn: lessonPack.purchasedOn,
       usedCount,
       payerId: lessonPack.payerId,
+      billingEntityId: lessonPack.billingEntityId,
       payerName: person.lastName,
       payerFirstName: person.firstName,
       payerCompany: person.companyName,
@@ -255,13 +263,13 @@ export async function countLesson(
   if (!isUuid(lessonId)) return { ok: false, message: NO_LESSON };
   if (!isUuid(lessonPackId)) return { ok: false, message: NO_PACK };
   const [locked] = await tx
-    .select({ id: lessonPack.id, lessonCount: lessonPack.lessonCount })
+    .select({ id: lessonPack.id, lessonCount: lessonPack.lessonCount, billingEntityId: lessonPack.billingEntityId })
     .from(lessonPack)
     .where(eq(lessonPack.id, lessonPackId))
     .for("no key update");
   if (!locked) return { ok: false, message: NO_PACK };
   const [l] = await tx
-    .select({ status: lesson.status, courseType: course.type })
+    .select({ status: lesson.status, courseType: course.type, courseEntityId: course.billingEntityId })
     .from(lesson)
     .innerJoin(course, eq(course.id, lesson.courseId))
     .where(eq(lesson.id, lessonId))
@@ -289,6 +297,8 @@ export async function countLesson(
     packStudentIds: packStudents.map((p) => p.id),
     lessonStudentIds: sheet?.students.map((st) => st.id) ?? [],
     countedStudentIds: countedStudents.map((p) => p.id),
+    packEntityId: locked.billingEntityId,
+    courseEntityId: l.courseEntityId,
   });
   if (refusal) return { ok: false, message: refusal };
   const who = await memberOf(tx, userId);
@@ -354,8 +364,17 @@ export async function lessonPacks(tx: Tx, lessonId: string, studentIds: readonly
   const countedIds = new Set(counted.map((p) => p.id));
   const countedStudents = new Set(counted.flatMap((p) => p.participants.map((s) => s.id)));
   const students = new Set(studentIds);
+  // Only the packs sold by the business of the lesson's course (#299).
+  const [l] = isUuid(lessonId)
+    ? await tx
+        .select({ entity: course.billingEntityId })
+        .from(lesson)
+        .innerJoin(course, eq(course.id, lesson.courseId))
+        .where(eq(lesson.id, lessonId))
+    : [];
   const offered = (await packsOf(tx, { open: true })).filter(
     (p) =>
+      p.billingEntityId === l?.entity &&
       !countedIds.has(p.id) &&
       !p.participants.some((s) => countedStudents.has(s.id)) &&
       (students.size === 0 || p.participants.some((s) => students.has(s.id))),

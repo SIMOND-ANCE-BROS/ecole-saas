@@ -38,6 +38,7 @@ beforeAll(async () => {
   [{ id: otherSchool }] =
     await admin`INSERT INTO school (name, slug) VALUES ('École D', ${`cb-${suffix}`}) RETURNING id`;
   entity = await defaultEntityFor(admin, school);
+  await defaultEntityFor(admin, otherSchool);
   await admin`INSERT INTO "user" (id, name, email) VALUES (${desk}, 'Accueil Test', ${`${desk}@exemple.test`})`;
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${desk}, 'front_desk'), (${otherSchool}, ${desk}, 'front_desk')`;
   for (const s of [school, otherSchool]) {
@@ -57,13 +58,13 @@ beforeAll(async () => {
       VALUES (${s}, 'Prof', 'Test', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
     const [jazz] = await admin`INSERT INTO discipline (school_id, name) VALUES (${s}, 'Jazz') RETURNING id`;
     const [c] =
-      await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-      VALUES (${s}, ${season.id}, ${jazz.id}, ${room.id}, ${teacher.id}, 1, '17:00', 60) RETURNING id`;
+      await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+      VALUES (${s}, (SELECT id FROM billing_entity WHERE school_id = ${s} AND is_default), ${season.id}, ${jazz.id}, ${room.id}, ${teacher.id}, 1, '17:00', 60) RETURNING id`;
     ids[`course-${s}`] = c.id;
     // A 45-minute course: with the 60-minute one, no package of the grid fits (no tariff for {45,60}).
     const [c45] =
-      await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-      VALUES (${s}, ${season.id}, ${jazz.id}, ${room.id}, ${teacher.id}, 2, '17:00', 45) RETURNING id`;
+      await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+      VALUES (${s}, (SELECT id FROM billing_entity WHERE school_id = ${s} AND is_default), ${season.id}, ${jazz.id}, ${room.id}, ${teacher.id}, 2, '17:00', 45) RETURNING id`;
     ids[`course45-${s}`] = c45.id;
     for (const date of ["2027-11-08", "2027-11-15", "2027-11-22"]) {
       const [l] = await admin`INSERT INTO lesson (school_id, course_id, date, instructor_id)
@@ -121,9 +122,9 @@ async function family(
       await admin`INSERT INTO person (school_id, last_name, first_name, is_student) VALUES (${s}, 'Zz-Famille', ${`Enfant${n}`}, true) RETURNING id`;
     await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for) VALUES (${s}, ${payer.id}, ${child.id}, 'legal_guardian', true)`;
     const [e] = await admin`
-      INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status)
-      VALUES (${s}, ${ids[`season-${s}`]}, ${payer.id}, 'child', 'quarter', 11000, ${status}) RETURNING id`;
-    await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${s}, ${e.id}, ${child.id}, ${ids[`course-${s}`]})`;
+      INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents, status)
+      VALUES (${s}, (SELECT id FROM billing_entity WHERE school_id = ${s} AND is_default), ${ids[`season-${s}`]}, ${payer.id}, 'child', 'quarter', 11000, ${status}) RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id) VALUES (${s}, (SELECT billing_entity_id FROM enrollment WHERE id = ${e.id}), ${e.id}, ${child.id}, ${ids[`course-${s}`]})`;
     students.push(child.id);
     enrollments.push(e.id);
   }
@@ -196,8 +197,8 @@ describe("confirming a trial or waitlist enrollment", () => {
   it("refuses when the engine cannot price the enrollment, saving nothing", async () => {
     const f = await family(school, ["trial"]);
     const [e] = f.enrollments;
-    await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id)
-      VALUES (${school}, ${e}, ${f.students[0]}, ${ids[`course45-${school}`]})`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id)
+      VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${e}), ${e}, ${f.students[0]}, ${ids[`course45-${school}`]})`;
     const preview = await inSchool((tx) => confirmationPreview(tx, e));
     expect(preview).toMatchObject({ status: "ok", price: { status: "error" } });
     expect(await inSchool((tx) => confirmEnrollment(tx, desk, e, 11000))).toMatchObject({ ok: false });
@@ -388,10 +389,10 @@ describe("cancelling a mistaken enrollment", () => {
   it("a duplicate entered by mistake stays cancellable when the other enrollment has the attendance", async () => {
     const f = await family(school, ["active"]);
     const [duplicate] = await admin`
-      INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status)
-      VALUES (${school}, ${ids[`season-${school}`]}, ${f.payer}, 'child', 'quarter', 11000, 'active') RETURNING id`;
-    await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id)
-      VALUES (${school}, ${duplicate.id}, ${f.students[0]}, ${ids[`course-${school}`]})`;
+      INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents, status)
+      VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${ids[`season-${school}`]}, ${f.payer}, 'child', 'quarter', 11000, 'active') RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id)
+      VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${duplicate.id}), ${duplicate.id}, ${f.students[0]}, ${ids[`course-${school}`]})`;
     await admin`INSERT INTO attendance (school_id, lesson_id, student_id, present)
       VALUES (${school}, ${ids[`lesson-${school}-2027-11-15`]}, ${f.students[0]}, true)`;
     const listed = await inSchool((tx) => seasonEnrollments(tx, { payerId: f.payer }, ids[`season-${school}`]));

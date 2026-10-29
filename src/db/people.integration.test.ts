@@ -14,6 +14,7 @@ import {
   type PersonInput,
   deleteRelationship,
 } from "./people";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /** People and relationships, read and written as the app does (app_user, RLS). Fictitious data deleted at the end. */
 
@@ -62,9 +63,8 @@ async function link(
 }
 
 beforeAll(async () => {
-  [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`pa-${suffix}`}) RETURNING id`;
-  [{ id: otherSchool }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`pb-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "École A", `pa-${suffix}`);
+  [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "École B", `pb-${suffix}`);
   helene = await insert(school, {
     last_name: "Lefèvre",
     first_name: "Hélène",
@@ -102,11 +102,12 @@ beforeAll(async () => {
     await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
     VALUES (${school}, 'Roux', 'Mathis', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
   [{ id: jazz }] =
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-    VALUES (${school}, ${season.id}, ${d.id}, ${room.id}, ${teacher.id}, 3, '17:00', 60) RETURNING id`;
-  const [i] = await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents)
-    VALUES (${school}, ${season.id}, ${helene}, 'child', 'quarter', 10000) RETURNING id`;
-  await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${school}, ${i.id}, ${zoe}, ${jazz})`;
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+    VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season.id}, ${d.id}, ${room.id}, ${teacher.id}, 3, '17:00', 60) RETURNING id`;
+  const [i] =
+    await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents)
+    VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season.id}, ${helene}, 'child', 'quarter', 10000) RETURNING id`;
+  await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id) VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${i.id}), ${i.id}, ${zoe}, ${jazz})`;
 });
 
 afterAll(async () => {

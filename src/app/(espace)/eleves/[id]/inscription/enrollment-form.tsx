@@ -20,6 +20,7 @@ import { overlaps } from "@/domain/schedule/overlap";
 import { INITIAL_STATUSES, isFull, overfilledCourses } from "@/domain/enrollment/lifecycle";
 import { ENROLLMENT_STATUS_LABELS } from "@/domain/enrollment/statuses";
 import { deferredQuery } from "@/lib/deferred-query";
+import { formatEuros } from "@/lib/money";
 import { preview, enroll, type FormInput } from "./actions";
 import { orConnectionLost } from "@/lib/action-result";
 import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
@@ -46,9 +47,11 @@ type Props = {
   courses: ScheduleCourse[];
   /** Student chosen in advance (« Inscrire » button on their record). */
   initialStudent?: string;
+  /** The school has several businesses (#299): each course and each enrollment names its own. */
+  severalEntities?: boolean;
 };
 
-export function EnrollmentForm({ payerId, students, courses, initialStudent }: Props) {
+export function EnrollmentForm({ payerId, students, courses, initialStudent, severalEntities = false }: Props) {
   const initial = students.find((d) => d.id === initialStudent) ?? (students.length === 1 ? students[0] : undefined);
   const [studentIds, setStudentIds] = useState<string[]>(initial ? [initial.id] : []);
   const [chosenAudience, setAudience] = useState<FormInput["audience"]>(
@@ -100,8 +103,11 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
   const visibleCourses = courses.filter((c) =>
     `${c.discipline} ${c.level ?? ""} ${DAYS[c.weekday ?? 0]}`.toLowerCase().includes(filter.trim().toLowerCase()),
   );
-  const next = result?.status === "ok" ? result.newEnrollment : null;
-  const canSave = next?.status === "ok" && !calculation && !sending;
+  // One enrollment per business selling the chosen courses (#299), all saved together.
+  const news = result?.status === "ok" ? result.newEnrollments : [];
+  const priced = news.flatMap((n) => (n.price.status === "ok" ? [{ ...n, price: n.price }] : []));
+  const canSave = news.length > 0 && priced.length === news.length && !calculation && !sending;
+  const totalLabel = status === "active" ? "Total" : "Total à la confirmation";
 
   // Courses suited to the chosen student(s)' age first; the others remain selectable.
   const chosenAges = students.filter((d) => studentIds.includes(d.id) && d.age !== null).map((d) => d.age as number);
@@ -303,6 +309,7 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
                           <span className="font-medium">{c.discipline}</span>
                           <Text span size="sm" c="dimmed" className="basis-full sm:basis-auto">
                             {c.durationMinutes} min{c.level ? `, ${c.level}` : ""}, {c.room}
+                            {severalEntities ? ` · ${c.entity}` : ""}
                           </Text>
                           {/* A tag rather than faded text: still readable, still selectable. */}
                           {!adapted(c) && (
@@ -412,13 +419,37 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
             {result.message}
           </Text>
         )}
-        {next?.status === "error" && (
-          <Text role="alert" size="sm">
-            {next.error.message}
+        {news.length > 1 && (
+          <Text size="xs">
+            Ces cours sont vendus par {news.length} entreprises : {news.length} inscriptions, chacune au forfait de ses
+            propres cours, facturées séparément.
           </Text>
         )}
-        {next?.status === "ok" && (
-          <PriceDetail price={next} totalLabel={status === "active" ? "Total" : "Total à la confirmation"} />
+        {news.map((n) => (
+          <section
+            key={n.billingEntityId}
+            aria-label={severalEntities ? `Inscription ${n.entity}` : undefined}
+            className="flex flex-col gap-1"
+          >
+            {severalEntities && (
+              <Title order={3} size="h6">
+                {n.entity}
+              </Title>
+            )}
+            {n.price.status === "error" ? (
+              <Text role="alert" size="sm">
+                {n.price.error.message}
+              </Text>
+            ) : (
+              <PriceDetail price={n.price} totalLabel={news.length > 1 ? `${totalLabel} ${n.entity}` : totalLabel} />
+            )}
+          </section>
+        ))}
+        {news.length > 1 && priced.length === news.length && (
+          <Text component="div" size="md" fw={600} className="flex justify-between gap-2 border-t border-bordure pt-3">
+            <span>{status === "active" ? "Total des inscriptions" : "Total à la confirmation"}</span>
+            <span className="tabular-nums">{formatEuros(priced.reduce((t, n) => t + n.price.netPriceCents, 0))}</span>
+          </Text>
         )}
         {result?.status === "ok" && <DiscountImpacts impacts={result.existingImpacts} />}
         {refusal && (
@@ -463,7 +494,11 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
           </Alert>
         )}
         <Button id={SAVE_BUTTON} type="submit" disabled={!canSave} loading={sending}>
-          {status === "active" ? "Enregistrer l’inscription" : `Enregistrer ${STATUS_SAVE[status]}`}
+          {news.length > 1
+            ? `Enregistrer les ${news.length} inscriptions${status === "active" ? "" : ` (${ENROLLMENT_STATUS_LABELS[status].toLowerCase()})`}`
+            : status === "active"
+              ? "Enregistrer l’inscription"
+              : `Enregistrer ${STATUS_SAVE[status]}`}
         </Button>
         <Text size="xs" c="dimmed">
           Vérifiez le prix avant d’enregistrer. Aucun paiement n’est encaissé à cette étape.

@@ -1,5 +1,6 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { schoolWithDefaultEntity } from "../../../db/billing-entity.integration-helpers";
 
 /**
  * Per-course rates edited from the instructor page (#276): the server action
@@ -62,8 +63,7 @@ const create = async (seasonId: string, instructorId: string, instructorRate: nu
 };
 
 beforeAll(async () => {
-  [{ id: school }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('Zz École', ${`zz-tc-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "Zz École", `zz-tc-${suffix}`);
   await admin`INSERT INTO "user" (id, name, email) VALUES (${director}, 'Zzfaux Test', ${`${director}@exemple.test`})`;
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${director}, 'director')`;
   [{ id: season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)

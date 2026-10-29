@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { columnsOf } from "./columns-of";
 import type { Tx } from "./index";
@@ -147,6 +147,30 @@ export function listEntities(tx: Tx): Promise<EntityRow[]> {
 export async function defaultEntityId(tx: Tx): Promise<string | null> {
   const [e] = await tx.select({ id: billingEntity.id }).from(billingEntity).where(eq(billingEntity.isDefault, true));
   return e?.id ?? null;
+}
+
+/**
+ * The school has more than one entity, active or not (#299): only then do screens name the
+ * entity of a course or an enrollment. A school with one never sees it.
+ */
+export async function severalEntities(tx: Tx): Promise<boolean> {
+  const rows = await tx.select({ id: billingEntity.id }).from(billingEntity).limit(2);
+  return rows.length > 1;
+}
+
+/** An entity offered in a choice (course form, #299). */
+export type EntityChoice = { id: string; name: string; isDefault: boolean };
+
+/**
+ * Entities a course can be sold by, the default first: the active ones, and `include`
+ * (the course's own) even once deactivated. A school with a single one sees no choice.
+ */
+export function entityChoices(tx: Tx, include?: string): Promise<EntityChoice[]> {
+  return tx
+    .select({ id: billingEntity.id, name: billingEntity.name, isDefault: billingEntity.isDefault })
+    .from(billingEntity)
+    .where(include ? or(eq(billingEntity.active, true), eq(billingEntity.id, include)) : eq(billingEntity.active, true))
+    .orderBy(desc(billingEntity.isDefault), asc(billingEntity.name));
 }
 
 /** Shown when a school has no default entity: nothing can be cashed until it has one. */

@@ -12,6 +12,7 @@ import {
   seasonOfCourse,
   seasonOverlapping,
 } from "./schedule";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /** Schedule, read as the application does (app_user, RLS). Fictitious data deleted at the end. */
 
@@ -39,14 +40,13 @@ async function createCourse(schoolId: string, seasonId: string, discipline: stri
     INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
     VALUES (${schoolId}, 'Prof', ${discipline}, 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
   await admin`
-    INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes, age_min, age_max, level)
-    VALUES (${schoolId}, ${seasonId}, ${d.id}, ${room.id}, ${teacher.id}, ${day}, ${time}, 60, 8, 10, 'Débutant')`;
+    INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes, age_min, age_max, level)
+    VALUES (${schoolId}, (SELECT id FROM billing_entity WHERE school_id = ${schoolId} AND is_default), ${seasonId}, ${d.id}, ${room.id}, ${teacher.id}, ${day}, ${time}, 60, 8, 10, 'Débutant')`;
 }
 
 beforeAll(async () => {
-  [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`pa-${suffix}`}) RETURNING id`;
-  [{ id: otherSchool }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`pb-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "École A", `pa-${suffix}`);
+  [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "École B", `pb-${suffix}`);
   [{ id: season2026 }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   [{ id: season2027 }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
@@ -93,7 +93,7 @@ describe("currentSeason", () => {
   });
 
   it("returns null without a season", async () => {
-    const [{ id }] = await admin`INSERT INTO school (name, slug) VALUES ('Vide', ${`pv-${suffix}`}) RETURNING id`;
+    const [{ id }] = await schoolWithDefaultEntity(admin, "Vide", `pv-${suffix}`);
     expect(await withSchool(id, (tx) => currentSeason(tx, "2026-10-19"))).toBeNull();
     await admin`DELETE FROM school WHERE id = ${id}`;
   });
@@ -181,9 +181,9 @@ describe("scheduleCourse and enrolledInCourse", () => {
       ["Zoé", "dropped"],
     ]) {
       const [i] = await admin`
-        INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status)
-        VALUES (${school}, ${season2026}, ${p.id}, 'child', 'quarter', 10000, ${status}) RETURNING id`;
-      await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${school}, ${i.id}, ${students[firstName]}, ${jazz.id})`;
+        INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents, status)
+        VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season2026}, ${p.id}, 'child', 'quarter', 10000, ${status}) RETURNING id`;
+      await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id) VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${i.id}), ${i.id}, ${students[firstName]}, ${jazz.id})`;
     }
 
     expect(await withSchool(school, (tx) => scheduleCourse(tx, jazz.id))).toMatchObject({

@@ -40,6 +40,8 @@ const COPIED = {
   // Belongs to the course and its instructor, both copied (#191), with its unit (#268).
   instructorRateCents: course.instructorRateCents,
   instructorRatePayMode: course.instructorRatePayMode,
+  // The business that sells it (#299) sells it again next season.
+  billingEntityId: course.billingEntityId,
 } satisfies { [K in MustCopy]: (typeof course)[K] };
 
 async function coursesOf(tx: Tx, seasonId: string) {

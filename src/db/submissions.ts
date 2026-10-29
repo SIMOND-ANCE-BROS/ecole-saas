@@ -34,8 +34,11 @@ type Refused = { ok: false; message: string };
 
 /** What a first payment submission stored: the payments it recorded. */
 export const storedPayments = z.object({ ok: z.literal(true), ids: z.array(z.uuid()) });
-/** What a first enrollment submission stored: the enrollment it created. */
-export const storedEnrollment = z.object({ ok: z.literal(true), id: z.uuid() });
+/**
+ * What a first enrollment submission stored: the enrollment it created, and since #299
+ * every enrollment it created, one per business (absent from a submission stored before).
+ */
+export const storedEnrollment = z.object({ ok: z.literal(true), id: z.uuid(), ids: z.array(z.uuid()).optional() });
 /** What a first lesson pack sale stored: the pack it created (#286). */
 export const storedLessonPack = z.object({ ok: z.literal(true), id: z.uuid() });
 /** What a first course submission stored: the course and the planning to go back to. */

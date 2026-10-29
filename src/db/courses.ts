@@ -3,8 +3,10 @@ import { columnsOf, rowsOf } from "./columns-of";
 import { z } from "zod";
 import type { Tx } from "./index";
 import { hoursBySite } from "./settings";
+import { defaultEntityId, NO_DEFAULT_ENTITY } from "./billing-entities";
 import {
   auditLog,
+  billingEntity,
   course,
   courseDate,
   discipline,
@@ -27,6 +29,7 @@ import {
   type PayMode,
 } from "../domain/payroll/rate";
 import { courseRateEditable } from "../domain/payroll/course-rates";
+import { entityChangeRefusal } from "../domain/enrollment/entities";
 import { issuePath } from "../lib/form-errors";
 import { has } from "../lib/has";
 import { parseEuros } from "../lib/money";
@@ -98,6 +101,11 @@ const courseFields = z.object({
     }),
   ]),
   instructorId: z.uuid(),
+  /**
+   * Business that sells the course (#299). Absent (a school with one entity sees no
+   * choice): the default entity for a new course, unchanged for an existing one.
+   */
+  billingEntityId: z.uuid().optional(),
   type: z.enum(["group", "private", "competition", "workshop"]),
   recurrence: z.enum(["weekly", "biweekly", "dates"]),
   weekday: integerOrNull(1, 7),
@@ -153,6 +161,7 @@ export type EditedCourse = {
   discipline: string;
   roomId: string;
   instructorId: string;
+  billingEntityId: string;
   type: keyof typeof COURSE_TYPES;
   recurrence: keyof typeof RECURRENCES;
   weekday: number | null;
@@ -182,6 +191,7 @@ export async function readCourse(tx: Tx, id: string): Promise<EditedCourse | nul
       discipline: discipline.name,
       roomId: course.roomId,
       instructorId: course.instructorId,
+      billingEntityId: course.billingEntityId,
       type: course.type,
       recurrence: course.recurrence,
       weekday: course.weekday,
@@ -335,6 +345,41 @@ async function values(tx: Tx, entry: CourseInput, guard?: string) {
   };
 }
 
+/**
+ * The entity a saved course is sold by (#299): the one chosen, if it is active or is
+ * already the course's (`current`, kept even once deactivated); none chosen, the
+ * course's own, or the school's default for a new course.
+ */
+async function resolveEntity(
+  tx: Tx,
+  wanted: string | undefined,
+  current?: string,
+): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
+  if (wanted === undefined) {
+    const id = current ?? (await defaultEntityId(tx));
+    return id ? { ok: true, id } : { ok: false, message: NO_DEFAULT_ENTITY };
+  }
+  const [e] = await tx
+    .select({ id: billingEntity.id })
+    .from(billingEntity)
+    .where(
+      and(
+        eq(billingEntity.id, wanted),
+        current ? or(eq(billingEntity.active, true), eq(billingEntity.id, current)) : eq(billingEntity.active, true),
+      ),
+    );
+  return e ? { ok: true, id: e.id } : { ok: false, message: "Entreprise introuvable ou inactive." };
+}
+
+/** Number of enrollments, whatever their status, with a student in the course. */
+async function enrollmentCount(tx: Tx, id: string): Promise<number> {
+  const [{ n }] = await tx
+    .select({ n: sql<number>`count(DISTINCT ${enrollmentCourse.enrollmentId})::int` })
+    .from(enrollmentCourse)
+    .where(eq(enrollmentCourse.courseId, id));
+  return n;
+}
+
 /** An amount typed in a unit the instructor is no longer paid in (a form opened before a pay mode change, #268). */
 const STALE_UNIT = {
   ok: false as const,
@@ -345,6 +390,8 @@ const STALE_UNIT = {
 export async function createCourse(tx: Tx, seasonId: string, entry: CourseInput): Promise<SaveResult> {
   const r = await values(tx, entry);
   if (!r.ok) return r;
+  const entity = await resolveEntity(tx, entry.billingEntityId);
+  if (!entity.ok) return entity;
   const instructorRateCents = entry.instructorRate ?? null;
   // A rate is typed in the instructor's current pay mode (#268).
   const unit = rateUnitAfterSave({
@@ -362,6 +409,7 @@ export async function createCourse(tx: Tx, seasonId: string, entry: CourseInput)
     .values(
       columnsOf(course, {
         ...r.values,
+        billingEntityId: entity.id,
         instructorRateCents,
         instructorRatePayMode,
         schoolId: CURRENT_SCHOOL,
@@ -403,6 +451,18 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
   if (!existing) return { ok: false, message: "Ce cours n’existe plus." };
   const r = await values(tx, entry, existing.instructorId);
   if (!r.ok) return r;
+  const entity = await resolveEntity(tx, entry.billingEntityId, existing.billingEntityId);
+  if (!entity.ok) return entity;
+  // Its enrollments belong to its entity (the database refuses the change too).
+  const entityRefusal =
+    entity.id === existing.billingEntityId
+      ? null
+      : entityChangeRefusal({
+          from: existing.billingEntityId,
+          to: entity.id,
+          enrollments: await enrollmentCount(tx, id),
+        });
+  if (entityRefusal) return { ok: false, message: entityRefusal };
   const stored = (await courseRate(tx, id)) ?? null;
   const instructorRateCents = rateAfterUpdate({
     sent: entry.instructorRate,
@@ -424,7 +484,7 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
   const instructorRatePayMode = unit.unit;
   await tx
     .update(course)
-    .set(columnsOf(course, { ...r.values, instructorRateCents, instructorRatePayMode }))
+    .set(columnsOf(course, { ...r.values, billingEntityId: entity.id, instructorRateCents, instructorRatePayMode }))
     .where(eq(course.id, id));
   await replaceDates(tx, id, r.dates);
   // New main instructor: takes over the old one's upcoming lessons, not those of a substitute.
@@ -657,10 +717,7 @@ export async function courseRateState(tx: Tx, id: string): Promise<CourseRateSta
 /** Refused as soon as an enrollment, whatever its status, concerns the course. */
 export async function deleteCourse(tx: Tx, id: string): Promise<Result> {
   if (!(await readCourse(tx, id))) return { ok: false, message: "Ce cours n’existe plus." };
-  const [{ n }] = await tx
-    .select({ n: sql<number>`count(DISTINCT ${enrollmentCourse.enrollmentId})::int` })
-    .from(enrollmentCourse)
-    .where(eq(enrollmentCourse.courseId, id));
+  const n = await enrollmentCount(tx, id);
   if (n > 0)
     return { ok: false, message: `Ce cours a ${n} inscription${n > 1 ? "s" : ""} : il ne peut pas être supprimé.` };
   const [attendanceRow] = await tx

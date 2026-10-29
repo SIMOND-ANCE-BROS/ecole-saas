@@ -24,6 +24,8 @@ const base: ScheduleCourse = {
   level: null,
   maxCapacity: 20,
   enrolled: 12,
+  billingEntityId: "entreprise-1",
+  entity: "Zz Entreprise",
 };
 const courses = [
   base,

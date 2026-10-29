@@ -551,6 +551,8 @@ export const course = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     schoolId: schoolIdColumn(),
     seasonId: uuid("season_id").notNull(),
+    // Business that sells the course (#299, ADR 0006): its enrollments belong to it.
+    billingEntityId: uuid("billing_entity_id").notNull(),
     disciplineId: uuid("discipline_id").notNull(),
     roomId: uuid("room_id").notNull(),
     instructorId: uuid("instructor_id").notNull(),
@@ -584,6 +586,8 @@ export const course = pgTable(
     check("course_duration", sql`${t.durationMinutes} > 0`),
     index().on(t.seasonId, t.weekday),
     sameSchoolTarget(t),
+    sameEntityTarget(t),
+    sameSchool(t, t.billingEntityId, billingEntity),
     sameSchool(t, t.seasonId, season),
     sameSchool(t, t.disciplineId, discipline),
     sameSchool(t, t.roomId, room),
@@ -804,6 +808,8 @@ export const enrollment = pgTable(
     schoolId: schoolIdColumn(),
     payerId: uuid("payer_id").notNull(),
     seasonId: uuid("season_id").notNull(),
+    // Business that sells it (#299): the entity of every course of the enrollment.
+    billingEntityId: uuid("billing_entity_id").notNull(),
     tariffId: uuid("tariff_id"),
     // Chosen audience and periodicity: needed to recompute the siblings discount
     // with the existing enrollments, even without a selected tariff (manual price).
@@ -827,6 +833,8 @@ export const enrollment = pgTable(
     check("enrollment_dropped_on", sql`${t.droppedOn} IS NULL OR ${t.status} = 'dropped'`),
     index().on(t.payerId, t.seasonId),
     sameSchoolTarget(t),
+    sameEntityTarget(t),
+    sameSchool(t, t.billingEntityId, billingEntity),
     sameSchool(t, t.payerId, person),
     sameSchool(t, t.seasonId, season),
     sameSchool(t, t.tariffId, tariff),
@@ -837,15 +845,17 @@ export const enrollmentCourse = pgTable(
   "enrollment_course",
   {
     schoolId: schoolIdColumn(),
+    // The enrollment's entity, which must be the course's (#299): a package never mixes two businesses.
+    billingEntityId: uuid("billing_entity_id").notNull(),
     enrollmentId: uuid("enrollment_id").notNull(),
     studentId: uuid("student_id").notNull(),
     courseId: uuid("course_id").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.enrollmentId, t.studentId, t.courseId] }),
-    sameSchool(t, t.enrollmentId, enrollment),
+    sameEntity(t, t.enrollmentId, enrollment),
     sameSchool(t, t.studentId, person),
-    sameSchool(t, t.courseId, course),
+    sameEntity(t, t.courseId, course),
   ],
 );
 
@@ -859,6 +869,8 @@ export const lessonPack = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     schoolId: schoolIdColumn(),
     payerId: uuid("payer_id").notNull(),
+    // Business that sells the pack (#299); the school's default entity until the sale form offers a choice.
+    billingEntityId: uuid("billing_entity_id").notNull(),
     peopleCount: smallint("people_count").notNull(),
     lessonCount: smallint("lesson_count").notNull(),
     priceCents: integer("price_cents").notNull(),
@@ -868,6 +880,8 @@ export const lessonPack = pgTable(
     check("lesson_pack_people", sql`${t.peopleCount} >= 1 AND ${t.lessonCount} >= 1`),
     check("lesson_pack_price", sql`${t.priceCents} >= 0`),
     sameSchoolTarget(t),
+    sameEntityTarget(t),
+    sameSchool(t, t.billingEntityId, billingEntity),
     sameSchool(t, t.payerId, person),
   ],
 );

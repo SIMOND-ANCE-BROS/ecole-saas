@@ -11,6 +11,7 @@ import {
   syncLessons,
   syncRoomSeasons,
 } from "./lessons";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /** Closures limited to some sites or some courses (#200), as the app does (app_user, RLS). Fictitious data. */
 
@@ -36,10 +37,8 @@ const TODAY = "2026-11-02"; // a Monday
 const THURSDAYS = ["2026-11-05", "2026-11-12", "2026-11-19", "2026-11-26"];
 
 beforeAll(async () => {
-  [{ id: school }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('Zz École A', ${`zza-${suffix}`}) RETURNING id`;
-  [{ id: otherSchool }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('Zz École B', ${`zzb-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "Zz École A", `zza-${suffix}`);
+  [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "Zz École B", `zzb-${suffix}`);
   [{ id: season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${school}, '2026-2027', '2026-09-01', '2026-11-30') RETURNING id`;
   [{ id: otherSeason }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
@@ -61,8 +60,8 @@ beforeAll(async () => {
       VALUES (${school}, 'Zzprof', 'Zzprénom', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
   const newCourse = async (seasonId: string, roomId: string) =>
     (
-      await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-        VALUES (${school}, ${seasonId}, ${d.id}, ${roomId}, ${teacher.id}, 4, '18:00', 60) RETURNING id`
+      await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+        VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${seasonId}, ${d.id}, ${roomId}, ${teacher.id}, 4, '18:00', 60) RETURNING id`
     )[0].id as string;
   jazz = await newCourse(season, centreRoom);
   ballet = await newCourse(season, annexeRoom);
@@ -176,8 +175,8 @@ describe("closures limited to sites or courses (#200)", () => {
 
   it("keeps a workshop during the holidays, not on its closed site (owner, 2026-10-28)", async () => {
     const [w] =
-      await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, recurrence, weekday, start_time, duration_minutes)
-      SELECT school_id, season_id, discipline_id, ${annexeRoom}, instructor_id, 'dates', NULL, '10:00', 120 FROM course WHERE id = ${jazz}
+      await admin`INSERT INTO course (billing_entity_id, school_id, season_id, discipline_id, room_id, instructor_id, recurrence, weekday, start_time, duration_minutes)
+      SELECT billing_entity_id, school_id, season_id, discipline_id, ${annexeRoom}, instructor_id, 'dates', NULL, '10:00', 120 FROM course WHERE id = ${jazz}
       RETURNING id`;
     await admin`INSERT INTO course_date (school_id, course_id, date) VALUES (${school}, ${w.id}, '2026-11-12'), (${school}, ${w.id}, '2026-11-19')`;
     const holidays = await add({ scope: "school", label: "Zz vacances", start: "2026-11-19", end: "2026-11-19" });

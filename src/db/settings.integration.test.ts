@@ -19,6 +19,7 @@ import {
   deleteRoom,
   deleteSite,
 } from "./settings";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /** School settings (#80), as the application runs them (app_user, RLS). Fictitious data deleted at the end. */
 
@@ -36,9 +37,8 @@ let studio: string;
 const TODAY = "2026-08-01";
 
 beforeAll(async () => {
-  [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`pa-${suffix}`}) RETURNING id`;
-  [{ id: otherSchool }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`pb-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "École A", `pa-${suffix}`);
+  [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "École B", `pb-${suffix}`);
   await admin`INSERT INTO discipline (school_id, name) VALUES (${otherSchool}, 'Jazz')`;
 });
 
@@ -248,8 +248,8 @@ describe("sites and rooms", () => {
     const [p] =
       await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
       VALUES (${school}, 'Prof', 'Camille', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-      VALUES (${school}, ${season2026}, ${jazz}, ${studio}, ${p.id}, 3, '17:00', 60)`;
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+      VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season2026}, ${jazz}, ${studio}, ${p.id}, 3, '17:00', 60)`;
     expect(await withSchool(school, (tx) => deleteRoom(tx, studio))).toEqual({
       ok: false,
       message: "Des cours ont lieu dans Grand studio : déplacez-les d’abord.",

@@ -11,6 +11,7 @@ import {
   listLessonPacks,
   deleteLessonPack,
 } from "./tariffs";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /** Tariff grid, siblings and lesson packs (#80), as the app does (app_user, RLS). Fake data deleted at the end. */
 
@@ -30,9 +31,8 @@ let payer: string;
 const price = (s: Parameters<typeof savePrice>[2]) => withSchool(school, (tx) => savePrice(tx, season, s));
 
 beforeAll(async () => {
-  [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`ta-${suffix}`}) RETURNING id`;
-  [{ id: otherSchool }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`tb-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "École A", `ta-${suffix}`);
+  [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "École B", `tb-${suffix}`);
   [{ id: season }] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   [{ id: zumba }] = await admin`INSERT INTO discipline (school_id, name) VALUES (${school}, 'Zumba') RETURNING id`;
@@ -44,8 +44,8 @@ beforeAll(async () => {
     await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
     VALUES (${school}, 'Prof', 'Lucas', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
   [{ id: zumbaCourse }] =
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-    VALUES (${school}, ${season}, ${zumba}, ${room.id}, ${p.id}, 1, '19:00', 60) RETURNING id`;
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+    VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${zumba}, ${room.id}, ${p.id}, 1, '19:00', 60) RETURNING id`;
   // Paid for by a third party (relationship « paie pour »): independent of how the student herself is flagged.
   [{ id: ines }] =
     await admin`INSERT INTO person (school_id, last_name, first_name, birth_date) VALUES (${school}, 'Moreau', 'Inès', '1992-07-14') RETURNING id`;
@@ -139,7 +139,7 @@ describe("tariff grid", () => {
         courseIds: [zumbaCourse],
       }),
     );
-    expect(r).toMatchObject({ status: "ok", newEnrollment: { status: "ok", grossPriceCents: 12500 } });
+    expect(r).toMatchObject({ status: "ok", newEnrollments: [{ price: { status: "ok", grossPriceCents: 12500 } }] });
   });
 
   it("removes an unused cell, refuses to remove a cell already used by an enrollment", async () => {
@@ -156,8 +156,8 @@ describe("tariff grid", () => {
     ).toBe(true);
     const [{ id: tariffId }] =
       await admin`SELECT id FROM tariff WHERE season_id = ${season} AND audience = 'adult' AND period = 'quarter' AND combination = '{60}'`;
-    await admin`INSERT INTO enrollment (school_id, season_id, payer_id, tariff_id, audience, period, gross_price_cents)
-      VALUES (${school}, ${season}, ${payer}, ${tariffId}, 'adult', 'quarter', 12500)`;
+    await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, tariff_id, audience, period, gross_price_cents)
+      VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${payer}, ${tariffId}, 'adult', 'quarter', 12500)`;
     expect(
       await price({
         audience: "adult",

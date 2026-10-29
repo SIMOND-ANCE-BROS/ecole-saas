@@ -4,6 +4,7 @@ import { deleteCourse, moveCourse } from "./courses";
 import { withSchool } from "./index";
 import { countLesson } from "./lesson-packs";
 import { addClosure, changeInstructor, deleteClosure, moveLesson, syncLessons } from "./lessons";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /**
  * A lesson a lesson pack was counted on is never deleted (#225, recommended rule pending
@@ -37,8 +38,7 @@ const newInstructor = async (lastName: string) =>
   )[0].id as string;
 
 beforeAll(async () => {
-  [{ id: school }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('Zz École carnets', ${`zzc-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "Zz École carnets", `zzc-${suffix}`);
   [{ id: season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${school}, '2026-2027', '2026-09-01', '2026-11-30') RETURNING id`;
   [{ id: discipline }] =
@@ -51,8 +51,9 @@ beforeAll(async () => {
   substitute = await newInstructor("Zzremplaçant");
   const [payer] =
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Zzpayeur', 'Zzprénom') RETURNING id`;
-  [{ id: pack }] = await admin`INSERT INTO lesson_pack (school_id, payer_id, people_count, lesson_count, price_cents)
-    VALUES (${school}, ${payer.id}, 1, 10, 40000) RETURNING id`;
+  [{ id: pack }] =
+    await admin`INSERT INTO lesson_pack (school_id, billing_entity_id, payer_id, people_count, lesson_count, price_cents)
+    VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${payer.id}, 1, 10, 40000) RETURNING id`;
   await admin`INSERT INTO "user" (id, name, email) VALUES (${frontDesk}, 'Zz Accueil', ${`${frontDesk}@exemple.test`})`;
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${frontDesk}, 'front_desk')`;
 });
@@ -90,8 +91,8 @@ const sync = () => withSchool(school, (tx) => syncLessons(tx, season, TODAY));
 /** A Thursday 18:00 course of its own, with its lessons generated. */
 async function newCourse(): Promise<string> {
   const [{ id }] =
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, type, weekday, start_time, duration_minutes)
-      VALUES (${school}, ${season}, ${discipline}, ${room}, ${teacher}, 'private', 4, '18:00', 60) RETURNING id`;
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, type, weekday, start_time, duration_minutes)
+      VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${discipline}, ${room}, ${teacher}, 'private', 4, '18:00', 60) RETURNING id`;
   await sync();
   return id as string;
 }

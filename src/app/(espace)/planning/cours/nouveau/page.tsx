@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Text, Title } from "@mantine/core";
 import { withSchool } from "@/db";
+import { entityChoices } from "@/db/billing-entities";
 import { coursePay, scheduleReferential } from "@/db/courses";
 import { chosenSeason, currentSeason, seasonCourses } from "@/db/schedule";
 import { seasonCalendar } from "@/db/lessons";
@@ -21,6 +22,7 @@ export default async function NewCoursePage({ searchParams }: PageProps<"/planni
     season: season,
     current,
     referential: referential,
+    entities,
     pay,
     schedule: schedule,
     calendar,
@@ -30,6 +32,7 @@ export default async function NewCoursePage({ searchParams }: PageProps<"/planni
       season: s,
       current: await currentSeason(tx, todayInParis()),
       referential: await scheduleReferential(tx),
+      entities: await entityChoices(tx),
       pay: await coursePay(tx, null),
       schedule: s ? await seasonCourses(tx, s.id) : [],
       calendar: s ? await seasonCalendar(tx, s.id, todayInParis()) : null,
@@ -64,6 +67,7 @@ export default async function NewCoursePage({ searchParams }: PageProps<"/planni
         seasonId={season.id}
         planning={planning}
         referential={referential}
+        entities={entities}
         pay={pay}
         schedule={schedule}
         calendar={calendar}

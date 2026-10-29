@@ -60,6 +60,8 @@ export const USED_UP = "Ce carnet est épuisé.";
 
 export const ALREADY_COUNTED_FOR_STUDENT = "Cette séance est déjà décomptée d’un carnet de cet élève.";
 export const NOT_A_STUDENT_OF_LESSON = "Ce carnet n’est à aucun élève de cette séance.";
+/** A pack is used only for the courses of the business that sold it (#299, ADR 0006). */
+export const OTHER_ENTITY = "Ce carnet est vendu par une autre entreprise que ce cours : il ne s’y décompte pas.";
 
 /**
  * Why this lesson cannot be counted on this pack, or null. A lesson already counted on
@@ -80,8 +82,12 @@ export function usageRefusal(u: {
   lessonStudentIds: readonly string[];
   /** Students named on the packs this lesson is already counted on. */
   countedStudentIds: readonly string[];
+  /** Business that sold the pack and business that sells the lesson's course (#299). */
+  packEntityId: string;
+  courseEntityId: string;
 }): string | null {
   if (u.courseType !== "private") return "Seules les séances de cours particulier se décomptent sur un carnet.";
+  if (u.packEntityId !== u.courseEntityId) return OTHER_ENTITY;
   if (!isCountable(u.lessonStatus)) return "Cette séance est annulée : elle ne se décompte pas.";
   if (u.packStudentIds.some((id) => u.countedStudentIds.includes(id))) return ALREADY_COUNTED_FOR_STUDENT;
   if (u.lessonStudentIds.length > 0 && !u.packStudentIds.some((id) => u.lessonStudentIds.includes(id)))

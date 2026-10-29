@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Text, Title } from "@mantine/core";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
+import { severalEntities } from "@/db/billing-entities";
 import { readStudent } from "@/db/students";
 import { payableStudents, displayedName } from "@/db/people";
 import { seasonCourses, currentSeason } from "@/db/schedule";
@@ -34,6 +35,7 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
       season,
       students: payerId ? await payableStudents(tx, payerId) : [],
       courses: season ? await seasonCourses(tx, season.id) : [],
+      severalEntities: await severalEntities(tx),
     };
   });
   if (!parsed) notFound();
@@ -88,6 +90,7 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
           }))}
           courses={courses}
           initialStudent={student.id}
+          severalEntities={parsed.severalEntities}
         />
       )}
     </FormPage>

@@ -185,8 +185,8 @@ async function main() {
     ] as const;
     for (const [d, room, teacher, day, time, duration, ageMin, ageMax, level] of COURSE) {
       await admin`
-        INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes, age_min, age_max, level)
-        VALUES (${school.id}, ${season.id}, ${disciplines[d]}, ${rooms[room]}, ${profs[teacher]}, ${day}, ${time}, ${duration}, ${ageMin}, ${ageMax}, ${level})`;
+        INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes, age_min, age_max, level)
+        VALUES (${school.id}, (SELECT id FROM billing_entity WHERE school_id = ${school.id} AND is_default), ${season.id}, ${disciplines[d]}, ${rooms[room]}, ${profs[teacher]}, ${day}, ${time}, ${duration}, ${ageMin}, ${ageMax}, ${level})`;
     }
   }
 

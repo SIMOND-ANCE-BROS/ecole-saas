@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
 import { syncLessons } from "./lessons";
 import { copySeason, seasonCopyPlan } from "./season-copy";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /**
  * Copy of a season's planning (#190), as the application runs it (app_user,
@@ -29,9 +30,8 @@ let gone: string;
 let competition: string;
 
 beforeAll(async () => {
-  [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`ca-${suffix}`}) RETURNING id`;
-  [{ id: otherSchool }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`cb-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "École A", `ca-${suffix}`);
+  [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "École B", `cb-${suffix}`);
   for (const [id, role] of [
     [director, "director"],
     [frontDesk, "front_desk"],
@@ -77,9 +77,9 @@ beforeAll(async () => {
     period: [string, string] | null = null,
   ) =>
     (
-      await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, recurrence, weekday,
+      await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, recurrence, weekday,
           start_date, end_date, start_time, duration_minutes, level, age_min, age_max, max_capacity)
-        VALUES (${schoolId}, ${seasonId}, ${p.discipline}, ${p.room}, ${instructorId},
+        VALUES (${schoolId}, (SELECT id FROM billing_entity WHERE school_id = ${schoolId} AND is_default), ${seasonId}, ${p.discipline}, ${p.room}, ${instructorId},
           ${weekday === null ? "dates" : "weekly"}, ${weekday}, ${period?.[0] ?? null}, ${period?.[1] ?? null},
           ${time}, 60, 'Débutant', 8, 10, 12) RETURNING id`
     )[0].id as string;
@@ -92,10 +92,11 @@ beforeAll(async () => {
   await admin`INSERT INTO course_date (school_id, course_id, date) VALUES (${school}, ${workshop}, '2027-02-13')`;
   // Every column away from the defaults: type, recurrence, ages, level and places left empty, length,
   // the instructor's own rate for the course (#191).
-  [{ id: competition }] = await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id,
+  [{ id: competition }] =
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id,
       type, recurrence, weekday, start_time, duration_minutes, level, age_min, age_max, max_capacity,
       instructor_rate_cents, instructor_rate_pay_mode)
-    VALUES (${school}, ${source}, ${a.discipline}, ${a.room}, ${a.active},
+    VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${source}, ${a.discipline}, ${a.room}, ${a.active},
       'competition', 'biweekly', 6, '10:30', 90, NULL, 14, 25, NULL, 4550, 'hourly') RETURNING id`;
   await insertCourse(otherSchool, foreignSeason, b, b.active, 2, "19:00");
 });
@@ -224,9 +225,9 @@ describe("copy of course rates after a pay mode change (#268)", () => {
     const kept = await teacher("per_lesson");
     const rated = async (instructorId: string, weekday: number, cents: number, unit: string) =>
       (
-        await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday,
+        await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday,
             start_time, duration_minutes, instructor_rate_cents, instructor_rate_pay_mode)
-          VALUES (${school}, ${from}, ${discipline}, ${room}, ${instructorId}, ${weekday}, '20:00', 60, ${cents}, ${unit})
+          VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${from}, ${discipline}, ${room}, ${instructorId}, ${weekday}, '20:00', 60, ${cents}, ${unit})
           RETURNING id`
       )[0].id as string;
     const hourlyRate = await rated(changed, 1, 4550, "hourly");
