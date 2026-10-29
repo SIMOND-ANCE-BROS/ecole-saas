@@ -132,16 +132,30 @@ export async function createDeposit(
         "Un des paiements choisis n’est plus à remettre (déjà remis, corrigé, pas encore à encaisser ou d’un autre moyen).",
     };
   }
+  // A slip goes to one entity's bank account (#298): its payments all belong to that entity.
+  // With a single entity (until #300 groups the deposits by entity) this always holds.
+  const entities = await tx
+    .selectDistinct({ id: payment.billingEntityId })
+    .from(payment)
+    .where(inArray(payment.id, ids));
+  if (entities.length !== 1)
+    return { ok: false, message: "Une remise ne regroupe que les paiements d’une même entreprise." };
+  const entity = entities[0].id;
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
   const [{ id }] = await tx
     .insert(bankDeposit)
-    .values({ schoolId: CURRENT_SCHOOL, date, method: method, createdBy: who })
+    .values({ schoolId: CURRENT_SCHOOL, billingEntityId: entity, date, method: method, createdBy: who })
     .returning({ id: bankDeposit.id });
   await tx.insert(bankDepositPayment).values(
     rowsOf(
       bankDepositPayment,
-      ids.map((paymentId) => ({ schoolId: CURRENT_SCHOOL, bankDepositId: id, paymentId: paymentId })),
+      ids.map((paymentId) => ({
+        schoolId: CURRENT_SCHOOL,
+        billingEntityId: entity,
+        bankDepositId: id,
+        paymentId: paymentId,
+      })),
     ),
   );
   await tx.insert(auditLog).values({

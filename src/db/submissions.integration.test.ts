@@ -7,6 +7,7 @@ import { saveEnrollment } from "./enrollments";
 import { withSchool } from "./index";
 import { syncLessons } from "./lessons";
 import { overlapping } from "./overlap.integration-helpers";
+import { defaultEntityFor } from "./billing-entity.integration-helpers";
 import { collect } from "./payments";
 import { KEY_REUSED, once, requestHash, storedCourse, storedEnrollment, storedPayments } from "./submissions";
 
@@ -35,6 +36,7 @@ beforeAll(async () => {
   await admin`INSERT INTO "user" (id, name, email) VALUES (${frontDesk}, 'Zz Accueil', ${`${frontDesk}@exemple.test`})`;
   for (const s of [ids.school, ids.otherSchool]) {
     await admin`INSERT INTO member (school_id, user_id, role) VALUES (${s}, ${frontDesk}, 'front_desk')`;
+    await defaultEntityFor(admin, s);
   }
   const e = ids.school;
   [{ id: ids.payer }] =

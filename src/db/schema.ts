@@ -6,7 +6,8 @@
  *    guaranteed by Row Level Security (see migrations/0001_rls.sql).
  *  - Amounts in integer CENTS (`*_cents`), rates in basis points
  *    (2000 = 20 %): no floating-point number on the TypeScript side.
- *  - The invoice number is provided by the school's invoicing tool.
+ *  - The invoice number is provided by the invoicing tool of the billing
+ *    entity that issues the invoice (ADR 0006).
  *  - Payments and the audit log are immutable (triggers in 0001_rls.sql).
  */
 import { getTableName, sql } from "drizzle-orm";
@@ -29,6 +30,7 @@ import {
   time,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { ROLE_VALUES } from "../domain/team/rules";
@@ -80,10 +82,7 @@ export const school = pgTable("school", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(), // subdomain: ribas.monapp.fr
-  companyName: text("company_name"),
-  siren: char("siren", { length: 9 }),
-  vatRegime: vatRegime("vat_regime").notNull().default("not_applicable"),
-  vatMention: text("vat_mention"), // e.g. « TVA non applicable, art. 293 B du CGI »
+  // Legal name, SIREN and VAT live on its billing entities (`billing_entity`, ADR 0006).
   timeZone: text("time_zone").notNull().default("Europe/Paris"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -117,17 +116,85 @@ function sameSchoolTarget(t: { schoolId: AnyPgColumn; id: AnyPgColumn }) {
   return unique(`${getTableName(t.id.table)}_school_id_id_unique`).on(t.schoolId, t.id);
 }
 
-/** Invoicing connector configuration, one per school. */
-export const invoicingConnector = pgTable("invoicing_connector", {
-  schoolId: uuid("school_id")
-    .primaryKey()
-    .references(() => school.id, { onDelete: "cascade" }),
-  tool: invoicingTool("tool").notNull(),
-  encryptedCredentials: text("encrypted_credentials").notNull(), // encrypted on the application side
-  oneConnectEnabled: boolean("one_connect_enabled").notNull().default(false),
-  active: boolean("active").notNull().default(true),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+/**
+ * Foreign key between two billing tables of the same billing entity (ADR 0006):
+ * composite (school_id, column, billing_entity_id) to (school_id, id,
+ * billing_entity_id), so that the target row belongs to the same school AND the
+ * same entity (an allocation never pays another business's installment). NULL
+ * column accepted (MATCH SIMPLE). Name: <table>_<column>_same_entity_fk.
+ */
+function sameEntity(
+  t: { schoolId: AnyPgColumn; billingEntityId: AnyPgColumn },
+  column: AnyPgColumn,
+  target: { schoolId: AnyPgColumn; id: AnyPgColumn; billingEntityId: AnyPgColumn },
+) {
+  return foreignKey({
+    name: `${getTableName(column.table)}_${column.name.replace(/_id$/, "")}_same_entity_fk`,
+    columns: [t.schoolId, column, t.billingEntityId],
+    foreignColumns: [target.schoolId, target.id, target.billingEntityId],
+  });
+}
+
+/** Unique constraint (school_id, id, billing_entity_id), target of the `sameEntity` foreign keys. */
+function sameEntityTarget(t: { schoolId: AnyPgColumn; id: AnyPgColumn; billingEntityId: AnyPgColumn }) {
+  return unique(`${getTableName(t.id.table)}_school_id_id_billing_entity_id_unique`).on(
+    t.schoolId,
+    t.id,
+    t.billingEntityId,
+  );
+}
+
+/**
+ * A business that sells, invoices and cashes inside a school (UI « Entreprise »,
+ * ADR 0006): its own SIREN, VAT regime, invoice mention and bank account. A school
+ * has at least one, exactly one by default; it is not a tenant (RLS stays per school).
+ */
+export const billingEntity = pgTable(
+  "billing_entity",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    schoolId: schoolIdColumn(),
+    name: text("name").notNull(), // short label shown in lists: « Danse Zz »
+    legalName: text("legal_name").notNull(),
+    siren: char("siren", { length: 9 }),
+    siret: char("siret", { length: 14 }),
+    vatNumber: text("vat_number"),
+    addressLine: text("address_line"),
+    postalCode: text("postal_code"),
+    city: text("city"),
+    vatRegime: vatRegime("vat_regime").notNull(),
+    vatMention: text("vat_mention"), // printed once per invoice, e.g. « TVA non applicable, art. 293 B du CGI »
+    bankAccountLabel: text("bank_account_label"), // printed on deposit slips; never an IBAN
+    isDefault: boolean("is_default").notNull().default(false),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    sameSchoolTarget(t),
+    unique("billing_entity_name_unique").on(t.schoolId, t.name),
+    uniqueIndex("billing_entity_one_default")
+      .on(t.schoolId)
+      .where(sql`${t.isDefault}`),
+    check("billing_entity_siren", sql`${t.siren} ~ '^[0-9]{9}$'`),
+    check("billing_entity_siret", sql`${t.siret} ~ '^[0-9]{14}$' AND left(${t.siret}, 9) = ${t.siren}`),
+    check("billing_entity_default_active", sql`${t.active} OR NOT ${t.isDefault}`),
+  ],
+);
+
+/** Invoicing connector configuration, one per billing entity (ADR 0007). */
+export const invoicingConnector = pgTable(
+  "invoicing_connector",
+  {
+    billingEntityId: uuid("billing_entity_id").primaryKey(),
+    schoolId: schoolIdColumn(),
+    tool: invoicingTool("tool").notNull(),
+    encryptedCredentials: text("encrypted_credentials").notNull(), // encrypted on the application side
+    oneConnectEnabled: boolean("one_connect_enabled").notNull().default(false),
+    active: boolean("active").notNull().default(true),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [sameSchool(t, t.billingEntityId, billingEntity).onDelete("cascade")],
+);
 
 /**
  * Membership of a user (managed by Better Auth, `user` table) in a
@@ -822,6 +889,7 @@ export const invoice = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     schoolId: schoolIdColumn(),
+    billingEntityId: uuid("billing_entity_id").notNull(), // the issuer (ADR 0006)
     payerId: uuid("payer_id").notNull(),
     status: invoiceStatus("status").notNull().default("to_send"),
     tool: invoicingTool("tool"),
@@ -836,11 +904,15 @@ export const invoice = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    unique().on(t.schoolId, t.number),
+    // Each entity has its own numbering in its own tool: « A-1 » may exist once per entity.
+    unique("invoice_billing_entity_id_number_unique").on(t.billingEntityId, t.number),
     index().on(t.payerId),
     sameSchoolTarget(t),
+    sameEntityTarget(t),
+    sameSchool(t, t.billingEntityId, billingEntity),
     sameSchool(t, t.payerId, person),
-    sameSchool(t, t.creditNoteOf, t),
+    // A credit note cancels an invoice of the same entity.
+    sameEntity(t, t.creditNoteOf, t),
   ],
 );
 
@@ -869,6 +941,7 @@ export const installment = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     schoolId: schoolIdColumn(),
+    billingEntityId: uuid("billing_entity_id").notNull(), // the invoice's
     invoiceId: uuid("invoice_id").notNull(),
     rank: smallint("rank").notNull(),
     dueDate: date("due_date").notNull(),
@@ -881,7 +954,8 @@ export const installment = pgTable(
       .on(t.schoolId, t.dueDate)
       .where(sql`${t.status} IN ('upcoming', 'partial', 'overdue')`),
     sameSchoolTarget(t),
-    sameSchool(t, t.invoiceId, invoice),
+    sameEntityTarget(t),
+    sameEntity(t, t.invoiceId, invoice),
   ],
 );
 
@@ -891,6 +965,7 @@ export const payment = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     schoolId: schoolIdColumn(),
+    billingEntityId: uuid("billing_entity_id").notNull(), // the business that cashes it (ADR 0006)
     payerId: uuid("payer_id").notNull(),
     date: date("date").notNull().defaultNow(),
     amountCents: integer("amount_cents").notNull(),
@@ -913,9 +988,12 @@ export const payment = pgTable(
     check("payment_amount", sql`${t.amountCents} <> 0`),
     check("payment_reversal_kind", sql`(${t.reversalKind} IS NULL) = (${t.correctsId} IS NULL)`),
     sameSchoolTarget(t),
+    sameEntityTarget(t),
+    sameSchool(t, t.billingEntityId, billingEntity),
     sameSchool(t, t.payerId, person),
     sameSchool(t, t.enteredBy, member),
-    sameSchool(t, t.correctsId, t),
+    // A reverse entry belongs to the entity of the payment it corrects.
+    sameEntity(t, t.correctsId, t),
   ],
 );
 
@@ -928,42 +1006,54 @@ export const bankDeposit = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     schoolId: schoolIdColumn(),
+    billingEntityId: uuid("billing_entity_id").notNull(), // a slip goes to one entity's bank account
     date: date("date").notNull(),
     method: depositMethod("method").notNull(),
     createdBy: uuid("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [sameSchoolTarget(t), sameSchool(t, t.createdBy, member)],
+  (t) => [
+    sameSchoolTarget(t),
+    sameEntityTarget(t),
+    sameSchool(t, t.billingEntityId, billingEntity),
+    sameSchool(t, t.createdBy, member),
+  ],
 );
 
-/** Payments of a deposit; a payment appears in a single deposit only (the payment, immutable, is not modified). */
+/**
+ * Payments of a deposit; a payment appears in a single deposit only (the payment,
+ * immutable, is not modified). Deposit and payment share the line's entity.
+ */
 export const bankDepositPayment = pgTable(
   "bank_deposit_payment",
   {
     schoolId: schoolIdColumn(),
+    billingEntityId: uuid("billing_entity_id").notNull(),
     bankDepositId: uuid("bank_deposit_id").notNull(),
     paymentId: uuid("payment_id").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.paymentId] }),
     index().on(t.bankDepositId),
-    sameSchool(t, t.bankDepositId, bankDeposit).onDelete("cascade"),
-    sameSchool(t, t.paymentId, payment),
+    sameEntity(t, t.bankDepositId, bankDeposit).onDelete("cascade"),
+    sameEntity(t, t.paymentId, payment),
   ],
 );
 
+/** Part of a payment paying an installment; payment and installment share the line's entity. */
 export const paymentAllocation = pgTable(
   "payment_allocation",
   {
     schoolId: schoolIdColumn(),
+    billingEntityId: uuid("billing_entity_id").notNull(),
     paymentId: uuid("payment_id").notNull(),
     installmentId: uuid("installment_id").notNull(),
     amountCents: integer("amount_cents").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.paymentId, t.installmentId] }),
-    sameSchool(t, t.paymentId, payment),
-    sameSchool(t, t.installmentId, installment),
+    sameEntity(t, t.paymentId, payment),
+    sameEntity(t, t.installmentId, installment),
   ],
 );
 

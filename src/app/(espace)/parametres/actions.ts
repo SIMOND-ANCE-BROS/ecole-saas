@@ -34,6 +34,13 @@ import {
   validLessonPack,
   validSiblings,
 } from "@/db/tariffs";
+import {
+  createEntity,
+  makeDefaultEntity,
+  updateEntity,
+  validEntityInput,
+  type EntityInput,
+} from "@/db/billing-entities";
 import { actionResult, type ActionResult } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
 
@@ -207,6 +214,31 @@ export async function lessonPack(seasonId: string, entry: z.input<typeof validLe
     (tx) => saveLessonPack(tx, seasonId, entry),
   );
 }
+const ENTITY_GONE = "Cette entreprise n’existe plus.";
+
+export async function newEntity(entry: EntityInput) {
+  return act(
+    "entreprises",
+    () => refusal(validEntityInput, entry),
+    (tx) => createEntity(tx, entry),
+  );
+}
+export async function changeEntity(id: string, entry: EntityInput) {
+  return act(
+    "entreprises",
+    () => refusal(validEntityInput, entry) ?? refusal(validId, id, ENTITY_GONE),
+    (tx) => updateEntity(tx, id, entry),
+  );
+}
+/** The entity that cashes every payment until courses carry their own (#299, #300). */
+export async function defaultEntity(id: string) {
+  return act(
+    "entreprises",
+    () => refusal(validId, id, ENTITY_GONE),
+    (tx) => makeDefaultEntity(tx, id),
+  );
+}
+
 export async function removeLessonPack(id: string) {
   return act(
     "tarifs",

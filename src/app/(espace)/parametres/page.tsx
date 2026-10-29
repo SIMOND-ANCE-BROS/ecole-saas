@@ -3,6 +3,7 @@ import { Paper, Text, Title } from "@mantine/core";
 import Link from "next/link";
 import { withSchool } from "@/db";
 import { listDisciplines, listPlaces, listSeasons } from "@/db/settings";
+import { listEntities } from "@/db/billing-entities";
 import { requireRole } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Paramètres" };
@@ -14,10 +15,12 @@ export default async function SettingsPage() {
     seasons: seasons,
     disciplines,
     seats: seats,
+    entities,
   } = await withSchool(schoolId, async (tx) => ({
     seasons: await listSeasons(tx),
     disciplines: await listDisciplines(tx),
     seats: await listPlaces(tx),
+    entities: await listEntities(tx),
   }));
   const rooms = seats.reduce((n, s) => n + s.rooms.length, 0);
   const sections = [
@@ -47,6 +50,11 @@ export default async function SettingsPage() {
       detail: "Certificat médical, validité et délai pour le fournir",
     },
     { href: "/planning/fermetures", title: "Fermetures", detail: "Vacances, jours fériés, gala" },
+    {
+      href: "/parametres/entreprises",
+      title: "Entreprises",
+      detail: `${entities.length} entreprise${entities.length > 1 ? "s" : ""} : SIREN, TVA et compte bancaire`,
+    },
     { href: "/intervenants", title: "Intervenants", detail: "Professeurs, statut et rémunération" },
     { href: "/parametres/equipe", title: "Équipe", detail: "Accès de la direction et de l’accueil, invitations" },
   ];
@@ -57,7 +65,7 @@ export default async function SettingsPage() {
           Paramètres
         </Title>
         <Text size="sm" c="dimmed">
-          Tout ce qui est propre à l’école : ses saisons, ses disciplines, ses lieux et ses tarifs.
+          Tout ce qui est propre à l’école : ses saisons, ses disciplines, ses lieux, ses tarifs et ses entreprises.
         </Text>
       </div>
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

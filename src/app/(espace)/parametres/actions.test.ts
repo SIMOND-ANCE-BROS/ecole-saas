@@ -9,6 +9,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 // The real schemas (Vitest has no `@/` alias here); the writes never run, `withSchool` is stubbed.
 vi.mock("@/db/settings", () => import("../../../db/settings"));
 vi.mock("@/db/tariffs", () => import("../../../db/tariffs"));
+vi.mock("@/db/billing-entities", () => import("../../../db/billing-entities"));
 vi.mock("@/db/lessons", () => ({ syncRoomSeasons: vi.fn() }));
 vi.mock("@/domain/people/age", () => import("../../../domain/people/age"));
 vi.mock("@/lib/action-result", () => import("../../../lib/action-result"));
@@ -99,6 +100,65 @@ describe("settings actions", () => {
     withSchool.mockResolvedValueOnce({ ok: false, message: "Cette discipline existe déjà." });
 
     expect(await actions.newDiscipline("Jazz")).toEqual({ ok: false, message: "Cette discipline existe déjà." });
+  });
+
+  describe("billing entities (#298)", () => {
+    const entity = {
+      name: "Zz Danse",
+      legalName: "Zz Danse EI",
+      siren: "000 000 001",
+      siret: "",
+      vatNumber: "",
+      addressLine: "",
+      postalCode: "",
+      city: "",
+      vatRegime: "not_applicable" as const,
+      vatMention: "",
+      bankAccountLabel: "Compte courant Zz Banque",
+    };
+
+    it("are management only", async () => {
+      requireRole.mockRejectedValueOnce(new Error("redirect"));
+
+      await expect(actions.newEntity(entity)).rejects.toThrow("redirect");
+      expect(requireRole).toHaveBeenCalledWith("director");
+      expect(withSchool).not.toHaveBeenCalled();
+    });
+
+    it("refuse a malformed SIREN, SIRET, postal code or an IBAN, in French, before the database", async () => {
+      expect(await actions.newEntity({ ...entity, siren: "12345" })).toEqual({
+        ok: false,
+        message: "SIREN : 9 chiffres",
+      });
+      expect(await actions.newEntity({ ...entity, siret: "000 000 002 00012" })).toEqual({
+        ok: false,
+        message: "Ce SIRET n’est pas celui de ce SIREN (ses 9 premiers chiffres diffèrent).",
+      });
+      expect(await actions.changeEntity(ID, { ...entity, postalCode: "691" })).toEqual({
+        ok: false,
+        message: "Code postal : 5 chiffres",
+      });
+      expect(await actions.newEntity({ ...entity, bankAccountLabel: "FR76 3000 6000 0112 3456 7890 189" })).toEqual({
+        ok: false,
+        message: "N’indiquez pas l’IBAN ici : un nom de compte suffit (il est imprimé sur les bordereaux).",
+      });
+      expect(await actions.newEntity({ ...entity, legalName: " " })).toEqual({
+        ok: false,
+        message: "Raison sociale obligatoire",
+      });
+      expect(await actions.newEntity(any({ ...entity, vatRegime: "vat_exempt" }))).toEqual({
+        ok: false,
+        message: "Régime de TVA à choisir",
+      });
+      expect(await actions.defaultEntity("x")).toEqual({ ok: false, message: "Cette entreprise n’existe plus." });
+      expect(withSchool).not.toHaveBeenCalled();
+    });
+
+    it("let a valid entity through", async () => {
+      withSchool.mockResolvedValueOnce({ ok: true, id: ID });
+
+      expect(await actions.changeEntity(ID, entity)).toEqual({ ok: true });
+    });
   });
 
   it("note the lessons a season edit leaves outside its new dates (#270)", async () => {

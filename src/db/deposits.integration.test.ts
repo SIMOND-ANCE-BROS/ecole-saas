@@ -7,6 +7,7 @@ import { formatEuros } from "../lib/money";
 import { exportRowOf } from "../domain/payments/payment-log";
 import { cancelDeposit, createDeposit, paymentLog, readDeposit, listDeposits, paymentsToDeposit } from "./deposits";
 import { overlapping } from "./overlap.integration-helpers";
+import { defaultEntityFor } from "./billing-entity.integration-helpers";
 import { once, storedPayments } from "./submissions";
 import { randomUUID } from "node:crypto";
 
@@ -26,12 +27,15 @@ const director = `rem-direction-${suffix}`;
 const TODAY = "2026-10-21";
 let school: string;
 let otherSchool: string;
+let entity: string;
 const ids: Record<string, string> = {};
 
 beforeAll(async () => {
   [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`ra-${suffix}`}) RETURNING id`;
   [{ id: otherSchool }] =
     await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`rb-${suffix}`}) RETURNING id`;
+  entity = await defaultEntityFor(admin, school);
+  await defaultEntityFor(admin, otherSchool);
   await admin`INSERT INTO "user" (id, name, email) VALUES (${director}, 'Direction Test', ${`${director}@exemple.test`})`;
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${director}, 'director'), (${otherSchool}, ${director}, 'director')`;
   const [p] =
@@ -154,10 +158,10 @@ describe("bank deposits", () => {
 
   it("a payment can belong to only one deposit (database constraint)", async () => {
     const [{ id: other }] =
-      await admin`INSERT INTO bank_deposit (school_id, date, method) VALUES (${school}, ${TODAY}, 'cheque') RETURNING id`;
+      await admin`INSERT INTO bank_deposit (school_id, billing_entity_id, date, method) VALUES (${school}, ${entity}, ${TODAY}, 'cheque') RETURNING id`;
     await expect(
-      admin`INSERT INTO bank_deposit_payment (school_id, bank_deposit_id, payment_id) VALUES (${school}, ${other}, ${ids.cheque})`,
-    ).rejects.toThrow();
+      admin`INSERT INTO bank_deposit_payment (school_id, billing_entity_id, bank_deposit_id, payment_id) VALUES (${school}, ${entity}, ${other}, ${ids.cheque})`,
+    ).rejects.toThrow(/bank_deposit_payment_payment_id_pk/);
     await admin`DELETE FROM bank_deposit WHERE id = ${other}`;
   });
 

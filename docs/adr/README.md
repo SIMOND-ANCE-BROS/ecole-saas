@@ -4,13 +4,15 @@ One file per structural decision, numbered, never rewritten: a decision that
 changes is **superseded** by a new record that links to the old one (and the
 old one gets `Status: Superseded by NNNN`).
 
-| #                                                      | Decision                                                  | Status   |
-| ------------------------------------------------------ | --------------------------------------------------------- | -------- |
-| [0001](0001-multi-school-row-level-security.md)        | Multi-school isolation with PostgreSQL Row Level Security | Accepted |
-| [0002](0002-invoicing-delegated-to-the-school-tool.md) | Invoicing delegated to the school's invoicing tool        | Accepted |
-| [0003](0003-mantine-for-the-interface.md)              | Mantine for every interface control, Tailwind for layout  | Accepted |
-| [0004](0004-english-code-french-interface.md)          | English code and process, French interface                | Accepted |
-| [0005](0005-business-registry-search.md)               | Business registry search, server-side and optional        | Accepted |
+| #                                                      | Decision                                                         | Status             |
+| ------------------------------------------------------ | ---------------------------------------------------------------- | ------------------ |
+| [0001](0001-multi-school-row-level-security.md)        | Multi-school isolation with PostgreSQL Row Level Security        | Accepted           |
+| [0002](0002-invoicing-delegated-to-the-school-tool.md) | Invoicing delegated to the school's invoicing tool               | Superseded by 0006 |
+| [0003](0003-mantine-for-the-interface.md)              | Mantine for every interface control, Tailwind for layout         | Accepted           |
+| [0004](0004-english-code-french-interface.md)          | English code and process, French interface                       | Accepted           |
+| [0005](0005-business-registry-search.md)               | Business registry search, server-side and optional               | Accepted           |
+| [0006](0006-billing-entities-and-vat-per-course.md)    | Invoice through billing entities inside a school, VAT per course | Accepted           |
+| [0007](0007-per-entity-connector-and-outbox.md)        | Send invoices through a per-entity connector and an outbox       | Accepted           |
 
 ## Template
 
