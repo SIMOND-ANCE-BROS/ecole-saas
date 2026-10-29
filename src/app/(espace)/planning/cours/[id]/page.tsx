@@ -27,16 +27,11 @@ import { requireRole } from "@/lib/session";
 import { ages, end, recurrenceText } from "../../format";
 import { ButtonLink } from "@/app/(espace)/_ui/button-link";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
+import { EnrollmentStatusBadge } from "@/app/(espace)/_people/enrollment-status";
 import { PrintButton } from "./print-button";
 import { coursePlanning } from "../../course-planning";
 
 export const metadata: Metadata = { title: "Cours" };
-
-const STATUS = {
-  active: null,
-  trial: { label: "à l’essai", color: "indigo" },
-  waitlist: { label: "en attente", color: "yellow" },
-} as const;
 
 const lessonDate = new Intl.DateTimeFormat("fr-FR", {
   weekday: "short",
@@ -55,7 +50,7 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
       ? {
           course,
           planning: await coursePlanning(tx, course.id),
-          enrolled: await enrolledInCourse(tx, course.id),
+          enrolled: await enrolledInCourse(tx, course.id, todayInParis()),
           lessons: await courseLessons(tx, course.id),
           inConflict: await conflictingLessons(tx, course.id, todayInParis()),
           // Pay data: read for management only, so it never reaches the front desk's page (#191).
@@ -238,7 +233,6 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
               </TableThead>
               <TableTbody>
                 {enrolled.map((i) => {
-                  const status = STATUS[i.status];
                   const age = i.birthDate ? ageAt(i.birthDate, today) : null;
                   const outsideBand =
                     age !== null &&
@@ -250,10 +244,10 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
                         <TextLink href={`/eleves/${i.studentId}`} inherit>
                           {i.firstName} {i.name}
                         </TextLink>
-                        {status && (
-                          <Badge color={status.color} variant="light" ml="xs">
-                            {status.label}
-                          </Badge>
+                        {i.status !== "active" && (
+                          <span className="ml-2">
+                            <EnrollmentStatusBadge status={i.status} droppedOn={i.droppedOn} />
+                          </span>
                         )}
                       </TableTd>
                       <TableTd

@@ -17,11 +17,11 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import type { Preview } from "@/db/enrollments";
 import type { ScheduleCourse } from "@/db/schedule";
 import { overlaps } from "@/domain/schedule/overlap";
-import { formatEuros } from "@/lib/money";
 import { deferredQuery } from "@/lib/deferred-query";
 import { preview, enroll, type FormInput } from "./actions";
 import { orConnectionLost } from "@/lib/action-result";
 import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
+import { DiscountImpacts, PriceDetail } from "@/app/(espace)/_people/price-detail";
 
 const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const AUDIENCES = [
@@ -387,45 +387,8 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
             {next.error.message}
           </Text>
         )}
-        {next?.status === "ok" && (
-          <dl className="flex flex-col gap-1">
-            <div className="flex justify-between gap-2">
-              <dt>Forfait {next.packageLabel}</dt>
-              <dd className="tabular-nums">{formatEuros(next.grossPriceCents)}</dd>
-            </div>
-            {next.discounts.map((r) => (
-              <Text component="div" size="sm" key={r.code} c={r.status === "rejected" ? "dimmed" : undefined}>
-                <div className="flex justify-between gap-2">
-                  <dt>
-                    Réduction {r.code}
-                    {r.status === "rejected" ? " (écartée)" : ""}
-                  </dt>
-                  <dd className="tabular-nums">{r.status === "applied" ? `−${formatEuros(r.amountCents)}` : "—"}</dd>
-                </div>
-                <Text size="xs">{r.reason}</Text>
-              </Text>
-            ))}
-            <Text
-              component="div"
-              size="md"
-              fw={600}
-              className="mt-2 flex justify-between gap-2 border-t border-bordure pt-3"
-            >
-              <dt>Total</dt>
-              <dd className="tabular-nums">{formatEuros(next.netPriceCents)}</dd>
-            </Text>
-          </dl>
-        )}
-        {result?.status === "ok" &&
-          result.existingImpacts.map((a) => (
-            <Alert key={a.reference} color="yellow" p="xs">
-              <Text size="xs">
-                L’inscription déjà enregistrée de {a.students} aurait une remise de{" "}
-                {formatEuros(a.recalculatedDiscount)} au lieu de {formatEuros(a.savedDeposit)} : à régulariser par un
-                avoir si l’école le décide.
-              </Text>
-            </Alert>
-          ))}
+        {next?.status === "ok" && <PriceDetail price={next} />}
+        {result?.status === "ok" && <DiscountImpacts impacts={result.existingImpacts} />}
         {refusal && (
           <Text role="alert" size="sm" c="red">
             {refusal}

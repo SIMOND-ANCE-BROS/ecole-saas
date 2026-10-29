@@ -12,12 +12,16 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import type { PaidEnrollment } from "@/db/enrollments";
+import type { SeasonEnrollment } from "@/db/enrollments";
 import type { PersonRecord } from "@/db/people";
+import type { Season } from "@/db/schedule";
 import { ENROLLMENT_STATUS_LABELS as STATUT } from "@/domain/enrollment/statuses";
+import { DUE_STATUSES } from "@/domain/payments/balance";
 import { formatEuros } from "@/lib/money";
 import { DAYS } from "../planning/format";
 import { TextLink } from "../_ui/text-link";
+import { EnrollmentChanges } from "./enrollment-change";
+import { ENROLLMENTS_HEADING, EnrollmentStatusBadge } from "./enrollment-status";
 
 /** Sections shared by the student and contact records. */
 
@@ -92,15 +96,15 @@ export function FollowedCourses({ courses }: { courses: PersonRecord["courses"] 
                     présent {c.presents} fois sur {c.presents + c.absents}
                   </Text>
                 )}
-                <Text
-                  span
-                  size="xs"
-                  ml="auto"
-                  c={c.status === "active" ? "dimmed" : WARNING}
-                  fw={c.status === "active" ? undefined : 500}
-                >
-                  {STATUT[c.status]}
-                </Text>
+                <span className="ml-auto">
+                  {c.status === "active" ? (
+                    <Text span size="xs" c="dimmed">
+                      {STATUT.active}
+                    </Text>
+                  ) : (
+                    <EnrollmentStatusBadge status={c.status} droppedOn={c.droppedOn} />
+                  )}
+                </span>
               </li>
             ))}
           </Paper>
@@ -158,14 +162,30 @@ export function Documents({ documents, today }: { documents: PersonRecord["docum
   );
 }
 
-/** Enrollments invoiced to a person: a commitment, not a payment. */
-export function BilledEnrollments({ enrollments, season }: { enrollments: PaidEnrollment[]; season: string }) {
+/**
+ * Enrollments of the season (#284): every status, each with what the front desk can do
+ * (confirm, drop-out, cancel). The total is what is owed (`DUE_STATUSES`, #99): a
+ * commitment, not a payment; trial, waitlist and drop-outs are shown apart.
+ */
+export function Enrollments({
+  enrollments,
+  season,
+  today,
+  title = "Inscriptions",
+}: {
+  enrollments: SeasonEnrollment[];
+  season: Season;
+  today: string;
+  title?: string;
+}) {
   if (enrollments.length === 0) return null;
-  const total = enrollments.reduce((s, i) => s + i.netPriceCents, 0);
+  const due = enrollments.filter((i) => DUE_STATUSES.includes(i.status));
+  const total = due.reduce((s, i) => s + i.netPriceCents, 0);
+  const apart = enrollments.length - due.length;
   return (
-    <section aria-labelledby="facturees" className="flex flex-col gap-2">
-      <Title order={2} size="h5" id="facturees">
-        Inscriptions facturées {season}
+    <section aria-labelledby={ENROLLMENTS_HEADING} className="flex flex-col gap-2">
+      <Title order={2} size="h5" id={ENROLLMENTS_HEADING} tabIndex={-1}>
+        {title} {season.label}
       </Title>
       <Paper withBorder className="overflow-x-auto">
         <Table>
@@ -179,21 +199,39 @@ export function BilledEnrollments({ enrollments, season }: { enrollments: PaidEn
               <TableTh scope="col" ta="right">
                 Prix
               </TableTh>
+              <TableTh scope="col">
+                <span className="sr-only">Actions</span>
+              </TableTh>
             </TableTr>
           </TableThead>
           <TableTbody>
-            {enrollments.map((i) => (
-              <TableTr key={i.id}>
-                <TableTd fw={500}>{i.students}</TableTd>
-                <TableTd>{i.courses.join(", ")}</TableTd>
-                <TableTd className="hidden sm:table-cell">
-                  {PUBLIC[i.audience]}, {PERIOD[i.period]}
-                </TableTd>
-                <TableTd ta="right" className="tabular-nums">
-                  {formatEuros(i.netPriceCents)}
-                </TableTd>
-              </TableTr>
-            ))}
+            {enrollments.map((i) => {
+              const owed = DUE_STATUSES.includes(i.status);
+              return (
+                <TableTr key={i.id}>
+                  <TableTd fw={500}>
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      {i.students}
+                      <EnrollmentStatusBadge status={i.status} droppedOn={i.droppedOn} />
+                    </span>
+                  </TableTd>
+                  <TableTd>{i.courses.join(", ")}</TableTd>
+                  <TableTd className="hidden sm:table-cell">
+                    {PUBLIC[i.audience]}, {PERIOD[i.period]}
+                  </TableTd>
+                  <TableTd ta="right" className="tabular-nums" c={owed ? undefined : "dimmed"}>
+                    {formatEuros(i.netPriceCents)}
+                  </TableTd>
+                  <TableTd>
+                    <EnrollmentChanges
+                      enrollment={i}
+                      today={today}
+                      season={{ startDate: season.startDate, endDate: season.endDate }}
+                    />
+                  </TableTd>
+                </TableTr>
+              );
+            })}
           </TableTbody>
           <TableTfoot>
             <TableTr>
@@ -206,10 +244,16 @@ export function BilledEnrollments({ enrollments, season }: { enrollments: PaidEn
               <TableTd ta="right" fw={600} className="tabular-nums">
                 {formatEuros(total)}
               </TableTd>
+              <TableTd />
             </TableTr>
           </TableTfoot>
         </Table>
       </Paper>
+      {apart > 0 && (
+        <Text size="xs" c="dimmed">
+          Les inscriptions à l’essai, en attente ou abandonnées ne sont pas comptées dans le total.
+        </Text>
+      )}
     </section>
   );
 }

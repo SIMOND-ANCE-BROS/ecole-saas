@@ -267,6 +267,13 @@
       "when": 1793274551801,
       "tag": "0037_payment_reversal_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1793282824773,
+      "tag": "0038_enrollment_dropped_on",
+      "breakpoints": true
     }
   ]
 }

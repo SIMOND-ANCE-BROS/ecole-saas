@@ -716,6 +716,9 @@ export const enrollment = pgTable(
     period: period("period").notNull(),
     status: enrollmentStatus("status").notNull().default("active"),
     enrolledOn: date("enrolled_on").notNull().defaultNow(),
+    // Day of the drop-out (#284): the student stays on attendance sheets up to this day included.
+    // Only on a dropped enrollment; NULL on a drop-out written before #284.
+    droppedOn: date("dropped_on"),
     grossPriceCents: integer("gross_price_cents").notNull(),
     discountCents: integer("discount_cents").notNull().default(0),
     netPriceCents: integer("net_price_cents").generatedAlwaysAs(sql`gross_price_cents - discount_cents`),
@@ -726,6 +729,7 @@ export const enrollment = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("enrollment_dropped_on", sql`${t.droppedOn} IS NULL OR ${t.status} = 'dropped'`),
     index().on(t.payerId, t.seasonId),
     sameSchoolTarget(t),
     sameSchool(t, t.payerId, person),
