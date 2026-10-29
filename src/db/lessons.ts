@@ -277,7 +277,9 @@ export async function syncLessons(
     .where(eq(season.id, seasonId))
     .for("no key update");
   if (!s) return { added: 0, removed: 0, keptForPack: 0 };
-  const start = [s.start, today, since ?? ""].reduce((a, b) => (b > a ? b : a));
+  // Not bounded by the season's start: a season starting later than before (#270) leaves upcoming
+  // lessons before its new start, to be removed like any other no longer expected.
+  const start = [today, since ?? ""].reduce((a, b) => (b > a ? b : a));
   const closures = await readClosures(tx, eq(closure.seasonId, seasonId));
   const allCourses = await tx
     .select({

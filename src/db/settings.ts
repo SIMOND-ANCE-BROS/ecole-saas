@@ -3,7 +3,8 @@ import { columnsOf, rowsOf } from "./columns-of";
 import { z } from "zod";
 import type { Hours } from "../domain/schedule/hours";
 import type { Tx } from "./index";
-import { closure, course, discipline, siteHours, season, room, site } from "./schema";
+import { closure, course, discipline, lesson, siteHours, season, room, site } from "./schema";
+import { syncLessons } from "./lessons";
 import { frenchDate } from "../lib/dates";
 import { issuePath } from "../lib/form-errors";
 
@@ -158,7 +159,20 @@ async function closuresOutside(tx: Tx, seasonId: string, s: z.output<typeof vali
     : `Ces fermetures sortiraient de la saison : ${names}. Supprimez-les dans Planning › Fermetures, puis recréez-les avec les bonnes dates.`;
 }
 
-export async function updateSeason(tx: Tx, id: string, entry: z.input<typeof validSeasonInput>): Promise<Result> {
+/**
+ * New label or dates of a season. The season's upcoming lessons follow the
+ * new dates in the same transaction (#270): lessons are created for added
+ * weeks, planned ones outside the dates removed, under the rules of
+ * `syncLessons` (attendance taken, lesson pack counted: kept). `outside`
+ * counts the lessons, not cancelled, still dated outside the new dates
+ * afterwards, for the director to move or cancel them.
+ */
+export async function updateSeason(
+  tx: Tx,
+  id: string,
+  entry: z.input<typeof validSeasonInput>,
+  today: string,
+): Promise<{ ok: true; id: string; outside: number } | { ok: false; message: string }> {
   const s = validSeasonInput.safeParse(entry);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   if (!isUuid(id)) return { ok: false, message: "Cette saison n’existe plus." };
@@ -173,7 +187,21 @@ export async function updateSeason(tx: Tx, id: string, entry: z.input<typeof val
     .set(columnsOf(season, seasonRow(s.data)))
     .where(eq(season.id, id))
     .returning({ id: season.id });
-  return rows.length === 1 ? { ok: true, id } : { ok: false, message: "Cette saison n’existe plus." };
+  if (rows.length !== 1) return { ok: false, message: "Cette saison n’existe plus." };
+  // Same transaction: the FOR NO KEY UPDATE syncLessons() takes is covered by the FOR UPDATE held above.
+  await syncLessons(tx, id, today);
+  const [{ outside }] = await tx
+    .select({ outside: sql<number>`count(*)::int` })
+    .from(lesson)
+    .innerJoin(course, eq(course.id, lesson.courseId))
+    .where(
+      and(
+        eq(course.seasonId, id),
+        ne(lesson.status, "cancelled"),
+        or(sql`${lesson.date} < ${s.data.startDate}`, sql`${lesson.date} > ${s.data.endDate}`),
+      ),
+    );
+  return { ok: true, id, outside };
 }
 
 // ---------------------------------------------------------------------------

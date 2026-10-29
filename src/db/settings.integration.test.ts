@@ -33,6 +33,7 @@ let season2026: string;
 let jazz: string;
 let center: string;
 let studio: string;
+const TODAY = "2026-08-01";
 
 beforeAll(async () => {
   [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`pa-${suffix}`}) RETURNING id`;
@@ -122,13 +123,13 @@ describe("seasons", () => {
 
   it("updates a season's dates without overlapping the other one", async () => {
     const entry = { label: "2026-2027", startDate: "2026-08-25", endDate: "2027-07-05" };
-    expect((await withSchool(school, (tx) => updateSeason(tx, season2026, entry))).ok).toBe(true);
-    expect(await withSchool(school, (tx) => updateSeason(tx, season2026, { ...entry, endDate: "2027-09-15" }))).toEqual(
-      {
-        ok: false,
-        message: "Ces dates chevauchent la saison 2027-2028.",
-      },
-    );
+    expect((await withSchool(school, (tx) => updateSeason(tx, season2026, entry, TODAY))).ok).toBe(true);
+    expect(
+      await withSchool(school, (tx) => updateSeason(tx, season2026, { ...entry, endDate: "2027-09-15" }, TODAY)),
+    ).toEqual({
+      ok: false,
+      message: "Ces dates chevauchent la saison 2027-2028.",
+    });
   });
 
   it("refuses new dates that would leave closures outside the season, naming them (#194)", async () => {
@@ -138,7 +139,7 @@ describe("seasons", () => {
       (${school}, ${season2026}, 'Zz Noël', '2026-12-19', '2027-01-04'),
       (${school}, ${season2026}, 'Zz Gala', '2027-06-28', '2027-07-05')`;
     const edit = (startDate: string, endDate: string) =>
-      withSchool(school, (tx) => updateSeason(tx, season2026, { label: "2026-2027", startDate, endDate }));
+      withSchool(school, (tx) => updateSeason(tx, season2026, { label: "2026-2027", startDate, endDate }, TODAY));
     const dates = async () =>
       (await admin`SELECT start_date::text AS s, end_date::text AS e FROM season WHERE id = ${season2026}`)[0];
 
@@ -181,7 +182,7 @@ describe("seasons", () => {
     });
     await isAdded;
     const b = withSchool(school, (tx) =>
-      updateSeason(tx, season2026, { label: "2026-2027", startDate: "2026-08-20", endDate: "2027-06-29" }),
+      updateSeason(tx, season2026, { label: "2026-2027", startDate: "2026-08-20", endDate: "2027-06-29" }, TODAY),
     );
     // Without the lock, B would not see A's uncommitted closure and would go through.
     await new Promise((r) => setTimeout(r, 300));

@@ -100,4 +100,20 @@ describe("settings actions", () => {
 
     expect(await actions.newDiscipline("Jazz")).toEqual({ ok: false, message: "Cette discipline existe déjà." });
   });
+
+  it("note the lessons a season edit leaves outside its new dates (#270)", async () => {
+    const entry = { label: "2027-2028", startDate: "2027-09-01", endDate: "2028-06-30" };
+    withSchool.mockResolvedValueOnce({ ok: true, id: ID, outside: 0 });
+    expect(await actions.changeSeason(ID, entry)).toEqual({ ok: true, note: null });
+
+    withSchool.mockResolvedValueOnce({ ok: true, id: ID, outside: 1 });
+    expect(await actions.changeSeason(ID, entry)).toEqual({
+      ok: true,
+      note: "1 séance reste en dehors des nouvelles dates (présences relevées, carnet ou séance passée) : déplacez-la ou annulez-la dans le planning si besoin.",
+    });
+
+    withSchool.mockResolvedValueOnce({ ok: true, id: ID, outside: 3 });
+    const r = await actions.changeSeason(ID, entry);
+    expect(r.ok && r.note).toMatch(/^3 séances restent en dehors des nouvelles dates/);
+  });
 });
