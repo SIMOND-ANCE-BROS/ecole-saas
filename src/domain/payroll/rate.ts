@@ -51,6 +51,39 @@ export function effectiveRate(course: RatedCourse, instructor: RatedInstructor):
 }
 
 /**
+ * Unit of the rate a course keeps after a save (#268); the server decides it,
+ * never trusting the form to know the instructor's current pay mode.
+ * - no rate: none;
+ * - the stored rate kept (not sent): its own unit;
+ * - an amount sent in the unit the form showed (`shownUnit`):
+ *   - the current pay mode: that one, even for the stored amount (converted
+ *     on purpose);
+ *   - an older pay mode: kept only for the stored amount in that same unit
+ *     (an untouched rate sent back); any other amount was typed in a unit the
+ *     instructor is no longer paid in (a stale form): refused (null);
+ *   - not said: the current pay mode, except for the stored amount of the same
+ *     instructor in another unit, which keeps its own.
+ */
+export function rateUnitAfterSave(save: {
+  /** Rate kept by `rateAfterUpdate` (or the one typed for a new course). */
+  cents: number | null;
+  sent: number | null | undefined;
+  shownUnit: PayMode | undefined;
+  stored: { cents: number; payMode: PayMode } | null;
+  sameInstructor: boolean;
+  /** The instructor's current pay mode. */
+  payMode: PayMode;
+}): { unit: PayMode | null } | null {
+  const { cents, sent, shownUnit, stored, sameInstructor, payMode } = save;
+  if (cents === null) return { unit: null };
+  if (sent === undefined) return { unit: sameInstructor && stored ? stored.payMode : payMode };
+  const resent = sameInstructor && stored !== null && stored.cents === sent ? stored : null;
+  if (shownUnit === payMode) return { unit: payMode };
+  if (shownUnit === undefined) return { unit: resent ? resent.payMode : payMode };
+  return resent && resent.payMode === shownUnit ? { unit: resent.payMode } : null;
+}
+
+/**
  * Rate the course keeps after an update (#191). A rate belongs to the
  * instructor it was typed for (`typedFor`):
  * - not sent (field not offered): the stored rate with the same instructor,

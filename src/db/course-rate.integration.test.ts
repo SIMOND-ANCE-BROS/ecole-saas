@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   courseOwnRate,
   courseRate,
+  courseRateState,
   coursePay,
   coursesWithOwnRate,
   createCourse,
@@ -166,6 +167,12 @@ describe("instructor rate per course (#191)", () => {
     // A monthly flat instructor: nothing sent, the previous instructor's rate is dropped.
     await move(flat, undefined);
     expect(await withSchool(school, (tx) => courseRate(tx, id))).toBeNull();
+    // Another hourly instructor, nothing sent: neither amount nor unit is left (#268).
+    await move(hourly, 4200, hourly);
+    await move(other, undefined);
+    const [row] = await admin`SELECT instructor_rate_cents AS cents, instructor_rate_pay_mode AS unit
+      FROM course WHERE id = ${id}`;
+    expect({ ...row }).toEqual({ cents: null, unit: null });
   });
 
   it("refuses to change an instructor's pay mode while courses carry their own rate", async () => {
@@ -256,21 +263,47 @@ describe("instructor rate per course (#191)", () => {
     expect(listed.map((c) => [c.rateCents, c.ratePayMode])).toEqual([[4000, "hourly"]]);
     expect((await withSchool(school, (tx) => coursePay(tx, old))).rate).toEqual({ cents: 4000, payMode: "hourly" });
 
-    // Saved again without the rate sent (left untouched in the form): kept in its own unit.
-    const resave = (instructorRate: number | null | undefined) =>
-      withSchool(school, (tx) =>
-        updateCourse(tx, old, {
+    // Saved again as the action does it (rate, then audit entry when it changed).
+    const resave = (instructorRate: number | null | undefined, instructorRateUnit?: InstructorInput["payMode"]) =>
+      withSchool(school, async (tx) => {
+        const before = await courseRateState(tx, old);
+        const r = await updateCourse(tx, old, {
           ...base,
           instructorId: teacher,
           weekday: 3,
           instructorRate,
           instructorRateFor: teacher,
-        }),
-      );
+          instructorRateUnit,
+        });
+        const after = r.ok ? await courseRateState(tx, old) : null;
+        if (after) await logCourseRate(tx, director, old, before, after);
+        return r;
+      });
+    const audited = async () =>
+      (await admin`SELECT count(*)::int AS n FROM audit_log WHERE row_id = ${old}`)[0].n as number;
+    const hourlyKept = { cents: 4000, payMode: "hourly" };
+    // Left untouched in the form (not sent), or sent back by a stale form, with or without its unit:
+    // kept in its own unit, and no audit entry since nothing changed.
     expect(await resave(undefined)).toMatchObject({ ok: true, instructorRateCents: 4000 });
-    expect(await withSchool(school, (tx) => courseRate(tx, old))).toEqual({ cents: 4000, payMode: "hourly" });
+    expect(await withSchool(school, (tx) => courseRate(tx, old))).toEqual(hourlyKept);
+    expect(await resave(4000)).toMatchObject({ ok: true });
+    expect(await withSchool(school, (tx) => courseRate(tx, old))).toEqual(hourlyKept);
+    expect(await resave(4000, "hourly")).toMatchObject({ ok: true });
+    expect(await withSchool(school, (tx) => courseRate(tx, old))).toEqual(hourlyKept);
+    expect(await audited()).toBe(0);
+    // Another amount typed in the old unit (a form opened before the change): refused.
+    expect(await resave(4100, "hourly")).toEqual({
+      ok: false,
+      message:
+        "Le mode de rémunération de cet intervenant a changé : rechargez la page pour saisir le tarif dans la bonne unité.",
+    });
+    expect(await withSchool(school, (tx) => courseRate(tx, old))).toEqual(hourlyKept);
+    // The same amount converted on purpose: now per lesson, and logged.
+    await resave(4000, "per_lesson");
+    expect(await withSchool(school, (tx) => courseRate(tx, old))).toEqual({ cents: 4000, payMode: "per_lesson" });
+    expect(await audited()).toBe(1);
     // A new amount is typed in the current pay mode.
-    await resave(4200);
+    await resave(4200, "per_lesson");
     expect(await withSchool(school, (tx) => courseOwnRate(tx, old))).toEqual({
       cents: 4200,
       payMode: "per_lesson",

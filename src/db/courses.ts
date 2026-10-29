@@ -18,7 +18,13 @@ import {
   season,
   site,
 } from "./schema";
-import { courseRateAllowed, rateAfterUpdate, rateInCurrentUnit, type PayMode } from "../domain/payroll/rate";
+import {
+  courseRateAllowed,
+  rateAfterUpdate,
+  rateInCurrentUnit,
+  rateUnitAfterSave,
+  type PayMode,
+} from "../domain/payroll/rate";
 import { issuePath } from "../lib/form-errors";
 import { has } from "../lib/has";
 import { parseEuros } from "../lib/money";
@@ -104,6 +110,8 @@ const courseFields = z.object({
   instructorRate: euroRateOrNull,
   /** Instructor the rate was typed for: a rate left over from another instructor is not kept (#191). */
   instructorRateFor: z.uuid().optional(),
+  /** Unit the form showed for that rate (#268): the server refuses an amount typed in a pay mode no longer current. */
+  instructorRateUnit: z.enum(["hourly", "per_lesson", "monthly_flat"]).optional(),
 });
 
 export const validCourseInput = courseFields
@@ -316,12 +324,28 @@ async function values(tx: Tx, entry: CourseInput, guard?: string) {
   };
 }
 
+/** An amount typed in a unit the instructor is no longer paid in (a form opened before a pay mode change, #268). */
+const STALE_UNIT = {
+  ok: false as const,
+  message:
+    "Le mode de rémunération de cet intervenant a changé : rechargez la page pour saisir le tarif dans la bonne unité.",
+};
+
 export async function createCourse(tx: Tx, seasonId: string, entry: CourseInput): Promise<SaveResult> {
   const r = await values(tx, entry);
   if (!r.ok) return r;
   const instructorRateCents = entry.instructorRate ?? null;
   // A rate is typed in the instructor's current pay mode (#268).
-  const instructorRatePayMode = instructorRateCents === null ? null : r.payMode;
+  const unit = rateUnitAfterSave({
+    cents: instructorRateCents,
+    sent: entry.instructorRate,
+    shownUnit: entry.instructorRateUnit,
+    stored: null,
+    sameInstructor: false,
+    payMode: r.payMode,
+  });
+  if (!unit) return STALE_UNIT;
+  const instructorRatePayMode = unit.unit;
   const [{ id }] = await tx
     .insert(course)
     .values(
@@ -362,10 +386,17 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
     oldInstructor: existing.instructorId,
     newInstructor: r.values.instructorId,
   });
-  // Unit (#268): a stored rate kept as it is (not sent) keeps its own, even an older pay
-  // mode's; a rate sent is typed in the instructor's current pay mode.
-  const instructorRatePayMode =
-    instructorRateCents === null ? null : entry.instructorRate === undefined && stored ? stored.payMode : r.payMode;
+  // Unit (#268), decided here: an older pay mode's rate sent back untouched keeps its own.
+  const unit = rateUnitAfterSave({
+    cents: instructorRateCents,
+    sent: entry.instructorRate,
+    shownUnit: entry.instructorRateUnit,
+    stored,
+    sameInstructor: existing.instructorId === r.values.instructorId,
+    payMode: r.payMode,
+  });
+  if (!unit) return STALE_UNIT;
+  const instructorRatePayMode = unit.unit;
   await tx
     .update(course)
     .set(columnsOf(course, { ...r.values, instructorRateCents, instructorRatePayMode }))

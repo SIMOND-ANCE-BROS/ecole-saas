@@ -4,6 +4,7 @@ import {
   effectiveRate,
   rateAfterUpdate,
   rateInCurrentUnit,
+  rateUnitAfterSave,
   seasonBlocksPayModeChange,
   type PayMode,
   type RatedInstructor,
@@ -76,6 +77,57 @@ describe("rateInCurrentUnit (#268)", () => {
   it("never holds for a monthly flat instructor (#192)", () => {
     expect(rateInCurrentUnit("monthly_flat", "monthly_flat")).toBe(false);
     expect(rateInCurrentUnit("hourly", "monthly_flat")).toBe(false);
+  });
+});
+
+describe("rateUnitAfterSave (#268)", () => {
+  const hourlyRate = { cents: 4550, payMode: "hourly" as const };
+  /** Instructor now paid by the lesson; the course stores 45,50 € per hour. */
+  const save = (
+    sent: number | null | undefined,
+    shownUnit: PayMode | undefined,
+    { cents = sent ?? (sent === undefined ? 4550 : null), sameInstructor = true, stored = hourlyRate } = {},
+  ) => rateUnitAfterSave({ cents, sent, shownUnit, stored, sameInstructor, payMode: "per_lesson" });
+
+  it("no rate: no unit", () => {
+    expect(save(null, "per_lesson")).toEqual({ unit: null });
+  });
+
+  it("the stored rate kept, not sent: its own unit", () => {
+    expect(save(undefined, undefined)).toEqual({ unit: "hourly" });
+  });
+
+  it("the stored amount sent back in its old unit: keeps it", () => {
+    expect(save(4550, "hourly")).toEqual({ unit: "hourly" });
+  });
+
+  it("the stored amount sent without a unit (a stale form): keeps its own unit", () => {
+    expect(save(4550, undefined)).toEqual({ unit: "hourly" });
+  });
+
+  it("the stored amount converted on purpose to the current unit: the current one", () => {
+    expect(save(4550, "per_lesson")).toEqual({ unit: "per_lesson" });
+  });
+
+  it("another amount: the current unit, refused when typed in the old one", () => {
+    expect(save(4000, "per_lesson")).toEqual({ unit: "per_lesson" });
+    expect(save(4000, undefined)).toEqual({ unit: "per_lesson" });
+    expect(save(4000, "hourly")).toBeNull();
+  });
+
+  it("another instructor or a new course: the current unit, never the stored one", () => {
+    expect(save(4550, undefined, { sameInstructor: false })).toEqual({ unit: "per_lesson" });
+    expect(save(4550, "hourly", { sameInstructor: false })).toBeNull();
+    expect(
+      rateUnitAfterSave({
+        cents: 4550,
+        sent: 4550,
+        shownUnit: "per_lesson",
+        stored: null,
+        sameInstructor: false,
+        payMode: "per_lesson",
+      }),
+    ).toEqual({ unit: "per_lesson" });
   });
 });
 

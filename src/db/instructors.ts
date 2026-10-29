@@ -21,7 +21,7 @@ export const PAY_MODES = {
   monthly_flat: "forfait mensuel",
 } as const;
 /** Rate unit according to the pay mode. */
-export const PAY_UNITS = { hourly: "heure", per_lesson: "séance", monthly_flat: "mois" } as const;
+export { PAY_UNITS } from "../domain/payroll/rate-field";
 
 const keys = <T extends object>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
 

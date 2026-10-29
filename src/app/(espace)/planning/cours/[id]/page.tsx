@@ -21,8 +21,7 @@ import { scheduleCourse, enrolledInCourse } from "@/db/schedule";
 import { conflictingLessons } from "@/db/unavailabilities";
 import { courseLessons } from "@/db/lessons";
 import { courseOwnRate } from "@/db/courses";
-import { PAY_UNITS } from "@/db/instructors";
-import { formatEuros } from "@/lib/money";
+import { courseRateLabel } from "@/domain/payroll/rate-field";
 import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { ages, end, recurrenceText } from "../../format";
@@ -128,8 +127,12 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
             {course.instructor}
             {parsed.ownRate && (
               <Text size="xs" c="dimmed" className="tabular-nums print:hidden">
-                Tarif intervenant : {formatEuros(parsed.ownRate.cents)} / {PAY_UNITS[parsed.ownRate.payMode]}{" "}
-                {parsed.ownRate.current ? "(propre à ce cours)" : "(tarif de l’ancien mode de rémunération)"}
+                Tarif intervenant : {courseRateLabel(parsed.ownRate)}
+                {parsed.ownRate.payMode === "monthly_flat"
+                  ? ""
+                  : parsed.ownRate.current
+                    ? " (propre à ce cours)"
+                    : " (tarif de l’ancien mode de rémunération)"}
               </Text>
             )}
           </dd>

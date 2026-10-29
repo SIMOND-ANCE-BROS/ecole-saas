@@ -15,9 +15,8 @@ import {
 import { withSchool } from "@/db";
 import { chosenSeason, currentSeason, schoolSeasons } from "@/db/schedule";
 import { seasonCopyPlan, type CourseToCopy } from "@/db/season-copy";
-import { PAY_UNITS } from "@/db/instructors";
+import { courseRateLabel } from "@/domain/payroll/rate-field";
 import { DAY_NAMES } from "@/domain/schedule/days";
-import { formatEuros } from "@/lib/money";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { ButtonLink } from "../../_ui/button-link";
@@ -179,7 +178,11 @@ export default async function CopyPage({ searchParams }: PageProps<"/planning/co
                         {c.instructor}
                         {copy.plan.check.inactiveInstructor.includes(c) && <Flag>inactif</Flag>}
                         {c.oldUnitRate && (
-                          <Flag>{`tarif de ${formatEuros(c.oldUnitRate.cents)} / ${PAY_UNITS[c.oldUnitRate.payMode]} non repris`}</Flag>
+                          <Flag>
+                            {c.oldUnitRate.payMode === "monthly_flat"
+                              ? "tarif non utilisé (forfait mensuel) non repris"
+                              : `tarif de ${courseRateLabel(c.oldUnitRate)} non repris`}
+                          </Flag>
                         )}
                       </TableTd>
                     </TableTr>
