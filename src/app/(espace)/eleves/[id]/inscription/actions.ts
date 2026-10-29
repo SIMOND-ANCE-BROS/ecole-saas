@@ -5,6 +5,7 @@ import { z } from "zod";
 import { withSchool } from "@/db";
 import { type Preview, enrollmentPreview, saveEnrollment } from "@/db/enrollments";
 import { currentSeason } from "@/db/schedule";
+import { once, storedEnrollment } from "@/db/submissions";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 
@@ -33,16 +34,21 @@ export async function preview(entry: FormInput): Promise<Preview> {
   });
 }
 
-/** Saves the enrollment; when refused, returns the message to display. */
-export async function enroll(entry: FormInput): Promise<{ message: string }> {
+/**
+ * Saves the enrollment; when refused, returns the message to display. `key` is
+ * generated once by the form: a retry after a lost response enrolls nothing twice (#260).
+ */
+export async function enroll(entry: FormInput, key: string): Promise<{ message: string }> {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
   const parsed = validInput.safeParse(entry);
-  if (!parsed.success) return { message: "Saisie invalide." };
+  if (!parsed.success || !z.uuid().safeParse(key).success) return { message: "Saisie invalide." };
   const { payerId: payerId, ...rest } = parsed.data;
   const result = await withSchool(schoolId, async (tx) => {
     const season = await currentSeason(tx, todayInParis());
     if (!season) return { ok: false as const, message: NO_SEASON_MESSAGE };
-    return saveEnrollment(tx, payerId, season.id, rest);
+    return once(tx, "enrollment", key, parsed.data, storedEnrollment, () =>
+      saveEnrollment(tx, payerId, season.id, rest),
+    );
   });
   if (!result.ok) return { message: result.message };
   redirect(`/eleves/${rest.studentIds[0]}?inscription=enregistree`);

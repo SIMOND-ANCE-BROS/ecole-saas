@@ -61,6 +61,9 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
   const [calculationAttempt, setCalculationAttempt] = useState(0);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [sending, startSend] = useTransition();
+  // Same key for every attempt of this enrollment: a retry after a lost response enrolls nothing twice (#260).
+  // A success leaves the form, so a new enrollment always gets a new key.
+  const [key] = useState(() => crypto.randomUUID());
 
   const entry: FormInput = useMemo(
     () => ({
@@ -120,7 +123,7 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
           setRefusal(
             (
               await orConnectionLost(
-                () => enroll(entry),
+                () => enroll(entry, key),
                 (message) => ({ message }),
               )
             ).message,
@@ -432,6 +435,7 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
           message={refusal}
           href={`/eleves/${studentIds[0] ?? ""}`}
           label="Voir les inscriptions de l’élève"
+          safeRetry
         />
         <Button type="submit" disabled={!canSave} loading={sending}>
           Enregistrer l’inscription

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { withSchool } from "@/db";
 import { correctPayment, collect } from "@/db/payments";
+import { once, storedPayments } from "@/db/submissions";
 import { todayInParis } from "@/domain/people/age";
 import { type ActionResult, actionResult } from "@/lib/action-result";
 import { topErrorsOf } from "@/lib/form-errors";
@@ -14,10 +15,22 @@ import { requireRole } from "@/lib/session";
 const safeReturnPath = (r: unknown) =>
   typeof r === "string" && /^\/(eleves|contacts)\/[0-9a-f-]{36}$/.test(r) ? r : null;
 
-/** Records one or more payments (front desk and management), then returns to the payer's record. */
-export async function collectPayments(payerId: string, entry: unknown, back: unknown): Promise<{ message: string }> {
+/**
+ * Records one or more payments (front desk and management), then returns to
+ * the payer's record. `key` is generated once by the form: a retry after a lost
+ * response records nothing new (#260).
+ */
+export async function collectPayments(
+  payerId: string,
+  entry: unknown,
+  back: unknown,
+  key: string,
+): Promise<{ message: string }> {
   const { schoolId: schoolId, userId } = await requireRole("director", "front_desk");
-  const r = await withSchool(schoolId, (tx) => collect(tx, userId, payerId, entry as never));
+  if (!z.uuid().safeParse(key).success) return { message: "Saisie invalide." };
+  const r = await withSchool(schoolId, (tx) =>
+    once(tx, "payment", key, { payerId, entry }, storedPayments, () => collect(tx, userId, payerId, entry as never)),
+  );
   if (!r.ok) return { message: r.message };
   revalidatePath("/encaissements");
   redirect(`${safeReturnPath(back) ?? `/personnes/${payerId}`}?encaisse=${r.ids.length}`);

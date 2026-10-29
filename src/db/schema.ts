@@ -568,6 +568,31 @@ export const suspendedLesson = pgTable(
   ],
 );
 
+/**
+ * One row per form submission that creates records (payment, enrollment,
+ * course), keyed by an id the browser generates once (#260): a retry after a
+ * lost response finds the row and gets the first result back instead of
+ * creating a duplicate. Rows can be purged after a few days.
+ */
+export const submission = pgTable(
+  "submission",
+  {
+    schoolId: schoolIdColumn(),
+    key: uuid("key").notNull(),
+    kind: text("kind").notNull(),
+    // Fingerprint of what was sent: the same key with other values is refused, not replayed.
+    requestHash: text("request_hash").notNull(),
+    // Technical ids only (created records, planning link), never personal data.
+    result: jsonb("result"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.schoolId, t.key] }),
+    check("submission_kind", sql`${t.kind} IN ('payment', 'enrollment', 'course')`),
+    check("submission_request_hash", sql`length(${t.requestHash}) = 64`),
+  ],
+);
+
 export const attendance = pgTable(
   "attendance",
   {
