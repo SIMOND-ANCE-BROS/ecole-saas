@@ -95,7 +95,7 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
    */
   const holdsInput = useUnsavedInput(body, { touchRoot: dialogue, portal: `#${PORTAL_ID}` });
   // Reload, tab close or another address with input: the browser asks too (#258).
-  useUnloadGuard(holdsInput, closing);
+  useUnloadGuard(holdsInput, { leaving: closing });
 
   useEffect(() => {
     const d = dialogue.current;

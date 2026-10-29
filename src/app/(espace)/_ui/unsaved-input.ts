@@ -47,14 +47,42 @@ export function differs(
 const fieldsOf = (root: HTMLElement) =>
   root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(FIELDS);
 
+/** What `holds` needs to decide, as `useUnsavedInput` keeps it. */
+export type InputState = {
+  /** No key pressed and no click yet: nothing can differ from what the person saw. */
+  untouched: boolean;
+  /** A value was picked in a list, calendar or menu. */
+  picked: boolean;
+  /** The container has a field someone can type in or choose. */
+  editable: boolean;
+  start: ReadonlyMap<string, string> | null;
+  atStart: ReadonlyMap<string, string>;
+  /** The fields as they are now (read only when needed). */
+  now: () => ReadonlyMap<string, string>;
+};
+
+/**
+ * Unsaved input: once touched, a pick in a list or calendar, or a field that differs.
+ * Untouched means no gesture yet: a key handled before the first-touch listener (Escape,
+ * Ctrl K in a panel, whose React capture handlers run first) compares nothing stale.
+ */
+export function holds({ untouched, picked, editable, start, atStart, now }: InputState): boolean {
+  if (untouched || !editable || !start) return false;
+  return picked || differs(start, atStart, now());
+}
+
 type Options = {
   /** Where the first key or click is listened for: the container by default (a panel passes its dialog). */
   touchRoot?: RefObject<HTMLElement | null>;
   /**
    * Where the form's lists, calendars and menus are rendered: a pick there may change state no
-   * field shows (values kept in React), so it always counts as input. Mantine's portals by default.
+   * field shows (values kept in React), so it always counts as input. By default `[data-portal]`,
+   * which matches any Mantine portal on the page, not only the form's: fine while the layout
+   * itself portals no widget.
    */
   portal?: string;
+  /** Off: no listener, no observer, never holds input (a full-page section rendered in a panel). */
+  enabled?: boolean;
 };
 
 /**
@@ -64,7 +92,7 @@ type Options = {
  */
 export function useUnsavedInput(
   root: RefObject<HTMLElement | null>,
-  { touchRoot, portal = "[data-portal]" }: Options = {},
+  { touchRoot, portal = "[data-portal]", enabled = true }: Options = {},
 ) {
   /** Each field as it was before the first key or click, or when it appeared (a row or a guardian added). */
   const start = useRef<Map<string, string> | null>(null);
@@ -79,7 +107,7 @@ export function useUnsavedInput(
 
   useEffect(() => {
     const r = root.current;
-    if (!r) return;
+    if (!r || !enabled) return;
     const readStart = () => {
       start.current = readFields(fieldsOf(r));
       atStart.current = new Map(start.current);
@@ -95,7 +123,10 @@ export function useUnsavedInput(
     touch.addEventListener("pointerdown", firstTouch, true);
     touch.addEventListener("keydown", firstTouch, true);
     const pick = (e: Event) => {
-      if (e.target instanceof Element && e.target.closest(portal)) picked.current = true;
+      if (!(e.target instanceof Element && e.target.closest(portal))) return;
+      // On a full page the portals sit outside the form: a pick there is a gesture too.
+      firstTouch();
+      picked.current = true;
     };
     document.addEventListener("pointerdown", pick, true);
     // A field that appears later starts from what it shows then (its defaults), not from empty.
@@ -112,28 +143,39 @@ export function useUnsavedInput(
       document.removeEventListener("pointerdown", pick, true);
       watch.disconnect();
     };
-  }, [root, touchRoot, portal]);
+  }, [root, touchRoot, portal, enabled]);
 
   return () => {
     const r = root.current;
-    const first = start.current;
-    if (!r?.querySelector(EDITABLE) || !first) return false;
-    return picked.current || differs(first, atStart.current, readFields(fieldsOf(r)));
+    if (!r || !enabled) return false;
+    return holds({
+      untouched: untouched.current,
+      picked: picked.current,
+      editable: r.querySelector(EDITABLE) !== null,
+      start: start.current,
+      atStart: atStart.current,
+      now: () => readFields(fieldsOf(r)),
+    });
   };
 }
 
 /**
  * Reload, closing the tab or typing another address while `holdsInput()`: the browser asks
  * first (its own wording; pages cannot set it). `leaving` turns it off when the page goes on
- * purpose (« Abandonner » then a full-page load). A save redirects within the app, which fires
- * no `beforeunload`, and the listener goes with the form.
+ * purpose (« Abandonner » then a full-page load); `enabled: false` adds no listener at all.
+ * A save redirects within the app, which fires no `beforeunload`, and the listener goes with
+ * the form.
  */
-export function useUnloadGuard(holdsInput: () => boolean, leaving?: RefObject<boolean>) {
+export function useUnloadGuard(
+  holdsInput: () => boolean,
+  { leaving, enabled = true }: { leaving?: RefObject<boolean>; enabled?: boolean } = {},
+) {
   const check = useRef(holdsInput);
   useEffect(() => {
     check.current = holdsInput;
   });
   useEffect(() => {
+    if (!enabled) return;
     const guard = (e: BeforeUnloadEvent) => {
       if (leaving?.current || !check.current()) return;
       e.preventDefault();
@@ -142,5 +184,5 @@ export function useUnloadGuard(holdsInput: () => boolean, leaving?: RefObject<bo
     };
     window.addEventListener("beforeunload", guard);
     return () => window.removeEventListener("beforeunload", guard);
-  }, [leaving]);
+  }, [leaving, enabled]);
 }

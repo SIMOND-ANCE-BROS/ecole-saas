@@ -1,5 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { differs, readFields, type FieldLike } from "./unsaved-input";
+import { differs, holds, readFields, type FieldLike, type InputState } from "./unsaved-input";
+
+describe("holds", () => {
+  const start = new Map([["lastName", ""]]);
+  const typed = new Map([["lastName", "Zz"]]);
+  const state = (over: Partial<InputState>): InputState => ({
+    untouched: false,
+    picked: false,
+    editable: true,
+    start,
+    atStart: start,
+    now: () => start,
+    ...over,
+  });
+
+  it("is false before any key or click, even if the fields read differently", () => {
+    // Escape or Ctrl K handled before the first-touch listener: the baseline may be stale.
+    expect(holds(state({ untouched: true, now: () => typed }))).toBe(false);
+    expect(holds(state({ untouched: true, picked: true }))).toBe(false);
+  });
+
+  it("is true once touched when a field differs or a value was picked", () => {
+    expect(holds(state({ now: () => typed }))).toBe(true);
+    expect(holds(state({ picked: true }))).toBe(true);
+  });
+
+  it("is false without an editable field or before the start is read", () => {
+    expect(holds(state({ editable: false, picked: true }))).toBe(false);
+    expect(holds(state({ start: null, now: () => typed }))).toBe(false);
+  });
+
+  it("is false once touched when nothing changed", () => {
+    expect(holds(state({}))).toBe(false);
+  });
+});
 
 const text = (name: string, value: string): FieldLike => ({ name, id: "", value, type: "text" });
 const box = (name: string, checked: boolean, value = "on", type = "checkbox"): FieldLike => ({
