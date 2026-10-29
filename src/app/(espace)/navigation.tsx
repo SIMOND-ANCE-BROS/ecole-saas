@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useTransition } from "react";
 import type { Role } from "@/domain/team/rules";
+import { FOCUS_SEARCH } from "./_ui/focus-search";
 
 const LINKS = [
   { href: "/", label: "Accueil" },
@@ -80,20 +81,32 @@ export function GlobalSearch() {
   // panel. Only when nothing has the focus yet (reload, Back) or the sidebar link that led here.
   useEffect(() => {
     const active = document.activeElement;
-    const free = !active || active === document.body || active.closest(`nav[aria-label="${NAV_LABEL}"]`) !== null;
+    const lost = !active || active === document.body;
+    const free = lost || active.closest(`nav[aria-label="${NAV_LABEL}"]`) !== null;
     if (onList && free) field.current?.focus();
+    // Elsewhere, a page may name where to start once focus was lost on the way, e.g. the
+    // planning's « Nouveau cours » after « Annuler » on the full-page course form (#244).
+    else if (!onList && lost) document.querySelector<HTMLElement>("main [data-page-focus]")?.focus();
   }, [onList, path]);
 
   useEffect(() => {
+    const focus = () => {
+      field.current?.focus();
+      field.current?.select();
+    };
     const shortcut = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        field.current?.focus();
-        field.current?.select();
+        focus();
       }
     };
     window.addEventListener("keydown", shortcut);
-    return () => window.removeEventListener("keydown", shortcut);
+    // A side panel closed by Ctrl K hands the focus over once it is gone (#244).
+    window.addEventListener(FOCUS_SEARCH, focus);
+    return () => {
+      window.removeEventListener("keydown", shortcut);
+      window.removeEventListener(FOCUS_SEARCH, focus);
+    };
   }, []);
 
   const go = (q: string, replace: boolean) => {

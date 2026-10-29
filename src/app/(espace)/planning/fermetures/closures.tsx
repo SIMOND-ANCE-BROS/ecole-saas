@@ -1,11 +1,11 @@
 "use client";
 
 import { Alert, Button, Input, MultiSelect, Paper, SegmentedControl, Text, TextInput } from "@mantine/core";
-import { unstable_rethrow } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { Closure } from "@/db/lessons";
 import type { ClosureScope } from "@/domain/schedule/closure-scope";
-import { NOT_SAVED, type ActionResult } from "@/lib/action-result";
+import { settle, type ActionResult } from "@/lib/action-result";
+import { ConfirmRemoval, type Removal } from "../../_ui/confirm-removal";
 import { DateField, refusedDateField } from "../../_ui/date-field";
 import { close, updateLessons, reopen } from "../seances/actions";
 
@@ -40,6 +40,9 @@ const EMPTY = {
   courseIds: [] as string[],
 };
 
+/** The form's first field: focus goes there once the last closure is removed. */
+const LABEL = "#closure-label";
+
 const isKind = (x: string): x is Kind => x === "school" || x === "sites" || x === "courses";
 
 /** What a closure covers, as the list says it. */
@@ -65,6 +68,15 @@ export function ClosuresManagement({
   const [inProgress, startTransition] = useTransition();
   const choice = useRef<HTMLInputElement>(null);
   const label = useRef<HTMLInputElement>(null);
+  const [removal, setRemoval] = useState<Removal | null>(null);
+  /** Where focus goes once a removal is saved and the list redrawn (its button is gone). */
+  const focusAfter = useRef<string | null>(null);
+  useEffect(() => {
+    if (inProgress || !focusAfter.current) return;
+    const target = document.querySelector<HTMLElement>(focusAfter.current);
+    focusAfter.current = null;
+    target?.focus();
+  }, [inProgress, closures]);
 
   // A single site is the whole school: « Certains sites » is only offered with two or more.
   const kinds = [
@@ -75,31 +87,17 @@ export function ClosuresManagement({
 
   const act = (action: () => Promise<ActionResult>, success: string, after?: () => void) =>
     startTransition(async () => {
-      let error: string | null;
-      try {
-        const r = await action();
-        error = r.ok ? null : r.message;
-      } catch (e) {
-        // A lost connection or a server error keeps the page on screen, with a way out.
-        unstable_rethrow(e);
-        error = NOT_SAVED;
-      }
-      setMessage(error ? { text: error, tone: "error" } : { text: success, tone: "ok" });
-      if (!error) after?.();
+      // A lost connection or a server error keeps the page on screen, with a way out.
+      const r = await settle(action);
+      setMessage(r.ok ? { text: success, tone: "ok" } : { text: r.message, tone: "error" });
+      if (r.ok) after?.();
     });
 
   // Saved: how many lessons left the planning; none means the closure covers nothing on those dates.
   const add = (scope: Kind) => {
     setMessage(null);
     startTransition(async () => {
-      let r;
-      try {
-        r = await close(entry(), seasonId);
-      } catch (e) {
-        unstable_rethrow(e);
-        setMessage({ text: NOT_SAVED, tone: "error" });
-        return;
-      }
+      const r = await settle(() => close(entry(), seasonId));
       if (!r.ok) {
         setMessage({ text: r.message, tone: "error" });
         return;
@@ -156,6 +154,7 @@ export function ClosuresManagement({
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto] lg:items-start">
           <TextInput
             label="Libellé"
+            id={LABEL.slice(1)}
             className="sm:col-span-2 lg:col-span-1"
             placeholder="Vacances de la Toussaint"
             autoFocus
@@ -259,7 +258,7 @@ export function ClosuresManagement({
         </Text>
       ) : (
         <Paper withBorder component="ul" className="divide-y divide-bordure text-sm">
-          {closures.map((f) => (
+          {closures.map((f, i) => (
             <li key={f.id} className="flex flex-wrap items-center gap-x-4 px-3 py-1.5">
               <span className="font-medium">{f.label}</span>
               <Text span size="sm" c="dimmed" className="tabular-nums">
@@ -276,7 +275,26 @@ export function ClosuresManagement({
                 color="gray"
                 className="ml-auto"
                 disabled={inProgress}
-                onClick={() => act(() => reopen(f.id), "Fermeture retirée, séances remises.")}
+                data-closure-remove={f.id}
+                onClick={() =>
+                  setRemoval({
+                    title: `Retirer la fermeture « ${f.label} » ?`,
+                    body: "Les séances à venir de ces dates reviennent au planning.",
+                    run: () => {
+                      // Refused: focus comes back to this « Retirer ». Removed: it is gone with its
+                      // row, so focus moves to the next closure (or the one before, or the form).
+                      const next = closures[i + 1] ?? closures[i - 1];
+                      focusAfter.current = `[data-closure-remove="${f.id}"]`;
+                      act(
+                        () => reopen(f.id),
+                        "Fermeture retirée, séances remises.",
+                        () => {
+                          focusAfter.current = next ? `[data-closure-remove="${next.id}"]` : LABEL;
+                        },
+                      );
+                    },
+                  })
+                }
                 aria-label={`Retirer la fermeture ${f.label}`}
               >
                 Retirer
@@ -285,6 +303,8 @@ export function ClosuresManagement({
           ))}
         </Paper>
       )}
+
+      <ConfirmRemoval removal={removal} onClose={() => setRemoval(null)} />
 
       <div className="flex flex-wrap items-center gap-3 border-t border-bordure pt-4">
         <Button

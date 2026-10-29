@@ -90,7 +90,9 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
               <ButtonLink href={withSeason("/planning/fermetures", seasonParam)} variant="default">
                 Fermetures
               </ButtonLink>
-              <ButtonLink href={withSeason("/planning/cours/nouveau", seasonParam)}>Nouveau cours</ButtonLink>
+              <ButtonLink href={withSeason("/planning/cours/nouveau", seasonParam)} data-page-focus>
+                Nouveau cours
+              </ButtonLink>
             </>
           )
         }
