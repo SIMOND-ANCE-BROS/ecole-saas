@@ -109,6 +109,16 @@ export async function createDeposit(
   if (!r.success) return { ok: false, message: r.error.issues[0].message };
   const { date, method: method, paymentIds: paymentIds } = r.data;
   const ids = [...new Set(paymentIds)];
+  // Same lock as correctPayment (#247): a deposit and a correction, or two deposits, of
+  // the same payment wait for each other, so the read below sees the other one. Ordered
+  // by id so two deposits sharing several payments cannot deadlock; a separate statement
+  // so the read takes a snapshot after the wait.
+  await tx
+    .select({ id: payment.id })
+    .from(payment)
+    .where(inArray(payment.id, ids))
+    .orderBy(asc(payment.id))
+    .for("no key update");
   const chosen = await rows(tx).where(inArray(payment.id, ids));
   const eligibles = new Set(toDeposit(chosen, date > today ? date : today)[method].map((p) => p.id));
   if (chosen.length !== ids.length || !ids.every((id) => eligibles.has(id))) {
