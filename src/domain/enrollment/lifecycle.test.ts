@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   canChange,
   confirmationPrice,
+  countsAsSibling,
   cancelRefusal,
   dropDateBounds,
   dropDateRefusal,
   enrollmentActions,
+  fullCourseAdvice,
+  INITIAL_STATUSES,
+  isChildrenCourse,
   onAttendanceSheet,
   onCourseList,
   oneRowPerStudent,
@@ -169,5 +173,47 @@ describe("oneRowPerStudent", () => {
       { student: "c", status: "trial" },
       { student: "d", status: "dropped" },
     ]);
+  });
+});
+
+describe("status at creation", () => {
+  it("offers « Inscrit » first (the default), then trial and waitlist", () => {
+    expect([...INITIAL_STATUSES]).toEqual(["active", "trial", "waitlist"]);
+  });
+
+  it("counts only an active new enrollment as a sibling", () => {
+    expect(INITIAL_STATUSES.filter(countsAsSibling)).toEqual(["active"]);
+  });
+});
+
+describe("fullCourseAdvice (Q5 default, children's courses only)", () => {
+  const children = { ageMax: 11 };
+  it("suggests the waitlist when a chosen children's course is full of active enrollments", () => {
+    expect(fullCourseAdvice("active", [{ enrolled: 20, maxCapacity: 20, ...children }])).toBe("suggest_waitlist");
+    expect(
+      fullCourseAdvice("active", [
+        { enrolled: 3, maxCapacity: 20, ...children },
+        { enrolled: 21, maxCapacity: 20, ...children },
+      ]),
+    ).toBe("suggest_waitlist");
+  });
+
+  it("never calls an adult course full, even at capacity", () => {
+    expect(fullCourseAdvice("active", [{ enrolled: 30, maxCapacity: 20, ageMax: null }])).toBe("none");
+    expect(fullCourseAdvice("active", [{ enrolled: 30, maxCapacity: 20, ageMax: 99 }])).toBe("none");
+  });
+
+  it("says nothing below capacity, without a capacity, or for a trial or waitlist enrollment", () => {
+    expect(fullCourseAdvice("active", [{ enrolled: 19, maxCapacity: 20, ...children }])).toBe("none");
+    expect(fullCourseAdvice("active", [{ enrolled: 99, maxCapacity: null, ...children }])).toBe("none");
+    expect(fullCourseAdvice("trial", [{ enrolled: 20, maxCapacity: 20, ...children }])).toBe("none");
+    expect(fullCourseAdvice("waitlist", [{ enrolled: 20, maxCapacity: 20, ...children }])).toBe("none");
+    expect(fullCourseAdvice("active", [])).toBe("none");
+  });
+
+  it("calls a course for children when its age band ends before 18", () => {
+    expect(isChildrenCourse({ ageMax: 17 })).toBe(true);
+    expect(isChildrenCourse({ ageMax: 18 })).toBe(false);
+    expect(isChildrenCourse({ ageMax: null })).toBe(false);
   });
 });

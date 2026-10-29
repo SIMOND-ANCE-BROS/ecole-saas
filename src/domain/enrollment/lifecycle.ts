@@ -1,3 +1,4 @@
+import { AGE_OF_MAJORITY } from "../people/age";
 import type { EnrollmentStatus } from "./statuses";
 
 /**
@@ -13,9 +14,14 @@ import type { EnrollmentStatus } from "./statuses";
  * 2. A status change never re-prices another saved enrollment: `discountImpacts` (`./impacts.ts`) only reports it.
  * 3. Only active enrollments count as siblings: `SIBLING_STATUSES` below.
  * 4. The price is recomputed at confirmation: `confirmationPrice` below.
- * 5. A full course is a warning, not a hard limit (enrollment form, to come with the status at creation).
+ * 5. A full course is a warning, not a hard limit: `fullCourseAdvice` below. The school limits
+ *    children's courses only (answers on #284, 2026-10-29): adult courses are never « full ».
  * 6. A trial never expires on its own: no automatic change exists; confirm or drop by hand.
  */
+
+/** Statuses an enrollment can be created with, the default first (#284). */
+export const INITIAL_STATUSES = ["active", "trial", "waitlist"] as const satisfies readonly EnrollmentStatus[];
+export type InitialStatus = (typeof INITIAL_STATUSES)[number];
 
 /**
  * Allowed changes of status. Dropped and ended are final; cancelling a mistake is not a
@@ -149,4 +155,27 @@ export function oneRowPerStudent<T extends { status: EnrollmentStatus }>(
   }
   const chosen = new Set(best.values());
   return rows.filter((r) => chosen.has(r));
+}
+
+/** A course as `fullCourseAdvice` reads it: its headcount (active enrollments), capacity and age band. */
+export type CourseLoad = { enrolled: number; maxCapacity: number | null; ageMax: number | null };
+
+/** A children's course: its age band ends before the age of majority (course data, never a name). */
+export const isChildrenCourse = (c: { ageMax: number | null }): boolean =>
+  c.ageMax !== null && c.ageMax < AGE_OF_MAJORITY;
+
+/** Whether a children's course is full: its active enrollments reach its capacity. */
+export const isFull = (c: CourseLoad): boolean =>
+  isChildrenCourse(c) && c.maxCapacity !== null && c.enrolled >= c.maxCapacity;
+
+/** What to tell the front desk about the courses chosen for a new enrollment. */
+export type FullCourseAdvice = "none" | "suggest_waitlist";
+
+/**
+ * Q5 (#284): a full children's course is a warning that proposes the waitlist, never a
+ * hard limit: saving as « Inscrit » stays possible. Adult courses are never full (the
+ * school limits children's courses only). Nothing to suggest for a trial or a waitlist.
+ */
+export function fullCourseAdvice(status: InitialStatus, courses: readonly CourseLoad[]): FullCourseAdvice {
+  return status === "active" && courses.some(isFull) ? "suggest_waitlist" : "none";
 }

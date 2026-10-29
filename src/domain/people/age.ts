@@ -6,9 +6,12 @@ export function ageAt(birthDate: string, day: string): number {
   return year - yearN - (beforeBirthday ? 1 : 0);
 }
 
+/** Legal age of majority in France (law, not a school setting). */
+export const AGE_OF_MAJORITY = 18;
+
 /** Under 18 on the given day; false when the birth date is unknown. */
 export function isMinor(birthDate: string | null, day: string): boolean {
-  return birthDate !== null && ageAt(birthDate, day) < 18;
+  return birthDate !== null && ageAt(birthDate, day) < AGE_OF_MAJORITY;
 }
 
 const formatParis = new Intl.DateTimeFormat("en-CA", {
