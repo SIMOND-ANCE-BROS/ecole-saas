@@ -6,6 +6,7 @@ import type { EntityInput, EntityRow } from "@/db/billing-entities";
 import { VAT_REGIMES } from "@/db/instructors";
 import { type ActionResult, settle } from "@/lib/action-result";
 import { isKeyOf } from "@/lib/has";
+import { compact } from "@/domain/billing/entity";
 import { BusinessSearch } from "../../_ui/business-search";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { changeEntity, defaultEntity, newEntity } from "../actions";
@@ -30,8 +31,9 @@ const EMPTY: Values = {
 const valuesOf = (e: EntityRow): Values => ({
   name: e.name,
   legalName: e.legalName,
-  siren: e.siren ?? "",
-  siret: e.siret ?? "",
+  // Spaced as on the card and on paper; the spaces are removed again when saved.
+  siren: e.siren ? spaced(e.siren) : "",
+  siret: e.siret ? spaced(e.siret) : "",
   vatNumber: e.vatNumber ?? "",
   addressLine: e.addressLine ?? "",
   postalCode: e.postalCode ?? "",
@@ -96,6 +98,8 @@ function EntityForm({
         {title}
       </Text>
       <BusinessSearch
+        // The button that opened the form is gone: focus starts in the form, as on the other settings screens.
+        autoFocus
         filled={(b) =>
           b.street ? "raison sociale, SIREN, SIRET et adresse remplis." : "raison sociale et SIREN remplis."
         }
@@ -106,7 +110,7 @@ function EntityForm({
             name: now.name || b.legalName,
             legalName: b.legalName,
             siren: b.siren,
-            siret: b.siret ?? now.siret,
+            siret: b.siret ?? (b.siren === compact(now.siren) ? now.siret : ""),
             // Without a public street (sole trader), the address typed is kept.
             addressLine: b.street ?? now.addressLine,
             postalCode: b.street ? (b.postcode ?? "") : now.postalCode,
@@ -146,7 +150,7 @@ function EntityForm({
           id="entity-bankAccountLabel"
           className="sm:col-span-2"
           label="Compte bancaire (facultatif)"
-          description="Le nom du compte, imprimé sur les bordereaux de remise en banque. Jamais l’IBAN."
+          description="Le nom du compte, qui sera imprimé sur les bordereaux de remise en banque. Jamais l’IBAN."
           inputWrapperOrder={["label", "input", "description", "error"]}
           autoComplete="off"
           value={v.bankAccountLabel}
@@ -229,7 +233,7 @@ export function Entities({ entities }: { entities: EntityRow[] }) {
       <Modal
         opened={asking !== null}
         onClose={() => setAsking(null)}
-        title={asking ? `Encaisser par défaut avec ${asking.name} ?` : ""}
+        title={asking ? `Choisir ${asking.name} par défaut ?` : ""}
         centered
       >
         <Text size="sm">

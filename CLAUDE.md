@@ -102,7 +102,7 @@ These values live in data (`billing_entity`, `tariff`, `discount`, `site`, `room
 - In code:
   - The software **never generates an invoice number**: it stores the one returned by the tool; numbers are unique per billing entity.
   - An issued invoice is never modified: issue a **credit note**.
-  - VAT mentions are data: the invoice-level mention and regime come from the billing entity (`billing_entity.vat_regime`, `billing_entity.vat_mention`), the line-level mention and rate from the VAT treatment of the course (`vat_treatment`, #301), copied onto the invoice line.
+  - VAT mentions are data: the invoice-level mention and regime come from the billing entity (`billing_entity.vat_regime`, `billing_entity.vat_mention`), the line-level mention and rate will come from the VAT treatment of the course (`vat_treatment`, to come with #301), copied onto the invoice line.
 - Each business's VAT regime and its tool are **pending the accountant's opinion**: keep them configurable.
 
 ## 6. Stack
@@ -142,7 +142,7 @@ DESIGN.md                    interface rules
 ```
 
 - Business logic lives in the domain folder as **pure functions** (input → output, no database, no network), unit-tested. Routes and server actions only validate, call the domain and persist.
-- The invoicing connector exposes one interface (`checkCredentials`, `createCustomer`, `createInvoice`, `finalize`, `createCreditNote`, `readStatus`), with **one connector per billing entity** (`invoicing_connector` keyed by `billing_entity_id`, ADR 0007); the rest of the code never knows the concrete tool.
+- The invoicing connector (to come, #303) exposes one interface (`checkCredentials`, `createCustomer`, `createInvoice`, `finalize`, `createCreditNote`, `readStatus`), with **one connector per billing entity** (`invoicing_connector` keyed by `billing_entity_id`, ADR 0007); the rest of the code never knows the concrete tool.
 - Naming: `camelCase` for variables and functions, `PascalCase` for types and React components, `SCREAMING_SNAKE_CASE` for module constants, `snake_case` in the database, `kebab-case` file names.
 
 ## 8. Mandatory rules

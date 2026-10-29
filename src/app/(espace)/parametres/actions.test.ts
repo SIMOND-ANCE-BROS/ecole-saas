@@ -140,7 +140,7 @@ describe("settings actions", () => {
       });
       expect(await actions.newEntity({ ...entity, bankAccountLabel: "FR76 3000 6000 0112 3456 7890 189" })).toEqual({
         ok: false,
-        message: "N’indiquez pas l’IBAN ici : un nom de compte suffit (il est imprimé sur les bordereaux).",
+        message: "N’indiquez pas l’IBAN ici : un nom de compte suffit (il sera imprimé sur les bordereaux).",
       });
       expect(await actions.newEntity({ ...entity, legalName: " " })).toEqual({
         ok: false,

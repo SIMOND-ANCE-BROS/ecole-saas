@@ -163,7 +163,7 @@ export const billingEntity = pgTable(
     postalCode: text("postal_code"),
     city: text("city"),
     vatRegime: vatRegime("vat_regime").notNull(),
-    vatMention: text("vat_mention"), // printed once per invoice, e.g. « TVA non applicable, art. 293 B du CGI »
+    vatMention: text("vat_mention"), // printed once per invoice; wording set by the school (its accountant)
     bankAccountLabel: text("bank_account_label"), // printed on deposit slips; never an IBAN
     isDefault: boolean("is_default").notNull().default(false),
     active: boolean("active").notNull().default(true),

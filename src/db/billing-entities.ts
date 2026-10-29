@@ -82,7 +82,7 @@ export const validEntityInput = entityFields
   })
   .refine((e) => e.bankAccountLabel === null || !looksLikeIban(e.bankAccountLabel), {
     path: issuePath(entityFields, "bankAccountLabel"),
-    message: "N’indiquez pas l’IBAN ici : un nom de compte suffit (il est imprimé sur les bordereaux).",
+    message: "N’indiquez pas l’IBAN ici : un nom de compte suffit (il sera imprimé sur les bordereaux).",
   });
 export type EntityInput = z.input<typeof validEntityInput>;
 
@@ -165,6 +165,9 @@ async function nameTaken(tx: Tx, name: string, except?: string): Promise<boolean
 export async function createEntity(tx: Tx, entry: EntityInput): Promise<Result> {
   const e = validEntityInput.safeParse(entry);
   if (!e.success) return { ok: false, message: e.error.issues[0].message };
+  // The school's entities locked, as makeDefaultEntity does: two entities added at the same
+  // moment wait for each other, so the second sees the first's name and default.
+  await tx.select({ id: billingEntity.id }).from(billingEntity).orderBy(asc(billingEntity.id)).for("update");
   if (await nameTaken(tx, e.data.name)) return { ok: false, message: TAKEN };
   const first = (await defaultEntityId(tx)) === null;
   const [{ id }] = await tx

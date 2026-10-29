@@ -2,7 +2,7 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
 import { createEntity, defaultEntityId, listEntities, makeDefaultEntity, updateEntity } from "./billing-entities";
-import { collect } from "./payments";
+import { collect, correctPayment } from "./payments";
 import { createDeposit } from "./deposits";
 import { defaultEntityFor } from "./billing-entity.integration-helpers";
 
@@ -245,6 +245,17 @@ describe("composite keys carrying the entity", () => {
     if (!r.ok) throw new Error(r.message);
     const [p] = await admin`SELECT billing_entity_id AS entity FROM payment WHERE id = ${r.ids[0]}`;
     expect(p.entity).toBe(entityA);
+
+    // Another default since: the reverse entry still belongs to the original's entity, A.
+    expect((await withSchool(school, (tx) => makeDefaultEntity(tx, entityB))).ok).toBe(true);
+    try {
+      const c = await withSchool(school, (tx) => correctPayment(tx, director, r.ids[0], 200, TODAY));
+      if (!c.ok) throw new Error(c.message);
+      const [x] = await admin`SELECT billing_entity_id AS entity FROM payment WHERE id = ${c.ids[0]}`;
+      expect(x.entity).toBe(entityA);
+    } finally {
+      await withSchool(school, (tx) => makeDefaultEntity(tx, entityA));
+    }
   });
 });
 
