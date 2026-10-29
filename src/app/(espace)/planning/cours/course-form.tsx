@@ -94,6 +94,9 @@ export function CourseForm({
   const [dates, setDates] = useState<string[]>(course?.dates.length ? course.dates : [date ?? ""]);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const [sending, startTransition] = useTransition();
+  // Same key for every attempt of a new course: a retry after a lost response creates it once (#260).
+  // A success leaves the form, so another new course always gets a new key.
+  const [submissionKey] = useState(() => crypto.randomUUID());
   const form = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (refusal) form.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')?.focus();
@@ -235,7 +238,7 @@ export function CourseForm({
         startTransition(async () =>
           setRefusal(
             await orNotSaved(
-              () => saveCourse(course?.id ?? null, entry, seasonId),
+              () => saveCourse(course?.id ?? null, entry, seasonId, submissionKey),
               // A new course may have been created before the answer was lost: check before retrying.
               () => ({ message: course ? NOT_SAVED : CONNECTION_LOST, errors: {} }),
             ),

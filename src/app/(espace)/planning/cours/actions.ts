@@ -24,8 +24,17 @@ import { SHORT_DAYS } from "@/domain/schedule/days";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { errorsOf, type FieldErrors, topErrorsOf } from "@/lib/form-errors";
-import type { z } from "zod";
+import { z } from "zod";
+import { once } from "@/db/submissions";
 import { seasonParam, withSeason } from "../season-link";
+
+/** What a first attempt stored: the course it created and the planning to go back to. */
+const storedCourse = z.object({
+  ok: z.literal(true),
+  id: z.uuid(),
+  instructorRateCents: z.number().int().nullable(),
+  season: z.string().optional(),
+});
 
 /** Errors by field: top-level (« room ») and nested (« room.capacity », a new room's own fields). */
 export type Refusal = { message: string; errors: FieldErrors<CourseFields> };
@@ -35,8 +44,15 @@ type CourseFields = z.input<typeof validCourseInput>;
  * Creates (null id) a course in the season chosen on the planning (#189; the
  * current one when none is given) or updates a course; management only.
  */
-export async function saveCourse(id: string | null, entry: unknown, seasonId?: unknown): Promise<Refusal> {
+export async function saveCourse(
+  id: string | null,
+  entry: unknown,
+  seasonId?: unknown,
+  key?: string,
+): Promise<Refusal> {
   const { schoolId: schoolId, userId } = await requireRole("director");
+  // A creation carries the key generated once by the form (#260).
+  if (id === null && !z.uuid().safeParse(key).success) return { message: "Saisie invalide.", errors: {} };
   const parsed = validCourseInput.safeParse(entry);
   if (!parsed.success) {
     return {
@@ -66,16 +82,22 @@ export async function saveCourse(id: string | null, entry: unknown, seasonId?: u
     const before = existing
       ? { instructorId: existing.instructorId, instructorRateCents: (await courseRate(tx, existing.id)) ?? null }
       : null;
-    const r = id !== null ? await updateCourse(tx, id, parsed.data) : await createCourse(tx, target, parsed.data);
-    // A change of the instructor's rate for this course is kept in the audit log (#191).
-    if (r.ok)
-      await logCourseRate(tx, userId, r.id, before, {
-        instructorId: parsed.data.instructorId,
-        instructorRateCents: r.instructorRateCents,
-      });
-    // Upcoming lessons recomputed in the same transaction (day changed, new course…).
-    if (r.ok) await syncLessons(tx, target, today);
-    return r.ok ? { ...r, season: await seasonOfLink(tx, target, today) } : r;
+    const save = async () => {
+      const r = id !== null ? await updateCourse(tx, id, parsed.data) : await createCourse(tx, target, parsed.data);
+      // A change of the instructor's rate for this course is kept in the audit log (#191).
+      if (r.ok)
+        await logCourseRate(tx, userId, r.id, before, {
+          instructorId: parsed.data.instructorId,
+          instructorRateCents: r.instructorRateCents,
+        });
+      // Upcoming lessons recomputed in the same transaction (day changed, new course…).
+      if (r.ok) await syncLessons(tx, target, today);
+      return r.ok ? { ...r, season: await seasonOfLink(tx, target, today) } : r;
+    };
+    // A new course is created at most once per key: a retry gets the first course back.
+    return id === null && key !== undefined
+      ? once(tx, "course", key, { entry: parsed.data, seasonId: target }, storedCourse, save)
+      : save();
   });
   if (!result.ok) return { message: result.message, errors: {} };
   redirect(

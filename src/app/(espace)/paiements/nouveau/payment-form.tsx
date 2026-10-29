@@ -35,6 +35,9 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
   const [date, setDate] = useState(today);
   const [message, setMessage] = useState<string | null>(null);
   const [sending, startTransition] = useTransition();
+  // Same key for every attempt of this entry: a retry after a lost response records nothing twice (#260).
+  // A success leaves the form, so a new entry always gets a new key.
+  const [key] = useState(() => crypto.randomUUID());
   const updated = (id: number, v: Partial<Row>) => setRows(rows.map((l) => (l.id === id ? { ...l, ...v } : l)));
   const amounts = rows.map((l) => parseEuros(l.amount));
   const total = amounts.reduce<number>((s, m) => s + (m ?? 0), 0);
@@ -86,7 +89,7 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
           setMessage(
             (
               await orConnectionLost(
-                () => collectPayments(payerId, entry, back),
+                () => collectPayments(payerId, entry, back, key),
                 (message) => ({ message }),
               )
             ).message,
