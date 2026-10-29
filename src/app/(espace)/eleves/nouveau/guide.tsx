@@ -200,7 +200,7 @@ export function NewStudentGuide({
                 );
               }}
               errors={sous("guardian.newPerson.")}
-              flagMinors
+              guardian
             />
             <Checkbox
               label="À prévenir en cas d’urgence"

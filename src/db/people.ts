@@ -1,9 +1,10 @@
-import { type AnyColumn, and, asc, desc, eq, or, type SQL, sql } from "drizzle-orm";
+import { type AnyColumn, and, asc, desc, eq, inArray, or, type SQL, sql } from "drizzle-orm";
 import { columnsOf } from "./columns-of";
 import { issuePath } from "../lib/form-errors";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { displayedName } from "../domain/people/name";
+import { guardianRefusal } from "../domain/people/guardian";
 import type { Tx } from "./index";
 import {
   course,
@@ -117,14 +118,21 @@ export function searchCondition(entry: string, alias = "person"): SQL | null {
   return or(...conditions) ?? null;
 }
 
-/** Search among all the school's people (see searchCondition). */
-export async function searchPeople(tx: Tx, entry: string): Promise<PersonResult[]> {
+/**
+ * Search among the school's people (see searchCondition); `types` keeps only
+ * those types (the guardian search offers individuals only, #216).
+ */
+export async function searchPeople(
+  tx: Tx,
+  entry: string,
+  types?: readonly PersonResult["type"][],
+): Promise<PersonResult[]> {
   const condition = searchCondition(entry);
   if (!condition) return [];
   return tx
     .select(resultColumns)
     .from(person)
-    .where(condition)
+    .where(types ? and(condition, inArray(person.type, [...types])) : condition)
     .orderBy(asc(person.lastName), asc(person.firstName))
     .limit(MAX_RESULTS);
 }
@@ -467,10 +475,13 @@ export async function addRelationship(tx: Tx, entry: z.input<typeof validRelatio
   const { personId: personId, relatedPersonId: relatedPersonId } = l.data;
   if (personId === relatedPersonId) return { ok: false, message: "Une personne ne peut pas être liée à elle-même." };
   const presentes = await tx
-    .select({ id: person.id })
+    .select({ id: person.id, type: person.type })
     .from(person)
     .where(or(eq(person.id, personId), eq(person.id, relatedPersonId)));
   if (presentes.length !== 2) return { ok: false, message: "Personne introuvable." };
+  const holder = presentes.find((p) => p.id === personId);
+  const refusal = holder && guardianRefusal(l.data.type, holder.type);
+  if (refusal) return { ok: false, message: refusal };
   const [existing] = await tx
     .select({ id: relationship.id })
     .from(relationship)
@@ -499,6 +510,14 @@ export async function addRelationship(tx: Tx, entry: z.input<typeof validRelatio
 export async function updateRelationship(tx: Tx, id: string, entry: NewRelationship): Promise<Result> {
   const refusal = { ok: false as const, message: "Ce lien n’existe plus." };
   if (!z.uuid().safeParse(id).success) return refusal;
+  const [holder] = await tx
+    .select({ type: person.type })
+    .from(relationship)
+    .innerJoin(person, eq(person.id, relationship.personId))
+    .where(eq(relationship.id, id));
+  if (!holder) return refusal;
+  const notGuardian = guardianRefusal(entry.type, holder.type);
+  if (notGuardian) return { ok: false, message: notGuardian };
   const rows = await tx
     .update(relationship)
     .set({ type: entry.type, emergencyContact: entry.emergencyContact, paysFor: entry.paysFor })

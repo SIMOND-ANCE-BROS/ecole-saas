@@ -185,7 +185,7 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
               onChange={setChoice}
               // Already a guardian: offering them again would add the link twice.
               exclude={[studentId, ...guardians.map((g) => g.id)]}
-              flagMinors
+              guardian
             />
             <Checkbox
               label="À prévenir en cas d’urgence"
