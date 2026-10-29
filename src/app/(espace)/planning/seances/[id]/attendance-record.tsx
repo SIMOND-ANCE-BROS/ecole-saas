@@ -1,9 +1,10 @@
 "use client";
 
-import { Alert, Anchor, Badge, Button, Paper, Select, Text } from "@mantine/core";
+import { Alert, Anchor, Button, Paper, Select, Text } from "@mantine/core";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { Attendance } from "@/db/lessons";
+import { EnrollmentStatusBadge } from "@/app/(espace)/_people/enrollment-status";
 import { notSent, settle, type ActionResult } from "@/lib/action-result";
 import { cancel, doAttendance, replace } from "../actions";
 
@@ -144,10 +145,10 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
                         {d.firstName} {d.name}
                       </Anchor>
                       {d.age !== null && <span className="text-doux"> ({d.age} ans)</span>}
-                      {d.status === "trial" && (
-                        <Badge variant="light" ml="xs">
-                          à l’essai
-                        </Badge>
+                      {d.status !== "active" && (
+                        <span className="ml-2">
+                          <EnrollmentStatusBadge status={d.status} droppedOn={d.droppedOn} />
+                        </span>
                       )}
                       {d.notes && <span className="block text-xs text-alerte-texte">{d.notes}</span>}
                     </span>

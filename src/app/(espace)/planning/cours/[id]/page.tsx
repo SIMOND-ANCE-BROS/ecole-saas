@@ -27,16 +27,11 @@ import { requireRole } from "@/lib/session";
 import { ages, end, recurrenceText } from "../../format";
 import { ButtonLink } from "@/app/(espace)/_ui/button-link";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
+import { EnrollmentStatusBadge } from "@/app/(espace)/_people/enrollment-status";
 import { PrintButton } from "./print-button";
 import { coursePlanning } from "../../course-planning";
 
 export const metadata: Metadata = { title: "Cours" };
-
-const STATUS = {
-  active: null,
-  trial: { label: "à l’essai", color: "indigo" },
-  waitlist: { label: "en attente", color: "yellow" },
-} as const;
 
 const lessonDate = new Intl.DateTimeFormat("fr-FR", {
   weekday: "short",
@@ -55,7 +50,7 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
       ? {
           course,
           planning: await coursePlanning(tx, course.id),
-          enrolled: await enrolledInCourse(tx, course.id),
+          enrolled: await enrolledInCourse(tx, course.id, todayInParis()),
           lessons: await courseLessons(tx, course.id),
           inConflict: await conflictingLessons(tx, course.id, todayInParis()),
           // Pay data: read for management only, so it never reaches the front desk's page (#191).
@@ -70,6 +65,8 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
   const active = enrolled.filter((i) => i.status === "active").length;
   const trials = enrolled.filter((i) => i.status === "trial").length;
   const waitlist = enrolled.filter((i) => i.status === "waitlist").length;
+  // Drop-outs still attending until their date (#284): listed, not counted in the headcount.
+  const dropping = enrolled.filter((i) => i.status === "dropped").length;
   const full = course.maxCapacity !== null && active >= course.maxCapacity;
   // « Chaque lundi 17:00–18:00 », « Un mercredi sur deux… », « Le sam. 24 oct., … 10:00–12:00 » (#90).
   const slot = `${recurrenceText(course)}, ${course.startTime}–${end(course.startTime, course.durationMinutes)}`;
@@ -217,7 +214,8 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
 
       <section aria-labelledby="inscrits" className="flex flex-col gap-2">
         <Title order={2} size="h5" id="inscrits">
-          Danseurs ({enrolled.length})
+          Danseurs ({enrolled.length}
+          {dropping > 0 && `, dont ${dropping} abandon${dropping > 1 ? "s" : ""} à venir`})
         </Title>
         {enrolled.length === 0 ? (
           <Text size="sm" c="dimmed">
@@ -238,7 +236,6 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
               </TableThead>
               <TableTbody>
                 {enrolled.map((i) => {
-                  const status = STATUS[i.status];
                   const age = i.birthDate ? ageAt(i.birthDate, today) : null;
                   const outsideBand =
                     age !== null &&
@@ -250,10 +247,10 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
                         <TextLink href={`/eleves/${i.studentId}`} inherit>
                           {i.firstName} {i.name}
                         </TextLink>
-                        {status && (
-                          <Badge color={status.color} variant="light" ml="xs">
-                            {status.label}
-                          </Badge>
+                        {i.status !== "active" && (
+                          <span className="ml-2">
+                            <EnrollmentStatusBadge status={i.status} droppedOn={i.droppedOn} />
+                          </span>
                         )}
                       </TableTd>
                       <TableTd

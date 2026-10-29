@@ -1,7 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
-import { enrollmentPreview, saveEnrollment, enrollmentsPaidBy } from "./enrollments";
+import { enrollmentPreview, saveEnrollment, seasonEnrollments } from "./enrollments";
 import { seasonCourses } from "./schedule";
 import { seasonFigures, lastEnrollments } from "./dashboard";
 
@@ -142,7 +142,7 @@ describe("Enrollment", () => {
   });
 
   it("lists the enrollments paid by the person for the season", async () => {
-    const list = await withSchool(ids.school, (tx) => enrollmentsPaidBy(tx, ids.payer, ids.season));
+    const list = await withSchool(ids.school, (tx) => seasonEnrollments(tx, { payerId: ids.payer }, ids.season));
     expect(list.map((i) => [i.students, i.netPriceCents])).toEqual([
       ["Noé", 14850],
       ["Zoé", 11000],

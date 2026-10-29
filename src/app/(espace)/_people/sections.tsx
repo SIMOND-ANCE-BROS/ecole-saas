@@ -12,12 +12,17 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import type { PaidEnrollment } from "@/db/enrollments";
+import { Fragment } from "react";
+import type { SeasonEnrollment } from "@/db/enrollments";
 import type { PersonRecord } from "@/db/people";
+import type { Season } from "@/db/schedule";
 import { ENROLLMENT_STATUS_LABELS as STATUT } from "@/domain/enrollment/statuses";
+import { amountDue, DUE_STATUSES } from "@/domain/payments/balance";
 import { formatEuros } from "@/lib/money";
 import { DAYS } from "../planning/format";
 import { TextLink } from "../_ui/text-link";
+import { EnrollmentChanges } from "./enrollment-change";
+import { ENROLLMENTS_HEADING, EnrollmentStatusBadge } from "./enrollment-status";
 
 /** Sections shared by the student and contact records. */
 
@@ -86,15 +91,15 @@ export function FollowedCourses({ courses }: { courses: PersonRecord["courses"] 
                     présent {c.presents} fois sur {c.presents + c.absents}
                   </Text>
                 )}
-                <Text
-                  span
-                  size="xs"
-                  ml="auto"
-                  c={c.status === "active" ? "dimmed" : WARNING}
-                  fw={c.status === "active" ? undefined : 500}
-                >
-                  {STATUT[c.status]}
-                </Text>
+                <span className="ml-auto">
+                  {c.status === "active" ? (
+                    <Text span size="xs" c="dimmed">
+                      {STATUT.active}
+                    </Text>
+                  ) : (
+                    <EnrollmentStatusBadge status={c.status} droppedOn={c.droppedOn} />
+                  )}
+                </span>
               </li>
             ))}
           </Paper>
@@ -119,14 +124,31 @@ export function FollowedCourses({ courses }: { courses: PersonRecord["courses"] 
   );
 }
 
-/** Enrollments invoiced to a person: a commitment, not a payment. */
-export function BilledEnrollments({ enrollments, season }: { enrollments: PaidEnrollment[]; season: string }) {
+/**
+ * Enrollments of the season (#284): every status, each with what the front desk can do
+ * (confirm, drop-out, cancel). The total is what `payerId` owes for them (`amountDue`, the
+ * balance's rule): a commitment, not a payment; trial and waitlist are left out. Without
+ * `payerId` (a student whose enrollments someone else pays), no total.
+ */
+export function Enrollments({
+  enrollments,
+  season,
+  today,
+  payerId,
+}: {
+  enrollments: SeasonEnrollment[];
+  season: Season;
+  today: string;
+  payerId: string | null;
+}) {
   if (enrollments.length === 0) return null;
-  const total = enrollments.reduce((s, i) => s + i.netPriceCents, 0);
+  const paid = enrollments.filter((i) => i.payerId === payerId);
+  const total = amountDue(paid);
+  const apart = paid.some((i) => !DUE_STATUSES.includes(i.status));
   return (
-    <section aria-labelledby="facturees" className="flex flex-col gap-2">
-      <Title order={2} size="h5" id="facturees">
-        Inscriptions facturées {season}
+    <section aria-labelledby={ENROLLMENTS_HEADING} className="flex flex-col gap-2">
+      <Title order={2} size="h5" id={ENROLLMENTS_HEADING} tabIndex={-1}>
+        Inscriptions {season.label}
       </Title>
       <Paper withBorder className="overflow-x-auto">
         <Table>
@@ -140,37 +162,72 @@ export function BilledEnrollments({ enrollments, season }: { enrollments: PaidEn
               <TableTh scope="col" ta="right">
                 Prix
               </TableTh>
+              <TableTh scope="col" className="hidden sm:table-cell">
+                <span className="sr-only">Actions</span>
+              </TableTh>
             </TableTr>
           </TableThead>
           <TableTbody>
-            {enrollments.map((i) => (
-              <TableTr key={i.id}>
-                <TableTd fw={500}>{i.students}</TableTd>
-                <TableTd>{i.courses.join(", ")}</TableTd>
-                <TableTd className="hidden sm:table-cell">
-                  {PUBLIC[i.audience]}, {PERIOD[i.period]}
-                </TableTd>
-                <TableTd ta="right" className="tabular-nums">
-                  {formatEuros(i.netPriceCents)}
-                </TableTd>
-              </TableTr>
-            ))}
+            {enrollments.map((i) => {
+              const owed = DUE_STATUSES.includes(i.status) && i.payerId === payerId;
+              const changes = (
+                <EnrollmentChanges
+                  enrollment={i}
+                  today={today}
+                  season={{ startDate: season.startDate, endDate: season.endDate }}
+                />
+              );
+              return (
+                <Fragment key={i.id}>
+                  <TableTr className="max-sm:[&>td]:border-b-0">
+                    <TableTd fw={500}>
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        {i.students}
+                        <EnrollmentStatusBadge status={i.status} droppedOn={i.droppedOn} />
+                      </span>
+                    </TableTd>
+                    <TableTd>{i.courses.join(", ")}</TableTd>
+                    <TableTd className="hidden sm:table-cell">
+                      {PUBLIC[i.audience]}, {PERIOD[i.period]}
+                    </TableTd>
+                    <TableTd ta="right" className="tabular-nums" c={owed ? undefined : "dimmed"}>
+                      {formatEuros(i.netPriceCents)}
+                    </TableTd>
+                    <TableTd className="hidden sm:table-cell">{changes}</TableTd>
+                  </TableTr>
+                  {/* Phone: the actions on their own line under the row, never cut at the right edge. */}
+                  <TableTr className="sm:hidden">
+                    <TableTd colSpan={3} pt={0}>
+                      {changes}
+                    </TableTd>
+                  </TableTr>
+                </Fragment>
+              );
+            })}
           </TableTbody>
-          <TableTfoot>
-            <TableTr>
-              <TableTd colSpan={2} ta="right" fw={500} className="sm:hidden">
-                Total
-              </TableTd>
-              <TableTd colSpan={3} ta="right" fw={500} className="hidden sm:table-cell">
-                Total de la saison (montant inscrit, ni encaissé ni dû à ce jour)
-              </TableTd>
-              <TableTd ta="right" fw={600} className="tabular-nums">
-                {formatEuros(total)}
-              </TableTd>
-            </TableTr>
-          </TableTfoot>
+          {paid.length > 0 && (
+            <TableTfoot>
+              <TableTr>
+                <TableTd colSpan={2} ta="right" fw={500} className="sm:hidden">
+                  Total
+                </TableTd>
+                <TableTd colSpan={3} ta="right" fw={500} className="hidden sm:table-cell">
+                  Total de la saison (montant inscrit)
+                </TableTd>
+                <TableTd ta="right" fw={600} className="tabular-nums">
+                  {formatEuros(total)}
+                </TableTd>
+                <TableTd className="hidden sm:table-cell" />
+              </TableTr>
+            </TableTfoot>
+          )}
         </Table>
       </Paper>
+      {apart && (
+        <Text size="xs" c="dimmed">
+          Les inscriptions à l’essai ou en attente ne sont pas comptées dans le total.
+        </Text>
+      )}
     </section>
   );
 }

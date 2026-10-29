@@ -190,7 +190,7 @@ describe("scheduleCourse and enrolledInCourse", () => {
       discipline: "Jazz",
       enrolled: 1,
     });
-    const enrolled = await withSchool(school, (tx) => enrolledInCourse(tx, jazz.id));
+    const enrolled = await withSchool(school, (tx) => enrolledInCourse(tx, jazz.id, "2026-10-01"));
     expect(enrolled.map((i) => `${i.firstName} ${i.status}`)).toEqual([
       "Alice trial",
       "Jules waitlist",
@@ -207,7 +207,7 @@ describe("scheduleCourse and enrolledInCourse", () => {
   it("does not read a course from another school, nor its enrolled students", async () => {
     const [salsa] = await admin`SELECT id FROM course WHERE school_id = ${otherSchool}`;
     expect(await withSchool(school, (tx) => scheduleCourse(tx, salsa.id))).toBeNull();
-    expect(await withSchool(school, (tx) => enrolledInCourse(tx, salsa.id))).toEqual([]);
+    expect(await withSchool(school, (tx) => enrolledInCourse(tx, salsa.id, "2026-10-01"))).toEqual([]);
     expect(await withSchool(school, (tx) => scheduleCourse(tx, "pas-un-uuid"))).toBeNull();
   });
 });

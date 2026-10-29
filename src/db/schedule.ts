@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, lte, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
+import { COURSE_LIST_CANDIDATES, onCourseList, oneRowPerStudent } from "../domain/enrollment/lifecycle";
 import { courseDatesSql } from "./courses";
 import type { Tx } from "./index";
 import { alias } from "drizzle-orm/pg-core";
@@ -167,17 +168,22 @@ export type Enrolled = {
   payer: string;
   telephone: string | null;
   email: string | null;
-  status: "active" | "trial" | "waitlist";
+  status: (typeof COURSE_LIST_CANDIDATES)[number];
+  /** Day of the drop-out, still to come (#284). */
+  droppedOn: string | null;
   enrollmentDate: string;
 };
 
-/** Students of the course during the year (active, on trial, on the waitlist), by last then first name. */
-export async function enrolledInCourse(tx: Tx, courseId: string): Promise<Enrolled[]> {
+/**
+ * Students of the course today (active, on trial, on the waitlist, or dropping out later:
+ * `onCourseList`), by last then first name.
+ */
+export async function enrolledInCourse(tx: Tx, courseId: string, today: string): Promise<Enrolled[]> {
   if (!z.uuid().safeParse(courseId).success) return [];
   const student = alias(person, "student");
   const payer = alias(person, "payer");
-  const rows = await tx
-    .selectDistinctOn([student.lastName, student.firstName, student.id], {
+  const all = await tx
+    .select({
       studentId: student.id,
       firstName: student.firstName,
       name: student.lastName,
@@ -190,14 +196,19 @@ export async function enrolledInCourse(tx: Tx, courseId: string): Promise<Enroll
       telephone: sql<string | null>`coalesce(${student.phone}, ${payer.phone})`,
       email: sql<string | null>`coalesce(${student.email}, ${payer.email})`,
       status: sql<Enrolled["status"]>`${enrollment.status}`,
+      droppedOn: enrollment.droppedOn,
       enrollmentDate: enrollment.enrolledOn,
     })
     .from(enrollmentCourse)
     .innerJoin(enrollment, eq(enrollment.id, enrollmentCourse.enrollmentId))
     .innerJoin(student, eq(student.id, enrollmentCourse.studentId))
     .innerJoin(payer, eq(payer.id, enrollment.payerId))
-    .where(and(eq(enrollmentCourse.courseId, courseId), inArray(enrollment.status, ["active", "trial", "waitlist"])))
-    .orderBy(asc(student.lastName), asc(student.firstName), asc(student.id), sql`${enrollment.status} = 'active' DESC`);
+    .where(and(eq(enrollmentCourse.courseId, courseId), inArray(enrollment.status, [...COURSE_LIST_CANDIDATES])))
+    .orderBy(asc(student.lastName), asc(student.firstName), asc(student.id));
+  const rows = oneRowPerStudent(
+    all.filter((r) => onCourseList(r.status, r.droppedOn, today)),
+    (r) => r.studentId,
+  );
   return rows.map(
     ({
       payerName: payerName,

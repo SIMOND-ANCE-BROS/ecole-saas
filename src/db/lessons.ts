@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { rowsOf } from "./columns-of";
 import { z } from "zod";
+import { ATTENDANCE_CANDIDATES, onAttendanceSheet, oneRowPerStudent } from "../domain/enrollment/lifecycle";
 import { closedCourseLabel, type ScopedClosure } from "../domain/schedule/closure-scope";
 import { recurrenceOf, type SeasonCalendar } from "../domain/schedule/lessons";
 import { planLessonSync, seasonLessons } from "../domain/schedule/lesson-sync";
@@ -32,9 +33,6 @@ import {
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const isUuid = (v: string) => z.uuid().safeParse(v).success;
 export type Result = { ok: true; id: string } | { ok: false; message: string };
-
-/** Students on the attendance sheet: active or on trial, never on the waitlist. */
-const ATTENDANCE_STATUSES = ["active", "trial"] as const;
 
 // ---------------------------------------------------------------------------
 // Closures
@@ -529,7 +527,9 @@ export type Attendance = {
     name: string;
     birthDate: string | null;
     notes: string | null;
-    status: (typeof ATTENDANCE_STATUSES)[number];
+    status: (typeof ATTENDANCE_CANDIDATES)[number];
+    /** Day of the drop-out: on the sheets up to this day included (#284). */
+    droppedOn: string | null;
     /** null until attendance is taken for this student. */
     present: boolean | null;
   }[];
@@ -559,22 +559,28 @@ export async function readAttendance(tx: Tx, lessonId: string): Promise<Attendan
     .where(eq(lesson.id, lessonId));
   if (!s) return null;
 
-  const students = await tx
-    .selectDistinctOn([person.lastName, person.firstName, person.id], {
+  // Every enrollment of the course that may be on a sheet; who is on this one depends on its date (#284).
+  const rows = await tx
+    .select({
       id: person.id,
       firstName: person.firstName,
       name: person.lastName,
       birthDate: person.birthDate,
       notes: person.notes,
       status: sql<Attendance["students"][number]["status"]>`${enrollment.status}`,
+      droppedOn: enrollment.droppedOn,
       present: attendance.present,
     })
     .from(enrollmentCourse)
     .innerJoin(enrollment, eq(enrollment.id, enrollmentCourse.enrollmentId))
     .innerJoin(person, eq(person.id, enrollmentCourse.studentId))
     .leftJoin(attendance, and(eq(attendance.lessonId, lessonId), eq(attendance.studentId, person.id)))
-    .where(and(eq(enrollmentCourse.courseId, s.courseId), inArray(enrollment.status, [...ATTENDANCE_STATUSES])))
-    .orderBy(asc(person.lastName), asc(person.firstName), asc(person.id), desc(sql`${enrollment.status} = 'active'`));
+    .where(and(eq(enrollmentCourse.courseId, s.courseId), inArray(enrollment.status, [...ATTENDANCE_CANDIDATES])))
+    .orderBy(asc(person.lastName), asc(person.firstName), asc(person.id));
+  const students = oneRowPerStudent(
+    rows.filter((d) => onAttendanceSheet(d.status, d.droppedOn, s.date)),
+    (d) => d.id,
+  );
 
   return {
     ...s,
