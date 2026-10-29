@@ -164,24 +164,39 @@ describe("biweeklySwapped (#270)", () => {
   const before = { start: "2026-09-01", end: "2027-06-30" };
   const biweekly = { type: "biweekly" as const, weekday: 4, startDate: null, endDate: null };
   const from = (start: string) => ({ start, end: "2027-06-30" });
+  const TODAY = "2026-08-15";
+  const swapped = (r: Parameters<typeof biweeklySwapped>[0], after: { start: string; end: string }, today = TODAY) =>
+    biweeklySwapped(r, before, after, today);
 
   it("swaps the weeks when the first Thursday moves by an odd number of weeks", () => {
-    expect(biweeklySwapped(biweekly, before, from("2026-09-08"))).toBe(true);
-    expect(biweeklySwapped(biweekly, before, from("2026-08-25"))).toBe(true);
+    expect(swapped(biweekly, from("2026-09-08"))).toBe(true);
+    expect(swapped(biweekly, from("2026-08-25"))).toBe(true);
   });
 
   it("keeps them when it moves by an even number of weeks, or not at all", () => {
-    expect(biweeklySwapped(biweekly, before, from("2026-09-15"))).toBe(false);
+    expect(swapped(biweekly, from("2026-09-15"))).toBe(false);
     // Tuesday → Wednesday: the first Thursday is still the 3rd.
-    expect(biweeklySwapped(biweekly, before, from("2026-09-02"))).toBe(false);
+    expect(swapped(biweekly, from("2026-09-02"))).toBe(false);
     // The end only: nothing moves.
-    expect(biweeklySwapped(biweekly, before, { start: "2026-09-01", end: "2027-05-31" })).toBe(false);
+    expect(swapped(biweekly, { start: "2026-09-01", end: "2027-05-31" })).toBe(false);
   });
 
   it("ignores a weekly course, and one with its own start after both season starts", () => {
-    expect(biweeklySwapped({ ...biweekly, type: "weekly" }, before, from("2026-09-08"))).toBe(false);
-    expect(biweeklySwapped({ ...biweekly, startDate: "2026-10-01" }, before, from("2026-09-08"))).toBe(false);
+    expect(swapped({ ...biweekly, type: "weekly" }, from("2026-09-08"))).toBe(false);
+    expect(swapped({ ...biweekly, startDate: "2026-10-01" }, from("2026-09-08"))).toBe(false);
     // Its own start falls before the new season start: the season's start rules again.
-    expect(biweeklySwapped({ ...biweekly, startDate: "2026-09-03" }, before, from("2026-09-08"))).toBe(true);
+    expect(swapped({ ...biweekly, startDate: "2026-09-03" }, from("2026-09-08"))).toBe(true);
+  });
+
+  it("swaps them on a two-week season shift when the course's own start lies in between", () => {
+    // First Thursday 10 September (its own start), then 17 September (the season's): one week.
+    expect(swapped({ ...biweekly, startDate: "2026-09-10" }, from("2026-09-15"))).toBe(true);
+  });
+
+  it("ignores a course ended before today or before its new first date", () => {
+    const ending = { ...biweekly, endDate: "2026-09-30" };
+    expect(swapped(ending, from("2026-09-08"))).toBe(true);
+    expect(swapped(ending, from("2026-09-08"), "2026-10-05")).toBe(false);
+    expect(swapped({ ...biweekly, endDate: "2026-09-09" }, from("2026-09-08"))).toBe(false);
   });
 });

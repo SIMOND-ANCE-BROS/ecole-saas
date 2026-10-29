@@ -80,14 +80,21 @@ export type SyncedCourse = { id: string; instructorId: string; siteId: string; r
  * meets on without closures (over the whole season: the « une semaine sur
  * deux » alternation is aligned on the first date). `closed`: whether a
  * closure takes a given day away from a course, as `courseDates` decides
- * (a one-off course ignores school-wide closures).
+ * (a one-off course ignores school-wide closures). `meetsBeyond`: whether
+ * the course would meet on a date outside the season, its dates stretched
+ * to reach it, the alternation of the season kept (#270).
  */
 export function seasonLessons(
   courses: SyncedCourse[],
   season: Period,
   closures: ScopedClosure[],
   start: string,
-): { expected: ExpectedLesson[]; meets: Set<string>; closed: (courseId: string, date: string) => boolean } {
+): {
+  expected: ExpectedLesson[];
+  meets: Set<string>;
+  closed: (courseId: string, date: string) => boolean;
+  meetsBeyond: (courseId: string, date: string) => boolean;
+} {
   const expected: ExpectedLesson[] = [];
   const meets = new Set<string>();
   const closedPeriods = new Map<string, Period[]>();
@@ -101,7 +108,20 @@ export function seasonLessons(
   }
   const closed = (courseId: string, date: string) =>
     (closedPeriods.get(courseId) ?? []).some((p) => p.start <= date && date <= p.end);
-  return { expected, meets, closed };
+  const recurrences = new Map(courses.map((c) => [c.id, c.recurrence]));
+  const meetsBeyond = (courseId: string, date: string) => {
+    const r = recurrences.get(courseId);
+    if (!r) return false;
+    const stretched = courseDates(
+      r,
+      { start: date < season.start ? date : season.start, end: date > season.end ? date : season.end },
+      [],
+    );
+    // Stretched before the season, the alternation must still fall on the season's own weeks.
+    const first = courseDates(r, season, [])[0];
+    return stretched.includes(date) && (first === undefined || stretched.includes(first));
+  };
+  return { expected, meets, closed, meetsBeyond };
 }
 
 export function planLessonSync(input: {
@@ -122,10 +142,13 @@ export function planLessonSync(input: {
   activeInstructors: ReadonlySet<string>;
   /** Whether a closure takes this day away from the course (`seasonLessons`). */
   closed: (courseId: string, date: string) => boolean;
+  /** Whether the course would meet on a date outside the season (`seasonLessons`). */
+  meetsBeyond: (courseId: string, date: string) => boolean;
   /** Only the pack lessons kept on a day of this period are reported (the closure just added). */
   report?: Period;
 }): SyncPlan {
-  const { start, today, season, expected, meets, existing, suspended, activeInstructors, closed, report } = input;
+  const { start, today, season, expected, meets, existing, suspended, activeInstructors, closed, meetsBeyond, report } =
+    input;
   const present = new Set(existing.map((e) => keyOf(e.courseId, e.reference)));
   const wanted = new Set(expected.map((a) => keyOf(a.courseId, a.date)));
 
@@ -135,12 +158,14 @@ export function planLessonSync(input: {
       e.status === "planned" &&
       !e.attendanceSheet &&
       !wanted.has(keyOf(e.courseId, e.reference)) &&
-      // Moved (#90) from a date the season no longer has to one it still has: the move stands (#270).
+      // Moved (#90) from a date the season no longer has to one it still has: the move stands (#270),
+      // as long as the course would still meet on its original date (not since changed day or period).
       !(
         e.plannedDate !== null &&
         (e.reference < season.start || e.reference > season.end) &&
         season.start <= e.date &&
-        e.date <= season.end
+        e.date <= season.end &&
+        meetsBeyond(e.courseId, e.reference)
       ),
   );
   // A lesson a pack was counted on is never removed (#225): nothing is lost, the director decides.

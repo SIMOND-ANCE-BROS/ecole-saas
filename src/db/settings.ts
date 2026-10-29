@@ -171,6 +171,7 @@ async function swappedBiweekly(
   seasonId: string,
   before: { start: string; end: string },
   after: { start: string; end: string },
+  today: string,
 ): Promise<string | null> {
   const courses = await tx
     .select({
@@ -188,15 +189,13 @@ async function swappedBiweekly(
     .innerJoin(room, eq(room.id, course.roomId))
     .where(and(eq(course.seasonId, seasonId), eq(course.recurrence, "biweekly")));
   const swapped = courses
-    .filter((c) => biweeklySwapped(recurrenceOf({ ...c, dates: [] }), before, after))
+    .filter((c) => biweeklySwapped(recurrenceOf({ ...c, dates: [] }), before, after, today))
     .map((c) => closedCourseLabel(c))
     .sort((a, b) => a.localeCompare(b, "fr"));
   if (swapped.length === 0) return null;
-  return `Décaler le début d’un nombre impair de semaines inverserait les semaines ${
-    swapped.length === 1 ? "de ce cours" : "de ces cours"
-  } une semaine sur deux : ${swapped.join(", ")}. Donnez d’abord une date de début à ${
-    swapped.length === 1 ? "ce cours" : "ces cours"
-  }, ou décalez d’un nombre pair de semaines.`;
+  return swapped.length === 1
+    ? `Ce début de saison décalerait la première séance de ce cours une semaine sur deux d’un nombre impair de semaines, et inverserait ses semaines : ${swapped[0]}. Donnez à ce cours une date de début après le nouveau début de saison, sur une de ses semaines actuelles.`
+    : `Ce début de saison décalerait la première séance de ces cours une semaine sur deux d’un nombre impair de semaines, et inverserait leurs semaines : ${swapped.join(", ")}. Donnez à ces cours une date de début après le nouveau début de saison, sur une de leurs semaines actuelles.`;
 }
 
 /**
@@ -229,7 +228,7 @@ export async function updateSeason(
   const refusal =
     (await checkSeason(tx, s.data, id)) ??
     (await closuresOutside(tx, id, s.data)) ??
-    (before.start !== after.start ? await swappedBiweekly(tx, id, before, after) : null);
+    (before.start !== after.start ? await swappedBiweekly(tx, id, before, after, today) : null);
   if (refusal) return { ok: false, message: refusal };
   const rows = await tx
     .update(season)

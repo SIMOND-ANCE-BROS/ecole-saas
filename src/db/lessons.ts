@@ -300,7 +300,7 @@ export async function syncLessons(
     .innerJoin(course, eq(course.id, courseDate.courseId))
     .where(eq(course.seasonId, seasonId));
 
-  const { expected, meets, closed } = seasonLessons(
+  const { expected, meets, closed, meetsBeyond } = seasonLessons(
     allCourses.map((c) => ({
       ...c,
       recurrence: recurrenceOf({ ...c, dates: oneOff.filter((p) => p.courseId === c.id).map((p) => p.date) }),
@@ -352,6 +352,7 @@ export async function syncLessons(
     suspended,
     activeInstructors: new Set(active.map((i) => i.id)),
     closed,
+    meetsBeyond,
     report,
   });
 

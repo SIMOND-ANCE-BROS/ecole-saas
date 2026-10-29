@@ -61,7 +61,12 @@ function plan(opts: {
   report?: { start: string; end: string };
 }) {
   const start = opts.start ?? TODAY;
-  const { expected, meets, closed } = seasonLessons(opts.courses ?? [jazz], SEASON, opts.closures ?? [], start);
+  const { expected, meets, closed, meetsBeyond } = seasonLessons(
+    opts.courses ?? [jazz],
+    SEASON,
+    opts.closures ?? [],
+    start,
+  );
   return planLessonSync({
     start,
     today: TODAY,
@@ -69,6 +74,7 @@ function plan(opts: {
     expected,
     meets,
     closed,
+    meetsBeyond,
     existing: opts.existing ?? [],
     suspended: opts.suspended ?? [],
     activeInstructors: new Set(opts.active ?? [T1, T2, SUB]),
@@ -441,6 +447,43 @@ describe("lessons outside the season's dates (#270)", () => {
     const p = plan({ existing: [...THURSDAYS.map((d) => lessonOn(d)), moved] });
     expect(p.remove).toEqual([]);
     expect(p.insert).toEqual([]);
+  });
+
+  it("removes it once the course no longer meets on its original day", () => {
+    // The course moved from Thursday to Tuesday: the 3 December Thursday is no longer one of its days.
+    const tuesdays: SyncedCourse = {
+      ...jazz,
+      recurrence: { type: "weekly", weekday: 2, startDate: null, endDate: null },
+    };
+    const moved = lessonOn("2026-11-27", { id: "moved", reference: "2026-12-03", plannedDate: "2026-12-03" });
+    expect(plan({ courses: [tuesdays], existing: [moved] }).remove).toEqual(["moved"]);
+    // Its period ended before that date: removed too.
+    const ended: SyncedCourse = {
+      ...jazz,
+      recurrence: { type: "weekly", weekday: 4, startDate: null, endDate: "2026-11-30" },
+    };
+    expect(plan({ courses: [ended], existing: [moved] }).remove).toEqual(["moved"]);
+  });
+
+  it("keeps one moved from before the season's start, on a week of the alternation only", () => {
+    // Season 1 → 30 November once its start moved; the 5 November lesson had moved to Friday 13.
+    const p = (course: SyncedCourse, reference: string) =>
+      planLessonSync({
+        start: TODAY,
+        today: TODAY,
+        season: { start: "2026-11-10", end: "2026-11-30" },
+        ...seasonLessons([course], { start: "2026-11-10", end: "2026-11-30" }, [], TODAY),
+        existing: [lessonOn("2026-11-13", { id: "moved", reference, plannedDate: reference })],
+        suspended: [],
+        activeInstructors: new Set([T1]),
+      }).remove;
+    expect(p(jazz, "2026-11-05")).toEqual([]);
+    // Every other week from the 12th: the 5th was not one of its weeks.
+    const biweekly: SyncedCourse = {
+      ...jazz,
+      recurrence: { type: "biweekly", weekday: 4, startDate: null, endDate: null },
+    };
+    expect(p(biweekly, "2026-11-05")).toEqual(["moved"]);
   });
 
   it("removes one moved outside the season too, and a plain lesson after its end", () => {

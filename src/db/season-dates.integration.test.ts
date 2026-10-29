@@ -129,24 +129,28 @@ describe("season dates and lessons (#270)", () => {
     expect(n).toBe(0);
   });
 
-  it("a later start removes the upcoming planned lessons before it, keeps and counts a pack one", async () => {
+  it("a later start removes the upcoming planned lessons before it, keeps a pack one and a moved one", async () => {
     await admin`INSERT INTO lesson_pack_usage (school_id, lesson_pack_id, lesson_id)
       VALUES (${school}, ${pack}, ${await lessonOn("2026-11-12")})`;
+    // The 5 November lesson moved to Tuesday 24 November, inside the new dates: the move stands.
+    await admin`UPDATE lesson SET date = '2026-11-24', planned_date = '2026-11-05' WHERE id = ${await lessonOn("2026-11-05")}`;
+    // A stale planned lesson before the new start: removed.
+    await admin`INSERT INTO lesson (school_id, course_id, date, instructor_id) VALUES (${school}, ${course}, '2026-11-10', ${teacher})`;
     expect(await edit("2026-11-16", "2026-11-30")).toEqual({ ok: true, id: season, outside: 3 });
-    expect(await dates()).toEqual(["2026-11-12", "2026-11-26", "2026-11-27", "2026-12-10", "2026-12-17"]);
+    expect(await dates()).toEqual(["2026-11-12", "2026-11-24", "2026-11-26", "2026-11-27", "2026-12-10", "2026-12-17"]);
   });
 
   it("a plain sync removes an upcoming planned lesson before the season's start", async () => {
     await admin`INSERT INTO lesson (school_id, course_id, date, instructor_id) VALUES (${school}, ${course}, '2026-11-09', ${teacher})`;
     expect((await withSchool(school, (tx) => syncLessons(tx, season, TODAY))).removed).toBe(1);
-    expect(await dates()).toEqual(["2026-11-12", "2026-11-26", "2026-11-27", "2026-12-10", "2026-12-17"]);
+    expect(await dates()).toEqual(["2026-11-12", "2026-11-24", "2026-11-26", "2026-11-27", "2026-12-10", "2026-12-17"]);
   });
 
   it("lengthening creates the lessons of the added weeks, closures still applied", async () => {
     expect(await edit("2026-09-01", "2027-01-15")).toEqual({ ok: true, id: season, outside: 0 });
     expect(await dates()).toEqual([
-      "2026-11-05",
       "2026-11-12",
+      "2026-11-24",
       "2026-11-26",
       "2026-11-27",
       "2026-12-03",
@@ -176,7 +180,7 @@ describe("season dates and lessons (#270)", () => {
     expect(await edit("2026-09-08", "2027-01-15")).toEqual({
       ok: false,
       message:
-        "Décaler le début d’un nombre impair de semaines inverserait les semaines de ce cours une semaine sur deux : Zzvalse – mardi 19:00 – Zz Studio. Donnez d’abord une date de début à ce cours, ou décalez d’un nombre pair de semaines.",
+        "Ce début de saison décalerait la première séance de ce cours une semaine sur deux d’un nombre impair de semaines, et inverserait ses semaines : Zzvalse – mardi 19:00 – Zz Studio. Donnez à ce cours une date de début après le nouveau début de saison, sur une de ses semaines actuelles.",
     });
     const [{ s }] = await admin`SELECT start_date::text AS s FROM season WHERE id = ${season}`;
     expect(s).toBe("2026-09-01");
