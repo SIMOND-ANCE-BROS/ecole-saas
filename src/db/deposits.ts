@@ -188,7 +188,10 @@ export async function cancelDeposit(tx: Tx, userId: string, id: string): Promise
     return { ok: false, message: "Un paiement de cette remise a été rejeté : la remise ne peut plus être annulée." };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
-  await tx.delete(bankDeposit).where(eq(bankDeposit.id, id));
+  // Two cancellations at the same moment both pass the lock above (#273): the second
+  // deletes nothing, and must neither succeed nor log a second deletion.
+  const deleted = await tx.delete(bankDeposit).where(eq(bankDeposit.id, id)).returning({ id: bankDeposit.id });
+  if (deleted.length === 0) return { ok: false, message: "Cette remise a déjà été annulée." };
   await tx.insert(auditLog).values({
     schoolId: CURRENT_SCHOOL,
     actor: who,

@@ -298,6 +298,27 @@ describe("deposits saved at the same time as another change (#247)", () => {
     });
   });
 
+  it("two cancellations of the same deposit: the second is refused and logs nothing (#273)", async () => {
+    const cheque = await newCheque("0273a");
+    const d = await deposit(cheque);
+    if (!d.ok) throw new Error(d.message);
+    const [first, second] = await overlapping(
+      admin,
+      (hold) =>
+        withSchool(school, async (tx) => {
+          const r = await cancelDeposit(tx, director, d.id);
+          await hold();
+          return r;
+        }),
+      () => withSchool(school, (tx) => cancelDeposit(tx, director, d.id)),
+    );
+    expect(first.ok).toBe(true);
+    expect(second).toEqual({ ok: false, message: "Cette remise a déjà été annulée." });
+    const [logged] = await admin`SELECT count(*)::int AS n FROM audit_log WHERE row_id = ${d.id} AND action = 'delete'`;
+    expect(logged.n).toBe(1);
+    expect((await toDeposit()).cheque.map((p) => p.id)).toContain(cheque);
+  });
+
   it("a rejection saved while its deposit is cancelled finds no deposit and is refused", async () => {
     const cheque = await newCheque("0253i");
     const d = await deposit(cheque);
