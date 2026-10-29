@@ -9,6 +9,7 @@ import { createCalendarToken, revokeCalendarToken } from "@/db/calendar-feed";
 import { deleteConnection } from "@/db/calendar-connections";
 import { addUnavailability, deleteUnavailability } from "@/db/unavailabilities";
 import { createInstructor, updateInstructor, validInstructorInput } from "@/db/instructors";
+import { todayInParis } from "@/domain/people/age";
 import { instantParis } from "@/domain/schedule/availability";
 import { personalPage } from "@/lib/public-calendar";
 import { parseEuros } from "@/lib/money";
@@ -59,7 +60,7 @@ export async function saveInstructor(id: string | null, state: FormState, f: For
 
   const result = await withSchool(schoolId, async (tx) => {
     if (id === null) return { ok: true as const, id: await createInstructor(tx, parsed.data) };
-    const r = await updateInstructor(tx, id, parsed.data);
+    const r = await updateInstructor(tx, id, parsed.data, todayInParis());
     return r.ok ? { ok: true as const, id } : r;
   });
   if (!result.ok) return refusal({ form: result.message });

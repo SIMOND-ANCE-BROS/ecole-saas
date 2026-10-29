@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { columnsOf } from "./columns-of";
 import { z } from "zod";
-import { todayInParis } from "../domain/people/age";
+import { frenchList } from "../lib/french-list";
 import { seasonBlocksPayModeChange } from "../domain/payroll/rate";
 import { deleteConnection } from "./calendar-connections";
 import type { Tx } from "./index";
@@ -106,22 +106,19 @@ export async function createInstructor(tx: Tx, entry: InstructorInput): Promise<
   return id;
 }
 
-/** « 2026-2027 », « 2026-2027 et 2027-2028 », « A, B et C ». */
-const frenchList = (items: string[]) =>
-  items.length > 1 ? `${items.slice(0, -1).join(", ")} et ${items[items.length - 1]}` : (items[0] ?? "");
-
 /**
  * Refused if the instructor does not exist in the current school, or if the
  * pay mode changes while courses of the current or a future season carry their
  * own rate for them (#191): such a rate is in the unit of the old pay mode.
  * Rates of past seasons are kept untouched as history and do not block
- * (#192 Q5, recommended rule pending the school's validation).
+ * (#192 Q5, recommended rule pending the school's validation). `today` is a
+ * `YYYY-MM-DD` date in Paris (`todayInParis()`).
  */
 export async function updateInstructor(
   tx: Tx,
   id: string,
   entry: InstructorInput,
-  today: string = todayInParis(),
+  today: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const gone = { ok: false as const, message: "Cet intervenant n’existe plus." };
   if (!z.uuid().safeParse(id).success) return gone;
