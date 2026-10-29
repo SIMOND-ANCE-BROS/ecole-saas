@@ -14,6 +14,15 @@ export type RatedInstructor = { id: string; payMode: PayMode; rateCents: number 
 export const courseRateAllowed = (payMode: PayMode) => payMode !== "monthly_flat";
 
 /**
+ * Whether a course rate of this season blocks a change of the instructor's
+ * pay mode (#192 Q5). Such a rate is in the unit of the old pay mode: the
+ * current and future seasons (ending today or later, in Paris) count, past
+ * seasons keep their rates untouched as history and no longer block.
+ * Recommended rule, pending the school's validation.
+ */
+export const seasonBlocksPayModeChange = (seasonEndDate: string, today: string) => seasonEndDate >= today;
+
+/**
  * Rate of the course's own instructor for this course: its specific rate when
  * set, else the instructor's default rate, in the unit of their pay mode
  * (per hour or per lesson).

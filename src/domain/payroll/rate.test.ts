@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { courseRateAllowed, effectiveRate, rateAfterUpdate, type RatedInstructor } from "./rate";
+import {
+  courseRateAllowed,
+  effectiveRate,
+  rateAfterUpdate,
+  seasonBlocksPayModeChange,
+  type RatedInstructor,
+} from "./rate";
 
 const hourly: RatedInstructor = { id: "i1", payMode: "hourly", rateCents: 3000 };
 
@@ -59,5 +65,31 @@ describe("rateAfterUpdate", () => {
     expect(change(4550, "x", 4550, "y")).toBeNull();
     expect(change(4550, undefined, 4550, "y")).toBeNull();
     expect(change(null, "y", null, "y")).toBeNull();
+  });
+});
+
+describe("seasonBlocksPayModeChange (#192 Q5)", () => {
+  const today = "2026-10-29";
+
+  it("counts the current season", () => {
+    expect(seasonBlocksPayModeChange("2027-06-30", today)).toBe(true);
+  });
+
+  it("counts a future season", () => {
+    expect(seasonBlocksPayModeChange("2028-06-30", today)).toBe(true);
+  });
+
+  it("still counts a season ending today", () => {
+    expect(seasonBlocksPayModeChange(today, today)).toBe(true);
+  });
+
+  it("leaves out a season that ended, even yesterday", () => {
+    expect(seasonBlocksPayModeChange("2026-10-28", today)).toBe(false);
+    expect(seasonBlocksPayModeChange("2026-06-30", today)).toBe(false);
+  });
+
+  it("compares dates across a year boundary", () => {
+    expect(seasonBlocksPayModeChange("2026-12-31", "2027-01-01")).toBe(false);
+    expect(seasonBlocksPayModeChange("2027-01-01", "2026-12-31")).toBe(true);
   });
 });
