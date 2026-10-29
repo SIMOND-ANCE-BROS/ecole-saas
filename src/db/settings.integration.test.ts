@@ -1,6 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
+import { addClosure } from "./lessons";
 import {
   createDiscipline,
   createSeason,
@@ -144,12 +145,12 @@ describe("seasons", () => {
     expect(await edit("2026-08-26", "2027-07-04")).toEqual({
       ok: false,
       message:
-        "Ces fermetures sortiraient de la saison : Zz Rentrée (le 25/08/2026), Zz Gala (du 28/06/2027 au 05/07/2027). Modifiez-les ou supprimez-les d’abord.",
+        "Ces fermetures sortiraient de la saison : Zz Rentrée (le 25/08/2026), Zz Gala (du 28/06/2027 au 05/07/2027). Supprimez-les dans Planning › Fermetures, puis recréez-les avec les bonnes dates.",
     });
     expect(await edit("2026-08-25", "2027-07-04")).toEqual({
       ok: false,
       message:
-        "Cette fermeture sortirait de la saison : Zz Gala (du 28/06/2027 au 05/07/2027). Modifiez-la ou supprimez-la d’abord.",
+        "Cette fermeture sortirait de la saison : Zz Gala (du 28/06/2027 au 05/07/2027). Supprimez-la dans Planning › Fermetures, puis recréez-la avec les bonnes dates.",
     });
     expect(await dates()).toEqual({ s: "2026-08-25", e: "2027-07-05" });
 
@@ -158,6 +159,41 @@ describe("seasons", () => {
     await admin`DELETE FROM closure WHERE season_id = ${season2026} AND label = 'Zz Gala'`;
     expect((await edit("2026-08-20", "2027-06-30")).ok).toBe(true);
     expect(await dates()).toEqual({ s: "2026-08-20", e: "2027-06-30" });
+  });
+
+  it("refuses a season edit racing a closure being added on the last day (#194)", async () => {
+    // Season now 2026-08-20 → 2027-06-30. Two transactions, two connections: A adds a closure on the
+    // last day and keeps its transaction open; B shortens the season by one day meanwhile.
+    let release = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    let added = () => {};
+    const isAdded = new Promise<void>((r) => (added = r));
+    const a = withSchool(school, async (tx) => {
+      const r = await addClosure(tx, season2026, {
+        scope: "school",
+        label: "Zz Dernier jour",
+        start: "2027-06-30",
+        end: "2027-06-30",
+      });
+      added();
+      await held;
+      return r;
+    });
+    await isAdded;
+    const b = withSchool(school, (tx) =>
+      updateSeason(tx, season2026, { label: "2026-2027", startDate: "2026-08-20", endDate: "2027-06-29" }),
+    );
+    // Without the lock, B would not see A's uncommitted closure and would go through.
+    await new Promise((r) => setTimeout(r, 300));
+    release();
+    expect((await a).ok).toBe(true);
+    expect(await b).toEqual({
+      ok: false,
+      message:
+        "Cette fermeture sortirait de la saison : Zz Dernier jour (le 30/06/2027). Supprimez-la dans Planning › Fermetures, puis recréez-la avec les bonnes dates.",
+    });
+    const [s] = await admin`SELECT end_date::text AS e FROM season WHERE id = ${season2026}`;
+    expect(s.e).toBe("2027-06-30");
   });
 });
 

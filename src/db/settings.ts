@@ -154,8 +154,8 @@ async function closuresOutside(tx: Tx, seasonId: string, s: z.output<typeof vali
     )
     .join(", ");
   return outside.length === 1
-    ? `Cette fermeture sortirait de la saison : ${names}. Modifiez-la ou supprimez-la d’abord.`
-    : `Ces fermetures sortiraient de la saison : ${names}. Modifiez-les ou supprimez-les d’abord.`;
+    ? `Cette fermeture sortirait de la saison : ${names}. Supprimez-la dans Planning › Fermetures, puis recréez-la avec les bonnes dates.`
+    : `Ces fermetures sortiraient de la saison : ${names}. Supprimez-les dans Planning › Fermetures, puis recréez-les avec les bonnes dates.`;
 }
 
 export async function updateSeason(tx: Tx, id: string, entry: z.input<typeof validSeasonInput>): Promise<Result> {
