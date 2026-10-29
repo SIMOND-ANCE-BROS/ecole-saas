@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { rowsOf } from "./columns-of";
 import { z } from "zod";
 import { toDeposit, DEPOSIT_METHODS, type DepositMethod } from "../domain/payments/deposits";
+import { REJECTED_REFERENCE } from "../domain/payments/rejection";
 import type { Tx } from "./index";
 import { alreadyCorrected, type Method } from "./payments";
 import { auditLog, member, payment, person, bankDeposit, bankDepositPayment } from "./schema";
@@ -169,25 +170,22 @@ export async function cancelDeposit(tx: Tx, userId: string, id: string): Promise
     .where(eq(bankDepositPayment.bankDepositId, id))
     .orderBy(asc(payment.id))
     .for("no key update", { of: payment });
-  // A payment of the deposit rejected (or corrected) after it: the slip was used, it stays.
-  // A partial correction made before the deposit does not count: the slip holds what was left.
-  const [reversed] = await tx
+  // A payment of the deposit rejected by the bank: the slip was used, it stays. Decided by
+  // what correctPayment wrote under the same lock (a deposited payment is only ever rejected),
+  // not by timestamps: a « Correction » made before the deposit never blocks it (#253).
+  const [rejected] = await tx
     .select({ id: payment.id })
     .from(payment)
     .innerJoin(bankDepositPayment, eq(bankDepositPayment.paymentId, payment.id))
-    .innerJoin(bankDeposit, eq(bankDeposit.id, bankDepositPayment.bankDepositId))
     .where(
       and(
         eq(bankDepositPayment.bankDepositId, id),
-        sql`EXISTS (SELECT 1 FROM payment c WHERE c.corrects_id = ${payment}.${sql.identifier("id")} AND c.created_at >= ${bankDeposit}.${sql.identifier("created_at")})`,
+        sql`EXISTS (SELECT 1 FROM payment c WHERE c.corrects_id = ${payment}.${sql.identifier("id")} AND c.reference = ${REJECTED_REFERENCE})`,
       ),
     )
     .limit(1);
-  if (reversed)
-    return {
-      ok: false,
-      message: "Un paiement de cette remise a été rejeté ou corrigé : la remise ne peut plus être annulée.",
-    };
+  if (rejected)
+    return { ok: false, message: "Un paiement de cette remise a été rejeté : la remise ne peut plus être annulée." };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
   await tx.delete(bankDeposit).where(eq(bankDeposit.id, id));

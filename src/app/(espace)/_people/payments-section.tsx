@@ -16,7 +16,7 @@ import { frenchDate } from "@/lib/dates";
 import { formatEuros } from "@/lib/money";
 import { ButtonLink } from "../_ui/button-link";
 import { CorrectPayment } from "./correct-payment";
-import { isRejection, rejectionLabel } from "@/domain/payments/rejection";
+import { isRejection, rejectionLabel, rejectionNotYet } from "@/domain/payments/rejection";
 
 // Tables show days as « 21/10/2026 », like the payment log and the lists (#201).
 const day = frenchDate;
@@ -43,6 +43,13 @@ const cashing = (p: PaymentRow, today: string) =>
  */
 function Correction({ payment: p, back, today }: { payment: PaymentRow; back: string; today: string }) {
   const remaining = p.amountCents - p.correctedCents;
+  // A deposit dated after today: no rejection before that day, so no form whose dates could not fit.
+  if (p.amountCents > 0 && remaining > 0 && p.depositedOn && rejectionNotYet(p.depositedOn, today))
+    return (
+      <Text span size="xs" c="dimmed">
+        rejet possible à partir du {day(p.depositedOn)}
+      </Text>
+    );
   if (p.amountCents > 0 && remaining > 0)
     return (
       <CorrectPayment

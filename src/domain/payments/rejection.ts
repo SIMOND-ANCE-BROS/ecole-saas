@@ -1,4 +1,5 @@
 import type { Method } from "../../db/payments";
+import { frenchDate } from "../../lib/dates";
 
 /**
  * A payment rejected after its bank deposit (#253): a bounced cheque, or cash
@@ -22,11 +23,20 @@ export const isRejection = (p: { amountCents: number; reference: string | null }
 /** What the action is called for a deposited payment: « Chèque rejeté » for a cheque. */
 export const rejectionLabel = (method: Method) => (method === "cheque" ? "Chèque rejeté" : "Paiement rejeté");
 
+/** Why no rejection can be recorded yet, or null: the deposit is dated after today. */
+export const rejectionNotYet = (depositedOn: string, today: string): string | null =>
+  depositedOn > today
+    ? `La remise est datée du ${frenchDate(depositedOn)} : un rejet ne peut être enregistré qu’à partir de cette date.`
+    : null;
+
 /**
- * Why the day the bank returned a payment is refused, or null: it is a
- * `YYYY-MM-DD` date, not before the bank deposit, not after today.
+ * Why the day the bank returned a payment is refused, or null: the deposit is
+ * not dated after today, and the day is a `YYYY-MM-DD` date, not before the
+ * bank deposit, not after today.
  */
 export function rejectionDateRefusal(date: string, depositedOn: string, today: string): string | null {
+  const notYet = rejectionNotYet(depositedOn, today);
+  if (notYet) return notYet;
   const parsed = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00Z`) : null;
   // A day that does not exist (31/02) reads as another one, or not at all.
   if (!parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) return "Date invalide.";

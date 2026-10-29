@@ -147,9 +147,9 @@ export async function collect(
  * to the original, within what is not already corrected. A payment already in a
  * bank deposit is rejected instead (#253, recommended rule pending the school's
  * validation): management only, for the whole amount not yet corrected, dated
- * `rejectedOn` (the day the bank returned it, not before the deposit; today when
- * null), reference « Paiement rejeté », and the deposit slip is left as printed.
- * Any other payment is corrected today, reference « Correction ».
+ * `rejectedOn` (the day the bank returned it, not before the deposit; required),
+ * reference « Paiement rejeté », and the deposit slip is left as printed. Any
+ * other payment is corrected today, reference « Correction », without `rejectedOn`.
  */
 export async function correctPayment(
   tx: Tx,
@@ -187,13 +187,15 @@ export async function correctPayment(
     .where(eq(payment.id, paymentId));
   if (!o || o.amount < 0 || o.correctedId) return { ok: false, message: "Ce paiement ne peut pas être corrigé." };
   const deposited = o.depositedOn !== null;
-  // The form asked for a rejection date, but the deposit was cancelled meanwhile.
-  if (!deposited && rejectedOn !== null)
-    return { ok: false, message: "Ce paiement n’est plus dans une remise en banque : rechargez la fiche." };
   const who = await memberAndRole(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
   if (deposited && who.role !== "director")
     return { ok: false, message: "Seule la direction peut enregistrer un paiement rejeté après sa remise en banque." };
+  // The form was opened before the deposit was made, or cancelled: what it asks no longer fits.
+  if (deposited && rejectedOn === null)
+    return { ok: false, message: "Ce paiement a été remis en banque : rechargez la fiche." };
+  if (!deposited && rejectedOn !== null)
+    return { ok: false, message: "Ce paiement n’est plus dans une remise en banque : rechargez la fiche." };
   const remaining = o.amount - o.alreadyCorrected;
   if (amountCents > remaining) return { ok: false, message: "La correction dépasse le montant encore non corrigé." };
   // A bank rejects a whole cheque: a rejection is always of everything not yet corrected.
@@ -202,7 +204,7 @@ export async function correctPayment(
       ok: false,
       message: `Un rejet porte sur tout le montant restant (${formatEuros(remaining)}) : rechargez la fiche.`,
     };
-  const date = o.depositedOn !== null ? (rejectedOn ?? today) : today;
+  const date = rejectedOn ?? today;
   const refusal = o.depositedOn !== null ? rejectionDateRefusal(date, o.depositedOn, today) : null;
   if (refusal) return { ok: false, message: refusal };
   const [{ id }] = await tx

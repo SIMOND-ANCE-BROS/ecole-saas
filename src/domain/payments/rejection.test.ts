@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isRejection, rejectionDateRefusal, rejectionLabel } from "./rejection";
+import { isRejection, rejectionDateRefusal, rejectionLabel, rejectionNotYet } from "./rejection";
 
 const DEPOSITED = "2026-10-01";
 const TODAY = "2026-10-21";
@@ -19,6 +19,13 @@ describe("rejectionDateRefusal", () => {
     expect(rejectionDateRefusal("2026-10-22", DEPOSITED, TODAY)).toBe(
       "Le rejet ne peut pas être daté après aujourd’hui.",
     );
+  });
+
+  it("refuses any day while the deposit is dated after today", () => {
+    const notYet = "La remise est datée du 25/10/2026 : un rejet ne peut être enregistré qu’à partir de cette date.";
+    expect(rejectionNotYet("2026-10-25", TODAY)).toBe(notYet);
+    expect(rejectionDateRefusal(TODAY, "2026-10-25", TODAY)).toBe(notYet);
+    expect(rejectionNotYet(TODAY, TODAY)).toBeNull();
   });
 
   it("refuses text that is not a date", () => {
