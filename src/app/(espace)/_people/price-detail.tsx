@@ -5,7 +5,14 @@ import { ofName } from "@/lib/french";
 import { formatEuros } from "@/lib/money";
 
 /** A priced enrollment: package, discounts (applied or set aside, with their reason) and total. */
-export function PriceDetail({ price }: { price: Extract<EnrollmentResult, { status: "ok" }> }) {
+export function PriceDetail({
+  price,
+  totalLabel = "Total",
+}: {
+  price: Extract<EnrollmentResult, { status: "ok" }>;
+  /** « Total à la confirmation » for a trial or waitlist enrollment, not due yet. */
+  totalLabel?: string;
+}) {
   return (
     <dl className="flex flex-col gap-1">
       <div className="flex justify-between gap-2">
@@ -25,7 +32,7 @@ export function PriceDetail({ price }: { price: Extract<EnrollmentResult, { stat
         </Text>
       ))}
       <Text component="div" size="md" fw={600} className="mt-2 flex justify-between gap-2 border-t border-bordure pt-3">
-        <dt>Total</dt>
+        <dt>{totalLabel}</dt>
         <dd className="tabular-nums">{formatEuros(price.netPriceCents)}</dd>
       </Text>
     </dl>
