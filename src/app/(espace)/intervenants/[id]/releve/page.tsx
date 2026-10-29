@@ -106,11 +106,11 @@ export default async function InstructorStatementPage({
         title={`Relevé de ${s.name}, ${label}`}
         description={
           owner
-            ? "Dirigeant de l’école."
+            ? undefined
             : `Payé ${flat ? "au forfait mensuel" : PAY_MODES[s.payMode]}${NBSP}: ${rate}. Calculé avec les séances et les tarifs d’aujourd’hui.`
         }
         actions={
-          <>
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
             <TextLink href={`/intervenants/releves?mois=${month}`} size="sm">
               Tous les relevés du mois
             </TextLink>
@@ -119,7 +119,7 @@ export default async function InstructorStatementPage({
                 Exporter (CSV)
               </Anchor>
             )}
-          </>
+          </div>
         }
       />
       {owner ? (
@@ -153,7 +153,7 @@ export default async function InstructorStatementPage({
               Montant dû
             </Title>
             <dl className="flex flex-wrap gap-x-8 gap-y-3">
-              <Figure label="Séances payées" value={String(s.lessonCount)} />
+              <Figure label="Séances comptées" value={String(s.lessonCount)} />
               <Figure label="Heures" value={hoursLabel(s.minutes)} />
               {flat && (
                 <Figure
@@ -203,7 +203,7 @@ export default async function InstructorStatementPage({
                   </TableThead>
                   <TableTbody className={PHONE_TABLE.body}>
                     {c.lines.map((l) => (
-                      <Line key={l.lessonId} line={l} flat={flat} />
+                      <Line key={l.lessonId} line={l} flat={flat} courseId={c.courseId} />
                     ))}
                   </TableTbody>
                 </Table>
@@ -229,11 +229,16 @@ function Figure({ label, value, strong }: { label: string; value: string; strong
   );
 }
 
-function Line({ line: l, flat }: { line: StatementLine; flat: boolean }) {
+function Line({ line: l, flat, courseId }: { line: StatementLine; flat: boolean; courseId: string }) {
   const reason = l.toPrice ? capitalised(TO_PRICE_REASONS[l.toPrice]) : null;
   return (
     <TableTr className={PHONE_TABLE.row}>
-      <TableTd className={`${PHONE_TABLE.cell} ${PHONE_TABLE.title}`}>{shortDate(l.date, true)}</TableTd>
+      <TableTd className={`${PHONE_TABLE.cell} ${PHONE_TABLE.title}`}>
+        {/* The lesson's page: attendance, substitute, cancellation. */}
+        <TextLink href={`/planning/seances/${l.lessonId}`} size="sm">
+          {shortDate(l.date, true)}
+        </TextLink>
+      </TableTd>
       <TableTd className={`${PHONE_TABLE.cell} tabular-nums`}>
         <span className={PHONE_LABEL} aria-hidden>
           Horaire
@@ -282,6 +287,11 @@ function Line({ line: l, flat }: { line: StatementLine; flat: boolean }) {
             <Text span size="sm">
               {reason}
             </Text>
+          )}
+          {l.toPrice === "old_unit" && (
+            <TextLink href={`/planning/cours/${courseId}`} size="sm">
+              Corriger le tarif du cours
+            </TextLink>
           )}
           {flat && !l.substitute && !l.toPrice && (
             <Text span size="sm" c="dimmed">

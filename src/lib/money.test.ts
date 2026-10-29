@@ -1,5 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { applyRate, formatEuros, parseEuros, split, typedEuros } from "./money";
+import { applyRate, formatEuros, parseEuros, prorate, split, typedEuros } from "./money";
+
+describe("prorate", () => {
+  it("prices minutes at an hourly rate, half a cent up", () => {
+    expect(prorate(2500, 90, 60)).toBe(3750);
+    expect(prorate(2501, 45, 60)).toBe(1876); // 18,7575 €
+    expect(prorate(30, 5, 60)).toBe(3); // exactly 2,5 cents: up
+    expect(prorate(1, 30, 60)).toBe(1); // half a cent: up
+    expect(prorate(1, 29, 60)).toBe(0);
+  });
+
+  it("gives zero for a zero rate or no time", () => {
+    expect(prorate(0, 90, 60)).toBe(0);
+    expect(prorate(2500, 0, 60)).toBe(0);
+  });
+
+  it("rounds with an odd denominator too", () => {
+    expect(prorate(100, 1, 3)).toBe(33);
+    expect(prorate(200, 1, 3)).toBe(67);
+  });
+
+  it("refuses non-integers, negatives and a zero denominator", () => {
+    expect(() => prorate(25.5, 60, 60)).toThrow(TypeError);
+    expect(() => prorate(-1, 60, 60)).toThrow(TypeError);
+    expect(() => prorate(100, 1, 0)).toThrow(TypeError);
+  });
+});
 
 describe("applyRate", () => {
   it("computes a 10 % siblings discount", () => {

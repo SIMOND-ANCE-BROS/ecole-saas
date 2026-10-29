@@ -8,7 +8,7 @@ const perLesson: RatedInstructor = { id: "i2", payMode: "per_lesson", rateCents:
 
 const lesson = (
   id: string,
-  regular: RatedInstructor,
+  regular: RatedInstructor & { isOwner?: boolean },
   date: string,
   more: Partial<StatementLesson> = {},
 ): StatementLesson => ({
@@ -21,7 +21,7 @@ const lesson = (
   courseId: `c-${regular.id}`,
   courseLabel: "Jazz Débutant, lundi 18:00",
   course: { instructorId: regular.id, instructorRateCents: null, instructorRatePayMode: null },
-  regular,
+  regular: { isOwner: false, ...regular },
   attendance: { taken: true, present: 4 },
   ...more,
 });
@@ -83,7 +83,9 @@ describe("statementCsv", () => {
     const rows = rowsOf(statementCsv([s]));
     expect(rows[1]).toBe(`Marin Test;04/10/2027;18:00;Jazz Débutant, lundi 18:00;90;;;;${IN_FLAT}`);
     expect(rows[2]).toBe("Marin Test;;;Forfait mensuel;;800,00;mois;800,00;");
-    expect(rows[3]).toMatch(/^Marin Test;;;À vérifier;;;;;Un tarif ou le mode de rémunération a changé/);
+    expect(rows[3]).toMatch(
+      /^Marin Test;;;À vérifier;;;;;Un tarif, le mode de rémunération ou l’intervenant d’un cours a changé/,
+    );
     const amounts = rows.slice(1).map((r) => r.split(";")[7]);
     expect(amounts.filter(Boolean)).toEqual(["800,00"]);
   });

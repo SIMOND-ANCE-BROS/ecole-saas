@@ -49,6 +49,7 @@ let perLesson: string;
 let hourly: string;
 let foreign: string;
 let owner: string;
+let ownerCourseId: string;
 let courseA: string;
 let courseB: string;
 
@@ -122,7 +123,9 @@ beforeAll(async () => {
   const ownerCourse = await courseOf(a, owner, 4, 60);
   // Per lesson: 4 lessons without attendance, 1 with a student present, 1 moved into October from September,
   // 1 where nobody came, 1 moved out to November, 1 cancelled: 6 owed.
-  for (const d of ["05", "12", "19", "26"]) await lessonOf(school, courseA, perLesson, `2027-10-${d}`);
+  for (const d of ["05", "12", "19"]) await lessonOf(school, courseA, perLesson, `2027-10-${d}`);
+  // A sheet saved with nobody on it (« effectuée », no row): not « nobody came », counted and flagged.
+  await lessonOf(school, courseA, perLesson, "2027-10-26", { status: "done" });
   await attendanceOf(await lessonOf(school, courseA, perLesson, "2027-10-01"), student.id, true);
   await lessonOf(school, courseA, perLesson, "2027-10-02", { plannedDate: "2027-09-28" });
   await attendanceOf(await lessonOf(school, courseA, perLesson, "2027-10-08"), student.id, false);
@@ -131,8 +134,10 @@ beforeAll(async () => {
   // The hourly instructor substitutes once on the per-lesson instructor's course: paid 30,00 €.
   await lessonOf(school, courseA, hourly, "2027-10-20");
   await attendanceOf(await lessonOf(school, courseB, hourly, "2027-10-06"), student.id, true);
-  // An owner's lesson: no statement.
+  // An owner's lesson: no statement; the hourly instructor replacing the owner: « à chiffrer ».
   await lessonOf(school, ownerCourse, owner, "2027-10-07");
+  await lessonOf(school, ownerCourse, hourly, "2027-10-14");
+  ownerCourseId = ownerCourse;
   // Another school's lessons in the same month.
   const foreignCourse = await courseOf(b, foreign, 2, 60);
   await lessonOf(otherSchool, foreignCourse, foreign, "2027-10-05");
@@ -176,7 +181,7 @@ describe("statementData", () => {
     const data = await withSchool(school, (tx) => statementData(tx, MONTH));
     expect(data.instructors.map((i) => i.id).sort()).toEqual([perLesson, hourly, owner].sort());
     expect(data.instructors.find((i) => i.id === owner)?.isOwner).toBe(true);
-    expect(data.lessons).toHaveLength(11);
+    expect(data.lessons).toHaveLength(12);
     expect(data.lessons.every((l) => l.instructorId !== foreign)).toBe(true);
     // The site closure is not a closure of the whole school.
     expect(data.closures).toEqual([{ startDate: "2027-10-23", endDate: "2027-11-07" }]);
@@ -224,7 +229,7 @@ describe("statementData", () => {
       flags: ["no_attendance"],
     });
     // 37,50 € (1 h 30 at 25,00 €/h) + 30,00 € (replacement at the regular teacher's rate).
-    expect(byId.get(hourly)).toMatchObject({ lessonCount: 2, totalCents: 6750, toPriceCount: 0 });
+    expect(byId.get(hourly)).toMatchObject({ lessonCount: 3, totalCents: 6750, toPriceCount: 1 });
     expect(m.statements.map((s) => s.instructorId).sort()).toEqual([perLesson, hourly].sort());
   });
 
@@ -246,12 +251,28 @@ describe("statementData", () => {
         { instructorId: perLesson, instructorRateCents: 3500, instructorRatePayMode: "per_lesson" },
       ),
     );
+    // A course created with a rate (or copied with a season) changes nothing already taught: not a change.
+    const ownerState = { instructorId: owner, instructorRateCents: 4000, instructorRatePayMode: "per_lesson" as const };
+    await withSchool(school, (tx) => logCourseRate(tx, "zz-nobody", ownerCourseId, null, ownerState));
     const data = await withSchool(school, (tx) => statementData(tx, thisMonth));
     expect(data.rateChanges.map((c) => c.instructorId).sort()).toEqual([hourly, perLesson].sort());
+    // A course handed to another instructor, without a rate of its own, is a change for both.
+    const noRate = { instructorRateCents: null, instructorRatePayMode: null };
+    await withSchool(school, (tx) =>
+      logCourseRate(
+        tx,
+        "zz-nobody",
+        ownerCourseId,
+        { instructorId: owner, ...noRate },
+        { instructorId: hourly, ...noRate },
+      ),
+    );
+    const handed = await withSchool(school, (tx) => statementData(tx, thisMonth));
+    expect(handed.rateChanges.map((c) => c.instructorId).sort()).toEqual([hourly, owner, perLesson].sort());
     expect(data.rateChanges.every((c) => c.date === todayInParis())).toBe(true);
     // For one instructor too, the school's changes: a replacement is paid at the regular teacher's rate.
     const one = await withSchool(school, (tx) => statementData(tx, thisMonth, hourly));
-    expect(one.rateChanges.map((c) => c.instructorId).sort()).toEqual([hourly, perLesson].sort());
+    expect(one.rateChanges.map((c) => c.instructorId).sort()).toEqual([hourly, owner, perLesson].sort());
     // A later month is not concerned.
     const next = `${Number(thisMonth.slice(0, 4)) + 1}${thisMonth.slice(4)}`;
     expect((await withSchool(school, (tx) => statementData(tx, next))).rateChanges).toEqual([]);

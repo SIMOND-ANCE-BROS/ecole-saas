@@ -33,9 +33,26 @@ const regular = alias(instructor, "regular");
 
 const lessonTime = sql<string>`to_char(coalesce(${lesson.startTime}, ${course.startTime}), 'HH24:MI')`;
 const courseTime = sql<string>`to_char(${course.startTime}, 'HH24:MI')`;
-const attendanceCount = (present?: true) => sql<number>`(
+/**
+ * Students marked on the lesson (`present`: marked present). A lesson pack
+ * counted on the lesson (private lessons, #225) marks its holder present.
+ */
+const attendanceCount = (present?: true) => sql<number>`((
   SELECT count(*)::int FROM attendance a
-  WHERE a.lesson_id = ${lesson}.${sql.identifier("id")}${present ? sql` AND a.present` : sql``})`;
+  WHERE a.lesson_id = ${lesson}.${sql.identifier("id")}${present ? sql` AND a.present` : sql``}
+) + (
+  SELECT count(*)::int FROM lesson_pack_usage u WHERE u.lesson_id = ${lesson}.${sql.identifier("id")}
+))`;
+
+/**
+ * A course audit entry that changes what its lessons are paid (#191, #268):
+ * its instructor, own rate or unit. Inserts (a new course, a season copy)
+ * change nothing already taught.
+ */
+const coursePayChanged = sql`${auditLog.before} IS NOT NULL AND (
+  ${auditLog.before}->'instructorId' IS DISTINCT FROM ${auditLog.after}->'instructorId'
+  OR ${auditLog.before}->'instructorRateCents' IS DISTINCT FROM ${auditLog.after}->'instructorRateCents'
+  OR ${auditLog.before}->'instructorRatePayMode' IS DISTINCT FROM ${auditLog.after}->'instructorRatePayMode')`;
 
 /** « Jazz Débutant, lundi 18:00 »: the course's name and usual slot, to tell two courses apart. */
 const courseLabel = (c: { discipline: string; level: string | null; weekday: number | null; time: string }) =>
@@ -84,6 +101,7 @@ export async function statementData(tx: Tx, month: string, instructorId?: string
       instructorRatePayMode: course.instructorRatePayMode,
       regularPayMode: regular.payMode,
       regularRateCents: regular.rateCents,
+      regularIsOwner: regular.isOwner,
       marked: attendanceCount(),
       present: attendanceCount(true),
     })
@@ -105,7 +123,7 @@ export async function statementData(tx: Tx, month: string, instructorId?: string
   const courseChanges = await tx
     .select({ instructorId: courseInstructor, date: parisDay })
     .from(auditLog)
-    .where(and(eq(auditLog.targetTable, "course"), since(first)));
+    .where(and(eq(auditLog.targetTable, "course"), since(first), coursePayChanged));
 
   const closures = await tx
     .select({ startDate: closure.startDate, endDate: closure.endDate })
@@ -134,8 +152,13 @@ export async function statementData(tx: Tx, month: string, instructorId?: string
         instructorRateCents: l.instructorRateCents,
         instructorRatePayMode: l.instructorRatePayMode,
       },
-      regular: { id: l.courseInstructorId, payMode: l.regularPayMode, rateCents: l.regularRateCents },
-      attendance: { taken: attendanceTaken(l.status, l.marked), present: l.present },
+      regular: {
+        id: l.courseInstructorId,
+        payMode: l.regularPayMode,
+        rateCents: l.regularRateCents,
+        isOwner: l.regularIsOwner,
+      },
+      attendance: { taken: attendanceTaken(l.marked), present: l.present },
     })),
     // Once per instructor and day: a course entry names the same instructor before and after.
     rateChanges: [

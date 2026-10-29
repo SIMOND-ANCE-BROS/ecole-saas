@@ -12,6 +12,18 @@ export function applyRate(cents: number, basisPoints: number): number {
   return Math.sign(raw) * Math.round(Math.abs(raw));
 }
 
+/**
+ * `cents` × `numerator` ÷ `denominator`, rounded to the nearest cent, half a
+ * cent up, in integers (no floating-point): an hourly rate for a number of
+ * minutes is `prorate(rate, minutes, 60)`. Non-negative integers only.
+ */
+export function prorate(cents: number, numerator: number, denominator: number): number {
+  if (![cents, numerator, denominator].every((n) => Number.isInteger(n) && n >= 0) || denominator === 0) {
+    throw new TypeError("Montant, numérateur et dénominateur entiers positifs attendus");
+  }
+  return Math.floor((2 * cents * numerator + denominator) / (2 * denominator));
+}
+
 /** Splits an amount into n installments; the leftover cents go on the first one. */
 export function split(cents: number, n: number): number[] {
   if (!Number.isInteger(cents) || !Number.isInteger(n) || n < 1) {

@@ -73,7 +73,7 @@ function lesson(
       instructorRateCents: rate ?? null,
       instructorRatePayMode: rate === undefined ? null : (unit ?? regular.payMode),
     },
-    regular: { id: regular.id, payMode: regular.payMode, rateCents: regular.rateCents },
+    regular: { id: regular.id, payMode: regular.payMode, rateCents: regular.rateCents, isOwner: regular.isOwner },
     attendance: TAKEN,
     ...rest,
   };
@@ -134,9 +134,17 @@ describe("lessonPay (« pas de cours, pas de paiement »)", () => {
 
 describe("attendanceTaken", () => {
   it("is taken once the sheet is saved or a student is marked", () => {
-    expect(attendanceTaken("done", 0)).toBe(true);
-    expect(attendanceTaken("planned", 2)).toBe(true);
-    expect(attendanceTaken("planned", 0)).toBe(false);
+    expect(attendanceTaken(2)).toBe(true);
+    expect(attendanceTaken(1)).toBe(true);
+  });
+
+  it("is not taken when a sheet was saved with nobody on it (drop-ins, crowded course)", () => {
+    expect(attendanceTaken(0)).toBe(false);
+    // Such a lesson is owed and flagged, never « nobody came ».
+    const s = statementOf(perLesson, [
+      lesson("i1", "2027-10-05", { status: "done", attendance: { taken: attendanceTaken(0), present: 0 } }),
+    ]);
+    expect(s).toMatchObject({ lessonCount: 1, totalCents: 3000, nobodyCameCount: 0, flags: ["no_attendance"] });
   });
 });
 
@@ -224,6 +232,23 @@ describe("priceLesson", () => {
     const l = lesson("i2", "2027-10-05", { instructorId: "i1", rate: 4000, durationMinutes: 45 });
     // 40,00 €/h × 45 min, in the regular teacher's unit.
     expect(priceLesson(l, perLesson)).toMatchObject({ rateCents: 4000, unit: "hourly", amountCents: 3000 });
+  });
+
+  it("leaves to price a replacement of an owner, whose rate on record is no pay", () => {
+    const l = lesson("i4", "2027-10-05", { instructorId: "i1" });
+    expect(priceLesson(l, perLesson)).toMatchObject({ substitute: true, amountCents: null, toPrice: "owner_course" });
+  });
+
+  it("pays a substitute paid less than the regular teacher at the regular teacher's rate", () => {
+    const cheap: StatementInstructor = { ...hourly, rateCents: 1000 };
+    const l = lesson("i1", "2027-10-05", { instructorId: "i2", durationMinutes: 60 });
+    expect(priceLesson(l, cheap)).toMatchObject({ rateCents: 3000, amountCents: 3000 });
+  });
+
+  it("pays an hourly substitute for the lesson's own length", () => {
+    const l = lesson("i2", "2027-10-05", { instructorId: "i1", durationMinutes: 75 });
+    // 25,00 €/h × 1 h 15 = 31,25 €
+    expect(priceLesson(l, perLesson)).toMatchObject({ rateCents: 2500, unit: "hourly", amountCents: 3125 });
   });
 
   it("leaves to price a replacement of a monthly flat teacher", () => {
@@ -422,6 +447,25 @@ describe("instructorStatement", () => {
       });
     expect(of([lesson("i2", "2027-10-05"), replaced]).flags).toEqual(["rate_changed"]);
     expect(of([lesson("i2", "2027-10-05")]).flags).toEqual([]);
+  });
+
+  it("flags lessons given before a course was handed to another instructor mid-month", () => {
+    // The course now belongs to i2: i1's earlier lessons read as replacements at i2's rate. The change of
+    // instructor is in the audit log for both (courses.ts `logCourseRate`), so the statement is flagged.
+    const before = { ...lesson("i2", "2027-10-05", { instructorId: "i1" }) };
+    const s = instructorStatement({
+      month: MONTH,
+      today: AFTER,
+      instructor: perLesson,
+      lessons: [before],
+      rateChanges: [
+        { instructorId: "i1", date: "2027-10-15" },
+        { instructorId: "i2", date: "2027-10-15" },
+      ],
+      closures: [],
+    });
+    expect(s.courses[0].lines[0].substitute).toBe(true);
+    expect(s.flags).toEqual(["rate_changed"]);
   });
 
   it("counts nothing for a month not started yet", () => {

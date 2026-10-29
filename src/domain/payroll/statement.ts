@@ -16,6 +16,7 @@
  * The statement month is the calendar month: instructors invoice at month end.
  */
 
+import { prorate } from "../../lib/money";
 import { monthBounds } from "./month";
 import { courseRateAllowed, effectiveRate, type PayMode, type RatedCourse, type RatedInstructor } from "./rate";
 
@@ -39,7 +40,7 @@ export type StatementLesson = {
   /** The course's own instructor and rate. */
   course: RatedCourse;
   /** The course's own (regular) instructor's pay: what a substitute is paid at. */
-  regular: RatedInstructor;
+  regular: RatedInstructor & { isOwner: boolean };
   /** `taken` once attendance was taken (`attendanceTaken`); `present`: students marked present. */
   attendance: { taken: boolean; present: number };
 };
@@ -57,11 +58,12 @@ export type RateChange = { instructorId: string; date: string };
 export type SchoolClosure = { startDate: string; endDate: string };
 
 /** Why a lesson is listed without an amount, « à chiffrer ». */
-export type ToPrice = "old_unit" | "flat_course";
+export type ToPrice = "old_unit" | "flat_course" | "owner_course";
 
 export const TO_PRICE_REASONS: Record<ToPrice, string> = {
   old_unit: "tarif du cours saisi dans un ancien mode de rémunération",
   flat_course: "remplacement d’un intervenant au forfait mensuel, sans tarif à la séance",
+  owner_course: "remplacement d’un dirigeant de l’école, taux à fixer",
 };
 
 /** « à chiffrer — tarif du cours saisi dans un ancien mode de rémunération ». */
@@ -76,16 +78,16 @@ export const FLAG_TEXTS: Record<StatementFlag, string> = {
   no_attendance:
     "Appel non fait pour certaines séances : elles sont comptées, mais une séance sans élève présent n’est pas payée. Faites l’appel, ou annulez la séance si personne n’est venu.",
   rate_changed:
-    "Un tarif ou le mode de rémunération a changé depuis le début du mois : le relevé est calculé avec les tarifs d’aujourd’hui. Vérifiez les séances d’avant le changement.",
+    "Un tarif, le mode de rémunération ou l’intervenant d’un cours a changé depuis le début du mois : le relevé est calculé avec les données d’aujourd’hui. Vérifiez les séances d’avant le changement.",
   flat_holidays:
-    "Forfait mensuel compté en entier alors que l’école ferme pendant ce mois (vacances, jours fériés) : à confirmer avec l’école.",
-  flat_no_lesson: "Aucune séance ce mois-ci : forfait mensuel non compté, à confirmer avec l’école.",
+    "Forfait mensuel compté en entier alors que l’école ferme pendant ce mois (vacances, jours fériés) : à vérifier avant de payer.",
+  flat_no_lesson: "Aucune séance ce mois-ci : forfait mensuel non compté, à vérifier avant de payer.",
 };
 
 /** The same, in a few words for the month's list. */
 export const FLAG_SHORT: Record<StatementFlag, string> = {
   no_attendance: NO_ATTENDANCE,
-  rate_changed: "tarif modifié depuis le début du mois",
+  rate_changed: "tarif ou cours modifié depuis le début du mois",
   flat_holidays: "forfait d’un mois avec vacances",
   flat_no_lesson: "forfait non compté",
 };
@@ -158,16 +160,20 @@ export type MonthStatement = {
   toPriceCount: number;
 };
 
-/** Attendance was taken: a sheet saved (the lesson becomes « effectuée ») or a student marked. */
-export const attendanceTaken = (status: LessonStatus, marked: number) => status === "done" || marked > 0;
+/**
+ * Attendance was taken: at least one student marked (present or absent, or
+ * counted on a lesson pack). A sheet saved with nobody on it (a course of
+ * drop-ins, a crowded course) proves nothing: not taken.
+ */
+export const attendanceTaken = (marked: number) => marked > 0;
 
 /**
  * Whether a lesson is owed for the month (#285 Q1 and Q5, settled by the
  * school: « pas de cours, pas de paiement »). Only lessons dated in the
  * month, up to today, count:
  * - a cancelled lesson is not owed (`not_counted`);
- * - a lesson whose attendance was taken with nobody present is not owed
- *   (`nobody_came`);
+ * - a lesson whose attendance shows students, none of them present, is not
+ *   owed (`nobody_came`);
  * - any other lesson is owed, attendance taken or not: it is not taken in
  *   crowded courses, so a lesson without it is counted and flagged
  *   « appel non fait ».
@@ -187,15 +193,11 @@ export const hasStatement = (i: Pick<StatementInstructor, "isOwner">) => !i.isOw
 
 /**
  * Pay for one lesson of an hourly instructor: rate × minutes ÷ 60, rounded
- * to the nearest cent, half a cent up, in integers (no floating-point).
- * Each lesson is rounded on its own and the total is the sum of the lines,
- * so that the statement adds up as shown.
+ * to the nearest cent, half a cent up, in integers (`prorate`). Each lesson
+ * is rounded on its own and the total is the sum of the lines, so that the
+ * statement adds up as shown.
  */
-export function hourlyAmount(rateCents: number, minutes: number): number {
-  if (!Number.isInteger(rateCents) || !Number.isInteger(minutes) || rateCents < 0 || minutes < 0)
-    throw new TypeError("Taux et durée doivent être des entiers positifs");
-  return Math.floor((rateCents * minutes + 30) / 60);
-}
+export const hourlyAmount = (rateCents: number, minutes: number) => prorate(rateCents, minutes, 60);
 
 /**
  * Price of a lesson for the instructor who taught it (#191, #268).
@@ -203,7 +205,9 @@ export function hourlyAmount(rateCents: number, minutes: number): number {
  * settled): the course's own rate, else the regular teacher's default rate,
  * in the regular teacher's unit, whatever the substitute's own rate. A
  * regular teacher paid a monthly flat has no rate per lesson: such a
- * replacement is « à chiffrer ». A course rate typed in another unit than
+ * replacement is « à chiffrer »; so is the replacement of an owner, whose
+ * rate on record is not a pay (owners invoice nothing; not settled by the
+ * school, #192). A course rate typed in another unit than
  * the current pay mode is not read in the new one (#268). A monthly flat
  * instructor's own lessons are shown for information (the flat pays them).
  */
@@ -214,6 +218,7 @@ export function priceLesson(
   const substitute = l.instructorId !== l.course.instructorId;
   const payer = substitute ? l.regular : i;
   const none = { substitute, rateCents: null, unit: null, amountCents: null };
+  if (substitute && l.regular.isOwner) return { ...none, toPrice: "owner_course" };
   if (!courseRateAllowed(payer.payMode)) return { ...none, toPrice: substitute ? "flat_course" : null };
   const rate = effectiveRate(l.course, payer);
   if (rate === null) return { ...none, toPrice: "old_unit" };

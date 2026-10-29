@@ -1,7 +1,8 @@
 import { Text } from "@mantine/core";
-import { frenchDate } from "@/lib/dates";
 
-/** Said under the month picker when the month is not over: lessons count up to today only (#285, open question 1). */
+const longDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+/** Said under the month picker when the month is not over: lessons count up to today only (#285). */
 export function MonthNotice({
   inProgress,
   notStarted,
@@ -20,7 +21,8 @@ export function MonthNotice({
   if (inProgress)
     return (
       <Text size="sm" c="dimmed">
-        Mois en cours : seules les séances jusqu’au {frenchDate(today)} inclus sont comptées.
+        Mois en cours : seules les séances jusqu’au{" "}
+        {longDate.format(new Date(`${today}T00:00:00Z`)).replace(/^1 /, "1er ")} inclus sont comptées.
       </Text>
     );
   return null;
