@@ -173,6 +173,7 @@ describe("readPerson", () => {
         weekday: 3,
         startTime: "17:00",
         status: "active",
+        droppedOn: null,
         payerId: helene,
         presents: 0,
         absents: 0,

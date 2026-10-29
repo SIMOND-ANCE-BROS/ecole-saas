@@ -3,13 +3,13 @@ import { Anchor, Paper, Text, Title } from "@mantine/core";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { readContact } from "@/db/students";
-import { enrollmentsPaidBy } from "@/db/enrollments";
+import { seasonEnrollments } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
 import { displayedName } from "@/db/people";
 import { currentSeason } from "@/db/schedule";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
-import { Banner, BilledEnrollments, Telephone } from "../../_people/sections";
+import { Banner, Enrollments, Telephone } from "../../_people/sections";
 import { PaymentsSection } from "../../_people/payments-section";
 import { BecomeStudent } from "./become-student";
 import { ButtonLink } from "../../_ui/button-link";
@@ -37,7 +37,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
     return {
       contact,
       season: season,
-      billed: season ? await enrollmentsPaidBy(tx, contact.id, season.id) : [],
+      billed: season ? await seasonEnrollments(tx, { payerId: contact.id }, season.id) : [],
       balance: await balanceOf(tx, contact.id, today),
       payments: await paymentsOf(tx, contact.id),
     };
@@ -150,7 +150,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
               </Paper>
             )}
           </section>
-          {season && <BilledEnrollments enrollments={billed} season={season.label} />}
+          {season && <Enrollments enrollments={billed} season={season} today={today} payerId={c.id} />}
           <PaymentsSection
             payerId={c.id}
             balance={balance}

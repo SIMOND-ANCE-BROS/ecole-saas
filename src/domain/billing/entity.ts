@@ -25,6 +25,15 @@ export const sirenOf = (siren: string | null, siret: string | null): string | nu
 export const isVatNumber = (s: string): boolean => /^[A-Z]{2}[0-9A-Z]{2,13}$/.test(s);
 
 /**
+ * Names of the fields whose value differs between two versions of a record, in
+ * the order of `after`: what the audit log keeps of an edit, without the values
+ * (a sole trader's SIREN or address is personal data).
+ */
+export function changedFields<T extends Record<string, unknown>>(before: T, after: T): (keyof T & string)[] {
+  return (Object.keys(after) as (keyof T & string)[]).filter((k) => before[k] !== after[k]);
+}
+
+/**
  * Looks like an IBAN (country code, 2 check digits, at least 11 more characters):
  * the bank account label is printed on deposit slips and must never hold one.
  */

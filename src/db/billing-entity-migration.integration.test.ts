@@ -7,7 +7,7 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /**
- * Migration 0040 (#298) replayed on a throwaway database: migrated up to the
+ * Migration 0041 (#298) replayed on a throwaway database: migrated up to the
  * migration before it, filled as a school was before billing entities, then
  * migrated to the end. Checks the backfill (one default entity per school
  * carrying the school's legal identity, every payment, deposit and invoice row
@@ -15,7 +15,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
  * role allowed to create a database (the local and CI owner role is).
  */
 
-const MIGRATION = "0040_billing_entity";
+const MIGRATION = "0041_billing_entity";
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");

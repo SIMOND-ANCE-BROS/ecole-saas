@@ -1,5 +1,5 @@
 {
-  "id": "a54ffcdb-084d-4c06-a4e4-320f8bda1e6c",
+  "id": "a8c322f5-e9bf-4a80-be26-8e24595d026a",
   "prevId": "e6a442bd-5918-4e26-8981-ab7e9b169ed8",
   "version": "7",
   "dialect": "postgresql",
@@ -358,12 +358,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "billing_entity_id": {
-          "name": "billing_entity_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "date": {
           "name": "date",
           "type": "date",
@@ -406,21 +400,6 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "bank_deposit_billing_entity_same_school_fk": {
-          "name": "bank_deposit_billing_entity_same_school_fk",
-          "tableFrom": "bank_deposit",
-          "tableTo": "billing_entity",
-          "columnsFrom": [
-            "school_id",
-            "billing_entity_id"
-          ],
-          "columnsTo": [
-            "school_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "bank_deposit_created_by_same_school_fk": {
           "name": "bank_deposit_created_by_same_school_fk",
           "tableFrom": "bank_deposit",
@@ -446,15 +425,6 @@
             "school_id",
             "id"
           ]
-        },
-        "bank_deposit_school_id_id_billing_entity_id_unique": {
-          "name": "bank_deposit_school_id_id_billing_entity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "school_id",
-            "id",
-            "billing_entity_id"
-          ]
         }
       },
       "policies": {},
@@ -467,12 +437,6 @@
       "columns": {
         "school_id": {
           "name": "school_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "billing_entity_id": {
-          "name": "billing_entity_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -521,36 +485,32 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "bank_deposit_payment_bank_deposit_same_entity_fk": {
-          "name": "bank_deposit_payment_bank_deposit_same_entity_fk",
+        "bank_deposit_payment_bank_deposit_same_school_fk": {
+          "name": "bank_deposit_payment_bank_deposit_same_school_fk",
           "tableFrom": "bank_deposit_payment",
           "tableTo": "bank_deposit",
           "columnsFrom": [
             "school_id",
-            "bank_deposit_id",
-            "billing_entity_id"
+            "bank_deposit_id"
           ],
           "columnsTo": [
             "school_id",
-            "id",
-            "billing_entity_id"
+            "id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "bank_deposit_payment_payment_same_entity_fk": {
-          "name": "bank_deposit_payment_payment_same_entity_fk",
+        "bank_deposit_payment_payment_same_school_fk": {
+          "name": "bank_deposit_payment_payment_same_school_fk",
           "tableFrom": "bank_deposit_payment",
           "tableTo": "payment",
           "columnsFrom": [
             "school_id",
-            "payment_id",
-            "billing_entity_id"
+            "payment_id"
           ],
           "columnsTo": [
             "school_id",
-            "id",
-            "billing_entity_id"
+            "id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -567,181 +527,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.billing_entity": {
-      "name": "billing_entity",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "school_id": {
-          "name": "school_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "legal_name": {
-          "name": "legal_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "siren": {
-          "name": "siren",
-          "type": "char(9)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "siret": {
-          "name": "siret",
-          "type": "char(14)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "vat_number": {
-          "name": "vat_number",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "address_line": {
-          "name": "address_line",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "postal_code": {
-          "name": "postal_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "city": {
-          "name": "city",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "vat_regime": {
-          "name": "vat_regime",
-          "type": "vat_regime",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "vat_mention": {
-          "name": "vat_mention",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "bank_account_label": {
-          "name": "bank_account_label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_default": {
-          "name": "is_default",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "active": {
-          "name": "active",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "billing_entity_one_default": {
-          "name": "billing_entity_one_default",
-          "columns": [
-            {
-              "expression": "school_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"billing_entity\".\"is_default\"",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "billing_entity_school_id_school_id_fk": {
-          "name": "billing_entity_school_id_school_id_fk",
-          "tableFrom": "billing_entity",
-          "tableTo": "school",
-          "columnsFrom": [
-            "school_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "billing_entity_school_id_id_unique": {
-          "name": "billing_entity_school_id_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "school_id",
-            "id"
-          ]
-        },
-        "billing_entity_name_unique": {
-          "name": "billing_entity_name_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "school_id",
-            "name"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "billing_entity_siren": {
-          "name": "billing_entity_siren",
-          "value": "\"billing_entity\".\"siren\" ~ '^[0-9]{9}$'"
-        },
-        "billing_entity_siret": {
-          "name": "billing_entity_siret",
-          "value": "\"billing_entity\".\"siret\" ~ '^[0-9]{14}$' AND left(\"billing_entity\".\"siret\", 9) = \"billing_entity\".\"siren\""
-        },
-        "billing_entity_default_active": {
-          "name": "billing_entity_default_active",
-          "value": "\"billing_entity\".\"active\" OR NOT \"billing_entity\".\"is_default\""
-        }
-      },
       "isRLSEnabled": false
     },
     "public.calendar_connection": {
@@ -1817,6 +1602,12 @@
           "notNull": true,
           "default": "now()"
         },
+        "dropped_on": {
+          "name": "dropped_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
         "gross_price_cents": {
           "name": "gross_price_cents",
           "type": "integer",
@@ -1950,7 +1741,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "enrollment_dropped_on": {
+          "name": "enrollment_dropped_on",
+          "value": "\"enrollment\".\"dropped_on\" IS NULL OR \"enrollment\".\"status\" = 'dropped'"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.enrollment_course": {
@@ -2075,12 +1871,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "billing_entity_id": {
-          "name": "billing_entity_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "invoice_id": {
           "name": "invoice_id",
           "type": "uuid",
@@ -2152,19 +1942,17 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "installment_invoice_same_entity_fk": {
-          "name": "installment_invoice_same_entity_fk",
+        "installment_invoice_same_school_fk": {
+          "name": "installment_invoice_same_school_fk",
           "tableFrom": "installment",
           "tableTo": "invoice",
           "columnsFrom": [
             "school_id",
-            "invoice_id",
-            "billing_entity_id"
+            "invoice_id"
           ],
           "columnsTo": [
             "school_id",
-            "id",
-            "billing_entity_id"
+            "id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -2186,15 +1974,6 @@
           "columns": [
             "school_id",
             "id"
-          ]
-        },
-        "installment_school_id_id_billing_entity_id_unique": {
-          "name": "installment_school_id_id_billing_entity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "school_id",
-            "id",
-            "billing_entity_id"
           ]
         }
       },
@@ -2610,12 +2389,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "billing_entity_id": {
-          "name": "billing_entity_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "payer_id": {
           "name": "payer_id",
           "type": "uuid",
@@ -2727,21 +2500,6 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "invoice_billing_entity_same_school_fk": {
-          "name": "invoice_billing_entity_same_school_fk",
-          "tableFrom": "invoice",
-          "tableTo": "billing_entity",
-          "columnsFrom": [
-            "school_id",
-            "billing_entity_id"
-          ],
-          "columnsTo": [
-            "school_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "invoice_payer_same_school_fk": {
           "name": "invoice_payer_same_school_fk",
           "tableFrom": "invoice",
@@ -2757,19 +2515,17 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "invoice_credit_note_of_same_entity_fk": {
-          "name": "invoice_credit_note_of_same_entity_fk",
+        "invoice_credit_note_of_same_school_fk": {
+          "name": "invoice_credit_note_of_same_school_fk",
           "tableFrom": "invoice",
           "tableTo": "invoice",
           "columnsFrom": [
             "school_id",
-            "credit_note_of",
-            "billing_entity_id"
+            "credit_note_of"
           ],
           "columnsTo": [
             "school_id",
-            "id",
-            "billing_entity_id"
+            "id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -2777,11 +2533,11 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "invoice_billing_entity_id_number_unique": {
-          "name": "invoice_billing_entity_id_number_unique",
+        "invoice_school_id_number_unique": {
+          "name": "invoice_school_id_number_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "billing_entity_id",
+            "school_id",
             "number"
           ]
         },
@@ -2791,15 +2547,6 @@
           "columns": [
             "school_id",
             "id"
-          ]
-        },
-        "invoice_school_id_id_billing_entity_id_unique": {
-          "name": "invoice_school_id_id_billing_entity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "school_id",
-            "id",
-            "billing_entity_id"
           ]
         }
       },
@@ -2940,16 +2687,10 @@
       "name": "invoicing_connector",
       "schema": "",
       "columns": {
-        "billing_entity_id": {
-          "name": "billing_entity_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
         "school_id": {
           "name": "school_id",
           "type": "uuid",
-          "primaryKey": false,
+          "primaryKey": true,
           "notNull": true
         },
         "tool": {
@@ -2997,21 +2738,6 @@
             "school_id"
           ],
           "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "invoicing_connector_billing_entity_same_school_fk": {
-          "name": "invoicing_connector_billing_entity_same_school_fk",
-          "tableFrom": "invoicing_connector",
-          "tableTo": "billing_entity",
-          "columnsFrom": [
-            "school_id",
-            "billing_entity_id"
-          ],
-          "columnsTo": [
-            "school_id",
             "id"
           ],
           "onDelete": "cascade",
@@ -3738,12 +3464,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "billing_entity_id": {
-          "name": "billing_entity_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "payer_id": {
           "name": "payer_id",
           "type": "uuid",
@@ -3837,21 +3557,6 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "payment_billing_entity_same_school_fk": {
-          "name": "payment_billing_entity_same_school_fk",
-          "tableFrom": "payment",
-          "tableTo": "billing_entity",
-          "columnsFrom": [
-            "school_id",
-            "billing_entity_id"
-          ],
-          "columnsTo": [
-            "school_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "payment_payer_same_school_fk": {
           "name": "payment_payer_same_school_fk",
           "tableFrom": "payment",
@@ -3882,19 +3587,17 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "payment_corrects_same_entity_fk": {
-          "name": "payment_corrects_same_entity_fk",
+        "payment_corrects_same_school_fk": {
+          "name": "payment_corrects_same_school_fk",
           "tableFrom": "payment",
           "tableTo": "payment",
           "columnsFrom": [
             "school_id",
-            "corrects_id",
-            "billing_entity_id"
+            "corrects_id"
           ],
           "columnsTo": [
             "school_id",
-            "id",
-            "billing_entity_id"
+            "id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -3908,15 +3611,6 @@
           "columns": [
             "school_id",
             "id"
-          ]
-        },
-        "payment_school_id_id_billing_entity_id_unique": {
-          "name": "payment_school_id_id_billing_entity_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "school_id",
-            "id",
-            "billing_entity_id"
           ]
         }
       },
@@ -3939,12 +3633,6 @@
       "columns": {
         "school_id": {
           "name": "school_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "billing_entity_id": {
-          "name": "billing_entity_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -3983,36 +3671,32 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "payment_allocation_payment_same_entity_fk": {
-          "name": "payment_allocation_payment_same_entity_fk",
+        "payment_allocation_payment_same_school_fk": {
+          "name": "payment_allocation_payment_same_school_fk",
           "tableFrom": "payment_allocation",
           "tableTo": "payment",
           "columnsFrom": [
             "school_id",
-            "payment_id",
-            "billing_entity_id"
+            "payment_id"
           ],
           "columnsTo": [
             "school_id",
-            "id",
-            "billing_entity_id"
+            "id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "payment_allocation_installment_same_entity_fk": {
-          "name": "payment_allocation_installment_same_entity_fk",
+        "payment_allocation_installment_same_school_fk": {
+          "name": "payment_allocation_installment_same_school_fk",
           "tableFrom": "payment_allocation",
           "tableTo": "installment",
           "columnsFrom": [
             "school_id",
-            "installment_id",
-            "billing_entity_id"
+            "installment_id"
           ],
           "columnsTo": [
             "school_id",
-            "id",
-            "billing_entity_id"
+            "id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"

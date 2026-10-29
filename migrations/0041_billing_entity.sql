@@ -9,7 +9,7 @@
 DO $$
 BEGIN
   IF NOT (SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user) THEN
-    RAISE EXCEPTION 'Migration 0040 must run as a role that bypasses RLS (#279), not %', current_user;
+    RAISE EXCEPTION 'Migration 0041 must run as a role that bypasses RLS (#279), not %', current_user;
   END IF;
 END $$;--> statement-breakpoint
 CREATE TABLE "billing_entity" (
@@ -45,7 +45,7 @@ CREATE POLICY school_isolation ON billing_entity
   USING (school_id = nullif(current_setting('app.school_id', true), '')::uuid)
   WITH CHECK (school_id = nullif(current_setting('app.school_id', true), '')::uuid);--> statement-breakpoint
 -- One default entity per existing school, from what the school carried until now. Its
--- columns are dropped by 0041 once nothing reads them. New schools get theirs explicitly
+-- columns are dropped by 0042 once nothing reads them. New schools get theirs explicitly
 -- (scripts/seed.ts, test fixtures): no trigger on school. school.siren had no format check:
 -- a value that is not 9 digits is left out (to retype in « Paramètres › Entreprises ») rather
 -- than failing the migration on the new check.

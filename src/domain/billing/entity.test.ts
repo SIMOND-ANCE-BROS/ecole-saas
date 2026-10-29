@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { compact, isSiren, isSiret, isVatNumber, looksLikeIban, sirenOf, siretMatchesSiren } from "./entity";
+import {
+  changedFields,
+  compact,
+  isSiren,
+  isSiret,
+  isVatNumber,
+  looksLikeIban,
+  sirenOf,
+  siretMatchesSiren,
+} from "./entity";
 
 describe("billing entity identifiers", () => {
   it("removes the spaces and dots printed on French papers", () => {
@@ -33,6 +42,12 @@ describe("billing entity identifiers", () => {
     expect(isVatNumber("FR00000000001")).toBe(true);
     expect(isVatNumber("fr00000000001")).toBe(false);
     expect(isVatNumber("00000000001")).toBe(false);
+  });
+
+  it("names the fields an edit changed, never their values", () => {
+    const before: Record<string, string | null> = { name: "Zz A", siren: "000000001", city: null };
+    expect(changedFields(before, { name: "Zz A", siren: "000000002", city: "Zzville" })).toEqual(["siren", "city"]);
+    expect(changedFields(before, { ...before })).toEqual([]);
   });
 
   it("spots an IBAN typed as a bank account label", () => {

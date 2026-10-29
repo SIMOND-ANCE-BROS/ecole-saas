@@ -6,8 +6,12 @@
 
 export type EnrollmentStatus = "trial" | "waitlist" | "active" | "dropped" | "ended";
 
-/** Statuses counted in the amount due. Dropped and trial: rule to be set by the school (#99), shown apart. */
-export const DUE_STATUSES: EnrollmentStatus[] = ["active", "ended"];
+/**
+ * Statuses counted in the amount due. A drop-out stays due: the school's rules say a paid
+ * quarter or year not attended is neither carried over nor refunded (#284, #99); management
+ * grants a credit case by case. Trial and waitlist are not due yet, shown apart.
+ */
+export const DUE_STATUSES: EnrollmentStatus[] = ["active", "ended", "dropped"];
 
 export type EnrollmentDue = { status: EnrollmentStatus; netPriceCents: number };
 export type BalancePayment = { amountCents: number; plannedPayment: string | null };
@@ -22,6 +26,10 @@ export type Balance = {
   /** Enrollments left out of the calculation, by status (amounts), so that management sees them. */
   outsideCalculation: Partial<Record<EnrollmentStatus, number>>;
 };
+
+/** Amount due for these enrollments: the ones whose status is in `DUE_STATUSES`. */
+export const amountDue = (enrollments: readonly EnrollmentDue[]): number =>
+  enrollments.filter((i) => DUE_STATUSES.includes(i.status)).reduce((s, i) => s + i.netPriceCents, 0);
 
 export function payerBalance(
   enrollments: EnrollmentDue[],

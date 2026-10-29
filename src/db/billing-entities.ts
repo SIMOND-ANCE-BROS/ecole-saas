@@ -3,8 +3,9 @@ import { z } from "zod";
 import { columnsOf } from "./columns-of";
 import type { Tx } from "./index";
 import { VAT_REGIMES } from "./instructors";
-import { billingEntity } from "./schema";
+import { auditLog, billingEntity, member } from "./schema";
 import {
+  changedFields,
   compact,
   isSiren,
   isSiret,
@@ -161,33 +162,85 @@ async function nameTaken(tx: Tx, name: string, except?: string): Promise<boolean
   return x !== undefined;
 }
 
+/** Active member of the current school who makes the change (the audit log's actor). */
+async function memberOf(tx: Tx, userId: string): Promise<string | null> {
+  const [m] = await tx
+    .select({ id: member.id })
+    .from(member)
+    .where(and(eq(member.userId, userId), eq(member.active, true)));
+  return m?.id ?? null;
+}
+
+/**
+ * Audit log of an entity change (#298): its legal identity and VAT data end up
+ * on invoices. Technical ids and field names only, never the values typed (a
+ * sole trader's SIREN and address are personal data).
+ */
+async function log(
+  tx: Tx,
+  actor: string,
+  id: string,
+  action: "insert" | "update",
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown>,
+) {
+  await tx
+    .insert(auditLog)
+    .values({ schoolId: CURRENT_SCHOOL, actor, targetTable: "billing_entity", rowId: id, action, before, after });
+}
+
 /** A new entity; the school's first one becomes its default. */
-export async function createEntity(tx: Tx, entry: EntityInput): Promise<Result> {
+export async function createEntity(tx: Tx, userId: string, entry: EntityInput): Promise<Result> {
   const e = validEntityInput.safeParse(entry);
   if (!e.success) return { ok: false, message: e.error.issues[0].message };
+  const who = await memberOf(tx, userId);
+  if (!who) return { ok: false, message: "Accès refusé." };
   // The school's entities locked, as makeDefaultEntity does: two entities added at the same
   // moment wait for each other, so the second sees the first's name and default.
   await tx.select({ id: billingEntity.id }).from(billingEntity).orderBy(asc(billingEntity.id)).for("update");
   if (await nameTaken(tx, e.data.name)) return { ok: false, message: TAKEN };
   const first = (await defaultEntityId(tx)) === null;
+  const row = entityRow(e.data);
   const [{ id }] = await tx
     .insert(billingEntity)
-    .values(columnsOf(billingEntity, { ...entityRow(e.data), schoolId: CURRENT_SCHOOL, isDefault: first }))
+    .values(columnsOf(billingEntity, { ...row, schoolId: CURRENT_SCHOOL, isDefault: first }))
     .returning({ id: billingEntity.id });
+  const filled = (Object.keys(row) as (keyof typeof row)[]).filter((k) => row[k] !== null);
+  await log(tx, who, id, "insert", null, { fields: filled, is_default: first });
   return { ok: true, id };
 }
 
-export async function updateEntity(tx: Tx, id: string, entry: EntityInput): Promise<Result> {
+export async function updateEntity(tx: Tx, userId: string, id: string, entry: EntityInput): Promise<Result> {
   const e = validEntityInput.safeParse(entry);
   if (!e.success) return { ok: false, message: e.error.issues[0].message };
   if (!isUuid(id)) return { ok: false, message: GONE };
+  const who = await memberOf(tx, userId);
+  if (!who) return { ok: false, message: "Accès refusé." };
   if (await nameTaken(tx, e.data.name, id)) return { ok: false, message: TAKEN };
-  const rows = await tx
-    .update(billingEntity)
-    .set(columnsOf(billingEntity, entityRow(e.data)))
+  const [before] = await tx
+    .select({
+      name: billingEntity.name,
+      legalName: billingEntity.legalName,
+      siren: billingEntity.siren,
+      siret: billingEntity.siret,
+      vatNumber: billingEntity.vatNumber,
+      addressLine: billingEntity.addressLine,
+      postalCode: billingEntity.postalCode,
+      city: billingEntity.city,
+      vatRegime: billingEntity.vatRegime,
+      vatMention: billingEntity.vatMention,
+      bankAccountLabel: billingEntity.bankAccountLabel,
+    })
+    .from(billingEntity)
     .where(eq(billingEntity.id, id))
-    .returning({ id: billingEntity.id });
-  return rows.length === 1 ? { ok: true, id } : { ok: false, message: GONE };
+    .for("update");
+  if (!before) return { ok: false, message: GONE };
+  const row = entityRow(e.data);
+  const fields = changedFields(before, row);
+  if (fields.length === 0) return { ok: true, id };
+  await tx.update(billingEntity).set(columnsOf(billingEntity, row)).where(eq(billingEntity.id, id));
+  await log(tx, who, id, "update", null, { fields });
+  return { ok: true, id };
 }
 
 /**
@@ -195,8 +248,10 @@ export async function updateEntity(tx: Tx, id: string, entry: EntityInput): Prom
  * statements: the partial unique index (one default per school) is checked row
  * by row, so the old default is cleared before the new one is set.
  */
-export async function makeDefaultEntity(tx: Tx, id: string): Promise<Result> {
+export async function makeDefaultEntity(tx: Tx, userId: string, id: string): Promise<Result> {
   if (!isUuid(id)) return { ok: false, message: GONE };
+  const who = await memberOf(tx, userId);
+  if (!who) return { ok: false, message: "Accès refusé." };
   // Every entity of the school, locked: two changes of default made at the same moment
   // wait for each other instead of both clearing the old default and failing on the index.
   const all = await tx
@@ -205,10 +260,13 @@ export async function makeDefaultEntity(tx: Tx, id: string): Promise<Result> {
     .orderBy(asc(billingEntity.id))
     .for("update");
   if (!all.some((e) => e.id === id)) return { ok: false, message: GONE };
+  const previous = await defaultEntityId(tx);
+  if (previous === id) return { ok: true, id };
   await tx
     .update(billingEntity)
     .set({ isDefault: false })
     .where(and(eq(billingEntity.isDefault, true), ne(billingEntity.id, id)));
   await tx.update(billingEntity).set({ isDefault: true, active: true }).where(eq(billingEntity.id, id));
+  await log(tx, who, id, "update", { default_entity_id: previous }, { default_entity_id: id });
   return { ok: true, id };
 }

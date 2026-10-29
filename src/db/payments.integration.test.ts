@@ -51,7 +51,7 @@ beforeAll(async () => {
   const [s] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents) VALUES (${school}, ${s.id}, ${payer}, 'child', 'year', 30000)`;
-  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status) VALUES (${school}, ${s.id}, ${payer}, 'child', 'quarter', 9000, 'dropped')`;
+  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status) VALUES (${school}, ${s.id}, ${payer}, 'child', 'quarter', 9000, 'trial')`;
   await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents) VALUES (${school}, ${s.id}, ${bounced}, 'child', 'year', 12000)`;
 });
 
@@ -100,7 +100,7 @@ describe("collect", () => {
       paid: 30000,
       remaining: 0,
       toCollect: 20000,
-      outsideCalculation: { dropped: 9000 },
+      outsideCalculation: { trial: 9000 },
     });
     const traces =
       await admin`SELECT action, after->>'montant_centimes' AS amount, actor IS NOT NULL AS signed FROM audit_log WHERE school_id = ${school} AND target_table = 'payment'`;

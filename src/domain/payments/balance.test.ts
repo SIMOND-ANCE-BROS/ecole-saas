@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { payerBalance } from "./balance";
+import { amountDue, payerBalance } from "./balance";
 
 const TODAY = "2026-10-21";
 
@@ -45,7 +45,7 @@ describe("payerBalance", () => {
     expect(s).toMatchObject({ paid: 15_000, remaining: 0, toCollect: 0 });
   });
 
-  it("dropped, trial and waitlist stay out of the computation, but visible (#99)", () => {
+  it("a drop-out stays due; trial and waitlist stay out of the computation, but visible (#99, #284)", () => {
     const s = payerBalance(
       [
         { status: "dropped", netPriceCents: 20_000 },
@@ -57,11 +57,25 @@ describe("payerBalance", () => {
       TODAY,
     );
     expect(s).toEqual({
-      due: 0,
+      due: 20_000,
       paid: 1_000,
-      remaining: -1_000,
+      remaining: 19_000,
       toCollect: 0,
-      outsideCalculation: { dropped: 20_000, trial: 1_500, waitlist: 9_000 },
+      outsideCalculation: { trial: 1_500, waitlist: 9_000 },
     });
+  });
+});
+
+describe("amountDue", () => {
+  it("counts active, ended and dropped enrollments, not trial nor waitlist", () => {
+    expect(
+      amountDue([
+        { status: "active", netPriceCents: 11_000 },
+        { status: "dropped", netPriceCents: 9_900 },
+        { status: "ended", netPriceCents: 100 },
+        { status: "trial", netPriceCents: 5_000 },
+        { status: "waitlist", netPriceCents: 7_000 },
+      ]),
+    ).toBe(21_000);
   });
 });

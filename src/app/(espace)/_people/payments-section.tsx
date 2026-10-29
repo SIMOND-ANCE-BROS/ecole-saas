@@ -69,7 +69,6 @@ function Correction({ payment: p, back, today }: { payment: PaymentRow; back: st
   return null;
 }
 const OUTSIDE_CALCULATION = {
-  dropped: "abandonnées",
   trial: "à l’essai",
   waitlist: "en liste d’attente",
 } as const;

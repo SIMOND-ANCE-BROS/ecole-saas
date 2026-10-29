@@ -1,6 +1,6 @@
 {
-  "id": "cec3c5de-28df-47bd-9636-7415a99af9c7",
-  "prevId": "a54ffcdb-084d-4c06-a4e4-320f8bda1e6c",
+  "id": "ec54b74b-4e26-4b36-b091-6ea5bc477efa",
+  "prevId": "a8c322f5-e9bf-4a80-be26-8e24595d026a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1817,6 +1817,12 @@
           "notNull": true,
           "default": "now()"
         },
+        "dropped_on": {
+          "name": "dropped_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
         "gross_price_cents": {
           "name": "gross_price_cents",
           "type": "integer",
@@ -1950,7 +1956,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "enrollment_dropped_on": {
+          "name": "enrollment_dropped_on",
+          "value": "\"enrollment\".\"dropped_on\" IS NULL OR \"enrollment\".\"status\" = 'dropped'"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.enrollment_course": {
@@ -4427,6 +4438,32 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "company_name": {
+          "name": "company_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "siren": {
+          "name": "siren",
+          "type": "char(9)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vat_regime": {
+          "name": "vat_regime",
+          "type": "vat_regime",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'not_applicable'"
+        },
+        "vat_mention": {
+          "name": "vat_mention",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "time_zone": {
           "name": "time_zone",

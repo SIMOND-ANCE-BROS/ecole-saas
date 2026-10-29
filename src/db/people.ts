@@ -191,6 +191,8 @@ export type PersonRecord = {
     weekday: number | null;
     startTime: string;
     status: (typeof enrollment.status.enumValues)[number];
+    /** Day of the drop-out (#284), on a dropped enrollment. */
+    droppedOn: string | null;
     payerId: string;
     /** Attendance taken for this student in this course. */
     presents: number;
@@ -256,6 +258,7 @@ export async function readPerson(tx: Tx, id: string): Promise<PersonRecord | nul
       weekday: course.weekday,
       startTime: course.startTime,
       status: enrollment.status,
+      droppedOn: enrollment.droppedOn,
       payerId: enrollment.payerId,
       presents: attendances(id, true),
       absents: attendances(id, false),

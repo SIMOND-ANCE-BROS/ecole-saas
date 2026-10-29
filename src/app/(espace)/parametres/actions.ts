@@ -44,7 +44,8 @@ import {
 import { actionResult, type ActionResult } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
 
-type Write = (tx: Tx) => Promise<{ ok: true } | { ok: false; message: string }>;
+/** A write in the school's transaction; `userId` (from the session) for the ones the audit log signs. */
+type Write = (tx: Tx, userId: string) => Promise<{ ok: true } | { ok: false; message: string }>;
 
 // Typed for the call sites; still parsed, since a server action receives whatever the browser sends.
 // The database layer parses again and refuses with the same messages.
@@ -64,10 +65,10 @@ function refusal(schema: z.ZodType, value: unknown, message?: string): string | 
  * never reaches the database; each action revalidates the page concerned.
  */
 async function act(page: string, refused: () => string | null, write: Write): Promise<ActionResult> {
-  const { schoolId } = await requireRole("director");
+  const { schoolId, userId } = await requireRole("director");
   const message = refused();
   if (message) return { ok: false, message };
-  const r = await withSchool(schoolId, write);
+  const r = await withSchool(schoolId, (tx) => write(tx, userId));
   revalidatePath(`/parametres/${page}`);
   return actionResult(r);
 }
@@ -220,14 +221,14 @@ export async function newEntity(entry: EntityInput) {
   return act(
     "entreprises",
     () => refusal(validEntityInput, entry),
-    (tx) => createEntity(tx, entry),
+    (tx, userId) => createEntity(tx, userId, entry),
   );
 }
 export async function changeEntity(id: string, entry: EntityInput) {
   return act(
     "entreprises",
     () => refusal(validEntityInput, entry) ?? refusal(validId, id, ENTITY_GONE),
-    (tx) => updateEntity(tx, id, entry),
+    (tx, userId) => updateEntity(tx, userId, id, entry),
   );
 }
 /** The entity that cashes every payment until courses carry their own (#299, #300). */
@@ -235,7 +236,7 @@ export async function defaultEntity(id: string) {
   return act(
     "entreprises",
     () => refusal(validId, id, ENTITY_GONE),
-    (tx) => makeDefaultEntity(tx, id),
+    (tx, userId) => makeDefaultEntity(tx, userId, id),
   );
 }
 

@@ -50,7 +50,7 @@ beforeAll(async () => {
   entityA = await defaultEntityFor(admin, school, "Zz Danse A");
   foreignEntity = await defaultEntityFor(admin, otherSchool, "Zz Danse ailleurs");
   await admin`INSERT INTO "user" (id, name, email) VALUES (${director}, 'Zz Direction', ${`${director}@exemple.test`})`;
-  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${director}, 'director')`;
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${director}, 'director'), (${otherSchool}, ${director}, 'director')`;
   [{ id: payer }] =
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Zzmartin', 'Zoé') RETURNING id`;
 });
@@ -94,7 +94,7 @@ async function invoiceOf(entity: string, number: string | null = null) {
 
 describe("billing entities", () => {
   it("adds a second entity, lists the default first, and keeps a single default", async () => {
-    const r = await withSchool(school, (tx) => createEntity(tx, entry));
+    const r = await withSchool(school, (tx) => createEntity(tx, director, entry));
     if (!r.ok) throw new Error(r.message);
     entityB = r.id;
 
@@ -110,7 +110,7 @@ describe("billing entities", () => {
   });
 
   it("refuses a name already taken, in French", async () => {
-    expect(await withSchool(school, (tx) => createEntity(tx, { ...entry, name: "zz danse a" }))).toEqual({
+    expect(await withSchool(school, (tx) => createEntity(tx, director, { ...entry, name: "zz danse a" }))).toEqual({
       ok: false,
       message: "Une autre entreprise porte déjà ce nom.",
     });
@@ -118,7 +118,7 @@ describe("billing entities", () => {
 
   it("edits an entity; a SIRET alone also gives the SIREN", async () => {
     const r = await withSchool(school, (tx) =>
-      updateEntity(tx, entityB, { ...entry, siren: "", siret: "000 000 002 00012", postalCode: "69100" }),
+      updateEntity(tx, director, entityB, { ...entry, siren: "", siret: "000 000 002 00012", postalCode: "69100" }),
     );
     expect(r.ok).toBe(true);
     const [e] = await admin`SELECT siren, siret, postal_code FROM billing_entity WHERE id = ${entityB}`;
@@ -126,19 +126,39 @@ describe("billing entities", () => {
   });
 
   it("changes the default entity, then back", async () => {
-    expect((await withSchool(school, (tx) => makeDefaultEntity(tx, entityB))).ok).toBe(true);
+    expect((await withSchool(school, (tx) => makeDefaultEntity(tx, director, entityB))).ok).toBe(true);
     expect(await withSchool(school, (tx) => defaultEntityId(tx))).toBe(entityB);
-    expect((await withSchool(school, (tx) => makeDefaultEntity(tx, entityA))).ok).toBe(true);
+    expect((await withSchool(school, (tx) => makeDefaultEntity(tx, director, entityA))).ok).toBe(true);
     expect(await withSchool(school, (tx) => defaultEntityId(tx))).toBe(entityA);
+  });
+
+  it("signs each creation, edit and change of default in the audit log, without the values", async () => {
+    const rows = await admin`
+      SELECT row_id, action, before, after, actor IS NOT NULL AS signed FROM audit_log
+      WHERE school_id = ${school} AND target_table = 'billing_entity' ORDER BY id`;
+    expect(rows.map((r) => [r.row_id, r.action, r.before, r.after, r.signed])).toEqual([
+      [
+        entityB,
+        "insert",
+        null,
+        { fields: ["name", "legalName", "siren", "vatRegime", "bankAccountLabel"], is_default: false },
+        true,
+      ],
+      [entityB, "update", null, { fields: ["siret", "postalCode"] }, true],
+      [entityB, "update", { default_entity_id: entityA }, { default_entity_id: entityB }, true],
+      [entityA, "update", { default_entity_id: entityB }, { default_entity_id: entityA }, true],
+    ]);
+    // Never a SIREN, a SIRET or a postal code typed.
+    expect(JSON.stringify(rows)).not.toMatch(/000000002|69100/);
   });
 
   it("another school neither sees nor edits them", async () => {
     expect((await withSchool(otherSchool, (tx) => listEntities(tx))).map((e) => e.name)).toEqual(["Zz Danse ailleurs"]);
-    expect(await withSchool(otherSchool, (tx) => updateEntity(tx, entityB, entry))).toEqual({
+    expect(await withSchool(otherSchool, (tx) => updateEntity(tx, director, entityB, entry))).toEqual({
       ok: false,
       message: "Cette entreprise n’existe plus.",
     });
-    expect(await withSchool(otherSchool, (tx) => makeDefaultEntity(tx, entityB))).toEqual({
+    expect(await withSchool(otherSchool, (tx) => makeDefaultEntity(tx, director, entityB))).toEqual({
       ok: false,
       message: "Cette entreprise n’existe plus.",
     });
@@ -247,14 +267,14 @@ describe("composite keys carrying the entity", () => {
     expect(p.entity).toBe(entityA);
 
     // Another default since: the reverse entry still belongs to the original's entity, A.
-    expect((await withSchool(school, (tx) => makeDefaultEntity(tx, entityB))).ok).toBe(true);
+    expect((await withSchool(school, (tx) => makeDefaultEntity(tx, director, entityB))).ok).toBe(true);
     try {
       const c = await withSchool(school, (tx) => correctPayment(tx, director, r.ids[0], 200, TODAY));
       if (!c.ok) throw new Error(c.message);
       const [x] = await admin`SELECT billing_entity_id AS entity FROM payment WHERE id = ${c.ids[0]}`;
       expect(x.entity).toBe(entityA);
     } finally {
-      await withSchool(school, (tx) => makeDefaultEntity(tx, entityA));
+      await withSchool(school, (tx) => makeDefaultEntity(tx, director, entityA));
     }
   });
 });
@@ -274,7 +294,7 @@ describe("invoicing connector per entity", () => {
   });
 });
 
-describe("payment immutability after the 0040 backfill", () => {
+describe("payment immutability after the 0041 backfill", () => {
   it("leaves the trigger payment_immutable enabled", async () => {
     const [t] = await admin`SELECT tgenabled FROM pg_trigger WHERE tgname = 'payment_immutable'`;
     expect(t.tgenabled).toBe("O");

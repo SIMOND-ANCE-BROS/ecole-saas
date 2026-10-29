@@ -3,7 +3,7 @@ import { Anchor, Paper, Text, Title } from "@mantine/core";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { readStudent } from "@/db/students";
-import { enrollmentsPaidBy } from "@/db/enrollments";
+import { seasonEnrollments } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
 import { displayedName } from "@/db/people";
 import { currentSeason } from "@/db/schedule";
@@ -13,7 +13,7 @@ import { documentsToBring, documentState, expectedDocuments } from "@/domain/peo
 import { ofName } from "@/lib/french";
 import { requireRole } from "@/lib/session";
 import { PaymentsSection } from "../../_people/payments-section";
-import { Banner, FollowedCourses, BilledEnrollments, dayOf, Notes, Telephone } from "../../_people/sections";
+import { Banner, FollowedCourses, Enrollments, dayOf, Notes, Telephone } from "../../_people/sections";
 import { Billing } from "./billing";
 import { type DocumentLine, Documents } from "./documents";
 import { Relatives } from "./relatives";
@@ -43,12 +43,12 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
     const student = await readStudent(tx, id, today);
     if (!student) return null;
     const season = await currentSeason(tx, today);
-    // An adult student who pays for themself sees their invoiced enrollments here.
     const paysForThemselves = student.billedTo.type !== "person";
     return {
       student: student,
       season: season,
-      billed: season ? await enrollmentsPaidBy(tx, student.id, season.id) : [],
+      // The student's enrollments, and the ones they pay for (an adult paying for their child).
+      enrollments: season ? await seasonEnrollments(tx, { personId: student.id }, season.id) : [],
       balance: paysForThemselves ? await balanceOf(tx, student.id, today) : null,
       payments: paysForThemselves ? await paymentsOf(tx, student.id) : [],
       requirements: await readRequirements(tx),
@@ -57,7 +57,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
     };
   });
   if (!parsed) notFound();
-  const { student: e, season: season, billed, balance: balance, payments: payments } = parsed;
+  const { student: e, season: season, enrollments, balance: balance, payments: payments } = parsed;
   const { requirements, documents, enrolledOn } = parsed;
   const toBring = documentsToBring({ requirements, documents, birthDate: e.birthDate, enrolledOn, today });
   const expected = expectedDocuments(requirements, e.birthDate, today);
@@ -194,7 +194,14 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
         <div className="flex min-w-0 flex-col gap-5">
           <Relatives studentId={e.id} firstName={firstName} guardians={e.guardians} other={e.otherRelationships} />
           <FollowedCourses courses={e.courses} />
-          {season && <BilledEnrollments enrollments={billed} season={season.label} />}
+          {season && (
+            <Enrollments
+              enrollments={enrollments}
+              season={season}
+              today={today}
+              payerId={e.billedTo.type !== "person" ? e.id : null}
+            />
+          )}
           {e.billedTo.type === "person" ? (
             <Text size="sm" c="dimmed">
               Paiements : sur la fiche de{" "}

@@ -1,7 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
-import { enrollmentPreview, saveEnrollment, enrollmentsPaidBy } from "./enrollments";
+import { enrollmentPreview, saveEnrollment, seasonEnrollments } from "./enrollments";
 import { seasonCourses } from "./schedule";
 import { seasonFigures, lastEnrollments } from "./dashboard";
 
@@ -142,7 +142,7 @@ describe("Enrollment", () => {
   });
 
   it("lists the enrollments paid by the person for the season", async () => {
-    const list = await withSchool(ids.school, (tx) => enrollmentsPaidBy(tx, ids.payer, ids.season));
+    const list = await withSchool(ids.school, (tx) => seasonEnrollments(tx, { payerId: ids.payer }, ids.season));
     expect(list.map((i) => [i.students, i.netPriceCents])).toEqual([
       ["Noé", 14850],
       ["Zoé", 11000],
@@ -193,5 +193,40 @@ describe("Dashboard and headcounts", () => {
     const courses = await withSchool(ids.school, (tx) => seasonCourses(tx, ids.season));
     const effective = Object.fromEntries(courses.map((c) => [c.id, c.enrolled]));
     expect(effective).toEqual({ [ids.jazz60]: 2, [ids.jazz45]: 1, [ids.classical60]: 0 });
+  });
+});
+
+describe("Status at creation (#284)", () => {
+  it("saves a trial enrollment priced like any other, without flagging the siblings' discounts", async () => {
+    const entry = { ...childEntry([ids.zoe], [ids.classical60]), status: "trial" as const };
+    const p = await withSchool(ids.school, (tx) => enrollmentPreview(tx, ids.payer, ids.season, entry));
+    if (p.status !== "ok") throw new Error(p.message);
+    // Priced with the active siblings (Noé), but a trial does not count as a sibling: nothing to flag.
+    expect(p.newEnrollment).toMatchObject({ status: "ok", discountCents: 1100 });
+    expect(p.existingImpacts).toEqual([]);
+    const r = await withSchool(ids.school, (tx) => saveEnrollment(tx, ids.payer, ids.season, entry));
+    if (!r.ok) throw new Error(r.message);
+    const [row] = await admin`SELECT status, discount_cents FROM enrollment WHERE id = ${r.id}`;
+    expect(row).toEqual({ status: "trial", discount_cents: 1100 });
+    // Not counted in the active figures, listed with its status.
+    expect(await withSchool(ids.school, (tx) => seasonFigures(tx, ids.season))).toMatchObject({ enrollments: 2 });
+    const listed = await withSchool(ids.school, (tx) => seasonEnrollments(tx, { payerId: ids.payer }, ids.season));
+    expect(listed.find((i) => i.id === r.id)).toMatchObject({ status: "trial", actions: { confirm: true } });
+  });
+
+  it("saves a waitlist enrollment, the default being « Inscrit »", async () => {
+    const r = await withSchool(ids.school, (tx) =>
+      saveEnrollment(tx, ids.otherPayer, ids.season, {
+        ...childEntry([ids.foreign], [ids.jazz60]),
+        status: "waitlist",
+      }),
+    );
+    if (!r.ok) throw new Error(r.message);
+    expect((await admin`SELECT status FROM enrollment WHERE id = ${r.id}`)[0].status).toBe("waitlist");
+    const d = await withSchool(ids.school, (tx) =>
+      saveEnrollment(tx, ids.otherPayer, ids.season, childEntry([ids.foreign], [ids.classical60])),
+    );
+    if (!d.ok) throw new Error(d.message);
+    expect((await admin`SELECT status FROM enrollment WHERE id = ${d.id}`)[0].status).toBe("active");
   });
 });
