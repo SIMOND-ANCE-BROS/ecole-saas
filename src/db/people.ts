@@ -4,7 +4,13 @@ import { issuePath } from "../lib/form-errors";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { displayedName } from "../domain/people/name";
-import { guardianRefusal } from "../domain/people/guardian";
+import {
+  guardianRefusal,
+  type PersonType,
+  RELATIONSHIP_KINDS,
+  type RelationshipKind,
+  typeChangeRefusal,
+} from "../domain/people/guardian";
 import type { Tx } from "./index";
 import {
   course,
@@ -146,8 +152,20 @@ export function listPeople(tx: Tx, limit = 200): Promise<PersonResult[]> {
 // Record
 // ---------------------------------------------------------------------------
 
-export const RELATIONSHIP_TYPES = ["legal_guardian", "partner", "other"] as const;
-export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number];
+export const RELATIONSHIP_TYPES = RELATIONSHIP_KINDS;
+export type RelationshipType = RelationshipKind;
+
+/** True only when A and B are the same union of literals. */
+type SameUnion<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+type Holds<T extends true> = T;
+/**
+ * Compile-time check (#216): the domain's dependency-free tuples hold exactly
+ * the values of the database enums; a value added on one side only fails here.
+ */
+export type DomainTypesMatchSchema = [
+  Holds<SameUnion<PersonType, (typeof person.type.enumValues)[number]>>,
+  Holds<SameUnion<RelationshipKind, (typeof relationship.type.enumValues)[number]>>,
+];
 
 export type RelationshipItem = {
   id: string;
@@ -452,6 +470,24 @@ export async function createPerson(
 export async function updatePerson(tx: Tx, id: string, entry: PersonInput): Promise<Result> {
   const refusal = { ok: false as const, message: "Cette personne n’existe plus." };
   if (!z.uuid().safeParse(id).success) return refusal;
+  // Before the update: a refusal returned here does not roll back the transaction.
+  const [links] = await tx
+    .select({
+      isGuardian: sql<boolean>`bool_or(${relationship.personId} = ${id})`,
+      hasGuardian: sql<boolean>`bool_or(${relationship.relatedPersonId} = ${id})`,
+    })
+    .from(relationship)
+    .where(
+      and(
+        eq(relationship.type, "legal_guardian"),
+        or(eq(relationship.personId, id), eq(relationship.relatedPersonId, id)),
+      ),
+    );
+  const notGuardian = typeChangeRefusal(entry.type, {
+    isGuardian: links?.isGuardian === true,
+    hasGuardian: links?.hasGuardian === true,
+  });
+  if (notGuardian) return { ok: false, message: notGuardian };
   const rows = await tx
     .update(person)
     .set(columnsOf(person, personValues(entry)))
@@ -480,7 +516,8 @@ export async function addRelationship(tx: Tx, entry: z.input<typeof validRelatio
     .where(or(eq(person.id, personId), eq(person.id, relatedPersonId)));
   if (presentes.length !== 2) return { ok: false, message: "Personne introuvable." };
   const holder = presentes.find((p) => p.id === personId);
-  const refusal = holder && guardianRefusal(l.data.type, holder.type);
+  const other = presentes.find((p) => p.id === relatedPersonId);
+  const refusal = holder && other && guardianRefusal(l.data.type, holder.type, other.type);
   if (refusal) return { ok: false, message: refusal };
   const [existing] = await tx
     .select({ id: relationship.id })
@@ -510,13 +547,15 @@ export async function addRelationship(tx: Tx, entry: z.input<typeof validRelatio
 export async function updateRelationship(tx: Tx, id: string, entry: NewRelationship): Promise<Result> {
   const refusal = { ok: false as const, message: "Ce lien n’existe plus." };
   if (!z.uuid().safeParse(id).success) return refusal;
-  const [holder] = await tx
-    .select({ type: person.type })
+  const other = alias(person, "other");
+  const [sides] = await tx
+    .select({ holder: person.type, other: other.type })
     .from(relationship)
     .innerJoin(person, eq(person.id, relationship.personId))
+    .innerJoin(other, eq(other.id, relationship.relatedPersonId))
     .where(eq(relationship.id, id));
-  if (!holder) return refusal;
-  const notGuardian = guardianRefusal(entry.type, holder.type);
+  if (!sides) return refusal;
+  const notGuardian = guardianRefusal(entry.type, sides.holder, sides.other);
   if (notGuardian) return { ok: false, message: notGuardian };
   const rows = await tx
     .update(relationship)
