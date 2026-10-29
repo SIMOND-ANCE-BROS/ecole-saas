@@ -4,13 +4,14 @@ import { requireRole } from "@/lib/session";
 import { PersonForm } from "../../_people/person-form";
 import { BackToList } from "../../_ui/list-return";
 import { TextLink } from "../../_ui/text-link";
+import { FormPage } from "@/app/(espace)/_ui/form-page";
 
 export const metadata: Metadata = { title: "Nouveau contact" };
 
 export default async function NewContactPage() {
   await requireRole("director", "front_desk");
   return (
-    <section className="flex flex-col gap-4">
+    <FormPage className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
         <BackToList list="/contacts" size="sm">
           Contacts
@@ -31,6 +32,6 @@ export default async function NewContactPage() {
         : le parent y est créé dans la foulée.
       </Text>
       <PersonForm person={null} section="contacts" />
-    </section>
+    </FormPage>
   );
 }

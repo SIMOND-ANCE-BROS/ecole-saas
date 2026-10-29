@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/session";
 import { PersonForm } from "../../../_people/person-form";
 import { BackToList } from "../../../_ui/list-return";
 import { TextLink } from "../../../_ui/text-link";
+import { FormPage } from "@/app/(espace)/_ui/form-page";
 
 export const metadata: Metadata = { title: "Modifier un élève" };
 
@@ -17,7 +18,7 @@ export default async function EditStudentPage({ params }: PageProps<"/eleves/[id
   if (!record) notFound();
 
   return (
-    <section className="flex flex-col gap-4">
+    <FormPage className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
         <BackToList list="/eleves" size="sm">
           Élèves
@@ -37,6 +38,6 @@ export default async function EditStudentPage({ params }: PageProps<"/eleves/[id
         Modifier {displayedName(record)}
       </Title>
       <PersonForm person={record} section="eleves" />
-    </section>
+    </FormPage>
   );
 }

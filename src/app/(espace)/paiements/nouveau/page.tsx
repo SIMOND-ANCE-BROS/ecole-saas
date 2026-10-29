@@ -9,6 +9,7 @@ import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { TextLink } from "../../_ui/text-link";
 import { PaymentForm } from "./payment-form";
+import { FormPage } from "@/app/(espace)/_ui/form-page";
 
 export const metadata: Metadata = { title: "Encaisser" };
 
@@ -29,7 +30,7 @@ export default async function CollectPaymentPage({ searchParams }: PageProps<"/p
   const back = `/${student ? "eleves" : "contacts"}/${p.id}`;
 
   return (
-    <section className="flex flex-col gap-4">
+    <FormPage className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
         <TextLink href={back} size="sm">
           {displayedName(p)}
@@ -49,6 +50,6 @@ export default async function CollectPaymentPage({ searchParams }: PageProps<"/p
         today={today}
         back={back}
       />
-    </section>
+    </FormPage>
   );
 }

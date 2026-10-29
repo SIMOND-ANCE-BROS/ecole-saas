@@ -10,6 +10,7 @@ import { requireRole } from "@/lib/session";
 import { BackToList } from "../../../_ui/list-return";
 import { TextLink } from "../../../_ui/text-link";
 import { EnrollmentForm } from "./enrollment-form";
+import { FormPage } from "@/app/(espace)/_ui/form-page";
 
 export const metadata: Metadata = { title: "Nouvelle inscription" };
 
@@ -41,7 +42,7 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
   const payer = student.billedTo.type === "person" ? student.billedTo.name : name;
 
   return (
-    <section className="flex flex-col gap-4">
+    <FormPage className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
         <BackToList list="/eleves" size="sm">
           Élèves
@@ -89,6 +90,6 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
           initialStudent={student.id}
         />
       )}
-    </section>
+    </FormPage>
   );
 }

@@ -255,8 +255,9 @@ export function CourseForm({
           // « Ja » then Enter takes « Jazz » rather than creating « Ja »; a new
           // « Jazz » is not replaced by « Modern jazz », which only contains it.
           selectFirstOptionOnChange={startsADiscipline}
-          // After a refusal, focus lands here: the list would cover the message.
-          openOnFocus={!refusal}
+          // Opens on a click, typing or ArrowDown, not on mere focus (#258): the panel opens
+          // with focus here, and the first Escape must close the panel, not a list.
+          openOnFocus={false}
           value={v.discipline}
           onChange={set("discipline")}
           description={

@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/session";
 import { PersonForm } from "../../../_people/person-form";
 import { BackToList } from "../../../_ui/list-return";
 import { TextLink } from "../../../_ui/text-link";
+import { FormPage } from "@/app/(espace)/_ui/form-page";
 
 export const metadata: Metadata = { title: "Modifier un contact" };
 
@@ -16,7 +17,7 @@ export default async function EditContactPage({ params }: PageProps<"/contacts/[
   const record = await withSchool(schoolId, (tx) => readPerson(tx, id));
   if (!record) notFound();
   return (
-    <section className="flex flex-col gap-4">
+    <FormPage className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
         <BackToList list="/contacts" size="sm">
           Contacts
@@ -36,6 +37,6 @@ export default async function EditContactPage({ params }: PageProps<"/contacts/[
         Modifier {displayedName(record)}
       </Title>
       <PersonForm person={record} section="contacts" />
-    </section>
+    </FormPage>
   );
 }
