@@ -7,6 +7,8 @@ import { offsetOf, PAGE_SIZE } from "../domain/filters/pagination";
 import { ENROLLMENT_STATUS_LABELS, STATUS_PRIORITY } from "../domain/enrollment/statuses";
 import { SHORT_DAYS } from "../domain/schedule/days";
 import { todayInParis } from "../domain/people/age";
+import type { Requirement } from "../domain/people/documents";
+import { missingDocumentsSql } from "./student-documents";
 import {
   canBeLegalGuardian,
   guardianRefusal,
@@ -66,6 +68,8 @@ export type StudentRow = {
   enrollmentStatus: string | null;
   /** Emergency contacts: « Sophie Martin, 06 12 34 56 78 ». */
   toNotify: string[];
+  /** Required documents missing for the season (#287): « Certificat médical »… */
+  missingDocuments: string[];
 };
 
 /**
@@ -81,6 +85,8 @@ export type ListOptions = {
   page?: number;
   /** Rows per page; `PAGE_SIZE` by default. */
   pageSize?: number;
+  /** The school's document requirements (`readRequirements`), for « Documents manquants » (#287). */
+  requirements?: readonly Requirement[];
 };
 
 // Computed list columns: the same expressions serve for display and for filters.
@@ -160,7 +166,13 @@ function studentEnrollment(seasonId: string | null): SQL<string | null> {
  */
 function studentScope(
   entry: string,
-  { filter = EMPTY_FILTER, currentSort = null, today = todayInParis(), seasonId = null }: ListOptions,
+  {
+    filter = EMPTY_FILTER,
+    currentSort = null,
+    today = todayInParis(),
+    seasonId = null,
+    requirements = [],
+  }: ListOptions,
 ) {
   const studentCondition = searchCondition(entry);
   const relativeCondition = searchCondition(entry, "r");
@@ -168,6 +180,7 @@ function studentScope(
   const validSeasonId = seasonId && isUuid(seasonId) ? seasonId : null;
   const seasonCourses = studentCourses(validSeasonId);
   const seasonStatus = studentEnrollment(validSeasonId);
+  const missing = missingDocumentsSql(requirements, validSeasonId, today);
   const expressions = {
     nom: { sql: sqlName("person") },
     age: { sql: sql`date_part('year', age(${today}::date, ${person.birthDate}))` },
@@ -178,6 +191,7 @@ function studentScope(
     email: { sql: studentEmail },
     cours: { sql: seasonCourses, list: true },
     inscription: { sql: seasonStatus },
+    documents: { sql: missing, list: true },
     prevenir: { sql: studentToNotify, list: true },
   };
   const where = and(
@@ -190,7 +204,13 @@ function studentScope(
       : undefined,
     filterCondition(filter, STUDENT_COLUMNS, expressions),
   );
-  return { where, order: columnOrder(currentSort, STUDENT_COLUMNS, expressions), seasonCourses, seasonStatus };
+  return {
+    where,
+    order: columnOrder(currentSort, STUDENT_COLUMNS, expressions),
+    seasonCourses,
+    seasonStatus,
+    missing,
+  };
 }
 
 /** Students of the school, by name: one page of `PAGE_SIZE` rows (`page`, from 1). */
@@ -210,6 +230,7 @@ export async function listStudents(tx: Tx, entry = "", options: ListOptions = {}
       courses: scope.seasonCourses,
       enrollmentStatus: scope.seasonStatus,
       toNotify: studentToNotify,
+      missingDocuments: scope.missing,
     })
     .from(person)
     .where(scope.where)

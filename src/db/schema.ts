@@ -33,18 +33,14 @@ import {
 } from "drizzle-orm/pg-core";
 import { ROLE_VALUES } from "../domain/team/rules";
 import { REVERSAL_KINDS } from "../domain/payments/rejection";
+import { DOCUMENT_TYPES } from "../domain/people/documents";
 
 // ---------------------------------------------------------------------------
 // Enumerated types
 // ---------------------------------------------------------------------------
 export const personType = pgEnum("person_type", ["individual", "organisation"]);
 export const relationshipType = pgEnum("relationship_type", ["legal_guardian", "partner", "other"]);
-export const documentType = pgEnum("document_type", [
-  "medical_certificate",
-  "parental_consent",
-  "image_rights",
-  "other",
-]);
+export const documentType = pgEnum("document_type", DOCUMENT_TYPES);
 export const instructorStatus = pgEnum("instructor_status", ["sole_trader", "company", "employee"]);
 export const vatRegime = pgEnum("vat_regime", ["franchise_293b", "vat_registered", "not_applicable"]);
 export const payMode = pgEnum("pay_mode", ["hourly", "per_lesson", "monthly_flat"]);
@@ -355,6 +351,11 @@ export const relationship = pgTable(
   ],
 );
 
+/**
+ * A document handed in for a student (#287): one row per student and type,
+ * its current state; the earlier states are in the audit log. Tracking only:
+ * `file` stays empty until scans can be stored (#184).
+ */
 export const studentDocument = pgTable(
   "student_document",
   {
@@ -363,10 +364,35 @@ export const studentDocument = pgTable(
     studentId: uuid("student_id").notNull(),
     type: documentType("type").notNull(),
     granted: boolean("granted").notNull().default(true),
+    // NULL: recorded before #287, date unknown.
+    receivedOn: date("received_on"),
     validUntil: date("valid_until"),
     file: text("file"),
   },
-  (t) => [sameSchool(t, t.studentId, person)],
+  (t) => [unique().on(t.studentId, t.type), sameSchool(t, t.studentId, person)],
+);
+
+/**
+ * Documents a school asks for (#287), one row per type it has set; a type
+ * without a row follows `DEFAULT_REQUIREMENTS` (src/domain/people/documents.ts).
+ */
+export const documentRequirement = pgTable(
+  "document_requirement",
+  {
+    schoolId: schoolIdColumn(),
+    type: documentType("type").notNull(),
+    required: boolean("required").notNull(),
+    minorsOnly: boolean("minors_only").notNull(),
+    validityMonths: smallint("validity_months"), // NULL: never expires
+    dueWithinDays: smallint("due_within_days").notNull(), // days after the enrollment to bring it
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.schoolId, t.type] }),
+    check("document_requirement_type", sql`${t.type} <> 'other'`),
+    check("document_requirement_validity", sql`${t.validityMonths} BETWEEN 1 AND 120`),
+    check("document_requirement_due", sql`${t.dueWithinDays} BETWEEN 0 AND 365`),
+  ],
 );
 
 // ---------------------------------------------------------------------------

@@ -41,6 +41,11 @@ export default async function SettingsPage() {
       title: "Sites et salles",
       detail: `${seats.length} site${seats.length > 1 ? "s" : ""}, ${rooms} salle${rooms > 1 ? "s" : ""}`,
     },
+    {
+      href: "/parametres/documents",
+      title: "Documents demandés",
+      detail: "Certificat médical, validité et délai pour le fournir",
+    },
     { href: "/planning/fermetures", title: "Fermetures", detail: "Vacances, jours fériés, gala" },
     { href: "/intervenants", title: "Intervenants", detail: "Professeurs, statut et rémunération" },
     { href: "/parametres/equipe", title: "Équipe", detail: "Accès de la direction et de l’accueil, invitations" },
