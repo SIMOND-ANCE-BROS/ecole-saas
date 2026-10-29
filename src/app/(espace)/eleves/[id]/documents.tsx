@@ -135,7 +135,11 @@ export function Documents({ studentId, firstName, lines, enrolled, today, isDire
       datedOn: d?.datedOn ?? "",
       validUntil: d?.validUntil ?? "",
       granted: d?.granted ?? true,
-      validTouched: d !== null,
+      // A recorded end date that is not the one computed from the document's date was typed by hand: kept.
+      validTouched:
+        d !== null &&
+        d.validUntil !== (d.datedOn ? validUntilFor(d.datedOn, line.validityMonths) : null) &&
+        !(d.datedOn === null && line.validityMonths !== null),
     });
   };
   const done = (message: string) => notifications.show({ color: "green", message });

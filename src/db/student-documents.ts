@@ -264,6 +264,10 @@ export async function saveDocument(
   if (!r.success) return { ok: false, message: r.error.issues[0]?.message ?? "Saisie invalide." };
   if (!(await studentExists(tx, studentId))) return { ok: false, message: STUDENT_GONE };
   const d = r.data;
+  // A document whose validity runs from its own date (the medical certificate) needs that date.
+  const requirement = (await readRequirements(tx)).find((q) => q.type === d.type);
+  if (requirement?.validityMonths != null && d.datedOn === null)
+    return { ok: false, message: "Indiquez la date du document." };
   const was = await current(tx, studentId, d.type);
   const [{ id }] = await tx
     .insert(studentDocument)

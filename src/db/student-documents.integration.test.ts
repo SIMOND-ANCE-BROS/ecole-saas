@@ -191,6 +191,17 @@ describe("documents of a student", () => {
       ok: false,
       message: "Indiquez la date du document.",
     });
+    const undated = {
+      type: "medical_certificate",
+      receivedOn: TODAY,
+      datedOn: null,
+      validUntil: null,
+      granted: true,
+    } as const;
+    expect(await as((tx) => saveDocument(tx, desk, alex, undated, TODAY))).toEqual({
+      ok: false,
+      message: "Indiquez la date du document.",
+    });
     expect(await as((tx) => studentDocuments(tx, alex))).toEqual([]);
   });
 
