@@ -150,7 +150,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
               </Paper>
             )}
           </section>
-          {season && <Enrollments enrollments={billed} season={season} today={today} title="Inscriptions facturées" />}
+          {season && <Enrollments enrollments={billed} season={season} today={today} payerId={c.id} />}
           <PaymentsSection
             payerId={c.id}
             balance={balance}

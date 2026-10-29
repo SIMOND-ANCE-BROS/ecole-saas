@@ -1,6 +1,7 @@
 import { Alert, Text } from "@mantine/core";
 import type { ExistingImpact } from "@/db/enrollments";
 import type { EnrollmentResult } from "@/domain/tariff/types";
+import { ofName } from "@/lib/french";
 import { formatEuros } from "@/lib/money";
 
 /** A priced enrollment: package, discounts (applied or set aside, with their reason) and total. */
@@ -39,8 +40,9 @@ export function DiscountImpacts({ impacts }: { impacts: readonly ExistingImpact[
   return impacts.map((a) => (
     <Alert key={a.reference} color="yellow" p="xs">
       <Text size="xs">
-        L’inscription déjà enregistrée de {a.students} aurait une remise de {formatEuros(a.recalculatedDiscount)} au
-        lieu de {formatEuros(a.savedDeposit)} : à régulariser par un avoir si l’école le décide.
+        L’inscription déjà enregistrée {ofName(a.students)} aurait une remise de {formatEuros(a.recalculatedDiscount)}{" "}
+        au lieu {a.savedDeposit === 0 ? "d’aucune remise" : `de ${formatEuros(a.savedDeposit)}`} : son prix enregistré
+        ne change pas, à corriger si l’école le décide.
       </Text>
     </Alert>
   ));

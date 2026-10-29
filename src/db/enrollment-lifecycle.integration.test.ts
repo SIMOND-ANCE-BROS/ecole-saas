@@ -57,6 +57,11 @@ beforeAll(async () => {
       await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
       VALUES (${s}, ${season.id}, ${jazz.id}, ${room.id}, ${teacher.id}, 1, '17:00', 60) RETURNING id`;
     ids[`course-${s}`] = c.id;
+    // A 45-minute course: with the 60-minute one, no package of the grid fits (no tariff for {45,60}).
+    const [c45] =
+      await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+      VALUES (${s}, ${season.id}, ${jazz.id}, ${room.id}, ${teacher.id}, 2, '17:00', 45) RETURNING id`;
+    ids[`course45-${s}`] = c45.id;
     for (const date of ["2027-11-08", "2027-11-15", "2027-11-22"]) {
       const [l] = await admin`INSERT INTO lesson (school_id, course_id, date, instructor_id)
         VALUES (${s}, ${c.id}, ${date}, ${teacher.id}) RETURNING id`;
@@ -185,6 +190,18 @@ describe("confirming a trial or waitlist enrollment", () => {
     expect(await auditOf(e)).toHaveLength(0);
   });
 
+  it("refuses when the engine cannot price the enrollment, saving nothing", async () => {
+    const f = await family(school, ["trial"]);
+    const [e] = f.enrollments;
+    await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id)
+      VALUES (${school}, ${e}, ${f.students[0]}, ${ids[`course45-${school}`]})`;
+    const preview = await inSchool((tx) => confirmationPreview(tx, e));
+    expect(preview).toMatchObject({ status: "ok", price: { status: "error" } });
+    expect(await inSchool((tx) => confirmEnrollment(tx, desk, e, 11000))).toMatchObject({ ok: false });
+    expect((await admin`SELECT status FROM enrollment WHERE id = ${e}`)[0].status).toBe("trial");
+    expect(await auditOf(e)).toHaveLength(0);
+  });
+
   it("refuses to confirm a drop-out, with a French message", async () => {
     const f = await family(school, ["active"]);
     const [e] = f.enrollments;
@@ -283,6 +300,35 @@ describe("recording a drop-out", () => {
   });
 });
 
+describe("waitlist and drop-outs", () => {
+  it("refuses a drop-out from the waitlist (never attended): it is cancelled instead", async () => {
+    const f = await family(school, ["waitlist"]);
+    expect(await inSchool((tx) => dropEnrollment(tx, desk, f.enrollments[0], "2027-11-15"))).toEqual({
+      ok: false,
+      message: "Une inscription en attente n’a jamais été suivie : annulez-la plutôt.",
+    });
+    expect(await sheet("2027-11-08")).not.toContain(f.students[0]);
+  });
+
+  it("refuses a drop-out dated before the enrollment day", async () => {
+    const f = await family(school, ["active"]);
+    await admin`UPDATE enrollment SET enrolled_on = '2027-10-05' WHERE id = ${f.enrollments[0]}`;
+    expect(await inSchool((tx) => dropEnrollment(tx, desk, f.enrollments[0], "2027-10-04"))).toEqual({
+      ok: false,
+      message: "La date de l’abandon ne peut pas précéder l’inscription ni le début de la saison.",
+    });
+  });
+
+  it("a drop-out stays due on the payer's balance (the school neither carries over nor refunds)", async () => {
+    const f = await family(school, ["active"]);
+    await inSchool((tx) => dropEnrollment(tx, desk, f.enrollments[0], "2027-11-15"));
+    expect(await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20"))).toMatchObject({
+      due: 11000,
+      outsideCalculation: {},
+    });
+  });
+});
+
 describe("attendance sheets by status", () => {
   it("shows a trial student, never a waitlisted one", async () => {
     const f = await family(school, ["trial", "waitlist"]);
@@ -333,6 +379,27 @@ describe("cancelling a mistaken enrollment", () => {
       await inSchool((tx) => seasonEnrollments(tx, { payerId: f.payer }, ids[`season-${school}`]))
     ).filter((i) => i.id === e);
     expect(listed).toMatchObject({ invoiced: true, actions: { cancel: false, drop: true } });
+  });
+
+  it("a duplicate entered by mistake stays cancellable when the other enrollment has the attendance", async () => {
+    const f = await family(school, ["active"]);
+    const [duplicate] = await admin`
+      INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status)
+      VALUES (${school}, ${ids[`season-${school}`]}, ${f.payer}, 'child', 'quarter', 11000, 'active') RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id)
+      VALUES (${school}, ${duplicate.id}, ${f.students[0]}, ${ids[`course-${school}`]})`;
+    await admin`INSERT INTO attendance (school_id, lesson_id, student_id, present)
+      VALUES (${school}, ${ids[`lesson-${school}-2027-11-15`]}, ${f.students[0]}, true)`;
+    const listed = await inSchool((tx) => seasonEnrollments(tx, { payerId: f.payer }, ids[`season-${school}`]));
+    expect(listed.map((i) => i.actions.cancel)).toEqual([true, true]);
+    expect(await inSchool((tx) => cancelEnrollment(tx, desk, duplicate.id))).toEqual({ ok: true, id: duplicate.id });
+    // The one left now carries the attendance alone: no longer cancellable.
+    const [left] = await inSchool((tx) => seasonEnrollments(tx, { payerId: f.payer }, ids[`season-${school}`]));
+    expect(left).toMatchObject({
+      id: f.enrollments[0],
+      actions: { cancel: false },
+      cancelRefusal: "Des présences sont déjà relevées pour cette inscription : enregistrez plutôt un abandon.",
+    });
   });
 
   it("is refused once attendance was taken: a drop-out is what happened", async () => {
@@ -393,6 +460,7 @@ describe("seasonEnrollments", () => {
       seasonEnrollments(tx, { personId: f.students[1] }, ids[`season-${school}`]),
     );
     expect(byStudent.map((i) => i.id)).toEqual([f.enrollments[1]]);
-    expect(byStudent[0].actions).toEqual({ confirm: true, drop: true, cancel: true });
+    // Waitlist: confirmed or cancelled, never dropped (it was never attended).
+    expect(byStudent[0].actions).toEqual({ confirm: true, drop: false, cancel: true });
   });
 });

@@ -18,27 +18,14 @@ const WRAPPING = { label: { whiteSpace: "normal", overflow: "visible" } } as con
 /**
  * Status of an enrollment as a badge, the same on records, course lists and
  * attendance sheets; a word, never colour alone. Nothing for an active
- * enrollment unless `showActive` (a list where every status is shown).
+ * enrollment. Outlined: its text keeps AA contrast in light and dark mode.
  */
-export function EnrollmentStatusBadge({
-  status,
-  droppedOn,
-  showActive = false,
-}: {
-  status: EnrollmentStatus;
-  droppedOn?: string | null;
-  showActive?: boolean;
-}) {
-  if (status === "active")
-    return showActive ? (
-      <Badge color="green" variant="light" tt="none">
-        inscrit
-      </Badge>
-    ) : null;
+export function EnrollmentStatusBadge({ status, droppedOn }: { status: EnrollmentStatus; droppedOn?: string | null }) {
+  if (status === "active") return null;
   const b = BADGES[status];
   return (
     // « abandon le 15/11/2026 » wraps in a narrow cell (phone) rather than being cut.
-    <Badge color={b.color} variant="light" tt="none" h="auto" maw="100%" styles={WRAPPING}>
+    <Badge color={b.color} variant="outline" tt="none" h="auto" maw="100%" styles={WRAPPING}>
       {b.label}
       {status === "dropped" && droppedOn ? ` le ${frenchDate(droppedOn)}` : ""}
     </Badge>

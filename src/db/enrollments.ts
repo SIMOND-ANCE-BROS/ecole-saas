@@ -3,7 +3,10 @@ import { rowsOf } from "./columns-of";
 import { z } from "zod";
 import { discountImpacts } from "../domain/enrollment/impacts";
 import {
+  cancelRefusal,
   confirmationPrice,
+  countsAsSibling,
+  dropDateBounds,
   dropDateRefusal,
   enrollmentActions,
   SIBLING_STATUSES,
@@ -25,13 +28,11 @@ import type {
 import type { Tx } from "./index";
 import { payableStudents } from "./people";
 import {
-  attendance,
   auditLog,
   course,
   discipline,
   enrollment,
   enrollmentCourse,
-  lesson,
   member,
   person,
   discount,
@@ -314,14 +315,36 @@ export type SeasonEnrollment = {
   netPriceCents: number;
   status: EnrollmentStatus;
   droppedOn: string | null;
+  enrolledOn: string;
+  payerId: string;
   /** An invoice line refers to it: only a credit note can undo it. */
   invoiced: boolean;
   /** What the front desk can do with it (#284). */
   actions: EnrollmentActions;
+  /** Why it cannot be cancelled, in French; null when it can. */
+  cancelRefusal: string | null;
 };
 
+const enrollmentId = sql`${enrollment}.${sql.identifier("id")}`;
+
 /** An invoice line refers to the enrollment of the row. */
-const invoicedSql = sql<boolean>`EXISTS (SELECT 1 FROM invoice_line l WHERE l.enrollment_id = ${enrollment}.${sql.identifier("id")})`;
+const invoicedSql = sql<boolean>`EXISTS (SELECT 1 FROM invoice_line l WHERE l.enrollment_id = ${enrollmentId})`;
+
+/**
+ * Attendance was taken for a student of the enrollment of the row in one of its courses,
+ * and no other enrollment of that student covers that course (a duplicate entered by
+ * mistake stays cancellable when the right one has the attendance).
+ */
+const attendedSql = sql<boolean>`EXISTS (
+  SELECT 1 FROM enrollment_course c
+  JOIN lesson s ON s.course_id = c.course_id
+  JOIN attendance a ON a.lesson_id = s.id AND a.student_id = c.student_id
+  WHERE c.enrollment_id = ${enrollmentId}
+    AND NOT EXISTS (
+      SELECT 1 FROM enrollment_course o
+      WHERE o.student_id = c.student_id AND o.course_id = c.course_id AND o.enrollment_id <> c.enrollment_id
+    )
+)`;
 
 /**
  * Enrollments of the season, every status, sorted by student: the ones a person pays for
@@ -349,7 +372,10 @@ export async function seasonEnrollments(
       netPriceCents: enrollment.netPriceCents,
       status: enrollment.status,
       droppedOn: enrollment.droppedOn,
+      enrolledOn: enrollment.enrolledOn,
+      payerId: enrollment.payerId,
       invoiced: invoicedSql,
+      attended: attendedSql,
     })
     .from(enrollment)
     .where(and(mine, eq(enrollment.seasonId, seasonId)));
@@ -387,8 +413,11 @@ export async function seasonEnrollments(
         netPriceCents: l.netPriceCents ?? 0,
         status: l.status,
         droppedOn: l.droppedOn,
+        enrolledOn: l.enrolledOn,
+        payerId: l.payerId,
         invoiced: l.invoiced,
-        actions: enrollmentActions(l.status, l.invoiced),
+        actions: enrollmentActions(l.status, { invoiced: l.invoiced, attended: l.attended }),
+        cancelRefusal: cancelRefusal({ invoiced: l.invoiced, attended: l.attended }),
         students: [...new Set(own.map((x) => x.firstName))].sort().join(" et "),
         courses: [
           ...new Set(
@@ -407,7 +436,6 @@ export async function seasonEnrollments(
 // ---------------------------------------------------------------------------
 
 const GONE = "Cette inscription n’existe plus.";
-const INVOICED = "Cette inscription est facturée : passez par un avoir.";
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 
 type Saved = {
@@ -420,13 +448,19 @@ type Saved = {
   grossPriceCents: number;
   discountCents: number;
   droppedOn: string | null;
+  enrolledOn: string;
   invoiced: boolean;
+  attended: boolean;
 };
 
 /**
  * A saved enrollment of the current school, or null. `lock`: the payer's row then the
  * enrollment's stay locked until the end of the transaction (same order everywhere), so
  * two clicks or two desks wait for each other and the second sees the first's change.
+ * The enrollment is locked `FOR UPDATE`: an invoice line referring to it (epic #6, which
+ * takes `FOR KEY SHARE` through its foreign key) waits for the change, then sees it.
+ * Attendance is not locked: one taken at the same instant as a cancellation can slip
+ * through (the cancellation then removes an enrollment just attended; the audit log keeps it).
  */
 async function readSaved(tx: Tx, id: string, lock = false): Promise<Saved | null> {
   if (!uuid.safeParse(id).success) return null;
@@ -443,7 +477,9 @@ async function readSaved(tx: Tx, id: string, lock = false): Promise<Saved | null
           grossPriceCents: enrollment.grossPriceCents,
           discountCents: enrollment.discountCents,
           droppedOn: enrollment.droppedOn,
+          enrolledOn: enrollment.enrolledOn,
           invoiced: invoicedSql,
+          attended: attendedSql,
         })
         .from(enrollment)
         .where(eq(enrollment.id, id))
@@ -451,7 +487,7 @@ async function readSaved(tx: Tx, id: string, lock = false): Promise<Saved | null
   const first = await read();
   if (!first || !lock) return first;
   await lockPayer(tx, first.payerId);
-  await tx.select({ id: enrollment.id }).from(enrollment).where(eq(enrollment.id, id)).for("no key update");
+  await tx.select({ id: enrollment.id }).from(enrollment).where(eq(enrollment.id, id)).for("update");
   // Read again under the locks, in a new statement: a change committed meanwhile is seen.
   return read();
 }
@@ -478,7 +514,9 @@ export type ConfirmationPreview =
     };
 
 async function confirmationOf(tx: Tx, e: Saved): Promise<ConfirmationPreview> {
-  const refusal = e.invoiced ? INVOICED : transitionRefusal(e.status, "active");
+  const refusal = e.invoiced
+    ? cancelRefusal({ invoiced: true, attended: false })
+    : transitionRefusal(e.status, "active");
   if (refusal) return { status: "invalid", message: refusal };
   const [target] = await withCourses(tx, [
     { id: e.id, audience: e.audience, period: e.period, deposit: e.discountCents },
@@ -561,7 +599,7 @@ export async function confirmEnrollment(
  */
 export async function leavingImpacts(tx: Tx, id: string): Promise<ExistingImpact[]> {
   const e = await readSaved(tx, id);
-  if (!e || !(SIBLING_STATUSES as readonly EnrollmentStatus[]).includes(e.status)) return [];
+  if (!e || !countsAsSibling(e.status)) return [];
   const remaining = await existingEnrollments(tx, e.payerId, e.seasonId, e.id);
   if (remaining.length === 0) return [];
   const result = computeTariff({
@@ -573,9 +611,10 @@ export async function leavingImpacts(tx: Tx, id: string): Promise<ExistingImpact
 }
 
 /**
- * Records a drop-out on `droppedOn` (within the enrollment's season): the student leaves
- * the attendance sheets of the lessons after that day. Its price stays as saved and is
- * shown apart on the balance (#99, #284 Q1). The same drop-out sent twice changes nothing.
+ * Records a drop-out on `droppedOn` (from the enrollment day, within its season): the
+ * student leaves the attendance sheets of the lessons after that day. Its price stays as
+ * saved and stays due (#284 Q1: the school neither carries over nor refunds). The same
+ * drop-out sent twice changes nothing.
  */
 export async function dropEnrollment(tx: Tx, userId: string, id: string, droppedOn: string): Promise<ChangeResult> {
   const e = await readSaved(tx, id, true);
@@ -587,7 +626,7 @@ export async function dropEnrollment(tx: Tx, userId: string, id: string, dropped
     .select({ startDate: season.startDate, endDate: season.endDate })
     .from(season)
     .where(eq(season.id, e.seasonId));
-  const dateRefusal = s ? dropDateRefusal(droppedOn, s) : GONE;
+  const dateRefusal = s ? dropDateRefusal(droppedOn, dropDateBounds(e.enrolledOn, s)) : GONE;
   if (dateRefusal) return { ok: false, message: dateRefusal };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
@@ -613,24 +652,12 @@ export async function dropEnrollment(tx: Tx, userId: string, id: string, dropped
 export async function cancelEnrollment(tx: Tx, userId: string, id: string): Promise<ChangeResult> {
   const e = await readSaved(tx, id, true);
   if (!e) return { ok: false, message: "Cette inscription a déjà été annulée." };
-  if (e.invoiced) return { ok: false, message: INVOICED };
+  const refusal = cancelRefusal(e);
+  if (refusal) return { ok: false, message: refusal };
   const courses = await tx
     .select({ studentId: enrollmentCourse.studentId, courseId: enrollmentCourse.courseId })
     .from(enrollmentCourse)
     .where(eq(enrollmentCourse.enrollmentId, id));
-  if (courses.length > 0) {
-    const [attended] = await tx
-      .select({ lessonId: attendance.lessonId })
-      .from(attendance)
-      .innerJoin(lesson, eq(lesson.id, attendance.lessonId))
-      .where(or(...courses.map((c) => and(eq(attendance.studentId, c.studentId), eq(lesson.courseId, c.courseId)))))
-      .limit(1);
-    if (attended)
-      return {
-        ok: false,
-        message: "Des présences sont déjà relevées pour cette inscription : enregistrez plutôt un abandon.",
-      };
-  }
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
   await tx.delete(enrollmentCourse).where(eq(enrollmentCourse.enrollmentId, id));

@@ -65,6 +65,8 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
   const active = enrolled.filter((i) => i.status === "active").length;
   const trials = enrolled.filter((i) => i.status === "trial").length;
   const waitlist = enrolled.filter((i) => i.status === "waitlist").length;
+  // Drop-outs still attending until their date (#284): listed, not counted in the headcount.
+  const dropping = enrolled.filter((i) => i.status === "dropped").length;
   const full = course.maxCapacity !== null && active >= course.maxCapacity;
   // « Chaque lundi 17:00–18:00 », « Un mercredi sur deux… », « Le sam. 24 oct., … 10:00–12:00 » (#90).
   const slot = `${recurrenceText(course)}, ${course.startTime}–${end(course.startTime, course.durationMinutes)}`;
@@ -212,7 +214,8 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
 
       <section aria-labelledby="inscrits" className="flex flex-col gap-2">
         <Title order={2} size="h5" id="inscrits">
-          Danseurs ({enrolled.length})
+          Danseurs ({enrolled.length}
+          {dropping > 0 && `, dont ${dropping} abandon${dropping > 1 ? "s" : ""} à venir`})
         </Title>
         {enrolled.length === 0 ? (
           <Text size="sm" c="dimmed">

@@ -170,7 +170,14 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
         <div className="flex min-w-0 flex-col gap-5">
           <Relatives studentId={e.id} firstName={firstName} guardians={e.guardians} other={e.otherRelationships} />
           <FollowedCourses courses={e.courses} />
-          {season && <Enrollments enrollments={enrollments} season={season} today={today} />}
+          {season && (
+            <Enrollments
+              enrollments={enrollments}
+              season={season}
+              today={today}
+              payerId={e.billedTo.type !== "person" ? e.id : null}
+            />
+          )}
           {e.billedTo.type === "person" ? (
             <Text size="sm" c="dimmed">
               Paiements : sur la fiche de{" "}

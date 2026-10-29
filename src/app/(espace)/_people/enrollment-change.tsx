@@ -5,8 +5,9 @@ import { notifications } from "@mantine/notifications";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState, useTransition } from "react";
 import type { ConfirmationPreview, ExistingImpact } from "@/db/enrollments";
-import type { EnrollmentActions } from "@/domain/enrollment/lifecycle";
+import { dropDateBounds, type EnrollmentActions } from "@/domain/enrollment/lifecycle";
 import { NOT_SAVED, settle } from "@/lib/action-result";
+import { ofName } from "@/lib/french";
 import { formatEuros } from "@/lib/money";
 import { DateField, refusedDateField } from "../_ui/date-field";
 import {
@@ -27,13 +28,17 @@ export type ChangeableEnrollment = {
   students: string;
   courses: string[];
   netPriceCents: number;
+  /** Why it cannot be cancelled (invoiced, attended), shown instead of « Annuler… »; null when it can. */
+  cancelRefusal: string | null;
+  /** Day it was entered: a drop-out cannot be dated before. */
+  enrolledOn: string;
   actions: EnrollmentActions;
 };
 
 type Props = {
   enrollment: ChangeableEnrollment;
   today: string;
-  /** Bounds of a drop-out date: the enrollment's season. */
+  /** The enrollment's season: a drop-out is dated within it. */
   season: { startDate: string; endDate: string };
 };
 
@@ -44,9 +49,10 @@ type Props = {
  * nothing; Escape closes it.
  */
 export function EnrollmentChanges({ enrollment, today, season }: Props) {
-  const [change, setChange] = useState<Change | null>(null);
+  // The open dialog, and the button that opened it: focus goes back to it when the dialog closes without a change.
+  const [opened, setOpened] = useState<{ change: Change; opener: HTMLButtonElement } | null>(null);
   const { confirm, drop, cancel } = enrollment.actions;
-  const who = enrollment.students;
+  const of = ofName(enrollment.students);
   return (
     <>
       <div className="flex flex-wrap gap-1 sm:justify-end">
@@ -54,8 +60,8 @@ export function EnrollmentChanges({ enrollment, today, season }: Props) {
           <Button
             size="compact-sm"
             variant="light"
-            aria-label={`Confirmer l’inscription de ${who}`}
-            onClick={() => setChange("confirm")}
+            aria-label={`Confirmer l’inscription ${of}`}
+            onClick={(e) => setOpened({ change: "confirm", opener: e.currentTarget })}
           >
             Confirmer…
           </Button>
@@ -64,10 +70,10 @@ export function EnrollmentChanges({ enrollment, today, season }: Props) {
           <Button
             size="compact-sm"
             variant="subtle"
-            aria-label={`Enregistrer un abandon pour ${who}`}
-            onClick={() => setChange("drop")}
+            aria-label={`Enregistrer l’abandon ${of}`}
+            onClick={(e) => setOpened({ change: "drop", opener: e.currentTarget })}
           >
-            Abandon…
+            Abandonner…
           </Button>
         )}
         {cancel ? (
@@ -75,24 +81,29 @@ export function EnrollmentChanges({ enrollment, today, season }: Props) {
             size="compact-sm"
             variant="subtle"
             color="red"
-            aria-label={`Annuler l’inscription de ${who}`}
-            onClick={() => setChange("cancel")}
+            aria-label={`Annuler l’inscription ${of}`}
+            onClick={(e) => setOpened({ change: "cancel", opener: e.currentTarget })}
           >
             Annuler…
           </Button>
         ) : (
           <Text span size="xs" c="dimmed">
-            Facturée : passez par un avoir
+            {enrollment.cancelRefusal}
           </Text>
         )}
       </div>
-      {change && (
+      {opened && (
         <ChangeDialog
-          change={change}
+          change={opened.change}
           enrollment={enrollment}
           today={today}
           season={season}
-          onClose={() => setChange(null)}
+          onClose={(saved) => {
+            const { opener } = opened;
+            setOpened(null);
+            // After a change the button may be gone: the save gives focus to the section heading.
+            if (!saved) requestAnimationFrame(() => opener.focus());
+          }}
         />
       )}
     </>
@@ -111,16 +122,23 @@ const DONE: Record<Change, string> = {
   cancel: "Inscription annulée",
 };
 
-/** A drop-out date to start from: today, within the season. */
-const withinSeason = (today: string, season: Props["season"]) =>
-  today < season.startDate ? season.startDate : today > season.endDate ? season.endDate : today;
+/** A drop-out date to start from: today, within the allowed days. */
+const within = (today: string, b: { min: string; max: string }) =>
+  today < b.min ? b.min : today > b.max ? b.max : today;
 
-function ChangeDialog({ change, enrollment, today, season, onClose }: Props & { change: Change; onClose: () => void }) {
+function ChangeDialog({
+  change,
+  enrollment,
+  today,
+  season,
+  onClose,
+}: Props & { change: Change; onClose: (saved: boolean) => void }) {
   const router = useRouter();
   // What the change would do, read when the dialog opens; `attempt` reads it again.
   const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState<{ attempt: number; preview: Preview } | null>(null);
-  const [droppedOn, setDroppedOn] = useState(withinSeason(today, season));
+  const bounds = dropDateBounds(enrollment.enrolledOn, season);
+  const [droppedOn, setDroppedOn] = useState(within(today, bounds));
   const [message, setMessage] = useState<string | null>(null);
   const [sending, startSending] = useTransition();
 
@@ -150,7 +168,7 @@ function ChangeDialog({ change, enrollment, today, season, onClose }: Props & { 
         if (change === "confirm") setAttempt((n) => n + 1);
         return;
       }
-      onClose();
+      onClose(true);
       notifications.show({ color: "green", message: DONE[change] });
       router.refresh();
       // The button that opened the dialog may be gone with the change: the section keeps the focus.
@@ -209,16 +227,15 @@ function ChangeDialog({ change, enrollment, today, season, onClose }: Props & { 
         <DateField
           label="Date de l’abandon"
           required
-          minDate={season.startDate}
-          maxDate={season.endDate}
+          minDate={bounds.min}
+          maxDate={bounds.max}
           value={droppedOn}
           onChange={setDroppedOn}
           w={160}
         />
         <Text size="sm">
-          {who} n’apparaîtra plus sur les appels des séances après cette date ; les présences déjà relevées restent. Le
-          prix de l’inscription ({formatEuros(enrollment.netPriceCents)}) reste enregistré et apparaît à part sur le
-          solde.
+          {who} n’apparaîtra plus sur les appels des séances après cette date. Le prix de l’inscription (
+          {formatEuros(enrollment.netPriceCents)}) reste dû ; un avoir éventuel se décide à part.
         </Text>
         <DiscountImpacts impacts={preview.impacts} />
       </>
@@ -227,8 +244,8 @@ function ChangeDialog({ change, enrollment, today, season, onClose }: Props & { 
     body = (
       <>
         <Text size="sm">
-          L’inscription de {who} ({summary}) sera supprimée, comme si elle n’avait pas été saisie. Les paiements déjà
-          reçus ne changent pas : ils restent sur le solde du payeur.
+          L’inscription {ofName(who)} ({summary}) sera supprimée, comme si elle n’avait pas été saisie. Les paiements
+          déjà reçus ne changent pas : ils restent sur le solde du payeur.
         </Text>
         <DiscountImpacts impacts={preview.impacts} />
       </>
@@ -236,7 +253,7 @@ function ChangeDialog({ change, enrollment, today, season, onClose }: Props & { 
   }
 
   return (
-    <Modal opened onClose={onClose} title={TITLES[change]} centered>
+    <Modal opened onClose={() => onClose(false)} title={TITLES[change]} centered>
       <form
         className="flex flex-col gap-3 text-sm"
         onSubmit={(e) => {
@@ -252,7 +269,7 @@ function ChangeDialog({ change, enrollment, today, season, onClose }: Props & { 
           </Text>
         )}
         <Group justify="flex-end" mt="xs">
-          <Button variant="default" onClick={onClose} data-autofocus>
+          <Button variant="default" onClick={() => onClose(false)} data-autofocus>
             {change === "cancel" ? "Garder l’inscription" : "Fermer"}
           </Button>
           <Button type="submit" color={change === "cancel" ? "red" : undefined} disabled={!ready} loading={sending}>
