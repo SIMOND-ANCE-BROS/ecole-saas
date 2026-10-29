@@ -1,19 +1,28 @@
 "use client";
 
 import { Button, Paper, Select, Text, Title } from "@mantine/core";
-import { useState, useTransition } from "react";
-import type { LessonPacks } from "@/db/lesson-packs";
+import { useEffect, useRef, useState, useTransition } from "react";
+import type { LessonPacks, PackRow } from "@/db/lesson-packs";
 import { packLabel } from "@/domain/lesson-pack/pack";
 import { settle } from "@/lib/action-result";
 import { countOnPack } from "../actions";
 
 const HEADING = "carnet-seance";
-const names = (p: LessonPacks["counted"][number]) => p.participants.map((s) => s.name).join(", ");
+const shortDate = new Intl.DateTimeFormat("fr-FR", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+const names = (p: PackRow) => p.participants.map((s) => s.name).join(", ");
+/** Who it is for, what remains, who pays and when it was sold: two packs never read the same. */
+const describe = (p: PackRow) =>
+  `${names(p)}${p.peopleCount > 1 ? ` (${p.peopleCount} personnes)` : ""} — ${packLabel(p)} · Facturé à ${p.payer} · vendu le ${shortDate.format(new Date(`${p.purchasedOn}T00:00:00Z`))}`;
 
 /**
  * A private lesson counted on lesson packs (#286): the packs it is counted on, each
- * with « Annuler le décompte », and a picker of open packs (arrows, Enter) with
- * « Décompter ». A cancelled lesson is never counted (Q2 default).
+ * with « Annuler le décompte », and a picker of the packs it can be counted on
+ * (arrows, Enter) with « Décompter ». A cancelled lesson is never counted (Q2 default).
  */
 export function PackUsage({
   lessonId,
@@ -25,27 +34,31 @@ export function PackUsage({
   packs: LessonPacks;
 }) {
   const [chosen, setChosen] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [inProgress, startTransition] = useTransition();
-  const ofLesson = packs.offered.filter((p) => p.ofLesson);
-  const others = packs.offered.filter((p) => !p.ofLesson);
-  const option = (p: LessonPacks["offered"][number]) => ({ value: p.id, label: `${names(p)} — ${packLabel(p)}` });
-  const data = [
-    ...(ofLesson.length > 0 ? [{ group: "Élèves de la séance", items: ofLesson.map(option) }] : []),
-    ...(others.length > 0
-      ? [{ group: ofLesson.length > 0 ? "Autres carnets" : "Carnets en cours", items: others.map(option) }]
-      : []),
-  ];
+  // The picker is disabled while saving: focus comes back to it afterwards, for the next count (#244).
+  const picker = useRef<HTMLInputElement>(null);
+  const refocus = useRef(false);
+  // The picker may only come back with the refreshed packs (a count undone): then too.
+  useEffect(() => {
+    if (inProgress || !refocus.current || !picker.current) return;
+    refocus.current = false;
+    picker.current.focus();
+  }, [inProgress, packs]);
 
-  const act = (packId: string, counted: boolean, success: string) =>
+  const act = (packId: string, counted: boolean, success: string) => {
+    setMessage(null);
+    refocus.current = true;
     startTransition(async () => {
       const r = await settle(() => countOnPack(lessonId, packId, counted));
       if (r.ok) setChosen(null);
       setMessage(r.ok ? { text: success, error: false } : { text: r.message, error: true });
     });
+  };
 
   return (
-    <section aria-labelledby={HEADING} className="flex flex-col gap-2">
+    <section aria-labelledby={HEADING} className="flex max-w-3xl flex-col gap-2">
       <Title order={2} size="h5" id={HEADING}>
         Carnet de cours particuliers
       </Title>
@@ -65,6 +78,7 @@ export function PackUsage({
                 variant="subtle"
                 size="compact-sm"
                 disabled={inProgress}
+                aria-label={`Annuler le décompte sur le carnet de ${names(p)}`}
                 onClick={() => act(p.id, false, "Décompte annulé : la séance est rendue au carnet.")}
               >
                 Annuler le décompte
@@ -85,28 +99,35 @@ export function PackUsage({
         )
       ) : (
         <form
-          className="flex flex-wrap items-end gap-2"
+          className="flex flex-wrap items-start gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             if (!chosen) {
-              setMessage({ text: "Choisissez un carnet.", error: true });
+              setMissing(true);
+              picker.current?.focus();
               return;
             }
             act(chosen, true, "Séance décomptée du carnet.");
           }}
         >
           <Select
-            className="min-w-0 flex-1 sm:max-w-md"
+            ref={picker}
+            className="min-w-0 flex-1"
             label={packs.counted.length > 0 ? "Décompter aussi sur un carnet" : "Décompter sur un carnet"}
             placeholder="Élève ou carnet"
             searchable
-            data={data}
+            data={packs.offered.map((p) => ({ value: p.id, label: describe(p) }))}
             value={chosen}
-            onChange={setChosen}
+            onChange={(v) => {
+              setChosen(v);
+              setMissing(false);
+            }}
             disabled={inProgress}
+            error={missing ? "Choisissez un carnet" : undefined}
             nothingFoundMessage="Aucun carnet ne correspond"
           />
-          <Button type="submit" variant="default" loading={inProgress}>
+          {/* Level with the field, below its label. */}
+          <Button type="submit" variant="default" loading={inProgress} className="mt-[25px]">
             Décompter
           </Button>
         </form>

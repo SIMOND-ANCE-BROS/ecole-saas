@@ -874,7 +874,7 @@ export const lessonPack = pgTable(
 
 /**
  * Students named on a lesson pack (#286): the private lessons of any of them can be
- * counted on it (#286 Q3 default: one usage per lesson, whoever attends). The pack's
+ * counted on it (#286 Q3 default, `usageRefusal`: one usage per lesson and student). The pack's
  * `people_count` may be larger: a guest from outside the school is not named.
  */
 export const lessonPackPerson = pgTable(

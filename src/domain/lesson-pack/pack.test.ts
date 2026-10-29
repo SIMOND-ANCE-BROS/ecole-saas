@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  ALREADY_COUNTED_FOR_STUDENT,
+  NOT_A_STUDENT_OF_LESSON,
   isCountable,
   isOpen,
   NO_GRID_PRICE,
@@ -114,27 +116,46 @@ describe("price", () => {
 
 describe("counting a lesson on a pack", () => {
   const open = { lessonCount: 5, usedCount: 4 };
+  const usage = (u: Partial<Parameters<typeof usageRefusal>[0]> = {}) =>
+    usageRefusal({
+      courseType: "private",
+      lessonStatus: "planned",
+      pack: open,
+      packStudentIds: [A],
+      lessonStudentIds: [],
+      countedStudentIds: [],
+      ...u,
+    });
 
   it("counts a planned or done private lesson on an open pack", () => {
-    expect(usageRefusal({ courseType: "private", lessonStatus: "planned", pack: open })).toBeNull();
-    expect(usageRefusal({ courseType: "private", lessonStatus: "done", pack: open })).toBeNull();
+    expect(usage()).toBeNull();
+    expect(usage({ lessonStatus: "done" })).toBeNull();
   });
 
-  it("refuses a 6th lesson on a pack of 5", () => {
-    expect(usageRefusal({ courseType: "private", lessonStatus: "done", pack: { lessonCount: 5, usedCount: 5 } })).toBe(
-      USED_UP,
-    );
+  it("refuses a 6th lesson on a pack of 5, and a 2nd on a pack of 1", () => {
+    expect(usage({ pack: { lessonCount: 5, usedCount: 5 } })).toBe(USED_UP);
+    expect(usage({ pack: { lessonCount: 1, usedCount: 1 } })).toBe(USED_UP);
   });
 
   it("never counts a cancelled lesson (Q2 default)", () => {
     expect(isCountable("cancelled")).toBe(false);
-    expect(usageRefusal({ courseType: "private", lessonStatus: "cancelled", pack: open })).toBe(
-      "Cette séance est annulée : elle ne se décompte pas.",
-    );
+    expect(usage({ lessonStatus: "cancelled" })).toBe("Cette séance est annulée : elle ne se décompte pas.");
   });
 
   it("counts only lessons of a private course", () => {
     for (const courseType of ["group", "competition", "workshop"] as const)
-      expect(usageRefusal({ courseType, lessonStatus: "planned", pack: open })).toMatch(/cours particulier/);
+      expect(usage({ courseType })).toMatch(/cours particulier/);
+  });
+
+  it("never counts a student's lesson on two of their packs, but two students may share a lesson (Q3 default)", () => {
+    expect(usage({ countedStudentIds: [A] })).toBe(ALREADY_COUNTED_FOR_STUDENT);
+    expect(usage({ packStudentIds: [B], countedStudentIds: [A] })).toBeNull();
+  });
+
+  it("uses a pack of a student on the sheet when the sheet names students", () => {
+    expect(usage({ lessonStudentIds: [B] })).toBe(NOT_A_STUDENT_OF_LESSON);
+    expect(usage({ packStudentIds: [A, B], lessonStudentIds: [B] })).toBeNull();
+    // A private course without enrollment: any open pack.
+    expect(usage({ lessonStudentIds: [] })).toBeNull();
   });
 });

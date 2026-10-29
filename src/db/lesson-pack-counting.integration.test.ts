@@ -1,6 +1,6 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { USED_UP } from "../domain/lesson-pack/pack";
+import { ALREADY_COUNTED_FOR_STUDENT, NOT_A_STUDENT_OF_LESSON, USED_UP } from "../domain/lesson-pack/pack";
 import { withSchool } from "./index";
 import { countLesson, lessonPacks, packsOf, uncountLesson } from "./lesson-packs";
 import { cancelLesson, syncLessons } from "./lessons";
@@ -53,7 +53,7 @@ beforeAll(async () => {
   await admin`INSERT INTO "user" (id, name, email) VALUES (${frontDesk}, 'Zz Accueil', ${`${frontDesk}@exemple.test`})`;
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${frontDesk}, 'front_desk')`;
   [{ id: season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
-    VALUES (${school}, '2026-2027', '2026-09-01', '2027-01-31') RETURNING id`;
+    VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   [{ id: discipline }] =
     await admin`INSERT INTO discipline (school_id, name) VALUES (${school}, 'Zzrock') RETURNING id`;
   const [s] =
@@ -79,7 +79,7 @@ beforeAll(async () => {
   for (const l of await admin`SELECT id FROM lesson WHERE course_id = ${privateCourse} ORDER BY date`)
     lessons.push(l.id as string);
   [{ id: groupLesson }] = await admin`SELECT id FROM lesson WHERE course_id = ${groupCourse} ORDER BY date LIMIT 1`;
-  if (lessons.length < 12) throw new Error("not enough lessons generated");
+  if (lessons.length < 20) throw new Error("not enough lessons generated");
 });
 
 afterAll(async () => {
@@ -92,6 +92,8 @@ afterAll(async () => {
     "lesson_pack_usage",
     "lesson_pack_person",
     "lesson_pack",
+    "enrollment_course",
+    "enrollment",
     "suspended_lesson",
     "lesson",
     "course",
@@ -109,6 +111,33 @@ afterAll(async () => {
   await admin.end();
 });
 
+/**
+ * Runs `start` while the admin connection holds `lockSql` in an open transaction, and
+ * releases it only once `waiters` sessions wait on a lock: the calls then really meet.
+ */
+async function whileLocked<T>(
+  lock: (t: postgres.TransactionSql) => Promise<unknown>,
+  waiters: number,
+  start: () => Promise<T>,
+) {
+  let running: Promise<T> | undefined;
+  await admin.begin(async (t) => {
+    await lock(t);
+    running = start();
+    for (let i = 0; i < 100; i++) {
+      // Statistics are a snapshot per transaction: cleared, each read sees the sessions now.
+      await t`SELECT pg_stat_clear_snapshot()`;
+      const [{ n }] = await t`SELECT count(*)::int AS n FROM pg_stat_activity
+        WHERE wait_event_type = 'Lock' AND datname = current_database() AND pid <> pg_backend_pid()`;
+      if (n >= waiters) return;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    throw new Error("the calls never waited on the lock");
+  });
+  if (!running) throw new Error("not started");
+  return running;
+}
+
 describe("counting a private lesson on a pack", () => {
   it("counts the lesson once, shows the remaining lessons and logs it", async () => {
     const pack = await newPack(10);
@@ -123,34 +152,47 @@ describe("counting a private lesson on a pack", () => {
   });
 
   it("refuses a 6th lesson on a pack of 5 and writes nothing", async () => {
-    const pack = await newPack(5);
-    for (const l of lessons.slice(0, 5)) expect((await count(l, pack)).ok).toBe(true);
-    expect(await count(lessons[5], pack)).toEqual({ ok: false, message: USED_UP });
+    const pack = await newPack(5, other);
+    for (const l of lessons.slice(1, 6)) expect((await count(l, pack)).ok).toBe(true);
+    expect(await count(lessons[6], pack)).toEqual({ ok: false, message: USED_UP });
     expect(await usages(pack)).toBe(5);
   });
 
   it("never over-uses a pack when two people count at the same moment", async () => {
-    const pack = await newPack(2);
-    expect((await count(lessons[6], pack)).ok).toBe(true);
-    // The pack row is held while both counts start: without the lock in countLesson, both
-    // would read one usage and both insert; with it, the second sees the first's usage.
-    const results = await admin.begin(async (t) => {
-      await t`SELECT id FROM lesson_pack WHERE id = ${pack} FOR UPDATE`;
-      const both = Promise.all([count(lessons[7], pack), count(lessons[8], pack)]);
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      return [both];
-    });
-    const [first, second] = await results[0];
+    const pack = await newPack(2, other);
+    expect((await count(lessons[7], pack)).ok).toBe(true);
+    // The pack row is held until both counts wait on it: without the lock in countLesson,
+    // both would read one usage and both insert; with it, the second sees the first's usage.
+    const [first, second] = await whileLocked(
+      (t) => t`SELECT id FROM lesson_pack WHERE id = ${pack} FOR UPDATE`,
+      2,
+      () => Promise.all([count(lessons[8], pack), count(lessons[9], pack)]),
+    );
     expect([first, second].filter((r) => r.ok)).toHaveLength(1);
     expect([first, second].find((r) => !r.ok)).toEqual({ ok: false, message: USED_UP });
     expect(await usages(pack)).toBe(2);
   });
 
+  it("never counts a lesson cancelled while the count was waiting", async () => {
+    const pack = await newPack(5, other);
+    // A cancellation holds the lesson and commits while the count waits on it.
+    const r = await whileLocked(
+      async (t) => {
+        await t`SELECT id FROM lesson WHERE id = ${lessons[10]} FOR NO KEY UPDATE`;
+        await t`UPDATE lesson SET status = 'cancelled' WHERE id = ${lessons[10]}`;
+      },
+      1,
+      () => count(lessons[10], pack),
+    );
+    expect(r).toEqual({ ok: false, message: "Cette séance est annulée : elle ne se décompte pas." });
+    expect(await usages(pack)).toBe(0);
+  });
+
   it("gives the lesson back when the count is undone, and the audit log keeps both", async () => {
     const pack = await newPack(5);
-    await count(lessons[1], pack);
-    expect(await uncount(lessons[1], pack)).toEqual({ ok: true });
-    expect(await uncount(lessons[1], pack)).toEqual({ ok: true, already: true });
+    await count(lessons[11], pack);
+    expect(await uncount(lessons[11], pack)).toEqual({ ok: true });
+    expect(await uncount(lessons[11], pack)).toEqual({ ok: true, already: true });
     expect(await usages(pack)).toBe(0);
     const logs = await admin`SELECT action FROM audit_log
       WHERE target_table = 'lesson_pack_usage' AND row_id = ${pack} ORDER BY id`;
@@ -159,17 +201,17 @@ describe("counting a private lesson on a pack", () => {
 
   it("never counts a cancelled lesson, and refuses to cancel a counted one (Q2 default)", async () => {
     const pack = await newPack(5);
-    expect((await withSchool(school, (tx) => cancelLesson(tx, lessons[9]))).ok).toBe(true);
-    expect(await count(lessons[9], pack)).toEqual({
+    expect((await withSchool(school, (tx) => cancelLesson(tx, lessons[12]))).ok).toBe(true);
+    expect(await count(lessons[12], pack)).toEqual({
       ok: false,
       message: "Cette séance est annulée : elle ne se décompte pas.",
     });
-    await count(lessons[10], pack);
-    expect(await withSchool(school, (tx) => cancelLesson(tx, lessons[10]))).toEqual({
+    await count(lessons[13], pack);
+    expect(await withSchool(school, (tx) => cancelLesson(tx, lessons[13]))).toEqual({
       ok: false,
       message: "Cette séance est décomptée d’un carnet : annulez d’abord le décompte.",
     });
-    const [{ status }] = await admin`SELECT status FROM lesson WHERE id = ${lessons[10]}`;
+    const [{ status }] = await admin`SELECT status FROM lesson WHERE id = ${lessons[13]}`;
     expect(status).toBe("planned");
   });
 
@@ -181,23 +223,51 @@ describe("counting a private lesson on a pack", () => {
     });
   });
 
-  it("offers the open packs, the ones of the lesson's students first", async () => {
+  it("never counts a student's lesson on two of their packs, but two students may share it (Q3)", async () => {
+    const first = await newPack(5);
+    const second = await newPack(5);
+    const theirs = await newPack(5, other);
+    expect((await count(lessons[14], first)).ok).toBe(true);
+    expect(await count(lessons[14], second)).toEqual({ ok: false, message: ALREADY_COUNTED_FOR_STUDENT });
+    expect((await count(lessons[14], theirs)).ok).toBe(true);
+    const { counted, offered } = await withSchool(school, (tx) => lessonPacks(tx, lessons[14], []));
+    expect(counted.map((p) => p.id).sort()).toEqual([first, theirs].sort());
+    // Neither the packs counted on it nor another pack of the same students are offered.
+    expect(offered.map((p) => p.id)).not.toContain(second);
+  });
+
+  it("offers every open pack on a lesson without students, and only theirs when the sheet names some", async () => {
     const mine = await newPack(3, student);
     const theirs = await newPack(3, other);
-    const usedUp = await newPack(1, student);
-    await count(lessons[11], usedUp);
-    const { counted, offered } = await withSchool(school, (tx) => lessonPacks(tx, lessons[11], [student]));
-    expect(counted.map((p) => p.id)).toEqual([usedUp]);
-    const ids = offered.map((p) => p.id);
-    expect(ids).toContain(mine);
-    expect(ids).toContain(theirs);
-    expect(ids).not.toContain(usedUp);
-    expect(ids.indexOf(mine)).toBeLessThan(ids.indexOf(theirs));
+    const usedUp = await newPack(1, other);
+    await count(lessons[15], usedUp);
+    expect(await count(lessons[16], usedUp)).toEqual({ ok: false, message: USED_UP });
+    const offered = (await withSchool(school, (tx) => lessonPacks(tx, lessons[16], []))).offered.map((p) => p.id);
+    expect(offered).toEqual(expect.arrayContaining([mine, theirs]));
+    expect(offered).not.toContain(usedUp);
+
+    // A private course the student is enrolled in: the sheet names them.
+    const [{ id: enrolledCourse }] =
+      await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, type, weekday, start_time, duration_minutes)
+        VALUES (${school}, ${season}, ${discipline}, ${room}, ${teacher}, 'private', 4, '17:00', 60) RETURNING id`;
+    const [{ id: enrollment }] =
+      await admin`INSERT INTO enrollment (school_id, payer_id, season_id, audience, period, gross_price_cents)
+        VALUES (${school}, ${payer}, ${season}, 'child', 'year', 0) RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id)
+      VALUES (${school}, ${enrollment}, ${student}, ${enrolledCourse})`;
+    await withSchool(school, (tx) => syncLessons(tx, season, TODAY));
+    const [{ id: lesson }] =
+      await admin`SELECT id FROM lesson WHERE course_id = ${enrolledCourse} ORDER BY date LIMIT 1`;
+    const ofLesson = (await withSchool(school, (tx) => lessonPacks(tx, lesson, [student]))).offered.map((p) => p.id);
+    expect(ofLesson).toContain(mine);
+    expect(ofLesson).not.toContain(theirs);
+    expect(await count(lesson, theirs)).toEqual({ ok: false, message: NOT_A_STUDENT_OF_LESSON });
+    expect((await count(lesson, mine)).ok).toBe(true);
   });
 
   it("cannot count on a pack of another school", async () => {
     const pack = await newPack(5);
-    expect(await count(lessons[2], pack, otherSchool)).toEqual({ ok: false, message: "Ce carnet n’existe plus." });
+    expect(await count(lessons[17], pack, otherSchool)).toEqual({ ok: false, message: "Ce carnet n’existe plus." });
     expect(await usages(pack)).toBe(0);
   });
 });
