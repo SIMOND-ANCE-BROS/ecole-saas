@@ -10,6 +10,7 @@ import {
   validPersonInput,
   type PersonInput,
 } from "@/db/people";
+import { GUARDIAN_PERSON_TYPES } from "@/domain/people/guardian";
 import { errorsOf, type FieldErrors } from "@/lib/form-errors";
 import { requireRole } from "@/lib/session";
 
@@ -36,9 +37,13 @@ export async function updateIdentity(id: string, entry: unknown, back: "eleves" 
   redirect(`/${back}/${id}?enregistre=modifie`);
 }
 
-/** Search for an existing person while typing (guardian, payer). */
-export async function searchPeopleAction(entry: string) {
+/**
+ * Search for an existing person while typing (guardian, payer). `guardian`:
+ * only the people who can be a legal guardian are offered (#216).
+ */
+export async function searchPeopleAction(entry: string, guardian = false) {
   const { schoolId: schoolId } = await requireRole("director", "front_desk");
   if (typeof entry !== "string") return [];
-  return withSchool(schoolId, (tx) => searchPeople(tx, entry.slice(0, 100)));
+  const types = guardian === true ? GUARDIAN_PERSON_TYPES : undefined;
+  return withSchool(schoolId, (tx) => searchPeople(tx, entry.slice(0, 100), types));
 }

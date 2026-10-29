@@ -60,10 +60,11 @@ type Props = {
   /** Organisation (CSE, company) rather than individual for a new person. */
   organization?: boolean;
   /**
-   * Guardian search: known minors are offered last, tagged « mineur ». Not
-   * hidden: a minor parent can hold parental authority.
+   * Guardian search: only individuals are offered, an organisation cannot be
+   * a legal guardian (#216). Known minors are offered last, tagged « mineur ».
+   * Not hidden: a minor parent can hold parental authority.
    */
-  flagMinors?: boolean;
+  guardian?: boolean;
   errors?: FieldErrors<PersonInput>;
 };
 
@@ -82,7 +83,7 @@ export function PersonChoice({
   onChange,
   exclude: exclude = [],
   organization: organization = false,
-  flagMinors = false,
+  guardian = false,
   errors: errors = {},
 }: Props) {
   const [entry, setInput] = useState("");
@@ -107,16 +108,16 @@ export function PersonChoice({
   useEffect(() => {
     if (!active) return;
     return deferredQuery(
-      () => searchPeopleAction(entry),
+      () => searchPeopleAction(entry, guardian),
       (r) => {
         const offered = r.filter((p) => !excluded.split(",").includes(p.id));
         // Stable sort: the order of the search stays within adults and within minors.
-        setResults(flagMinors ? [...offered].sort((a, b) => Number(minor(a)) - Number(minor(b))) : offered);
+        setResults(guardian ? [...offered].sort((a, b) => Number(minor(a)) - Number(minor(b))) : offered);
         setError(false);
       },
       () => setError(true),
     );
-  }, [entry, active, excluded, flagMinors]);
+  }, [entry, active, excluded, guardian]);
 
   const pick = (p: PersonResult) => {
     focusNext.current = "change";
@@ -253,7 +254,7 @@ export function PersonChoice({
                 onClick={() => pick(p)}
               >
                 <span className="font-medium">{displayedName(p)}</span>
-                {flagMinors && minor(p) && (
+                {guardian && minor(p) && (
                   <Badge color="gray" variant="light" radius="sm" tt="none" fw={400}>
                     mineur
                   </Badge>

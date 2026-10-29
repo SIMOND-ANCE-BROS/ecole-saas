@@ -7,6 +7,12 @@ import { offsetOf, PAGE_SIZE } from "../domain/filters/pagination";
 import { ENROLLMENT_STATUS_LABELS, STATUS_PRIORITY } from "../domain/enrollment/statuses";
 import { SHORT_DAYS } from "../domain/schedule/days";
 import { todayInParis } from "../domain/people/age";
+import {
+  canBeLegalGuardian,
+  guardianRefusal,
+  type PersonType,
+  REVERSED_GUARDIAN_PAYER_REFUSAL,
+} from "../domain/people/guardian";
 import { filterCondition, columnOrder } from "./filters";
 import type { Tx } from "./index";
 import {
@@ -438,6 +444,20 @@ async function resolve(tx: Tx, p: z.output<typeof otherValidPerson>): Promise<st
   return r.status === "ok" ? r.id : null;
 }
 
+/**
+ * Refusal when the chosen guardian (existing or new) cannot be a legal
+ * guardian (#216); null otherwise, including when the person no longer exists.
+ */
+async function chosenGuardianRefusal(
+  tx: Tx,
+  p: z.output<typeof otherValidPerson>,
+  studentType: PersonType,
+): Promise<string | null> {
+  if (has(p, "newPerson")) return guardianRefusal("legal_guardian", p.newPerson.type, studentType);
+  const [x] = await tx.select({ type: person.type }).from(person).where(eq(person.id, p.id));
+  return x ? guardianRefusal("legal_guardian", x.type, studentType) : null;
+}
+
 /** Error that rolls back the whole creation: nothing is kept half-done. */
 export class CreationRefusal extends Error {}
 
@@ -451,6 +471,10 @@ export async function createStudent(
   entry: StudentInput,
   confirmed: boolean,
 ): Promise<{ status: "ok"; id: string } | { status: "duplicates"; duplicates: DuplicateWithRole[] }> {
+  if (entry.guardian) {
+    const refusal = await chosenGuardianRefusal(tx, entry.guardian, entry.student.type);
+    if (refusal) throw new CreationRefusal(refusal);
+  }
   if (!confirmed) {
     const nextItems: [DuplicateWithRole["role"], PersonInput][] = [["student", entry.student]];
     if (entry.guardian && has(entry.guardian, "newPerson")) nextItems.push(["guardian", entry.guardian.newPerson]);
@@ -505,6 +529,16 @@ export async function setBilling(
   }
   const [e] = await tx.select({ id: person.id }).from(person).where(eq(person.id, studentId));
   if (!e) return { ok: false, message: "Cet élève n’existe plus." };
+  if (target.type === "person") {
+    // Reversing a « student is guardian of the target » relationship would make the target the guardian.
+    const [reversed] = await tx
+      .select({ type: relationship.type, targetType: person.type })
+      .from(relationship)
+      .innerJoin(person, eq(person.id, relationship.relatedPersonId))
+      .where(and(eq(relationship.personId, studentId), eq(relationship.relatedPersonId, target.id)));
+    if (reversed?.type === "legal_guardian" && !canBeLegalGuardian(reversed.targetType))
+      return { ok: false, message: REVERSED_GUARDIAN_PAYER_REFUSAL };
+  }
   await tx.update(relationship).set({ paysFor: false }).where(eq(relationship.relatedPersonId, studentId));
   if (target.type === "self") return { ok: true, id: studentId };
 
@@ -547,8 +581,11 @@ export async function addGuardian(
 ): Promise<Result> {
   const r = otherValidPerson.safeParse(guardian);
   if (!r.success || !isUuid(studentId)) return { ok: false, message: "Saisie invalide." };
-  const [e] = await tx.select({ id: person.id }).from(person).where(eq(person.id, studentId));
+  const [e] = await tx.select({ id: person.id, type: person.type }).from(person).where(eq(person.id, studentId));
   if (!e) return { ok: false, message: "Cet élève n’existe plus." };
+  // Before anything is written: a refusal returned here does not roll back the transaction.
+  const refusal = await chosenGuardianRefusal(tx, r.data, e.type);
+  if (refusal) return { ok: false, message: refusal };
   const guardianId = await resolve(tx, r.data);
   if (!guardianId || guardianId === studentId) return { ok: false, message: "Responsable introuvable." };
   const [existing] = await tx
