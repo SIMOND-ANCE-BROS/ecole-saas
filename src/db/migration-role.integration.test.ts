@@ -6,7 +6,7 @@ import { bypassesRls, readMigrationRole } from "./migration-role";
 
 const adminUrl = process.env.DATABASE_ADMIN_URL;
 const appUrl = process.env.DATABASE_URL;
-if (!adminUrl || !appUrl) throw new Error("DATABASE_ADMIN_URL ou DATABASE_URL manquante : copier .env.example en .env");
+if (!adminUrl || !appUrl) throw new Error("DATABASE_ADMIN_URL or DATABASE_URL is missing: copy .env.example to .env");
 const admin = postgres(adminUrl, { max: 1, onnotice: () => {} });
 const app = postgres(appUrl, { max: 1, onnotice: () => {} });
 

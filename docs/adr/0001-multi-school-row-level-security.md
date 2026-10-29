@@ -50,6 +50,8 @@ SECURITY` with the policy `school_isolation`, comparing `school_id` with the
 migrations (`0019`, `0036`…) run without `app.school_id`, so they only work
 when the migration role is a superuser or has `BYPASSRLS`; otherwise they
 match no row, silently unless a constraint catches it. `DATABASE_ADMIN_URL`
-must therefore connect as such a role, and `npm run db:migrate`
-(`scripts/migrate.ts`) refuses to run otherwise (#279). The decision above is
+must therefore connect as a role that owns the tables (or is a superuser) and
+bypasses RLS (superuser or `BYPASSRLS`), and `npm run db:migrate`
+(`scripts/migrate.ts`) refuses to run otherwise (#279). Never run
+`drizzle-kit migrate` directly: always `npm run db:migrate`. The decision above is
 unchanged: no policy or `FORCE` flag is relaxed for migrations.

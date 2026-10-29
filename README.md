@@ -41,6 +41,8 @@ Rôles PostgreSQL : `app_user` pour l'application (soumis à la RLS), `app_admin
 
 ### Rôle des migrations (déploiement)
 
-`DATABASE_ADMIN_URL` doit se connecter avec un rôle **superutilisateur ou `BYPASSRLS`**. Les tables métier sont en `FORCE ROW LEVEL SECURITY` : un simple propriétaire est filtré lui aussi, et une reprise de données dans une migration (0019, 0036…) ne modifierait alors aucune ligne, sans erreur. `npm run db:migrate` (`scripts/migrate.ts`) vérifie ce rôle avant d’appliquer quoi que ce soit et s’arrête sinon (#279). En local et en CI, `proprio` est le superutilisateur du conteneur ; chez un hébergeur managé où le propriétaire n’est pas superutilisateur, lui donner `BYPASSRLS` ou migrer avec un rôle qui l’a.
+`DATABASE_ADMIN_URL` doit se connecter avec un rôle qui est **propriétaire des tables (ou superutilisateur) et qui contourne la RLS (superutilisateur ou `BYPASSRLS`)**. Les tables métier sont en `FORCE ROW LEVEL SECURITY` : un simple propriétaire est filtré lui aussi, et une reprise de données dans une migration (0019, 0036…) ne modifierait alors aucune ligne, sans erreur. `npm run db:migrate` (`scripts/migrate.ts`) vérifie ce rôle avant d’appliquer quoi que ce soit et s’arrête sinon (#279). En local et en CI, `proprio` est le superutilisateur du conteneur ; chez un hébergeur managé où le propriétaire n’est pas superutilisateur, lui donner `BYPASSRLS` ou migrer avec un rôle qui l’a.
+
+Ne jamais lancer `drizzle-kit migrate` directement : toujours `npm run db:migrate`, qui fait cette vérification.
 
 Voir `AGENTS.md` pour les conventions de code.
