@@ -302,6 +302,13 @@
       "when": 1793296986206,
       "tag": "0042_school_billing_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1793300639110,
+      "tag": "0043_lesson_pack_person",
+      "breakpoints": true
     }
   ]
 }

@@ -675,7 +675,7 @@ export const suspendedLesson = pgTable(
 
 /**
  * One row per form submission that creates records (payment, enrollment,
- * course), keyed by an id the browser generates once (#260): a retry after a
+ * course, lesson pack), keyed by an id the browser generates once (#260): a retry after a
  * lost response finds the row and gets the first result back instead of
  * creating a duplicate. Rows can be purged after a few days.
  */
@@ -693,7 +693,7 @@ export const submission = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.schoolId, t.key] }),
-    check("submission_kind", sql`${t.kind} IN ('payment', 'enrollment', 'course')`),
+    check("submission_kind", sql`${t.kind} IN ('payment', 'enrollment', 'course', 'lesson_pack')`),
     check("submission_request_hash", sql`length(${t.requestHash}) = 64`),
   ],
 );
@@ -866,8 +866,29 @@ export const lessonPack = pgTable(
   },
   (t) => [
     check("lesson_pack_people", sql`${t.peopleCount} >= 1 AND ${t.lessonCount} >= 1`),
+    check("lesson_pack_price", sql`${t.priceCents} >= 0`),
     sameSchoolTarget(t),
     sameSchool(t, t.payerId, person),
+  ],
+);
+
+/**
+ * Students named on a lesson pack (#286): the private lessons of any of them can be
+ * counted on it (#286 Q3 default: one usage per lesson, whoever attends). The pack's
+ * `people_count` may be larger: a guest from outside the school is not named.
+ */
+export const lessonPackPerson = pgTable(
+  "lesson_pack_person",
+  {
+    schoolId: schoolIdColumn(),
+    lessonPackId: uuid("lesson_pack_id").notNull(),
+    personId: uuid("person_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.lessonPackId, t.personId] }),
+    index().on(t.personId),
+    sameSchool(t, t.lessonPackId, lessonPack).onDelete("cascade"),
+    sameSchool(t, t.personId, person),
   ],
 );
 
