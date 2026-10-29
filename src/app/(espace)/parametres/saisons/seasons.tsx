@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Group, Paper, Select, Table, Text, TextInput } from "@mantine/core";
+import { Alert, Button, Group, Paper, Select, Table, Text, TextInput } from "@mantine/core";
 import { useState, useTransition } from "react";
 import type { SeasonRow } from "@/db/settings";
 import { DateField, refusedDateField } from "../../_ui/date-field";
@@ -35,6 +35,8 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
     null,
   );
   const [message, setMessage] = useState<string | null>(null);
+  // Lessons a date edit left outside the season's new dates (#270): a warning, not a refusal.
+  const [note, setNote] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
   const focusAfter = useFocusAfter();
   // Leaving the edit (saved, « Annuler », Escape): focus goes back to the row's « Modifier » (#186).
@@ -47,14 +49,17 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
     startTransition(async () => {
       const r = await settle(action);
       setMessage(r.ok ? null : r.message);
+      setNote(null);
       if (r.ok) after?.();
     });
 
   const saveEdition = (id: string, e: { label: string; startDate: string; endDate: string }) =>
-    act(
-      () => changeSeason(id, { label: e.label, startDate: e.startDate, endDate: e.endDate }),
-      () => closeEdit(id),
-    );
+    startTransition(async () => {
+      const r = await settle(() => changeSeason(id, { label: e.label, startDate: e.startDate, endDate: e.endDate }));
+      setMessage(r.ok ? null : r.message);
+      setNote(r.ok ? r.note : null);
+      if (r.ok) closeEdit(id);
+    });
 
   return (
     <div className="flex flex-col gap-5">
@@ -224,6 +229,11 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
         <Text role="alert" size="sm" c="red">
           {message}
         </Text>
+      )}
+      {note && (
+        <Alert role="status" color="yellow">
+          {note}
+        </Alert>
       )}
     </div>
   );

@@ -277,7 +277,9 @@ export async function syncLessons(
     .where(eq(season.id, seasonId))
     .for("no key update");
   if (!s) return { added: 0, removed: 0, keptForPack: 0 };
-  const start = [s.start, today, since ?? ""].reduce((a, b) => (b > a ? b : a));
+  // Not bounded by the season's start: a season starting later than before (#270) leaves upcoming
+  // lessons before its new start, to be removed like any other no longer expected.
+  const start = [today, since ?? ""].reduce((a, b) => (b > a ? b : a));
   const closures = await readClosures(tx, eq(closure.seasonId, seasonId));
   const allCourses = await tx
     .select({
@@ -298,7 +300,7 @@ export async function syncLessons(
     .innerJoin(course, eq(course.id, courseDate.courseId))
     .where(eq(course.seasonId, seasonId));
 
-  const { expected, meets, closed } = seasonLessons(
+  const { expected, meets, closed, meetsBeyond } = seasonLessons(
     allCourses.map((c) => ({
       ...c,
       recurrence: recurrenceOf({ ...c, dates: oneOff.filter((p) => p.courseId === c.id).map((p) => p.date) }),
@@ -343,12 +345,14 @@ export async function syncLessons(
   const plan = planLessonSync({
     start,
     today,
+    season: { start: s.start, end: s.end },
     expected,
     meets,
     existing,
     suspended,
     activeInstructors: new Set(active.map((i) => i.id)),
     closed,
+    meetsBeyond,
     report,
   });
 

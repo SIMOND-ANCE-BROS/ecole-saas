@@ -78,12 +78,28 @@ export async function newSeason(entry: z.input<typeof validSeasonInput>, copyFro
     (tx) => createSeason(tx, entry, copyFrom),
   );
 }
-export async function changeSeason(id: string, entry: z.input<typeof validSeasonInput>) {
-  return act(
-    "saisons",
-    () => refusal(validSeasonInput, entry) ?? refusal(validId, id, SEASON_GONE),
-    (tx) => updateSeason(tx, id, entry),
-  );
+/** French note on the lessons a season edit leaves outside its new dates (#270), or null. */
+function outsideNote(outside: number): string | null {
+  if (outside === 0) return null;
+  return outside === 1
+    ? "1 séance reste en dehors des nouvelles dates (déjà faite, avec carnet ou déplacée) : déplacez-la ou annulez-la dans le planning si besoin."
+    : `${outside} séances restent en dehors des nouvelles dates (déjà faites, avec carnet ou déplacées) : déplacez-les ou annulez-les dans le planning si besoin.`;
+}
+
+/** The season's lessons follow its new dates (#270); `note` names those left outside them. */
+export async function changeSeason(
+  id: string,
+  entry: z.input<typeof validSeasonInput>,
+): Promise<ActionResult<{ note: string | null }>> {
+  const { schoolId } = await requireRole("director");
+  const message = refusal(validSeasonInput, entry) ?? refusal(validId, id, SEASON_GONE);
+  if (message) return { ok: false, message };
+  const r = await withSchool(schoolId, (tx) => updateSeason(tx, id, entry, todayInParis()));
+  revalidatePath("/parametres/saisons");
+  // Every planning page, and the home page's lessons of the day.
+  revalidatePath("/planning", "layout");
+  revalidatePath("/");
+  return r.ok ? { ok: true, note: outsideNote(r.outside) } : { ok: false, message: r.message };
 }
 
 export async function newDiscipline(name: string) {

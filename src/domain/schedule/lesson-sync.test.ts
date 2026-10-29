@@ -61,13 +61,20 @@ function plan(opts: {
   report?: { start: string; end: string };
 }) {
   const start = opts.start ?? TODAY;
-  const { expected, meets, closed } = seasonLessons(opts.courses ?? [jazz], SEASON, opts.closures ?? [], start);
+  const { expected, meets, closed, meetsBeyond } = seasonLessons(
+    opts.courses ?? [jazz],
+    SEASON,
+    opts.closures ?? [],
+    start,
+  );
   return planLessonSync({
     start,
     today: TODAY,
+    season: SEASON,
     expected,
     meets,
     closed,
+    meetsBeyond,
     existing: opts.existing ?? [],
     suspended: opts.suspended ?? [],
     activeInstructors: new Set(opts.active ?? [T1, T2, SUB]),
@@ -430,5 +437,75 @@ describe("lessons removed by a closure (#206)", () => {
     });
     expect(p.remove).toEqual(["a", "b"]);
     expect(p.setAside).toHaveLength(1);
+  });
+});
+
+describe("lessons outside the season's dates (#270)", () => {
+  it("keeps a lesson moved from a date the season no longer has to one it still has", () => {
+    // The season ends on 30 November: the 3 December lesson was moved to Friday 27 November.
+    const moved = lessonOn("2026-11-27", { id: "moved", reference: "2026-12-03", plannedDate: "2026-12-03" });
+    const p = plan({ existing: [...THURSDAYS.map((d) => lessonOn(d)), moved] });
+    expect(p.remove).toEqual([]);
+    expect(p.insert).toEqual([]);
+  });
+
+  it("removes it once the course no longer meets on its original day", () => {
+    // The course moved from Thursday to Tuesday: the 3 December Thursday is no longer one of its days.
+    const tuesdays: SyncedCourse = {
+      ...jazz,
+      recurrence: { type: "weekly", weekday: 2, startDate: null, endDate: null },
+    };
+    const moved = lessonOn("2026-11-27", { id: "moved", reference: "2026-12-03", plannedDate: "2026-12-03" });
+    expect(plan({ courses: [tuesdays], existing: [moved] }).remove).toEqual(["moved"]);
+    // Its period ended before that date: removed too.
+    const ended: SyncedCourse = {
+      ...jazz,
+      recurrence: { type: "weekly", weekday: 4, startDate: null, endDate: "2026-11-30" },
+    };
+    expect(plan({ courses: [ended], existing: [moved] }).remove).toEqual(["moved"]);
+  });
+
+  it("keeps one moved from before the season's start, on a week of the alternation only", () => {
+    // Season 1 → 30 November once its start moved; the 5 November lesson had moved to Friday 13.
+    const p = (course: SyncedCourse, reference: string) =>
+      planLessonSync({
+        start: TODAY,
+        today: TODAY,
+        season: { start: "2026-11-10", end: "2026-11-30" },
+        ...seasonLessons([course], { start: "2026-11-10", end: "2026-11-30" }, [], TODAY),
+        existing: [lessonOn("2026-11-13", { id: "moved", reference, plannedDate: reference })],
+        suspended: [],
+        activeInstructors: new Set([T1]),
+      }).remove;
+    expect(p(jazz, "2026-11-05")).toEqual([]);
+    // Every other week from the 12th: the 5th was not one of its weeks.
+    const biweekly: SyncedCourse = {
+      ...jazz,
+      recurrence: { type: "biweekly", weekday: 4, startDate: null, endDate: null },
+    };
+    expect(p(biweekly, "2026-11-05")).toEqual(["moved"]);
+  });
+
+  it("removes one moved outside the season too, and a plain lesson after its end", () => {
+    const movedOut = lessonOn("2026-12-04", { id: "out", reference: "2026-12-03", plannedDate: "2026-12-03" });
+    const after = lessonOn("2026-12-10", { id: "after" });
+    expect(plan({ existing: [...THURSDAYS.map((d) => lessonOn(d)), movedOut, after] }).remove).toEqual([
+      "out",
+      "after",
+    ]);
+  });
+
+  it("removes the upcoming planned lessons before the season's start", () => {
+    // Today 2 November, the season now starting on 10 November: the 5 November lesson is stale.
+    const p = planLessonSync({
+      start: TODAY,
+      today: TODAY,
+      season: { start: "2026-11-10", end: "2026-11-30" },
+      ...seasonLessons([jazz], { start: "2026-11-10", end: "2026-11-30" }, [], TODAY),
+      existing: THURSDAYS.map((d) => lessonOn(d)),
+      suspended: [],
+      activeInstructors: new Set([T1]),
+    });
+    expect(p.remove).toEqual(["l-2026-11-05"]);
   });
 });
