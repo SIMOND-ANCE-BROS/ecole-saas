@@ -73,6 +73,8 @@ async function withSeasonOf(
   schoolId: string,
   seasonId: unknown,
   action: (seasonId: string) => Parameters<typeof withSchool>[1],
+  /** The closure just added: only the pack lessons kept on its dates are reported. */
+  report?: { start: string; end: string },
 ): Promise<ActionResult<SyncCounts>> {
   const today = todayInParis();
   const r = await withSchool(schoolId, async (tx) => {
@@ -84,7 +86,7 @@ async function withSeasonOf(
       };
     const result = (await action(season.id)(tx)) as { ok: true } | { ok: false; message: string };
     if (!result.ok) return result;
-    const { removed, keptForPack } = await syncLessons(tx, season.id, today);
+    const { removed, keptForPack } = await syncLessons(tx, season.id, today, undefined, report);
     return { ok: true as const, removed, keptForPack };
   });
   revalidatePath("/planning/fermetures");
@@ -99,7 +101,10 @@ export async function close(
   const e = validClosureInput.safeParse(entry);
   // The same French message as the database layer gives for that field.
   if (!e.success) return { ok: false, message: e.error.issues[0]?.message ?? "Saisie invalide." };
-  return withSeasonOf(schoolId, seasonId, (id) => (tx) => addClosure(tx, id, e.data));
+  return withSeasonOf(schoolId, seasonId, (id) => (tx) => addClosure(tx, id, e.data), {
+    start: e.data.start,
+    end: e.data.end,
+  });
 }
 
 /** Removes a closure: the lessons of ITS season come back, whatever season is shown. */

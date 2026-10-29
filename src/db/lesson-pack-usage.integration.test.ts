@@ -1,12 +1,13 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { deleteCourse } from "./courses";
+import { deleteCourse, moveCourse } from "./courses";
 import { withSchool } from "./index";
-import { addClosure, changeInstructor, deleteClosure, syncLessons } from "./lessons";
+import { addClosure, changeInstructor, deleteClosure, moveLesson, syncLessons } from "./lessons";
 
 /**
  * A lesson a lesson pack was counted on is never deleted (#225, recommended rule pending
- * the school's validation): a closure keeps it as is, a course deletion is refused. No app
+ * the school's validation): a closure keeps it as is, so does a course change or a move
+ * « et des suivantes », and a course deletion is refused. No app
  * code writes `lesson_pack_usage` yet: the rows are inserted here. Each case has its own
  * course. Fictitious data.
  */
@@ -87,6 +88,11 @@ async function newCourse(): Promise<string> {
 const lessons = (courseId: string) =>
   admin<{ id: string; date: string; instructor: string }[]>`
     SELECT id, date::text AS date, instructor_id AS instructor FROM lesson WHERE course_id = ${courseId} ORDER BY date`;
+/** Date and effective time of each lesson, as the planning shows it. */
+const slots = (courseId: string) =>
+  admin<{ id: string; date: string; start: string }[]>`
+    SELECT l.id, l.date::text AS date, to_char(coalesce(l.start_time, c.start_time), 'HH24:MI') AS start
+    FROM lesson l JOIN course c ON c.id = l.course_id WHERE l.course_id = ${courseId} ORDER BY l.date`;
 const lessonOn = async (courseId: string, date: string) => {
   const l = (await lessons(courseId)).find((x) => x.date === date);
   if (!l) throw new Error(`no lesson on ${date}`);
@@ -127,6 +133,49 @@ describe("a closure over a lesson with lesson-pack usage (#225)", () => {
     expect(await sync()).toEqual({ added: 1, removed: 0, keptForPack: 0 });
     expect((await lessons(salsa)).map((l) => l.date)).toEqual(THURSDAYS);
     expect(await lessonOn(salsa, "2026-11-12")).toEqual({ id: used.id, date: "2026-11-12", instructor: substitute });
+  });
+});
+
+describe("a course change over a lesson with lesson-pack usage (#225)", () => {
+  it("moves the course to another weekday without a foreign-key error, the pack lesson stays", async () => {
+    const salsa = await newCourse();
+    const used = await lessonOn(salsa, "2026-11-19");
+    await usePack(used.id);
+
+    const r = await withSchool(school, (tx) =>
+      moveCourse(tx, salsa, { weekday: 5, startTime: "18:00", durationMinutes: 60 }, true),
+    );
+    expect(r).toEqual({ status: "ok", id: salsa });
+    // Not on a closed day: kept without a warning.
+    expect(await sync()).toEqual({ added: 4, removed: 3, keptForPack: 0 });
+    expect(await lessons(salsa)).toEqual([
+      expect.objectContaining({ date: "2026-11-06" }),
+      expect.objectContaining({ date: "2026-11-13" }),
+      { id: used.id, date: "2026-11-19", instructor: teacher },
+      expect.objectContaining({ date: "2026-11-20" }),
+      expect.objectContaining({ date: "2026-11-27" }),
+    ]);
+  });
+
+  it("moves the following lessons « et des suivantes » but leaves the pack lesson as it was", async () => {
+    const salsa = await newCourse();
+    const used = await lessonOn(salsa, "2026-11-19");
+    await usePack(used.id);
+    const from = await lessonOn(salsa, "2026-11-12");
+
+    const r = await withSchool(school, (tx) =>
+      moveLesson(tx, from.id, { date: "2026-11-13", startTime: "19:00", durationMinutes: 60 }, "following"),
+    );
+    expect(r).toEqual({ status: "ok", seasonId: season, since: "2026-11-09" });
+    await withSchool(school, (tx) => syncLessons(tx, season, TODAY, "2026-11-09"));
+    // The pack lesson keeps its day and its time; the others move to Friday 19:00.
+    expect(await slots(salsa)).toEqual([
+      expect.objectContaining({ date: "2026-11-05", start: "18:00" }),
+      { id: from.id, date: "2026-11-13", start: "19:00" },
+      { id: used.id, date: "2026-11-19", start: "18:00" },
+      expect.objectContaining({ date: "2026-11-20", start: "19:00" }),
+      expect.objectContaining({ date: "2026-11-27", start: "19:00" }),
+    ]);
   });
 });
 

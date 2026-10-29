@@ -58,6 +58,7 @@ function plan(opts: {
   suspended?: SuspendedLesson[];
   start?: string;
   active?: string[];
+  report?: { start: string; end: string };
 }) {
   const start = opts.start ?? TODAY;
   const { expected, meets, closed } = seasonLessons(opts.courses ?? [jazz], SEASON, opts.closures ?? [], start);
@@ -70,6 +71,7 @@ function plan(opts: {
     existing: opts.existing ?? [],
     suspended: opts.suspended ?? [],
     activeInstructors: new Set(opts.active ?? [T1, T2, SUB]),
+    report: opts.report,
   });
 }
 
@@ -315,6 +317,40 @@ describe("lessons removed by a closure (#206)", () => {
     // Kept, not removed: nothing is set aside for it, and it is not created again.
     expect(p.setAside.map((k) => k.referenceDate)).toEqual(["2026-11-19"]);
     expect(p.insert.map((a) => a.date)).toEqual(["2026-11-05", "2026-11-26"]);
+  });
+
+  it("keeps but does not report a pack lesson moved alone off the closed day", () => {
+    // Moved from 12/11 to 13/11: the closure of 12/11 takes its reference date, not the day it is on.
+    const moved = lessonOn("2026-11-12", {
+      id: "moved",
+      date: "2026-11-13",
+      plannedDate: "2026-11-12",
+      packUsage: true,
+    });
+    const p = plan({ closures: [closed("2026-11-12", "2026-11-12")], existing: [moved] });
+    expect(p.remove).toEqual([]);
+    expect(p.keptForPack).toEqual([]);
+  });
+
+  it("keeps but does not report a pack lesson left on its old day by a weekday change", () => {
+    const friday: SyncedCourse = {
+      ...jazz,
+      recurrence: { type: "weekly", weekday: 5, startDate: null, endDate: null },
+    };
+    const p = plan({ courses: [friday], existing: [lessonOn("2026-11-12", { packUsage: true })] });
+    expect(p.remove).toEqual([]);
+    expect(p.keptForPack).toEqual([]);
+    expect(p.insert.map((a) => a.date)).toContain("2026-11-13");
+  });
+
+  it("reports only the pack lessons on the dates of the closure just added", () => {
+    const p = plan({
+      closures: [closed("2026-11-12", "2026-11-12"), closed("2026-11-26", "2026-11-26")],
+      existing: [lessonOn("2026-11-12", { packUsage: true }), lessonOn("2026-11-26", { packUsage: true })],
+      report: { start: "2026-11-26", end: "2026-11-26" },
+    });
+    expect(p.remove).toEqual([]);
+    expect(p.keptForPack).toEqual(["l-2026-11-26"]);
   });
 
   it("reports no pack lesson when the lesson with pack usage stays wanted", () => {

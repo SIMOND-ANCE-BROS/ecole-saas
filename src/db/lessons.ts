@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { rowsOf } from "./columns-of";
 import { z } from "zod";
 import { closedCourseLabel, type ScopedClosure } from "../domain/schedule/closure-scope";
@@ -255,13 +255,15 @@ const withPackUsage = sql`EXISTS (SELECT 1 FROM lesson_pack_usage u WHERE u.less
  * keeps aside what it had of its own (substitute, time, new date) and gets
  * it back when the closure no longer covers it (#206). A lesson a lesson pack
  * was counted on is never removed either (#225): `keptForPack` counts those
- * that would have been, for the director to move them if need be.
+ * left on a closed day (within `report`, the closure just added, when given),
+ * for the director to move them if need be.
  */
 export async function syncLessons(
   tx: Tx,
   seasonId: string,
   today: string,
   since?: string,
+  report?: { start: string; end: string },
 ): Promise<{ added: number; removed: number; keptForPack: number }> {
   // One sync at a time per season: another one could take a lesson just kept aside for stale (#206).
   // NO KEY UPDATE, not UPDATE: callers insert a course or a closure first, whose foreign key takes
@@ -344,6 +346,7 @@ export async function syncLessons(
     suspended,
     activeInstructors: new Set(active.map((i) => i.id)),
     closed,
+    report,
   });
 
   // Removals first: a lesson given back may take the date a removed lesson leaves.
@@ -839,7 +842,13 @@ export async function moveLesson(
   if (s.recurrence === "dates")
     return { status: "refused", message: "Un cours à dates précises se déplace séance par séance." };
   const newDay = isoDay(date);
-  // 1. Earlier lessons keep the old slot.
+  // A later lesson a lesson pack was counted on stays as it is (#225), unless it is the one moved.
+  const packKept = and(
+    sql`coalesce(${lesson.plannedDate}, ${lesson.date}) >= ${reference}::date`,
+    ne(lesson.id, id),
+    sql`${withPackUsage}`,
+  );
+  // 1. Earlier lessons, and the later ones kept for a pack, keep the old slot.
   await tx
     .update(lesson)
     .set({
@@ -847,7 +856,10 @@ export async function moveLesson(
       durationMinutes: sql`coalesce(${lesson.durationMinutes}, ${s.courseDuration})`,
     })
     .where(
-      and(eq(lesson.courseId, s.courseId), sql`coalesce(${lesson.plannedDate}, ${lesson.date}) < ${reference}::date`),
+      and(
+        eq(lesson.courseId, s.courseId),
+        or(sql`coalesce(${lesson.plannedDate}, ${lesson.date}) < ${reference}::date`, packKept),
+      ),
     );
   // 2. The course takes the new slot.
   await tx.update(course).set({ weekday: newDay, startTime, durationMinutes }).where(eq(course.id, s.courseId));
@@ -861,6 +873,7 @@ export async function moveLesson(
         eq(lesson.status, "planned"),
         sql`coalesce(${lesson.plannedDate}, ${lesson.date}) >= ${reference}::date`,
         sql`NOT ${withAttendance}`,
+        or(eq(lesson.id, id), sql`NOT ${withPackUsage}`),
       ),
     );
   for (const x of following) {

@@ -63,8 +63,8 @@ export type SyncPlan = {
   forget: { courseId: string; referenceDate: string }[];
   setAside: SuspendedLesson[];
   /**
-   * Ids of the lessons that would be removed but are kept because a lesson pack was
-   * counted on them (#225): the director moves them if need be.
+   * Ids of the lessons kept on a closed day because a lesson pack was counted on them
+   * (#225), within `report` when given: the director moves them if need be.
    */
   keptForPack: string[];
 };
@@ -117,8 +117,10 @@ export function planLessonSync(input: {
   activeInstructors: ReadonlySet<string>;
   /** Whether a closure takes this day away from the course (`seasonLessons`). */
   closed: (courseId: string, date: string) => boolean;
+  /** Only the pack lessons kept on a day of this period are reported (the closure just added). */
+  report?: Period;
 }): SyncPlan {
-  const { start, today, expected, meets, existing, suspended, activeInstructors, closed } = input;
+  const { start, today, expected, meets, existing, suspended, activeInstructors, closed, report } = input;
   const present = new Set(existing.map((e) => keyOf(e.courseId, e.reference)));
   const wanted = new Set(expected.map((a) => keyOf(a.courseId, a.date)));
 
@@ -131,7 +133,13 @@ export function planLessonSync(input: {
   );
   // A lesson a pack was counted on is never removed (#225): nothing is lost, the director decides.
   const removed = outdated.filter((e) => !e.packUsage);
-  const keptForPack = outdated.filter((e) => e.packUsage).map((e) => e.id);
+  // Reported only where it still sits on a closed day: one moved off it, or left behind by a
+  // change of the course, is kept as well but needs no warning.
+  const keptForPack = outdated
+    .filter(
+      (e) => e.packUsage && closed(e.courseId, e.date) && (!report || (report.start <= e.date && e.date <= report.end)),
+    )
+    .map((e) => e.id);
   const removedIds = new Set(removed.map((e) => e.id));
 
   // Removed by a closure (the course still meets that day) with something of its own: kept aside.
