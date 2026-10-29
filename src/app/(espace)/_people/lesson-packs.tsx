@@ -72,7 +72,6 @@ export function LessonPacks({
       {open.length === 0 ? (
         <Text size="sm" c="dimmed">
           {usedUp.length === 0 ? "Aucun carnet." : "Aucun carnet en cours."}
-          {noPayer && " Choisissez d’abord «\u00a0Facturé à\u00a0» pour vendre un carnet."}
         </Text>
       ) : (
         <Paper withBorder component="ul" className="divide-y divide-bordure">
@@ -80,6 +79,11 @@ export function LessonPacks({
             <PackLine key={p.id} pack={p} personId={personId} />
           ))}
         </Paper>
+      )}
+      {noPayer && (
+        <Text size="sm" c="dimmed">
+          Choisissez d’abord «&nbsp;Facturé à&nbsp;» pour vendre un carnet.
+        </Text>
       )}
       {usedUp.length > 0 && (
         <Accordion variant="contained" chevronPosition="left">

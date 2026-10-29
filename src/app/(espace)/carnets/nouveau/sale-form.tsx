@@ -7,6 +7,7 @@ import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
 import {
   MAX_LESSONS,
   MAX_PEOPLE,
+  MAX_PRICE_CENTS,
   MAX_REASON_LENGTH,
   NO_GRID_PRICE,
   priceDiffers,
@@ -44,6 +45,8 @@ export function SaleForm({ payerId, students, initialStudent, grid, back }: Prop
   const [typedPrice, setTypedPrice] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  // The server knew a newer grid and asks for a reason: the reason field shows too.
+  const [askReason, setAskReason] = useState(false);
   const [tried, setTried] = useState(false);
   const [sending, startTransition] = useTransition();
   // Same key for every attempt of this sale: a retry after a lost response sells nothing twice (#260).
@@ -56,8 +59,9 @@ export function SaleForm({ payerId, students, initialStudent, grid, back }: Prop
   const price = typedPrice ?? (gridPriceCents !== null ? typedEuros(gridPriceCents) : "");
   const priceCents = price.trim() === "" ? null : parseEuros(price);
   const unreadable = price.trim() !== "" && priceCents === null;
-  // The server may know a newer grid: its refusal shows the reason field too.
-  const differs = priceDiffers({ gridPriceCents, priceCents }) || message === REASON_REQUIRED;
+  const tooHigh = priceCents !== null && priceCents > MAX_PRICE_CENTS;
+  // An empty price is missing, not different: the price field says so, not the reason.
+  const differs = (priceCents !== null && priceDiffers({ gridPriceCents, priceCents })) || askReason;
   const tooMany = peopleCount !== null && participants.length > peopleCount;
 
   const largest = lessonCounts.at(-1);
@@ -68,6 +72,8 @@ export function SaleForm({ payerId, students, initialStudent, grid, back }: Prop
   const followGrid = () => {
     setTypedPrice(null);
     setReason("");
+    setAskReason(false);
+    setMessage(null);
   };
   // A refused entry: focus goes to the first field in error, once it is drawn.
   const focusError = () =>
@@ -78,7 +84,10 @@ export function SaleForm({ payerId, students, initialStudent, grid, back }: Prop
   const choose = (ids: string[]) => {
     setParticipants(ids);
     // More students than people: the pack is for at least as many people as named students.
-    if (peopleCount === null || ids.length > peopleCount) setPeople(Math.max(ids.length, 1));
+    if (peopleCount === null || ids.length > peopleCount) {
+      setPeople(Math.max(ids.length, 1));
+      followGrid();
+    }
   };
 
   return (
@@ -97,6 +106,7 @@ export function SaleForm({ payerId, students, initialStudent, grid, back }: Prop
           peopleCount === null ||
           tooMany ||
           unreadable ||
+          tooHigh ||
           priceCents === null ||
           (differs && reason.trim() === "")
         ) {
@@ -104,16 +114,16 @@ export function SaleForm({ payerId, students, initialStudent, grid, back }: Prop
           return;
         }
         const entry = { lessonCount, peopleCount, participantIds: participants, priceCents, reason };
-        startTransition(async () =>
-          setMessage(
-            (
-              await orConnectionLost(
-                () => sellPack(payerId, entry, back, key),
-                (m) => ({ message: m }),
-              )
-            ).message,
-          ),
-        );
+        startTransition(async () => {
+          const r = await orConnectionLost(
+            () => sellPack(payerId, entry, back, key),
+            (m) => ({ message: m }),
+          );
+          if (r.message === REASON_REQUIRED) {
+            setAskReason(true);
+            focusError();
+          } else setMessage(r.message);
+        });
       }}
     >
       <Checkbox.Group
@@ -201,9 +211,13 @@ export function SaleForm({ payerId, students, initialStudent, grid, back }: Prop
           error={
             unreadable
               ? "Montant non reconnu"
-              : tried && priceCents === null && gridPriceCents === null
-                ? NO_GRID_PRICE
-                : undefined
+              : tooHigh
+                ? `Prix trop élevé (${formatEuros(MAX_PRICE_CENTS)} au plus)`
+                : tried && priceCents === null
+                  ? gridPriceCents === null
+                    ? NO_GRID_PRICE
+                    : "Indiquez le prix"
+                  : undefined
           }
         />
         {differs && (
@@ -214,12 +228,12 @@ export function SaleForm({ payerId, students, initialStudent, grid, back }: Prop
             maxLength={MAX_REASON_LENGTH}
             value={reason}
             onChange={(e) => setReason(e.currentTarget.value)}
-            error={(tried || message === REASON_REQUIRED) && reason.trim() === "" ? "Indiquez le motif" : undefined}
+            error={(tried || askReason) && reason.trim() === "" ? "Indiquez le motif" : undefined}
           />
         )}
       </div>
 
-      {message && message !== REASON_REQUIRED && (
+      {message && (
         <Text role="alert" size="sm" c="red">
           {message}
         </Text>
