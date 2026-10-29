@@ -274,7 +274,7 @@ describe("invoicing connector per entity", () => {
   });
 });
 
-describe("payment immutability after the 0038 backfill", () => {
+describe("payment immutability after the 0040 backfill", () => {
   it("leaves the trigger payment_immutable enabled", async () => {
     const [t] = await admin`SELECT tgenabled FROM pg_trigger WHERE tgname = 'payment_immutable'`;
     expect(t.tgenabled).toBe("O");
