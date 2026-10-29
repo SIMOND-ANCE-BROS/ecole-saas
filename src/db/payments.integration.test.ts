@@ -2,6 +2,7 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
 import { overlapping } from "./overlap.integration-helpers";
+import { defaultEntityFor } from "./billing-entity.integration-helpers";
 import { correctPayment, collect, paymentsOf, balanceOf } from "./payments";
 import { createDeposit, paymentsToDeposit, readDeposit } from "./deposits";
 import { once, storedPayments } from "./submissions";
@@ -29,11 +30,14 @@ let otherSchool: string;
 let payer: string;
 let foreign: string;
 let bounced: string;
+let entity: string;
 
 beforeAll(async () => {
   [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`pa-${suffix}`}) RETURNING id`;
   [{ id: otherSchool }] =
     await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`pb-${suffix}`}) RETURNING id`;
+  entity = await defaultEntityFor(admin, school);
+  await defaultEntityFor(admin, otherSchool);
   await admin`INSERT INTO "user" (id, name, email) VALUES (${frontDesk}, 'Accueil Test', ${`${frontDesk}@exemple.test`})`;
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${frontDesk}, 'front_desk')`;
   await admin`INSERT INTO "user" (id, name, email) VALUES (${director}, 'Direction Test', ${`${director}@exemple.test`})`;
@@ -102,6 +106,27 @@ describe("collect", () => {
       await admin`SELECT action, after->>'montant_centimes' AS amount, actor IS NOT NULL AS signed FROM audit_log WHERE school_id = ${school} AND target_table = 'payment'`;
     expect(traces).toHaveLength(3);
     expect(traces.every((t) => t.action === "insert" && t.amount === "10000" && t.signed)).toBe(true);
+    // Cashed by the school's default entity (#298).
+    const entities = await admin`SELECT DISTINCT billing_entity_id AS id FROM payment WHERE id IN ${admin(ids)}`;
+    expect(entities.map((e) => e.id)).toEqual([entity]);
+  });
+
+  it("refuses to record a payment while the school has no default entity (#298)", async () => {
+    const [{ id: bare }] =
+      await admin`INSERT INTO school (name, slug) VALUES ('Zz École sans entreprise', ${`pc-${suffix}`}) RETURNING id`;
+    try {
+      await admin`INSERT INTO member (school_id, user_id, role) VALUES (${bare}, ${frontDesk}, 'front_desk')`;
+      const [p] =
+        await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${bare}, 'Zzsans', 'Zoé') RETURNING id`;
+      expect(await withSchool(bare, (tx) => collect(tx, frontDesk, p.id, [cheque(5000, null, "x")]))).toEqual({
+        ok: false,
+        message: "Aucune entreprise par défaut : la direction la choisit dans Paramètres › Entreprises.",
+      });
+    } finally {
+      await admin`DELETE FROM person WHERE school_id = ${bare}`;
+      await admin`DELETE FROM member WHERE school_id = ${bare}`;
+      await admin`DELETE FROM school WHERE id = ${bare}`;
+    }
   });
 
   it("rejects cash « à encaisser plus tard », a payer from another school, a non-member account", async () => {
@@ -147,6 +172,10 @@ describe("collect", () => {
       enteredBy: "Accueil Test",
     });
     expect(rows.find((l) => l.id === ids[0])?.correctedCents).toBe(4000);
+    // The reverse entry belongs to the original's entity (#298).
+    const [{ id: correctionEntity }] =
+      await admin`SELECT billing_entity_id AS id FROM payment WHERE id = ${correction!.id}`;
+    expect(correctionEntity).toBe(entity);
     expect(await withSchool(school, (tx) => correctPayment(tx, frontDesk, correction!.id, 100, TODAY))).toEqual({
       ok: false,
       message: "Ce paiement ne peut pas être corrigé.",
@@ -333,8 +362,8 @@ describe("migration 0037: the kind of the reverse entries written before it (#27
         // Rows as written before the migration: no kind, the label as reference.
         await t`ALTER TABLE payment DROP CONSTRAINT payment_reversal_kind`;
         const insert = (amount: number, reference: string | null, issuer: string | null, corrects: string | null) =>
-          t`INSERT INTO payment (school_id, payer_id, date, amount_cents, method, reference, issuer, corrects_id)
-            VALUES (${school}, ${payer}, ${TODAY}, ${amount}, 'cheque', ${reference}, ${issuer}, ${corrects})
+          t`INSERT INTO payment (school_id, billing_entity_id, payer_id, date, amount_cents, method, reference, issuer, corrects_id)
+            VALUES (${school}, ${entity}, ${payer}, ${TODAY}, ${amount}, 'cheque', ${reference}, ${issuer}, ${corrects})
             RETURNING id`;
         const [bouncedCheque] = await insert(5000, "0372a", "Zz Banque", null);
         const [corrected] = await insert(3000, "0372b", null, null);
@@ -373,9 +402,9 @@ describe("migration 0037: the kind of the reverse entries written before it (#27
       try {
         await admin.begin(async (t) => {
           const [o] =
-            await t`INSERT INTO payment (school_id, payer_id, amount_cents, method) VALUES (${school}, ${payer}, 100, 'cash') RETURNING id`;
-          await t`INSERT INTO payment (school_id, payer_id, amount_cents, method, corrects_id, reversal_kind)
-            VALUES (${school}, ${payer}, -100, 'cash', ${corrects ? o.id : null}, ${kind})`;
+            await t`INSERT INTO payment (school_id, billing_entity_id, payer_id, amount_cents, method) VALUES (${school}, ${entity}, ${payer}, 100, 'cash') RETURNING id`;
+          await t`INSERT INTO payment (school_id, billing_entity_id, payer_id, amount_cents, method, corrects_id, reversal_kind)
+            VALUES (${school}, ${entity}, ${payer}, -100, 'cash', ${corrects ? o.id : null}, ${kind})`;
           throw new Error("inserted");
         });
         return false;

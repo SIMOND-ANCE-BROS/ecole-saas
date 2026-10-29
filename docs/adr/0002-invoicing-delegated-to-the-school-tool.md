@@ -1,6 +1,6 @@
 # 0002. Delegate invoicing to the school's invoicing tool
 
-- Status: Accepted
+- Status: Superseded by [0006](0006-billing-entities-and-vat-per-course.md)
 - Date: 2026-10-22 (records a decision taken at project start)
 - Issue: #111
 

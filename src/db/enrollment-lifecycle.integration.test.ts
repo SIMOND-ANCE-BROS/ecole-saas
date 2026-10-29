@@ -13,6 +13,7 @@ import { readAttendance } from "./lessons";
 import { enrolledInCourse } from "./schedule";
 import { balanceOf } from "./payments";
 import { overlapping } from "./overlap.integration-helpers";
+import { defaultEntityFor } from "./billing-entity.integration-helpers";
 
 /**
  * Enrollment lifecycle (#284), run as the application (app_user, RLS): confirm a trial
@@ -29,12 +30,14 @@ const suffix = Math.random().toString(36).slice(2, 8);
 const desk = `cycle-accueil-${suffix}`;
 let school: string;
 let otherSchool: string;
+let entity: string;
 const ids: Record<string, string> = {};
 
 beforeAll(async () => {
   [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École C', ${`ca-${suffix}`}) RETURNING id`;
   [{ id: otherSchool }] =
     await admin`INSERT INTO school (name, slug) VALUES ('École D', ${`cb-${suffix}`}) RETURNING id`;
+  entity = await defaultEntityFor(admin, school);
   await admin`INSERT INTO "user" (id, name, email) VALUES (${desk}, 'Accueil Test', ${`${desk}@exemple.test`})`;
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${desk}, 'front_desk'), (${otherSchool}, ${desk}, 'front_desk')`;
   for (const s of [school, otherSchool]) {
@@ -342,7 +345,7 @@ describe("cancelling a mistaken enrollment", () => {
   it("removes it with its courses, logs ids and amounts, and leaves the payer's payments on the balance", async () => {
     const f = await family(school, ["active"]);
     const [e] = f.enrollments;
-    await admin`INSERT INTO payment (school_id, payer_id, amount_cents, method) VALUES (${school}, ${f.payer}, 5000, 'cash')`;
+    await admin`INSERT INTO payment (school_id, billing_entity_id, payer_id, amount_cents, method) VALUES (${school}, ${entity}, ${f.payer}, 5000, 'cash')`;
     expect(await inSchool((tx) => cancelEnrollment(tx, desk, e))).toEqual({ ok: true, id: e });
     expect(await admin`SELECT 1 FROM enrollment WHERE id = ${e}`).toHaveLength(0);
     expect(await admin`SELECT 1 FROM enrollment_course WHERE enrollment_id = ${e}`).toHaveLength(0);
@@ -368,7 +371,8 @@ describe("cancelling a mistaken enrollment", () => {
   it("is refused once invoiced, and not offered", async () => {
     const f = await family(school, ["active"]);
     const [e] = f.enrollments;
-    const [inv] = await admin`INSERT INTO invoice (school_id, payer_id) VALUES (${school}, ${f.payer}) RETURNING id`;
+    const [inv] =
+      await admin`INSERT INTO invoice (school_id, billing_entity_id, payer_id) VALUES (${school}, ${entity}, ${f.payer}) RETURNING id`;
     await admin`INSERT INTO invoice_line (school_id, invoice_id, label, unit_price_cents, enrollment_id)
       VALUES (${school}, ${inv.id}, 'Forfait', 11000, ${e})`;
     expect(await inSchool((tx) => cancelEnrollment(tx, desk, e))).toEqual({

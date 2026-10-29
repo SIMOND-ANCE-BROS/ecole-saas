@@ -80,6 +80,11 @@ async function main() {
     INSERT INTO school (name, slug) VALUES ('École de démonstration', 'demo')
     ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
     RETURNING id`;
+  // Its default billing entity (#298): created here, never by a trigger on school.
+  await admin`
+    INSERT INTO billing_entity (school_id, name, legal_name, vat_regime, bank_account_label, is_default)
+    SELECT ${school.id}, 'Danse Démo', 'Danse Démo EI', 'not_applicable', 'Compte courant Banque Démo', true
+    WHERE NOT EXISTS (SELECT 1 FROM billing_entity WHERE school_id = ${school.id})`;
   await admin`
     INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${school.id}, '2026-2027', '2026-09-01', '2027-06-30')

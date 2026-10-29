@@ -16,6 +16,7 @@ import {
 } from "./schema";
 import { issuePath } from "../lib/form-errors";
 import { formatEuros } from "../lib/money";
+import { defaultEntityId, NO_DEFAULT_ENTITY } from "./billing-entities";
 
 /**
  * Payments (#97): payments recorded against the payer, immutable
@@ -115,6 +116,9 @@ export async function collect(
   if (!p) return { ok: false, message: "Payeur introuvable." };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
+  // Cashed by the school's default entity until the payment form offers a choice (#300).
+  const entity = await defaultEntityId(tx);
+  if (!entity) return { ok: false, message: NO_DEFAULT_ENTITY };
   const ids: string[] = [];
   for (const x of r.data) {
     const [{ id }] = await tx
@@ -127,6 +131,7 @@ export async function collect(
         issuer: x.issuer,
         depositPlannedOn: x.plannedPayment,
         schoolId: CURRENT_SCHOOL,
+        billingEntityId: entity,
         payerId: payerId,
         enteredBy: who,
       })
@@ -174,6 +179,7 @@ export async function correctPayment(
   const [o] = await tx
     .select({
       payerId: payment.payerId,
+      billingEntityId: payment.billingEntityId,
       amount: payment.amountCents,
       method: payment.method,
       reference: payment.reference,
@@ -214,6 +220,8 @@ export async function correctPayment(
     .insert(payment)
     .values({
       schoolId: CURRENT_SCHOOL,
+      // The reverse entry belongs to the original's entity (key payment_corrects_same_entity_fk).
+      billingEntityId: o.billingEntityId,
       payerId: o.payerId,
       date,
       amountCents: -amountCents,

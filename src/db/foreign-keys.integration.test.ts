@@ -63,6 +63,20 @@ describe("Foreign keys across schools", () => {
           CREATE TABLE temoin_composite (
             school_id uuid, cible_id uuid,
             FOREIGN KEY (school_id, cible_id) REFERENCES temoin_cible (school_id, id)
+          );
+          -- Three-column keys carrying the billing entity (#298): accepted when school_id pairs
+          -- with school_id, reported otherwise.
+          CREATE TABLE temoin_entite (
+            id uuid PRIMARY KEY, school_id uuid NOT NULL, billing_entity_id uuid NOT NULL,
+            UNIQUE (school_id, id, billing_entity_id)
+          );
+          CREATE TABLE temoin_trois (
+            school_id uuid, cible_id uuid, billing_entity_id uuid,
+            FOREIGN KEY (school_id, cible_id, billing_entity_id) REFERENCES temoin_entite (school_id, id, billing_entity_id)
+          );
+          CREATE TABLE temoin_trois_croise (
+            school_id uuid, cible_id uuid, billing_entity_id uuid,
+            FOREIGN KEY (billing_entity_id, cible_id, school_id) REFERENCES temoin_entite (school_id, id, billing_entity_id)
           );`);
         throw new Cancellation(await defects(tx));
       })
@@ -73,6 +87,7 @@ describe("Foreign keys across schools", () => {
 
     expect(result.filter((d) => d.startsWith("temoin_"))).toEqual([
       "temoin_simple → temoin_cible (temoin_simple_cible_id_fkey)",
+      "temoin_trois_croise → temoin_entite (temoin_trois_croise_billing_entity_id_cible_id_school_id_fkey)",
     ]);
   });
 });
