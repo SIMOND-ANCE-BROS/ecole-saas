@@ -17,7 +17,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import type { Preview } from "@/db/enrollments";
 import type { ScheduleCourse } from "@/db/schedule";
 import { overlaps } from "@/domain/schedule/overlap";
-import { fullCourseAdvice, INITIAL_STATUSES, isChildrenCourse, isFull } from "@/domain/enrollment/lifecycle";
+import { INITIAL_STATUSES, overfilledCourses } from "@/domain/enrollment/lifecycle";
 import { ENROLLMENT_STATUS_LABELS } from "@/domain/enrollment/statuses";
 import { deferredQuery } from "@/lib/deferred-query";
 import { preview, enroll, type FormInput } from "./actions";
@@ -33,7 +33,7 @@ const AUDIENCES = [
   ["student", "Étudiant"],
 ] as const;
 /** What the save button says for an enrollment not committed yet. */
-const STATUS_SAVE = { trial: "l’inscription à l’essai", waitlist: "en attente" } as const;
+const STATUS_SAVE = { trial: "l’inscription à l’essai", waitlist: "l’inscription en attente" } as const;
 const PERIODS = [
   ["quarter", "Trimestre"],
   ["year", "Année"],
@@ -110,8 +110,8 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
   const sortedCourses = [...visibleCourses.filter(adapted), ...visibleCourses.filter((c) => !adapted(c))];
 
   const chosen = courses.filter((c) => courseIds.includes(c.id));
-  // Q5 (#284): a full children's course proposes the waitlist, never blocks.
-  const fullCourses = fullCourseAdvice(status, chosen) === "suggest_waitlist" ? chosen.filter(isFull) : [];
+  // Q5 (#284): a course this enrollment would overfill proposes the waitlist, never blocks.
+  const fullCourses = overfilledCourses(status, chosen, Math.max(studentIds.length, 1));
 
   // Chosen courses that overlap on the same day.
   const overlappingCourses = chosen.flatMap((a, i) =>
@@ -280,8 +280,7 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
               </li>
             )}
             {sortedCourses.map((c) => {
-              // Places only on a children's course: the school sets no limit on adult courses (#284).
-              const restantes = c.maxCapacity === null || !isChildrenCourse(c) ? null : c.maxCapacity - c.enrolled;
+              const restantes = c.maxCapacity === null ? null : c.maxCapacity - c.enrolled;
               return (
                 <li key={c.id} className="border-b border-bordure last:border-0">
                   {/* The whole row is the checkbox's label: one click target, the course as its name. */}
