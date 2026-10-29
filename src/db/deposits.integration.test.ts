@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
 import { correctPayment, collect } from "./payments";
 import { cancelDeposit, createDeposit, paymentLog, readDeposit, listDeposits, paymentsToDeposit } from "./deposits";
+import { overlapping } from "./overlap.integration-helpers";
 
 /**
  * Bank deposits and payments log (#98), as the application runs it
@@ -191,5 +192,58 @@ describe("bank deposits", () => {
         )
       ).ok,
     ).toBe(false);
+  });
+});
+
+describe("deposits saved at the same time as another change (#247)", () => {
+  const NOT_DEPOSITABLE =
+    "Un des paiements choisis n’est plus à remettre (déjà remis, corrigé, pas encore à encaisser ou d’un autre moyen).";
+
+  async function newCheque(reference: string): Promise<string> {
+    const [p] =
+      await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Zzconcurrent', 'Test') RETURNING id`;
+    const r = await withSchool(school, (tx) =>
+      collect(tx, director, p.id, [
+        { method: "cheque", amountCents: 7000, date: TODAY, reference, issuer: null, plannedPayment: null },
+      ]),
+    );
+    if (!r.ok) throw new Error(r.message);
+    return r.ids[0];
+  }
+  const deposit = (paymentId: string) =>
+    withSchool(school, (tx) =>
+      createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [paymentId] }, TODAY),
+    );
+
+  it("a deposit waits for a full correction of its cheque, then refuses it", async () => {
+    const cheque = await newCheque("0247a");
+    const [corrected, deposited] = await overlapping(
+      admin,
+      (hold) =>
+        withSchool(school, async (tx) => {
+          const r = await correctPayment(tx, director, cheque, 7000, TODAY);
+          await hold();
+          return r;
+        }),
+      () => deposit(cheque),
+    );
+    expect(corrected.ok).toBe(true);
+    expect(deposited).toEqual({ ok: false, message: NOT_DEPOSITABLE });
+  });
+
+  it("two deposits of the same cheque: the second is refused with a message, not an error", async () => {
+    const cheque = await newCheque("0247b");
+    const [first, second] = await overlapping(
+      admin,
+      (hold) =>
+        withSchool(school, async (tx) => {
+          const r = await createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [cheque] }, TODAY);
+          await hold();
+          return r;
+        }),
+      () => deposit(cheque),
+    );
+    expect(first.ok).toBe(true);
+    expect(second).toEqual({ ok: false, message: NOT_DEPOSITABLE });
   });
 });

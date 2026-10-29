@@ -139,6 +139,13 @@ export async function correctPayment(
   if (!isUuid(paymentId)) return { ok: false, message: "Ce paiement n’existe plus." };
   if (!Number.isInteger(amountCents) || amountCents <= 0) return { ok: false, message: "Montant invalide" };
   if (!z.iso.date().safeParse(date).success) return { ok: false, message: "Date invalide" };
+  // Two corrections of the same payment wait for each other (#247), so the total read
+  // below includes a correction saved at the same moment. NO KEY UPDATE, not UPDATE: the
+  // correction's foreign key to this payment takes KEY SHARE, which UPDATE would block.
+  // The lock is its own statement: a query that waits on a lock keeps its first snapshot
+  // for the subquery of the total, a new statement sees the other correction once
+  // committed. A row lock fires no trigger (payment_immutable is on UPDATE and DELETE).
+  await tx.select({ id: payment.id }).from(payment).where(eq(payment.id, paymentId)).for("no key update");
   const [o] = await tx
     .select({
       payerId: payment.payerId,

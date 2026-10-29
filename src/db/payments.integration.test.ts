@@ -1,6 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
+import { overlapping } from "./overlap.integration-helpers";
 import { correctPayment, collect, paymentsOf, balanceOf } from "./payments";
 
 /**
@@ -139,5 +140,31 @@ describe("collect", () => {
       ok: false,
       message: "Ce paiement ne peut pas être corrigé.",
     });
+  });
+});
+
+describe("correctPayment under concurrency (#247)", () => {
+  it("two corrections saved at the same time never correct more than the payment", async () => {
+    const r = await withSchool(school, (tx) => collect(tx, frontDesk, payer, [cheque(10000, null, "0247")]));
+    if (!r.ok) throw new Error(r.message);
+    const [id] = r.ids;
+
+    // A corrects 60,00 € and stays open; B corrects 60,00 € meanwhile. Without the lock,
+    // B reads the total before A commits and goes through at once.
+    const [first, second] = await overlapping(
+      admin,
+      (hold) =>
+        withSchool(school, async (tx) => {
+          const result = await correctPayment(tx, frontDesk, id, 6000, TODAY);
+          await hold();
+          return result;
+        }),
+      () => withSchool(school, (tx) => correctPayment(tx, frontDesk, id, 6000, TODAY)),
+    );
+
+    expect(first.ok).toBe(true);
+    expect(second).toEqual({ ok: false, message: "La correction dépasse le montant encore non corrigé." });
+    const rows = await withSchool(school, (tx) => paymentsOf(tx, payer));
+    expect(rows.find((l) => l.id === id)?.correctedCents).toBe(6000);
   });
 });
