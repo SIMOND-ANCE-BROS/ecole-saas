@@ -5,12 +5,14 @@ import { withSchool } from "@/db";
 import { readContact } from "@/db/students";
 import { seasonEnrollments } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
+import { packsOf } from "@/db/lesson-packs";
 import { displayedName } from "@/db/people";
 import { currentSeason } from "@/db/schedule";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { Banner, Enrollments, Telephone } from "../../_people/sections";
 import { PaymentsSection } from "../../_people/payments-section";
+import { LessonPacks } from "../../_people/lesson-packs";
 import { BecomeStudent } from "./become-student";
 import { ButtonLink } from "../../_ui/button-link";
 import { BackToList } from "../../_ui/list-return";
@@ -18,7 +20,11 @@ import { TextLink } from "../../_ui/text-link";
 
 export const metadata: Metadata = { title: "Fiche contact" };
 
-const BANNERS: Record<string, string> = { cree: "Contact créé.", modifie: "Fiche enregistrée." };
+const BANNERS: Record<string, string> = {
+  cree: "Contact créé.",
+  modifie: "Fiche enregistrée.",
+  vendu: "Carnet vendu.",
+};
 
 /** Banner after a payment (`?encaisse=3`). */
 const collected = (n: unknown) => {
@@ -28,7 +34,7 @@ const collected = (n: unknown) => {
 
 export default async function PageContact({ params, searchParams }: PageProps<"/contacts/[id]">) {
   const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
-  const [{ id }, { enregistre, encaisse }] = await Promise.all([params, searchParams]);
+  const [{ id }, { enregistre, encaisse, carnet }] = await Promise.all([params, searchParams]);
   const today = todayInParis();
   const parsed = await withSchool(schoolId, async (tx) => {
     const contact = await readContact(tx, id);
@@ -40,10 +46,13 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
       billed: season ? await seasonEnrollments(tx, { payerId: contact.id }, season.id) : [],
       balance: await balanceOf(tx, contact.id, today),
       payments: await paymentsOf(tx, contact.id),
+      packs: await packsOf(tx, { personId: contact.id }),
     };
   });
   if (!parsed) notFound();
-  const { contact: c, season: season, billed, balance: balance, payments: payments } = parsed;
+  const { contact: c, season: season, billed, balance: balance, payments: payments, packs } = parsed;
+  // A pack is sold to someone who pays for a student (or is one).
+  const sells = c.isStudent || c.students.some((s) => s.paysFor);
   const name = displayedName(c);
   const firstName = c.firstName ?? name;
   const roles = (e: (typeof c.students)[number]) =>
@@ -61,7 +70,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
           / {name}
         </Text>
       </nav>
-      <Banner text={collected(encaisse) ?? BANNERS[String(enregistre)]} />
+      <Banner text={collected(encaisse) ?? BANNERS[String(carnet ?? enregistre)]} />
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -151,6 +160,9 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
             )}
           </section>
           {season && <Enrollments enrollments={billed} season={season} today={today} payerId={c.id} />}
+          {(sells || packs.length > 0) && (
+            <LessonPacks packs={packs} personId={c.id} sellHref={sells ? `/carnets/nouveau?payeur=${c.id}` : null} />
+          )}
           <PaymentsSection
             payerId={c.id}
             balance={balance}

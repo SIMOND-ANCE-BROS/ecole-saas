@@ -8,7 +8,7 @@ import { submission } from "./schema";
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 
 /** Kinds of submission made safe to retry (#260). */
-export type SubmissionKind = "payment" | "enrollment" | "course";
+export type SubmissionKind = "payment" | "enrollment" | "course" | "lesson_pack";
 
 /** The same key sent with other values: never replayed, never applied. */
 export const KEY_REUSED = "Cette saisie a déjà été envoyée avec d’autres valeurs : rechargez la page.";
@@ -36,6 +36,8 @@ type Refused = { ok: false; message: string };
 export const storedPayments = z.object({ ok: z.literal(true), ids: z.array(z.uuid()) });
 /** What a first enrollment submission stored: the enrollment it created. */
 export const storedEnrollment = z.object({ ok: z.literal(true), id: z.uuid() });
+/** What a first lesson pack sale stored: the pack it created (#286). */
+export const storedLessonPack = z.object({ ok: z.literal(true), id: z.uuid() });
 /** What a first course submission stored: the course and the planning to go back to. */
 export const storedCourse = z.object({
   ok: z.literal(true),

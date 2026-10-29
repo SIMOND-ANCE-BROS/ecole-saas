@@ -5,6 +5,7 @@ import { withSchool } from "@/db";
 import { readStudent } from "@/db/students";
 import { seasonEnrollments } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
+import { packsOf } from "@/db/lesson-packs";
 import { displayedName } from "@/db/people";
 import { currentSeason } from "@/db/schedule";
 import { firstEnrollmentDate, readRequirements, studentDocuments } from "@/db/student-documents";
@@ -13,6 +14,7 @@ import { documentsToBring, documentState, expectedDocuments } from "@/domain/peo
 import { ofName } from "@/lib/french";
 import { requireRole } from "@/lib/session";
 import { PaymentsSection } from "../../_people/payments-section";
+import { LessonPacks } from "../../_people/lesson-packs";
 import { Banner, FollowedCourses, Enrollments, dayOf, Notes, Telephone } from "../../_people/sections";
 import { Billing } from "./billing";
 import { type DocumentLine, Documents } from "./documents";
@@ -27,6 +29,7 @@ const BANNERS: Record<string, string> = {
   cree: "Élève créé.",
   modifie: "Fiche enregistrée.",
   enregistree: "Inscription enregistrée.",
+  vendu: "Carnet vendu.",
 };
 
 /** Banner after a payment (`?encaisse=3`). */
@@ -37,7 +40,7 @@ const collected = (n: unknown) => {
 
 export default async function StudentPage({ params, searchParams }: PageProps<"/eleves/[id]">) {
   const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
-  const [{ id }, { enregistre, inscription, encaisse }] = await Promise.all([params, searchParams]);
+  const [{ id }, { enregistre, inscription, encaisse, carnet }] = await Promise.all([params, searchParams]);
   const today = todayInParis();
   const parsed = await withSchool(schoolId, async (tx) => {
     const student = await readStudent(tx, id, today);
@@ -54,11 +57,12 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
       requirements: await readRequirements(tx),
       documents: await studentDocuments(tx, student.id),
       enrolledOn: season ? await firstEnrollmentDate(tx, student.id, season.id) : null,
+      packs: await packsOf(tx, { personId: student.id }),
     };
   });
   if (!parsed) notFound();
   const { student: e, season: season, enrollments, balance: balance, payments: payments } = parsed;
-  const { requirements, documents, enrolledOn } = parsed;
+  const { requirements, documents, enrolledOn, packs } = parsed;
   const toBring = documentsToBring({ requirements, documents, birthDate: e.birthDate, enrolledOn, today });
   const expected = expectedDocuments(requirements, e.birthDate, today);
   // Documents the school asks of this student, and any other already recorded.
@@ -84,7 +88,9 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   const emergencyContacts = e.guardians
     .filter((r) => r.toNotify)
     .concat(e.otherRelationships.filter((a) => a.toNotify && a.direction === "incoming"));
-  const banner = BANNERS[String(inscription ?? enregistre)];
+  const banner = BANNERS[String(inscription ?? carnet ?? enregistre)];
+  // Who pays a pack sold from this record: the student's payer, or themselves.
+  const packPayer = e.billedTo.type === "person" ? e.billedTo.id : e.billedTo.type === "self" ? e.id : null;
 
   return (
     <article className="flex w-full min-w-0 flex-col gap-5">
@@ -202,6 +208,12 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
               payerId={e.billedTo.type !== "person" ? e.id : null}
             />
           )}
+          <LessonPacks
+            packs={packs}
+            personId={e.id}
+            sellHref={packPayer ? `/carnets/nouveau?payeur=${packPayer}&eleve=${e.id}` : null}
+            noPayer={!packPayer}
+          />
           {e.billedTo.type === "person" ? (
             <Text size="sm" c="dimmed">
               Paiements : sur la fiche de{" "}
