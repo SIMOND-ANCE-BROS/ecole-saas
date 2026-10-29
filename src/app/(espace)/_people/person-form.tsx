@@ -13,7 +13,7 @@ import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
 
 type Props = {
   /** Person being edited; null when creating a contact (a student is created with the guided form). */
-  person: Omit<PersonRecord, "relationships" | "courses" | "documents"> | null;
+  person: Omit<PersonRecord, "relationships" | "courses"> | null;
   /** Record we come from: student (birth date and notes) or contact. */
   section: "eleves" | "contacts";
   proposedName?: string;

@@ -21,12 +21,6 @@ import { TextLink } from "../_ui/text-link";
 
 /** Sections shared by the student and contact records. */
 
-const DOCUMENT = {
-  medical_certificate: "Certificat médical",
-  parental_consent: "Autorisation parentale",
-  image_rights: "Droit à l’image",
-  other: "Autre document",
-} as const;
 const PERIOD = { quarter: "trimestre", year: "année", single: "unité" } as const;
 const PUBLIC = { child: "Enfant", adult: "Adulte", couple: "Couple", student: "Étudiant" } as const;
 /** Text that needs attention (absences, expired document): the theme's readable amber, both modes. */
@@ -122,39 +116,6 @@ export function FollowedCourses({ courses }: { courses: PersonRecord["courses"] 
         </section>
       )}
     </>
-  );
-}
-
-export function Documents({ documents, today }: { documents: PersonRecord["documents"]; today: string }) {
-  return (
-    <section aria-labelledby="documents" className="flex flex-col gap-2">
-      <Title order={2} size="h5" id="documents">
-        Documents
-      </Title>
-      {documents.length === 0 ? (
-        <Text size="sm" c="dimmed">
-          Aucun document enregistré (certificat médical, autorisations).
-        </Text>
-      ) : (
-        <Paper withBorder component="ul" className="divide-y divide-bordure text-sm">
-          {documents.map((d, i) => {
-            const expiresAt = d.validUntil !== null && d.validUntil < today;
-            return (
-              <li key={i} className="flex flex-wrap items-baseline gap-x-3 px-3 py-2">
-                <span className="font-medium">{DOCUMENT[d.type]}</span>
-                <Text span size="sm" c={expiresAt || !d.granted ? WARNING : "dimmed"}>
-                  {!d.granted
-                    ? "refusé"
-                    : d.validUntil
-                      ? `${expiresAt ? "expiré le" : "valable jusqu’au"} ${dayOf(d.validUntil)}`
-                      : "fourni"}
-                </Text>
-              </li>
-            );
-          })}
-        </Paper>
-      )}
-    </section>
   );
 }
 

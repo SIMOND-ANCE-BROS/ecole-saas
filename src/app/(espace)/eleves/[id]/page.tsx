@@ -7,12 +7,15 @@ import { enrollmentsPaidBy } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
 import { displayedName } from "@/db/people";
 import { currentSeason } from "@/db/schedule";
+import { firstEnrollmentDate, readRequirements, studentDocuments } from "@/db/student-documents";
 import { ageAt, isMinor, todayInParis } from "@/domain/people/age";
+import { documentsToBring, documentState, expectedDocuments } from "@/domain/people/documents";
 import { ofName } from "@/lib/french";
 import { requireRole } from "@/lib/session";
 import { PaymentsSection } from "../../_people/payments-section";
-import { Banner, FollowedCourses, Documents, BilledEnrollments, dayOf, Notes, Telephone } from "../../_people/sections";
+import { Banner, FollowedCourses, BilledEnrollments, dayOf, Notes, Telephone } from "../../_people/sections";
 import { Billing } from "./billing";
+import { type DocumentLine, Documents } from "./documents";
 import { Relatives } from "./relatives";
 import { ButtonLink } from "../../_ui/button-link";
 import { BackToList } from "../../_ui/list-return";
@@ -48,10 +51,31 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
       billed: season ? await enrollmentsPaidBy(tx, student.id, season.id) : [],
       balance: paysForThemselves ? await balanceOf(tx, student.id, today) : null,
       payments: paysForThemselves ? await paymentsOf(tx, student.id) : [],
+      requirements: await readRequirements(tx),
+      documents: await studentDocuments(tx, student.id),
+      enrolledOn: season ? await firstEnrollmentDate(tx, student.id, season.id) : null,
     };
   });
   if (!parsed) notFound();
   const { student: e, season: season, billed, balance: balance, payments: payments } = parsed;
+  const { requirements, documents, enrolledOn } = parsed;
+  const toBring = documentsToBring({ requirements, documents, birthDate: e.birthDate, enrolledOn, today });
+  const expected = expectedDocuments(requirements, e.birthDate, today);
+  // Documents the school asks of this student, and any other already recorded.
+  const documentLines: DocumentLine[] = requirements.flatMap((r) => {
+    const doc = documents.find((d) => d.type === r.type) ?? null;
+    if (!expected.includes(r.type) && !doc) return [];
+    return [
+      {
+        type: r.type,
+        expected: expected.includes(r.type),
+        state: documentState(doc ?? undefined, today),
+        doc,
+        due: toBring.find((d) => d.type === r.type) ?? null,
+        validityMonths: r.validityMonths,
+      },
+    ];
+  });
 
   const name = displayedName(e);
   const firstName = e.firstName ?? name;
@@ -189,7 +213,14 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
               today={today}
             />
           )}
-          <Documents documents={e.documents} today={today} />
+          <Documents
+            studentId={e.id}
+            firstName={firstName}
+            lines={documentLines}
+            enrolled={enrolledOn !== null}
+            today={today}
+            isDirector={role === "director"}
+          />
         </div>
       </div>
     </article>

@@ -267,6 +267,20 @@
       "when": 1793274551801,
       "tag": "0037_payment_reversal_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1793286193313,
+      "tag": "0038_student_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1793289440451,
+      "tag": "0039_student_document_dated_on",
+      "breakpoints": true
     }
   ]
 }
