@@ -279,7 +279,7 @@ export function ClosuresManagement({
                 onClick={() =>
                   setRemoval({
                     title: `Retirer la fermeture « ${f.label} » ?`,
-                    body: "Les séances à venir de ces dates reviennent au planning (sauf si une autre fermeture les couvre), avec leur horaire et leur remplaçant s’ils en avaient ; un remplaçant archivé laisse la place à l’intervenant du cours.",
+                    body: "Les séances à venir de ces dates reviennent au planning.",
                     run: () => {
                       // Refused: focus comes back to this « Retirer ». Removed: it is gone with its
                       // row, so focus moves to the next closure (or the one before, or the form).

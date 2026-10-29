@@ -60,11 +60,12 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
     toggle.current?.focus();
   }, [inProgress, cancelled]);
 
-  const act = (action: () => Promise<ActionResult>, success: string) =>
+  /** `success` null: the refreshed sheet says it itself (one announcement, not two). */
+  const act = (action: () => Promise<ActionResult>, success: string | null) =>
     startTransition(async () => {
       // A lost connection or a server error keeps the sheet on screen, with a way out.
       const r = await settle(action);
-      setMessage(r.ok ? { text: success, error: false } : { text: r.message, error: true });
+      setMessage(r.ok ? (success ? { text: success, error: false } : null) : { text: r.message, error: true });
     });
   const save = () =>
     act(
@@ -91,7 +92,7 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
       >
         {cancelled ? (
           <Alert color="yellow" role="status">
-            Séance annulée : pas d’appel.
+            Séance annulée : pas d’appel. « Rétablir la séance » la remet au planning.
           </Alert>
         ) : attendance.students.length === 0 ? (
           <Text size="sm" c="dimmed">
@@ -233,10 +234,8 @@ export function AttendanceRecord({ attendance: attendance, instructors: instruct
           disabled={inProgress}
           onClick={() => {
             refocusToggle.current = true;
-            act(
-              () => cancel(attendance.id, !cancelled),
-              cancelled ? "Séance rétablie." : "Séance annulée. « Rétablir la séance » la remet au planning.",
-            );
+            // Cancelled: the sheet's own alert announces it, with how to undo.
+            act(() => cancel(attendance.id, !cancelled), cancelled ? "Séance rétablie." : null);
           }}
         >
           {cancelled ? "Rétablir la séance" : "Annuler la séance"}

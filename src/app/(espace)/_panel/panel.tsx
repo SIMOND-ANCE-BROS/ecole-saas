@@ -20,9 +20,16 @@ const FIRST_FIELD = "input:enabled:not([type=hidden],[type=radio],[type=checkbox
 
 /** Keys that never change a value: moving between fields, closing, or a lone modifier. */
 const NOT_AN_EDIT = new Set(["Tab", "Escape", "Shift", "Control", "Meta", "Alt", "AltGraph", "CapsLock"]);
-/** Elements whose click may change a value (links and the panel's own background excluded). */
+/** Keys that move within a field: an edit only in a number field (they step its value). */
+const MOVES = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]);
+const NUMBER_FIELD = ".mantine-NumberInput-input";
+/**
+ * Controls whose click may change a value without typing: buttons (stepper, « Ajouter
+ * un règlement », « Retirer »), boxes and radios. A click into a text field only places
+ * the cursor; what is typed there counts through `input` events.
+ */
 const CONTROL =
-  "button, input, select, textarea, label, [role=button], [role=option], [role=checkbox], [role=radio], [role=switch], [role=slider]";
+  "button, select, input[type=checkbox], input[type=radio], [role=button], [role=option], [role=checkbox], [role=radio], [role=switch], [role=slider]";
 
 /** Where the panel's drop-down lists, calendars and menus are rendered. */
 const PORTAL_ID = "panneau-portail";
@@ -122,9 +129,14 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
           }
           toSearch.current = true;
           close();
-        } else if (!NOT_AN_EDIT.has(e.key)) {
-          // Any other key may change a value (typing, arrows in a number field, Enter on
-          // an option): a false « edited » only shows the hint, a false « untouched » loses data.
+        } else if (NOT_AN_EDIT.has(e.key)) {
+          // Moving between fields or closing changes nothing.
+        } else if (MOVES.has(e.key)) {
+          // Arrows move the cursor in a text field, but step a number field.
+          if (e.target instanceof Element && e.target.matches(NUMBER_FIELD)) edited.current = true;
+        } else {
+          // Any other key may change a value (typing, Enter on an option or on « Ajouter »,
+          // Space on a box): a false « edited » only shows the hint, a false « untouched » loses data.
           edited.current = true;
         }
       }}
@@ -141,7 +153,14 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
             </Button>
           </div>
           {/* On its own line, so it never squeezes the header's actions on a phone. */}
-          <Text role="status" size="sm" c="dimmed" className="mt-1 empty:hidden">
+          <Text
+            role="status"
+            size="sm"
+            bg="var(--mantine-color-blue-light)"
+            // Mantine's light blue text is too pale on white (3.3:1): a darker shade in light mode.
+            c="light-dark(var(--mantine-color-blue-9), var(--mantine-color-blue-light-color))"
+            className="mt-2 rounded-md px-2 py-1 empty:hidden"
+          >
             {keepHint ? "Enregistrez ou annulez avant de chercher." : ""}
           </Text>
         </div>

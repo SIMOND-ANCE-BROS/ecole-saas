@@ -81,8 +81,12 @@ export function GlobalSearch() {
   // panel. Only when nothing has the focus yet (reload, Back) or the sidebar link that led here.
   useEffect(() => {
     const active = document.activeElement;
-    const free = !active || active === document.body || active.closest(`nav[aria-label="${NAV_LABEL}"]`) !== null;
+    const lost = !active || active === document.body;
+    const free = lost || active.closest(`nav[aria-label="${NAV_LABEL}"]`) !== null;
     if (onList && free) field.current?.focus();
+    // Elsewhere, a page may name where to start once focus was lost on the way, e.g. the
+    // planning's « Nouveau cours » after « Annuler » on the full-page course form (#244).
+    else if (!onList && lost) document.querySelector<HTMLElement>("main [data-page-focus]")?.focus();
   }, [onList, path]);
 
   useEffect(() => {
