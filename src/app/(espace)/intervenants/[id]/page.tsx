@@ -14,6 +14,7 @@ import { BackToList } from "@/app/(espace)/_ui/list-return";
 import { end } from "@/app/(espace)/planning/format";
 import { courseRateSections } from "@/domain/payroll/course-rates";
 import { courseRateAllowed } from "@/domain/payroll/rate";
+import { hasStatement } from "@/domain/payroll/statement";
 import { todayInParis } from "@/domain/people/age";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
@@ -82,9 +83,17 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
             {instructor.isOwner && ", dirigeant de l’école"}
           </Text>
         </div>
-        <ButtonLink href={`/intervenants/${id}/modifier`} variant="default">
-          Modifier la fiche
-        </ButtonLink>
+        <div className="flex flex-wrap gap-2">
+          {/* Owners get no statement (#285). */}
+          {hasStatement(instructor) && (
+            <ButtonLink href={`/intervenants/${id}/releve`} variant="default">
+              Relevé du mois
+            </ButtonLink>
+          )}
+          <ButtonLink href={`/intervenants/${id}/modifier`} variant="default">
+            Modifier la fiche
+          </ButtonLink>
+        </div>
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Paper withBorder p="md" component="section" aria-labelledby="identite">

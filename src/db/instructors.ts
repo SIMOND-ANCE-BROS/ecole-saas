@@ -5,7 +5,9 @@ import { frenchList } from "../lib/french-list";
 import { seasonBlocksPayModeChange } from "../domain/payroll/rate";
 import { deleteConnection } from "./calendar-connections";
 import type { Tx } from "./index";
-import { course, instructor, season } from "./schema";
+import { auditLog, course, instructor, member, season } from "./schema";
+
+const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 
 /** Instructors (teachers), always within the `withSchool()` transaction (RLS). */
 
@@ -113,18 +115,22 @@ export async function createInstructor(tx: Tx, entry: InstructorInput): Promise<
  * Rates of past seasons are kept untouched as history and do not block
  * (#192 Q5, recommended rule pending the school's validation). `today` is a
  * `YYYY-MM-DD` date in Paris (`todayInParis()`).
+ *
+ * A change of pay mode or rate is kept in the audit log, by `userId` when
+ * given: the monthly statement flags a month whose rates changed (#285).
  */
 export async function updateInstructor(
   tx: Tx,
   id: string,
   entry: InstructorInput,
   today: string,
+  userId: string | null = null,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const gone = { ok: false as const, message: "Cet intervenant n’existe plus." };
   if (!z.uuid().safeParse(id).success) return gone;
   // Locked: a course rate saved meanwhile (FOR SHARE in courses.ts) waits, or makes this check see it.
   const [current] = await tx
-    .select({ payMode: instructor.payMode })
+    .select({ payMode: instructor.payMode, rateCents: instructor.rateCents })
     .from(instructor)
     .where(eq(instructor.id, id))
     .for("update");
@@ -157,6 +163,19 @@ export async function updateInstructor(
     .set(columnsOf(instructor, { ...instructorRow(entry), ...cutoff }))
     .where(eq(instructor.id, id))
     .returning({ id: instructor.id });
-  if (rows.length === 1 && !entry.active) await deleteConnection(tx, id);
-  return rows.length === 1 ? { ok: true } : gone;
+  if (rows.length !== 1) return gone;
+  if (!entry.active) await deleteConnection(tx, id);
+  if (current.payMode !== entry.payMode || current.rateCents !== entry.rateCents) {
+    const [who] = userId ? await tx.select({ id: member.id }).from(member).where(eq(member.userId, userId)) : [];
+    await tx.insert(auditLog).values({
+      schoolId: CURRENT_SCHOOL,
+      actor: who?.id ?? null,
+      targetTable: "instructor",
+      rowId: id,
+      action: "update",
+      before: { payMode: current.payMode, rateCents: current.rateCents },
+      after: { payMode: entry.payMode, rateCents: entry.rateCents },
+    });
+  }
+  return { ok: true };
 }
