@@ -17,6 +17,8 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import type { Preview } from "@/db/enrollments";
 import type { ScheduleCourse } from "@/db/schedule";
 import { overlaps } from "@/domain/schedule/overlap";
+import { fullCourseAdvice, INITIAL_STATUSES, isChildrenCourse, isFull } from "@/domain/enrollment/lifecycle";
+import { ENROLLMENT_STATUS_LABELS } from "@/domain/enrollment/statuses";
 import { deferredQuery } from "@/lib/deferred-query";
 import { preview, enroll, type FormInput } from "./actions";
 import { orConnectionLost } from "@/lib/action-result";
@@ -30,6 +32,8 @@ const AUDIENCES = [
   ["couple", "Couple"],
   ["student", "Étudiant"],
 ] as const;
+/** What the save button says for an enrollment not committed yet. */
+const STATUS_SAVE = { trial: "l’inscription à l’essai", waitlist: "en attente" } as const;
 const PERIODS = [
   ["quarter", "Trimestre"],
   ["year", "Année"],
@@ -50,6 +54,7 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
     initial && initial.age !== null && initial.age >= 18 ? "adult" : "child",
   );
   const [period, setPeriod] = useState<FormInput["period"]>("quarter");
+  const [status, setStatus] = useState<FormInput["status"]>("active");
   const [courseIds, setCourseIds] = useState<string[]>([]);
   const [filter, setFilter] = useState("");
   const [lastPreview, setPreview] = useState<{
@@ -72,8 +77,9 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
       audience: chosenAudience,
       period,
       courseIds,
+      status,
     }),
-    [payerId, studentIds, chosenAudience, period, courseIds],
+    [payerId, studentIds, chosenAudience, period, courseIds, status],
   );
 
   // No price from a previous selection is shown as the current price.
@@ -103,8 +109,11 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
     chosenAges.every((a) => (c.ageMin === null || a >= c.ageMin) && (c.ageMax === null || a <= c.ageMax));
   const sortedCourses = [...visibleCourses.filter(adapted), ...visibleCourses.filter((c) => !adapted(c))];
 
-  // Chosen courses that overlap on the same day.
   const chosen = courses.filter((c) => courseIds.includes(c.id));
+  // Q5 (#284): a full children's course proposes the waitlist, never blocks.
+  const fullCourses = fullCourseAdvice(status, chosen) === "suggest_waitlist" ? chosen.filter(isFull) : [];
+
+  // Chosen courses that overlap on the same day.
   const overlappingCourses = chosen.flatMap((a, i) =>
     chosen
       .slice(i + 1)
@@ -226,6 +235,20 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
           />
         </div>
 
+        <Radio.Group
+          id="statut"
+          label="Statut"
+          description="À l’essai ou en attente : pas encore dû, confirmé plus tard depuis la fiche."
+          value={status}
+          onChange={(v) => setStatus(v as FormInput["status"])}
+        >
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-2">
+            {INITIAL_STATUSES.map((s) => (
+              <Radio key={s} value={s} label={ENROLLMENT_STATUS_LABELS[s]} />
+            ))}
+          </div>
+        </Radio.Group>
+
         <fieldset id="choix-cours" className="flex flex-col gap-2">
           <Text component="legend" size="sm" fw={600} mb={4}>
             Cours ({courseIds.length} choisi{courseIds.length > 1 ? "s" : ""})
@@ -257,7 +280,8 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
               </li>
             )}
             {sortedCourses.map((c) => {
-              const restantes = c.maxCapacity === null ? null : c.maxCapacity - c.enrolled;
+              // Places only on a children's course: the school sets no limit on adult courses (#284).
+              const restantes = c.maxCapacity === null || !isChildrenCourse(c) ? null : c.maxCapacity - c.enrolled;
               return (
                 <li key={c.id} className="border-b border-bordure last:border-0">
                   {/* The whole row is the checkbox's label: one click target, the course as its name. */}
@@ -354,6 +378,11 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
           <Text size="xs" c="dimmed">
             {chosen.length} cours · {chosen.reduce((total, c) => total + c.durationMinutes, 0)} min par semaine
           </Text>
+          {status !== "active" && (
+            <Text size="xs" fw={500}>
+              {ENROLLMENT_STATUS_LABELS[status]} : pas compté dans le dû ni dans la réduction fratrie
+            </Text>
+          )}
         </div>
         {calculation && (
           <Text role="status" size="sm" c="dimmed">
@@ -400,8 +429,24 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
           label="Voir les inscriptions de l’élève"
           safeRetry
         />
+        {fullCourses.length > 0 && (
+          <Alert role="alert" color="yellow" p="xs">
+            <Text size="sm" fw={500}>
+              {fullCourses.length > 1 ? "Ces cours sont complets" : "Ce cours est complet"} : inscrire en attente ?
+            </Text>
+            <Text size="xs">
+              {fullCourses
+                .map((c) => `${c.discipline} ${c.weekday ? DAYS[c.weekday].toLowerCase() : ""} ${c.startTime}`)
+                .join(" ; ")}
+              . « Inscrit » reste possible.
+            </Text>
+            <Button size="compact-sm" variant="default" mt="xs" onClick={() => setStatus("waitlist")}>
+              Inscrire en attente
+            </Button>
+          </Alert>
+        )}
         <Button type="submit" disabled={!canSave} loading={sending}>
-          Enregistrer l’inscription
+          {status === "active" ? "Enregistrer l’inscription" : `Enregistrer ${STATUS_SAVE[status]}`}
         </Button>
         <Text size="xs" c="dimmed">
           Vérifiez le prix avant d’enregistrer. Aucun paiement n’est encaissé à cette étape.

@@ -12,6 +12,7 @@ import {
   SIBLING_STATUSES,
   transitionRefusal,
   type EnrollmentActions,
+  type InitialStatus,
 } from "../domain/enrollment/lifecycle";
 import { STATUS_PRIORITY, type EnrollmentStatus } from "../domain/enrollment/statuses";
 import { has } from "../lib/has";
@@ -51,6 +52,8 @@ export type EnrollmentInput = {
   audience: Audience;
   period: Period;
   courseIds: string[];
+  /** « Inscrit » by default; « À l’essai » or « En attente » for a family not committed yet (#284). */
+  status?: InitialStatus;
 };
 
 const NEW = "new";
@@ -229,7 +232,10 @@ export async function enrollmentPreview(
     status: "ok",
     // The engine returns one result per request, NEW included.
     newEnrollment: result.enrollments.find((i) => i.reference === NEW)!,
-    existingImpacts: await impactsOn(tx, payerId, existing, result.enrollments),
+    // A trial or waitlist enrollment does not count as a sibling (Q3): the others' discounts stay as they are.
+    existingImpacts: countsAsSibling(entry.status ?? "active")
+      ? await impactsOn(tx, payerId, existing, result.enrollments)
+      : [],
   };
 }
 
@@ -276,6 +282,7 @@ export async function saveEnrollment(
       schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid`,
       payerId: payerId,
       seasonId: seasonId,
+      status: entry.status ?? "active",
       tariffId: r.tariffRowId,
       audience: entry.audience,
       period: entry.period,
