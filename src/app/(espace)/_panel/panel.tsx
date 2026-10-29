@@ -17,9 +17,15 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, type ReactNode, use, useEffect, useId, useRef, useState } from "react";
 import { FOCUS_SEARCH } from "../_ui/focus-search";
 import { useListReturn } from "../_ui/list-return";
+import { useUnloadGuard, useUnsavedInput } from "../_ui/unsaved-input";
 
 /** True inside a panel: « Annuler » goes back there instead of navigating. */
 const InPanel = createContext(false);
+
+/** Whether this is rendered inside a side panel (which guards its own input). */
+export function useInPanel(): boolean {
+  return use(InPanel);
+}
 
 type Props = { title: string; children: ReactNode };
 
@@ -28,29 +34,6 @@ type Props = { title: string; children: ReactNode };
  * else its first text field or list (not a radio or checkbox, such as « Particulier / Professionnel »).
  */
 const FIRST_FIELD = "input:enabled:not([type=hidden],[type=radio],[type=checkbox]), select:enabled, textarea:enabled";
-
-/** Any field of the panel's forms, visible or not (a Select's chosen value lives in a hidden input). */
-const FIELDS = "input, select, textarea";
-/** A field someone can type in or choose: a panel without one (a record) never asks. */
-const EDITABLE = "input:not([type=hidden]), select, textarea";
-
-/**
- * What each field of the panel holds, keyed by name, else id (Mantine gives every
- * field one): its text, or « 1 » for a ticked box. Empty and unticked read as "".
- */
-function readFields(root: HTMLElement): Map<string, string> {
-  const values = new Map<string, string>();
-  root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(FIELDS).forEach((f, i) => {
-    const key = f.name || f.id || `#${i}`;
-    const boxed = f instanceof HTMLInputElement && (f.type === "checkbox" || f.type === "radio");
-    // Radios share a name: keep the one that is ticked.
-    if (boxed) {
-      if (f.checked) values.set(key, f.type === "radio" ? f.value : "1");
-      else if (!values.has(key)) values.set(key, "");
-    } else values.set(key, f.value);
-  });
-  return values;
-}
 
 /** Where the panel's drop-down lists, calendars and menus are rendered. */
 const PORTAL_ID = "panneau-portail";
@@ -68,9 +51,12 @@ const IN_DIALOG: MantineThemeOverride = {
  * stays behind, the URL is the full page's. Closed by « Fermer », Escape,
  * a click outside or the Back button; focus returns to where it was. With
  * unsaved input, « Fermer », Escape, a click outside and « Ouvrir en pleine
- * page » ask « Abandonner la saisie ? » first (#251). The Back button does
- * not: the history has already moved when the router hears of it. A form's own
- * « Annuler » does not either: it says what it does.
+ * page » ask « Abandonner la saisie ? » first (#251); a reload or closing the tab
+ * gets the browser's own question (#258). The Back button does not ask: the
+ * history has already moved when the router hears of it, and pushing it back is
+ * fragile. A form's own « Annuler » does not either: it says what it does.
+ * « Ouvrir en pleine page » keeps asking rather than carrying the input over: a
+ * draft would put personal data (often a minor's) in browser storage.
  *
  * A parallel slot keeps its content on a client navigation to a route it does
  * not intercept (redirect after saving, link): the panel hides itself once the
@@ -98,39 +84,18 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
    * search can only take the focus once the panel is gone, as after Escape.
    */
   const toSearch = useRef(false);
-  /**
-   * Each field as it was when the panel opened, or when it appeared later (a row or a
-   * guardian added, with its defaults): leaving asks only if one differs (#251).
-   */
-  const start = useRef<Map<string, string> | null>(null);
-  /** The fields present at opening: one removed since then with a value counts as input. */
-  const atOpening = useRef<Map<string, string>>(new Map());
-  /**
-   * The person has not pressed a key or clicked in the panel yet. A form may still fill its
-   * defaults in its own effects (they run before the panel's), so the starting values are
-   * read again right before the first key or click, and are what that person saw.
-   */
-  const untouched = useRef(true);
-  const readStart = () => {
-    if (!body.current) return;
-    start.current = readFields(body.current);
-    atOpening.current = new Map(start.current);
-  };
-  const firstTouch = () => {
-    if (!untouched.current) return;
-    untouched.current = false;
-    readStart();
-  };
-  /**
-   * A value picked in a list, calendar or menu of the panel: it may change state no field
-   * shows (a form keeping its values in React), so it always counts as input.
-   */
-  const picked = useRef(false);
   /** Last field or button focused in the panel: « Continuer la saisie » gives the focus back there. */
   const lastFocus = useRef<HTMLElement | null>(null);
   /** The panel is going away (Back called, or a full page loading): never ask, never go Back twice. */
   const closing = useRef(false);
   const [keepHint, setKeepHint] = useState(false);
+  /**
+   * Something typed or chosen is not saved (#251): a field differs from what the person saw,
+   * or a value was picked in a list or calendar. A record without fields never holds input.
+   */
+  const holdsInput = useUnsavedInput(body, { touchRoot: dialogue, portal: `#${PORTAL_ID}` });
+  // Reload, tab close or another address with input: the browser asks too (#258).
+  useUnloadGuard(holdsInput, { leaving: closing });
 
   useEffect(() => {
     const d = dialogue.current;
@@ -143,8 +108,6 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
         body.current?.querySelector<HTMLElement>("[data-panel-focus]") ??
         body.current?.querySelector<HTMLElement>(FIRST_FIELD);
       field?.focus();
-      readStart();
-      requestAnimationFrame(() => untouched.current && readStart());
     }
     return () => {
       if (toSearch.current) window.dispatchEvent(new Event(FOCUS_SEARCH));
@@ -157,32 +120,6 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
     closing.current = true;
     router.back();
   };
-  /**
-   * Something typed or chosen is not saved: a field differs from when the panel opened,
-   * or a value was picked in a list or calendar. A record without fields never holds input.
-   */
-  const holdsInput = () => {
-    const b = body.current;
-    const first = start.current;
-    if (!b?.querySelector(EDITABLE) || !first) return false;
-    if (picked.current) return true;
-    const now = readFields(b);
-    for (const [key, value] of now) if (value !== (first.get(key) ?? "")) return true;
-    for (const [key, value] of atOpening.current) if (!now.has(key) && value !== "") return true;
-    return false;
-  };
-  // A field that appears later starts from what it shows then (its defaults), not from empty.
-  useEffect(() => {
-    const b = body.current;
-    if (!b) return;
-    const watch = new MutationObserver(() => {
-      const first = start.current;
-      if (!first) return;
-      for (const [key, value] of readFields(b)) if (!first.has(key)) first.set(key, value);
-    });
-    watch.observe(b, { childList: true, subtree: true });
-    return () => watch.disconnect();
-  }, []);
   /** Leaving the panel while it holds input: what to do once « Abandonner » is chosen (#251). */
   const [leave, setLeave] = useState<(() => void) | null>(null);
   /** Escape, a click outside, « Fermer »: closes at once, or asks first when it holds input. */
@@ -224,9 +161,7 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
         } else close();
       }}
       onClick={(e) => e.target === e.currentTarget && (leave ? stay() : requestLeave(close))}
-      onPointerDownCapture={firstTouch}
       onKeyDownCapture={(e) => {
-        firstTouch();
         // While « Abandonner la saisie ? » is asked, Escape answers « Continuer la saisie ».
         if (leave) {
           if (e.key === "Escape") {
@@ -320,13 +255,8 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
           }}
         />
       )}
-      {/* Every click in an open list, calendar or menu may pick a value. */}
-      <div
-        id={PORTAL_ID}
-        onPointerDownCapture={() => {
-          picked.current = true;
-        }}
-      />
+      {/* Lists, calendars and menus: every click there may pick a value (`useUnsavedInput`). */}
+      <div id={PORTAL_ID} />
     </dialog>
   );
 }

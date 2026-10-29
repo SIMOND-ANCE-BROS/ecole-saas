@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/session";
 import { BackToList } from "@/app/(espace)/_ui/list-return";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { InstructorForm } from "../../instructor-form";
+import { FormPage } from "@/app/(espace)/_ui/form-page";
 
 export const metadata: Metadata = { title: "Modifier un intervenant" };
 
@@ -17,7 +18,7 @@ export default async function UpdateInstructor({ params }: PageProps<"/intervena
   if (!instructor) notFound();
   const name = `${instructor.firstName} ${instructor.name}`;
   return (
-    <section className="flex w-full min-w-0 flex-col gap-4">
+    <FormPage className="flex w-full min-w-0 flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
         <BackToList list="/intervenants" size="sm">
           Intervenants
@@ -35,6 +36,6 @@ export default async function UpdateInstructor({ params }: PageProps<"/intervena
         Modifier {name}
       </Title>
       <InstructorForm instructor={instructor} />
-    </section>
+    </FormPage>
   );
 }

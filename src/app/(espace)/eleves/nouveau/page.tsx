@@ -6,6 +6,7 @@ import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { BackToList } from "../../_ui/list-return";
 import { NewStudentGuide } from "./guide";
+import { FormPage } from "@/app/(espace)/_ui/form-page";
 
 export const metadata: Metadata = { title: "Nouvel élève" };
 
@@ -15,7 +16,7 @@ export default async function NewStudentPage({ searchParams }: PageProps<"/eleve
   const { responsable } = await searchParams;
   const r = typeof responsable === "string" ? await withSchool(schoolId, (tx) => readPerson(tx, responsable)) : null;
   return (
-    <section className="flex flex-col gap-4">
+    <FormPage className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
         <BackToList list="/eleves" size="sm">
           Élèves
@@ -29,6 +30,6 @@ export default async function NewStudentPage({ searchParams }: PageProps<"/eleve
         Nouvel élève
       </Title>
       <NewStudentGuide today={todayInParis()} initialGuardian={r ? { id: r.id, name: displayedName(r) } : undefined} />
-    </section>
+    </FormPage>
   );
 }

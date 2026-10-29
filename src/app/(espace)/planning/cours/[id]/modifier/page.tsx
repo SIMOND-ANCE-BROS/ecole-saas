@@ -10,6 +10,7 @@ import { requireRole } from "@/lib/session";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { CourseForm } from "../../course-form";
 import { coursePlanning } from "../../../course-planning";
+import { FormPage } from "@/app/(espace)/_ui/form-page";
 
 export const metadata: Metadata = { title: "Modifier un cours" };
 
@@ -32,7 +33,7 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
   const { course } = parsed;
 
   return (
-    <section className="flex flex-col gap-4">
+    <FormPage className="flex flex-col gap-4">
       <nav aria-label="Fil d’Ariane" className="text-sm">
         <TextLink href={parsed.planning.href} size="sm">
           {parsed.planning.label}
@@ -59,6 +60,6 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
         schedule={parsed.schedule}
         calendar={parsed.calendar}
       />
-    </section>
+    </FormPage>
   );
 }
