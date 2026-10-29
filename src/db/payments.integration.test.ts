@@ -287,8 +287,8 @@ describe("a payment rejected after its bank deposit (#253)", () => {
       remaining: 12000,
     });
     const [trace] =
-      await admin`SELECT after->>'rejected' AS rejected, after->>'bank_deposit_id' AS deposit, after->>'date' AS date FROM audit_log WHERE row_id = ${r.ids[0]}`;
-    expect(trace).toEqual({ rejected: "true", deposit: depositId, date: "2026-10-20" });
+      await admin`SELECT after->>'rejected' AS rejected, after->>'reversal_kind' AS kind, after->>'bank_deposit_id' AS deposit, after->>'date' AS date FROM audit_log WHERE row_id = ${r.ids[0]}`;
+    expect(trace).toEqual({ rejected: "true", kind: "rejection", deposit: depositId, date: "2026-10-20" });
   });
 
   it("nothing is left to reject once the whole amount is", async () => {
@@ -322,7 +322,8 @@ describe("migration 0037: the kind of the reverse entries written before it (#27
     const from = statements.findIndex((s) => s.includes("DISABLE TRIGGER"));
     const to = statements.findIndex((s) => s.includes("ENABLE TRIGGER"));
     if (from < 0 || to < from) throw new Error("No backfill in migration 0037");
-    const backfill = statements.slice(from, to + 1);
+    // The backfill, the trigger enabled again, then the constraint, which must accept the backfilled rows.
+    const backfill = statements.slice(from);
 
     const ROLLBACK = new Error("rollback");
     let filled: Record<string, unknown>[] = [];

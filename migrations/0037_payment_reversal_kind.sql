@@ -19,6 +19,8 @@ UPDATE "payment" AS "r" SET
   "issuer" = coalesce("r"."issuer", "o"."issuer")
 FROM "payment" AS "o"
 WHERE "o"."school_id" = "r"."school_id"
-  AND "o"."id" = "r"."corrects_id";--> statement-breakpoint
+  AND "o"."id" = "r"."corrects_id"
+  -- Only rows written before this migration: run again, it never reclassifies a newer one.
+  AND "r"."reversal_kind" IS NULL;--> statement-breakpoint
 ALTER TABLE "payment" ENABLE TRIGGER "payment_immutable";--> statement-breakpoint
 ALTER TABLE "payment" ADD CONSTRAINT "payment_reversal_kind" CHECK (("payment"."reversal_kind" IS NULL) = ("payment"."corrects_id" IS NULL));

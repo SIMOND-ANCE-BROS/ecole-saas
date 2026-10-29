@@ -230,6 +230,7 @@ export async function correctPayment(
     method: o.method,
     date,
     corrige_id: paymentId,
+    reversal_kind: deposited ? "rejection" : "correction",
     // The deposit slip keeps the payment as printed; the audit log says which one it was on.
     ...(deposited ? { rejected: true, bank_deposit_id: o.depositId } : {}),
   });
