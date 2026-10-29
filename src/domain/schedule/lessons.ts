@@ -109,3 +109,19 @@ export function courseDates(
   const retained = r.type === "biweekly" ? all.filter((_, i) => i % 2 === 0) : all;
   return retained.filter((date) => open(date, school) && open(date, scoped));
 }
+
+/**
+ * Whether new season dates swap the weeks of a « une semaine sur deux »
+ * course (#270): its alternation is aligned on its first date, which the
+ * season's start moves when the course has no start of its own after it.
+ * Swapped weeks would replace every upcoming lesson of the course.
+ */
+export function biweeklySwapped(r: Recurrence | null, before: Period, after: Period): boolean {
+  if (r?.type !== "biweekly") return false;
+  const first = (season: Period) => {
+    const start = r.startDate && r.startDate > season.start ? r.startDate : season.start;
+    return toDay(lessonDates({ start, end: toIso(toDay(start) + 6 * ONE_DAY), weekday: r.weekday, closures: [] })[0]);
+  };
+  const weeks = Math.round((first(after) - first(before)) / (7 * ONE_DAY));
+  return weeks % 2 !== 0;
+}

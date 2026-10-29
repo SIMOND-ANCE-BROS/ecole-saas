@@ -65,6 +65,7 @@ function plan(opts: {
   return planLessonSync({
     start,
     today: TODAY,
+    season: SEASON,
     expected,
     meets,
     closed,
@@ -430,5 +431,38 @@ describe("lessons removed by a closure (#206)", () => {
     });
     expect(p.remove).toEqual(["a", "b"]);
     expect(p.setAside).toHaveLength(1);
+  });
+});
+
+describe("lessons outside the season's dates (#270)", () => {
+  it("keeps a lesson moved from a date the season no longer has to one it still has", () => {
+    // The season ends on 30 November: the 3 December lesson was moved to Friday 27 November.
+    const moved = lessonOn("2026-11-27", { id: "moved", reference: "2026-12-03", plannedDate: "2026-12-03" });
+    const p = plan({ existing: [...THURSDAYS.map((d) => lessonOn(d)), moved] });
+    expect(p.remove).toEqual([]);
+    expect(p.insert).toEqual([]);
+  });
+
+  it("removes one moved outside the season too, and a plain lesson after its end", () => {
+    const movedOut = lessonOn("2026-12-04", { id: "out", reference: "2026-12-03", plannedDate: "2026-12-03" });
+    const after = lessonOn("2026-12-10", { id: "after" });
+    expect(plan({ existing: [...THURSDAYS.map((d) => lessonOn(d)), movedOut, after] }).remove).toEqual([
+      "out",
+      "after",
+    ]);
+  });
+
+  it("removes the upcoming planned lessons before the season's start", () => {
+    // Today 2 November, the season now starting on 10 November: the 5 November lesson is stale.
+    const p = planLessonSync({
+      start: TODAY,
+      today: TODAY,
+      season: { start: "2026-11-10", end: "2026-11-30" },
+      ...seasonLessons([jazz], { start: "2026-11-10", end: "2026-11-30" }, [], TODAY),
+      existing: THURSDAYS.map((d) => lessonOn(d)),
+      suspended: [],
+      activeInstructors: new Set([T1]),
+    });
+    expect(p.remove).toEqual(["l-2026-11-05"]);
   });
 });

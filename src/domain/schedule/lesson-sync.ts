@@ -105,9 +105,14 @@ export function seasonLessons(
 }
 
 export function planLessonSync(input: {
-  /** First date the sync may change (season start, today, `since`). */
+  /**
+   * First date the sync may change (today, `since`). Not the season's start: upcoming
+   * lessons left before a later start are removed too (#270).
+   */
   start: string;
   today: string;
+  /** The season's dates: a moved lesson still held within them is kept (#270). */
+  season: Period;
   expected: ExpectedLesson[];
   /** Keys `courseId date` of every day each course meets on, closures ignored, over the whole season. */
   meets: ReadonlySet<string>;
@@ -120,7 +125,7 @@ export function planLessonSync(input: {
   /** Only the pack lessons kept on a day of this period are reported (the closure just added). */
   report?: Period;
 }): SyncPlan {
-  const { start, today, expected, meets, existing, suspended, activeInstructors, closed, report } = input;
+  const { start, today, season, expected, meets, existing, suspended, activeInstructors, closed, report } = input;
   const present = new Set(existing.map((e) => keyOf(e.courseId, e.reference)));
   const wanted = new Set(expected.map((a) => keyOf(a.courseId, a.date)));
 
@@ -129,7 +134,14 @@ export function planLessonSync(input: {
       e.reference >= start &&
       e.status === "planned" &&
       !e.attendanceSheet &&
-      !wanted.has(keyOf(e.courseId, e.reference)),
+      !wanted.has(keyOf(e.courseId, e.reference)) &&
+      // Moved (#90) from a date the season no longer has to one it still has: the move stands (#270).
+      !(
+        e.plannedDate !== null &&
+        (e.reference < season.start || e.reference > season.end) &&
+        season.start <= e.date &&
+        e.date <= season.end
+      ),
   );
   // A lesson a pack was counted on is never removed (#225): nothing is lost, the director decides.
   const removed = outdated.filter((e) => !e.packUsage);

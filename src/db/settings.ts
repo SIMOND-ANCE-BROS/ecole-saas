@@ -5,6 +5,8 @@ import type { Hours } from "../domain/schedule/hours";
 import type { Tx } from "./index";
 import { closure, course, discipline, lesson, siteHours, season, room, site } from "./schema";
 import { syncLessons } from "./lessons";
+import { closedCourseLabel } from "../domain/schedule/closure-scope";
+import { biweeklySwapped, recurrenceOf } from "../domain/schedule/lessons";
 import { frenchDate } from "../lib/dates";
 import { issuePath } from "../lib/form-errors";
 
@@ -160,12 +162,50 @@ async function closuresOutside(tx: Tx, seasonId: string, s: z.output<typeof vali
 }
 
 /**
- * New label or dates of a season. The season's upcoming lessons follow the
- * new dates in the same transaction (#270): lessons are created for added
- * weeks, planned ones outside the dates removed, under the rules of
- * `syncLessons` (attendance taken, lesson pack counted: kept). `outside`
- * counts the lessons, not cancelled, still dated outside the new dates
- * afterwards, for the director to move or cancel them.
+ * A new start must not swap the weeks of a « une semaine sur deux » course
+ * aligned on it (#270): every upcoming lesson would be replaced, losing its
+ * substitute or own time. Refused, naming the courses.
+ */
+async function swappedBiweekly(
+  tx: Tx,
+  seasonId: string,
+  before: { start: string; end: string },
+  after: { start: string; end: string },
+): Promise<string | null> {
+  const courses = await tx
+    .select({
+      recurrence: course.recurrence,
+      weekday: course.weekday,
+      startDate: course.startDate,
+      endDate: course.endDate,
+      discipline: discipline.name,
+      level: course.level,
+      startTime: sql<string>`to_char(${course.startTime}, 'HH24:MI')`,
+      room: room.name,
+    })
+    .from(course)
+    .innerJoin(discipline, eq(discipline.id, course.disciplineId))
+    .innerJoin(room, eq(room.id, course.roomId))
+    .where(and(eq(course.seasonId, seasonId), eq(course.recurrence, "biweekly")));
+  const swapped = courses
+    .filter((c) => biweeklySwapped(recurrenceOf({ ...c, dates: [] }), before, after))
+    .map((c) => closedCourseLabel(c))
+    .sort((a, b) => a.localeCompare(b, "fr"));
+  if (swapped.length === 0) return null;
+  return `Décaler le début d’un nombre impair de semaines inverserait les semaines ${
+    swapped.length === 1 ? "de ce cours" : "de ces cours"
+  } une semaine sur deux : ${swapped.join(", ")}. Donnez d’abord une date de début à ${
+    swapped.length === 1 ? "ce cours" : "ces cours"
+  }, ou décalez d’un nombre pair de semaines.`;
+}
+
+/**
+ * New label or dates of a season. When the dates change, the season's
+ * upcoming lessons follow them in the same transaction (#270): lessons are
+ * created for added weeks, planned ones outside the dates removed, under the
+ * rules of `syncLessons` (attendance taken, lesson pack counted: kept).
+ * `outside` counts the lessons, not cancelled, still dated outside the new
+ * dates afterwards, for the director to move or cancel them.
  */
 export async function updateSeason(
   tx: Tx,
@@ -178,9 +218,18 @@ export async function updateSeason(
   if (!isUuid(id)) return { ok: false, message: "Cette saison n’existe plus." };
   // FOR UPDATE conflicts with the KEY SHARE of addClosure(): a closure being added commits first and is
   // checked below, or waits and reads the new dates (#194).
-  const [current] = await tx.select({ id: season.id }).from(season).where(eq(season.id, id)).for("update");
+  const [current] = await tx
+    .select({ start: season.startDate, end: season.endDate })
+    .from(season)
+    .where(eq(season.id, id))
+    .for("update");
   if (!current) return { ok: false, message: "Cette saison n’existe plus." };
-  const refusal = (await checkSeason(tx, s.data, id)) ?? (await closuresOutside(tx, id, s.data));
+  const before = { start: current.start, end: current.end };
+  const after = { start: s.data.startDate, end: s.data.endDate };
+  const refusal =
+    (await checkSeason(tx, s.data, id)) ??
+    (await closuresOutside(tx, id, s.data)) ??
+    (before.start !== after.start ? await swappedBiweekly(tx, id, before, after) : null);
   if (refusal) return { ok: false, message: refusal };
   const rows = await tx
     .update(season)
@@ -188,6 +237,8 @@ export async function updateSeason(
     .where(eq(season.id, id))
     .returning({ id: season.id });
   if (rows.length !== 1) return { ok: false, message: "Cette saison n’existe plus." };
+  // A new label only: the lessons stay as they are.
+  if (before.start === after.start && before.end === after.end) return { ok: true, id, outside: 0 };
   // Same transaction: the FOR NO KEY UPDATE syncLessons() takes is covered by the FOR UPDATE held above.
   await syncLessons(tx, id, today);
   const [{ outside }] = await tx

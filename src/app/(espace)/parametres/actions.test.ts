@@ -109,7 +109,7 @@ describe("settings actions", () => {
     withSchool.mockResolvedValueOnce({ ok: true, id: ID, outside: 1 });
     expect(await actions.changeSeason(ID, entry)).toEqual({
       ok: true,
-      note: "1 séance reste en dehors des nouvelles dates (présences relevées, carnet ou séance passée) : déplacez-la ou annulez-la dans le planning si besoin.",
+      note: "1 séance reste en dehors des nouvelles dates (déjà faite, avec carnet ou déplacée) : déplacez-la ou annulez-la dans le planning si besoin.",
     });
 
     withSchool.mockResolvedValueOnce({ ok: true, id: ID, outside: 3 });

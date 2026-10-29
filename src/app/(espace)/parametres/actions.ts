@@ -82,8 +82,8 @@ export async function newSeason(entry: z.input<typeof validSeasonInput>, copyFro
 function outsideNote(outside: number): string | null {
   if (outside === 0) return null;
   return outside === 1
-    ? "1 séance reste en dehors des nouvelles dates (présences relevées, carnet ou séance passée) : déplacez-la ou annulez-la dans le planning si besoin."
-    : `${outside} séances restent en dehors des nouvelles dates (présences relevées, carnet ou séance passée) : déplacez-les ou annulez-les dans le planning si besoin.`;
+    ? "1 séance reste en dehors des nouvelles dates (déjà faite, avec carnet ou déplacée) : déplacez-la ou annulez-la dans le planning si besoin."
+    : `${outside} séances restent en dehors des nouvelles dates (déjà faites, avec carnet ou déplacées) : déplacez-les ou annulez-les dans le planning si besoin.`;
 }
 
 /** The season's lessons follow its new dates (#270); `note` names those left outside them. */
@@ -96,7 +96,9 @@ export async function changeSeason(
   if (message) return { ok: false, message };
   const r = await withSchool(schoolId, (tx) => updateSeason(tx, id, entry, todayInParis()));
   revalidatePath("/parametres/saisons");
-  revalidatePath("/planning");
+  // Every planning page, and the home page's lessons of the day.
+  revalidatePath("/planning", "layout");
+  revalidatePath("/");
   return r.ok ? { ok: true, note: outsideNote(r.outside) } : { ok: false, message: r.message };
 }
 

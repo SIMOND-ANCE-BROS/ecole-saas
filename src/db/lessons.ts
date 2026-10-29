@@ -345,6 +345,7 @@ export async function syncLessons(
   const plan = planLessonSync({
     start,
     today,
+    season: { start: s.start, end: s.end },
     expected,
     meets,
     existing,
