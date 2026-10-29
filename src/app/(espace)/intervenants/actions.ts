@@ -28,7 +28,7 @@ export type FormState = {
 
 /** Creates (null id) or updates an instructor; management only. */
 export async function saveInstructor(id: string | null, state: FormState, f: FormData): Promise<FormState> {
-  const { schoolId: schoolId } = await requireRole("director");
+  const { schoolId: schoolId, userId } = await requireRole("director");
   const read = (n: InstructorField) => INSTRUCTOR.read(f, n);
   const values = {
     firstName: read("firstName"),
@@ -60,7 +60,7 @@ export async function saveInstructor(id: string | null, state: FormState, f: For
 
   const result = await withSchool(schoolId, async (tx) => {
     if (id === null) return { ok: true as const, id: await createInstructor(tx, parsed.data) };
-    const r = await updateInstructor(tx, id, parsed.data, todayInParis());
+    const r = await updateInstructor(tx, id, parsed.data, todayInParis(), userId);
     return r.ok ? { ok: true as const, id } : r;
   });
   if (!result.ok) return refusal({ form: result.message });

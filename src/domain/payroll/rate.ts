@@ -41,8 +41,10 @@ export const seasonBlocksPayModeChange = (seasonEndDate: string, today: string) 
  * - for a monthly flat instructor, whose pay does not depend on courses;
  * - when the course's rate was typed in another unit than the instructor's
  *   current pay mode (#268): neither that rate nor the default one is assumed;
- * - for any other instructor than the course's (a replacement): which rate a
- *   replacement is paid is an open question (#192), not decided here.
+ * - for any other instructor than the course's: a replacement is paid the
+ *   regular teacher's rate (#192 Q1, settled), so the caller asks with the
+ *   course's own instructor (`priceLesson` in statement.ts), never with the
+ *   substitute.
  */
 export function effectiveRate(course: RatedCourse, instructor: RatedInstructor): number | null {
   if (instructor.id !== course.instructorId || !courseRateAllowed(instructor.payMode)) return null;

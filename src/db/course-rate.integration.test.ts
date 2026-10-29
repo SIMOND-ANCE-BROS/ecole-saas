@@ -402,12 +402,15 @@ describe("instructor rate per course (#191)", () => {
     // The same amount in another unit is another rate (#268).
     await withSchool(school, (tx) => logCourseRate(tx, director, id, after, sameAmountPerLesson));
     await withSchool(school, (tx) => logCourseRate(tx, director, id, sameAmountPerLesson, none));
-    // No rate before nor after: nothing to record, even for a new instructor.
+    // No rate before nor after, same instructor: nothing to record.
+    await withSchool(school, (tx) => logCourseRate(tx, director, id, none, none));
+    // A new instructor without a rate is recorded: the monthly statement flags it (#285).
     await withSchool(school, (tx) => logCourseRate(tx, director, id, none, { ...none, instructorId: flat }));
     expect(await entries()).toEqual([
       { action: "insert", before: null, after, has_actor: true },
       { action: "update", before: after, after: sameAmountPerLesson, has_actor: true },
       { action: "update", before: sameAmountPerLesson, after: none, has_actor: true },
+      { action: "update", before: none, after: { ...none, instructorId: flat }, has_actor: true },
     ]);
   });
 });

@@ -2,6 +2,7 @@
  * Bank deposits and payment log (#98): pure rules, in cents, dates
  * `YYYY-MM-DD`.
  */
+import { csvAmount, csvDocument, csvText } from "../../lib/csv";
 import { frenchDate } from "../../lib/dates";
 
 export const DEPOSIT_METHODS = ["cheque", "cash", "holiday_voucher"] as const;
@@ -59,30 +60,22 @@ export type ExportRow = {
   deposit: string | null;
 };
 
-const amount = (c: number) =>
-  `${c < 0 ? "-" : ""}${Math.floor(Math.abs(c) / 100)},${String(Math.abs(c) % 100).padStart(2, "0")}`;
 const dateFr = (iso: string | null) => (iso ? frenchDate(iso) : "");
-/** Text cell: quoted if needed, and never interpreted as a formula by a spreadsheet. */
-function text(v: string | null): string {
-  let t = v ?? "";
-  if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`;
-  return /[;"\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-}
 
 /** CSV export for accounting: separator « ; », amounts « 123,45 », dates DD/MM/YYYY, BOM for Excel. */
 export function toCsv(rows: ExportRow[]): string {
   const header = ["Date", "Payeur", "Moyen", "Montant", "Référence", "Émetteur", "Encaissement prévu", "Remise"];
-  const body = rows.map((l) =>
-    [
+  return csvDocument(
+    header,
+    rows.map((l) => [
       dateFr(l.date),
-      text(l.payer),
-      text(l.method),
-      amount(l.amountCents),
-      text(l.reference),
-      text(l.issuer),
+      csvText(l.payer),
+      csvText(l.method),
+      csvAmount(l.amountCents),
+      csvText(l.reference),
+      csvText(l.issuer),
       dateFr(l.plannedPayment),
       dateFr(l.deposit),
-    ].join(";"),
+    ]),
   );
-  return `﻿${[header.join(";"), ...body].join("\r\n")}\r\n`;
 }

@@ -46,6 +46,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // A change of rate is kept in the audit log (#285), append-only outside tests.
+  await admin.begin(async (t) => {
+    await t`ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only`;
+    await t`DELETE FROM audit_log WHERE school_id IN (${school}, ${otherSchool})`;
+    await t`ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only`;
+  });
   for (const t of ["course", "room", "site", "discipline", "instructor", "season"]) {
     await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [school, otherSchool]);
   }
@@ -77,6 +83,15 @@ describe("updateInstructor", () => {
       rateCents: 4500,
       active: false,
     });
+    // The change of rate is in the audit log (#285); a save without one adds nothing.
+    await withSchool(school, (tx) => updateInstructor(tx, id, modified, "2026-10-29"));
+    expect(await admin`SELECT action, before, after FROM audit_log WHERE row_id = ${id}`).toEqual([
+      {
+        action: "update",
+        before: { payMode: "hourly", rateCents: 4000 },
+        after: { payMode: "hourly", rateCents: 4500 },
+      },
+    ]);
   });
 
   it("does not update an instructor from another school", async () => {
