@@ -88,7 +88,16 @@ export default async function InstructorsPage({ searchParams }: PageProps<"/inte
             </>
           )
         }
-        actions={isDirector && <ButtonLink href="/intervenants/nouveau">Nouvel intervenant</ButtonLink>}
+        actions={
+          isDirector && (
+            <>
+              <ButtonLink href="/intervenants/releves" variant="default">
+                Relevés du mois
+              </ButtonLink>
+              <ButtonLink href="/intervenants/nouveau">Nouvel intervenant</ButtonLink>
+            </>
+          )
+        }
       />
 
       {confirmed && (

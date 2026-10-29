@@ -611,7 +611,7 @@ export type CourseRateState = {
   instructorRatePayMode: PayMode | null;
 };
 
-/** Records a change of a course's instructor rate in the audit log; nothing when it did not change. */
+/** Records a change of a course's instructor or of their rate for it in the audit log; nothing when neither changed. */
 export async function logCourseRate(
   tx: Tx,
   userId: string,
@@ -622,8 +622,10 @@ export async function logCourseRate(
   const was = before?.instructorRateCents ?? null;
   const sameRate =
     was === after.instructorRateCents && (before?.instructorRatePayMode ?? null) === after.instructorRatePayMode;
-  // A rate kept for a new instructor is a change too; no rate before and after is not.
-  if (sameRate && (was === null || before?.instructorId === after.instructorId)) return;
+  // A change of instructor is kept too, rate or not: the lessons already given were
+  // taught by the old one, and the monthly statement flags it (#285).
+  const sameInstructor = before === null || before.instructorId === after.instructorId;
+  if (sameRate && sameInstructor) return;
   const [who] = await tx.select({ id: member.id }).from(member).where(eq(member.userId, userId));
   await tx.insert(auditLog).values(
     rowsOf(auditLog, [
