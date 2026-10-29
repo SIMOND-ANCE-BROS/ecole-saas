@@ -43,3 +43,13 @@ SECURITY` with the policy `school_isolation`, comparing `school_id` with the
   the PR. Names are English since migration `0027_english_names` (#114):
   column `school_id`, policy `school_isolation`, setting `app.school_id`
   (originally `ecole_id`, `isolation_ecole`, `app.ecole_id`).
+
+## Note (2026-10-29): migration role
+
+`FORCE ROW LEVEL SECURITY` filters the table owner too. Data backfills inside
+migrations (`0019`, `0036`…) run without `app.school_id`, so they only work
+when the migration role is a superuser or has `BYPASSRLS`; otherwise they
+match no row, silently unless a constraint catches it. `DATABASE_ADMIN_URL`
+must therefore connect as such a role, and `npm run db:migrate`
+(`scripts/migrate.ts`) refuses to run otherwise (#279). The decision above is
+unchanged: no policy or `FORCE` flag is relaxed for migrations.
