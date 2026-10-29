@@ -68,8 +68,7 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
   const waitlist = enrolled.filter((i) => i.status === "waitlist").length;
   // Drop-outs still attending until their date (#284): listed, not counted in the headcount.
   const dropping = enrolled.filter((i) => i.status === "dropped").length;
-  // Only a children's course is ever full (#284): the school sets no limit on adult courses.
-  const full = isFull({ enrolled: active, maxCapacity: course.maxCapacity, ageMax: course.ageMax });
+  const full = isFull({ enrolled: active, maxCapacity: course.maxCapacity });
   // « Chaque lundi 17:00–18:00 », « Un mercredi sur deux… », « Le sam. 24 oct., … 10:00–12:00 » (#90).
   const slot = `${recurrenceText(course)}, ${course.startTime}–${end(course.startTime, course.durationMinutes)}`;
   const public_ = [ages(course.ageMin, course.ageMax), course.level].filter(Boolean).join(", ");

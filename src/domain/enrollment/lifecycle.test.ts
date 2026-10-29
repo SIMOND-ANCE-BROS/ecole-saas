@@ -7,9 +7,9 @@ import {
   dropDateBounds,
   dropDateRefusal,
   enrollmentActions,
-  fullCourseAdvice,
   INITIAL_STATUSES,
-  isChildrenCourse,
+  isFull,
+  overfilledCourses,
   onAttendanceSheet,
   onCourseList,
   oneRowPerStudent,
@@ -186,34 +186,28 @@ describe("status at creation", () => {
   });
 });
 
-describe("fullCourseAdvice (Q5 default, children's courses only)", () => {
-  const children = { ageMax: 11 };
-  it("suggests the waitlist when a chosen children's course is full of active enrollments", () => {
-    expect(fullCourseAdvice("active", [{ enrolled: 20, maxCapacity: 20, ...children }])).toBe("suggest_waitlist");
-    expect(
-      fullCourseAdvice("active", [
-        { enrolled: 3, maxCapacity: 20, ...children },
-        { enrolled: 21, maxCapacity: 20, ...children },
-      ]),
-    ).toBe("suggest_waitlist");
+describe("overfilledCourses (Q5 default: a warning, capacity as data)", () => {
+  it("lists a chosen course whose capacity the new enrollment would exceed", () => {
+    const full = { id: "a", enrolled: 20, maxCapacity: 20 };
+    const open = { id: "b", enrolled: 3, maxCapacity: 20 };
+    expect(overfilledCourses("active", [open, full], 1)).toEqual([full]);
+    expect(overfilledCourses("trial", [full], 1)).toEqual([full]);
   });
 
-  it("never calls an adult course full, even at capacity", () => {
-    expect(fullCourseAdvice("active", [{ enrolled: 30, maxCapacity: 20, ageMax: null }])).toBe("none");
-    expect(fullCourseAdvice("active", [{ enrolled: 30, maxCapacity: 20, ageMax: 99 }])).toBe("none");
+  it("warns a couple taking the last place but one", () => {
+    expect(overfilledCourses("active", [{ enrolled: 19, maxCapacity: 20 }], 2)).toHaveLength(1);
+    expect(overfilledCourses("active", [{ enrolled: 19, maxCapacity: 20 }], 1)).toHaveLength(0);
   });
 
-  it("says nothing below capacity, without a capacity, or for a trial or waitlist enrollment", () => {
-    expect(fullCourseAdvice("active", [{ enrolled: 19, maxCapacity: 20, ...children }])).toBe("none");
-    expect(fullCourseAdvice("active", [{ enrolled: 99, maxCapacity: null, ...children }])).toBe("none");
-    expect(fullCourseAdvice("trial", [{ enrolled: 20, maxCapacity: 20, ...children }])).toBe("none");
-    expect(fullCourseAdvice("waitlist", [{ enrolled: 20, maxCapacity: 20, ...children }])).toBe("none");
-    expect(fullCourseAdvice("active", [])).toBe("none");
+  it("never warns for a course without a capacity (adult courses at Ribas), nor for a waitlist enrollment", () => {
+    expect(overfilledCourses("active", [{ enrolled: 99, maxCapacity: null }], 1)).toEqual([]);
+    expect(overfilledCourses("waitlist", [{ enrolled: 20, maxCapacity: 20 }], 1)).toEqual([]);
+    expect(overfilledCourses("active", [], 1)).toEqual([]);
   });
 
-  it("calls a course for children when its age band ends before 18", () => {
-    expect(isChildrenCourse({ ageMax: 17 })).toBe(true);
-    expect(isChildrenCourse({ ageMax: 18 })).toBe(false);
-    expect(isChildrenCourse({ ageMax: null })).toBe(false);
+  it("calls a course full once its active enrollments reach its capacity", () => {
+    expect(isFull({ enrolled: 20, maxCapacity: 20 })).toBe(true);
+    expect(isFull({ enrolled: 19, maxCapacity: 20 })).toBe(false);
+    expect(isFull({ enrolled: 50, maxCapacity: null })).toBe(false);
   });
 });
