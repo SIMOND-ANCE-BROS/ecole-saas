@@ -8,6 +8,7 @@ import { INSTRUCTOR, type InstructorField } from "./fields";
 import { Cancel } from "@/app/(espace)/_panel/panel";
 import { BusinessSearch } from "@/app/(espace)/_ui/business-search";
 import type { Business } from "@/connectors/business-registry/registry";
+import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
 
 type Mode = keyof typeof PAY_UNITS;
 
@@ -30,7 +31,17 @@ function toValues(i: Instructor | null): Record<InstructorField, string> {
 }
 
 export function InstructorForm({ instructor }: { instructor: Instructor | null }) {
-  const action = saveInstructor.bind(null, instructor?.id ?? null);
+  const id = instructor?.id ?? null;
+  // A lost connection keeps what was typed: the form is redrawn from the values sent (#257).
+  const action = (state: FormState, f: FormData) =>
+    orNotSaved(
+      () => saveInstructor(id, state, f),
+      () => ({
+        attempt: state.attempt + 1,
+        errors: { form: NOT_SAVED },
+        values: INSTRUCTOR.readAll(f),
+      }),
+    );
   const [state, send, inProgress] = useActionState<FormState, FormData>(action, {
     attempt: 0,
     errors: {},

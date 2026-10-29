@@ -32,5 +32,20 @@ export async function settle<T extends { ok: boolean }>(call: () => Promise<T>):
   }
 }
 
+/**
+ * `settle` for an action whose answer has another shape (`{ message }`, a form
+ * state…): when the call fails on its own, `failed` builds the answer shown
+ * instead, from which the form keeps what was typed (#257). A redirect or a
+ * « not found » still goes through.
+ */
+export async function orNotSaved<T>(call: () => Promise<T>, failed: () => T): Promise<T> {
+  try {
+    return await call();
+  } catch (e) {
+    unstable_rethrow(e);
+    return failed();
+  }
+}
+
 /** Whether a refusal comes from a call that never got an answer. */
 export const notSent = <T extends { ok: boolean }>(r: T | NotSent): r is NotSent => has(r, "sent") && r.sent === false;

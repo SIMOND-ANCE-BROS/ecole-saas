@@ -3,6 +3,7 @@
 import { Button, Group, Text } from "@mantine/core";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { cancel } from "../../actions";
+import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
 
 export function Print() {
   return <Button onClick={() => window.print()}>Imprimer le bordereau</Button>;
@@ -65,7 +66,18 @@ export function CancelDeposit({ id }: { id: string }) {
         color="red"
         size="compact-sm"
         loading={sending}
-        onClick={() => startTransition(async () => setMessage((await cancel(id)).message))}
+        onClick={() =>
+          startTransition(async () =>
+            setMessage(
+              (
+                await orNotSaved(
+                  () => cancel(id),
+                  () => ({ message: NOT_SAVED }),
+                )
+              ).message,
+            ),
+          )
+        }
       >
         Oui, annuler
       </Button>

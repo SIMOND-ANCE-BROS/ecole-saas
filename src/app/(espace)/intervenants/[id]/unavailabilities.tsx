@@ -5,6 +5,7 @@ import { TimeInput } from "@mantine/dates";
 import { useState, useTransition } from "react";
 import { DateField, refusedDateField } from "@/app/(espace)/_ui/date-field";
 import { addUnavailabilityAction, removeUnavailability } from "../actions";
+import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
 
 export type DisplayedUnavailability = {
   id: string;
@@ -114,7 +115,14 @@ export function Unavailabilities({
                   aria-label={`Retirer l’indisponibilité du ${range(i.start, i.end)}`}
                   onClick={() =>
                     startTransition(async () => {
-                      setMessage((await removeUnavailability(instructorId, i.id)).message);
+                      setMessage(
+                        (
+                          await orNotSaved(
+                            () => removeUnavailability(instructorId, i.id),
+                            () => ({ message: NOT_SAVED }),
+                          )
+                        ).message,
+                      );
                       // The button leaves with its row: focus goes back to the entry, not to the page.
                       focusDate("indispo-du");
                     })
@@ -139,10 +147,10 @@ export function Unavailabilities({
           if (v.toDate && v.toDate < v.fromDate) return refuse("toDate", "La fin doit suivre le début.");
           setDateError(null);
           startTransition(async () => {
-            const { message: error } = await addUnavailabilityAction(instructorId, {
-              ...v,
-              toDate: v.toDate || v.fromDate,
-            });
+            const { message: error } = await orNotSaved(
+              () => addUnavailabilityAction(instructorId, { ...v, toDate: v.toDate || v.fromDate }),
+              () => ({ message: NOT_SAVED }),
+            );
             setMessage(error);
             if (!error) {
               setV({ fromDate: "", toDate: "", fromTime: "", toTime: "", label: "" });

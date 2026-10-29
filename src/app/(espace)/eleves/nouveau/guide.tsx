@@ -23,6 +23,7 @@ import type { DuplicateWithRole, StudentInput } from "@/db/students";
 import type { PersonInput } from "@/db/people";
 import type { FieldErrors, FieldPath } from "@/lib/form-errors";
 import { has } from "@/lib/has";
+import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
 import { ofName } from "@/lib/french";
 
 /** Checked against the server schema: a value renamed on one side fails to compile. */
@@ -102,17 +103,21 @@ export function NewStudentGuide({
   const send = (confirmed: boolean) =>
     startTransition(async () =>
       setRefusal(
-        await createStudentFromGuide(
-          {
-            student: { type: "individual", companyName: "", siren: "", address: "", ...e },
-            guardian: displayedGuardian && guardian ? toInput(guardian) : null,
-            toNotify,
-            billing:
-              chosenBilling === "other"
-                ? { type: "other", payer: payer ? toInput(payer) : null }
-                : { type: chosenBilling },
-          },
-          confirmed,
+        await orNotSaved(
+          () =>
+            createStudentFromGuide(
+              {
+                student: { type: "individual", companyName: "", siren: "", address: "", ...e },
+                guardian: displayedGuardian && guardian ? toInput(guardian) : null,
+                toNotify,
+                billing:
+                  chosenBilling === "other"
+                    ? { type: "other", payer: payer ? toInput(payer) : null }
+                    : { type: chosenBilling },
+              },
+              confirmed,
+            ),
+          () => ({ message: NOT_SAVED, errors: {} }),
         ),
       ),
     );

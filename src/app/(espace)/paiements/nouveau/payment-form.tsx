@@ -7,6 +7,7 @@ import { PAYMENT_METHODS, type Method } from "@/db/payments";
 import { formatEuros, parseEuros, typedEuros } from "@/lib/money";
 import { DateField, refusedDateField } from "../../_ui/date-field";
 import { collectPayments } from "../actions";
+import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
 
 /** `id`: stable key of the row, so removing one keeps the others' fields in place. */
 type Row = { id: number; method: Method; amount: string; reference: string; issuer: string; payment: string };
@@ -80,7 +81,16 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
           plannedPayment: l.method === "cheque" && l.payment ? l.payment : null,
         }));
         setMessage(null);
-        startTransition(async () => setMessage((await collectPayments(payerId, entry, back)).message));
+        startTransition(async () =>
+          setMessage(
+            (
+              await orNotSaved(
+                () => collectPayments(payerId, entry, back),
+                () => ({ message: NOT_SAVED }),
+              )
+            ).message,
+          ),
+        );
       }}
     >
       <Text size="sm">

@@ -20,6 +20,7 @@ import { overlaps } from "@/domain/schedule/overlap";
 import { formatEuros } from "@/lib/money";
 import { deferredQuery } from "@/lib/deferred-query";
 import { preview, enroll, type FormInput } from "./actions";
+import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
 
 const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const AUDIENCES = [
@@ -114,7 +115,16 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
         e.preventDefault();
         if (!canSave) return;
         setRefusal(null);
-        startSend(async () => setRefusal((await enroll(entry)).message));
+        startSend(async () =>
+          setRefusal(
+            (
+              await orNotSaved(
+                () => enroll(entry),
+                () => ({ message: NOT_SAVED }),
+              )
+            ).message,
+          ),
+        );
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canSave) {

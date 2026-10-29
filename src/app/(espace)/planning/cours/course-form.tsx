@@ -15,6 +15,7 @@ import { saveCourse, type Refusal, remove, checkSlot } from "./actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
 import { DateField, refusedDateField } from "@/app/(espace)/_ui/date-field";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
+import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
 
 const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const DURATIONS = [45, 60, 90, 120];
@@ -230,7 +231,14 @@ export function CourseForm({
         e.preventDefault();
         // A date shown as refused is never saved as empty or dropped from the list.
         if (refusedDateField(e.currentTarget)) return;
-        startTransition(async () => setRefusal(await saveCourse(course?.id ?? null, entry, seasonId)));
+        startTransition(async () =>
+          setRefusal(
+            await orNotSaved(
+              () => saveCourse(course?.id ?? null, entry, seasonId),
+              () => ({ message: NOT_SAVED, errors: {} }),
+            ),
+          ),
+        );
       }}
     >
       <Fieldset legend="Cours" className="grid gap-3 sm:grid-cols-2">
@@ -624,7 +632,12 @@ export function CourseForm({
                 loading={sending}
                 onClick={() =>
                   startTransition(async () => {
-                    setRefusal(await remove(course.id));
+                    setRefusal(
+                      await orNotSaved(
+                        () => remove(course.id),
+                        () => ({ message: NOT_SAVED, errors: {} }),
+                      ),
+                    );
                     setConfirm(false);
                   })
                 }

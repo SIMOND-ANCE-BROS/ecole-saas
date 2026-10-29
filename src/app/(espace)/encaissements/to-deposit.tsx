@@ -18,6 +18,7 @@ import { useState, useTransition } from "react";
 import { PAYMENT_METHODS } from "@/db/payments";
 import type { AuditLogRow } from "@/db/deposits";
 import type { DepositMethod } from "@/domain/payments/deposits";
+import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
 import { frenchDate } from "@/lib/dates";
 import { formatEuros } from "@/lib/money";
 import { DateField, refusedDateField } from "../_ui/date-field";
@@ -122,7 +123,14 @@ export function ToDeposit({
           }
           setMessage(null);
           startTransition(async () =>
-            setMessage((await deposit({ date, method: method, paymentIds: selection.map((p) => p.id) })).message),
+            setMessage(
+              (
+                await orNotSaved(
+                  () => deposit({ date, method: method, paymentIds: selection.map((p) => p.id) }),
+                  () => ({ message: NOT_SAVED }),
+                )
+              ).message,
+            ),
           );
         }}
       >

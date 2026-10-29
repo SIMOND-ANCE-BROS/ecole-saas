@@ -8,6 +8,7 @@ import { createContact, updateIdentity, type Refusal } from "./actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
 import { DateField, refusedDateField } from "@/app/(espace)/_ui/date-field";
 import { BusinessSearch } from "@/app/(espace)/_ui/business-search";
+import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
 
 type Props = {
   /** Person being edited; null when creating a contact (a student is created with the guided form). */
@@ -63,7 +64,12 @@ export function PersonForm({ person: person, section: section, proposedName: pro
   const student = section === "eleves";
   const send = (confirmed: boolean) =>
     startTransition(async () =>
-      setRefusal(person ? await updateIdentity(person.id, entry, section) : await createContact(entry, confirmed)),
+      setRefusal(
+        await orNotSaved(
+          () => (person ? updateIdentity(person.id, entry, section) : createContact(entry, confirmed)),
+          () => ({ message: NOT_SAVED, errors: {} }),
+        ),
+      ),
     );
 
   const field = (

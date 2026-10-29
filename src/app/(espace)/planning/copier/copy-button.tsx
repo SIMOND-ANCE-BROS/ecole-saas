@@ -3,6 +3,7 @@
 import { Alert, Button, Group } from "@mantine/core";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useState, useTransition } from "react";
+import { settle } from "@/lib/action-result";
 import { copyPlanning } from "./actions";
 
 /** Confirms the copy reviewed above; on success the planning of the filled season opens. */
@@ -34,7 +35,7 @@ export function CopyButton({
           onClick={() =>
             startTransition(async () => {
               setRefusal(null);
-              const r = await copyPlanning(sourceId, targetId);
+              const r = await settle(() => copyPlanning(sourceId, targetId));
               if (r.ok) router.push(r.planning);
               else setRefusal(r.message);
             })
