@@ -2,7 +2,7 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
 import { addRelationship, searchPeople, updatePerson, updateRelationship, type PersonInput } from "./people";
-import { addGuardian, createStudent, CreationRefusal, setBilling } from "./students";
+import { addGuardian, billTo, createStudent, CreationRefusal, setBilling } from "./students";
 import {
   GUARDIAN_BECOMES_ORGANISATION_REFUSAL,
   GUARDIAN_PERSON_TYPES,
@@ -230,5 +230,56 @@ describe("an organisation still pays for a student", () => {
     expect(r).toEqual({ ok: false, message: REVERSED_GUARDIAN_PAYER_REFUSAL });
     expect(await relationshipOf(student, other)).toMatchObject({ type: "legal_guardian" });
     expect((await relationshipOf(payer, student))?.pays_for).toBe(true);
+  });
+});
+
+describe("a refused billing change keeps the previous « Facturé à » (#269)", () => {
+  const MISSING = "00000000-0000-4000-8000-000000000269";
+
+  it("keeps the previous payer when the new one cannot be found", async () => {
+    const [student, payer] = [await newStudent("Zacharie"), await newStudent("Zélie")];
+    await link(payer, student, "legal_guardian", true);
+    const r = await withSchool(school, (tx) => setBilling(tx, student, { type: "person", id: MISSING }));
+    expect(r).toEqual({ ok: false, message: "Personne introuvable." });
+    expect((await relationshipOf(payer, student))?.pays_for).toBe(true);
+  });
+
+  it("keeps the previous payer when the payer belongs to another school", async () => {
+    const [{ id: other }] =
+      await admin`INSERT INTO school (name, slug) VALUES ('École Zz bis', ${`gz2-${suffix}`}) RETURNING id`;
+    try {
+      const [{ id: foreign }] = await admin`INSERT INTO person (school_id, last_name, first_name)
+        VALUES (${other}, 'Zzailleurs', 'Zoran') RETURNING id`;
+      const [student, payer] = [await newStudent("Zadig"), await newStudent("Zita")];
+      await link(payer, student, "other", true);
+      const r = await withSchool(school, (tx) => setBilling(tx, student, { type: "person", id: foreign as string }));
+      expect(r).toEqual({ ok: false, message: "Personne introuvable." });
+      expect((await relationshipOf(payer, student))?.pays_for).toBe(true);
+    } finally {
+      await admin`DELETE FROM person WHERE school_id = ${other}`;
+      await admin`DELETE FROM school WHERE id = ${other}`;
+    }
+  });
+
+  it("keeps no new payer when billing a student that no longer exists", async () => {
+    const before = await count("person");
+    const r = await withSchool(school, (tx) =>
+      billTo(tx, MISSING, { newPerson: individual({ name: "Zzorphelin", firstName: "Zébulon" }) }),
+    );
+    expect(r).toEqual({ ok: false, message: "Cet élève n’existe plus." });
+    expect(await count("person")).toBe(before);
+  });
+
+  it("still records a new payer when the change is accepted", async () => {
+    const [student, payer] = [await newStudent("Zéa"), await newStudent("Zohra")];
+    await link(payer, student, "legal_guardian", true);
+    const r = await withSchool(school, (tx) =>
+      billTo(tx, student, { newPerson: individual({ name: "Zzpayeur", firstName: "Zeno" }) }),
+    );
+    expect(r).toEqual({ ok: true, id: student });
+    expect((await relationshipOf(payer, student))?.pays_for).toBe(false);
+    const [created] = await admin`SELECT r.type, r.pays_for FROM relationship r JOIN person p ON p.id = r.person_id
+      WHERE r.related_person_id = ${student} AND p.first_name = 'Zeno'`;
+    expect(created).toEqual({ type: "other", pays_for: true });
   });
 });

@@ -14,6 +14,7 @@ import {
   REVERSED_GUARDIAN_PAYER_REFUSAL,
 } from "../domain/people/guardian";
 import { filterCondition, columnOrder } from "./filters";
+import { allOrNothing } from "./all-or-nothing";
 import type { Tx } from "./index";
 import {
   addRelationship,
@@ -519,7 +520,16 @@ export async function createStudent(
  * « Facturé à »: the student themselves, or a person (guardian, relative,
  * organisation). A single payer at a time; the relationship is created if needed.
  */
-export async function setBilling(
+export function setBilling(
+  tx: Tx,
+  studentId: string,
+  target: { type: "self" } | { type: "person"; id: string },
+): Promise<Result> {
+  // The previous payer is cleared before the new one is recorded: a later refusal must restore it (#269).
+  return allOrNothing(tx, (sp) => recordBilling(sp, studentId, target));
+}
+
+async function recordBilling(
   tx: Tx,
   studentId: string,
   target: { type: "self" } | { type: "person"; id: string },
@@ -573,7 +583,17 @@ export async function setBilling(
 }
 
 /** Adds a legal guardian (existing or new); an existing relationship becomes « responsable ». */
-export async function addGuardian(
+export function addGuardian(
+  tx: Tx,
+  studentId: string,
+  guardian: z.input<typeof otherValidPerson>,
+  toNotify: boolean,
+): Promise<Result> {
+  // Every refusal known today comes before the first write; the savepoint keeps it that way if one comes after (#269).
+  return allOrNothing(tx, (sp) => recordGuardian(sp, studentId, guardian, toNotify));
+}
+
+async function recordGuardian(
   tx: Tx,
   studentId: string,
   guardian: z.input<typeof otherValidPerson>,
@@ -583,7 +603,6 @@ export async function addGuardian(
   if (!r.success || !isUuid(studentId)) return { ok: false, message: "Saisie invalide." };
   const [e] = await tx.select({ id: person.id, type: person.type }).from(person).where(eq(person.id, studentId));
   if (!e) return { ok: false, message: "Cet élève n’existe plus." };
-  // Before anything is written: a refusal returned here does not roll back the transaction.
   const refusal = await chosenGuardianRefusal(tx, r.data, e.type);
   if (refusal) return { ok: false, message: refusal };
   const guardianId = await resolve(tx, r.data);
@@ -641,6 +660,10 @@ export async function isStudent(tx: Tx, id: string): Promise<boolean | null> {
 export async function billTo(tx: Tx, studentId: string, payer: unknown): Promise<Result> {
   const p = otherValidPerson.safeParse(payer);
   if (!p.success) return { ok: false, message: "Vérifiez les informations du payeur." };
-  const id = await resolve(tx, p.data);
-  return id ? setBilling(tx, studentId, { type: "person", id }) : { ok: false, message: "Payeur introuvable." };
+  const chosen = p.data;
+  // A new payer is created before the billing change: a refusal of that change must not keep them (#269).
+  return allOrNothing(tx, async (sp): Promise<Result> => {
+    const id = await resolve(sp, chosen);
+    return id ? recordBilling(sp, studentId, { type: "person", id }) : { ok: false, message: "Payeur introuvable." };
+  });
 }

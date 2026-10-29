@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Tx } from ".";
+import { allOrNothing } from "./all-or-nothing";
 import { submission } from "./schema";
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
@@ -79,25 +80,12 @@ export async function once<T extends { ok: true }, F extends Refused>(
   }
   // `create` runs inside a savepoint: a refusal rolls back whatever it wrote before
   // refusing (a new room created before the discipline was refused…), then frees the key.
-  try {
-    const r = await tx.transaction(async () => {
-      const x = await create();
-      if (!x.ok) throw new RefusedInside(x);
-      return x;
-    });
-    // Only technical ids are stored (and the planning link of a course), never personal data.
-    await tx.update(submission).set({ result: r }).where(mine);
-    return r;
-  } catch (e) {
-    if (!(e instanceof RefusedInside)) throw e;
+  const r = await allOrNothing<T | F>(tx, create);
+  if (!r.ok) {
     await tx.delete(submission).where(mine);
-    return e.refusal;
+    return r;
   }
-}
-
-/** Carries a refusal out of the savepoint, so that the savepoint is rolled back. */
-class RefusedInside extends Error {
-  constructor(readonly refusal: Refused) {
-    super("refused");
-  }
+  // Only technical ids are stored (and the planning link of a course), never personal data.
+  await tx.update(submission).set({ result: r }).where(mine);
+  return r;
 }
