@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { columnsOf } from "./columns-of";
 import { z } from "zod";
+import { formatEuros } from "../lib/money";
 import type { Tx } from "./index";
 import { discipline, enrollment, discount, tariff, lessonPackTariff } from "./schema";
 
@@ -18,6 +19,14 @@ export const AUDIENCES = ["child", "adult", "couple", "student"] as const;
 export const PERIODS = ["quarter", "year", "single"] as const;
 export type Audience = (typeof AUDIENCES)[number];
 export type Period = (typeof PERIODS)[number];
+
+/** Highest price or amount accepted in the settings: 10 000,00 €. */
+const MAX_CENTS = 10_000_00;
+const priceCents = z
+  .int({ error: "Prix : un montant en euros" })
+  .min(0, "Prix positif ou nul")
+  .max(MAX_CENTS, `Prix au plus ${formatEuros(MAX_CENTS)}`);
+const audience = z.enum(AUDIENCES, { error: "Public invalide." });
 
 // ---------------------------------------------------------------------------
 // Grid
@@ -78,14 +87,26 @@ export async function seasonGrid(tx: Tx, seasonId: string): Promise<GridRow[]> {
   );
 }
 
-export const validCell = z.object({
-  audience: z.enum(AUDIENCES),
-  combination: z.array(z.int().min(5).max(600)).min(1, "Indiquez au moins un cours").max(6),
-  disciplineId: z.uuid().nullable(),
-  period: z.enum(PERIODS),
-  /** null: remove the price of this cell. */
-  priceCents: z.int().min(0).max(10_000_00).nullable(),
-});
+export const validCell = z.object(
+  {
+    audience,
+    combination: z
+      .array(
+        z
+          .int({ error: "Durée de cours invalide." })
+          .min(5, "Durée de cours d’au moins 5 min")
+          .max(600, "Durée de cours de 10 h au plus"),
+        { error: "Indiquez au moins un cours" },
+      )
+      .min(1, "Indiquez au moins un cours")
+      .max(6, "6 cours au plus"),
+    disciplineId: z.uuid({ error: "Cette discipline n’existe plus." }).nullable(),
+    period: z.enum(PERIODS, { error: "Période invalide." }),
+    /** null: remove the price of this cell. */
+    priceCents: priceCents.nullable(),
+  },
+  { error: "Saisie invalide." },
+);
 
 const sameCase = (seasonId: string, c: z.output<typeof validCell>, combination: number[]) =>
   and(
@@ -174,13 +195,27 @@ export async function readSiblings(tx: Tx, seasonId: string): Promise<Siblings |
 }
 
 export const validSiblings = z
-  .object({
-    rateBps: z.int().min(1).max(10000).nullable(),
-    amountCents: z.int().min(1).max(10_000_00).nullable(),
-    minStudents: z.int().min(2).max(10),
-    audiences: z.array(z.enum(AUDIENCES)).max(AUDIENCES.length),
-    combinableWithMultiDiscipline: z.boolean(),
-  })
+  .object(
+    {
+      rateBps: z
+        .int({ error: "Pourcentage invalide." })
+        .min(1, "Pourcentage d’au moins 0,01 %")
+        .max(10000, "Pourcentage de 100 % au plus")
+        .nullable(),
+      amountCents: z
+        .int({ error: "Montant : un montant en euros" })
+        .min(1, `Montant d’au moins ${formatEuros(1)}`)
+        .max(MAX_CENTS, `Montant au plus ${formatEuros(MAX_CENTS)}`)
+        .nullable(),
+      minStudents: z
+        .int({ error: "Seuil : un nombre entier d’élèves" })
+        .min(2, "Seuil d’au moins 2 élèves")
+        .max(10, "Seuil de 10 élèves au plus"),
+      audiences: z.array(audience, { error: "Public invalide." }).max(AUDIENCES.length, "Public invalide."),
+      combinableWithMultiDiscipline: z.boolean({ error: "Saisie invalide." }),
+    },
+    { error: "Saisie invalide." },
+  )
   .refine(
     (f) => (f.rateBps === null) !== (f.amountCents === null),
     "Indiquez un pourcentage ou un montant, pas les deux.",
@@ -237,11 +272,20 @@ export function listLessonPacks(tx: Tx, seasonId: string): Promise<LessonPackRow
     .orderBy(asc(lessonPackTariff.maxPeople), asc(lessonPackTariff.lessonCount));
 }
 
-export const validLessonPack = z.object({
-  lessonCount: z.int().min(1).max(100),
-  maxPeople: z.int().min(1).max(20),
-  priceCents: z.int().min(0).max(10_000_00),
-});
+export const validLessonPack = z.object(
+  {
+    lessonCount: z
+      .int({ error: "Séances : un nombre entier" })
+      .min(1, "Au moins 1 séance")
+      .max(100, "100 séances au plus"),
+    maxPeople: z
+      .int({ error: "Personnes : un nombre entier" })
+      .min(1, "Au moins 1 personne")
+      .max(20, "20 personnes au plus"),
+    priceCents,
+  },
+  { error: "Saisie invalide." },
+);
 
 /** Creates or updates the price of a lesson pack (lessons, people). */
 export async function saveLessonPack(

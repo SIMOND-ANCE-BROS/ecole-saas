@@ -150,11 +150,18 @@ export function pendingInvitations(tx: Tx, now: Date): Promise<PendingInvitation
     .orderBy(asc(invitation.createdAt));
 }
 
-export const validInvitation = z.object({
-  email: z.email("E-mail invalide").trim().toLowerCase().max(200),
-  name: z.string().trim().min(1, "Nom obligatoire").max(100),
-  role: z.enum(INVITABLE_ROLES),
-});
+export const validInvitation = z.object(
+  {
+    email: z.email("E-mail invalide").trim().toLowerCase().max(200, "E-mail : 200 caractères au plus"),
+    name: z
+      .string({ error: "Nom obligatoire" })
+      .trim()
+      .min(1, "Nom obligatoire")
+      .max(100, "Nom : 100 caractères au plus"),
+    role: z.enum(INVITABLE_ROLES, { error: "Choisissez un rôle." }),
+  },
+  { error: "Saisie invalide." },
+);
 
 /** Invites a person; an invitation still open for the same e-mail is replaced. */
 export async function invite(
