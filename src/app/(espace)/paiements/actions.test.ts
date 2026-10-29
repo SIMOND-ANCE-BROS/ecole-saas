@@ -25,6 +25,7 @@ vi.mock("@/lib/action-result", () => import("../../../lib/action-result"));
 const { correct, collectPayments } = await import("./actions");
 
 const PAYMENT = "8d2c6c1e-3f4a-4b5c-9d6e-7f8091a2b3c4";
+const OPENING = "4d5e6f70-8192-4a3b-8c4d-5e6f70819203";
 const RECORD = "/eleves/1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 // Whatever the browser may send, which the types of the call site never allow.
 const entry = (v: unknown) => v as Parameters<typeof correct>[0];
@@ -52,25 +53,25 @@ describe("correct", () => {
   });
 
   it("refuses an invalid payment id without touching the database", async () => {
-    expect(await correct({ paymentId: "not-a-uuid", amountCents: 1000, back: RECORD })).toEqual(TAMPERED);
+    expect(await correct({ key: OPENING, paymentId: "not-a-uuid", amountCents: 1000, back: RECORD })).toEqual(TAMPERED);
     expect(withSchool).not.toHaveBeenCalled();
   });
 
   it("refuses a zero, negative, fractional or missing amount", async () => {
     for (const amountCents of [0, -500, 12.5, Number.NaN, "1000", null]) {
-      expect(await correct(entry({ paymentId: PAYMENT, amountCents, back: RECORD }))).toEqual(REFUSED);
+      expect(await correct(entry({ key: OPENING, paymentId: PAYMENT, amountCents, back: RECORD }))).toEqual(REFUSED);
     }
     expect(withSchool).not.toHaveBeenCalled();
   });
 
   it("refuses a return path that is not text", async () => {
-    expect(await correct(entry({ paymentId: PAYMENT, amountCents: 1000, back: 42 }))).toEqual(TAMPERED);
+    expect(await correct(entry({ key: OPENING, paymentId: PAYMENT, amountCents: 1000, back: 42 }))).toEqual(TAMPERED);
     expect(withSchool).not.toHaveBeenCalled();
   });
 
   it("passes on the database refusal, such as an amount above what is left", async () => {
     withSchool.mockResolvedValueOnce({ ok: false, message: "Au plus 20,00 € peuvent encore être corrigés." });
-    expect(await correct({ paymentId: PAYMENT, amountCents: 5000, back: RECORD })).toEqual({
+    expect(await correct({ key: OPENING, paymentId: PAYMENT, amountCents: 5000, back: RECORD })).toEqual({
       ok: false,
       message: "Au plus 20,00 € peuvent encore être corrigés.",
     });
@@ -79,14 +80,16 @@ describe("correct", () => {
 
   it("returns ok and refreshes the record and the payment log", async () => {
     withSchool.mockResolvedValueOnce({ ok: true });
-    expect(await correct({ paymentId: PAYMENT, amountCents: 1000, back: RECORD })).toEqual({ ok: true });
+    expect(await correct({ key: OPENING, paymentId: PAYMENT, amountCents: 1000, back: RECORD })).toEqual({ ok: true });
     expect(revalidatePath).toHaveBeenCalledWith(RECORD);
     expect(revalidatePath).toHaveBeenCalledWith("/encaissements");
   });
 
   it("does not refresh a return path that is not a student or contact record", async () => {
     withSchool.mockResolvedValueOnce({ ok: true });
-    expect(await correct({ paymentId: PAYMENT, amountCents: 1000, back: "https://example.test" })).toEqual({
+    expect(
+      await correct({ key: OPENING, paymentId: PAYMENT, amountCents: 1000, back: "https://example.test" }),
+    ).toEqual({
       ok: true,
     });
     expect(revalidatePath).toHaveBeenCalledTimes(1);
@@ -96,15 +99,37 @@ describe("correct", () => {
   it("passes the day a deposited payment was rejected, and no day for a plain correction (#253)", async () => {
     withSchool.mockImplementation((_school, run: (tx: string) => unknown) => run("tx"));
     correctPayment.mockResolvedValue({ ok: true, ids: [] });
-    await correct({ paymentId: PAYMENT, amountCents: 1000, back: RECORD, rejectedOn: "2026-10-20" });
+    await correct({ key: OPENING, paymentId: PAYMENT, amountCents: 1000, back: RECORD, rejectedOn: "2026-10-20" });
     expect(correctPayment).toHaveBeenLastCalledWith("tx", "user-a", PAYMENT, 1000, expect.any(String), "2026-10-20");
-    await correct({ paymentId: PAYMENT, amountCents: 1000, back: RECORD });
+    await correct({ key: OPENING, paymentId: PAYMENT, amountCents: 1000, back: RECORD });
     expect(correctPayment).toHaveBeenLastCalledWith("tx", "user-a", PAYMENT, 1000, expect.any(String), null);
+  });
+
+  it("records through once(), keyed by the form's key, with what was sent (#260)", async () => {
+    withSchool.mockImplementation((_school, run: (tx: string) => unknown) => run("tx"));
+    correctPayment.mockResolvedValue({ ok: true, ids: [] });
+    await correct({ key: OPENING, paymentId: PAYMENT, amountCents: 1000, back: RECORD, rejectedOn: "2026-10-20" });
+    expect(once).toHaveBeenCalledWith(
+      "tx",
+      "payment",
+      OPENING,
+      { paymentId: PAYMENT, amountCents: 1000, rejectedOn: "2026-10-20" },
+      expect.anything(),
+      expect.any(Function),
+    );
+  });
+
+  it("refuses a missing or malformed key without touching the database", async () => {
+    for (const key of [undefined, "not-a-uuid"])
+      expect(await correct(entry({ key, paymentId: PAYMENT, amountCents: 1000, back: RECORD }))).toEqual(TAMPERED);
+    expect(withSchool).not.toHaveBeenCalled();
   });
 
   it("refuses a rejection day that is not a date, in the words of the field", async () => {
     for (const rejectedOn of ["20/10/2026", "2026-02-31", 42])
-      expect(await correct(entry({ paymentId: PAYMENT, amountCents: 1000, back: RECORD, rejectedOn }))).toEqual({
+      expect(
+        await correct(entry({ key: OPENING, paymentId: PAYMENT, amountCents: 1000, back: RECORD, rejectedOn })),
+      ).toEqual({
         ok: false,
         message: "Date du rejet invalide.",
       });

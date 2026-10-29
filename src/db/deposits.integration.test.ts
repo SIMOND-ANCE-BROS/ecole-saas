@@ -1,7 +1,9 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
-import { correctPayment, collect } from "./payments";
+import { correctPayment, collect, PAYMENT_METHODS } from "./payments";
+import { toCsv, totals } from "../domain/payments/deposits";
+import { formatEuros } from "../lib/money";
 import { cancelDeposit, createDeposit, paymentLog, readDeposit, listDeposits, paymentsToDeposit } from "./deposits";
 import { overlapping } from "./overlap.integration-helpers";
 
@@ -245,5 +247,121 @@ describe("deposits saved at the same time as another change (#247)", () => {
     );
     expect(first.ok).toBe(true);
     expect(second).toEqual({ ok: false, message: NOT_DEPOSITABLE });
+  });
+
+  it("a deposit cancelled while a rejection of its cheque is saved: the cancellation is refused (#253)", async () => {
+    const cheque = await newCheque("0253c");
+    const d = await deposit(cheque);
+    if (!d.ok) throw new Error(d.message);
+    const [rejected, cancelled] = await overlapping(
+      admin,
+      (hold) =>
+        withSchool(school, async (tx) => {
+          const r = await correctPayment(tx, director, cheque, 7000, TODAY, TODAY);
+          await hold();
+          return r;
+        }),
+      () => withSchool(school, (tx) => cancelDeposit(tx, director, d.id)),
+    );
+    expect(rejected.ok).toBe(true);
+    expect(cancelled).toEqual({ ok: false, message: REVERSED });
+    expect(await withSchool(school, (tx) => readDeposit(tx, d.id))).toMatchObject({ count: 1, totalCents: 7000 });
+  });
+});
+
+const REVERSED = "Un paiement de cette remise a été rejeté ou corrigé : la remise ne peut plus être annulée.";
+
+describe("a deposited payment rejected (#253)", () => {
+  async function newCheque(reference: string): Promise<string> {
+    const [p] =
+      await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Zzrejet', 'Test') RETURNING id`;
+    const r = await withSchool(school, (tx) =>
+      collect(tx, director, p.id, [
+        { method: "cheque", amountCents: 7000, date: TODAY, reference, issuer: null, plannedPayment: null },
+      ]),
+    );
+    if (!r.ok) throw new Error(r.message);
+    return r.ids[0];
+  }
+  const deposit = async (paymentId: string) => {
+    const d = await withSchool(school, (tx) =>
+      createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [paymentId] }, TODAY),
+    );
+    if (!d.ok) throw new Error(d.message);
+    return d.id;
+  };
+
+  it("partly corrected before the deposit, then rejected for the rest; the deposit can no longer be cancelled", async () => {
+    const cheque = await newCheque("0253d");
+    expect((await withSchool(school, (tx) => correctPayment(tx, director, cheque, 2000, TODAY))).ok).toBe(true);
+    // A correction made before the deposit does not hold the deposit.
+    const first = await deposit(cheque);
+    expect(await withSchool(school, (tx) => readDeposit(tx, first))).toMatchObject({ totalCents: 7000 });
+    expect((await withSchool(school, (tx) => cancelDeposit(tx, director, first))).ok).toBe(true);
+    const second = await deposit(cheque);
+
+    // A bank rejects the whole cheque: only what is left (50,00 €) is accepted.
+    expect(await withSchool(school, (tx) => correctPayment(tx, director, cheque, 4000, TODAY, TODAY))).toEqual({
+      ok: false,
+      message: `Un rejet porte sur tout le montant restant (${formatEuros(5000)}) : rechargez la fiche.`,
+    });
+    const r = await withSchool(school, (tx) => correctPayment(tx, director, cheque, 5000, TODAY, TODAY));
+    expect(r.ok).toBe(true);
+
+    expect(await withSchool(school, (tx) => cancelDeposit(tx, director, second))).toEqual({
+      ok: false,
+      message: REVERSED,
+    });
+    expect(await withSchool(school, (tx) => readDeposit(tx, second))).toMatchObject({ count: 1, totalCents: 7000 });
+  });
+
+  it("the payment log shows the rejection on its own day, nets the totals and exports it", async () => {
+    const older = await newCheque("0253f");
+    const [{ id: payerId }] = await admin`SELECT payer_id AS id FROM payment WHERE id = ${older}`;
+    // Received and deposited on 20/10, rejected on 21/10.
+    const earlier = await withSchool(school, (tx) =>
+      collect(tx, director, payerId, [
+        {
+          method: "cheque",
+          amountCents: 6000,
+          date: "2026-10-20",
+          reference: "0253g",
+          issuer: null,
+          plannedPayment: null,
+        },
+      ]),
+    );
+    if (!earlier.ok) throw new Error(earlier.message);
+    const [received] = earlier.ids;
+    const d = await withSchool(school, (tx) =>
+      createDeposit(tx, director, { date: "2026-10-20", method: "cheque", paymentIds: [received] }, TODAY),
+    );
+    if (!d.ok) throw new Error(d.message);
+    const rejected = await withSchool(school, (tx) => correctPayment(tx, director, received, 6000, TODAY, TODAY));
+    if (!rejected.ok) throw new Error(rejected.message);
+
+    const ofPayer = <T extends { payerId: string }>(rows: T[]) => rows.filter((l) => l.payerId === payerId);
+    const day20 = ofPayer(await withSchool(school, (tx) => paymentLog(tx, "2026-10-20", "2026-10-20", null)));
+    expect(day20.map((l) => l.amountCents)).toEqual([6000]);
+    const day21 = ofPayer(await withSchool(school, (tx) => paymentLog(tx, TODAY, TODAY, null)));
+    expect(day21.map((l) => [l.amountCents, l.reference])).toContainEqual([-6000, "Paiement rejeté"]);
+    const both = ofPayer(await withSchool(school, (tx) => paymentLog(tx, "2026-10-20", TODAY, null)));
+    // The received cheque 0253f (70,00 €) stays; the rejected one nets to zero.
+    expect(totals(both).total).toBe(7000);
+
+    const csv = toCsv(
+      both.map((l) => ({
+        date: l.date,
+        payer: l.payer,
+        method: PAYMENT_METHODS[l.method],
+        amountCents: l.amountCents,
+        reference: l.reference,
+        issuer: l.issuer,
+        plannedPayment: l.plannedPayment,
+        deposit: l.dateDeposit,
+      })),
+    );
+    expect(csv).toContain("21/10/2026;Test Zzrejet;Chèque;-60,00;Paiement rejeté;;;");
+    expect(csv).toContain("20/10/2026;Test Zzrejet;Chèque;60,00;0253g;;;20/10/2026");
   });
 });

@@ -49,11 +49,7 @@ function Correction({ payment: p, back, today }: { payment: PaymentRow; back: st
         paymentId={p.id}
         remaining={remaining}
         back={back}
-        rejection={
-          p.depositedOn
-            ? { label: rejectionLabel(p.method), receivedOn: p.date, depositedOn: p.depositedOn, today }
-            : null
-        }
+        rejection={p.depositedOn ? { label: rejectionLabel(p.method), depositedOn: p.depositedOn, today } : null}
       />
     );
   if (p.correctedCents > 0)

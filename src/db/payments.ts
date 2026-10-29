@@ -15,6 +15,7 @@ import {
   user,
 } from "./schema";
 import { issuePath } from "../lib/form-errors";
+import { formatEuros } from "../lib/money";
 
 /**
  * Payments (#97): payments recorded against the payer, immutable
@@ -145,9 +146,10 @@ export async function collect(
  * Cancels all or part of a payment: negative payment of the same method, linked
  * to the original, within what is not already corrected. A payment already in a
  * bank deposit is rejected instead (#253, recommended rule pending the school's
- * validation): management only, dated `rejectedOn` (the day the bank returned
- * it; today when null), reference « Paiement rejeté », and the deposit slip is
- * left as printed. Any other payment is corrected today, reference « Correction ».
+ * validation): management only, for the whole amount not yet corrected, dated
+ * `rejectedOn` (the day the bank returned it, not before the deposit; today when
+ * null), reference « Paiement rejeté », and the deposit slip is left as printed.
+ * Any other payment is corrected today, reference « Correction ».
  */
 export async function correctPayment(
   tx: Tx,
@@ -159,7 +161,7 @@ export async function correctPayment(
 ): Promise<Result> {
   if (!isUuid(paymentId)) return { ok: false, message: "Ce paiement n’existe plus." };
   if (!Number.isInteger(amountCents) || amountCents <= 0) return { ok: false, message: "Montant invalide" };
-  if (!z.iso.date().safeParse(today).success) return { ok: false, message: "Date invalide" };
+  if (!z.iso.date().safeParse(today).success) return { ok: false, message: "Date invalide." };
   // Two corrections of the same payment wait for each other (#247), so the total read
   // below includes a correction saved at the same moment. NO KEY UPDATE, not UPDATE: the
   // correction's foreign key to this payment takes KEY SHARE, which UPDATE would block.
@@ -177,23 +179,31 @@ export async function correctPayment(
       correctedId: payment.correctsId,
       alreadyCorrected: alreadyCorrected,
       depositId: bankDepositPayment.bankDepositId,
+      depositedOn: bankDeposit.date,
     })
     .from(payment)
     .leftJoin(bankDepositPayment, eq(bankDepositPayment.paymentId, payment.id))
+    .leftJoin(bankDeposit, eq(bankDeposit.id, bankDepositPayment.bankDepositId))
     .where(eq(payment.id, paymentId));
   if (!o || o.amount < 0 || o.correctedId) return { ok: false, message: "Ce paiement ne peut pas être corrigé." };
-  const deposited = o.depositId !== null;
+  const deposited = o.depositedOn !== null;
   // The form asked for a rejection date, but the deposit was cancelled meanwhile.
   if (!deposited && rejectedOn !== null)
     return { ok: false, message: "Ce paiement n’est plus dans une remise en banque : rechargez la fiche." };
-  if (amountCents > o.amount - o.alreadyCorrected)
-    return { ok: false, message: "La correction dépasse le montant encore non corrigé." };
   const who = await memberAndRole(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
   if (deposited && who.role !== "director")
     return { ok: false, message: "Seule la direction peut enregistrer un paiement rejeté après sa remise en banque." };
-  const date = deposited ? (rejectedOn ?? today) : today;
-  const refusal = deposited ? rejectionDateRefusal(date, o.date, today) : null;
+  const remaining = o.amount - o.alreadyCorrected;
+  if (amountCents > remaining) return { ok: false, message: "La correction dépasse le montant encore non corrigé." };
+  // A bank rejects a whole cheque: a rejection is always of everything not yet corrected.
+  if (deposited && amountCents !== remaining)
+    return {
+      ok: false,
+      message: `Un rejet porte sur tout le montant restant (${formatEuros(remaining)}) : rechargez la fiche.`,
+    };
+  const date = o.depositedOn !== null ? (rejectedOn ?? today) : today;
+  const refusal = o.depositedOn !== null ? rejectionDateRefusal(date, o.depositedOn, today) : null;
   if (refusal) return { ok: false, message: refusal };
   const [{ id }] = await tx
     .insert(payment)

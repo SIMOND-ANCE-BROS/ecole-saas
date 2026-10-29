@@ -2,7 +2,7 @@
 
 import { Button, Group, Input, Text } from "@mantine/core";
 import { unstable_rethrow, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { type ReactNode, useEffect, useRef, useState, useTransition } from "react";
 import { rejectionDateRefusal } from "@/domain/payments/rejection";
 import { NOT_SAVED } from "@/lib/action-result";
 import { frenchDate } from "@/lib/dates";
@@ -26,8 +26,7 @@ function refusalOf(amount: string, remaining: number): string | null {
 export type Rejection = {
   /** « Chèque rejeté » or « Paiement rejeté ». */
   label: string;
-  /** Day the payment was received: the rejection cannot come before it. */
-  receivedOn: string;
+  /** Day of the bank deposit: the rejection cannot come before it. */
   depositedOn: string;
   today: string;
 };
@@ -35,8 +34,10 @@ export type Rejection = {
 /**
  * Correcting a payment (management): a payment is never modified, a negative
  * payment is entered instead, at most the amount not yet corrected. A payment
- * already deposited is recorded as rejected on the day the bank returned it;
- * its deposit slip stays as printed and the amount is due again (#253).
+ * already deposited is recorded as rejected, for all that is left, on the day
+ * the bank returned it; its deposit slip stays as printed and the amount is
+ * due again (#253). Each opening of the form sends with its own key: a retry
+ * after a lost response records nothing twice (#260).
  */
 export function CorrectPayment({
   paymentId,
@@ -51,6 +52,7 @@ export function CorrectPayment({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [key, setKey] = useState("");
   const [amount, setAmount] = useState(typedEuros(remaining));
   const [rejectedOn, setRejectedOn] = useState(rejection?.today ?? "");
   // The refusal shows on Enter or when leaving the field, not while typing « 12, ».
@@ -76,7 +78,9 @@ export function CorrectPayment({
         onClick={() => {
           setClosed(false);
           setShown(false);
+          setMessage(null);
           setRejectedOn(rejection?.today ?? "");
+          setKey(crypto.randomUUID());
           setOpen(true);
         }}
       >
@@ -84,13 +88,25 @@ export function CorrectPayment({
       </Button>
     );
   }
-  const refusal = refusalOf(amount, remaining);
+  // A rejection is of everything left (a bank rejects a whole cheque): nothing to type.
+  const cents = rejection ? remaining : parseEuros(amount);
+  const refusal = rejection ? null : refusalOf(amount, remaining);
   const dateRefusal = rejection
     ? rejectedOn === ""
       ? "Indiquez la date du rejet"
-      : rejectionDateRefusal(rejectedOn, rejection.receivedOn, rejection.today)
+      : rejectionDateRefusal(rejectedOn, rejection.depositedOn, rejection.today)
     : null;
   const id = `correction-${paymentId}`;
+  const buttons = (saveLabel: string, props: { mb?: number } = {}): ReactNode => (
+    <>
+      <Button type="submit" variant="default" size="compact-xs" loading={sending} {...props}>
+        {saveLabel}
+      </Button>
+      <Button variant="subtle" size="compact-xs" onClick={close} {...props}>
+        Fermer
+      </Button>
+    </>
+  );
   return (
     <form
       onKeyDown={(e) => {
@@ -103,12 +119,11 @@ export function CorrectPayment({
         e.preventDefault();
         setShown(true);
         if (refusedDateField(e.currentTarget)) return;
-        const cents = parseEuros(amount);
         if (refusal || dateRefusal || !cents) return;
         startTransition(async () => {
           let r;
           try {
-            r = await correct({ paymentId, amountCents: cents, back, rejectedOn: rejection ? rejectedOn : null });
+            r = await correct({ key, paymentId, amountCents: cents, back, rejectedOn: rejection ? rejectedOn : null });
           } catch (e) {
             unstable_rethrow(e);
             setMessage(NOT_SAVED);
@@ -128,75 +143,69 @@ export function CorrectPayment({
         });
       }}
     >
-      {rejection && (
-        <Text size="xs" c="dimmed" mb={4}>
-          Remis en banque le {frenchDate(rejection.depositedOn)} : la remise reste telle quelle, le montant rejeté
-          redevient dû.
-        </Text>
-      )}
-      <Input.Wrapper
-        id={id}
-        label={rejection ? "Montant rejeté (€)" : "Montant de la correction (€)"}
-        description={`Au plus ${formatEuros(remaining)}`}
-        error={shown ? refusal : null}
-        size="xs"
-        // Readable: no smaller than the rest of the table's small text.
-        styles={{ description: { fontSize: "var(--mantine-font-size-xs)" } }}
-      >
-        {/* The buttons sit beside the field, or wrap under it with no extra gap. */}
-        <Group gap="xs" wrap="wrap" align="center">
-          <Input
-            id={id}
-            size="xs"
-            w={110}
-            inputMode="decimal"
-            styles={{ input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } }}
-            value={amount}
-            onChange={(e) => {
-              setAmount(e.currentTarget.value);
-              setShown(false);
-            }}
-            onBlur={() => setShown(true)}
-            // Mantine links it to « Au plus … » and the message through the wrapper's id.
-            error={shown && refusal !== null}
-            autoFocus
-          />
-          {!rejection && (
-            <>
-              <Button type="submit" variant="default" size="compact-xs" loading={sending}>
-                Enregistrer la correction
-              </Button>
-              <Button variant="subtle" size="compact-xs" onClick={close}>
-                Fermer
-              </Button>
-            </>
-          )}
-        </Group>
-      </Input.Wrapper>
-      {rejection && (
-        <Group gap="xs" wrap="wrap" align="flex-end" mt={4}>
-          <DateField
-            label="Rejeté le"
-            size="xs"
-            w={130}
-            required
-            minDate={rejection.receivedOn}
-            maxDate={rejection.today}
-            value={rejectedOn}
-            onChange={(d) => {
-              setRejectedOn(d);
-              setShown(false);
-            }}
-            error={shown ? dateRefusal : null}
-            styles={{ label: { fontSize: "var(--mantine-font-size-xs)" } }}
-          />
-          <Button type="submit" variant="default" size="compact-xs" loading={sending} mb={4}>
-            Enregistrer le rejet
-          </Button>
-          <Button variant="subtle" size="compact-xs" onClick={close} mb={4}>
-            Fermer
-          </Button>
-        </Group>
+      {rejection ? (
+        <>
+          <Text size="xs" c="dimmed" mb={4}>
+            Remis en banque le {frenchDate(rejection.depositedOn)} : la remise reste telle quelle, le montant rejeté
+            redevient dû.
+          </Text>
+          <Text size="xs">
+            Montant rejeté :{" "}
+            <Text span size="xs" fw={600} className="tabular-nums">
+              {formatEuros(remaining)}
+            </Text>
+          </Text>
+          <Group gap="xs" wrap="wrap" align="flex-end" mt={4}>
+            <DateField
+              label="Rejeté le"
+              size="xs"
+              w={130}
+              required
+              autoFocus
+              minDate={rejection.depositedOn}
+              maxDate={rejection.today}
+              value={rejectedOn}
+              onChange={(d) => {
+                setRejectedOn(d);
+                setShown(false);
+              }}
+              error={shown ? dateRefusal : null}
+              styles={{ label: { fontSize: "var(--mantine-font-size-xs)" } }}
+            />
+            {buttons("Enregistrer le rejet", { mb: 4 })}
+          </Group>
+        </>
+      ) : (
+        <Input.Wrapper
+          id={id}
+          label="Montant de la correction (€)"
+          description={`Au plus ${formatEuros(remaining)}`}
+          error={shown ? refusal : null}
+          size="xs"
+          // Readable: no smaller than the rest of the table's small text.
+          styles={{ description: { fontSize: "var(--mantine-font-size-xs)" } }}
+        >
+          {/* The buttons sit beside the field, or wrap under it with no extra gap. */}
+          <Group gap="xs" wrap="wrap" align="center">
+            <Input
+              id={id}
+              size="xs"
+              w={110}
+              inputMode="decimal"
+              styles={{ input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } }}
+              value={amount}
+              onChange={(e) => {
+                setAmount(e.currentTarget.value);
+                setShown(false);
+              }}
+              onBlur={() => setShown(true)}
+              // Mantine links it to « Au plus … » and the message through the wrapper's id.
+              error={shown && refusal !== null}
+              autoFocus
+            />
+            {buttons("Enregistrer la correction")}
+          </Group>
+        </Input.Wrapper>
       )}
       {message && (
         <Text span role="alert" size="xs" c="red">

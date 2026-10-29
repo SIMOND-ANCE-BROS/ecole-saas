@@ -159,6 +159,35 @@ export async function cancelDeposit(tx: Tx, userId: string, id: string): Promise
     .from(bankDeposit)
     .where(eq(bankDeposit.id, id));
   if (!x) return { ok: false, message: "Cette remise n’existe plus." };
+  // Same lock as createDeposit and correctPayment (#247, #253), ordered by id: a rejection
+  // saved at the same moment is seen by the read below, or waits for the cancellation and
+  // then finds the payment no longer deposited. A separate statement, for a fresh snapshot.
+  await tx
+    .select({ id: payment.id })
+    .from(payment)
+    .innerJoin(bankDepositPayment, eq(bankDepositPayment.paymentId, payment.id))
+    .where(eq(bankDepositPayment.bankDepositId, id))
+    .orderBy(asc(payment.id))
+    .for("no key update", { of: payment });
+  // A payment of the deposit rejected (or corrected) after it: the slip was used, it stays.
+  // A partial correction made before the deposit does not count: the slip holds what was left.
+  const [reversed] = await tx
+    .select({ id: payment.id })
+    .from(payment)
+    .innerJoin(bankDepositPayment, eq(bankDepositPayment.paymentId, payment.id))
+    .innerJoin(bankDeposit, eq(bankDeposit.id, bankDepositPayment.bankDepositId))
+    .where(
+      and(
+        eq(bankDepositPayment.bankDepositId, id),
+        sql`EXISTS (SELECT 1 FROM payment c WHERE c.corrects_id = ${payment}.${sql.identifier("id")} AND c.created_at >= ${bankDeposit}.${sql.identifier("created_at")})`,
+      ),
+    )
+    .limit(1);
+  if (reversed)
+    return {
+      ok: false,
+      message: "Un paiement de cette remise a été rejeté ou corrigé : la remise ne peut plus être annulée.",
+    };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
   await tx.delete(bankDeposit).where(eq(bankDeposit.id, id));

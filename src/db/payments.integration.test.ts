@@ -4,6 +4,9 @@ import { withSchool } from "./index";
 import { overlapping } from "./overlap.integration-helpers";
 import { correctPayment, collect, paymentsOf, balanceOf } from "./payments";
 import { createDeposit, paymentsToDeposit, readDeposit } from "./deposits";
+import { once, storedPayments } from "./submissions";
+import { formatEuros } from "../lib/money";
+import { randomUUID } from "node:crypto";
 
 /**
  * Payments (#97), as the application runs them (app_user, RLS). Fictitious data
@@ -57,7 +60,7 @@ afterAll(async () => {
     await t`ALTER TABLE payment ENABLE TRIGGER payment_immutable`;
     await t`ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only`;
   });
-  for (const t of ["enrollment", "season", "person", "member"])
+  for (const t of ["submission", "enrollment", "season", "person", "member"])
     await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [school, otherSchool]);
   await admin`DELETE FROM "user" WHERE id IN (${frontDesk}, ${director})`;
   await admin`DELETE FROM school WHERE id IN (${school}, ${otherSchool})`;
@@ -215,12 +218,21 @@ describe("a payment rejected after its bank deposit (#253)", () => {
     };
     expect(await reject(frontDesk, "2026-10-20")).toEqual(refused);
     expect(await reject(frontDesk, null)).toEqual(refused);
+    // The role comes first: front desk never learns what is left to reject.
+    expect(await reject(frontDesk, null, 1)).toEqual(refused);
   });
 
-  it("refuses a rejection dated before the payment or after today", async () => {
-    expect(await reject(director, "2026-10-09")).toEqual({
+  it("a rejection is of the whole amount left", async () => {
+    expect(await reject(director, "2026-10-20", 5000)).toEqual({
       ok: false,
-      message: "Le rejet ne peut pas précéder la réception du paiement.",
+      message: `Un rejet porte sur tout le montant restant (${formatEuros(12000)}) : rechargez la fiche.`,
+    });
+  });
+
+  it("refuses a rejection dated before the bank deposit or after today", async () => {
+    expect(await reject(director, "2026-10-11")).toEqual({
+      ok: false,
+      message: "Le rejet ne peut pas précéder la remise en banque.",
     });
     expect(await reject(director, "2026-10-22")).toEqual({
       ok: false,
@@ -228,10 +240,20 @@ describe("a payment rejected after its bank deposit (#253)", () => {
     });
   });
 
-  it("management records it on its own date; the deposit slip stays as printed; the amount is due again", async () => {
-    const r = await reject(director, "2026-10-20");
+  it("management records it once on its own date; the deposit slip stays as printed; the amount is due again", async () => {
+    // Sent through once() as the action does: a retry after a lost response records nothing new (#260).
+    const key = randomUUID();
+    const send = () =>
+      withSchool(school, (tx) =>
+        once(tx, "payment", key, { paymentId: id, amountCents: 12000, rejectedOn: "2026-10-20" }, storedPayments, () =>
+          correctPayment(tx, director, id, 12000, TODAY, "2026-10-20"),
+        ),
+      );
+    const r = await send();
     if (!r.ok) throw new Error(r.message);
+    expect(await send()).toEqual(r);
     const rows = await withSchool(school, (tx) => paymentsOf(tx, bounced));
+    expect(rows.filter((p) => p.correctedId === id)).toHaveLength(1);
     expect(rows.find((p) => p.id === r.ids[0])).toMatchObject({
       date: "2026-10-20",
       amountCents: -12000,

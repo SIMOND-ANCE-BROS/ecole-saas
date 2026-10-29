@@ -38,13 +38,15 @@ export async function collectPayments(
 
 /**
  * What the correction form sends: the payment, the amount in cents, the record
- * to refresh and, for a payment already deposited, the day the bank returned it (#253).
+ * to refresh, for a payment already deposited the day the bank returned it (#253),
+ * and the key generated once per opening of the form (#260).
  */
 const validCorrection = z.object({
   paymentId: z.uuid(),
   amountCents: z.number().int().positive(),
   back: z.string().max(200).nullable(),
   rejectedOn: z.iso.date().nullable().default(null),
+  key: z.uuid(),
 });
 
 /** Corrects a payment, or records a deposited one as rejected, with a negative payment: management only. */
@@ -65,9 +67,12 @@ export async function correct(correction: z.input<typeof validCorrection>): Prom
           : "Correction impossible : rechargez la fiche.",
     };
   }
-  const { paymentId, amountCents, back, rejectedOn } = c.data;
+  const { paymentId, amountCents, back, rejectedOn, key } = c.data;
+  // A retry after a lost response returns the first result instead of a second reverse entry.
   const r = await withSchool(schoolId, (tx) =>
-    correctPayment(tx, userId, paymentId, amountCents, todayInParis(), rejectedOn),
+    once(tx, "payment", key, { paymentId, amountCents, rejectedOn }, storedPayments, () =>
+      correctPayment(tx, userId, paymentId, amountCents, todayInParis(), rejectedOn),
+    ),
   );
   if (!r.ok) return actionResult(r);
   const path = safeReturnPath(back);
