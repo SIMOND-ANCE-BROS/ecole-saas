@@ -14,10 +14,10 @@ import {
   REVERSED_GUARDIAN_PAYER_REFUSAL,
 } from "../domain/people/guardian";
 import { filterCondition, columnOrder } from "./filters";
+import { allOrNothing } from "./all-or-nothing";
 import type { Tx } from "./index";
 import {
   addRelationship,
-  allOrNothing,
   searchCondition,
   createPerson,
   payableStudents,
@@ -589,7 +589,7 @@ export function addGuardian(
   guardian: z.input<typeof otherValidPerson>,
   toNotify: boolean,
 ): Promise<Result> {
-  // A new guardian is created before the relationship: a later refusal must not keep them (#269).
+  // Every refusal known today comes before the first write; the savepoint keeps it that way if one comes after (#269).
   return allOrNothing(tx, (sp) => recordGuardian(sp, studentId, guardian, toNotify));
 }
 
@@ -657,12 +657,12 @@ export async function isStudent(tx: Tx, id: string): Promise<boolean | null> {
 }
 
 /** Bill a known person or one just created (organisation, other relative). */
-export function billTo(tx: Tx, studentId: string, payer: unknown): Promise<Result> {
+export async function billTo(tx: Tx, studentId: string, payer: unknown): Promise<Result> {
   const p = otherValidPerson.safeParse(payer);
-  if (!p.success) return Promise.resolve({ ok: false, message: "Vérifiez les informations du payeur." });
+  if (!p.success) return { ok: false, message: "Vérifiez les informations du payeur." };
   const chosen = p.data;
   // A new payer is created before the billing change: a refusal of that change must not keep them (#269).
-  return allOrNothing(tx, async (sp) => {
+  return allOrNothing(tx, async (sp): Promise<Result> => {
     const id = await resolve(sp, chosen);
     return id ? recordBilling(sp, studentId, { type: "person", id }) : { ok: false, message: "Payeur introuvable." };
   });

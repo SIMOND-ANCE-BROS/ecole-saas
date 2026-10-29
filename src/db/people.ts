@@ -390,32 +390,6 @@ export type PersonInput = z.output<typeof validPersonInput>;
 export type Duplicate = { id: string; name: string; telephone: string | null };
 export type Result = { ok: true; id: string } | { ok: false; message: string };
 
-/** Carries a refusal out of the savepoint of `allOrNothing`, so that the savepoint is rolled back. */
-class RefusedInside extends Error {
-  constructor(readonly refusal: { ok: false; message: string }) {
-    super("refused");
-  }
-}
-
-/**
- * Runs a multi-step change inside a savepoint (#269): a returned refusal does
- * not roll back the transaction by itself, so a refusal of `change` undoes
- * whatever it already wrote (a cleared payer, a person just created…), then is
- * returned as is.
- */
-export async function allOrNothing(tx: Tx, change: (tx: Tx) => Promise<Result>): Promise<Result> {
-  try {
-    return await tx.transaction(async (savepoint) => {
-      const r = await change(savepoint);
-      if (!r.ok) throw new RefusedInside(r);
-      return r;
-    });
-  } catch (e) {
-    if (e instanceof RefusedInside) return e.refusal;
-    throw e;
-  }
-}
-
 /** A professional without a named contact takes their company name as name; no birth date for them. */
 const personValues = (f: PersonInput) => ({
   type: f.type,
