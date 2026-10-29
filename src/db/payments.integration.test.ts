@@ -3,6 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
 import { overlapping } from "./overlap.integration-helpers";
 import { correctPayment, collect, paymentsOf, balanceOf } from "./payments";
+import { createDeposit, paymentsToDeposit, readDeposit } from "./deposits";
+import { once, storedPayments } from "./submissions";
+import { formatEuros } from "../lib/money";
+import { randomUUID } from "node:crypto";
 
 /**
  * Payments (#97), as the application runs them (app_user, RLS). Fictitious data
@@ -16,11 +20,13 @@ const admin = postgres(url, { max: 1, onnotice: () => {} });
 
 const suffix = Math.random().toString(36).slice(2, 8);
 const frontDesk = `pai-accueil-${suffix}`;
+const director = `pai-direction-${suffix}`;
 const TODAY = "2026-10-21";
 let school: string;
 let otherSchool: string;
 let payer: string;
 let foreign: string;
+let bounced: string;
 
 beforeAll(async () => {
   [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`pa-${suffix}`}) RETURNING id`;
@@ -28,6 +34,10 @@ beforeAll(async () => {
     await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`pb-${suffix}`}) RETURNING id`;
   await admin`INSERT INTO "user" (id, name, email) VALUES (${frontDesk}, 'Accueil Test', ${`${frontDesk}@exemple.test`})`;
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${frontDesk}, 'front_desk')`;
+  await admin`INSERT INTO "user" (id, name, email) VALUES (${director}, 'Direction Test', ${`${director}@exemple.test`})`;
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${director}, 'director')`;
+  [{ id: bounced }] =
+    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Zzrejet', 'Zoé') RETURNING id`;
   [{ id: payer }] =
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Martin', 'Sophie') RETURNING id`;
   [{ id: foreign }] =
@@ -36,10 +46,12 @@ beforeAll(async () => {
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents) VALUES (${school}, ${s.id}, ${payer}, 'child', 'year', 30000)`;
   await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status) VALUES (${school}, ${s.id}, ${payer}, 'child', 'quarter', 9000, 'dropped')`;
+  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents) VALUES (${school}, ${s.id}, ${bounced}, 'child', 'year', 12000)`;
 });
 
 afterAll(async () => {
   await admin.begin(async (t) => {
+    await t`DELETE FROM bank_deposit WHERE school_id IN (${school}, ${otherSchool})`;
     await t`ALTER TABLE payment DISABLE TRIGGER payment_immutable`;
     await t`ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only`;
     await t`DELETE FROM audit_log WHERE school_id IN (${school}, ${otherSchool})`;
@@ -48,9 +60,9 @@ afterAll(async () => {
     await t`ALTER TABLE payment ENABLE TRIGGER payment_immutable`;
     await t`ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only`;
   });
-  for (const t of ["enrollment", "season", "person", "member"])
+  for (const t of ["submission", "enrollment", "season", "person", "member"])
     await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [school, otherSchool]);
-  await admin`DELETE FROM "user" WHERE id = ${frontDesk}`;
+  await admin`DELETE FROM "user" WHERE id IN (${frontDesk}, ${director})`;
   await admin`DELETE FROM school WHERE id IN (${school}, ${otherSchool})`;
   await admin.end();
 });
@@ -124,7 +136,12 @@ describe("collect", () => {
     });
     const rows = await withSchool(school, (tx) => paymentsOf(tx, payer));
     const correction = rows.find((l) => l.correctedId === ids[0]);
-    expect(correction).toMatchObject({ amountCents: -4000, method: "cheque", enteredBy: "Accueil Test" });
+    expect(correction).toMatchObject({
+      amountCents: -4000,
+      method: "cheque",
+      reference: "Correction",
+      enteredBy: "Accueil Test",
+    });
     expect(rows.find((l) => l.id === ids[0])?.correctedCents).toBe(4000);
     expect(await withSchool(school, (tx) => correctPayment(tx, frontDesk, correction!.id, 100, TODAY))).toEqual({
       ok: false,
@@ -166,5 +183,127 @@ describe("correctPayment under concurrency (#247)", () => {
     expect(second).toEqual({ ok: false, message: "La correction dépasse le montant encore non corrigé." });
     const rows = await withSchool(school, (tx) => paymentsOf(tx, payer));
     expect(rows.find((l) => l.id === id)?.correctedCents).toBe(6000);
+  });
+});
+
+describe("a payment rejected after its bank deposit (#253)", () => {
+  const RECEIVED = "2026-10-10";
+  let id: string;
+  let depositId: string;
+  const reject = (who: string, rejectedOn: string | null, amountCents = 12000) =>
+    withSchool(school, (tx) => correctPayment(tx, who, id, amountCents, TODAY, rejectedOn));
+
+  beforeAll(async () => {
+    const r = await withSchool(school, (tx) =>
+      collect(tx, director, bounced, [{ ...cheque(12000, null, "0253"), date: RECEIVED }]),
+    );
+    if (!r.ok) throw new Error(r.message);
+    [id] = r.ids;
+    const d = await withSchool(school, (tx) =>
+      createDeposit(tx, director, { date: "2026-10-12", method: "cheque", paymentIds: [id] }, TODAY),
+    );
+    if (!d.ok) throw new Error(d.message);
+    depositId = d.id;
+  });
+
+  it("the payment shows as deposited and the payer owes nothing", async () => {
+    expect((await withSchool(school, (tx) => paymentsOf(tx, bounced)))[0]).toMatchObject({ depositedOn: "2026-10-12" });
+    expect((await withSchool(school, (tx) => balanceOf(tx, bounced, TODAY)))?.remaining).toBe(0);
+  });
+
+  it("front desk is refused, with or without a date", async () => {
+    const refused = {
+      ok: false,
+      message: "Seule la direction peut enregistrer un paiement rejeté après sa remise en banque.",
+    };
+    expect(await reject(frontDesk, "2026-10-20")).toEqual(refused);
+    expect(await reject(frontDesk, null)).toEqual(refused);
+    // The role comes first: front desk never learns what is left to reject.
+    expect(await reject(frontDesk, null, 1)).toEqual(refused);
+  });
+
+  it("a rejection is of the whole amount left", async () => {
+    expect(await reject(director, "2026-10-20", 5000)).toEqual({
+      ok: false,
+      message: `Un rejet porte sur tout le montant restant (${formatEuros(12000)}) : rechargez la fiche.`,
+    });
+  });
+
+  it("refuses a rejection dated before the bank deposit or after today", async () => {
+    expect(await reject(director, "2026-10-11")).toEqual({
+      ok: false,
+      message: "Le rejet ne peut pas précéder la remise en banque.",
+    });
+    expect(await reject(director, "2026-10-22")).toEqual({
+      ok: false,
+      message: "Le rejet ne peut pas être daté après aujourd’hui.",
+    });
+  });
+
+  it("management records it once on its own date; the deposit slip stays as printed; the amount is due again", async () => {
+    // Sent through once() as the action does: a retry after a lost response records nothing new (#260).
+    const key = randomUUID();
+    const send = () =>
+      withSchool(school, (tx) =>
+        once(tx, "payment", key, { paymentId: id, amountCents: 12000, rejectedOn: "2026-10-20" }, storedPayments, () =>
+          correctPayment(tx, director, id, 12000, TODAY, "2026-10-20"),
+        ),
+      );
+    const r = await send();
+    if (!r.ok) throw new Error(r.message);
+    expect(await send()).toEqual(r);
+    const rows = await withSchool(school, (tx) => paymentsOf(tx, bounced));
+    expect(rows.filter((p) => p.correctedId === id)).toHaveLength(1);
+    expect(rows.find((p) => p.id === r.ids[0])).toMatchObject({
+      date: "2026-10-20",
+      amountCents: -12000,
+      method: "cheque",
+      reference: "Paiement rejeté",
+      correctedId: id,
+      depositedOn: null,
+      enteredBy: "Direction Test",
+    });
+    expect(rows.find((p) => p.id === id)).toMatchObject({ correctedCents: 12000, depositedOn: "2026-10-12" });
+
+    const slip = await withSchool(school, (tx) => readDeposit(tx, depositId));
+    expect(slip).toMatchObject({ date: "2026-10-12", count: 1, totalCents: 12000 });
+    expect(slip?.payments.map((p) => p.id)).toEqual([id]);
+    // Nothing new to deposit: the rejection is a negative entry, never on a slip.
+    const pending = await withSchool(school, (tx) => paymentsToDeposit(tx, TODAY));
+    expect(
+      Object.values(pending)
+        .flat()
+        .map((p) => p.id),
+    ).not.toContain(r.ids[0]);
+
+    expect(await withSchool(school, (tx) => balanceOf(tx, bounced, TODAY))).toMatchObject({
+      due: 12000,
+      paid: 0,
+      remaining: 12000,
+    });
+    const [trace] =
+      await admin`SELECT after->>'rejected' AS rejected, after->>'bank_deposit_id' AS deposit, after->>'date' AS date FROM audit_log WHERE row_id = ${r.ids[0]}`;
+    expect(trace).toEqual({ rejected: "true", deposit: depositId, date: "2026-10-20" });
+  });
+
+  it("nothing is left to reject once the whole amount is", async () => {
+    expect(await reject(director, TODAY, 1)).toEqual({
+      ok: false,
+      message: "La correction dépasse le montant encore non corrigé.",
+    });
+  });
+
+  it("a payment that is not deposited takes no rejection date and is corrected today", async () => {
+    const r = await withSchool(school, (tx) => collect(tx, director, bounced, [cheque(3000, null, "0254")]));
+    if (!r.ok) throw new Error(r.message);
+    expect(await withSchool(school, (tx) => correctPayment(tx, director, r.ids[0], 3000, TODAY, "2026-10-21"))).toEqual(
+      { ok: false, message: "Ce paiement n’est plus dans une remise en banque : rechargez la fiche." },
+    );
+    const c = await withSchool(school, (tx) => correctPayment(tx, frontDesk, r.ids[0], 3000, TODAY));
+    if (!c.ok) throw new Error(c.message);
+    expect((await withSchool(school, (tx) => paymentsOf(tx, bounced))).find((p) => p.id === c.ids[0])).toMatchObject({
+      date: TODAY,
+      reference: "Correction",
+    });
   });
 });
