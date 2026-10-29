@@ -97,9 +97,9 @@ export function CorrectPayment({
       : rejectionDateRefusal(rejectedOn, rejection.depositedOn, rejection.today)
     : null;
   const id = `correction-${paymentId}`;
-  const buttons = (saveLabel: string, props: { mb?: number } = {}): ReactNode => (
+  const buttons = (saveLabel: string, props: { mb?: number } = {}, focusSave = false): ReactNode => (
     <>
-      <Button type="submit" variant="default" size="compact-xs" loading={sending} {...props}>
+      <Button type="submit" variant="default" size="compact-xs" loading={sending} autoFocus={focusSave} {...props}>
         {saveLabel}
       </Button>
       <Button variant="subtle" size="compact-xs" onClick={close} {...props}>
@@ -161,7 +161,6 @@ export function CorrectPayment({
               size="xs"
               w={130}
               required
-              autoFocus
               minDate={rejection.depositedOn}
               maxDate={rejection.today}
               value={rejectedOn}
@@ -172,7 +171,8 @@ export function CorrectPayment({
               error={shown ? dateRefusal : null}
               styles={{ label: { fontSize: "var(--mantine-font-size-xs)" } }}
             />
-            {buttons("Enregistrer le rejet", { mb: 4 })}
+            {/* Focus on saving, not on the date: its calendar would cover the explanation. Today is the usual day. */}
+            {buttons("Enregistrer le rejet", { mb: 4 }, true)}
           </Group>
         </>
       ) : (
