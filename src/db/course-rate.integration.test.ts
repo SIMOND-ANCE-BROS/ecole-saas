@@ -7,7 +7,7 @@ import {
   courseRate,
   courseRateState,
   coursePay,
-  coursesWithOwnRate,
+  instructorCourseRates,
   createCourse,
   logCourseRate,
   updateCourse,
@@ -259,8 +259,8 @@ describe("instructor rate per course (#191)", () => {
       payMode: "hourly",
       current: false,
     });
-    const listed = await withSchool(school, (tx) => coursesWithOwnRate(tx, teacher));
-    expect(listed.map((c) => [c.rateCents, c.ratePayMode])).toEqual([[4000, "hourly"]]);
+    const listed = (await withSchool(school, (tx) => instructorCourseRates(tx, teacher))).filter((c) => c.rate);
+    expect(listed.map((c) => c.rate)).toEqual([{ cents: 4000, payMode: "hourly" }]);
     expect((await withSchool(school, (tx) => coursePay(tx, old))).rate).toEqual({ cents: 4000, payMode: "hourly" });
 
     // Saved again as the action does it (rate, then audit entry when it changed).
@@ -379,10 +379,10 @@ describe("instructor rate per course (#191)", () => {
     ]);
   });
 
-  it("lists the instructor's courses with their own rate, and pay data, within the school only", async () => {
-    const listed = await withSchool(school, (tx) => coursesWithOwnRate(tx, hourly));
-    expect(listed.every((c) => typeof c.rateCents === "number")).toBe(true);
-    expect(await withSchool(otherSchool, (tx) => coursesWithOwnRate(tx, hourly))).toEqual([]);
+  it("lists the instructor's courses with their own rate if any, and pay data, within the school only", async () => {
+    const listed = await withSchool(school, (tx) => instructorCourseRates(tx, hourly));
+    expect(listed.some((c) => c.rate !== null) && listed.some((c) => c.rate === null)).toBe(true);
+    expect(await withSchool(otherSchool, (tx) => instructorCourseRates(tx, hourly))).toEqual([]);
     const pay = await withSchool(school, (tx) => coursePay(tx, null));
     expect(pay.instructors[hourly]).toEqual({ payMode: "hourly", rateCents: 3000 });
     expect(pay.instructors[otherHourly]).toBeUndefined();
