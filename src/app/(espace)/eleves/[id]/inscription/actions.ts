@@ -6,6 +6,7 @@ import { withSchool } from "@/db";
 import { type Preview, enrollmentPreview, saveEnrollment } from "@/db/enrollments";
 import { currentSeason } from "@/db/schedule";
 import { once, storedEnrollment } from "@/db/submissions";
+import { INITIAL_STATUSES } from "@/domain/enrollment/lifecycle";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 
@@ -15,6 +16,7 @@ const validInput = z.object({
   audience: z.enum(["child", "adult", "couple", "student"]),
   period: z.enum(["quarter", "year", "single"]),
   courseIds: z.array(z.uuid()).max(10),
+  status: z.enum(INITIAL_STATUSES),
 });
 
 export type FormInput = z.infer<typeof validInput>;

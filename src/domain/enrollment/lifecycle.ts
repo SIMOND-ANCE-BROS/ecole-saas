@@ -13,9 +13,15 @@ import type { EnrollmentStatus } from "./statuses";
  * 2. A status change never re-prices another saved enrollment: `discountImpacts` (`./impacts.ts`) only reports it.
  * 3. Only active enrollments count as siblings: `SIBLING_STATUSES` below.
  * 4. The price is recomputed at confirmation: `confirmationPrice` below.
- * 5. A full course is a warning, not a hard limit (enrollment form, to come with the status at creation).
+ * 5. A full course is a warning, not a hard limit: `overfilledCourses` below. Which courses are
+ *    limited is data (`course.max_capacity`): the school limits children's courses only (answers
+ *    on #284), so its adult courses have no capacity. Whether a trial takes a place: assumed yes.
  * 6. A trial never expires on its own: no automatic change exists; confirm or drop by hand.
  */
+
+/** Statuses an enrollment can be created with, the default first (#284). */
+export const INITIAL_STATUSES = ["active", "trial", "waitlist"] as const satisfies readonly EnrollmentStatus[];
+export type InitialStatus = (typeof INITIAL_STATUSES)[number];
 
 /**
  * Allowed changes of status. Dropped and ended are final; cancelling a mistake is not a
@@ -149,4 +155,26 @@ export function oneRowPerStudent<T extends { status: EnrollmentStatus }>(
   }
   const chosen = new Set(best.values());
   return rows.filter((r) => chosen.has(r));
+}
+
+/** A course as the capacity rules read it: its headcount (active enrollments) and capacity, if any. */
+export type CourseLoad = { enrolled: number; maxCapacity: number | null };
+
+/** Whether a course is full: its active enrollments reach its capacity. No capacity: never full. */
+export const isFull = (c: CourseLoad): boolean => c.maxCapacity !== null && c.enrolled >= c.maxCapacity;
+
+/**
+ * Q5 (#284): chosen courses a new enrollment of `added` students (2 for a couple) would take
+ * over capacity, to propose the waitlist; a warning, never a hard limit (saving stays
+ * possible). Also for a trial, which takes a place too; nothing for a waitlist enrollment.
+ * Which courses are limited is data: the school sets `max_capacity` on the courses it limits
+ * (Ribas: children's courses only, adult courses left without a capacity).
+ */
+export function overfilledCourses<T extends CourseLoad>(
+  status: InitialStatus,
+  courses: readonly T[],
+  added: number,
+): T[] {
+  if (status === "waitlist") return [];
+  return courses.filter((c) => c.maxCapacity !== null && c.enrolled + added > c.maxCapacity);
 }

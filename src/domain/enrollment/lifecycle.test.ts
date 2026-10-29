@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   canChange,
   confirmationPrice,
+  countsAsSibling,
   cancelRefusal,
   dropDateBounds,
   dropDateRefusal,
   enrollmentActions,
+  INITIAL_STATUSES,
+  isFull,
+  overfilledCourses,
   onAttendanceSheet,
   onCourseList,
   oneRowPerStudent,
@@ -169,5 +173,41 @@ describe("oneRowPerStudent", () => {
       { student: "c", status: "trial" },
       { student: "d", status: "dropped" },
     ]);
+  });
+});
+
+describe("status at creation", () => {
+  it("offers « Inscrit » first (the default), then trial and waitlist", () => {
+    expect([...INITIAL_STATUSES]).toEqual(["active", "trial", "waitlist"]);
+  });
+
+  it("counts only an active new enrollment as a sibling", () => {
+    expect(INITIAL_STATUSES.filter(countsAsSibling)).toEqual(["active"]);
+  });
+});
+
+describe("overfilledCourses (Q5 default: a warning, capacity as data)", () => {
+  it("lists a chosen course whose capacity the new enrollment would exceed", () => {
+    const full = { id: "a", enrolled: 20, maxCapacity: 20 };
+    const open = { id: "b", enrolled: 3, maxCapacity: 20 };
+    expect(overfilledCourses("active", [open, full], 1)).toEqual([full]);
+    expect(overfilledCourses("trial", [full], 1)).toEqual([full]);
+  });
+
+  it("warns a couple taking the last place but one", () => {
+    expect(overfilledCourses("active", [{ enrolled: 19, maxCapacity: 20 }], 2)).toHaveLength(1);
+    expect(overfilledCourses("active", [{ enrolled: 19, maxCapacity: 20 }], 1)).toHaveLength(0);
+  });
+
+  it("never warns for a course without a capacity (adult courses at Ribas), nor for a waitlist enrollment", () => {
+    expect(overfilledCourses("active", [{ enrolled: 99, maxCapacity: null }], 1)).toEqual([]);
+    expect(overfilledCourses("waitlist", [{ enrolled: 20, maxCapacity: 20 }], 1)).toEqual([]);
+    expect(overfilledCourses("active", [], 1)).toEqual([]);
+  });
+
+  it("calls a course full once its active enrollments reach its capacity", () => {
+    expect(isFull({ enrolled: 20, maxCapacity: 20 })).toBe(true);
+    expect(isFull({ enrolled: 19, maxCapacity: 20 })).toBe(false);
+    expect(isFull({ enrolled: 50, maxCapacity: null })).toBe(false);
   });
 });

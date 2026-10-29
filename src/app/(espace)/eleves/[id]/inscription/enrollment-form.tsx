@@ -17,6 +17,8 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import type { Preview } from "@/db/enrollments";
 import type { ScheduleCourse } from "@/db/schedule";
 import { overlaps } from "@/domain/schedule/overlap";
+import { INITIAL_STATUSES, isFull, overfilledCourses } from "@/domain/enrollment/lifecycle";
+import { ENROLLMENT_STATUS_LABELS } from "@/domain/enrollment/statuses";
 import { deferredQuery } from "@/lib/deferred-query";
 import { preview, enroll, type FormInput } from "./actions";
 import { orConnectionLost } from "@/lib/action-result";
@@ -30,6 +32,9 @@ const AUDIENCES = [
   ["couple", "Couple"],
   ["student", "Étudiant"],
 ] as const;
+const SAVE_BUTTON = "enregistrer-inscription";
+/** What the save button says for an enrollment not committed yet. */
+const STATUS_SAVE = { trial: "l’inscription à l’essai", waitlist: "l’inscription en attente" } as const;
 const PERIODS = [
   ["quarter", "Trimestre"],
   ["year", "Année"],
@@ -50,6 +55,7 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
     initial && initial.age !== null && initial.age >= 18 ? "adult" : "child",
   );
   const [period, setPeriod] = useState<FormInput["period"]>("quarter");
+  const [status, setStatus] = useState<FormInput["status"]>("active");
   const [courseIds, setCourseIds] = useState<string[]>([]);
   const [filter, setFilter] = useState("");
   const [lastPreview, setPreview] = useState<{
@@ -72,8 +78,9 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
       audience: chosenAudience,
       period,
       courseIds,
+      status,
     }),
-    [payerId, studentIds, chosenAudience, period, courseIds],
+    [payerId, studentIds, chosenAudience, period, courseIds, status],
   );
 
   // No price from a previous selection is shown as the current price.
@@ -103,8 +110,11 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
     chosenAges.every((a) => (c.ageMin === null || a >= c.ageMin) && (c.ageMax === null || a <= c.ageMax));
   const sortedCourses = [...visibleCourses.filter(adapted), ...visibleCourses.filter((c) => !adapted(c))];
 
-  // Chosen courses that overlap on the same day.
   const chosen = courses.filter((c) => courseIds.includes(c.id));
+  // Q5 (#284): a course this enrollment would overfill proposes the waitlist, never blocks.
+  const fullCourses = overfilledCourses(status, chosen, Math.max(studentIds.length, 1));
+
+  // Chosen courses that overlap on the same day.
   const overlappingCourses = chosen.flatMap((a, i) =>
     chosen
       .slice(i + 1)
@@ -225,6 +235,20 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
             onChange={(e) => setPeriod(e.currentTarget.value as FormInput["period"])}
           />
         </div>
+
+        <Radio.Group
+          id="statut"
+          label="Statut"
+          description="À l’essai ou en attente : pas encore dû, confirmé plus tard depuis la fiche."
+          value={status}
+          onChange={(v) => setStatus(v as FormInput["status"])}
+        >
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-2">
+            {INITIAL_STATUSES.map((s) => (
+              <Radio key={s} value={s} label={ENROLLMENT_STATUS_LABELS[s]} />
+            ))}
+          </div>
+        </Radio.Group>
 
         <fieldset id="choix-cours" className="flex flex-col gap-2">
           <Text component="legend" size="sm" fw={600} mb={4}>
@@ -354,6 +378,12 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
           <Text size="xs" c="dimmed">
             {chosen.length} cours · {chosen.reduce((total, c) => total + c.durationMinutes, 0)} min par semaine
           </Text>
+          {status !== "active" && (
+            <Text size="xs" fw={500}>
+              {ENROLLMENT_STATUS_LABELS[status]} : rien à régler pour l’instant, le prix sera recalculé à la
+              confirmation.
+            </Text>
+          )}
         </div>
         {calculation && (
           <Text role="status" size="sm" c="dimmed">
@@ -387,7 +417,9 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
             {next.error.message}
           </Text>
         )}
-        {next?.status === "ok" && <PriceDetail price={next} />}
+        {next?.status === "ok" && (
+          <PriceDetail price={next} totalLabel={status === "active" ? "Total" : "Total à la confirmation"} />
+        )}
         {result?.status === "ok" && <DiscountImpacts impacts={result.existingImpacts} />}
         {refusal && (
           <Text role="alert" size="sm" c="red">
@@ -400,8 +432,38 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
           label="Voir les inscriptions de l’élève"
           safeRetry
         />
-        <Button type="submit" disabled={!canSave} loading={sending}>
-          Enregistrer l’inscription
+        {fullCourses.length > 0 && (
+          <Alert role="status" color="yellow" p="xs">
+            <Text size="sm" fw={500}>
+              {fullCourses.some(isFull)
+                ? fullCourses.length > 1
+                  ? "Ces cours sont complets"
+                  : "Ce cours est complet"
+                : "Plus assez de places"}{" "}
+              : inscrire en attente ?
+            </Text>
+            <Text size="xs">
+              {fullCourses
+                .map((c) => `${c.discipline} ${c.weekday ? DAYS[c.weekday].toLowerCase() : ""} ${c.startTime}`)
+                .join(" ; ")}
+              . « Inscrit » reste possible.
+            </Text>
+            <Button
+              size="compact-sm"
+              variant="default"
+              mt="xs"
+              onClick={() => {
+                setStatus("waitlist");
+                // The alert goes with its button: focus moves on to saving.
+                requestAnimationFrame(() => document.getElementById(SAVE_BUTTON)?.focus());
+              }}
+            >
+              Inscrire en attente
+            </Button>
+          </Alert>
+        )}
+        <Button id={SAVE_BUTTON} type="submit" disabled={!canSave} loading={sending}>
+          {status === "active" ? "Enregistrer l’inscription" : `Enregistrer ${STATUS_SAVE[status]}`}
         </Button>
         <Text size="xs" c="dimmed">
           Vérifiez le prix avant d’enregistrer. Aucun paiement n’est encaissé à cette étape.
