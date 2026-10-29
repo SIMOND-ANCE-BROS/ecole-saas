@@ -8,7 +8,8 @@ import { validInvitation } from "./team";
  * Settings and tariff refusals reach the user as they are (#250): every
  * message must be French and say what to fix, never Zod's English default.
  */
-const ENGLISH = /invalid (input|type)|expected|too (big|small)|must|string|number|received|nan/i;
+// « invalide » is French; Zod's « Invalid UUID / email / ISO date » defaults are caught by `\binvalid\b`.
+const ENGLISH = /\binvalid\b|expected|too (big|small)|must|string|number|received|\bnan\b/i;
 
 const UUID = "00000000-0000-4000-8000-000000000000";
 const long = (n: number) => "a".repeat(n);
@@ -141,6 +142,8 @@ const cases: [string, z.ZodType, unknown[]][] = [
       { email: "zz@exemple.fr", name: "", role: "front_desk" },
       { email: "zz@exemple.fr", name: long(101), role: "front_desk" },
       { email: "zz@exemple.fr", name: "Zz Test", role: "admin" },
+      // A teacher account is never created by invitation.
+      { email: "zz@exemple.fr", name: "Zz Test", role: "teacher" },
     ],
   ],
 ];
@@ -163,18 +166,33 @@ describe("settings and tariff validation messages", () => {
     if (!r.success) expect(r.error.issues[0].message).toMatch(/^Prix au plus 10\s000,00\s€$/u);
   });
 
-  it("still accepts valid input", () => {
-    expect(validName.safeParse("Jazz").success).toBe(true);
-    expect(validRoomInput.safeParse({ siteId: UUID, name: "Salle 1", capacity: null }).success).toBe(true);
-    expect(validLessonPack.safeParse({ lessonCount: 10, maxPeople: 4, priceCents: 1_000_000 }).success).toBe(true);
-    expect(
-      validSiblings.safeParse({
-        rateBps: 1000,
-        amountCents: null,
-        minStudents: 2,
-        audiences: ["child"],
-        combinableWithMultiDiscipline: false,
-      }).success,
-    ).toBe(true);
+  it("still accepts every boundary value", () => {
+    const cell = { audience: "child", combination: [60], disciplineId: null, period: "year", priceCents: 1000 };
+    const siblings = {
+      rateBps: 1000,
+      amountCents: null,
+      minStudents: 2,
+      audiences: ["child"],
+      combinableWithMultiDiscipline: false,
+    };
+    const accepted: [z.ZodType, unknown][] = [
+      [validName, "Jazz"],
+      [validName, long(100)],
+      [validRoomInput, { siteId: UUID, name: "Salle 1", capacity: null }],
+      [validRoomInput, { siteId: UUID, name: "Salle 1", capacity: 1 }],
+      [validRoomInput, { siteId: UUID, name: "Salle 1", capacity: 1000 }],
+      [validHours, [{ weekday: 1, opening: "09:00", closure: "12:00" }]],
+      [validHours, [{ weekday: 7, opening: "09:00", closure: "12:00" }]],
+      [validHours, Array.from({ length: 7 }, (_, i) => ({ weekday: i + 1, opening: "09:00", closure: "12:00" }))],
+      [validCell, { ...cell, priceCents: 0 }],
+      [validCell, { ...cell, priceCents: 1_000_000 }],
+      [validCell, { ...cell, combination: [5, 600] }],
+      [validCell, { ...cell, combination: [60, 60, 60, 60, 60, 60] }],
+      [validLessonPack, { lessonCount: 10, maxPeople: 4, priceCents: 0 }],
+      [validLessonPack, { lessonCount: 10, maxPeople: 4, priceCents: 1_000_000 }],
+      [validSiblings, siblings],
+      [validSiblings, { ...siblings, rateBps: 10000, minStudents: 10 }],
+    ];
+    for (const [schema, input] of accepted) expect(schema.safeParse(input).success, JSON.stringify(input)).toBe(true);
   });
 });

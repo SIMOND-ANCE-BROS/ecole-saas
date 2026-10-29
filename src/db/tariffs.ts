@@ -26,7 +26,7 @@ const priceCents = z
   .int({ error: "Prix : un montant en euros" })
   .min(0, "Prix positif ou nul")
   .max(MAX_CENTS, `Prix au plus ${formatEuros(MAX_CENTS)}`);
-const audience = z.enum(AUDIENCES, { error: "Public invalide." });
+const audience = z.enum(AUDIENCES, { error: "Public invalide" });
 
 // ---------------------------------------------------------------------------
 // Grid
@@ -93,15 +93,15 @@ export const validCell = z.object(
     combination: z
       .array(
         z
-          .int({ error: "Durée de cours invalide." })
-          .min(5, "Durée de cours d’au moins 5 min")
-          .max(600, "Durée de cours de 10 h au plus"),
+          .int({ error: "Durée de cours invalide" })
+          .min(5, "Durée de cours d’au moins 5 min")
+          .max(600, "Durée de cours de 10 h au plus"),
         { error: "Indiquez au moins un cours" },
       )
       .min(1, "Indiquez au moins un cours")
       .max(6, "6 cours au plus"),
     disciplineId: z.uuid({ error: "Cette discipline n’existe plus." }).nullable(),
-    period: z.enum(PERIODS, { error: "Période invalide." }),
+    period: z.enum(PERIODS, { error: "Période invalide" }),
     /** null: remove the price of this cell. */
     priceCents: priceCents.nullable(),
   },
@@ -198,9 +198,9 @@ export const validSiblings = z
   .object(
     {
       rateBps: z
-        .int({ error: "Pourcentage invalide." })
-        .min(1, "Pourcentage d’au moins 0,01 %")
-        .max(10000, "Pourcentage de 100 % au plus")
+        .int({ error: "Pourcentage invalide" })
+        .min(1, "Pourcentage d’au moins 0,01 %")
+        .max(10000, "Pourcentage de 100 % au plus")
         .nullable(),
       amountCents: z
         .int({ error: "Montant : un montant en euros" })
@@ -211,7 +211,7 @@ export const validSiblings = z
         .int({ error: "Seuil : un nombre entier d’élèves" })
         .min(2, "Seuil d’au moins 2 élèves")
         .max(10, "Seuil de 10 élèves au plus"),
-      audiences: z.array(audience, { error: "Public invalide." }).max(AUDIENCES.length, "Public invalide."),
+      audiences: z.array(audience, { error: "Public invalide" }).max(AUDIENCES.length, "Public invalide"),
       combinableWithMultiDiscipline: z.boolean({ error: "Saisie invalide." }),
     },
     { error: "Saisie invalide." },

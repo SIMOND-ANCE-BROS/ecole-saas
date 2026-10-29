@@ -329,13 +329,13 @@ export const validHours = z
   .array(
     z.object(
       {
-        weekday: z.int({ error: "Jour invalide." }).min(1, "Jour invalide.").max(7, "Jour invalide."),
+        weekday: z.int({ error: "Jour invalide" }).min(1, "Jour invalide").max(7, "Jour invalide"),
         opening: timePattern,
         closure: timePattern,
       },
-      { error: "Horaires invalides." },
+      { error: "Horaires invalides" },
     ),
-    { error: "Horaires invalides." },
+    { error: "Horaires invalides" },
   )
   .max(7, "7 jours au plus")
   .refine((h) => new Set(h.map((x) => x.weekday)).size === h.length, "Un même jour est saisi deux fois.")
@@ -367,12 +367,12 @@ export async function saveHours(tx: Tx, siteId: string, entry: z.input<typeof va
 
 export const validRoomInput = z.object(
   {
-    siteId: z.uuid({ error: "Choisissez un site." }),
+    siteId: z.uuid({ error: "Choisissez un site" }),
     name: validName,
     capacity: z
       .int({ error: "Capacité : un nombre entier de personnes" })
       .min(1, "Capacité d’au moins 1 personne")
-      .max(1000, "Capacité de 1 000 personnes au plus")
+      .max(1000, "Capacité de 1 000 personnes au plus")
       .nullable(),
   },
   { error: "Saisie invalide." },
