@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { effectiveRequirements, missingDocuments } from "../domain/people/documents";
+import { effectiveRequirements, missingDocuments, validUntilFor } from "../domain/people/documents";
 import { withSchool } from "./index";
 import {
   firstEnrollmentDate,
@@ -152,27 +152,65 @@ describe("requirements", () => {
 });
 
 describe("documents of a student", () => {
-  it("« Reçu aujourd’hui » records the document once, valid as the school's setting says, and logs it", async () => {
-    expect(await as((tx) => receiveToday(tx, desk, zoe, "medical_certificate", TODAY))).toEqual({ ok: true });
-    expect(await as((tx) => receiveToday(tx, desk, zoe, "medical_certificate", TODAY))).toEqual({ ok: true });
+  it("records a certificate valid three years from its own date (the school's example), once, in the audit log", async () => {
+    // Handed in today, dated 2025-09-10: valid until 2028-09-09, whatever the day it was brought.
+    const certificate = {
+      type: "medical_certificate",
+      receivedOn: TODAY,
+      datedOn: "2025-09-10",
+      validUntil: validUntilFor("2025-09-10", 36),
+      granted: true,
+    } as const;
+    expect(certificate.validUntil).toBe("2028-09-09");
+    // Two people saving it at the same time: one row, and the audit log sees the state each one replaced.
+    const saves = await Promise.all([
+      as((tx) => saveDocument(tx, desk, zoe, certificate, TODAY)),
+      as((tx) => saveDocument(tx, desk, zoe, certificate, TODAY)),
+    ]);
+    expect(saves).toEqual([{ ok: true }, { ok: true }]);
     const docs = await as((tx) => studentDocuments(tx, zoe));
     expect(docs).toEqual([
       {
         id: expect.any(String),
         type: "medical_certificate",
         receivedOn: TODAY,
+        datedOn: "2025-09-10",
         granted: true,
-        validUntil: "2029-10-28",
+        validUntil: "2028-09-09",
       },
     ]);
     const log = await auditOf(docs[0].id);
     expect(log.map((l) => l.action)).toEqual(["insert", "update"]);
     expect(log[0]).toMatchObject({ before: null, has_actor: true });
+    expect(log[1].before).toMatchObject({ datedOn: "2025-09-10" });
     expect(log[0].after).toMatchObject({ studentId: zoe, type: "medical_certificate", receivedOn: TODAY });
   });
 
+  it("needs the date of a document whose validity runs from it: no one-click receipt", async () => {
+    expect(await as((tx) => receiveToday(tx, desk, alex, "medical_certificate", TODAY))).toEqual({
+      ok: false,
+      message: "Indiquez la date du document.",
+    });
+    expect(await as((tx) => studentDocuments(tx, alex))).toEqual([]);
+  });
+
+  it("records documents of students only, not of their contacts", async () => {
+    const [{ id: parent }] = await admin`INSERT INTO person (school_id, last_name, first_name)
+      VALUES (${school}, 'Zzdoc', 'Parent') RETURNING id`;
+    expect(await as((tx) => receiveToday(tx, desk, parent, "image_rights", TODAY))).toEqual({
+      ok: false,
+      message: "Cet élève n’existe plus.",
+    });
+  });
+
   it("corrects the dates and the family's answer, keeping the previous state in the audit log", async () => {
-    const entry = { type: "image_rights", receivedOn: "2026-09-12", validUntil: null, granted: false } as const;
+    const entry = {
+      type: "image_rights",
+      receivedOn: "2026-09-12",
+      datedOn: null,
+      validUntil: null,
+      granted: false,
+    } as const;
     expect(await as((tx) => saveDocument(tx, desk, zoe, entry, TODAY))).toEqual({ ok: true });
     const fixed = { ...entry, granted: true };
     expect(await as((tx) => saveDocument(tx, desk, zoe, fixed, TODAY))).toEqual({ ok: true });
@@ -183,8 +221,8 @@ describe("documents of a student", () => {
     expect(log[1].after).toMatchObject({ granted: true });
   });
 
-  it("refuses a reception date in the future or a validity ending before it, in French", async () => {
-    const base = { type: "parental_consent", granted: true, validUntil: null } as const;
+  it("refuses a reception date in the future, a document dated after it or a validity ending before its date", async () => {
+    const base = { type: "parental_consent", granted: true, datedOn: null, validUntil: null } as const;
     expect(await as((tx) => saveDocument(tx, desk, zoe, { ...base, receivedOn: "2026-10-30" }, TODAY))).toEqual({
       ok: false,
       message: "La date de réception ne peut pas être dans le futur.",
@@ -193,7 +231,12 @@ describe("documents of a student", () => {
       await as((tx) =>
         saveDocument(tx, desk, zoe, { ...base, receivedOn: "2026-10-01", validUntil: "2026-09-01" }, TODAY),
       ),
-    ).toEqual({ ok: false, message: "La fin de validité doit suivre la réception." });
+    ).toEqual({ ok: false, message: "La fin de validité doit suivre la date du document." });
+    expect(
+      await as((tx) =>
+        saveDocument(tx, desk, zoe, { ...base, receivedOn: "2026-10-01", datedOn: "2026-10-02" }, TODAY),
+      ),
+    ).toEqual({ ok: false, message: "Le document ne peut pas être daté après sa réception." });
   });
 
   it("removes a document entered by mistake; the audit log keeps it", async () => {
@@ -232,7 +275,11 @@ describe("« Documents manquants » on the students list", () => {
   });
 
   it("matches the domain rule, expiry included", async () => {
+    // Expired yesterday: the same 15 days to renew it, not late yet.
     await admin`UPDATE student_document SET valid_until = '2026-10-28' WHERE student_id = ${zoe} AND type = 'medical_certificate'`;
+    expect((await missingColumn()).Zoé).toEqual([]);
+    // Expired on 2026-10-01: due by 2026-10-17, late today.
+    await admin`UPDATE student_document SET valid_until = '2026-10-01' WHERE student_id = ${zoe} AND type = 'medical_certificate'`;
     const requirements = await as((tx) => readRequirements(tx));
     const documents = await as((tx) => studentDocuments(tx, zoe));
     const enrolledOn = await as((tx) => firstEnrollmentDate(tx, zoe, season));

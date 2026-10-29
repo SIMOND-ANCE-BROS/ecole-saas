@@ -366,6 +366,8 @@ export const studentDocument = pgTable(
     granted: boolean("granted").notNull().default(true),
     // NULL: recorded before #287, date unknown.
     receivedOn: date("received_on"),
+    // Date written on the document (a certificate's): its validity runs from it.
+    datedOn: date("dated_on"),
     validUntil: date("valid_until"),
     file: text("file"),
   },

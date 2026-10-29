@@ -21,6 +21,7 @@ const all = defaults.map((r) => ({ ...r, required: true }));
 const doc = (type: ReceivedDocument["type"], fields: Partial<ReceivedDocument> = {}): ReceivedDocument => ({
   type,
   receivedOn: "2026-09-10",
+  datedOn: null,
   granted: true,
   validUntil: null,
   ...fields,
@@ -55,7 +56,8 @@ describe("validUntilFor", () => {
   });
 
   it("stays within the month (29 February)", () => {
-    expect(validUntilFor("2028-02-29", 12)).toBe("2029-02-27");
+    expect(validUntilFor("2028-02-29", 12)).toBe("2029-02-28");
+    expect(validUntilFor("2028-02-29", 48)).toBe("2032-02-28");
     expect(validUntilFor("2027-03-01", 12)).toBe("2028-02-29");
   });
 
@@ -120,8 +122,18 @@ describe("documentsToBring", () => {
     expect(documentsToBring({ ...base, documents: [], enrolledOn: null })).toEqual([]);
   });
 
-  it("asks again for an expired certificate, overdue when the enrollment is older than the delay", () => {
+  it("gives a certificate expiring mid-season the same delay from the day it expired", () => {
     const documents = [doc("medical_certificate", { validUntil: "2026-10-01" })];
+    expect(documentsToBring({ ...base, documents, enrolledOn: "2026-09-05" })).toEqual([
+      { type: "medical_certificate", dueOn: "2026-10-17", overdue: true },
+    ]);
+    expect(documentsToBring({ ...base, documents, enrolledOn: "2026-09-05", today: "2026-10-10" })).toEqual([
+      { type: "medical_certificate", dueOn: "2026-10-17", overdue: false },
+    ]);
+  });
+
+  it("counts from the enrollment when the certificate had already expired then", () => {
+    const documents = [doc("medical_certificate", { validUntil: "2026-06-30" })];
     expect(documentsToBring({ ...base, documents, enrolledOn: "2026-09-05" })).toEqual([
       { type: "medical_certificate", dueOn: "2026-09-20", overdue: true },
     ]);

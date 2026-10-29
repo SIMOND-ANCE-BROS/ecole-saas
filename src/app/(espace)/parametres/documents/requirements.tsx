@@ -58,7 +58,7 @@ export function Requirements({ requirements }: { requirements: Requirement[] }) 
             <Fieldset variant="unstyled" legend={<span className="font-semibold">{label}</span>}>
               <div className="flex flex-col gap-3 pt-2">
                 <Checkbox
-                  label={`Demander : ${label.toLowerCase()}`}
+                  label="Demander ce document"
                   checked={r.required}
                   onChange={(e) => change(r.type, { required: e.currentTarget.checked })}
                 />
@@ -74,6 +74,7 @@ export function Requirements({ requirements }: { requirements: Requirement[] }) 
                 </Radio.Group>
                 <NumberInput
                   label="Valable (mois)"
+                  disabled={!r.required}
                   description="À partir de la date du document. Vide : sans limite."
                   min={1}
                   max={VALIDITY_MONTHS_MAX}
@@ -81,19 +82,20 @@ export function Requirements({ requirements }: { requirements: Requirement[] }) 
                   allowNegative={false}
                   // No silent correction on blur: the server says what is wrong.
                   clampBehavior="none"
-                  className="w-48"
+                  classNames={{ input: "w-48" }}
                   value={r.validity}
                   onChange={(v) => change(r.type, { validity: String(v) })}
                 />
                 <NumberInput
-                  label="À fournir dans les (jours)"
+                  label="Délai pour le fournir (jours)"
+                  disabled={!r.required}
                   description="Délai après l’inscription ; passé ce délai, le document est en retard."
                   min={0}
                   max={DUE_WITHIN_DAYS_MAX}
                   allowDecimal={false}
                   allowNegative={false}
                   clampBehavior="none"
-                  className="w-48"
+                  classNames={{ input: "w-48" }}
                   value={r.due}
                   onChange={(v) => change(r.type, { due: String(v) })}
                 />

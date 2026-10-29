@@ -71,17 +71,23 @@ export type ReceivedDocument = {
   type: DocumentType;
   /** null: recorded before #287, date unknown. */
   receivedOn: string | null;
+  /** Date written on the document (a medical certificate's), from which its validity runs; null: not entered. */
+  datedOn: string | null;
   /** The family's answer (image rights, parental consent); false: refused. */
   granted: boolean;
   validUntil: string | null;
 };
 
 /**
- * Last valid day of a document dated `date`, given the school's validity
- * (dated 2025-09-10, three years: valid until 2028-09-09); null: no expiry.
+ * Last valid day of a document dated `date`, given the school's validity: the
+ * day before its anniversary (dated 2025-09-10, three years: valid until
+ * 2028-09-09; dated 29 February, one year: until 28 February); null: no expiry.
  */
 export function validUntilFor(date: string, validityMonths: number | null): string | null {
-  return validityMonths === null ? null : addDays(addMonths(date, validityMonths), -1);
+  if (validityMonths === null) return null;
+  const anniversary = addMonths(date, validityMonths);
+  // A shorter month already brought the day back (29 February → 28): that day is the last one.
+  return anniversary.slice(8) < date.slice(8) ? anniversary : addDays(anniversary, -1);
 }
 
 export type DocumentState = "missing" | "expired" | "refused" | "received";
@@ -110,7 +116,9 @@ export type DocumentToBring = { type: RequirableType; dueOn: string; overdue: bo
  * enrolled in the current season (active or trial) since `enrolledOn`, their
  * first enrollment date of the season; none for a student not enrolled: the
  * school only chases papers of students who dance this season. Each is due
- * `dueWithinDays` after that date. A refused answer is an answer: not to bring.
+ * `dueWithinDays` after that date, or after the day it expired when that is
+ * later (a certificate running out mid-season gets the same delay to be
+ * renewed). A refused answer is an answer: not to bring.
  */
 export function documentsToBring({
   requirements,
@@ -129,12 +137,12 @@ export function documentsToBring({
   const expected = expectedDocuments(requirements, birthDate, today);
   return requirements.flatMap((r) => {
     if (!expected.includes(r.type)) return [];
-    const state = documentState(
-      documents.find((d) => d.type === r.type),
-      today,
-    );
+    const doc = documents.find((d) => d.type === r.type);
+    const state = documentState(doc, today);
     if (state !== "missing" && state !== "expired") return [];
-    const dueOn = addDays(enrolledOn, r.dueWithinDays);
+    const expiredOn = state === "expired" && doc?.validUntil ? addDays(doc.validUntil, 1) : null;
+    const from = expiredOn !== null && expiredOn > enrolledOn ? expiredOn : enrolledOn;
+    const dueOn = addDays(from, r.dueWithinDays);
     return [{ type: r.type, dueOn, overdue: today > dueOn }];
   });
 }

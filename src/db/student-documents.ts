@@ -8,7 +8,6 @@ import {
   type RequirableType,
   type Requirement,
   VALIDITY_MONTHS_MAX,
-  validUntilFor,
 } from "../domain/people/documents";
 import { issuePath } from "../lib/form-errors";
 import type { Tx } from "./index";
@@ -135,6 +134,7 @@ export type StudentDocumentRow = {
   id: string;
   type: RequirableType;
   receivedOn: string | null;
+  datedOn: string | null;
   granted: boolean;
   validUntil: string | null;
 };
@@ -147,6 +147,7 @@ export async function studentDocuments(tx: Tx, studentId: string): Promise<Stude
       id: studentDocument.id,
       type: studentDocument.type,
       receivedOn: studentDocument.receivedOn,
+      datedOn: studentDocument.datedOn,
       granted: studentDocument.granted,
       validUntil: studentDocument.validUntil,
     })
@@ -179,22 +180,27 @@ const documentFields = z.object(
   {
     type: z.enum(REQUIRABLE_TYPES, { error: "Document inconnu." }),
     receivedOn: z.iso.date("Date de réception invalide"),
+    datedOn: z.iso.date("Date du document invalide").nullable(),
     validUntil: z.iso.date("Date de fin de validité invalide").nullable(),
     granted: z.boolean({ error: "Saisie invalide." }),
   },
   { error: "Saisie invalide." },
 );
 
-/** A document entered on the record: received on a past day, valid at least until then. */
+/** A document entered on the record: received on a past day, dated before, valid at least from its date. */
 export const validDocumentInput = (today: string) =>
   documentFields
     .refine((d) => d.receivedOn <= today, {
       path: issuePath(documentFields, "receivedOn"),
       message: "La date de réception ne peut pas être dans le futur.",
     })
-    .refine((d) => d.validUntil === null || d.validUntil >= d.receivedOn, {
+    .refine((d) => d.datedOn === null || d.datedOn <= d.receivedOn, {
+      path: issuePath(documentFields, "datedOn"),
+      message: "Le document ne peut pas être daté après sa réception.",
+    })
+    .refine((d) => d.validUntil === null || d.validUntil >= (d.datedOn ?? d.receivedOn), {
       path: issuePath(documentFields, "validUntil"),
-      message: "La fin de validité doit suivre la réception.",
+      message: "La fin de validité doit suivre la date du document.",
     })
     // A medical certificate has no « yes or no »: it is handed in or not.
     .refine((d) => d.granted || d.type !== "medical_certificate", {
@@ -207,15 +213,24 @@ const loggedDocument = (d: Omit<StudentDocumentRow, "id"> & { studentId: string 
   studentId: d.studentId,
   type: d.type,
   receivedOn: d.receivedOn,
+  datedOn: d.datedOn,
   granted: d.granted,
   validUntil: d.validUntil,
 });
 
+/**
+ * The student's document of this type, locked for the change: two people
+ * saving the same document at once are serialised (a transaction lock on the
+ * pair, since `FOR UPDATE` locks nothing while no row exists), so the audit
+ * log always sees the state each change replaced.
+ */
 async function current(tx: Tx, studentId: string, type: RequirableType) {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`student_document:${studentId}:${type}`}, 0))`);
   const [d] = await tx
     .select({
       id: studentDocument.id,
       receivedOn: studentDocument.receivedOn,
+      datedOn: studentDocument.datedOn,
       granted: studentDocument.granted,
       validUntil: studentDocument.validUntil,
     })
@@ -227,7 +242,10 @@ async function current(tx: Tx, studentId: string, type: RequirableType) {
 
 async function studentExists(tx: Tx, studentId: string): Promise<boolean> {
   if (!z.uuid().safeParse(studentId).success) return false;
-  const [p] = await tx.select({ id: person.id }).from(person).where(eq(person.id, studentId));
+  const [p] = await tx
+    .select({ id: person.id })
+    .from(person)
+    .where(and(eq(person.id, studentId), eq(person.isStudent, true)));
   return p !== undefined;
 }
 
@@ -254,12 +272,13 @@ export async function saveDocument(
       studentId,
       type: d.type,
       receivedOn: d.receivedOn,
+      datedOn: d.datedOn,
       granted: d.granted,
       validUntil: d.validUntil,
     })
     .onConflictDoUpdate({
       target: [studentDocument.studentId, studentDocument.type],
-      set: { receivedOn: d.receivedOn, granted: d.granted, validUntil: d.validUntil },
+      set: { receivedOn: d.receivedOn, datedOn: d.datedOn, granted: d.granted, validUntil: d.validUntil },
     })
     .returning({ id: studentDocument.id });
   await tx.insert(auditLog).values({
@@ -274,7 +293,11 @@ export async function saveDocument(
   return { ok: true };
 }
 
-/** « Reçu aujourd’hui »: handed in today, granted, valid as long as the school's setting says. */
+/**
+ * « Reçu aujourd’hui » in one click: handed in today, granted, for a document
+ * without validity. One whose validity runs from its own date (the medical
+ * certificate) needs that date: `saveDocument`, from the form.
+ */
 export async function receiveToday(
   tx: Tx,
   userId: string,
@@ -284,11 +307,12 @@ export async function receiveToday(
 ): Promise<Result> {
   const requirement = (await readRequirements(tx)).find((q) => q.type === type);
   if (!requirement) return { ok: false, message: "Document inconnu." };
+  if (requirement.validityMonths !== null) return { ok: false, message: "Indiquez la date du document." };
   return saveDocument(
     tx,
     userId,
     studentId,
-    { type, receivedOn: today, granted: true, validUntil: validUntilFor(today, requirement.validityMonths) },
+    { type, receivedOn: today, datedOn: null, granted: true, validUntil: null },
     today,
   );
 }
@@ -335,9 +359,13 @@ export function missingDocumentsSql(
     SELECT min(i.enrolled_on) FROM enrollment_course ic JOIN enrollment i ON i.id = ic.enrollment_id
     WHERE ic.student_id = ${id} AND i.season_id = ${seasonId} AND i.status IN ('active', 'trial'))`;
   const minor = sql`(${person.birthDate} IS NOT NULL AND date_part('year', age(${today}::date, ${person.birthDate})) < 18)`;
+  // A document that expired after the enrollment gets the same delay from the day after its end.
+  const from = (type: string) => sql`greatest(${enrolledOn}, (
+    SELECT sd.valid_until + 1 FROM student_document sd WHERE sd.student_id = ${id} AND sd.type = ${type}::document_type))`;
   const items = required.map(
     (r) => sql`CASE WHEN ${r.minorsOnly ? minor : sql`true`}
-      AND ${enrolledOn} + ${r.dueWithinDays}::int < ${today}::date
+      AND ${enrolledOn} IS NOT NULL
+      AND ${from(r.type)} + ${r.dueWithinDays}::int < ${today}::date
       AND NOT EXISTS (
         SELECT 1 FROM student_document sd WHERE sd.student_id = ${id} AND sd.type = ${r.type}::document_type
           AND (sd.valid_until IS NULL OR sd.valid_until >= ${today}::date)

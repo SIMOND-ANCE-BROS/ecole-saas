@@ -42,6 +42,7 @@ describe("document actions", () => {
       await actions.editDocument("x", {
         type: "image_rights",
         receivedOn: "2026-09-10",
+        datedOn: null,
         validUntil: null,
         granted: true,
       }),

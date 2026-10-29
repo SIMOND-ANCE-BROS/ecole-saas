@@ -30,7 +30,7 @@ export type DocumentLine = {
   doc: StudentDocumentRow | null;
   /** Still to bring this season: due date, overdue or not. */
   due: DocumentToBring | null;
-  /** The school's validity for this type, to suggest an end date. */
+  /** The school's validity for this type; set: the document's own date is asked, its validity runs from it. */
   validityMonths: number | null;
 };
 
@@ -48,42 +48,55 @@ type Props = {
 type Edition = {
   type: RequirableType;
   receivedOn: string;
+  datedOn: string;
   validUntil: string;
   granted: boolean;
+  /** The end date was typed by hand: it no longer follows the document's date. */
   validTouched: boolean;
 };
+
+/** Feminine names, for the agreement of « reçue », « expirée »… */
+const FEMININE: Record<RequirableType, boolean> = {
+  medical_certificate: false,
+  parental_consent: true,
+  image_rights: false,
+};
+const agreed = (type: RequirableType, participle: string) => `${participle}${FEMININE[type] ? "e" : ""}`;
 
 /** What the row says about the document, in words (never by colour alone). */
 function status(line: DocumentLine, enrolled: boolean): { text: string; warn: boolean } {
   const d = line.doc;
-  const received = d?.receivedOn ? `reçu le ${dayOf(d.receivedOn)}` : "reçu (date inconnue)";
+  const received = d?.receivedOn
+    ? `${agreed(line.type, "reçu")} le ${dayOf(d.receivedOn)}`
+    : `${agreed(line.type, "reçu")} (date inconnue)`;
+  const dated = d?.datedOn ? `, ${agreed(line.type, "daté")} du ${dayOf(d.datedOn)}` : "";
   const due = line.due ? `à fournir avant le ${dayOf(line.due.dueOn)}${line.due.overdue ? ", en retard" : ""}` : null;
+  const notReceived = `Non ${agreed(line.type, "reçu")}`;
   switch (line.state) {
     case "missing":
-      if (due) return { text: `Non reçu : ${due}`, warn: line.due?.overdue ?? false };
-      return line.expected && !enrolled
-        ? { text: "Non reçu, à demander à l’inscription", warn: false }
-        : { text: "Non reçu (pas demandé)", warn: false };
+      if (due) return { text: `${notReceived} : ${due}`, warn: line.due?.overdue ?? false };
+      return { text: `${notReceived}${line.expected && !enrolled ? ", à demander à l’inscription" : ""}`, warn: false };
     case "expired":
       // `validUntil` is set: an expired document has an end date.
       return {
-        text: `Expiré le ${dayOf(d?.validUntil ?? "")}${due ? ` : ${due}` : `, ${received}`}`,
+        text: `${agreed(line.type, "Expiré")} le ${dayOf(d?.validUntil ?? "")}${due ? ` : ${due}` : `, ${received}`}`,
         warn: line.due?.overdue ?? true,
       };
     case "refused":
-      return { text: `Refusé par la famille, réponse ${received}`, warn: true };
+      return { text: `Refus de la famille, réponse ${received.replace(/^reçue?/, "reçue")}`, warn: true };
     case "received": {
       const until = d?.validUntil ? `, valable jusqu’au ${dayOf(d.validUntil)}` : "";
-      return { text: `${received.charAt(0).toUpperCase()}${received.slice(1)}${until}`, warn: false };
+      return { text: `${received.charAt(0).toUpperCase()}${received.slice(1)}${dated}${until}`, warn: false };
     }
   }
 }
 
 /**
  * « Documents » section of the student record (#287): for each document the
- * school can ask for, whether it was handed in, when, and until when it is
- * valid. One click records it as received today; « Modifier » corrects the
- * dates or the family's answer. Front desk and management.
+ * school asks of the student, whether it was handed in, when, and until when
+ * it is valid. A document without validity is received in one click; one
+ * whose validity runs from its own date (the medical certificate) opens the
+ * form on that date. Front desk and management.
  */
 export function Documents({ studentId, firstName, lines, enrolled, today, isDirector }: Props) {
   const toBring = lines.flatMap((l) => (l.due ? [l.due] : []));
@@ -110,16 +123,19 @@ export function Documents({ studentId, firstName, lines, enrolled, today, isDire
   const closeEdit = (type: RequirableType) => {
     focusAfter(`[data-document-edit="${type}"]`);
     setEdition(null);
-  };
-  const open = (line: DocumentLine) => {
     setMessage(null);
-    const receivedOn = line.doc?.receivedOn ?? today;
+  };
+  /** Opens the form: the recorded document, or a new one received today (`fresh`). */
+  const open = (line: DocumentLine, fresh = false) => {
+    setMessage(null);
+    const d = fresh ? null : line.doc;
     setEdition({
       type: line.type,
-      receivedOn,
-      validUntil: line.doc ? (line.doc.validUntil ?? "") : (validUntilFor(receivedOn, line.validityMonths) ?? ""),
-      granted: line.doc?.granted ?? true,
-      validTouched: line.doc !== null,
+      receivedOn: d?.receivedOn ?? today,
+      datedOn: d?.datedOn ?? "",
+      validUntil: d?.validUntil ?? "",
+      granted: d?.granted ?? true,
+      validTouched: d !== null,
     });
   };
   const done = (message: string) => notifications.show({ color: "green", message });
@@ -140,7 +156,7 @@ export function Documents({ studentId, firstName, lines, enrolled, today, isDire
       </div>
       {toBring.length > 0 && (
         <Alert
-          color={overdue ? "yellow" : "blue"}
+          color={overdue ? "yellow" : "gray"}
           title={overdue ? "Documents en retard" : "Documents à fournir"}
           role="status"
         >
@@ -155,11 +171,6 @@ export function Documents({ studentId, firstName, lines, enrolled, today, isDire
             . L’inscription reste valable.
           </Text>
         </Alert>
-      )}
-      {message && (
-        <Text role="alert" size="sm" c="red">
-          {message}
-        </Text>
       )}
       {lines.length === 0 && (
         <Text size="sm" c="dimmed">
@@ -178,6 +189,7 @@ export function Documents({ studentId, firstName, lines, enrolled, today, isDire
           const s = status(line, enrolled);
           const editing = edition?.type === line.type;
           const toReceive = line.state === "missing" || line.state === "expired";
+          const datedType = line.validityMonths !== null;
           return (
             <li key={line.type} className="flex flex-col gap-2 px-3 py-2.5">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -192,30 +204,33 @@ export function Documents({ studentId, firstName, lines, enrolled, today, isDire
                         size="compact-sm"
                         variant="default"
                         disabled={inProgress}
-                        aria-label={`${label} : reçu aujourd’hui`}
+                        aria-label={`${label} : ${agreed(line.type, "reçu")} aujourd’hui`}
                         data-document-receive={line.type}
                         onClick={() =>
-                          act(
-                            () => receiveDocumentToday(studentId, line.type),
-                            () => {
-                              done(`${label} : reçu aujourd’hui.`);
-                              focusAfter(`[data-document-edit="${line.type}"]`);
-                            },
-                          )
+                          // Its validity runs from its own date: the form asks for it.
+                          datedType
+                            ? open(line, true)
+                            : act(
+                                () => receiveDocumentToday(studentId, line.type),
+                                () => {
+                                  done(`${label} : ${agreed(line.type, "reçu")} aujourd’hui.`);
+                                  focusAfter(`[data-document-edit="${line.type}"]`);
+                                },
+                              )
                         }
                       >
-                        Reçu aujourd’hui
+                        {agreed(line.type, "Reçu")} aujourd’hui
                       </Button>
                     )}
                     <Button
                       size="compact-sm"
                       variant="subtle"
                       disabled={inProgress}
-                      aria-label={`Modifier : ${label}`}
+                      aria-label={`${line.doc ? "Modifier" : "Saisir"} : ${label}`}
                       data-document-edit={line.type}
                       onClick={() => open(line)}
                     >
-                      Modifier
+                      {line.doc ? "Modifier" : "Saisir"}
                     </Button>
                     {line.doc && (
                       <Button
@@ -228,12 +243,12 @@ export function Documents({ studentId, firstName, lines, enrolled, today, isDire
                         onClick={() =>
                           setRemoval({
                             title: `Retirer : ${label} ?`,
-                            body: `${label} redevient « non reçu » pour ${firstName}. Le journal garde ce qui était enregistré.`,
+                            body: `Le document repasse à « non ${agreed(line.type, "reçu")} » pour ${firstName}. Le journal garde ce qui était enregistré.`,
                             run: () =>
                               act(
                                 () => unreceiveDocument(studentId, line.type),
                                 () => {
-                                  done(`${label} : retiré.`);
+                                  done(`${label} : document retiré.`);
                                   focusAfter(
                                     `[data-document-receive="${line.type}"]`,
                                     `[data-document-edit="${line.type}"]`,
@@ -253,8 +268,8 @@ export function Documents({ studentId, firstName, lines, enrolled, today, isDire
               {editing && edition && (
                 <form
                   ref={form}
-                  aria-label={`Modifier : ${label}`}
-                  className="flex flex-wrap items-end gap-3"
+                  aria-label={`${line.doc ? "Modifier" : "Saisir"} : ${label}`}
+                  className="flex flex-col gap-2"
                   onKeyDown={(e) => e.key === "Escape" && closeEdit(line.type)}
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -264,77 +279,101 @@ export function Documents({ studentId, firstName, lines, enrolled, today, isDire
                         editDocument(studentId, {
                           type: edition.type,
                           receivedOn: edition.receivedOn,
+                          datedOn: edition.datedOn || null,
                           validUntil: edition.validUntil || null,
                           granted: edition.granted,
                         }),
                       () => {
-                        done(`${label} : enregistré.`);
+                        done(`${label} : document enregistré.`);
                         closeEdit(line.type);
                       },
                     );
                   }}
                 >
-                  <DateField
-                    label="Reçu le"
-                    required
-                    autoFocus
-                    maxDate={today}
-                    value={edition.receivedOn}
-                    onChange={(receivedOn) =>
-                      setEdition(
-                        (x) =>
-                          x && {
-                            ...x,
-                            receivedOn,
-                            // The end date follows the date received until it is typed by hand.
-                            validUntil:
-                              x.validTouched || !receivedOn
-                                ? x.validUntil
-                                : (validUntilFor(receivedOn, validityOf(x.type)) ?? ""),
-                          },
-                      )
-                    }
-                    className="w-40"
-                  />
-                  <DateField
-                    label="Valable jusqu’au"
-                    description="Vide : sans limite"
-                    minDate={edition.receivedOn || undefined}
-                    value={edition.validUntil}
-                    onChange={(validUntil) => setEdition((x) => x && { ...x, validUntil, validTouched: true })}
-                    className="w-40"
-                  />
-                  {line.type !== "medical_certificate" && (
-                    <Checkbox
-                      label="Accordé par la famille"
-                      checked={edition.granted}
-                      onChange={(e) => {
-                        const granted = e.currentTarget.checked;
-                        setEdition((x) => x && { ...x, granted });
-                      }}
-                      className="pb-2"
+                  <div className="flex flex-wrap items-end gap-3">
+                    <DateField
+                      label="Reçu le"
+                      required
+                      autoFocus={!datedType}
+                      maxDate={today}
+                      value={edition.receivedOn}
+                      onChange={(receivedOn) => setEdition((x) => x && { ...x, receivedOn })}
+                      className="w-40"
                     />
+                    {(datedType || edition.datedOn) && (
+                      <DateField
+                        label="Daté du"
+                        required={datedType}
+                        autoFocus={datedType}
+                        maxDate={edition.receivedOn || today}
+                        value={edition.datedOn}
+                        onChange={(datedOn) =>
+                          setEdition(
+                            (x) =>
+                              x && {
+                                ...x,
+                                datedOn,
+                                // The end date follows the document's date until it is typed by hand.
+                                validUntil:
+                                  x.validTouched || !datedOn
+                                    ? x.validUntil
+                                    : (validUntilFor(datedOn, validityOf(x.type)) ?? ""),
+                              },
+                          )
+                        }
+                        className="w-40"
+                      />
+                    )}
+                    <DateField
+                      label="Valable jusqu’au"
+                      description="Vide : sans limite"
+                      minDate={edition.datedOn || edition.receivedOn || undefined}
+                      value={edition.validUntil}
+                      onChange={(validUntil) => setEdition((x) => x && { ...x, validUntil, validTouched: true })}
+                      className="w-40"
+                    />
+                    {line.type !== "medical_certificate" && (
+                      <Checkbox
+                        label="Accordé par la famille"
+                        checked={edition.granted}
+                        onChange={(e) => {
+                          const granted = e.currentTarget.checked;
+                          setEdition((x) => x && { ...x, granted });
+                        }}
+                        className="pb-2"
+                      />
+                    )}
+                    <Group gap="xs">
+                      <Button type="submit" size="compact-sm" variant="default" loading={inProgress}>
+                        Enregistrer
+                      </Button>
+                      <Button
+                        type="button"
+                        size="compact-sm"
+                        variant="subtle"
+                        color="gray"
+                        onClick={() => closeEdit(line.type)}
+                      >
+                        Annuler
+                      </Button>
+                    </Group>
+                  </div>
+                  {message && (
+                    <Text role="alert" size="sm" c="red">
+                      {message}
+                    </Text>
                   )}
-                  <Group gap="xs">
-                    <Button type="submit" size="compact-sm" loading={inProgress}>
-                      Enregistrer
-                    </Button>
-                    <Button
-                      type="button"
-                      size="compact-sm"
-                      variant="subtle"
-                      color="gray"
-                      onClick={() => closeEdit(line.type)}
-                    >
-                      Annuler
-                    </Button>
-                  </Group>
                 </form>
               )}
             </li>
           );
         })}
       </Paper>
+      {message && !edition && (
+        <Text role="alert" size="sm" c="red">
+          {message}
+        </Text>
+      )}
     </section>
   );
 }
