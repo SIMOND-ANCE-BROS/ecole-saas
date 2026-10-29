@@ -619,7 +619,12 @@ export function CourseForm({
           {refusal.message}
         </Text>
       )}
-      <CheckSaved message={refusal?.message} href={planning ?? "/planning"} label="Voir le planning" />
+      <CheckSaved
+        message={refusal?.message}
+        href={planning ?? "/planning"}
+        label="Voir le planning"
+        safeRetry={!course}
+      />
 
       <div className="flex flex-wrap items-center gap-2 border-t border-bordure pt-4">
         <Button type="submit" loading={sending}>

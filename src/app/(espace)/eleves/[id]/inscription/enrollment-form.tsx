@@ -435,6 +435,7 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
           message={refusal}
           href={`/eleves/${studentIds[0] ?? ""}`}
           label="Voir les inscriptions de l’élève"
+          safeRetry
         />
         <Button type="submit" disabled={!canSave} loading={sending}>
           Enregistrer l’inscription

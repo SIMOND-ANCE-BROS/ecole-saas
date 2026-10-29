@@ -2,14 +2,13 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { z } from "zod";
 import { createCourse, type CourseInput } from "./courses";
 import { saveEnrollment } from "./enrollments";
 import { withSchool } from "./index";
 import { syncLessons } from "./lessons";
 import { overlapping } from "./overlap.integration-helpers";
 import { collect } from "./payments";
-import { KEY_REUSED, once } from "./submissions";
+import { KEY_REUSED, once, requestHash, storedCourse, storedEnrollment, storedPayments } from "./submissions";
 
 /**
  * Creations made safe to retry (#260), as the application runs them (app_user,
@@ -115,9 +114,6 @@ afterAll(async () => {
   await admin.end();
 });
 
-const storedPayments = z.object({ ok: z.literal(true), ids: z.array(z.uuid()) });
-const storedId = z.object({ ok: z.literal(true), id: z.uuid() });
-
 const cash = (amountCents: number) => [
   { method: "cash" as const, amountCents, date: TODAY, reference: null, issuer: null, plannedPayment: null },
 ];
@@ -214,7 +210,7 @@ describe("once: enrollments and courses", () => {
     };
     const run = () =>
       withSchool(ids.school, (tx) =>
-        once(tx, "enrollment", key, { payerId: ids.payer, ...entry }, storedId, () =>
+        once(tx, "enrollment", key, { payerId: ids.payer, ...entry }, storedEnrollment, () =>
           saveEnrollment(tx, ids.payer, ids.season, entry),
         ),
       );
@@ -227,10 +223,9 @@ describe("once: enrollments and courses", () => {
 
   it("creates a course and its lessons once for the same key", async () => {
     const key = randomUUID();
-    const stored = z.object({ ok: z.literal(true), id: z.uuid(), instructorRateCents: z.number().nullable() });
     const run = () =>
       withSchool(ids.school, (tx) =>
-        once(tx, "course", key, { entry: courseInput, seasonId: ids.season }, stored, async () => {
+        once(tx, "course", key, { entry: courseInput, seasonId: ids.season }, storedCourse, async () => {
           const r = await createCourse(tx, ids.season, courseInput);
           if (r.ok) await syncLessons(tx, ids.season, TODAY);
           return r;
@@ -253,11 +248,86 @@ describe("once: enrollments and courses", () => {
     const key = randomUUID();
     await pay(key, 700);
     const r = await withSchool(ids.school, (tx) =>
-      once(tx, "enrollment", key, { payerId: ids.payer }, storedId, async () => ({
+      once(tx, "enrollment", key, { payerId: ids.payer }, storedEnrollment, async () => ({
         ok: true as const,
         id: randomUUID(),
       })),
     );
     expect(r).toEqual({ ok: false, message: KEY_REUSED });
+  });
+});
+
+describe("once: failures free the key", () => {
+  const concurrentAfter = <A>(key: string, first: (hold: () => Promise<void>) => Promise<A>) =>
+    overlapping(admin, first, () => pay(key, 4500));
+
+  it("records once when the first of two concurrent attempts is rolled back", async () => {
+    const key = randomUUID();
+    const before = await paymentsOf(ids.payer);
+    const [first, second] = await concurrentAfter(key, (hold) =>
+      withSchool(ids.school, async (tx) => {
+        await once(tx, "payment", key, { payerId: ids.payer, entry: cash(4500) }, storedPayments, () =>
+          collect(tx, frontDesk, ids.payer, cash(4500)),
+        );
+        await hold();
+        throw new Error("rolled back");
+      }).catch((e: Error) => e.message),
+    );
+    expect(first).toBe("rolled back");
+    expect(second.ok).toBe(true);
+    expect(await paymentsOf(ids.payer)).toBe(before + 1);
+  });
+
+  it("records once when the first of two concurrent attempts is refused", async () => {
+    const key = randomUUID();
+    const before = await paymentsOf(ids.payer);
+    const [first, second] = await concurrentAfter(key, (hold) =>
+      withSchool(ids.school, async (tx) => {
+        const r = await once(tx, "payment", key, { payerId: ids.payer, entry: cash(0) }, storedPayments, () =>
+          collect(tx, frontDesk, ids.payer, cash(0)),
+        );
+        await hold();
+        return r;
+      }),
+    );
+    expect(first.ok).toBe(false);
+    expect(second.ok).toBe(true);
+    expect(await paymentsOf(ids.payer)).toBe(before + 1);
+  });
+
+  it("lets the same key succeed after a creation that threw", async () => {
+    const key = randomUUID();
+    await expect(
+      withSchool(ids.school, (tx) =>
+        once(tx, "payment", key, { payerId: ids.payer, entry: cash(800) }, storedPayments, () => {
+          throw new Error("boom");
+        }),
+      ),
+    ).rejects.toThrow("boom");
+    const before = await paymentsOf(ids.payer);
+    expect((await pay(key, 800)).ok).toBe(true);
+    expect(await paymentsOf(ids.payer)).toBe(before + 1);
+  });
+
+  it("rolls back what a refused creation wrote before refusing", async () => {
+    const key = randomUUID();
+    const name = `Zz Orpheline ${suffix}`;
+    const r = await withSchool(ids.school, (tx) =>
+      once(tx, "course", key, { name }, storedCourse, async () => {
+        await tx.execute(sql`INSERT INTO discipline (school_id, name) VALUES (${ids.school}, ${name})`);
+        return { ok: false as const, message: "Salle introuvable." };
+      }),
+    );
+    expect(r).toEqual({ ok: false, message: "Salle introuvable." });
+    const [{ n }] = await admin`SELECT count(*)::int AS n FROM discipline WHERE name = ${name}`;
+    expect(n).toBe(0);
+    const [{ k }] = await admin`SELECT count(*)::int AS k FROM submission WHERE key = ${key}`;
+    expect(k).toBe(0);
+  });
+
+  it("gives the same fingerprint whatever the order of the keys", () => {
+    expect(requestHash({ a: 1, b: [{ y: 2, x: null }] })).toBe(requestHash({ b: [{ x: null, y: 2 }], a: 1 }));
+    expect(requestHash({ a: 1 })).not.toBe(requestHash({ a: 2 }));
+    expect(requestHash({ a: 1 })).toHaveLength(64);
   });
 });

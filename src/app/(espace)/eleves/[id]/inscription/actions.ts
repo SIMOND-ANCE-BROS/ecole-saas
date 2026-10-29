@@ -5,7 +5,7 @@ import { z } from "zod";
 import { withSchool } from "@/db";
 import { type Preview, enrollmentPreview, saveEnrollment } from "@/db/enrollments";
 import { currentSeason } from "@/db/schedule";
-import { once } from "@/db/submissions";
+import { once, storedEnrollment } from "@/db/submissions";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 
@@ -33,9 +33,6 @@ export async function preview(entry: FormInput): Promise<Preview> {
     return season ? enrollmentPreview(tx, payerId, season.id, rest) : WITHOUT_SEASON;
   });
 }
-
-/** What a first attempt stored: the enrollment it created. */
-const storedEnrollment = z.object({ ok: z.literal(true), id: z.uuid() });
 
 /**
  * Saves the enrollment; when refused, returns the message to display. `key` is

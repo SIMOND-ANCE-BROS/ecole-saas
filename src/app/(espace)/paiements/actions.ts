@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { withSchool } from "@/db";
 import { correctPayment, collect } from "@/db/payments";
-import { once } from "@/db/submissions";
+import { once, storedPayments } from "@/db/submissions";
 import { todayInParis } from "@/domain/people/age";
 import { type ActionResult, actionResult } from "@/lib/action-result";
 import { topErrorsOf } from "@/lib/form-errors";
@@ -14,9 +14,6 @@ import { requireRole } from "@/lib/session";
 /** Return to the payer's record: only a student or contact record. */
 const safeReturnPath = (r: unknown) =>
   typeof r === "string" && /^\/(eleves|contacts)\/[0-9a-f-]{36}$/.test(r) ? r : null;
-
-/** What a first attempt stored: the ids of the payments it recorded. */
-const storedPayments = z.object({ ok: z.literal(true), ids: z.array(z.uuid()) });
 
 /**
  * Records one or more payments (front desk and management), then returns to

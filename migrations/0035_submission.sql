@@ -5,7 +5,9 @@ CREATE TABLE "submission" (
 	"request_hash" text NOT NULL,
 	"result" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "submission_school_id_key_pk" PRIMARY KEY("school_id","key")
+	CONSTRAINT "submission_school_id_key_pk" PRIMARY KEY("school_id","key"),
+	CONSTRAINT "submission_kind" CHECK ("submission"."kind" IN ('payment', 'enrollment', 'course')),
+	CONSTRAINT "submission_request_hash" CHECK (length("submission"."request_hash") = 64)
 );
 --> statement-breakpoint
 ALTER TABLE "submission" ADD CONSTRAINT "submission_school_id_school_id_fk" FOREIGN KEY ("school_id") REFERENCES "public"."school"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

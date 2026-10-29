@@ -25,16 +25,8 @@ import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { errorsOf, type FieldErrors, topErrorsOf } from "@/lib/form-errors";
 import { z } from "zod";
-import { once } from "@/db/submissions";
+import { once, storedCourse } from "@/db/submissions";
 import { seasonParam, withSeason } from "../season-link";
-
-/** What a first attempt stored: the course it created and the planning to go back to. */
-const storedCourse = z.object({
-  ok: z.literal(true),
-  id: z.uuid(),
-  instructorRateCents: z.number().int().nullable(),
-  season: z.string().optional(),
-});
 
 /** Errors by field: top-level (« room ») and nested (« room.capacity », a new room's own fields). */
 export type Refusal = { message: string; errors: FieldErrors<CourseFields> };

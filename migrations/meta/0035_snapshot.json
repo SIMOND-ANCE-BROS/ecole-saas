@@ -1,5 +1,5 @@
 {
-  "id": "6e5708f8-dbf0-49e3-b38d-7e862c7eb2fd",
+  "id": "15ca86aa-f1ec-4fca-b7c1-512ee98c2d87",
   "prevId": "63a16844-c0ec-48c6-950f-89a019248c34",
   "version": "7",
   "dialect": "postgresql",
@@ -4557,7 +4557,16 @@
       },
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "submission_kind": {
+          "name": "submission_kind",
+          "value": "\"submission\".\"kind\" IN ('payment', 'enrollment', 'course')"
+        },
+        "submission_request_hash": {
+          "name": "submission_request_hash",
+          "value": "length(\"submission\".\"request_hash\") = 64"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.suspended_lesson": {

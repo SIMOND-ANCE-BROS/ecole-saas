@@ -582,10 +582,15 @@ export const submission = pgTable(
     kind: text("kind").notNull(),
     // Fingerprint of what was sent: the same key with other values is refused, not replayed.
     requestHash: text("request_hash").notNull(),
+    // Technical ids only (created records, planning link), never personal data.
     result: jsonb("result"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.schoolId, t.key] })],
+  (t) => [
+    primaryKey({ columns: [t.schoolId, t.key] }),
+    check("submission_kind", sql`${t.kind} IN ('payment', 'enrollment', 'course')`),
+    check("submission_request_hash", sql`length(${t.requestHash}) = 64`),
+  ],
 );
 
 export const attendance = pgTable(

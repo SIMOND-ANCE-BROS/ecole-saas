@@ -216,7 +216,7 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
           {message}
         </Text>
       )}
-      <CheckSaved message={message} href={back} label="Voir les paiements de la fiche" />
+      <CheckSaved message={message} href={back} label="Voir les paiements de la fiche" safeRetry />
       <div className="flex flex-wrap gap-2 border-t border-bordure pt-4">
         {/* An unreadable amount is left out of the total: no « Encaisser » for a wrong sum. */}
         <Button type="submit" loading={sending} disabled={total === 0 || invalides.some(Boolean)}>
