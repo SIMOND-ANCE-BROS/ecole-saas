@@ -11,6 +11,7 @@ import {
   enrollmentCourse,
   instructor,
   attendance,
+  lessonPackUsage,
   member,
   room,
   lesson,
@@ -478,6 +479,18 @@ export async function deleteCourse(tx: Tx, id: string): Promise<Result> {
     .limit(1);
   if (attendanceRow)
     return { ok: false, message: "Des appels ont été faits pour ce cours : il ne peut pas être supprimé." };
+  // A lesson a lesson pack was counted on is never deleted (#225): the foreign key would refuse it anyway.
+  const [packRow] = await tx
+    .select({ lessonId: lessonPackUsage.lessonId })
+    .from(lessonPackUsage)
+    .innerJoin(lesson, eq(lesson.id, lessonPackUsage.lessonId))
+    .where(eq(lesson.courseId, id))
+    .limit(1);
+  if (packRow)
+    return {
+      ok: false,
+      message: "Ce cours a des séances déjà décomptées d’un carnet : il ne peut pas être supprimé.",
+    };
   await tx.delete(lesson).where(eq(lesson.courseId, id));
   await tx.delete(course).where(eq(course.id, id));
   return { ok: true, id };
