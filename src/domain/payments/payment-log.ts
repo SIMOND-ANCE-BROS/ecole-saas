@@ -1,5 +1,7 @@
 import { PAYMENT_COLUMNS, type ColumnId } from "../filters/columns";
 import { applyFilter, type Cell, type Filter, readFilter, readSort, type Sort, sortRows } from "../filters/filters";
+import type { ExportRow } from "./deposits";
+import { type ReversalKind, reversalLabel } from "./rejection";
 
 /**
  * The payment log as a list (#98, #107): the period's payments, filtered and
@@ -15,6 +17,8 @@ export type PaymentLogRow = {
   /** Method label as shown (« Chèque »), so the checkboxes match it. */
   methodLabel: string;
   amountCents: number;
+  /** Kind of a reverse entry, null for an ordinary payment (#272). */
+  reversalKind: ReversalKind | null;
   reference: string | null;
   issuer: string | null;
   plannedPayment: string | null;
@@ -27,9 +31,29 @@ type PaymentColumn = ColumnId<typeof PAYMENT_COLUMNS>;
 export const futureCashing = (row: Pick<PaymentLogRow, "plannedPayment">, today: string) =>
   row.plannedPayment && row.plannedPayment > today ? row.plannedPayment : null;
 
-/** « 0012345, Banque Populaire »: the cheque number and its bank, or null. */
-export const referenceOf = (row: Pick<PaymentLogRow, "reference" | "issuer">) =>
-  [row.reference, row.issuer].filter(Boolean).join(", ") || null;
+/**
+ * The reference column of the export: the cheque number, preceded by what a reverse
+ * entry is (« Paiement rejeté, 0012345 »), so the accountant links a rejection to the
+ * bounced cheque (#272). Null when there is nothing to show.
+ */
+export const exportReference = (row: Pick<PaymentLogRow, "reversalKind" | "reference">) =>
+  [reversalLabel(row.reversalKind), row.reference].filter(Boolean).join(", ") || null;
+
+/** A row of the payment log as the CSV export writes it. */
+export const exportRowOf = (row: PaymentLogRow): ExportRow => ({
+  date: row.date,
+  payer: row.payer,
+  method: row.methodLabel,
+  amountCents: row.amountCents,
+  reference: exportReference(row),
+  issuer: row.issuer,
+  plannedPayment: row.plannedPayment,
+  deposit: row.dateDeposit,
+});
+
+/** « 0012345, Banque Populaire »: the cheque number and its bank, after the kind of a reverse entry; or null. */
+export const referenceOf = (row: Pick<PaymentLogRow, "reversalKind" | "reference" | "issuer">) =>
+  [exportReference(row), row.issuer].filter(Boolean).join(", ") || null;
 
 /** A column's value for filtering and sorting; the amount sorts in cents. */
 export function paymentLogValue(row: PaymentLogRow, column: PaymentColumn, today: string): Cell {

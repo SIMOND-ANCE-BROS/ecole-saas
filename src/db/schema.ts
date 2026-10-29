@@ -32,6 +32,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { ROLE_VALUES } from "../domain/team/rules";
+import { REVERSAL_KINDS } from "../domain/payments/rejection";
 
 // ---------------------------------------------------------------------------
 // Enumerated types
@@ -70,6 +71,8 @@ export const paymentMethod = pgEnum("payment_method", [
   "pass_sport",
   "other",
 ]);
+/** Kind of a reverse entry (#272): a correction, or the rejection of a deposited payment. */
+export const reversalKind = pgEnum("reversal_kind", REVERSAL_KINDS);
 export const installmentStatus = pgEnum("installment_status", ["upcoming", "paid", "partial", "overdue", "cancelled"]);
 export const statementStatus = pgEnum("statement_status", ["to_check", "matching", "discrepancy", "paid"]);
 export const memberRole = pgEnum("member_role", ROLE_VALUES);
@@ -871,12 +874,16 @@ export const payment = pgTable(
     depositPlannedOn: date("deposit_planned_on"),
     // Correction: negative payment cancelling all or part of this payment.
     correctsId: uuid("corrects_id"),
+    // What the reverse entry is (#272), set exactly when `corrects_id` is: its `reference`
+    // stays the original's (cheque number), the label is derived for display and export.
+    reversalKind: reversalKind("reversal_kind"),
     enteredBy: uuid("entered_by"),
     toolSynced: boolean("tool_synced").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     check("payment_amount", sql`${t.amountCents} <> 0`),
+    check("payment_reversal_kind", sql`(${t.reversalKind} IS NULL) = (${t.correctsId} IS NULL)`),
     sameSchoolTarget(t),
     sameSchool(t, t.payerId, person),
     sameSchool(t, t.enteredBy, member),

@@ -17,12 +17,13 @@ import { formatEuros } from "@/lib/money";
 import { ButtonLink } from "../_ui/button-link";
 import { CorrectPayment } from "./correct-payment";
 import { isRejection, rejectionLabel, rejectionNotYet } from "@/domain/payments/rejection";
+import { referenceOf } from "@/domain/payments/payment-log";
 
 // Tables show days as « 21/10/2026 », like the payment log and the lists (#201).
 const day = frenchDate;
 
-/** Cheque number and bank, or the reference given. */
-const reference = (p: PaymentRow) => [p.reference, p.issuer].filter(Boolean).join(", ");
+/** Cheque number and bank, or the reference given; a reverse entry says what it is first (#272). */
+const reference = (p: PaymentRow) => referenceOf(p) ?? "";
 
 /** When the money is in: a correction or a rejection, a cheque to cash later, deposited, or cashed. */
 const cashing = (p: PaymentRow, today: string) =>

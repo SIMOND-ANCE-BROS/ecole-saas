@@ -4,6 +4,7 @@ import { withSchool } from "./index";
 import { correctPayment, collect, PAYMENT_METHODS } from "./payments";
 import { toCsv, totals } from "../domain/payments/deposits";
 import { formatEuros } from "../lib/money";
+import { exportRowOf } from "../domain/payments/payment-log";
 import { cancelDeposit, createDeposit, paymentLog, readDeposit, listDeposits, paymentsToDeposit } from "./deposits";
 import { overlapping } from "./overlap.integration-helpers";
 import { once, storedPayments } from "./submissions";
@@ -416,24 +417,19 @@ describe("a deposited payment rejected (#253)", () => {
     const day20 = ofPayer(await withSchool(school, (tx) => paymentLog(tx, "2026-10-20", "2026-10-20", null)));
     expect(day20.map((l) => l.amountCents)).toEqual([6000]);
     const day21 = ofPayer(await withSchool(school, (tx) => paymentLog(tx, TODAY, TODAY, null)));
-    expect(day21.map((l) => [l.amountCents, l.reference])).toContainEqual([-6000, "Paiement rejeté"]);
+    // The rejection keeps the bounced cheque's number; its kind is stored (#272).
+    expect(day21.map((l) => [l.amountCents, l.reversalKind, l.reference])).toContainEqual([
+      -6000,
+      "rejection",
+      "0253g",
+    ]);
     const both = ofPayer(await withSchool(school, (tx) => paymentLog(tx, "2026-10-20", TODAY, null)));
     // The received cheque 0253f (70,00 €) stays; the rejected one nets to zero.
     expect(totals(both).total).toBe(7000);
 
-    const csv = toCsv(
-      both.map((l) => ({
-        date: l.date,
-        payer: l.payer,
-        method: PAYMENT_METHODS[l.method],
-        amountCents: l.amountCents,
-        reference: l.reference,
-        issuer: l.issuer,
-        plannedPayment: l.plannedPayment,
-        deposit: l.dateDeposit,
-      })),
-    );
-    expect(csv).toContain("21/10/2026;Test Zzrejet;Chèque;-60,00;Paiement rejeté;;;");
+    // As the export route writes it.
+    const csv = toCsv(both.map((l) => exportRowOf({ ...l, methodLabel: PAYMENT_METHODS[l.method] })));
+    expect(csv).toContain("21/10/2026;Test Zzrejet;Chèque;-60,00;Paiement rejeté, 0253g;;;");
     expect(csv).toContain("20/10/2026;Test Zzrejet;Chèque;60,00;0253g;;;20/10/2026");
   });
 

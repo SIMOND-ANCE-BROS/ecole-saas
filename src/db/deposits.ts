@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { rowsOf } from "./columns-of";
 import { z } from "zod";
 import { toDeposit, DEPOSIT_METHODS, type DepositMethod } from "../domain/payments/deposits";
-import { REJECTED_REFERENCE } from "../domain/payments/rejection";
+import type { ReversalKind } from "../domain/payments/rejection";
 import type { Tx } from "./index";
 import { alreadyCorrected, type Method } from "./payments";
 import { auditLog, member, payment, person, bankDeposit, bankDepositPayment } from "./schema";
@@ -25,6 +25,8 @@ export type AuditLogRow = {
   method: Method;
   amountCents: number;
   correctedCents: number;
+  /** Kind of a reverse entry, null for an ordinary payment (#272). */
+  reversalKind: ReversalKind | null;
   reference: string | null;
   issuer: string | null;
   plannedPayment: string | null;
@@ -42,6 +44,7 @@ function rows(tx: Tx) {
       method: payment.method,
       amountCents: payment.amountCents,
       correctedCents: alreadyCorrected,
+      reversalKind: payment.reversalKind,
       reference: payment.reference,
       issuer: payment.issuer,
       plannedPayment: payment.depositPlannedOn,
@@ -172,7 +175,8 @@ export async function cancelDeposit(tx: Tx, userId: string, id: string): Promise
     .for("no key update", { of: payment });
   // A payment of the deposit rejected by the bank: the slip was used, it stays. Decided by
   // what correctPayment wrote under the same lock (a deposited payment is only ever rejected),
-  // not by timestamps: a « Correction » made before the deposit never blocks it (#253).
+  // not by timestamps: a correction made before the deposit never blocks it (#253). Read
+  // from the stored kind of the reverse entry, never from a label (#272).
   const [rejected] = await tx
     .select({ id: payment.id })
     .from(payment)
@@ -180,7 +184,7 @@ export async function cancelDeposit(tx: Tx, userId: string, id: string): Promise
     .where(
       and(
         eq(bankDepositPayment.bankDepositId, id),
-        sql`EXISTS (SELECT 1 FROM payment c WHERE c.corrects_id = ${payment}.${sql.identifier("id")} AND c.reference = ${REJECTED_REFERENCE})`,
+        sql`EXISTS (SELECT 1 FROM payment c WHERE c.corrects_id = ${payment}.${sql.identifier("id")} AND c.reversal_kind = ${"rejection" satisfies ReversalKind})`,
       ),
     )
     .limit(1);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isRejection, rejectionDateRefusal, rejectionLabel, rejectionNotYet } from "./rejection";
+import { isRejection, rejectionDateRefusal, rejectionLabel, rejectionNotYet, reversalLabel } from "./rejection";
 
 const DEPOSITED = "2026-10-01";
 const TODAY = "2026-10-21";
@@ -35,11 +35,19 @@ describe("rejectionDateRefusal", () => {
 });
 
 describe("isRejection", () => {
-  it("only a negative payment with the rejection reference", () => {
-    expect(isRejection({ amountCents: -5000, reference: "Paiement rejeté" })).toBe(true);
-    expect(isRejection({ amountCents: -5000, reference: "Correction" })).toBe(false);
-    // A payment typed with that reference by hand is still a payment.
-    expect(isRejection({ amountCents: 5000, reference: "Paiement rejeté" })).toBe(false);
+  it("reads the stored kind, never the reference", () => {
+    expect(isRejection({ reversalKind: "rejection" })).toBe(true);
+    expect(isRejection({ reversalKind: "correction" })).toBe(false);
+    // An ordinary payment, whatever its reference.
+    expect(isRejection({ reversalKind: null })).toBe(false);
+  });
+});
+
+describe("reversalLabel", () => {
+  it("names each kind of reverse entry, and nothing for an ordinary payment", () => {
+    expect(reversalLabel("rejection")).toBe("Paiement rejeté");
+    expect(reversalLabel("correction")).toBe("Correction");
+    expect(reversalLabel(null)).toBeNull();
   });
 });
 

@@ -10,15 +10,25 @@ import { frenchDate } from "../../lib/dates";
  * is due again since the payer's balance is enrollments minus payments.
  */
 
-/** Reference of the reverse entry of a rejected payment; a plain correction says « Correction ». */
-export const REJECTED_REFERENCE = "Paiement rejeté";
+/**
+ * Kind of a reverse entry (`payment.reversal_kind`, #272): a correction of a
+ * payment not deposited, or the rejection of a deposited one. Stored as data, so
+ * rewording a label never reclassifies a row; NULL for an ordinary payment.
+ */
+export const REVERSAL_KINDS = ["correction", "rejection"] as const;
+export type ReversalKind = (typeof REVERSAL_KINDS)[number];
 
-/** Reference of the reverse entry of a payment that was not deposited. */
-export const CORRECTION_REFERENCE = "Correction";
+/** What a reverse entry is called on screen and in the export. */
+export const REVERSAL_LABELS: Record<ReversalKind, string> = {
+  correction: "Correction",
+  rejection: "Paiement rejeté",
+};
+
+/** The label of a reverse entry, or null for an ordinary payment. */
+export const reversalLabel = (kind: ReversalKind | null): string | null => (kind ? REVERSAL_LABELS[kind] : null);
 
 /** A reverse entry (negative payment) recording a rejection, rather than a plain correction. */
-export const isRejection = (p: { amountCents: number; reference: string | null }) =>
-  p.amountCents < 0 && p.reference === REJECTED_REFERENCE;
+export const isRejection = (p: { reversalKind: ReversalKind | null }) => p.reversalKind === "rejection";
 
 /** What the action is called for a deposited payment: « Chèque rejeté » for a cheque. */
 export const rejectionLabel = (method: Method) => (method === "cheque" ? "Chèque rejeté" : "Paiement rejeté");

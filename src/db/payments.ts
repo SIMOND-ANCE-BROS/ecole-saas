@@ -2,7 +2,7 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { type Balance, payerBalance } from "../domain/payments/balance";
 import type { Tx } from "./index";
-import { CORRECTION_REFERENCE, REJECTED_REFERENCE, rejectionDateRefusal } from "../domain/payments/rejection";
+import { type ReversalKind, rejectionDateRefusal } from "../domain/payments/rejection";
 import {
   lessonPack,
   enrollment,
@@ -148,8 +148,9 @@ export async function collect(
  * bank deposit is rejected instead (#253, recommended rule pending the school's
  * validation): management only, for the whole amount not yet corrected, dated
  * `rejectedOn` (the day the bank returned it, not before the deposit; required),
- * reference « Paiement rejeté », and the deposit slip is left as printed. Any
- * other payment is corrected today, reference « Correction », without `rejectedOn`.
+ * kind `rejection`, and the deposit slip is left as printed. Any other payment is
+ * corrected today, kind `correction`, without `rejectedOn`. The reverse entry keeps
+ * the original's reference and issuer (cheque number, bank, #272).
  */
 export async function correctPayment(
   tx: Tx,
@@ -175,6 +176,8 @@ export async function correctPayment(
       payerId: payment.payerId,
       amount: payment.amountCents,
       method: payment.method,
+      reference: payment.reference,
+      issuer: payment.issuer,
       date: payment.date,
       correctedId: payment.correctsId,
       alreadyCorrected: alreadyCorrected,
@@ -215,8 +218,10 @@ export async function correctPayment(
       date,
       amountCents: -amountCents,
       method: o.method,
-      reference: deposited ? REJECTED_REFERENCE : CORRECTION_REFERENCE,
+      reference: o.reference,
+      issuer: o.issuer,
       correctsId: paymentId,
+      reversalKind: deposited ? "rejection" : "correction",
       enteredBy: who.id,
     })
     .returning({ id: payment.id });
@@ -225,6 +230,7 @@ export async function correctPayment(
     method: o.method,
     date,
     corrige_id: paymentId,
+    reversal_kind: deposited ? "rejection" : "correction",
     // The deposit slip keeps the payment as printed; the audit log says which one it was on.
     ...(deposited ? { rejected: true, bank_deposit_id: o.depositId } : {}),
   });
@@ -240,6 +246,8 @@ export type PaymentRow = {
   issuer: string | null;
   plannedPayment: string | null;
   correctedId: string | null;
+  /** Kind of a reverse entry, null for an ordinary payment (#272). */
+  reversalKind: ReversalKind | null;
   /** Amount already cancelled by corrections (positive payments). */
   correctedCents: number;
   enteredBy: string | null;
@@ -260,6 +268,7 @@ export async function paymentsOf(tx: Tx, payerId: string): Promise<PaymentRow[]>
       issuer: payment.issuer,
       plannedPayment: payment.depositPlannedOn,
       correctedId: payment.correctsId,
+      reversalKind: payment.reversalKind,
       correctedCents: alreadyCorrected,
       enteredBy: user.name,
       depositedOn: bankDeposit.date,
