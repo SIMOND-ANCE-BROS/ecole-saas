@@ -15,7 +15,7 @@ import { rowsOf } from "./columns-of";
 import type { Tx } from "./index";
 import { displayedName, payableStudents } from "./people";
 import { currentSeason } from "./schedule";
-import { resolveEntity } from "./billing-entities";
+import { entityChoices, resolveEntity } from "./billing-entities";
 import { auditLog, course, lesson, lessonPack, lessonPackPerson, lessonPackUsage, member, person } from "./schema";
 import { readAttendance } from "./lessons";
 import { listLessonPacks } from "./tariffs";
@@ -26,6 +26,9 @@ import { listLessonPacks } from "./tariffs";
  * reason. Rules in `domain/lesson-pack/pack.ts`. Always within the `withSchool()`
  * transaction (RLS).
  */
+
+/** A pack sold without its business while the school has several (#299). */
+export const ENTITY_REQUIRED = "Choisissez l’entreprise qui vend le carnet.";
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const isUuid = (v: unknown) => z.uuid().safeParse(v).success;
@@ -110,6 +113,10 @@ export async function sellLessonPack(
   // priceRefusal returned null: the price is set.
   const priceCents = e.priceCents ?? 0;
   const changed = gridPriceCents !== null && priceCents !== gridPriceCents;
+  // With several active entities (the form then offers the choice) the seller is always chosen
+  // (#299): a default could sell the pack by a business whose private courses never use it.
+  if (e.billingEntityId === undefined && (await entityChoices(tx)).length > 1)
+    return { ok: false, message: ENTITY_REQUIRED };
   const entity = await resolveEntity(tx, e.billingEntityId);
   if (!entity.ok) return entity;
 
@@ -269,13 +276,22 @@ export async function countLesson(
     .where(eq(lessonPack.id, lessonPackId))
     .for("no key update");
   if (!locked) return { ok: false, message: NO_PACK };
+  // The lesson's course FOR KEY SHARE, before the lesson (updateCourse's order: course, then
+  // its lessons): a change of the course's entity (FOR UPDATE) waits for this count, which
+  // it then sees and refuses (entityLock), or commits first, and this count reads its new
+  // entity (#299).
+  const [c] = await tx
+    .select({ entityId: course.billingEntityId })
+    .from(course)
+    .where(sql`${course.id} = (SELECT s.course_id FROM lesson s WHERE s.id = ${lessonId})`)
+    .for("key share");
   const [l] = await tx
-    .select({ status: lesson.status, courseType: course.type, courseEntityId: course.billingEntityId })
+    .select({ status: lesson.status, courseType: course.type })
     .from(lesson)
     .innerJoin(course, eq(course.id, lesson.courseId))
     .where(eq(lesson.id, lessonId))
     .for("no key update", { of: lesson });
-  if (!l) return { ok: false, message: NO_LESSON };
+  if (!l || !c) return { ok: false, message: NO_LESSON };
   const counted = await tx
     .select({ lessonId: lessonPackUsage.lessonId })
     .from(lessonPackUsage)
@@ -299,7 +315,7 @@ export async function countLesson(
     lessonStudentIds: sheet?.students.map((st) => st.id) ?? [],
     countedStudentIds: countedStudents.map((p) => p.id),
     packEntityId: locked.billingEntityId,
-    courseEntityId: l.courseEntityId,
+    courseEntityId: c.entityId,
   });
   if (refusal) return { ok: false, message: refusal };
   const who = await memberOf(tx, userId);

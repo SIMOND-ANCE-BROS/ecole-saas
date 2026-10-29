@@ -5,7 +5,8 @@ import { OTHER_ENTITY } from "../domain/lesson-pack/pack";
 import { createCourse, entityLock, readCourse, updateCourse, type CourseInput } from "./courses";
 import { enrollmentPreview, saveEnrollment, type EnrollmentInput } from "./enrollments";
 import { withSchool } from "./index";
-import { countLesson, lessonPacks, sellLessonPack } from "./lesson-packs";
+import { countLesson, ENTITY_REQUIRED, lessonPacks, sellLessonPack } from "./lesson-packs";
+import { overlapping } from "./overlap.integration-helpers";
 import { syncLessons } from "./lessons";
 import { once, storedEnrollment } from "./submissions";
 import { defaultEntityFor, schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
@@ -250,6 +251,30 @@ describe("the entity of a course", () => {
   });
 });
 
+/** What the course form would send for a saved private course, with another entity. */
+async function privateCourseInput(id: string, billingEntityId: string): Promise<CourseInput> {
+  const [c] = await admin`SELECT * FROM course WHERE id = ${id}`;
+  return {
+    discipline: { id: c.discipline_id },
+    room: { id: c.room_id },
+    instructorId: c.instructor_id,
+    billingEntityId,
+    type: "private",
+    recurrence: "weekly",
+    weekday: c.weekday,
+    startDate: null,
+    endDate: null,
+    dates: [],
+    startTime: String(c.start_time).slice(0, 5),
+    durationMinutes: c.duration_minutes,
+    ageMin: null,
+    ageMax: null,
+    level: null,
+    maxCapacity: null,
+    instructorRate: null,
+  };
+}
+
 describe("lesson packs and entities", () => {
   it("refuses to count a lesson on a pack of another entity, and does not offer it", async () => {
     await withSchool(ids.school, (tx) => syncLessons(tx, ids.season, TODAY));
@@ -281,30 +306,55 @@ describe("lesson packs and entities", () => {
     await admin`INSERT INTO lesson_pack_usage (school_id, lesson_pack_id, lesson_id) VALUES (${ids.school}, ${pack.id}, ${lesson.id})`;
     const locked = "Ce cours a 1 séance décomptée d’un carnet : l’entreprise qui le vend ne peut plus changer.";
     expect(await withSchool(ids.school, (tx) => entityLock(tx, ids.privateB))).toBe(locked);
-    const [c] = await admin`SELECT * FROM course WHERE id = ${ids.privateB}`;
-    expect(
-      await withSchool(ids.school, (tx) =>
-        updateCourse(tx, ids.privateB, {
-          discipline: { id: c.discipline_id },
-          room: { id: c.room_id },
-          instructorId: c.instructor_id,
-          billingEntityId: ids.a,
-          type: "private",
-          recurrence: "weekly",
-          weekday: c.weekday,
-          startDate: null,
-          endDate: null,
-          dates: [],
-          startTime: "17:00",
-          durationMinutes: c.duration_minutes,
-          ageMin: null,
-          ageMax: null,
-          level: null,
-          maxCapacity: null,
-          instructorRate: null,
+    const input = await privateCourseInput(ids.privateB, ids.a);
+    expect(await withSchool(ids.school, (tx) => updateCourse(tx, ids.privateB, input))).toEqual({
+      ok: false,
+      message: locked,
+    });
+  });
+
+  it("never counts a lesson on a pack of the course's old entity while the entity changes", async () => {
+    // A private course of B with no counted lesson, a pack of B: the director moves the
+    // course to A while the front desk counts one of its lessons on the B pack.
+    const [{ id: course }] = await admin`
+      INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, type, weekday, start_time, duration_minutes)
+      VALUES (${ids.school}, ${ids.b}, ${ids.season}, ${ids.rock}, ${ids.room}, ${ids.teacher}, 'private', 5, '18:00', 60) RETURNING id`;
+    await withSchool(ids.school, (tx) => syncLessons(tx, ids.season, TODAY));
+    const [lesson] = await admin`SELECT id FROM lesson WHERE course_id = ${course} ORDER BY date LIMIT 1`;
+    const [pack] = await admin`
+      INSERT INTO lesson_pack (school_id, billing_entity_id, payer_id, people_count, lesson_count, price_cents)
+      VALUES (${ids.school}, ${ids.b}, ${ids.payer}, 1, 5, 20000) RETURNING id`;
+    await admin`INSERT INTO lesson_pack_person (school_id, lesson_pack_id, person_id) VALUES (${ids.school}, ${pack.id}, ${ids.zoe})`;
+    const input = await privateCourseInput(course, ids.a);
+
+    const [moved, counted] = await overlapping(
+      admin,
+      (hold) =>
+        withSchool(ids.school, async (tx) => {
+          const r = await updateCourse(tx, course, input);
+          await hold();
+          return r;
         }),
+      () => withSchool(ids.school, (tx) => countLesson(tx, frontDesk, lesson.id, pack.id)),
+    );
+    // The count waited for the move, then read the course's new entity.
+    expect(moved).toMatchObject({ ok: true });
+    expect(counted).toEqual({ ok: false, message: OTHER_ENTITY });
+    const [{ n }] = await admin`SELECT count(*)::int AS n FROM lesson_pack_usage WHERE lesson_pack_id = ${pack.id}`;
+    expect(n).toBe(0);
+  });
+
+  it("refuses a pack sold without its entity when the school has several active ones", async () => {
+    const r = await withSchool(ids.school, (tx) =>
+      sellLessonPack(
+        tx,
+        frontDesk,
+        ids.payer,
+        { lessonCount: 5, peopleCount: 1, participantIds: [ids.zoe], priceCents: 20000, reason: "Zz devis" },
+        TODAY,
       ),
-    ).toEqual({ ok: false, message: locked });
+    );
+    expect(r).toEqual({ ok: false, message: ENTITY_REQUIRED });
   });
 
   it("refuses to sell a pack for an inactive entity", async () => {
