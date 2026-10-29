@@ -2,7 +2,7 @@ import { withSchool } from "@/db";
 import { PAYMENT_METHODS } from "@/db/payments";
 import { paymentLog } from "@/db/deposits";
 import { toCsv } from "@/domain/payments/deposits";
-import { paymentLogQuery, shownPaymentLog } from "@/domain/payments/payment-log";
+import { exportRowOf, paymentLogQuery, shownPaymentLog } from "@/domain/payments/payment-log";
 import { validDate } from "@/domain/schedule/week";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
@@ -28,18 +28,7 @@ export async function GET(query: Request) {
     sort,
     today,
   );
-  const csv = toCsv(
-    rows.map((l) => ({
-      date: l.date,
-      payer: l.payer,
-      method: PAYMENT_METHODS[l.method],
-      amountCents: l.amountCents,
-      reference: l.reference,
-      issuer: l.issuer,
-      plannedPayment: l.plannedPayment,
-      deposit: l.dateDeposit,
-    })),
-  );
+  const csv = toCsv(rows.map(exportRowOf));
   return new Response(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

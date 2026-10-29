@@ -7,6 +7,8 @@ import { createDeposit, paymentsToDeposit, readDeposit } from "./deposits";
 import { once, storedPayments } from "./submissions";
 import { formatEuros } from "../lib/money";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Payments (#97), as the application runs them (app_user, RLS). Fictitious data
@@ -139,7 +141,9 @@ describe("collect", () => {
     expect(correction).toMatchObject({
       amountCents: -4000,
       method: "cheque",
-      reference: "Correction",
+      // The kind is stored; the reverse entry keeps the cheque number (#272).
+      reversalKind: "correction",
+      reference: "0001",
       enteredBy: "Accueil Test",
     });
     expect(rows.find((l) => l.id === ids[0])?.correctedCents).toBe(4000);
@@ -258,7 +262,8 @@ describe("a payment rejected after its bank deposit (#253)", () => {
       date: "2026-10-20",
       amountCents: -12000,
       method: "cheque",
-      reference: "Paiement rejeté",
+      reversalKind: "rejection",
+      reference: "0253",
       correctedId: id,
       depositedOn: null,
       enteredBy: "Direction Test",
@@ -303,7 +308,82 @@ describe("a payment rejected after its bank deposit (#253)", () => {
     if (!c.ok) throw new Error(c.message);
     expect((await withSchool(school, (tx) => paymentsOf(tx, bounced))).find((p) => p.id === c.ids[0])).toMatchObject({
       date: TODAY,
-      reference: "Correction",
+      reversalKind: "correction",
+      reference: "0254",
     });
+  });
+});
+
+describe("migration 0037: the kind of the reverse entries written before it (#272)", () => {
+  it("reads the kind from the old label, gives back the cheque number, and leaves payments immutable", async () => {
+    const statements = readFileSync(join(process.cwd(), "migrations/0037_payment_reversal_kind.sql"), "utf8").split(
+      "--> statement-breakpoint",
+    );
+    const from = statements.findIndex((s) => s.includes("DISABLE TRIGGER"));
+    const to = statements.findIndex((s) => s.includes("ENABLE TRIGGER"));
+    if (from < 0 || to < from) throw new Error("No backfill in migration 0037");
+    const backfill = statements.slice(from, to + 1);
+
+    const ROLLBACK = new Error("rollback");
+    let filled: Record<string, unknown>[] = [];
+    let stillImmutable = false;
+    await admin
+      .begin(async (t) => {
+        // Rows as written before the migration: no kind, the label as reference.
+        await t`ALTER TABLE payment DROP CONSTRAINT payment_reversal_kind`;
+        const insert = (amount: number, reference: string | null, issuer: string | null, corrects: string | null) =>
+          t`INSERT INTO payment (school_id, payer_id, date, amount_cents, method, reference, issuer, corrects_id)
+            VALUES (${school}, ${payer}, ${TODAY}, ${amount}, 'cheque', ${reference}, ${issuer}, ${corrects})
+            RETURNING id`;
+        const [bouncedCheque] = await insert(5000, "0372a", "Zz Banque", null);
+        const [corrected] = await insert(3000, "0372b", null, null);
+        const [rejection] = await insert(-5000, "Paiement rejeté", null, bouncedCheque.id);
+        const [correction] = await insert(-1000, "Correction", null, corrected.id);
+        // Typed by hand with that reference, it is still an ordinary payment.
+        const [ordinary] = await insert(2000, "Paiement rejeté", null, null);
+        for (const s of backfill) await t.unsafe(s);
+        const order = [bouncedCheque.id, corrected.id, rejection.id, correction.id, ordinary.id];
+        filled = (
+          await t`SELECT id, reversal_kind AS kind, reference, issuer FROM payment WHERE id IN ${t(order)}`
+        ).map((r) => ({ ...r, id: order.indexOf(r.id) }));
+        try {
+          await t.savepoint((s) => s`UPDATE payment SET reference = 'x' WHERE id = ${ordinary.id}`);
+        } catch (e) {
+          stillImmutable = /cannot be modified/.test(String(e));
+        }
+        throw ROLLBACK;
+      })
+      .catch((e) => {
+        if (e !== ROLLBACK) throw e;
+      });
+    expect(filled.sort((x, y) => Number(x.id) - Number(y.id))).toEqual([
+      { id: 0, kind: null, reference: "0372a", issuer: "Zz Banque" },
+      { id: 1, kind: null, reference: "0372b", issuer: null },
+      { id: 2, kind: "rejection", reference: "0372a", issuer: "Zz Banque" },
+      { id: 3, kind: "correction", reference: "0372b", issuer: null },
+      { id: 4, kind: null, reference: "Paiement rejeté", issuer: null },
+    ]);
+    // The trigger is enabled again by the migration itself.
+    expect(stillImmutable).toBe(true);
+  });
+
+  it("a reverse entry always carries its kind, and an ordinary payment never does", async () => {
+    const violates = async (kind: string | null, corrects: boolean) => {
+      try {
+        await admin.begin(async (t) => {
+          const [o] =
+            await t`INSERT INTO payment (school_id, payer_id, amount_cents, method) VALUES (${school}, ${payer}, 100, 'cash') RETURNING id`;
+          await t`INSERT INTO payment (school_id, payer_id, amount_cents, method, corrects_id, reversal_kind)
+            VALUES (${school}, ${payer}, -100, 'cash', ${corrects ? o.id : null}, ${kind})`;
+          throw new Error("inserted");
+        });
+        return false;
+      } catch (e) {
+        return (e as { constraint_name?: string }).constraint_name === "payment_reversal_kind";
+      }
+    };
+    expect(await violates(null, true)).toBe(true);
+    expect(await violates("rejection", false)).toBe(true);
+    expect(await violates("correction", true)).toBe(false);
   });
 });

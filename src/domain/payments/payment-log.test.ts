@@ -3,6 +3,7 @@ import { PAYMENT_COLUMNS } from "../filters/columns";
 import { EMPTY_FILTER, readFilter } from "../filters/filters";
 import { totals } from "./deposits";
 import {
+  exportReference,
   futureCashing,
   paymentLogQuery,
   paymentLogValue,
@@ -25,6 +26,7 @@ const row = (r: Partial<Row> & Pick<Row, "method">): Row => ({
   payer: "Zz Payeur",
   methodLabel: LABELS[r.method],
   amountCents: 10000,
+  reversalKind: null,
   reference: null,
   issuer: null,
   plannedPayment: null,
@@ -36,7 +38,7 @@ const ROWS: Row[] = [
   row({ payer: "Zz Martin", method: "cheque", amountCents: 12000, plannedPayment: "2026-11-05", reference: "0012345" }),
   row({ payer: "Zz Bernard", method: "cash", amountCents: 3500, date: "2026-10-03" }),
   // A correction cancelling Zz Bernard's cash payment.
-  row({ payer: "Zz Bernard", method: "cash", amountCents: -3500, date: "2026-10-04", reference: "Correction" }),
+  row({ payer: "Zz Bernard", method: "cash", amountCents: -3500, date: "2026-10-04", reversalKind: "correction" }),
   row({ payer: "Zz Arnaud", method: "cheque", amountCents: 9000, date: "2026-10-02", dateDeposit: "2026-10-10" }),
   row({ payer: "Zz Colin", method: "holiday_voucher", amountCents: 5000 }),
   row({ payer: "Zz Durand", method: "pass_sport", amountCents: 5000 }),
@@ -53,8 +55,18 @@ describe("payment log values", () => {
   });
 
   it("joins the cheque number and its bank", () => {
-    expect(referenceOf({ reference: "0012345", issuer: "Zz Banque" })).toBe("0012345, Zz Banque");
-    expect(referenceOf({ reference: null, issuer: null })).toBeNull();
+    expect(referenceOf({ reversalKind: null, reference: "0012345", issuer: "Zz Banque" })).toBe("0012345, Zz Banque");
+    expect(referenceOf({ reversalKind: null, reference: null, issuer: null })).toBeNull();
+  });
+
+  it("names a reverse entry from its stored kind, before the original cheque number (#272)", () => {
+    const rejected = { reversalKind: "rejection", reference: "0012345", issuer: "Zz Banque" } as const;
+    expect(referenceOf(rejected)).toBe("Paiement rejeté, 0012345, Zz Banque");
+    expect(exportReference(rejected)).toBe("Paiement rejeté, 0012345");
+    expect(exportReference({ reversalKind: "correction", reference: null })).toBe("Correction");
+    // A payment whose reference was typed as the label is still an ordinary payment.
+    expect(exportReference({ reversalKind: null, reference: "Paiement rejeté" })).toBe("Paiement rejeté");
+    expect(exportReference({ reversalKind: null, reference: null })).toBeNull();
   });
 
   it("sorts the amount in cents", () => expect(paymentLogValue(ROWS[0], "montant", TODAY)).toBe(12000));
