@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { columnsOf } from "./columns-of";
 import type { Tx } from "./index";
@@ -147,6 +147,56 @@ export function listEntities(tx: Tx): Promise<EntityRow[]> {
 export async function defaultEntityId(tx: Tx): Promise<string | null> {
   const [e] = await tx.select({ id: billingEntity.id }).from(billingEntity).where(eq(billingEntity.isDefault, true));
   return e?.id ?? null;
+}
+
+/**
+ * The school has more than one entity, active or not (#299): only then do screens name the
+ * entity of a course or an enrollment. A school with one never sees it.
+ */
+export async function severalEntities(tx: Tx): Promise<boolean> {
+  const rows = await tx.select({ id: billingEntity.id }).from(billingEntity).limit(2);
+  return rows.length > 1;
+}
+
+/** An entity offered in a choice (course form, #299). */
+export type EntityChoice = { id: string; name: string; isDefault: boolean };
+
+/**
+ * Entities a course can be sold by, the default first: the active ones, and `include`
+ * (the course's own) even once deactivated. A school with a single one sees no choice.
+ */
+export function entityChoices(tx: Tx, include?: string): Promise<EntityChoice[]> {
+  return tx
+    .select({ id: billingEntity.id, name: billingEntity.name, isDefault: billingEntity.isDefault })
+    .from(billingEntity)
+    .where(include ? or(eq(billingEntity.active, true), eq(billingEntity.id, include)) : eq(billingEntity.active, true))
+    .orderBy(desc(billingEntity.isDefault), asc(billingEntity.name));
+}
+
+/**
+ * The entity a course or a lesson pack is sold by (#299): the one chosen, if it is active
+ * or is already the row's own (`current`, kept even once deactivated); none chosen, the
+ * row's own, or the school's default for a new one.
+ */
+export async function resolveEntity(
+  tx: Tx,
+  wanted: string | undefined,
+  current?: string,
+): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
+  if (wanted === undefined) {
+    const id = current ?? (await defaultEntityId(tx));
+    return id ? { ok: true, id } : { ok: false, message: NO_DEFAULT_ENTITY };
+  }
+  const [e] = await tx
+    .select({ id: billingEntity.id })
+    .from(billingEntity)
+    .where(
+      and(
+        eq(billingEntity.id, wanted),
+        current ? or(eq(billingEntity.active, true), eq(billingEntity.id, current)) : eq(billingEntity.active, true),
+      ),
+    );
+  return e ? { ok: true, id: e.id } : { ok: false, message: "Entreprise introuvable ou inactive." };
 }
 
 /** Shown when a school has no default entity: nothing can be cashed until it has one. */

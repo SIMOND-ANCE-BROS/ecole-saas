@@ -186,7 +186,14 @@ export function Enrollments({
                         <EnrollmentStatusBadge status={i.status} droppedOn={i.droppedOn} />
                       </span>
                     </TableTd>
-                    <TableTd>{i.courses.join(", ")}</TableTd>
+                    <TableTd>
+                      {i.courses.join(", ")}
+                      {i.entity && (
+                        <Text size="xs" c="dimmed">
+                          Entreprise : {i.entity}
+                        </Text>
+                      )}
+                    </TableTd>
                     <TableTd className="hidden sm:table-cell">
                       {PUBLIC[i.audience]}, {PERIOD[i.period]}
                     </TableTd>

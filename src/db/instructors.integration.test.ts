@@ -8,6 +8,7 @@ import {
   updateInstructor,
   type InstructorInput,
 } from "./instructors";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /** Instructors, read and written as the application does (app_user, RLS). Fictitious data deleted at the end. */
 
@@ -35,9 +36,8 @@ const camille: InstructorInput = {
 };
 
 beforeAll(async () => {
-  [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`ia-${suffix}`}) RETURNING id`;
-  [{ id: otherSchool }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`ib-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "École A", `ia-${suffix}`);
+  [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "École B", `ib-${suffix}`);
   [{ id: season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   [{ id: foreign }] = await admin`
@@ -114,8 +114,8 @@ describe("listInstructors", () => {
     const [room] =
       await admin`INSERT INTO room (school_id, site_id, name) VALUES (${school}, ${s.id}, 'Studio') RETURNING id`;
     await admin`
-      INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-      VALUES (${school}, ${season}, ${d.id}, ${room.id}, ${lucas}, 1, '18:00', 60), (${school}, ${season}, ${d.id}, ${room.id}, ${lucas}, 3, '18:00', 90)`;
+      INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+      VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${d.id}, ${room.id}, ${lucas}, 1, '18:00', 60), (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${d.id}, ${room.id}, ${lucas}, 3, '18:00', 90)`;
 
     const list = await withSchool(school, (tx) => listInstructors(tx, season));
     expect(list.map((i) => `${i.firstName} ${i.name} ${i.active ? "actif" : "inactif"} ${i.seasonCourses}`)).toEqual([

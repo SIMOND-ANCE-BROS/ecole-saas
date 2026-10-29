@@ -50,9 +50,9 @@ beforeAll(async () => {
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${otherSchool}, 'Ailleurs', 'Paul') RETURNING id`;
   const [s] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
-  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents) VALUES (${school}, ${s.id}, ${payer}, 'child', 'year', 30000)`;
-  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status) VALUES (${school}, ${s.id}, ${payer}, 'child', 'quarter', 9000, 'trial')`;
-  await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents) VALUES (${school}, ${s.id}, ${bounced}, 'child', 'year', 12000)`;
+  await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents) VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${s.id}, ${payer}, 'child', 'year', 30000)`;
+  await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents, status) VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${s.id}, ${payer}, 'child', 'quarter', 9000, 'trial')`;
+  await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents) VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${s.id}, ${bounced}, 'child', 'year', 12000)`;
 });
 
 afterAll(async () => {

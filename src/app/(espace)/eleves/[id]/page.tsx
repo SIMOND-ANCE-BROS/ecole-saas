@@ -29,6 +29,8 @@ const BANNERS: Record<string, string> = {
   cree: "Élève créé.",
   modifie: "Fiche enregistrée.",
   enregistree: "Inscription enregistrée.",
+  // One submission over two businesses (#299): one enrollment each.
+  enregistrees: "Inscriptions enregistrées, une par entreprise.",
   vendu: "Carnet vendu.",
 };
 

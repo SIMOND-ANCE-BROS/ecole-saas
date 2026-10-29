@@ -5,7 +5,18 @@ import { courseDatesSql } from "./courses";
 import type { Tx } from "./index";
 import { alias } from "drizzle-orm/pg-core";
 import { displayedName } from "./people";
-import { course, discipline, enrollment, enrollmentCourse, instructor, person, season, room, site } from "./schema";
+import {
+  billingEntity,
+  course,
+  discipline,
+  enrollment,
+  enrollmentCourse,
+  instructor,
+  person,
+  season,
+  room,
+  site,
+} from "./schema";
 
 /** Schedule reads, always within the `withSchool()` transaction (RLS). */
 
@@ -92,6 +103,9 @@ export type ScheduleCourse = {
   maxCapacity: number | null;
   /** Distinct enrolled students (active enrollments). */
   enrolled: number;
+  /** Business that sells it (#299) and its short name. */
+  billingEntityId: string;
+  entity: string;
 };
 
 /**
@@ -142,8 +156,11 @@ async function readScheduleCourse(tx: Tx, filter: SQL): Promise<ScheduleCourse[]
       level: course.level,
       maxCapacity: course.maxCapacity,
       enrolled: effective,
+      billingEntityId: course.billingEntityId,
+      entity: billingEntity.name,
     })
     .from(course)
+    .innerJoin(billingEntity, eq(billingEntity.id, course.billingEntityId))
     .innerJoin(discipline, eq(discipline.id, course.disciplineId))
     .innerJoin(room, eq(room.id, course.roomId))
     .innerJoin(site, eq(site.id, room.siteId))

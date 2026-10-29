@@ -4,6 +4,7 @@ import { withSchool } from "./index";
 import { enrollmentPreview, saveEnrollment, seasonEnrollments } from "./enrollments";
 import { seasonCourses } from "./schedule";
 import { seasonFigures, lastEnrollments } from "./dashboard";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /** Enrollments, run as the application (app_user, RLS). Fictitious data deleted at the end. */
 
@@ -15,7 +16,7 @@ const suffix = Math.random().toString(36).slice(2, 8);
 const ids = {} as Record<string, string>;
 
 beforeAll(async () => {
-  [{ id: ids.school }] = await admin`INSERT INTO school (name, slug) VALUES ('École I', ${`i-${suffix}`}) RETURNING id`;
+  [{ id: ids.school }] = await schoolWithDefaultEntity(admin, "École I", `i-${suffix}`);
   const e = ids.school;
   [{ id: ids.season }] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${e}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
@@ -41,8 +42,8 @@ beforeAll(async () => {
   const [classical] = await admin`INSERT INTO discipline (school_id, name) VALUES (${e}, 'Classique') RETURNING id`;
   const course = async (seasonId: string, disciplineId: string, duration: number, day: number) =>
     (
-      await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-      VALUES (${e}, ${seasonId}, ${disciplineId}, ${room.id}, ${teacher.id}, ${day}, '17:00', ${duration}) RETURNING id`
+      await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+      VALUES (${e}, (SELECT id FROM billing_entity WHERE school_id = ${e} AND is_default), ${seasonId}, ${disciplineId}, ${room.id}, ${teacher.id}, ${day}, '17:00', ${duration}) RETURNING id`
     )[0].id as string;
   ids.jazz60 = await course(ids.season, jazz.id, 60, 1);
   ids.jazz45 = await course(ids.season, jazz.id, 45, 2);
@@ -103,7 +104,7 @@ describe("Enrollment", () => {
   it("previews the price for a first child, without siblings discount", async () => {
     const a = await preview(childEntry([ids.zoe], [ids.jazz60]));
     if (a.status !== "ok") throw new Error(a.message);
-    expect(a.newEnrollment).toMatchObject({ status: "ok", grossPriceCents: 11000, netPriceCents: 11000 });
+    expect(a.newEnrollments[0].price).toMatchObject({ status: "ok", grossPriceCents: 11000, netPriceCents: 11000 });
   });
 
   it("saves the enrollment at the price recomputed on the server", async () => {
@@ -129,7 +130,11 @@ describe("Enrollment", () => {
   it("applies the siblings discount with the already saved enrollment, and flags it for that one", async () => {
     const a = await preview(childEntry([ids.noe], [ids.jazz60]));
     if (a.status !== "ok") throw new Error(a.message);
-    expect(a.newEnrollment).toMatchObject({ grossPriceCents: 11000, discountCents: 1100, netPriceCents: 9900 });
+    expect(a.newEnrollments[0].price).toMatchObject({
+      grossPriceCents: 11000,
+      discountCents: 1100,
+      netPriceCents: 9900,
+    });
     expect(a.existingImpacts).toHaveLength(1);
     expect(a.existingImpacts[0]).toMatchObject({ students: "Zoé", savedDeposit: 0, recalculatedDiscount: 1100 });
   });
@@ -202,7 +207,7 @@ describe("Status at creation (#284)", () => {
     const p = await withSchool(ids.school, (tx) => enrollmentPreview(tx, ids.payer, ids.season, entry));
     if (p.status !== "ok") throw new Error(p.message);
     // Priced with the active siblings (Noé), but a trial does not count as a sibling: nothing to flag.
-    expect(p.newEnrollment).toMatchObject({ status: "ok", discountCents: 1100 });
+    expect(p.newEnrollments[0].price).toMatchObject({ status: "ok", discountCents: 1100 });
     expect(p.existingImpacts).toEqual([]);
     const r = await withSchool(ids.school, (tx) => saveEnrollment(tx, ids.payer, ids.season, entry));
     if (!r.ok) throw new Error(r.message);

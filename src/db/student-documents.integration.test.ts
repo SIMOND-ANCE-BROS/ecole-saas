@@ -13,6 +13,7 @@ import {
   studentDocuments,
 } from "./student-documents";
 import { listStudents } from "./students";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /**
  * Documents received for each student (#287), as the application runs them
@@ -44,9 +45,8 @@ async function student(schoolId: string, firstName: string, birthDate: string) {
 }
 
 beforeAll(async () => {
-  [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`da-${suffix}`}) RETURNING id`;
-  [{ id: otherSchool }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`db-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "École A", `da-${suffix}`);
+  [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "École B", `db-${suffix}`);
   await admin`INSERT INTO "user" (id, name, email) VALUES (${desk}, 'Zzfaux Test', ${`${desk}@exemple.test`})`;
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${desk}, 'front_desk')`;
   zoe = await student(school, "Zoé", "2015-03-10");
@@ -65,17 +65,17 @@ beforeAll(async () => {
     await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
     VALUES (${school}, 'Roux', 'Mathis', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
   const [jazz] =
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-    VALUES (${school}, ${season}, ${d.id}, ${room.id}, ${teacher.id}, 3, '17:00', 60) RETURNING id`;
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+    VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${d.id}, ${room.id}, ${teacher.id}, 3, '17:00', 60) RETURNING id`;
   for (const [who, status, enrolledOn] of [
     [zoe, "active", "2026-09-05"],
     [alex, "trial", "2026-10-20"],
     [noe, "waitlist", "2026-09-01"],
   ] as const) {
     const [i] =
-      await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status, enrolled_on)
-      VALUES (${school}, ${season}, ${who}, 'child', 'quarter', 10000, ${status}, ${enrolledOn}) RETURNING id`;
-    await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${school}, ${i.id}, ${who}, ${jazz.id})`;
+      await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents, status, enrolled_on)
+      VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${who}, 'child', 'quarter', 10000, ${status}, ${enrolledOn}) RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id) VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${i.id}), ${i.id}, ${who}, ${jazz.id})`;
   }
 });
 

@@ -7,6 +7,7 @@ import { type CoursePay, type EditedCourse, RECURRENCES, type ScheduleReferentia
 import { PAY_UNITS, rateField } from "@/domain/payroll/rate-field";
 import { formatEuros, parseEuros, typedEuros } from "@/lib/money";
 import type { ScheduleCourse } from "@/db/schedule";
+import type { EntityChoice } from "@/db/billing-entities";
 import { conflicts } from "@/domain/schedule/overlap";
 import { lessonDatesOf, type SeasonCalendar } from "@/domain/schedule/lessons";
 import { outsideHours } from "@/domain/schedule/hours";
@@ -30,6 +31,10 @@ const shortDate = new Intl.DateTimeFormat("fr-FR", {
 type Props = {
   course: EditedCourse | null;
   referential: ScheduleReferential;
+  /** Businesses that can sell the course (#299), the default first: no choice shown with one. */
+  entities: EntityChoice[];
+  /** Why the course's entity can no longer change (enrollments, counted lessons); null: it can. */
+  entityLock?: string | null;
   /** Instructors' pay modes and this course's own rate (#191): director pages only. */
   pay: CoursePay;
   schedule: ScheduleCourse[];
@@ -55,6 +60,8 @@ const whole = (v: string) => (v.trim() === "" ? null : Number(v));
 export function CourseForm({
   course,
   referential: referential,
+  entities,
+  entityLock = null,
   pay,
   schedule: schedule,
   calendar,
@@ -76,6 +83,8 @@ export function CourseForm({
     newSite: "",
     siteAddress: "",
     instructorId: course?.instructorId ?? r.instructors[0]?.id ?? "",
+    // A new course is preselected on the default entity (#299; #288 Q1 may refine it).
+    billingEntityId: course?.billingEntityId ?? entities[0]?.id ?? "",
     type: course?.type ?? "group",
     recurrence: course?.recurrence ?? "weekly",
     startDate: course?.startDate ?? "",
@@ -152,6 +161,8 @@ export function CourseForm({
             site: v.siteId !== NEW ? { id: v.siteId } : { name: v.newSite, address: v.siteAddress },
           },
     instructorId: v.instructorId,
+    // Only sent when there is a choice: otherwise the default entity, or the course's own.
+    billingEntityId: entities.length > 1 && v.billingEntityId ? v.billingEntityId : undefined,
     type: v.type,
     recurrence: v.recurrence,
     weekday: oneOff ? null : Number(v.weekday),
@@ -384,6 +395,19 @@ export function CourseForm({
             setV({ ...v, type, recurrence: !course && type === "workshop" ? "dates" : v.recurrence });
           }}
         />
+        {entities.length > 1 && (
+          <Select
+            label="Entreprise"
+            description={entityLock ?? "Celle qui vend le cours, encaisse et facture ses inscriptions."}
+            // Read-only rather than disabled: the value stays readable and focusable.
+            readOnly={entityLock !== null}
+            allowDeselect={false}
+            data={entities.map((e) => ({ value: e.id, label: e.name }))}
+            value={v.billingEntityId || null}
+            onChange={set("billingEntityId")}
+            error={error("billingEntityId")}
+          />
+        )}
       </Fieldset>
 
       <Fieldset legend="Créneau" className="grid gap-3 sm:grid-cols-3">

@@ -12,3 +12,18 @@ export async function defaultEntityFor(admin: postgres.Sql, schoolId: string, na
     RETURNING id`;
   return id;
 }
+
+/**
+ * Creates a test school with its default billing entity (#299: every course,
+ * enrollment and lesson pack belongs to one). Returns the rows of
+ * `INSERT … RETURNING id`, so that it replaces that insert as is.
+ */
+export async function schoolWithDefaultEntity(
+  admin: postgres.Sql,
+  name: string,
+  slug: string,
+): Promise<{ id: string }[]> {
+  const rows = await admin<{ id: string }[]>`INSERT INTO school (name, slug) VALUES (${name}, ${slug}) RETURNING id`;
+  await defaultEntityFor(admin, rows[0].id);
+  return rows;
+}

@@ -309,6 +309,13 @@
       "when": 1793300639110,
       "tag": "0043_lesson_pack_person",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1793305459007,
+      "tag": "0044_entity_on_courses",
+      "breakpoints": true
     }
   ]
 }

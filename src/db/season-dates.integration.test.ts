@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
 import { addClosure, syncLessons } from "./lessons";
 import { updateSeason } from "./settings";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /**
  * A season's lessons follow its new dates (#270): `updateSeason` re-syncs them in the same
@@ -30,8 +31,7 @@ const TODAY = "2026-11-02"; // a Monday
 const LABEL = "2026-2027";
 
 beforeAll(async () => {
-  [{ id: school }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('Zz École dates', ${`zzd-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "Zz École dates", `zzd-${suffix}`);
   [{ id: season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${school}, ${LABEL}, '2026-09-01', '2026-12-31') RETURNING id`;
   [{ id: discipline }] =
@@ -46,12 +46,13 @@ beforeAll(async () => {
              (${school}, 'Zzremplaçant', 'Zzprénom', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
   [{ id: student }] =
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Zzélève', 'Zzprénom') RETURNING id`;
-  [{ id: pack }] = await admin`INSERT INTO lesson_pack (school_id, payer_id, people_count, lesson_count, price_cents)
-    VALUES (${school}, ${student}, 1, 5, 20000) RETURNING id`;
+  [{ id: pack }] =
+    await admin`INSERT INTO lesson_pack (school_id, billing_entity_id, payer_id, people_count, lesson_count, price_cents)
+    VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${student}, 1, 5, 20000) RETURNING id`;
   // Thursday 18:00, weekly.
   [{ id: course }] =
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-      VALUES (${school}, ${season}, ${discipline}, ${room}, ${teacher}, 4, '18:00', 60) RETURNING id`;
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+      VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${discipline}, ${room}, ${teacher}, 4, '18:00', 60) RETURNING id`;
   // The Thursday 19 November is closed.
   const closed = await withSchool(school, (tx) =>
     addClosure(tx, season, { scope: "school", label: "Zz Stage", start: "2026-11-16", end: "2026-11-20" }),
@@ -173,8 +174,8 @@ describe("season dates and lessons (#270)", () => {
 
   it("refuses a start moved by an odd number of weeks over a course every other week", async () => {
     const [valse] = await admin`INSERT INTO discipline (school_id, name) VALUES (${school}, 'Zzvalse') RETURNING id`;
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, recurrence, weekday, start_time, duration_minutes)
-      VALUES (${school}, ${season}, ${valse.id}, ${room}, ${teacher}, 'biweekly', 2, '19:00', 60)`;
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, recurrence, weekday, start_time, duration_minutes)
+      VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${valse.id}, ${room}, ${teacher}, 'biweekly', 2, '19:00', 60)`;
     await withSchool(school, (tx) => syncLessons(tx, season, TODAY));
 
     expect(await edit("2026-09-08", "2027-01-15")).toEqual({

@@ -60,8 +60,8 @@ beforeAll(async () => {
     VALUES (${e}, 'Zzprof', 'Camille', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
   const [jazz] = await admin`INSERT INTO discipline (school_id, name) VALUES (${e}, 'Zz Jazz') RETURNING id`;
   [{ id: ids.course }] =
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-    VALUES (${e}, ${ids.season}, ${jazz.id}, ${ids.room}, ${ids.teacher}, 1, '17:00', 60) RETURNING id`;
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+    VALUES (${e}, (SELECT id FROM billing_entity WHERE school_id = ${e} AND is_default), ${ids.season}, ${jazz.id}, ${ids.room}, ${ids.teacher}, 1, '17:00', 60) RETURNING id`;
   courseInput = {
     discipline: { name: "Zz Classique" },
     room: { id: ids.room },

@@ -21,6 +21,7 @@ import { scheduleCourse, enrolledInCourse } from "@/db/schedule";
 import { conflictingLessons } from "@/db/unavailabilities";
 import { courseLessons } from "@/db/lessons";
 import { courseOwnRate } from "@/db/courses";
+import { severalEntities } from "@/db/billing-entities";
 import { courseRateLabel } from "@/domain/payroll/rate-field";
 import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
@@ -56,6 +57,8 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
           inConflict: await conflictingLessons(tx, course.id, todayInParis()),
           // Pay data: read for management only, so it never reaches the front desk's page (#191).
           ownRate: role === "director" ? await courseOwnRate(tx, course.id) : null,
+          // The selling business is named only when the school has several (#299).
+          showEntity: await severalEntities(tx),
         }
       : null;
   });
@@ -135,6 +138,12 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
             )}
           </dd>
         </div>
+        {parsed.showEntity && (
+          <div>
+            <dt className="text-xs text-doux">Entreprise</dt>
+            <dd>{course.entity}</dd>
+          </div>
+        )}
         <div>
           <dt className="text-xs text-doux">Public</dt>
           <dd>{public_ || "Tous"}</dd>

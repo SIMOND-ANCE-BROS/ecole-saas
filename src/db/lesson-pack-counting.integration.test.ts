@@ -4,6 +4,7 @@ import { ALREADY_COUNTED_FOR_STUDENT, NOT_A_STUDENT_OF_LESSON, USED_UP } from ".
 import { withSchool } from "./index";
 import { countLesson, lessonPacks, packsOf, uncountLesson } from "./lesson-packs";
 import { cancelLesson, syncLessons } from "./lessons";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /**
  * Counting private lessons on a lesson pack (#286), as the application runs it
@@ -33,8 +34,9 @@ const lessons: string[] = [];
 let groupLesson: string;
 
 const newPack = async (lessonCount: number, participant = student) => {
-  const [{ id }] = await admin`INSERT INTO lesson_pack (school_id, payer_id, people_count, lesson_count, price_cents)
-    VALUES (${school}, ${payer}, 1, ${lessonCount}, 20000) RETURNING id`;
+  const [{ id }] =
+    await admin`INSERT INTO lesson_pack (school_id, billing_entity_id, payer_id, people_count, lesson_count, price_cents)
+    VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${payer}, 1, ${lessonCount}, 20000) RETURNING id`;
   await admin`INSERT INTO lesson_pack_person (school_id, lesson_pack_id, person_id) VALUES (${school}, ${id}, ${participant})`;
   return id as string;
 };
@@ -46,10 +48,8 @@ const uncount = (lesson: string, pack: string) =>
   withSchool(school, (tx) => uncountLesson(tx, frontDesk, lesson, pack));
 
 beforeAll(async () => {
-  [{ id: school }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('Zz École décompte', ${`zzd-${suffix}`}) RETURNING id`;
-  [{ id: otherSchool }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('Zz Autre école', ${`zze-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "Zz École décompte", `zzd-${suffix}`);
+  [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "Zz Autre école", `zze-${suffix}`);
   await admin`INSERT INTO "user" (id, name, email) VALUES (${frontDesk}, 'Zz Accueil', ${`${frontDesk}@exemple.test`})`;
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${frontDesk}, 'front_desk')`;
   [{ id: season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
@@ -70,11 +70,11 @@ beforeAll(async () => {
   [{ id: other }] =
     await admin`INSERT INTO person (school_id, last_name, first_name, is_student) VALUES (${school}, 'Zzautre', 'Zzprénom', true) RETURNING id`;
   [{ id: privateCourse }] =
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, type, weekday, start_time, duration_minutes)
-      VALUES (${school}, ${season}, ${discipline}, ${room}, ${teacher}, 'private', 2, '17:00', 60) RETURNING id`;
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, type, weekday, start_time, duration_minutes)
+      VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${discipline}, ${room}, ${teacher}, 'private', 2, '17:00', 60) RETURNING id`;
   [{ id: groupCourse }] =
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, type, weekday, start_time, duration_minutes)
-      VALUES (${school}, ${season}, ${discipline}, ${room}, ${teacher}, 'group', 3, '17:00', 60) RETURNING id`;
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, type, weekday, start_time, duration_minutes)
+      VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${discipline}, ${room}, ${teacher}, 'group', 3, '17:00', 60) RETURNING id`;
   await withSchool(school, (tx) => syncLessons(tx, season, TODAY));
   for (const l of await admin`SELECT id FROM lesson WHERE course_id = ${privateCourse} ORDER BY date`)
     lessons.push(l.id as string);
@@ -248,13 +248,13 @@ describe("counting a private lesson on a pack", () => {
 
     // A private course the student is enrolled in: the sheet names them.
     const [{ id: enrolledCourse }] =
-      await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, type, weekday, start_time, duration_minutes)
-        VALUES (${school}, ${season}, ${discipline}, ${room}, ${teacher}, 'private', 4, '17:00', 60) RETURNING id`;
+      await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, type, weekday, start_time, duration_minutes)
+        VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${discipline}, ${room}, ${teacher}, 'private', 4, '17:00', 60) RETURNING id`;
     const [{ id: enrollment }] =
-      await admin`INSERT INTO enrollment (school_id, payer_id, season_id, audience, period, gross_price_cents)
-        VALUES (${school}, ${payer}, ${season}, 'child', 'year', 0) RETURNING id`;
-    await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id)
-      VALUES (${school}, ${enrollment}, ${student}, ${enrolledCourse})`;
+      await admin`INSERT INTO enrollment (school_id, billing_entity_id, payer_id, season_id, audience, period, gross_price_cents)
+        VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${payer}, ${season}, 'child', 'year', 0) RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id)
+      VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${enrollment}), ${enrollment}, ${student}, ${enrolledCourse})`;
     await withSchool(school, (tx) => syncLessons(tx, season, TODAY));
     const [{ id: lesson }] =
       await admin`SELECT id FROM lesson WHERE course_id = ${enrolledCourse} ORDER BY date LIMIT 1`;

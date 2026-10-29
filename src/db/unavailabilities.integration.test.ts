@@ -10,6 +10,7 @@ import {
   deleteUnavailability,
 } from "./unavailabilities";
 import { withSchool } from "./index";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /** Unavailabilities, conflicts and substitutes, as the app does (app_user, RLS). Fictitious data deleted at the end. */
 
@@ -30,9 +31,8 @@ const lessons: Record<string, string> = {};
 const TODAY = "2026-10-19";
 
 beforeAll(async () => {
-  [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`da-${suffix}`}) RETURNING id`;
-  [{ id: otherSchool }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`db-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "École A", `da-${suffix}`);
+  [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "École B", `db-${suffix}`);
   [{ id: season }] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${school}, '2026-2027', '2026-09-01', '2026-11-30') RETURNING id`;
   const [d] = await admin`INSERT INTO discipline (school_id, name) VALUES (${school}, 'Jazz') RETURNING id`;
@@ -52,13 +52,13 @@ beforeAll(async () => {
   foreign = await teacher(otherSchool, "Ailleurs");
   // Jazz on Wednesday 17:00 (Camille); Zumba on Wednesday 17:30 (Lucas, who also teaches jazz elsewhere in the season).
   [{ id: jazz }] =
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-    VALUES (${school}, ${season}, ${d.id}, ${room.id}, ${camille}, 3, '17:00', 60) RETURNING id`;
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+    VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${d.id}, ${room.id}, ${camille}, 3, '17:00', 60) RETURNING id`;
   const [zumba] =
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-    VALUES (${school}, ${season}, ${z.id}, ${room.id}, ${lucas}, 3, '17:30', 60) RETURNING id`;
-  await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-    VALUES (${school}, ${season}, ${d.id}, ${room.id}, ${lucas}, 5, '18:00', 60)`;
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+    VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${z.id}, ${room.id}, ${lucas}, 3, '17:30', 60) RETURNING id`;
+  await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+    VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${d.id}, ${room.id}, ${lucas}, 5, '18:00', 60)`;
   for (const date of ["2026-11-04", "2026-11-18"]) {
     [{ id: lessons[date] }] =
       await admin`INSERT INTO lesson (school_id, course_id, date, instructor_id) VALUES (${school}, ${jazz}, ${date}, ${camille}) RETURNING id`;

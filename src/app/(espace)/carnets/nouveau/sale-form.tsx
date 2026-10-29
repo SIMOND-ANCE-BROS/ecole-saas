@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Checkbox, NumberInput, Text, TextInput } from "@mantine/core";
+import { Button, Checkbox, NumberInput, Select, Text, TextInput } from "@mantine/core";
 import { useRef, useState, useTransition } from "react";
 import { Cancel } from "@/app/(espace)/_panel/panel";
 import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
@@ -15,6 +15,7 @@ import {
 } from "@/domain/lesson-pack/pack";
 import { priceLessonPack } from "@/domain/tariff/lesson-pack";
 import type { LessonPackTariffRow } from "@/domain/tariff/types";
+import type { EntityChoice } from "@/db/billing-entities";
 import { orConnectionLost } from "@/lib/action-result";
 import { formatEuros, parseEuros, typedEuros } from "@/lib/money";
 import { sellPack } from "../actions";
@@ -26,6 +27,8 @@ type Props = {
   initialStudent: string | null;
   grid: LessonPackTariffRow[];
   back: string;
+  /** Businesses that can sell the pack (#299), the default first: no choice shown with one. */
+  entities: EntityChoice[];
 };
 
 const count = (v: string | number) => (typeof v === "number" && Number.isInteger(v) ? v : null);
@@ -36,7 +39,7 @@ const list = (ns: number[]) => (ns.length <= 1 ? ns.join("") : `${ns.slice(0, -1
  * people, the price of the grid (editable with a reason). Fully typable: Tab moves
  * through the fields, Enter sells.
  */
-export function SaleForm({ payerId, students, initialStudent, grid, back }: Props) {
+export function SaleForm({ payerId, students, initialStudent, grid, back, entities }: Props) {
   const lessonCounts = [...new Set(grid.map((r) => r.lessonCount))].sort((a, b) => a - b);
   const [participants, setParticipants] = useState<string[]>(initialStudent ? [initialStudent] : []);
   const [lessons, setLessons] = useState<string | number>(lessonCounts.at(-1) ?? 10);
@@ -44,6 +47,10 @@ export function SaleForm({ payerId, students, initialStudent, grid, back }: Prop
   // null: the price follows the grid; otherwise what was typed.
   const [typedPrice, setTypedPrice] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  // Only the chosen entity's private courses can use the pack (#299): with several, the front
+  // desk chooses it, never a default sold by mistake.
+  const [entity, setEntity] = useState(entities.length === 1 ? entities[0].id : "");
+  const entityMissing = entities.length > 1 && entity === "";
   const [message, setMessage] = useState<string | null>(null);
   // The server knew a newer grid and asks for a reason: the reason field shows too.
   const [askReason, setAskReason] = useState(false);
@@ -101,6 +108,7 @@ export function SaleForm({ payerId, students, initialStudent, grid, back }: Prop
         // Refused here: the field says why; the message line is for the server's answers.
         setMessage(null);
         if (
+          entityMissing ||
           participants.length === 0 ||
           lessonCount === null ||
           peopleCount === null ||
@@ -113,7 +121,15 @@ export function SaleForm({ payerId, students, initialStudent, grid, back }: Prop
           focusError();
           return;
         }
-        const entry = { lessonCount, peopleCount, participantIds: participants, priceCents, reason };
+        const entry = {
+          lessonCount,
+          peopleCount,
+          participantIds: participants,
+          priceCents,
+          reason,
+          // Only sent when there is a choice: otherwise the default entity.
+          billingEntityId: entities.length > 1 && entity ? entity : undefined,
+        };
         startTransition(async () => {
           const r = await orConnectionLost(
             () => sellPack(payerId, entry, back, key),
@@ -147,6 +163,22 @@ export function SaleForm({ payerId, students, initialStudent, grid, back }: Prop
           ))}
         </div>
       </Checkbox.Group>
+
+      {entities.length > 1 && (
+        <Select
+          label="Entreprise"
+          description="Le carnet ne se décompte que sur les cours particuliers de cette entreprise."
+          className="sm:max-w-sm"
+          allowDeselect={false}
+          data={entities.map((e) => ({ value: e.id, label: e.name }))}
+          required
+          placeholder="Choisissez l’entreprise"
+          value={entity || null}
+          onChange={(v) => setEntity(v ?? entity)}
+          error={tried && entityMissing ? "Choisissez l’entreprise qui vend le carnet" : undefined}
+          data-missing={tried && entityMissing}
+        />
+      )}
 
       <div className="grid gap-3 sm:grid-cols-[12rem_12rem]">
         <NumberInput

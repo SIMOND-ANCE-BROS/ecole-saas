@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createCalendarToken, calendarState, readCalendar, revokeCalendarToken } from "./calendar-feed";
 import { readInstructor, updateInstructor } from "./instructors";
 import { withSchool } from "./index";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /** An instructor's iCal subscription, as the app does (app_user, RLS). Fictitious data deleted at the end. */
 
@@ -17,9 +18,8 @@ let camille: string;
 let ines: string;
 
 beforeAll(async () => {
-  [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`ga-${suffix}`}) RETURNING id`;
-  [{ id: otherSchool }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`gb-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "École A", `ga-${suffix}`);
+  [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "École B", `gb-${suffix}`);
   const [season] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   const [d] = await admin`INSERT INTO discipline (school_id, name) VALUES (${school}, 'Jazz') RETURNING id`;
@@ -35,8 +35,8 @@ beforeAll(async () => {
   camille = await teacher("Camille");
   ines = await teacher("Inès");
   const [c] =
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes, level)
-    VALUES (${school}, ${season.id}, ${d.id}, ${room.id}, ${camille}, 3, '17:00', 60, 'Débutant') RETURNING id`;
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes, level)
+    VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season.id}, ${d.id}, ${room.id}, ${camille}, 3, '17:00', 60, 'Débutant') RETURNING id`;
   await admin`INSERT INTO lesson (school_id, course_id, date, instructor_id, status) VALUES
     (${school}, ${c.id}, '2026-10-14', ${camille}, 'done'),
     (${school}, ${c.id}, '2026-11-04', ${camille}, 'planned'),

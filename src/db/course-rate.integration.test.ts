@@ -16,6 +16,7 @@ import {
 } from "./courses";
 import { updateInstructor, type InstructorInput } from "./instructors";
 import { withSchool } from "./index";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /**
  * Instructor rate per course (#191), as the application runs it (app_user,
@@ -44,9 +45,8 @@ const TODAY = "2026-10-29";
 const INSTRUCTOR = `(school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents, active)`;
 
 beforeAll(async () => {
-  [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`ta-${suffix}`}) RETURNING id`;
-  [{ id: otherSchool }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`tb-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "École A", `ta-${suffix}`);
+  [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "École B", `tb-${suffix}`);
   await admin`INSERT INTO "user" (id, name, email) VALUES (${director}, 'Zzfaux Test', ${`${director}@exemple.test`})`;
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${director}, 'director')`;
   [{ id: season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
@@ -336,9 +336,9 @@ describe("instructor rate per course (#191)", () => {
     const [{ id: discipline }] =
       await admin`INSERT INTO discipline (school_id, name) VALUES (${school}, 'Zzunité') RETURNING id`;
     const insert = (t: postgres.TransactionSql, instructorId: string, cents: number | null, unit: string | null) =>
-      t`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time,
+      t`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time,
           duration_minutes, instructor_rate_cents, instructor_rate_pay_mode)
-        VALUES (${school}, ${season}, ${discipline}, ${roomId}, ${instructorId}, 4, '08:00', 60, ${cents}, ${unit})
+        VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${discipline}, ${roomId}, ${instructorId}, 4, '08:00', 60, ${cents}, ${unit})
         RETURNING id`;
     const refused = async (cents: number | null, unit: string | null) => {
       try {

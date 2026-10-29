@@ -1,10 +1,9 @@
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { migrationsBefore } from "./migration.integration-helpers";
 
 /**
  * Migration 0041 (#298) replayed on a throwaway database: migrated up to the
@@ -26,24 +25,6 @@ const target = new URL(url);
 target.pathname = `/${database}`;
 let db: postgres.Sql;
 let before: string;
-
-type Journal = { entries: { tag: string }[] };
-
-/** A copy of the migrations folder whose journal stops just before `tag`. */
-function migrationsBefore(tag: string): string {
-  const folder = mkdtempSync(join(tmpdir(), "zz-migrations-"));
-  mkdirSync(join(folder, "meta"));
-  for (const f of readdirSync("migrations"))
-    if (f.endsWith(".sql")) copyFileSync(join("migrations", f), join(folder, f));
-  const journal = JSON.parse(readFileSync("migrations/meta/_journal.json", "utf8")) as Journal;
-  const stop = journal.entries.findIndex((e) => e.tag === tag);
-  if (stop < 0) throw new Error(`${tag} absent du journal`);
-  writeFileSync(
-    join(folder, "meta/_journal.json"),
-    JSON.stringify({ ...journal, entries: journal.entries.slice(0, stop) }),
-  );
-  return folder;
-}
 
 const ids: Record<string, string> = {};
 

@@ -5,6 +5,7 @@ import { withSchool } from "./index";
 import { packsOf, sellLessonPack, type SaleInput } from "./lesson-packs";
 import { balanceOf } from "./payments";
 import { once, storedLessonPack } from "./submissions";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /**
  * Selling a lesson pack (#286), as the application runs it (app_user, RLS).
@@ -34,10 +35,8 @@ const insertPerson = async (schoolId: string, lastName: string, isStudent: boole
   )[0].id as string;
 
 beforeAll(async () => {
-  [{ id: school }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('Zz École A', ${`lpa-${suffix}`}) RETURNING id`;
-  [{ id: otherSchool }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('Zz École B', ${`lpb-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "Zz École A", `lpa-${suffix}`);
+  [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "Zz École B", `lpb-${suffix}`);
   await admin`INSERT INTO "user" (id, name, email) VALUES (${frontDesk}, 'Zz Accueil', ${`${frontDesk}@exemple.test`})`;
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${frontDesk}, 'front_desk')`;
   const [s] = await admin`INSERT INTO season (school_id, label, start_date, end_date)

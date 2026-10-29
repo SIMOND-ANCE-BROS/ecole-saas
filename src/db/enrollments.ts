@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { rowsOf } from "./columns-of";
 import { z } from "zod";
 import { discountImpacts } from "../domain/enrollment/impacts";
@@ -17,8 +17,8 @@ import {
 import { STATUS_PRIORITY, type EnrollmentStatus } from "../domain/enrollment/statuses";
 import { has } from "../lib/has";
 import { computeTariff } from "../domain/tariff/compute";
+import { requestsByEntity, type EntityCourse } from "../domain/enrollment/entities";
 import type {
-  ChosenCourse,
   EnrollmentRequest,
   TariffRow,
   Period,
@@ -26,10 +26,12 @@ import type {
   DiscountRule,
   EnrollmentResult,
 } from "../domain/tariff/types";
+import { severalEntities } from "./billing-entities";
 import type { Tx } from "./index";
 import { payableStudents } from "./people";
 import {
   auditLog,
+  billingEntity,
   course,
   discipline,
   enrollment,
@@ -56,8 +58,8 @@ export type EnrollmentInput = {
   status?: InitialStatus;
 };
 
-const NEW = "new";
 const uuid = z.uuid();
+const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 
 export async function loadGrid(tx: Tx, seasonId: string): Promise<TariffRow[]> {
   return tx
@@ -161,13 +163,13 @@ async function lockPayer(tx: Tx, payerId: string) {
   await tx.select({ id: person.id }).from(person).where(eq(person.id, payerId)).for("no key update");
 }
 
-/** Payer's students and the season's courses actually chosen; otherwise the reason for refusal. */
+/** Payer's students and the season's courses actually chosen, with their entity; otherwise the reason for refusal. */
 async function validate(
   tx: Tx,
   payerId: string,
   seasonId: string,
   entry: EnrollmentInput,
-): Promise<string | ChosenCourse[]> {
+): Promise<string | EntityCourse[]> {
   const studentIds = [...new Set(entry.studentIds)];
   const courseIds = [...new Set(entry.courseIds)];
   if (entry.audience === "couple" && studentIds.length !== 2) return "Un couple réunit deux danseurs.";
@@ -181,11 +183,21 @@ async function validate(
 
   if (courseIds.length === 0) return [];
   const chosen = await tx
-    .select({ disciplineId: course.disciplineId, durationMinutes: course.durationMinutes })
+    .select({
+      courseId: course.id,
+      billingEntityId: course.billingEntityId,
+      disciplineId: course.disciplineId,
+      durationMinutes: course.durationMinutes,
+    })
     .from(course)
-    .where(and(inArray(course.id, courseIds), eq(course.seasonId, seasonId)));
+    .where(and(inArray(course.id, courseIds), eq(course.seasonId, seasonId)))
+    // A course whose entity is being changed at the same moment (FOR UPDATE, updateCourse) is
+    // read once that change is committed: the enrollment then takes its new entity, never one
+    // the foreign keys would refuse at insert.
+    .for("key share");
   if (chosen.length !== courseIds.length) return "Un des cours ne fait pas partie de la saison.";
-  return chosen;
+  // In the order chosen: the courses of each entity keep it.
+  return courseIds.flatMap((id) => chosen.filter((c) => c.courseId === id));
 }
 
 /** An already saved enrollment whose discount would change with the new one (e.g. siblings). */
@@ -196,11 +208,39 @@ export type ExistingImpact = {
   recalculatedDiscount: number;
 };
 
+/** One of the enrollments a submission creates: one per business selling the chosen courses (#299). */
+export type NewEnrollment = {
+  billingEntityId: string;
+  /** Short name of the business, shown when the school has several. */
+  entity: string;
+  /** Ids of its courses, among the chosen ones. */
+  courseIds: string[];
+  price: EnrollmentResult;
+};
+
 export type Preview =
   | { status: "invalid"; message: string }
-  | { status: "ok"; newEnrollment: EnrollmentResult; existingImpacts: ExistingImpact[] };
+  | {
+      status: "ok";
+      /** One per entity, the default first; a single one when every course is sold by the same business. */
+      newEnrollments: NewEnrollment[];
+      existingImpacts: ExistingImpact[];
+    };
 
-/** Price of the new enrollment, computed with the grid, the discounts and the payer's other enrollments. */
+/** The school's entities, the default first then by name: the order enrollments are split in. */
+async function entitiesInOrder(tx: Tx): Promise<{ id: string; name: string }[]> {
+  return tx
+    .select({ id: billingEntity.id, name: billingEntity.name })
+    .from(billingEntity)
+    .orderBy(desc(billingEntity.isDefault), asc(billingEntity.name));
+}
+
+/**
+ * Price of the new enrollments, computed with the grid, the discounts and the payer's
+ * other enrollments. The chosen courses are split by the business that sells them, one
+ * enrollment each, priced on its own combination (#288 Q3 default); siblings are counted
+ * over every enrollment of the payer, whatever its business (#288 Q2 default).
+ */
 export async function enrollmentPreview(
   tx: Tx,
   payerId: string,
@@ -210,28 +250,27 @@ export async function enrollmentPreview(
   const chosenCourses = await validate(tx, payerId, seasonId, entry);
   if (typeof chosenCourses === "string") return { status: "invalid", message: chosenCourses };
 
+  const entities = await entitiesInOrder(tx);
+  // References of the new requests are entity ids, never an enrollment id of `existing`.
+  const requests = requestsByEntity(
+    entry,
+    chosenCourses,
+    entities.map((e) => e.id),
+  );
   const grid = await loadGrid(tx, seasonId);
   const discounts = await loadDiscounts(tx, seasonId);
   const existing = await existingEnrollments(tx, payerId, seasonId);
-  const result = computeTariff({
-    grid,
-    discounts,
-    enrollments: [
-      ...existing,
-      {
-        reference: NEW,
-        studentIds: entry.studentIds,
-        audience: entry.audience,
-        period: entry.period,
-        courses: chosenCourses,
-      },
-    ],
-  });
+  const result = computeTariff({ grid, discounts, enrollments: [...existing, ...requests] });
 
   return {
     status: "ok",
-    // The engine returns one result per request, NEW included.
-    newEnrollment: result.enrollments.find((i) => i.reference === NEW)!,
+    newEnrollments: requests.map((r) => ({
+      billingEntityId: r.reference,
+      entity: entities.find((e) => e.id === r.reference)?.name ?? "",
+      courseIds: chosenCourses.filter((c) => c.billingEntityId === r.reference).map((c) => c.courseId),
+      // The engine returns one result per request, each new one included.
+      price: result.enrollments.find((i) => i.reference === r.reference)!,
+    })),
     // A trial or waitlist enrollment does not count as a sibling (Q3): the others' discounts stay as they are.
     existingImpacts: countsAsSibling(entry.status ?? "active")
       ? await impactsOn(tx, payerId, existing, result.enrollments)
@@ -262,54 +301,68 @@ async function impactsOn(
   }));
 }
 
-/** Saves the enrollment at the price recomputed here (never the one sent by the browser). */
+/**
+ * Saves the enrollments at the prices recomputed here (never the ones sent by the
+ * browser): one per business selling the chosen courses (#299), all or none. `id` is
+ * the first (the default entity's when it sells one of the courses), `ids` all of them.
+ */
 export async function saveEnrollment(
   tx: Tx,
   payerId: string,
   seasonId: string,
   entry: EnrollmentInput,
-): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
+): Promise<{ ok: true; id: string; ids: string[] } | { ok: false; message: string }> {
   if (!uuid.safeParse(payerId).success) return { ok: false, message: "Saisie invalide." };
   await lockPayer(tx, payerId);
   const preview = await enrollmentPreview(tx, payerId, seasonId, entry);
   if (preview.status === "invalid") return { ok: false, message: preview.message };
-  const r = preview.newEnrollment;
-  if (r.status === "error") return { ok: false, message: r.error.message };
-
-  const [{ id }] = await tx
-    .insert(enrollment)
-    .values({
-      schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid`,
-      payerId: payerId,
-      seasonId: seasonId,
-      status: entry.status ?? "active",
-      tariffId: r.tariffRowId,
-      audience: entry.audience,
-      period: entry.period,
-      grossPriceCents: r.grossPriceCents,
-      discountCents: r.discountCents,
-      discounts: r.discounts.filter((d) => d.status === "applied").map((d) => d.code),
-    })
-    .returning({ id: enrollment.id });
+  const several = preview.newEnrollments.length > 1;
+  for (const n of preview.newEnrollments)
+    if (n.price.status === "error")
+      return { ok: false, message: several ? `${n.entity} : ${n.price.error.message}` : n.price.error.message };
 
   const studentIds = [...new Set(entry.studentIds)];
-  const courseIds = [...new Set(entry.courseIds)];
-  if (courseIds.length > 0) {
-    await tx.insert(enrollmentCourse).values(
-      rowsOf(
-        enrollmentCourse,
-        studentIds.flatMap((studentId) =>
-          courseIds.map((courseId) => ({
-            schoolId: sql`nullif(current_setting('app.school_id', true), '')::uuid`,
-            enrollmentId: id,
-            studentId: studentId,
-            courseId: courseId,
-          })),
+  const ids: string[] = [];
+  for (const n of preview.newEnrollments) {
+    const r = n.price;
+    // Checked above: every new enrollment is priced.
+    if (r.status === "error") continue;
+    const [{ id }] = await tx
+      .insert(enrollment)
+      .values({
+        schoolId: CURRENT_SCHOOL,
+        billingEntityId: n.billingEntityId,
+        payerId: payerId,
+        seasonId: seasonId,
+        status: entry.status ?? "active",
+        tariffId: r.tariffRowId,
+        audience: entry.audience,
+        period: entry.period,
+        grossPriceCents: r.grossPriceCents,
+        discountCents: r.discountCents,
+        discounts: r.discounts.filter((d) => d.status === "applied").map((d) => d.code),
+      })
+      .returning({ id: enrollment.id });
+    ids.push(id);
+    if (n.courseIds.length > 0) {
+      await tx.insert(enrollmentCourse).values(
+        rowsOf(
+          enrollmentCourse,
+          studentIds.flatMap((studentId) =>
+            n.courseIds.map((courseId) => ({
+              schoolId: CURRENT_SCHOOL,
+              // The enrollment's entity: the foreign keys check it is also the course's.
+              billingEntityId: n.billingEntityId,
+              enrollmentId: id,
+              studentId: studentId,
+              courseId: courseId,
+            })),
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
-  return { ok: true, id };
+  return { ok: true, id: ids[0], ids };
 }
 
 export type SeasonEnrollment = {
@@ -328,6 +381,8 @@ export type SeasonEnrollment = {
   invoiced: boolean;
   /** What the front desk can do with it (#284). */
   actions: EnrollmentActions;
+  /** Business that sells it (#299); null when the school has only one. */
+  entity: string | null;
   /** Why it cannot be cancelled, in French; null when it can. */
   cancelRefusal: string | null;
 };
@@ -383,10 +438,13 @@ export async function seasonEnrollments(
       payerId: enrollment.payerId,
       invoiced: invoicedSql,
       attended: attendedSql,
+      entity: billingEntity.name,
     })
     .from(enrollment)
+    .innerJoin(billingEntity, eq(billingEntity.id, enrollment.billingEntityId))
     .where(and(mine, eq(enrollment.seasonId, seasonId)));
   if (rows.length === 0) return [];
+  const namedEntity = await severalEntities(tx);
 
   const relationships = await tx
     .select({
@@ -425,6 +483,7 @@ export async function seasonEnrollments(
         invoiced: l.invoiced,
         actions: enrollmentActions(l.status, { invoiced: l.invoiced, attended: l.attended }),
         cancelRefusal: cancelRefusal({ invoiced: l.invoiced, attended: l.attended }),
+        entity: namedEntity ? l.entity : null,
         students: [...new Set(own.map((x) => x.firstName))].sort().join(" et "),
         courses: [
           ...new Set(
@@ -443,7 +502,6 @@ export async function seasonEnrollments(
 // ---------------------------------------------------------------------------
 
 const GONE = "Cette inscription n’existe plus.";
-const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 
 type Saved = {
   id: string;

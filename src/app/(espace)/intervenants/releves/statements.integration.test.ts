@@ -1,5 +1,6 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { schoolWithDefaultEntity } from "../../../../db/billing-entity.integration-helpers";
 
 /**
  * Instructor statements (#285) against the real database (app_user, RLS):
@@ -57,7 +58,7 @@ const INSTRUCTOR = `(school_id, last_name, first_name, status, vat_regime, pay_m
 
 /** A school with a season, a room and a discipline; returns what courses need. */
 async function setUp(slug: string) {
-  const [{ id }] = await admin`INSERT INTO school (name, slug) VALUES ('Zz École', ${slug}) RETURNING id`;
+  const [{ id }] = await schoolWithDefaultEntity(admin, "Zz École", slug);
   const [season] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${id}, '2027-2028', '2027-09-01', '2028-06-30') RETURNING id`;
   const [site] =
@@ -83,8 +84,8 @@ const teacher = async (schoolId: string, name: string, payMode: string, rate: nu
 
 const courseOf = async (s: Awaited<ReturnType<typeof setUp>>, instructorId: string, weekday: number, minutes: number) =>
   (
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-      VALUES (${s.id}, ${s.season}, ${s.discipline}, ${s.room}, ${instructorId}, ${weekday}, '18:00', ${minutes}) RETURNING id`
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+      VALUES (${s.id}, (SELECT id FROM billing_entity WHERE school_id = ${s.id} AND is_default), ${s.season}, ${s.discipline}, ${s.room}, ${instructorId}, ${weekday}, '18:00', ${minutes}) RETURNING id`
   )[0].id as string;
 
 const lessonOf = async (

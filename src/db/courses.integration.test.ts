@@ -10,6 +10,7 @@ import {
   deleteCourse,
 } from "./courses";
 import { withSchool } from "./index";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /** Schedule editing, as the application runs it (app_user, RLS). Fictitious data deleted at the end. */
 
@@ -31,9 +32,8 @@ let base: CourseInput;
 const INSTRUCTOR = `(school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents, active)`;
 
 beforeAll(async () => {
-  [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École A', ${`ca-${suffix}`}) RETURNING id`;
-  [{ id: otherSchool }] =
-    await admin`INSERT INTO school (name, slug) VALUES ('École B', ${`cb-${suffix}`}) RETURNING id`;
+  [{ id: school }] = await schoolWithDefaultEntity(admin, "École A", `ca-${suffix}`);
+  [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "École B", `cb-${suffix}`);
   [{ id: season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   [{ id: site }] =
@@ -187,9 +187,9 @@ describe("deleteCourse", () => {
     const [d] =
       await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Martin', 'Léa') RETURNING id`;
     const [i] = await admin`
-      INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status)
-      VALUES (${school}, ${season}, ${p.id}, 'child', 'quarter', 10000, 'active') RETURNING id`;
-    await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${school}, ${i.id}, ${d.id}, ${id})`;
+      INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents, status)
+      VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${p.id}, 'child', 'quarter', 10000, 'active') RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id) VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${i.id}), ${i.id}, ${d.id}, ${id})`;
     expect(await withSchool(school, (tx) => deleteCourse(tx, id))).toEqual({
       ok: false,
       message: "Ce cours a 1 inscription : il ne peut pas être supprimé.",
@@ -231,9 +231,9 @@ describe("moveCourse (calendar view)", () => {
     const [d] =
       await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Petit', 'Lou') RETURNING id`;
     const [i] =
-      await admin`INSERT INTO enrollment (school_id, season_id, payer_id, audience, period, gross_price_cents, status)
-      VALUES (${school}, ${season}, ${p.id}, 'child', 'quarter', 10000, 'active') RETURNING id`;
-    await admin`INSERT INTO enrollment_course (school_id, enrollment_id, student_id, course_id) VALUES (${school}, ${i.id}, ${d.id}, ${id})`;
+      await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents, status)
+      VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${p.id}, 'child', 'quarter', 10000, 'active') RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id) VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${i.id}), ${i.id}, ${d.id}, ${id})`;
     const slot = { weekday: 5, startTime: "17:00", durationMinutes: 60 };
     expect(await withSchool(school, (tx) => moveCourse(tx, id, slot, false))).toEqual({
       status: "confirm",

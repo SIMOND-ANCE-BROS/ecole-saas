@@ -11,6 +11,7 @@ import {
   REASON_REQUIRED,
   remainingLessons,
   saleRefusal,
+  OTHER_ENTITY,
   USED_UP,
   usageRefusal,
 } from "./pack";
@@ -124,8 +125,14 @@ describe("counting a lesson on a pack", () => {
       packStudentIds: [A],
       lessonStudentIds: [],
       countedStudentIds: [],
+      packEntityId: "entity-a",
+      courseEntityId: "entity-a",
       ...u,
     });
+
+  it("refuses a pack sold by another business than the lesson's course (#299)", () => {
+    expect(usage({ courseEntityId: "entity-b" })).toBe(OTHER_ENTITY);
+  });
 
   it("counts a planned or done private lesson on an open pack", () => {
     expect(usage()).toBeNull();
