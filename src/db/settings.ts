@@ -15,7 +15,11 @@ import { issuePath } from "../lib/form-errors";
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const isUuid = (v: string) => z.uuid().safeParse(v).success;
 export type Result = { ok: true; id: string } | { ok: false; message: string };
-export const validName = z.string().trim().min(1, "Nom obligatoire").max(100);
+export const validName = z
+  .string({ error: "Nom obligatoire" })
+  .trim()
+  .min(1, "Nom obligatoire")
+  .max(100, "Nom : 100 caractères au plus");
 const account = (query: SQL) => sql<number>`(${query})::int`;
 
 // ---------------------------------------------------------------------------
@@ -46,11 +50,18 @@ export function listSeasons(tx: Tx): Promise<SeasonRow[]> {
     .orderBy(desc(season.startDate));
 }
 
-const seasonFields = z.object({
-  label: z.string().trim().min(1, "Libellé obligatoire").max(30),
-  startDate: z.iso.date("Date invalide"),
-  endDate: z.iso.date("Date invalide"),
-});
+const seasonFields = z.object(
+  {
+    label: z
+      .string({ error: "Libellé obligatoire" })
+      .trim()
+      .min(1, "Libellé obligatoire")
+      .max(30, "Libellé : 30 caractères au plus"),
+    startDate: z.iso.date("Date invalide"),
+    endDate: z.iso.date("Date invalide"),
+  },
+  { error: "Saisie invalide." },
+);
 
 export const validSeasonInput = seasonFields.refine((s) => s.endDate > s.startDate, {
   path: issuePath(seasonFields, "endDate"),
@@ -237,11 +248,18 @@ export async function listPlaces(tx: Tx): Promise<SiteRow[]> {
   }));
 }
 
-export const validSiteInput = z.object({
-  name: validName,
-  address: z.string().trim().min(1, "Adresse obligatoire").max(300),
-  permanence: z.boolean(),
-});
+export const validSiteInput = z.object(
+  {
+    name: validName,
+    address: z
+      .string({ error: "Adresse obligatoire" })
+      .trim()
+      .min(1, "Adresse obligatoire")
+      .max(300, "Adresse : 300 caractères au plus"),
+    permanence: z.boolean({ error: "Saisie invalide." }),
+  },
+  { error: "Saisie invalide." },
+);
 
 /** Site columns from the form input. */
 const siteRow = (s: z.output<typeof validSiteInput>) => ({
@@ -304,10 +322,22 @@ export async function hoursBySite(tx: Tx): Promise<Record<string, Hours[]>> {
   return r;
 }
 
-const timePattern = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM");
+const timePattern = z
+  .string({ error: "Heure au format HH:MM" })
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM");
 export const validHours = z
-  .array(z.object({ weekday: z.int().min(1).max(7), opening: timePattern, closure: timePattern }))
-  .max(7)
+  .array(
+    z.object(
+      {
+        weekday: z.int({ error: "Jour invalide" }).min(1, "Jour invalide").max(7, "Jour invalide"),
+        opening: timePattern,
+        closure: timePattern,
+      },
+      { error: "Horaires invalides" },
+    ),
+    { error: "Horaires invalides" },
+  )
+  .max(7, "7 jours au plus")
   .refine((h) => new Set(h.map((x) => x.weekday)).size === h.length, "Un même jour est saisi deux fois.")
   .refine((h) => h.every((x) => x.closure > x.opening), "L’heure de fermeture doit suivre l’ouverture.");
 
@@ -335,11 +365,18 @@ export async function saveHours(tx: Tx, siteId: string, entry: z.input<typeof va
   return { ok: true, id: siteId };
 }
 
-export const validRoomInput = z.object({
-  siteId: z.uuid(),
-  name: validName,
-  capacity: z.int().min(1).max(1000).nullable(),
-});
+export const validRoomInput = z.object(
+  {
+    siteId: z.uuid({ error: "Choisissez un site" }),
+    name: validName,
+    capacity: z
+      .int({ error: "Capacité : un nombre entier de personnes" })
+      .min(1, "Capacité d’au moins 1 personne")
+      .max(1000, "Capacité de 1 000 personnes au plus")
+      .nullable(),
+  },
+  { error: "Saisie invalide." },
+);
 
 /** Room columns from the form input. */
 const roomRow = (s: z.output<typeof validRoomInput>) => ({ siteId: s.siteId, name: s.name, capacity: s.capacity });
