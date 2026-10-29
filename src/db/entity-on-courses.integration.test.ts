@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { OTHER_ENTITY } from "../domain/lesson-pack/pack";
-import { createCourse, readCourse, updateCourse, type CourseInput } from "./courses";
+import { createCourse, entityLock, readCourse, updateCourse, type CourseInput } from "./courses";
 import { enrollmentPreview, saveEnrollment, type EnrollmentInput } from "./enrollments";
 import { withSchool } from "./index";
-import { countLesson, lessonPacks } from "./lesson-packs";
+import { countLesson, lessonPacks, sellLessonPack } from "./lesson-packs";
 import { syncLessons } from "./lessons";
 import { once, storedEnrollment } from "./submissions";
 import { defaultEntityFor, schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
@@ -149,7 +149,6 @@ describe("enrolling in courses of two entities (#299)", () => {
       enrollmentPreview(tx, ids.payer, ids.season, child(ids.zoe, [ids.rockB, ids.jazzA])),
     );
     if (p.status !== "ok") throw new Error(p.message);
-    expect(p.severalEntities).toBe(true);
     // The default entity first; not the « 45 min + 1 h » package of both (165 €).
     expect(p.newEnrollments).toMatchObject([
       { billingEntityId: ids.a, entity: "Zz Entreprise", courseIds: [ids.jazzA], price: { grossPriceCents: 11000 } },
@@ -266,5 +265,65 @@ describe("lesson packs and entities", () => {
     });
     const offered = await withSchool(ids.school, (tx) => lessonPacks(tx, lesson.id, []));
     expect(offered.offered.map((p) => p.id)).not.toContain(pack.id);
+  });
+
+  it("offers a pack of the course's entity, then locks the course's entity once a lesson is counted", async () => {
+    const [lesson] = await admin`SELECT id FROM lesson WHERE course_id = ${ids.privateB} ORDER BY date LIMIT 1`;
+    const [pack] = await admin`
+      INSERT INTO lesson_pack (school_id, billing_entity_id, payer_id, people_count, lesson_count, price_cents)
+      VALUES (${ids.school}, ${ids.b}, ${ids.payer}, 1, 5, 20000) RETURNING id`;
+    await admin`INSERT INTO lesson_pack_person (school_id, lesson_pack_id, person_id) VALUES (${ids.school}, ${pack.id}, ${ids.noe})`;
+    const offered = await withSchool(ids.school, (tx) => lessonPacks(tx, lesson.id, []));
+    expect(offered.offered.map((p) => p.id)).toContain(pack.id);
+
+    expect(await withSchool(ids.school, (tx) => entityLock(tx, ids.privateB))).toBeNull();
+    // Counted directly: countLesson would write to the audit log, which these tests leave untouched.
+    await admin`INSERT INTO lesson_pack_usage (school_id, lesson_pack_id, lesson_id) VALUES (${ids.school}, ${pack.id}, ${lesson.id})`;
+    const locked = "Ce cours a 1 séance décomptée d’un carnet : l’entreprise qui le vend ne peut plus changer.";
+    expect(await withSchool(ids.school, (tx) => entityLock(tx, ids.privateB))).toBe(locked);
+    const [c] = await admin`SELECT * FROM course WHERE id = ${ids.privateB}`;
+    expect(
+      await withSchool(ids.school, (tx) =>
+        updateCourse(tx, ids.privateB, {
+          discipline: { id: c.discipline_id },
+          room: { id: c.room_id },
+          instructorId: c.instructor_id,
+          billingEntityId: ids.a,
+          type: "private",
+          recurrence: "weekly",
+          weekday: c.weekday,
+          startDate: null,
+          endDate: null,
+          dates: [],
+          startTime: "17:00",
+          durationMinutes: c.duration_minutes,
+          ageMin: null,
+          ageMax: null,
+          level: null,
+          maxCapacity: null,
+          instructorRate: null,
+        }),
+      ),
+    ).toEqual({ ok: false, message: locked });
+  });
+
+  it("refuses to sell a pack for an inactive entity", async () => {
+    const r = await withSchool(ids.school, (tx) =>
+      sellLessonPack(
+        tx,
+        frontDesk,
+        ids.payer,
+        {
+          lessonCount: 5,
+          peopleCount: 1,
+          participantIds: [ids.zoe],
+          priceCents: 20000,
+          reason: "Zz devis",
+          billingEntityId: ids.closed,
+        },
+        TODAY,
+      ),
+    );
+    expect(r).toEqual({ ok: false, message: "Entreprise introuvable ou inactive." });
   });
 });

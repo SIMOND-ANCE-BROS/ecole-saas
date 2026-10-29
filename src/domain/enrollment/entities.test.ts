@@ -117,21 +117,93 @@ describe("pricing an enrollment over two entities (#299, #288 Q2 and Q3 defaults
   });
 });
 
+describe("rounding and edge cases over two entities", () => {
+  const grid = [
+    {
+      id: "row-45",
+      audience: "child" as const,
+      period: "quarter" as const,
+      combination: [45],
+      disciplineId: null,
+      priceCents: 8505,
+    },
+    {
+      id: "row-60",
+      audience: "child" as const,
+      period: "quarter" as const,
+      combination: [60],
+      disciplineId: null,
+      priceCents: 8505,
+    },
+    {
+      id: "row-couple",
+      audience: "couple" as const,
+      period: "quarter" as const,
+      combination: [60],
+      disciplineId: null,
+      priceCents: 23000,
+    },
+  ];
+  const run = (...requests: EnrollmentRequest[]) =>
+    computeTariff({ grid, discounts: [ribasSiblings], enrollments: requests });
+
+  it("rounds each discount on its own enrollment, the total being the sum of the nets", () => {
+    const [first] = requestsByEntity(child("zz-1"), [course("c1", A, JAZZ, 60)], ORDER);
+    const [second] = requestsByEntity(child("zz-2"), [course("c2", B, ROCK, 45)], ORDER);
+    const result = run({ ...first, reference: "first" }, { ...second, reference: "second" });
+    // 10 % of 85,05 € = 8,505 € → 8,51 € on each, never 17,01 € shared.
+    expect(result.enrollments.map((r) => ok(r).discountCents)).toEqual([851, 851]);
+    expect(result.netTotalCents).toBe(2 * (8505 - 851));
+  });
+
+  it("gives three siblings over two entities the discount on each enrollment", () => {
+    const requests = [
+      ...requestsByEntity(child("zz-1"), [course("c1", A, JAZZ, 60), course("c2", B, ROCK, 45)], ORDER),
+      { ...requestsByEntity(child("zz-2"), [course("c3", B, ROCK, 45)], ORDER)[0], reference: "zz-2" },
+      { ...requestsByEntity(child("zz-3"), [course("c4", A, JAZZ, 60)], ORDER)[0], reference: "zz-3" },
+    ];
+    expect(run(...requests).enrollments.map((r) => ok(r).discountCents)).toEqual([851, 851, 851, 851]);
+  });
+
+  it("prices a couple on its own couple combination in each entity", () => {
+    const couple = { studentIds: ["zz-1", "zz-2"], audience: "couple" as const, period: "quarter" as const };
+    const requests = requestsByEntity(couple, [course("c1", A, JAZZ, 60), course("c2", B, ROCK, 60)], ORDER);
+    expect(run(...requests).enrollments.map((r) => ok(r).grossPriceCents)).toEqual([23000, 23000]);
+  });
+
+  it("keeps the siblings discount of the others when one entity's enrollment of a child is left out", () => {
+    // Zoé with A and B, Noé with B: without Zoé's A enrollment (dropped), Zoé still counts through B.
+    const [zoeB] = requestsByEntity(child("zz-1"), [course("c2", B, ROCK, 45)], ORDER);
+    const [noeB] = requestsByEntity(child("zz-2"), [course("c3", B, ROCK, 45)], ORDER);
+    const result = run({ ...zoeB, reference: "zoe-b" }, { ...noeB, reference: "noe-b" });
+    expect(result.enrollments.map((r) => ok(r).discountCents)).toEqual([851, 851]);
+  });
+});
+
 describe("entityChangeRefusal", () => {
-  it("accepts any entity while the course has no enrollment", () => {
-    expect(entityChangeRefusal({ from: A, to: B, enrollments: 0 })).toBeNull();
+  it("accepts any entity while the course has no enrollment and no lesson counted on a pack", () => {
+    expect(entityChangeRefusal({ from: A, to: B, enrollments: 0, countedLessons: 0 })).toBeNull();
   });
 
   it("accepts keeping the same entity on an enrolled course", () => {
-    expect(entityChangeRefusal({ from: A, to: A, enrollments: 3 })).toBeNull();
+    expect(entityChangeRefusal({ from: A, to: A, enrollments: 3, countedLessons: 2 })).toBeNull();
   });
 
   it("refuses to change the entity of a course with enrollments, in French", () => {
-    expect(entityChangeRefusal({ from: A, to: B, enrollments: 1 })).toBe(
+    expect(entityChangeRefusal({ from: A, to: B, enrollments: 1, countedLessons: 0 })).toBe(
       "Ce cours a 1 inscription : l’entreprise qui le vend ne peut plus changer.",
     );
-    expect(entityChangeRefusal({ from: A, to: B, enrollments: 2 })).toBe(
+    expect(entityChangeRefusal({ from: A, to: B, enrollments: 2, countedLessons: 0 })).toBe(
       "Ce cours a 2 inscriptions : l’entreprise qui le vend ne peut plus changer.",
+    );
+  });
+
+  it("refuses it for a private course whose lessons were counted on a pack of its entity", () => {
+    expect(entityChangeRefusal({ from: A, to: B, enrollments: 0, countedLessons: 1 })).toBe(
+      "Ce cours a 1 séance décomptée d’un carnet : l’entreprise qui le vend ne peut plus changer.",
+    );
+    expect(entityChangeRefusal({ from: A, to: B, enrollments: 0, countedLessons: 3 })).toBe(
+      "Ce cours a 3 séances décomptées d’un carnet : l’entreprise qui le vend ne peut plus changer.",
     );
   });
 });

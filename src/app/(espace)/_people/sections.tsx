@@ -190,7 +190,7 @@ export function Enrollments({
                       {i.courses.join(", ")}
                       {i.entity && (
                         <Text size="xs" c="dimmed">
-                          {i.entity}
+                          Entreprise : {i.entity}
                         </Text>
                       )}
                     </TableTd>

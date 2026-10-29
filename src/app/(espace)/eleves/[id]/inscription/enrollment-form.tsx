@@ -370,7 +370,7 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
         className="flex flex-col gap-3 self-start text-sm lg:sticky lg:top-16"
       >
         <Title order={2} size="h6">
-          Récapitulatif de l’inscription
+          {news.length > 1 ? "Récapitulatif des inscriptions" : "Récapitulatif de l’inscription"}
         </Title>
         <div className="border-b border-bordure pb-3">
           <Text size="sm" fw={500}>
@@ -420,10 +420,12 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
           </Text>
         )}
         {news.length > 1 && (
-          <Text size="xs">
-            Ces cours sont vendus par {news.length} entreprises : {news.length} inscriptions, chacune au forfait de ses
-            propres cours, facturées séparément.
-          </Text>
+          <Alert color="blue" p="xs">
+            <Text size="sm">
+              {news.length} entreprises différentes : {news.length} inscriptions et {news.length} factures. Le forfait
+              se calcule séparément pour chacune.
+            </Text>
+          </Alert>
         )}
         {news.map((n) => (
           <section
@@ -432,7 +434,7 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
             className="flex flex-col gap-1"
           >
             {severalEntities && (
-              <Title order={3} size="h6">
+              <Title order={3} size="sm" fw={700}>
                 {n.entity}
               </Title>
             )}
@@ -441,7 +443,11 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
                 {n.price.error.message}
               </Text>
             ) : (
-              <PriceDetail price={n.price} totalLabel={news.length > 1 ? `${totalLabel} ${n.entity}` : totalLabel} />
+              <PriceDetail
+                price={n.price}
+                totalLabel={news.length > 1 ? `Sous-total ${n.entity}` : totalLabel}
+                subtotal={news.length > 1}
+              />
             )}
           </section>
         ))}

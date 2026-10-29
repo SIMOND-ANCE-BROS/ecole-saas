@@ -62,10 +62,20 @@ export function requestsByEntity(
 /**
  * Why a course's entity cannot change, in French; null when it can. Its enrollments
  * belong to its entity (the database refuses an enrollment mixing two), and their
- * invoices will be issued by it: the entity is set before the first enrollment.
+ * invoices will be issued by it; so do the lesson packs its private lessons were counted
+ * on. The entity is set before the first enrollment or counted lesson.
  */
-export function entityChangeRefusal(change: { from: string; to: string; enrollments: number }): string | null {
-  if (change.from === change.to || change.enrollments === 0) return null;
+export function entityChangeRefusal(change: {
+  from: string;
+  to: string;
+  enrollments: number;
+  countedLessons: number;
+}): string | null {
+  if (change.from === change.to) return null;
+  const end = " : l’entreprise qui le vend ne peut plus changer.";
   const n = change.enrollments;
-  return `Ce cours a ${n} inscription${n > 1 ? "s" : ""} : l’entreprise qui le vend ne peut plus changer.`;
+  if (n > 0) return `Ce cours a ${n} inscription${n > 1 ? "s" : ""}${end}`;
+  const c = change.countedLessons;
+  if (c > 0) return `Ce cours a ${c} séance${c > 1 ? "s décomptées" : " décomptée"} d’un carnet${end}`;
+  return null;
 }

@@ -33,6 +33,8 @@ type Props = {
   referential: ScheduleReferential;
   /** Businesses that can sell the course (#299), the default first: no choice shown with one. */
   entities: EntityChoice[];
+  /** Why the course's entity can no longer change (enrollments, counted lessons); null: it can. */
+  entityLock?: string | null;
   /** Instructors' pay modes and this course's own rate (#191): director pages only. */
   pay: CoursePay;
   schedule: ScheduleCourse[];
@@ -59,6 +61,7 @@ export function CourseForm({
   course,
   referential: referential,
   entities,
+  entityLock = null,
   pay,
   schedule: schedule,
   calendar,
@@ -395,7 +398,9 @@ export function CourseForm({
         {entities.length > 1 && (
           <Select
             label="Entreprise"
-            description="Celle qui vend le cours, encaisse et facture ses inscriptions."
+            description={entityLock ?? "Celle qui vend le cours, encaisse et facture ses inscriptions."}
+            // Read-only rather than disabled: the value stays readable and focusable.
+            readOnly={entityLock !== null}
             allowDeselect={false}
             data={entities.map((e) => ({ value: e.id, label: e.name }))}
             value={v.billingEntityId || null}

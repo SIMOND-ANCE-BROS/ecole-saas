@@ -15,7 +15,7 @@ import { rowsOf } from "./columns-of";
 import type { Tx } from "./index";
 import { displayedName, payableStudents } from "./people";
 import { currentSeason } from "./schedule";
-import { defaultEntityId, NO_DEFAULT_ENTITY } from "./billing-entities";
+import { resolveEntity } from "./billing-entities";
 import { auditLog, course, lesson, lessonPack, lessonPackPerson, lessonPackUsage, member, person } from "./schema";
 import { readAttendance } from "./lessons";
 import { listLessonPacks } from "./tariffs";
@@ -37,6 +37,8 @@ export const validSale = z.object({
   participantIds: z.array(z.uuid()).min(1).max(MAX_PEOPLE),
   priceCents: z.int().min(0).max(MAX_PRICE_CENTS).nullable(),
   reason: z.string().max(MAX_REASON_LENGTH * 2),
+  /** Business that sells the pack (#299): its private courses only. Absent (one entity): the default. */
+  billingEntityId: z.uuid().optional(),
 });
 export type SaleInput = z.input<typeof validSale>;
 
@@ -108,15 +110,14 @@ export async function sellLessonPack(
   // priceRefusal returned null: the price is set.
   const priceCents = e.priceCents ?? 0;
   const changed = gridPriceCents !== null && priceCents !== gridPriceCents;
-  // Sold by the school's default entity until the sale form offers a choice (#299 follow-up).
-  const entity = await defaultEntityId(tx);
-  if (!entity) return { ok: false, message: NO_DEFAULT_ENTITY };
+  const entity = await resolveEntity(tx, e.billingEntityId);
+  if (!entity.ok) return entity;
 
   const [{ id }] = await tx
     .insert(lessonPack)
     .values({
       schoolId: CURRENT_SCHOOL,
-      billingEntityId: entity,
+      billingEntityId: entity.id,
       payerId,
       peopleCount: e.peopleCount,
       lessonCount: e.lessonCount,

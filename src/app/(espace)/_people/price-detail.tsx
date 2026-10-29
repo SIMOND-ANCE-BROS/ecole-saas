@@ -8,10 +8,13 @@ import { formatEuros } from "@/lib/money";
 export function PriceDetail({
   price,
   totalLabel = "Total",
+  subtotal = false,
 }: {
   price: Extract<EnrollmentResult, { status: "ok" }>;
   /** « Total à la confirmation » for a trial or waitlist enrollment, not due yet. */
   totalLabel?: string;
+  /** One of several enrollments saved together (#299): a plain subtotal, the grand total comes after. */
+  subtotal?: boolean;
 }) {
   return (
     <dl className="flex flex-col gap-1">
@@ -31,7 +34,12 @@ export function PriceDetail({
           <Text size="xs">{r.reason}</Text>
         </Text>
       ))}
-      <Text component="div" size="md" fw={600} className="mt-2 flex justify-between gap-2 border-t border-bordure pt-3">
+      <Text
+        component="div"
+        size={subtotal ? "sm" : "md"}
+        fw={subtotal ? 500 : 600}
+        className="mt-2 flex justify-between gap-2 border-t border-bordure pt-3"
+      >
         <dt>{totalLabel}</dt>
         <dd className="tabular-nums">{formatEuros(price.netPriceCents)}</dd>
       </Text>

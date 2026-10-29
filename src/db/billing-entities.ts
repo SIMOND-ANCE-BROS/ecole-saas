@@ -173,6 +173,32 @@ export function entityChoices(tx: Tx, include?: string): Promise<EntityChoice[]>
     .orderBy(desc(billingEntity.isDefault), asc(billingEntity.name));
 }
 
+/**
+ * The entity a course or a lesson pack is sold by (#299): the one chosen, if it is active
+ * or is already the row's own (`current`, kept even once deactivated); none chosen, the
+ * row's own, or the school's default for a new one.
+ */
+export async function resolveEntity(
+  tx: Tx,
+  wanted: string | undefined,
+  current?: string,
+): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
+  if (wanted === undefined) {
+    const id = current ?? (await defaultEntityId(tx));
+    return id ? { ok: true, id } : { ok: false, message: NO_DEFAULT_ENTITY };
+  }
+  const [e] = await tx
+    .select({ id: billingEntity.id })
+    .from(billingEntity)
+    .where(
+      and(
+        eq(billingEntity.id, wanted),
+        current ? or(eq(billingEntity.active, true), eq(billingEntity.id, current)) : eq(billingEntity.active, true),
+      ),
+    );
+  return e ? { ok: true, id: e.id } : { ok: false, message: "Entreprise introuvable ou inactive." };
+}
+
 /** Shown when a school has no default entity: nothing can be cashed until it has one. */
 export const NO_DEFAULT_ENTITY =
   "Aucune entreprise par défaut : la direction la choisit dans Paramètres › Entreprises.";

@@ -53,5 +53,7 @@ export async function enroll(entry: FormInput, key: string): Promise<{ message: 
     );
   });
   if (!result.ok) return { message: result.message };
-  redirect(`/eleves/${rest.studentIds[0]}?inscription=enregistree`);
+  // Courses of two businesses: one enrollment each (#299), said in the banner.
+  const several = (result.ids?.length ?? 1) > 1;
+  redirect(`/eleves/${rest.studentIds[0]}?inscription=${several ? "enregistrees" : "enregistree"}`);
 }

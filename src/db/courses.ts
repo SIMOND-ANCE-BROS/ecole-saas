@@ -3,10 +3,9 @@ import { columnsOf, rowsOf } from "./columns-of";
 import { z } from "zod";
 import type { Tx } from "./index";
 import { hoursBySite } from "./settings";
-import { defaultEntityId, NO_DEFAULT_ENTITY } from "./billing-entities";
+import { resolveEntity } from "./billing-entities";
 import {
   auditLog,
-  billingEntity,
   course,
   courseDate,
   discipline,
@@ -345,32 +344,6 @@ async function values(tx: Tx, entry: CourseInput, guard?: string) {
   };
 }
 
-/**
- * The entity a saved course is sold by (#299): the one chosen, if it is active or is
- * already the course's (`current`, kept even once deactivated); none chosen, the
- * course's own, or the school's default for a new course.
- */
-async function resolveEntity(
-  tx: Tx,
-  wanted: string | undefined,
-  current?: string,
-): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
-  if (wanted === undefined) {
-    const id = current ?? (await defaultEntityId(tx));
-    return id ? { ok: true, id } : { ok: false, message: NO_DEFAULT_ENTITY };
-  }
-  const [e] = await tx
-    .select({ id: billingEntity.id })
-    .from(billingEntity)
-    .where(
-      and(
-        eq(billingEntity.id, wanted),
-        current ? or(eq(billingEntity.active, true), eq(billingEntity.id, current)) : eq(billingEntity.active, true),
-      ),
-    );
-  return e ? { ok: true, id: e.id } : { ok: false, message: "Entreprise introuvable ou inactive." };
-}
-
 /** Number of enrollments, whatever their status, with a student in the course. */
 async function enrollmentCount(tx: Tx, id: string): Promise<number> {
   const [{ n }] = await tx
@@ -378,6 +351,30 @@ async function enrollmentCount(tx: Tx, id: string): Promise<number> {
     .from(enrollmentCourse)
     .where(eq(enrollmentCourse.courseId, id));
   return n;
+}
+
+/** Number of the course's lessons counted on a lesson pack (#286). */
+async function countedLessonCount(tx: Tx, id: string): Promise<number> {
+  const [{ n }] = await tx
+    .select({ n: sql<number>`count(DISTINCT ${lessonPackUsage.lessonId})::int` })
+    .from(lessonPackUsage)
+    .innerJoin(lesson, eq(lesson.id, lessonPackUsage.lessonId))
+    .where(eq(lesson.courseId, id));
+  return n;
+}
+
+/**
+ * Why the course's entity can no longer change (#299), in French; null when it can. The
+ * course form shows it under a locked « Entreprise » select, the save checks it again.
+ */
+export async function entityLock(tx: Tx, id: string): Promise<string | null> {
+  if (!z.uuid().safeParse(id).success) return null;
+  return entityChangeRefusal({
+    from: "current",
+    to: "other",
+    enrollments: await enrollmentCount(tx, id),
+    countedLessons: await countedLessonCount(tx, id),
+  });
 }
 
 /** An amount typed in a unit the instructor is no longer paid in (a form opened before a pay mode change, #268). */
@@ -453,15 +450,9 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
   if (!r.ok) return r;
   const entity = await resolveEntity(tx, entry.billingEntityId, existing.billingEntityId);
   if (!entity.ok) return entity;
-  // Its enrollments belong to its entity (the database refuses the change too).
-  const entityRefusal =
-    entity.id === existing.billingEntityId
-      ? null
-      : entityChangeRefusal({
-          from: existing.billingEntityId,
-          to: entity.id,
-          enrollments: await enrollmentCount(tx, id),
-        });
+  // Its enrollments and counted lessons belong to its entity (the database refuses an
+  // enrolled course's change too). The course row is locked: no enrollment slips in meanwhile.
+  const entityRefusal = entity.id === existing.billingEntityId ? null : await entityLock(tx, id);
   if (entityRefusal) return { ok: false, message: entityRefusal };
   const stored = (await courseRate(tx, id)) ?? null;
   const instructorRateCents = rateAfterUpdate({

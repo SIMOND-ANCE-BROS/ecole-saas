@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Text, Title } from "@mantine/core";
 import { withSchool } from "@/db";
+import { entityChoices } from "@/db/billing-entities";
 import { packGrid } from "@/db/lesson-packs";
 import { displayedName, payableStudents, readPerson } from "@/db/people";
 import { isStudent } from "@/db/students";
@@ -37,11 +38,12 @@ export default async function SellPackPage({ searchParams }: PageProps<"/carnets
               ? `/eleves/${from.id}`
               : `/${(await isStudent(tx, payer.id)) ? "eleves" : "contacts"}/${payer.id}`,
             grid: await packGrid(tx, today),
+            entities: await entityChoices(tx),
           };
         })
       : null;
   if (!parsed) notFound();
-  const { payer, students, from, back, grid } = parsed;
+  const { payer, students, from, back, grid, entities } = parsed;
   const payerName = displayedName(payer);
 
   return (
@@ -75,6 +77,7 @@ export default async function SellPackPage({ searchParams }: PageProps<"/carnets
           initialStudent={from?.id ?? (students.length === 1 ? students[0].id : null)}
           grid={grid}
           back={back}
+          entities={entities}
         />
       )}
     </FormPage>

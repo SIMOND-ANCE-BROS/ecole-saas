@@ -190,7 +190,11 @@ async function validate(
       durationMinutes: course.durationMinutes,
     })
     .from(course)
-    .where(and(inArray(course.id, courseIds), eq(course.seasonId, seasonId)));
+    .where(and(inArray(course.id, courseIds), eq(course.seasonId, seasonId)))
+    // A course whose entity is being changed at the same moment (FOR UPDATE, updateCourse) is
+    // read once that change is committed: the enrollment then takes its new entity, never one
+    // the foreign keys would refuse at insert.
+    .for("key share");
   if (chosen.length !== courseIds.length) return "Un des cours ne fait pas partie de la saison.";
   // In the order chosen: the courses of each entity keep it.
   return courseIds.flatMap((id) => chosen.filter((c) => c.courseId === id));
@@ -220,8 +224,6 @@ export type Preview =
       status: "ok";
       /** One per entity, the default first; a single one when every course is sold by the same business. */
       newEnrollments: NewEnrollment[];
-      /** The school has several entities: the screen names each enrollment's. */
-      severalEntities: boolean;
       existingImpacts: ExistingImpact[];
     };
 
@@ -269,7 +271,6 @@ export async function enrollmentPreview(
       // The engine returns one result per request, each new one included.
       price: result.enrollments.find((i) => i.reference === r.reference)!,
     })),
-    severalEntities: entities.length > 1,
     // A trial or waitlist enrollment does not count as a sibling (Q3): the others' discounts stay as they are.
     existingImpacts: countsAsSibling(entry.status ?? "active")
       ? await impactsOn(tx, payerId, existing, result.enrollments)
