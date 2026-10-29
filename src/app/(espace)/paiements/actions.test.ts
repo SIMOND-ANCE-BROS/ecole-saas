@@ -11,7 +11,11 @@ vi.mock("next/cache", () => ({ revalidatePath: (...args: unknown[]) => revalidat
 const redirect = vi.fn();
 vi.mock("next/navigation", () => ({ redirect: (...args: unknown[]) => redirect(...args) }));
 const collect = vi.fn();
-vi.mock("@/db/payments", () => ({ correctPayment: vi.fn(), collect: (...args: unknown[]) => collect(...args) }));
+const correctPayment = vi.fn();
+vi.mock("@/db/payments", () => ({
+  correctPayment: (...args: unknown[]) => correctPayment(...args),
+  collect: (...args: unknown[]) => collect(...args),
+}));
 // `once` runs the creation it is given: the key handling itself is tested against the database.
 const once = vi.fn();
 vi.mock("@/db/submissions", () => ({ once: (...args: unknown[]) => once(...args), storedPayments: {} }));
@@ -34,6 +38,7 @@ beforeEach(() => {
   requireRole.mockResolvedValue({ schoolId: "school-a", userId: "user-a" });
   redirect.mockReset();
   collect.mockReset();
+  correctPayment.mockReset();
   once.mockReset();
   once.mockImplementation((_tx, _kind, _key, _request, _stored, create: () => unknown) => create());
 });
@@ -86,6 +91,24 @@ describe("correct", () => {
     });
     expect(revalidatePath).toHaveBeenCalledTimes(1);
     expect(revalidatePath).toHaveBeenCalledWith("/encaissements");
+  });
+
+  it("passes the day a deposited payment was rejected, and no day for a plain correction (#253)", async () => {
+    withSchool.mockImplementation((_school, run: (tx: string) => unknown) => run("tx"));
+    correctPayment.mockResolvedValue({ ok: true, ids: [] });
+    await correct({ paymentId: PAYMENT, amountCents: 1000, back: RECORD, rejectedOn: "2026-10-20" });
+    expect(correctPayment).toHaveBeenLastCalledWith("tx", "user-a", PAYMENT, 1000, expect.any(String), "2026-10-20");
+    await correct({ paymentId: PAYMENT, amountCents: 1000, back: RECORD });
+    expect(correctPayment).toHaveBeenLastCalledWith("tx", "user-a", PAYMENT, 1000, expect.any(String), null);
+  });
+
+  it("refuses a rejection day that is not a date, in the words of the field", async () => {
+    for (const rejectedOn of ["20/10/2026", "2026-02-31", 42])
+      expect(await correct(entry({ paymentId: PAYMENT, amountCents: 1000, back: RECORD, rejectedOn }))).toEqual({
+        ok: false,
+        message: "Date du rejet invalide.",
+      });
+    expect(withSchool).not.toHaveBeenCalled();
   });
 });
 

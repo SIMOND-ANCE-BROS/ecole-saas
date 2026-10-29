@@ -3,9 +3,12 @@
 import { Button, Group, Input, Text } from "@mantine/core";
 import { unstable_rethrow, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { rejectionDateRefusal } from "@/domain/payments/rejection";
 import { NOT_SAVED } from "@/lib/action-result";
+import { frenchDate } from "@/lib/dates";
 import { formatEuros, parseEuros, typedEuros } from "@/lib/money";
 import { correct } from "../paiements/actions";
+import { DateField, refusedDateField } from "../_ui/date-field";
 
 /** Heading of the payments section (`payments-section.tsx`), focused when a fully corrected payment loses its button. */
 const PAYMENTS_HEADING = "paiements";
@@ -19,20 +22,43 @@ function refusalOf(amount: string, remaining: number): string | null {
   return null;
 }
 
+/** A payment already in a bank deposit: rejected (bounced cheque) rather than corrected (#253). */
+export type Rejection = {
+  /** « Chèque rejeté » or « Paiement rejeté ». */
+  label: string;
+  /** Day the payment was received: the rejection cannot come before it. */
+  receivedOn: string;
+  depositedOn: string;
+  today: string;
+};
+
 /**
  * Correcting a payment (management): a payment is never modified, a negative
- * payment is entered instead, at most the amount not yet corrected.
+ * payment is entered instead, at most the amount not yet corrected. A payment
+ * already deposited is recorded as rejected on the day the bank returned it;
+ * its deposit slip stays as printed and the amount is due again (#253).
  */
-export function CorrectPayment({ paymentId, remaining, back }: { paymentId: string; remaining: number; back: string }) {
+export function CorrectPayment({
+  paymentId,
+  remaining,
+  back,
+  rejection,
+}: {
+  paymentId: string;
+  remaining: number;
+  back: string;
+  rejection: Rejection | null;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(typedEuros(remaining));
+  const [rejectedOn, setRejectedOn] = useState(rejection?.today ?? "");
   // The refusal shows on Enter or when leaving the field, not while typing « 12, ».
   const [shown, setShown] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [sending, startTransition] = useTransition();
   const opener = useRef<HTMLButtonElement>(null);
-  // Closed by « Fermer », Escape or a saved correction: the focus goes back to « Corriger », not to the page.
+  // Closed by « Fermer », Escape or a saved correction: the focus goes back to the opening button, not to the page.
   const [closed, setClosed] = useState(false);
   useEffect(() => {
     if (closed && !open) opener.current?.focus();
@@ -50,19 +76,25 @@ export function CorrectPayment({ paymentId, remaining, back }: { paymentId: stri
         onClick={() => {
           setClosed(false);
           setShown(false);
+          setRejectedOn(rejection?.today ?? "");
           setOpen(true);
         }}
       >
-        Corriger
+        {rejection ? rejection.label : "Corriger"}
       </Button>
     );
   }
   const refusal = refusalOf(amount, remaining);
+  const dateRefusal = rejection
+    ? rejectedOn === ""
+      ? "Indiquez la date du rejet"
+      : rejectionDateRefusal(rejectedOn, rejection.receivedOn, rejection.today)
+    : null;
   const id = `correction-${paymentId}`;
   return (
     <form
       onKeyDown={(e) => {
-        if (e.key === "Escape") {
+        if (e.key === "Escape" && !e.defaultPrevented) {
           e.preventDefault();
           close();
         }
@@ -70,12 +102,13 @@ export function CorrectPayment({ paymentId, remaining, back }: { paymentId: stri
       onSubmit={(e) => {
         e.preventDefault();
         setShown(true);
+        if (refusedDateField(e.currentTarget)) return;
         const cents = parseEuros(amount);
-        if (refusal || !cents) return;
+        if (refusal || dateRefusal || !cents) return;
         startTransition(async () => {
           let r;
           try {
-            r = await correct({ paymentId, amountCents: cents, back });
+            r = await correct({ paymentId, amountCents: cents, back, rejectedOn: rejection ? rejectedOn : null });
           } catch (e) {
             unstable_rethrow(e);
             setMessage(NOT_SAVED);
@@ -87,7 +120,7 @@ export function CorrectPayment({ paymentId, remaining, back }: { paymentId: stri
           }
           setMessage(null);
           if (cents === remaining) {
-            // Fully corrected: « Corriger » goes away with the refresh; the section keeps the focus.
+            // Fully corrected: the button goes away with the refresh; the section keeps the focus.
             document.getElementById(PAYMENTS_HEADING)?.focus();
             setOpen(false);
           } else close();
@@ -95,9 +128,15 @@ export function CorrectPayment({ paymentId, remaining, back }: { paymentId: stri
         });
       }}
     >
+      {rejection && (
+        <Text size="xs" c="dimmed" mb={4}>
+          Remis en banque le {frenchDate(rejection.depositedOn)} : la remise reste telle quelle, le montant rejeté
+          redevient dû.
+        </Text>
+      )}
       <Input.Wrapper
         id={id}
-        label="Montant de la correction (€)"
+        label={rejection ? "Montant rejeté (€)" : "Montant de la correction (€)"}
         description={`Au plus ${formatEuros(remaining)}`}
         error={shown ? refusal : null}
         size="xs"
@@ -122,14 +161,43 @@ export function CorrectPayment({ paymentId, remaining, back }: { paymentId: stri
             error={shown && refusal !== null}
             autoFocus
           />
-          <Button type="submit" variant="default" size="compact-xs" loading={sending}>
-            Enregistrer la correction
+          {!rejection && (
+            <>
+              <Button type="submit" variant="default" size="compact-xs" loading={sending}>
+                Enregistrer la correction
+              </Button>
+              <Button variant="subtle" size="compact-xs" onClick={close}>
+                Fermer
+              </Button>
+            </>
+          )}
+        </Group>
+      </Input.Wrapper>
+      {rejection && (
+        <Group gap="xs" wrap="wrap" align="flex-end" mt={4}>
+          <DateField
+            label="Rejeté le"
+            size="xs"
+            w={130}
+            required
+            minDate={rejection.receivedOn}
+            maxDate={rejection.today}
+            value={rejectedOn}
+            onChange={(d) => {
+              setRejectedOn(d);
+              setShown(false);
+            }}
+            error={shown ? dateRefusal : null}
+            styles={{ label: { fontSize: "var(--mantine-font-size-xs)" } }}
+          />
+          <Button type="submit" variant="default" size="compact-xs" loading={sending} mb={4}>
+            Enregistrer le rejet
           </Button>
-          <Button variant="subtle" size="compact-xs" onClick={close}>
+          <Button variant="subtle" size="compact-xs" onClick={close} mb={4}>
             Fermer
           </Button>
         </Group>
-      </Input.Wrapper>
+      )}
       {message && (
         <Text span role="alert" size="xs" c="red">
           {message}
