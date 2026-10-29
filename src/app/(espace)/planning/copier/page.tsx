@@ -15,6 +15,7 @@ import {
 import { withSchool } from "@/db";
 import { chosenSeason, currentSeason, schoolSeasons } from "@/db/schedule";
 import { seasonCopyPlan, type CourseToCopy } from "@/db/season-copy";
+import { courseRateLabel } from "@/domain/payroll/rate-field";
 import { DAY_NAMES } from "@/domain/schedule/days";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
@@ -71,8 +72,14 @@ export default async function CopyPage({ searchParams }: PageProps<"/planning/co
   const planning = withSeason("/planning", targetParam);
   const copied = copy?.ok ? copy.plan.copied : [];
   const check = copy?.ok ? copy.plan.check : null;
+  // A rate typed in the instructor's older pay mode is not carried over (#268).
+  const oldUnitRates = copied.filter((c) => c.oldUnitRate !== null).length;
   const toCheck = check
     ? [
+        oldUnitRates > 0 &&
+          (oldUnitRates === 1
+            ? "1 cours a un tarif intervenant de l’ancien mode de rémunération de son intervenant : il n’est pas repris, le tarif habituel s’applique."
+            : `${oldUnitRates} cours ont un tarif intervenant de l’ancien mode de rémunération de leur intervenant : ces tarifs ne sont pas repris, le tarif habituel s’applique.`),
         check.periodDropped.length > 0 &&
           `${count(check.periodDropped.length, "avait une période limitée", "avaient une période limitée")} dans l’ancienne saison : la copie a lieu toute la saison, ajustez ses dates si besoin.`,
         check.biweekly.length > 0 &&
@@ -170,6 +177,13 @@ export default async function CopyPage({ searchParams }: PageProps<"/planning/co
                       <TableTd>
                         {c.instructor}
                         {copy.plan.check.inactiveInstructor.includes(c) && <Flag>inactif</Flag>}
+                        {c.oldUnitRate && (
+                          <Flag>
+                            {c.oldUnitRate.payMode === "monthly_flat"
+                              ? "tarif non utilisé (forfait mensuel) non repris"
+                              : `tarif de ${courseRateLabel(c.oldUnitRate)} non repris`}
+                          </Flag>
+                        )}
                       </TableTd>
                     </TableTr>
                   ))}

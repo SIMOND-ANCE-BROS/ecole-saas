@@ -18,7 +18,13 @@ import {
   season,
   site,
 } from "./schema";
-import { courseRateAllowed, rateAfterUpdate, type PayMode } from "../domain/payroll/rate";
+import {
+  courseRateAllowed,
+  rateAfterUpdate,
+  rateInCurrentUnit,
+  rateUnitAfterSave,
+  type PayMode,
+} from "../domain/payroll/rate";
 import { issuePath } from "../lib/form-errors";
 import { has } from "../lib/has";
 import { parseEuros } from "../lib/money";
@@ -104,6 +110,8 @@ const courseFields = z.object({
   instructorRate: euroRateOrNull,
   /** Instructor the rate was typed for: a rate left over from another instructor is not kept (#191). */
   instructorRateFor: z.uuid().optional(),
+  /** Unit the form showed for that rate (#268): the server refuses an amount typed in a pay mode no longer current. */
+  instructorRateUnit: z.enum(["hourly", "per_lesson", "monthly_flat"]).optional(),
 });
 
 export const validCourseInput = courseFields
@@ -293,6 +301,8 @@ async function values(tx: Tx, entry: CourseInput, guard?: string) {
   const [startDate, endDate] = oneOff ? [null, null] : [entry.startDate, entry.endDate];
   return {
     ok: true as const,
+    // The instructor's current pay mode: the unit of a rate typed now (#268).
+    payMode: i.payMode,
     // Course columns, ready for insert/update.
     values: {
       disciplineId,
@@ -314,13 +324,39 @@ async function values(tx: Tx, entry: CourseInput, guard?: string) {
   };
 }
 
+/** An amount typed in a unit the instructor is no longer paid in (a form opened before a pay mode change, #268). */
+const STALE_UNIT = {
+  ok: false as const,
+  message:
+    "Le mode de rémunération de cet intervenant a changé : rechargez la page pour saisir le tarif dans la bonne unité.",
+};
+
 export async function createCourse(tx: Tx, seasonId: string, entry: CourseInput): Promise<SaveResult> {
   const r = await values(tx, entry);
   if (!r.ok) return r;
   const instructorRateCents = entry.instructorRate ?? null;
+  // A rate is typed in the instructor's current pay mode (#268).
+  const unit = rateUnitAfterSave({
+    cents: instructorRateCents,
+    sent: entry.instructorRate,
+    shownUnit: entry.instructorRateUnit,
+    stored: null,
+    sameInstructor: false,
+    payMode: r.payMode,
+  });
+  if (!unit) return STALE_UNIT;
+  const instructorRatePayMode = unit.unit;
   const [{ id }] = await tx
     .insert(course)
-    .values(columnsOf(course, { ...r.values, instructorRateCents, schoolId: CURRENT_SCHOOL, seasonId: seasonId }))
+    .values(
+      columnsOf(course, {
+        ...r.values,
+        instructorRateCents,
+        instructorRatePayMode,
+        schoolId: CURRENT_SCHOOL,
+        seasonId: seasonId,
+      }),
+    )
     .returning({ id: course.id });
   await replaceDates(tx, id, r.dates);
   return { ok: true, id, instructorRateCents };
@@ -342,16 +378,28 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
   if (!existing) return { ok: false, message: "Ce cours n’existe plus." };
   const r = await values(tx, entry, existing.instructorId);
   if (!r.ok) return r;
+  const stored = (await courseRate(tx, id)) ?? null;
   const instructorRateCents = rateAfterUpdate({
     sent: entry.instructorRate,
     typedFor: entry.instructorRateFor,
-    stored: (await courseRate(tx, id)) ?? null,
+    stored: stored?.cents ?? null,
     oldInstructor: existing.instructorId,
     newInstructor: r.values.instructorId,
   });
+  // Unit (#268), decided here: an older pay mode's rate sent back untouched keeps its own.
+  const unit = rateUnitAfterSave({
+    cents: instructorRateCents,
+    sent: entry.instructorRate,
+    shownUnit: entry.instructorRateUnit,
+    stored,
+    sameInstructor: existing.instructorId === r.values.instructorId,
+    payMode: r.payMode,
+  });
+  if (!unit) return STALE_UNIT;
+  const instructorRatePayMode = unit.unit;
   await tx
     .update(course)
-    .set(columnsOf(course, { ...r.values, instructorRateCents }))
+    .set(columnsOf(course, { ...r.values, instructorRateCents, instructorRatePayMode }))
     .where(eq(course.id, id));
   await replaceDates(tx, id, r.dates);
   // New main instructor: takes over the old one's upcoming lessons, not those of a substitute.
@@ -371,36 +419,48 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
   return { ok: true, id, instructorRateCents };
 }
 
+/** A course's own instructor rate with its unit: the pay mode it was typed in (#268). */
+export type CourseRate = { cents: number; payMode: PayMode };
+
 /**
- * Instructor's rate for this course (#191): director pages only, never read
- * with the course for the front desk. undefined: no such course.
+ * Instructor's rate for this course (#191) with its unit (#268): director
+ * pages only, never read with the course for the front desk. null: none;
+ * undefined: no such course.
  */
-export async function courseRate(tx: Tx, id: string): Promise<number | null | undefined> {
+export async function courseRate(tx: Tx, id: string): Promise<CourseRate | null | undefined> {
   if (!z.uuid().safeParse(id).success) return undefined;
-  const [c] = await tx.select({ cents: course.instructorRateCents }).from(course).where(eq(course.id, id));
-  return c?.cents;
+  const [c] = await tx
+    .select({ cents: course.instructorRateCents, payMode: course.instructorRatePayMode })
+    .from(course)
+    .where(eq(course.id, id));
+  if (!c) return undefined;
+  // Both set or both null (check course_instructor_rate_unit).
+  return c.cents === null || c.payMode === null ? null : { cents: c.cents, payMode: c.payMode };
 }
 
 /**
- * The course's own instructor rate with its unit, when one applies (#191):
- * null when none is set or the instructor's pay mode does not use it.
+ * The course's own instructor rate, in the unit it was typed in (#268), when
+ * one is shown (#191): null when none is set or the instructor is now paid a
+ * monthly flat. `current`: the unit is still the instructor's pay mode; if not,
+ * it is an older pay mode's rate, kept as history (#192 Q5).
  * Director only: callers check the role before reading it.
  */
-export async function courseOwnRate(tx: Tx, id: string): Promise<{ cents: number; payMode: PayMode } | null> {
+export async function courseOwnRate(tx: Tx, id: string): Promise<(CourseRate & { current: boolean }) | null> {
   if (!z.uuid().safeParse(id).success) return null;
   const [c] = await tx
-    .select({ cents: course.instructorRateCents, payMode: instructor.payMode })
+    .select({ cents: course.instructorRateCents, unit: course.instructorRatePayMode, payMode: instructor.payMode })
     .from(course)
     .innerJoin(instructor, eq(instructor.id, course.instructorId))
     .where(eq(course.id, id));
-  return c && c.cents !== null && courseRateAllowed(c.payMode) ? { cents: c.cents, payMode: c.payMode } : null;
+  if (!c || c.cents === null || c.unit === null || !courseRateAllowed(c.payMode)) return null;
+  return { cents: c.cents, payMode: c.unit, current: rateInCurrentUnit(c.unit, c.payMode) };
 }
 
 export type CoursePay = {
   /** Pay mode and default rate of each instructor offered in the form. */
   instructors: Record<string, { payMode: PayMode; rateCents: number }>;
-  /** The course's own instructor rate; null: none (or a new course). */
-  rateCents: number | null;
+  /** The course's own instructor rate, in its own unit (#268); null: none (or a new course). */
+  rate: CourseRate | null;
 };
 
 /** Pay data of the course form (#191), for the director's new and edit pages only. */
@@ -410,7 +470,7 @@ export async function coursePay(tx: Tx, courseId: string | null): Promise<Course
     .from(instructor);
   return {
     instructors: Object.fromEntries(rows.map((i) => [i.id, { payMode: i.payMode, rateCents: i.rateCents }])),
-    rateCents: courseId ? ((await courseRate(tx, courseId)) ?? null) : null,
+    rate: courseId ? ((await courseRate(tx, courseId)) ?? null) : null,
   };
 }
 
@@ -425,8 +485,11 @@ export function coursesWithOwnRate(tx: Tx, instructorId: string) {
       startTime: sql<string>`to_char(${course.startTime}, 'HH24:MI')`,
       durationMinutes: course.durationMinutes,
       season: season.label,
-      // Never null here: the query keeps only courses with a rate (isNotNull below).
+      // Never null here: the query keeps only courses with a rate (isNotNull below),
+      // whose unit is then set too (check course_instructor_rate_unit).
       rateCents: sql<number>`${course.instructorRateCents}`,
+      /** Unit of the rate (#268): the pay mode it was typed in, maybe not the instructor's current one. */
+      ratePayMode: sql<PayMode>`${course.instructorRatePayMode}`,
     })
     .from(course)
     .innerJoin(discipline, eq(discipline.id, course.disciplineId))
@@ -435,17 +498,26 @@ export function coursesWithOwnRate(tx: Tx, instructorId: string) {
     .orderBy(desc(season.startDate), sql`${course.weekday} NULLS LAST`, course.startTime, discipline.name);
 }
 
+/** A course's instructor and own rate, as written to the audit log. */
+export type CourseRateState = {
+  instructorId: string;
+  instructorRateCents: number | null;
+  instructorRatePayMode: PayMode | null;
+};
+
 /** Records a change of a course's instructor rate in the audit log; nothing when it did not change. */
 export async function logCourseRate(
   tx: Tx,
   userId: string,
   courseId: string,
-  before: { instructorId: string; instructorRateCents: number | null } | null,
-  after: { instructorId: string; instructorRateCents: number | null },
+  before: CourseRateState | null,
+  after: CourseRateState,
 ) {
   const was = before?.instructorRateCents ?? null;
+  const sameRate =
+    was === after.instructorRateCents && (before?.instructorRatePayMode ?? null) === after.instructorRatePayMode;
   // A rate kept for a new instructor is a change too; no rate before and after is not.
-  if (was === after.instructorRateCents && (was === null || before?.instructorId === after.instructorId)) return;
+  if (sameRate && (was === null || before?.instructorId === after.instructorId)) return;
   const [who] = await tx.select({ id: member.id }).from(member).where(eq(member.userId, userId));
   await tx.insert(auditLog).values(
     rowsOf(auditLog, [
@@ -460,6 +532,18 @@ export async function logCourseRate(
       },
     ]),
   );
+}
+
+/** A course's instructor and own rate, for the audit log (#191, #268); null: no such course. */
+export async function courseRateState(tx: Tx, id: string): Promise<CourseRateState | null> {
+  const existing = await readCourse(tx, id);
+  if (!existing) return null;
+  const rate = (await courseRate(tx, id)) ?? null;
+  return {
+    instructorId: existing.instructorId,
+    instructorRateCents: rate?.cents ?? null,
+    instructorRatePayMode: rate?.payMode ?? null,
+  };
 }
 
 /** Refused as soon as an enrollment, whatever its status, concerns the course. */

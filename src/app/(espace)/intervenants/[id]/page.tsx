@@ -13,7 +13,8 @@ import { ButtonLink } from "@/app/(espace)/_ui/button-link";
 import { BackToList } from "@/app/(espace)/_ui/list-return";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { end } from "@/app/(espace)/planning/format";
-import { courseRateAllowed } from "@/domain/payroll/rate";
+import { courseRateAllowed, rateInCurrentUnit } from "@/domain/payroll/rate";
+import { courseRateLabel } from "@/domain/payroll/rate-field";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
 import { CalendarSubscription } from "./calendar-subscription";
@@ -159,11 +160,23 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
                     </TableTd>
                     <TableTd className="whitespace-nowrap">{c.season}</TableTd>
                     <TableTd ta="right" className="whitespace-nowrap tabular-nums">
-                      {courseRateAllowed(instructor.payMode) ? (
-                        `${formatEuros(c.rateCents)} / ${PAY_UNITS[instructor.payMode]}`
-                      ) : (
+                      {/* In the unit it was typed in (#268), which may be an older pay mode's. */}
+                      {rateInCurrentUnit(c.ratePayMode, instructor.payMode) ? (
+                        courseRateLabel({ cents: c.rateCents, payMode: c.ratePayMode })
+                      ) : c.ratePayMode === "monthly_flat" ? (
+                        <Text span size="sm" c="dimmed">
+                          {courseRateLabel({ cents: c.rateCents, payMode: c.ratePayMode })}
+                        </Text>
+                      ) : !courseRateAllowed(instructor.payMode) ? (
                         <Text span size="sm" c="dimmed" td="line-through">
-                          {formatEuros(c.rateCents)}
+                          {courseRateLabel({ cents: c.rateCents, payMode: c.ratePayMode })}
+                        </Text>
+                      ) : (
+                        <Text span size="sm" c="dimmed">
+                          {courseRateLabel({ cents: c.rateCents, payMode: c.ratePayMode })}
+                          <Text span size="xs" c="dimmed" display="block">
+                            ancien mode de rémunération
+                          </Text>
                         </Text>
                       )}
                     </TableTd>
