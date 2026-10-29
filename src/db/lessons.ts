@@ -171,10 +171,13 @@ export async function addClosure(tx: Tx, seasonId: string, entry: z.input<typeof
   const f = validClosureInput.safeParse(entry);
   if (!f.success) return { ok: false, message: f.error.issues[0].message };
   if (f.data.end < f.data.start) return { ok: false, message: "La fin précède le début." };
+  // KEY SHARE: waits for, then reads, a season date edit in progress (updateSeason() locks FOR UPDATE),
+  // and keeps the dates from changing until this closure commits (#194). Two closures still go side by side.
   const [s] = await tx
     .select({ start: season.startDate, end: season.endDate })
     .from(season)
-    .where(eq(season.id, seasonId));
+    .where(eq(season.id, seasonId))
+    .for("key share");
   if (!s) return { ok: false, message: "Cette saison n’existe plus." };
   // A closure belongs to one season (#189): its lessons are the ones it cancels.
   if (f.data.start < s.start || f.data.end > s.end)

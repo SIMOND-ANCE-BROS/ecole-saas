@@ -1,9 +1,10 @@
-import { and, asc, desc, eq, ne, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ne, or, type SQL, sql } from "drizzle-orm";
 import { columnsOf, rowsOf } from "./columns-of";
 import { z } from "zod";
 import type { Hours } from "../domain/schedule/hours";
 import type { Tx } from "./index";
-import { course, discipline, siteHours, season, room, site } from "./schema";
+import { closure, course, discipline, siteHours, season, room, site } from "./schema";
+import { frenchDate } from "../lib/dates";
 import { issuePath } from "../lib/form-errors";
 
 /**
@@ -128,11 +129,44 @@ export async function createSeason(
   return { ok: true, id };
 }
 
+/**
+ * New season dates must keep every closure of the season inside them (#194,
+ * recommended rule pending the school's validation): the edit is refused,
+ * naming the closures, rather than clipping or deleting them silently.
+ */
+async function closuresOutside(tx: Tx, seasonId: string, s: z.output<typeof validSeasonInput>): Promise<string | null> {
+  const outside = await tx
+    .select({ label: closure.label, start: closure.startDate, end: closure.endDate })
+    .from(closure)
+    .where(
+      and(
+        eq(closure.seasonId, seasonId),
+        or(sql`${closure.startDate} < ${s.startDate}`, sql`${closure.endDate} > ${s.endDate}`),
+      ),
+    )
+    .orderBy(asc(closure.startDate), asc(closure.label));
+  if (outside.length === 0) return null;
+  const names = outside
+    .map((c) =>
+      c.start === c.end
+        ? `${c.label} (le ${frenchDate(c.start)})`
+        : `${c.label} (du ${frenchDate(c.start)} au ${frenchDate(c.end)})`,
+    )
+    .join(", ");
+  return outside.length === 1
+    ? `Cette fermeture sortirait de la saison : ${names}. Supprimez-la dans Planning › Fermetures, puis recréez-la avec les bonnes dates.`
+    : `Ces fermetures sortiraient de la saison : ${names}. Supprimez-les dans Planning › Fermetures, puis recréez-les avec les bonnes dates.`;
+}
+
 export async function updateSeason(tx: Tx, id: string, entry: z.input<typeof validSeasonInput>): Promise<Result> {
   const s = validSeasonInput.safeParse(entry);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   if (!isUuid(id)) return { ok: false, message: "Cette saison n’existe plus." };
-  const refusal = await checkSeason(tx, s.data, id);
+  // FOR UPDATE conflicts with the KEY SHARE of addClosure(): a closure being added commits first and is
+  // checked below, or waits and reads the new dates (#194).
+  const [current] = await tx.select({ id: season.id }).from(season).where(eq(season.id, id)).for("update");
+  if (!current) return { ok: false, message: "Cette saison n’existe plus." };
+  const refusal = (await checkSeason(tx, s.data, id)) ?? (await closuresOutside(tx, id, s.data));
   if (refusal) return { ok: false, message: refusal };
   const rows = await tx
     .update(season)
