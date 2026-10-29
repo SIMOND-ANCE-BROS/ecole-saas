@@ -5,6 +5,7 @@ import { withSchool } from "@/db";
 import { countContacts, countStudents, seasonCourseLabels, listContacts, listStudents } from "@/db/students";
 import { currentSeason } from "@/db/schedule";
 import { readPreference } from "@/db/preferences";
+import { readRequirements } from "@/db/student-documents";
 import { displayedName } from "@/db/people";
 import { STUDENT_COLUMNS } from "@/domain/filters/columns";
 import { readFilter, readSort } from "@/domain/filters/filters";
@@ -13,7 +14,7 @@ import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { ListTable } from "../_filters/list-table";
 import { NavigableResults } from "../_people/navigable-results";
-import { Telephone } from "../_people/sections";
+import { Telephone, WARNING } from "../_people/sections";
 import { ButtonLink } from "../_ui/button-link";
 import { RememberList } from "../_ui/list-return";
 import { PageHeader } from "../_ui/page-header";
@@ -43,7 +44,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
     courses,
   } = await withSchool(schoolId, async (tx) => {
     const season = await currentSeason(tx, today);
-    const options = { filter, currentSort, today, seasonId: season?.id };
+    const options = { filter, currentSort, today, seasonId: season?.id, requirements: await readRequirements(tx) };
     const total = await countStudents(tx, entry, options);
     // Clamped to the pages that exist: a filter may have shrunk the list since `?page=` was set.
     const page = readPage(askedPage, total);
@@ -114,6 +115,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
                 email: e.email,
                 cours: e.courses,
                 inscription: e.enrollmentStatus,
+                documents: e.missingDocuments,
                 prevenir: e.toNotify,
               },
             }))}
@@ -137,6 +139,11 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
                       {e.guardians.length > 0 && (
                         <Text span size="sm" c="dimmed">
                           Responsable : {e.guardians.join(", ")}
+                        </Text>
+                      )}
+                      {e.missingDocuments.length > 0 && (
+                        <Text span size="sm" c={WARNING}>
+                          Documents manquants : {e.missingDocuments.join(", ")}
                         </Text>
                       )}
                       {e.telephone && (

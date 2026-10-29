@@ -1,4 +1,5 @@
 import { ENROLLMENT_STATUS_LABELS } from "../enrollment/statuses";
+import { DOCUMENT_LABELS, REQUIRABLE_TYPES } from "../people/documents";
 import type { ColumnDef } from "./filters";
 
 /**
@@ -21,6 +22,14 @@ export const STUDENT_COLUMNS = [
     choice: Object.values(ENROLLMENT_STATUS_LABELS),
   },
   { id: "cours", label: "Cours suivis", type: "text", ifEmpty: "aucun" },
+  // Required documents overdue (not handed in, or expired, past the delay after enrollment), for the season's enrolled students only (#287).
+  {
+    id: "documents",
+    label: "Documents manquants",
+    type: "text",
+    ifEmpty: "aucun",
+    choice: REQUIRABLE_TYPES.map((t) => DOCUMENT_LABELS[t]),
+  },
   { id: "telephone", label: "Téléphone", type: "phone" },
   // Offered in « Colonnes », hidden by default (#89).
   { id: "naissance", label: "Naissance", type: "date", byDefault: false, yearsBack: true },

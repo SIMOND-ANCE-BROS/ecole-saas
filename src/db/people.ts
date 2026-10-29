@@ -12,16 +12,7 @@ import {
   typeChangeRefusal,
 } from "../domain/people/guardian";
 import type { Tx } from "./index";
-import {
-  course,
-  discipline,
-  studentDocument,
-  enrollment,
-  enrollmentCourse,
-  relationship,
-  person,
-  season,
-} from "./schema";
+import { course, discipline, enrollment, enrollmentCourse, relationship, person, season } from "./schema";
 
 export { displayedName };
 
@@ -207,7 +198,6 @@ export type PersonRecord = {
     presents: number;
     absents: number;
   }[];
-  documents: { type: (typeof studentDocument.type.enumValues)[number]; granted: boolean; validUntil: string | null }[];
 };
 
 /** A student's presences or absences at the lessons of the row's course. */
@@ -281,12 +271,6 @@ export async function readPerson(tx: Tx, id: string): Promise<PersonRecord | nul
     .where(eq(enrollmentCourse.studentId, id))
     .orderBy(desc(season.startDate), sql`${course.weekday} NULLS LAST`, asc(course.startTime));
 
-  const documents = await tx
-    .select({ type: studentDocument.type, granted: studentDocument.granted, validUntil: studentDocument.validUntil })
-    .from(studentDocument)
-    .where(eq(studentDocument.studentId, id))
-    .orderBy(asc(studentDocument.type));
-
   return {
     ...p,
     relationships: relationships.map((l) => ({
@@ -298,7 +282,6 @@ export async function readPerson(tx: Tx, id: string): Promise<PersonRecord | nul
       paysFor: l.paysFor,
     })),
     courses: followed.map((c) => ({ ...c, startTime: c.startTime.slice(0, 5) })),
-    documents,
   };
 }
 

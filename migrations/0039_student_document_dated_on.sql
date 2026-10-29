@@ -1,0 +1,1 @@
+ALTER TABLE "student_document" ADD COLUMN "dated_on" date;

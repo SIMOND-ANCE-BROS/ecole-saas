@@ -1,5 +1,5 @@
 {
-  "id": "f0ab8ff8-3558-4cf9-a83d-6e0ea02a4920",
+  "id": "a4b7c44a-3380-4957-b2e4-a101cd267942",
   "prevId": "ec681d6a-3aba-4343-aba7-1f2f1a1ad6e9",
   "version": "7",
   "dialect": "postgresql",
@@ -1446,6 +1446,98 @@
       },
       "isRLSEnabled": false
     },
+    "public.document_requirement": {
+      "name": "document_requirement",
+      "schema": "",
+      "columns": {
+        "school_id": {
+          "name": "school_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "document_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "required": {
+          "name": "required",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "minors_only": {
+          "name": "minors_only",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "validity_months": {
+          "name": "validity_months",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "due_within_days": {
+          "name": "due_within_days",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "document_requirement_school_id_school_id_fk": {
+          "name": "document_requirement_school_id_school_id_fk",
+          "tableFrom": "document_requirement",
+          "tableTo": "school",
+          "columnsFrom": [
+            "school_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "document_requirement_school_id_type_pk": {
+          "name": "document_requirement_school_id_type_pk",
+          "columns": [
+            "school_id",
+            "type"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "document_requirement_type": {
+          "name": "document_requirement_type",
+          "value": "\"document_requirement\".\"type\" <> 'other'"
+        },
+        "document_requirement_validity": {
+          "name": "document_requirement_validity",
+          "value": "\"document_requirement\".\"validity_months\" BETWEEN 1 AND 120"
+        },
+        "document_requirement_due": {
+          "name": "document_requirement_due",
+          "value": "\"document_requirement\".\"due_within_days\" BETWEEN 0 AND 365"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.enrollment": {
       "name": "enrollment",
       "schema": "",
@@ -1509,12 +1601,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "dropped_on": {
-          "name": "dropped_on",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
         },
         "gross_price_cents": {
           "name": "gross_price_cents",
@@ -1649,12 +1735,7 @@
         }
       },
       "policies": {},
-      "checkConstraints": {
-        "enrollment_dropped_on": {
-          "name": "enrollment_dropped_on",
-          "value": "\"enrollment\".\"dropped_on\" IS NULL OR \"enrollment\".\"status\" = 'dropped'"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.enrollment_course": {
@@ -4471,6 +4552,12 @@
           "notNull": true,
           "default": true
         },
+        "received_on": {
+          "name": "received_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
         "valid_until": {
           "name": "valid_until",
           "type": "date",
@@ -4516,7 +4603,16 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "student_document_student_id_type_unique": {
+          "name": "student_document_student_id_type_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "student_id",
+            "type"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
