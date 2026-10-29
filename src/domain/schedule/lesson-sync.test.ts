@@ -37,6 +37,7 @@ const lessonOn = (date: string, own: Partial<ExistingLesson> = {}): ExistingLess
   courseInstructorId: T1,
   status: "planned",
   attendanceSheet: false,
+  packUsage: false,
   ...own,
 });
 const keptOn = (referenceDate: string, own: Partial<SuspendedLesson> = {}): SuspendedLesson => ({
@@ -299,6 +300,37 @@ describe("lessons removed by a closure (#206)", () => {
     });
     expect(p.remove).toEqual([]);
     expect(p.setAside).toEqual([]);
+  });
+
+  it("keeps as is a lesson a lesson pack was counted on, and says so (#225)", () => {
+    const p = plan({
+      closures: [closed("2026-11-12", "2026-11-19")],
+      existing: [
+        lessonOn("2026-11-12", { instructorId: SUB, packUsage: true }),
+        lessonOn("2026-11-19", { instructorId: SUB }),
+      ],
+    });
+    expect(p.remove).toEqual(["l-2026-11-19"]);
+    expect(p.keptForPack).toEqual(["l-2026-11-12"]);
+    // Kept, not removed: nothing is set aside for it, and it is not created again.
+    expect(p.setAside.map((k) => k.referenceDate)).toEqual(["2026-11-19"]);
+    expect(p.insert.map((a) => a.date)).toEqual(["2026-11-05", "2026-11-26"]);
+  });
+
+  it("reports no pack lesson when the lesson with pack usage stays wanted", () => {
+    const p = plan({ existing: [lessonOn("2026-11-12", { packUsage: true })] });
+    expect(p.keptForPack).toEqual([]);
+    expect(p.remove).toEqual([]);
+  });
+
+  it("forgets what was kept aside once a pack lesson is back on its reference date", () => {
+    // Kept aside before, then a lesson with pack usage on the same reference date: nothing to give back.
+    const p = plan({
+      existing: [lessonOn("2026-11-12", { packUsage: true })],
+      suspended: [keptOn("2026-11-12", { instructorId: SUB })],
+    });
+    expect(p.forget).toEqual([{ courseId: "jazz", referenceDate: "2026-11-12" }]);
+    expect(p.insert.map((a) => a.date)).not.toContain("2026-11-12");
   });
 
   it("judges a moved lesson on its original date, and keeps its new date aside", () => {

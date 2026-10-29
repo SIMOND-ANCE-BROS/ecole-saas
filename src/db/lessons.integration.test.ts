@@ -106,9 +106,9 @@ const sync = () => withSchool(school, (tx) => syncLessons(tx, season, TODAY));
 
 describe("closures and lesson generation", () => {
   it("generates the season's upcoming Wednesdays, not past ones, then duplicates nothing", async () => {
-    expect(await sync()).toEqual({ added: 6, removed: 0 });
+    expect(await sync()).toEqual({ added: 6, removed: 0, keptForPack: 0 });
     expect(await dates()).toEqual(["2026-10-21", "2026-10-28", "2026-11-04", "2026-11-11", "2026-11-18", "2026-11-25"]);
-    expect(await sync()).toEqual({ added: 0, removed: 0 });
+    expect(await sync()).toEqual({ added: 0, removed: 0, keptForPack: 0 });
   });
 
   it("rejects a closure that ends before it starts", async () => {
@@ -141,7 +141,7 @@ describe("closures and lesson generation", () => {
       addClosure(tx, season, { scope: "school", label: "Toussaint", start: "2026-10-17", end: "2026-11-01" }),
     );
     expect(r.ok).toBe(true);
-    expect(await sync()).toEqual({ added: 0, removed: 2 });
+    expect(await sync()).toEqual({ added: 0, removed: 2, keptForPack: 0 });
     expect(await dates()).toEqual(["2026-11-04", "2026-11-11", "2026-11-18", "2026-11-25"]);
     expect((await withSchool(school, (tx) => listClosures(tx, season))).map((f) => f.label)).toEqual(["Toussaint"]);
 
@@ -149,7 +149,7 @@ describe("closures and lesson generation", () => {
       ok: true,
       seasonId: season,
     });
-    expect(await sync()).toEqual({ added: 2, removed: 0 });
+    expect(await sync()).toEqual({ added: 2, removed: 0, keptForPack: 0 });
   });
 });
 
@@ -208,7 +208,7 @@ describe("attendance", () => {
     await withSchool(school, (tx) =>
       addClosure(tx, season, { scope: "school", label: "Grève", start: "2026-10-21", end: "2026-10-21" }),
     );
-    expect(await sync()).toEqual({ added: 0, removed: 0 });
+    expect(await sync()).toEqual({ added: 0, removed: 0, keptForPack: 0 });
     expect((await dates())[0]).toBe("2026-10-21");
   });
 });

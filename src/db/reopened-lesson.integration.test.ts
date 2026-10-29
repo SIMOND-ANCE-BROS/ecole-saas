@@ -135,14 +135,14 @@ describe("a lesson removed by a closure, then given back (#206)", () => {
     await move(jazz, "2026-11-19", { date: "2026-11-20", startTime: "19:00", durationMinutes: 45 });
 
     const closure = await close("2026-11-12", "2026-11-26");
-    expect(await sync()).toEqual({ added: 0, removed: 3 });
+    expect(await sync()).toEqual({ added: 0, removed: 3, keptForPack: 0 });
     // 26/11 is a plain lesson: removed, but not kept aside; no instructor kept for the moved one.
     expect(await kept(jazz)).toEqual([
       { reference: "2026-11-12", instructor: substitute },
       { reference: "2026-11-19", instructor: null },
     ]);
 
-    expect(await reopen(closure)).toEqual({ added: 3, removed: 0 });
+    expect(await reopen(closure)).toEqual({ added: 3, removed: 0, keptForPack: 0 });
     expect(await lessonOn(jazz, "2026-11-12")).toMatchObject({
       date: "2026-11-12",
       start: null,

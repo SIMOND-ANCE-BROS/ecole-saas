@@ -105,7 +105,7 @@ describe("closures limited to sites or courses (#200)", () => {
   it("removes only the lessons held on a closed site, then gives them back", async () => {
     const r = await add({ scope: "sites", label: "Zz travaux", ...dates, siteIds: [annexe] });
     expect(r.ok).toBe(true);
-    expect(await sync()).toEqual({ added: 0, removed: 1 });
+    expect(await sync()).toEqual({ added: 0, removed: 1, keptForPack: 0 });
     expect(await datesOf(ballet)).toEqual(["2026-11-05", "2026-11-19", "2026-11-26"]);
     expect(await datesOf(jazz)).toEqual(THURSDAYS);
     expect(await withSchool(school, (tx) => listClosures(tx, season))).toMatchObject([
@@ -114,20 +114,20 @@ describe("closures limited to sites or courses (#200)", () => {
 
     // The course moves to the open site: its lesson comes back.
     await admin`UPDATE course SET room_id = ${centreRoom} WHERE id = ${ballet}`;
-    expect(await sync()).toEqual({ added: 1, removed: 0 });
+    expect(await sync()).toEqual({ added: 1, removed: 0, keptForPack: 0 });
     expect(await datesOf(ballet)).toEqual(THURSDAYS);
     await admin`UPDATE course SET room_id = ${annexeRoom} WHERE id = ${ballet}`;
-    expect(await sync()).toEqual({ added: 0, removed: 1 });
+    expect(await sync()).toEqual({ added: 0, removed: 1, keptForPack: 0 });
 
     await withSchool(school, (tx) => deleteClosure(tx, r.ok ? r.id : ""));
-    expect(await sync()).toEqual({ added: 1, removed: 0 });
+    expect(await sync()).toEqual({ added: 1, removed: 0, keptForPack: 0 });
     expect(await datesOf(ballet)).toEqual(THURSDAYS);
   });
 
   it("removes only the lessons of the chosen courses", async () => {
     const r = await add({ scope: "courses", label: "Zz gala", ...dates, courseIds: [jazz] });
     expect(r.ok).toBe(true);
-    expect(await sync()).toEqual({ added: 0, removed: 1 });
+    expect(await sync()).toEqual({ added: 0, removed: 1, keptForPack: 0 });
     expect(await datesOf(jazz)).toEqual(["2026-11-05", "2026-11-19", "2026-11-26"]);
     expect(await datesOf(ballet)).toEqual(THURSDAYS);
     const [shown] = await withSchool(school, (tx) => closuresBetween(tx, "2026-11-09", "2026-11-15"));

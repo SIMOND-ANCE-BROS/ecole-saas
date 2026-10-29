@@ -103,14 +103,25 @@ export function ClosuresManagement({
         return;
       }
       const n = r.removed;
+      // Lessons a lesson pack was counted on stay as they are (#225): the director moves them if need be.
+      const k = r.keptForPack;
+      const packNote =
+        k > 0
+          ? ` ${k} séance${k > 1 ? "s" : ""} de carnet ${k > 1 ? "sont maintenues" : "est maintenue"} : déplacez-la${
+              k > 1 ? "s" : ""
+            } si besoin.`
+          : "";
       setMessage(
         n > 0
-          ? { text: `Fermeture ajoutée : ${n} séance${n > 1 ? "s" : ""} retirée${n > 1 ? "s" : ""}.`, tone: "ok" }
+          ? {
+              text: `Fermeture ajoutée : ${n} séance${n > 1 ? "s" : ""} retirée${n > 1 ? "s" : ""}.${packNote}`,
+              tone: k > 0 ? "warning" : "ok",
+            }
           : {
               // Past lessons and those whose attendance is taken are never removed.
               text: `Fermeture ajoutée. Aucune séance à venir ${
                 scope === "sites" ? "de ces sites " : scope === "courses" ? "de ces cours " : ""
-              }n’a été retirée.`,
+              }n’a été retirée.${packNote}`,
               tone: "warning",
             },
       );

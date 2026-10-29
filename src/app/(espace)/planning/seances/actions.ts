@@ -24,6 +24,8 @@ const validId = z.uuid();
 const NO_LESSON = "Cette séance n’existe plus.";
 const INVALID = "Saisie invalide.";
 
+type SyncCounts = { removed: number; keptForPack: number };
+
 /** Attendance of a lesson: front desk and management. */
 export async function doAttendance(
   lessonId: string,
@@ -65,12 +67,13 @@ export async function cancel(lessonId: string, cancelled: boolean): Promise<Acti
  * Closures of the season shown (`?saison=`, #189; the current one when none is
  * given): management; upcoming lessons follow at once. `removed`: how many
  * lessons left the planning (#200), 0 says the closure covers nothing.
+ * `keptForPack`: lessons a lesson pack was counted on, kept as is (#225).
  */
 async function withSeasonOf(
   schoolId: string,
   seasonId: unknown,
   action: (seasonId: string) => Parameters<typeof withSchool>[1],
-): Promise<ActionResult<{ removed: number }>> {
+): Promise<ActionResult<SyncCounts>> {
   const today = todayInParis();
   const r = await withSchool(schoolId, async (tx) => {
     const season = seasonId ? await seasonById(tx, seasonId) : await currentSeason(tx, today);
@@ -81,17 +84,17 @@ async function withSeasonOf(
       };
     const result = (await action(season.id)(tx)) as { ok: true } | { ok: false; message: string };
     if (!result.ok) return result;
-    const { removed } = await syncLessons(tx, season.id, today);
-    return { ok: true as const, removed };
+    const { removed, keptForPack } = await syncLessons(tx, season.id, today);
+    return { ok: true as const, removed, keptForPack };
   });
   revalidatePath("/planning/fermetures");
-  return r.ok ? { ok: true, removed: r.removed } : { ok: false, message: r.message };
+  return r.ok ? { ok: true, removed: r.removed, keptForPack: r.keptForPack } : { ok: false, message: r.message };
 }
 
 export async function close(
   entry: z.input<typeof validClosureInput>,
   seasonId?: string,
-): Promise<ActionResult<{ removed: number }>> {
+): Promise<ActionResult<SyncCounts>> {
   const { schoolId } = await requireRole("director");
   const e = validClosureInput.safeParse(entry);
   // The same French message as the database layer gives for that field.

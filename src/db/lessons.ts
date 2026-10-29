@@ -242,6 +242,7 @@ export const effectiveTime = sql<string>`coalesce(${lesson.startTime}, ${course.
 export const effectiveDuration = sql<number>`coalesce(${lesson.durationMinutes}, ${course.durationMinutes})`;
 
 const withAttendance = sql`EXISTS (SELECT 1 FROM attendance p WHERE p.lesson_id = ${lesson}.${sql.identifier("id")})`;
+const withPackUsage = sql`EXISTS (SELECT 1 FROM lesson_pack_usage u WHERE u.lesson_id = ${lesson}.${sql.identifier("id")})`;
 
 /**
  * Brings the season's upcoming lessons in line with the courses and the
@@ -252,14 +253,16 @@ const withAttendance = sql`EXISTS (SELECT 1 FROM attendance p WHERE p.lesson_id 
  * on that date nor removed. `since`: only regenerate from that date on
  * (moving a lesson « et des suivantes »). A lesson removed by a closure
  * keeps aside what it had of its own (substitute, time, new date) and gets
- * it back when the closure no longer covers it (#206).
+ * it back when the closure no longer covers it (#206). A lesson a lesson pack
+ * was counted on is never removed either (#225): `keptForPack` counts those
+ * that would have been, for the director to move them if need be.
  */
 export async function syncLessons(
   tx: Tx,
   seasonId: string,
   today: string,
   since?: string,
-): Promise<{ added: number; removed: number }> {
+): Promise<{ added: number; removed: number; keptForPack: number }> {
   // One sync at a time per season: another one could take a lesson just kept aside for stale (#206).
   // NO KEY UPDATE, not UPDATE: callers insert a course or a closure first, whose foreign key takes
   // KEY SHARE on the season; FOR UPDATE would conflict with that of a concurrent caller (deadlock).
@@ -268,7 +271,7 @@ export async function syncLessons(
     .from(season)
     .where(eq(season.id, seasonId))
     .for("no key update");
-  if (!s) return { added: 0, removed: 0 };
+  if (!s) return { added: 0, removed: 0, keptForPack: 0 };
   const start = [s.start, today, since ?? ""].reduce((a, b) => (b > a ? b : a));
   const closures = await readClosures(tx, eq(closure.seasonId, seasonId));
   const allCourses = await tx
@@ -312,6 +315,7 @@ export async function syncLessons(
       courseInstructorId: course.instructorId,
       status: lesson.status,
       attendanceSheet: sql<boolean>`${withAttendance}`,
+      packUsage: sql<boolean>`${withPackUsage}`,
     })
     .from(lesson)
     .innerJoin(course, eq(course.id, lesson.courseId))
@@ -400,7 +404,7 @@ export async function syncLessons(
           )
           .onConflictDoNothing()
           .returning({ id: lesson.id });
-  return { added: added.length, removed: plan.remove.length };
+  return { added: added.length, removed: plan.remove.length, keptForPack: plan.keptForPack.length };
 }
 
 /**

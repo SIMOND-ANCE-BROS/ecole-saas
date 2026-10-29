@@ -31,6 +31,8 @@ export type ExistingLesson = {
   courseInstructorId: string;
   status: "planned" | "done" | "cancelled";
   attendanceSheet: boolean;
+  /** Lessons of a lesson pack were counted on it (#225): never removed, kept as is. */
+  packUsage: boolean;
 };
 
 /** What a lesson removed by a closure had of its own. `instructorId`: a real substitute, or null. */
@@ -60,6 +62,11 @@ export type SyncPlan = {
   /** Kept rows no longer needed (given back, stale), deleted before `setAside` is written. */
   forget: { courseId: string; referenceDate: string }[];
   setAside: SuspendedLesson[];
+  /**
+   * Ids of the lessons that would be removed but are kept because a lesson pack was
+   * counted on them (#225): the director moves them if need be.
+   */
+  keptForPack: string[];
 };
 
 const keyOf = (courseId: string, date: string) => `${courseId} ${date}`;
@@ -115,13 +122,16 @@ export function planLessonSync(input: {
   const present = new Set(existing.map((e) => keyOf(e.courseId, e.reference)));
   const wanted = new Set(expected.map((a) => keyOf(a.courseId, a.date)));
 
-  const removed = existing.filter(
+  const outdated = existing.filter(
     (e) =>
       e.reference >= start &&
       e.status === "planned" &&
       !e.attendanceSheet &&
       !wanted.has(keyOf(e.courseId, e.reference)),
   );
+  // A lesson a pack was counted on is never removed (#225): nothing is lost, the director decides.
+  const removed = outdated.filter((e) => !e.packUsage);
+  const keptForPack = outdated.filter((e) => e.packUsage).map((e) => e.id);
   const removedIds = new Set(removed.map((e) => e.id));
 
   // Removed by a closure (the course still meets that day) with something of its own: kept aside.
@@ -180,5 +190,5 @@ export function planLessonSync(input: {
     insert.push(lesson);
   }
 
-  return { insert, remove: removed.map((e) => e.id), forget, setAside };
+  return { insert, remove: removed.map((e) => e.id), forget, setAside, keptForPack };
 }

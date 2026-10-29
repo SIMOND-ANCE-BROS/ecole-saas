@@ -79,19 +79,20 @@ describe("close", () => {
   });
 
   it("returns how many lessons left the planning", async () => {
-    withSchool.mockResolvedValueOnce({ ok: true, removed: 3 });
+    withSchool.mockResolvedValueOnce({ ok: true, removed: 3, keptForPack: 1 });
 
     expect(await close({ scope: "school", label: "Zz vacances", start: "2026-11-12", end: "2026-11-12" })).toEqual({
       ok: true,
       removed: 3,
+      keptForPack: 1,
     });
   });
 
   it("passes a closure of some sites through, and refuses one without any site", async () => {
-    withSchool.mockResolvedValueOnce({ ok: true, removed: 0 });
+    withSchool.mockResolvedValueOnce({ ok: true, removed: 0, keptForPack: 0 });
     const sites = { scope: "sites", label: "Zz travaux", start: "2026-11-12", end: "2026-11-13" } as const;
 
-    expect(await close({ ...sites, siteIds: [PERSON] })).toEqual({ ok: true, removed: 0 });
+    expect(await close({ ...sites, siteIds: [PERSON] })).toEqual({ ok: true, removed: 0, keptForPack: 0 });
     expect(withSchool).toHaveBeenCalledTimes(1);
     expect(await close({ ...sites, siteIds: [] })).toEqual({
       ok: false,
