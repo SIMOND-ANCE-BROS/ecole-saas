@@ -17,7 +17,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import type { Preview } from "@/db/enrollments";
 import type { ScheduleCourse } from "@/db/schedule";
 import { overlaps } from "@/domain/schedule/overlap";
-import { INITIAL_STATUSES, overfilledCourses } from "@/domain/enrollment/lifecycle";
+import { INITIAL_STATUSES, isFull, overfilledCourses } from "@/domain/enrollment/lifecycle";
 import { ENROLLMENT_STATUS_LABELS } from "@/domain/enrollment/statuses";
 import { deferredQuery } from "@/lib/deferred-query";
 import { preview, enroll, type FormInput } from "./actions";
@@ -32,6 +32,7 @@ const AUDIENCES = [
   ["couple", "Couple"],
   ["student", "Étudiant"],
 ] as const;
+const SAVE_BUTTON = "enregistrer-inscription";
 /** What the save button says for an enrollment not committed yet. */
 const STATUS_SAVE = { trial: "l’inscription à l’essai", waitlist: "l’inscription en attente" } as const;
 const PERIODS = [
@@ -379,7 +380,8 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
           </Text>
           {status !== "active" && (
             <Text size="xs" fw={500}>
-              {ENROLLMENT_STATUS_LABELS[status]} : pas compté dans le dû ni dans la réduction fratrie
+              {ENROLLMENT_STATUS_LABELS[status]} : rien à régler pour l’instant, le prix sera recalculé à la
+              confirmation.
             </Text>
           )}
         </div>
@@ -415,7 +417,9 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
             {next.error.message}
           </Text>
         )}
-        {next?.status === "ok" && <PriceDetail price={next} />}
+        {next?.status === "ok" && (
+          <PriceDetail price={next} totalLabel={status === "active" ? "Total" : "Total à la confirmation"} />
+        )}
         {result?.status === "ok" && <DiscountImpacts impacts={result.existingImpacts} />}
         {refusal && (
           <Text role="alert" size="sm" c="red">
@@ -429,9 +433,14 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
           safeRetry
         />
         {fullCourses.length > 0 && (
-          <Alert role="alert" color="yellow" p="xs">
+          <Alert role="status" color="yellow" p="xs">
             <Text size="sm" fw={500}>
-              {fullCourses.length > 1 ? "Ces cours sont complets" : "Ce cours est complet"} : inscrire en attente ?
+              {fullCourses.some(isFull)
+                ? fullCourses.length > 1
+                  ? "Ces cours sont complets"
+                  : "Ce cours est complet"
+                : "Plus assez de places"}{" "}
+              : inscrire en attente ?
             </Text>
             <Text size="xs">
               {fullCourses
@@ -439,12 +448,21 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
                 .join(" ; ")}
               . « Inscrit » reste possible.
             </Text>
-            <Button size="compact-sm" variant="default" mt="xs" onClick={() => setStatus("waitlist")}>
+            <Button
+              size="compact-sm"
+              variant="default"
+              mt="xs"
+              onClick={() => {
+                setStatus("waitlist");
+                // The alert goes with its button: focus moves on to saving.
+                requestAnimationFrame(() => document.getElementById(SAVE_BUTTON)?.focus());
+              }}
+            >
               Inscrire en attente
             </Button>
           </Alert>
         )}
-        <Button type="submit" disabled={!canSave} loading={sending}>
+        <Button id={SAVE_BUTTON} type="submit" disabled={!canSave} loading={sending}>
           {status === "active" ? "Enregistrer l’inscription" : `Enregistrer ${STATUS_SAVE[status]}`}
         </Button>
         <Text size="xs" c="dimmed">
