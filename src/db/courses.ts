@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNotNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import { columnsOf, rowsOf } from "./columns-of";
 import { z } from "zod";
 import type { Tx } from "./index";
@@ -15,6 +15,7 @@ import {
   member,
   room,
   lesson,
+  payMode,
   season,
   site,
 } from "./schema";
@@ -25,6 +26,7 @@ import {
   rateUnitAfterSave,
   type PayMode,
 } from "../domain/payroll/rate";
+import { courseRateEditable } from "../domain/payroll/course-rates";
 import { issuePath } from "../lib/form-errors";
 import { has } from "../lib/has";
 import { parseEuros } from "../lib/money";
@@ -45,16 +47,11 @@ const integerOrNull = (min: number, max: number) =>
   z.int(between(min, max)).min(min, between(min, max)).max(max, between(min, max)).nullable();
 const duration = z.int(between(5, 600)).min(5, between(5, 600)).max(600, between(5, 600));
 const dateOrNull = z.iso.date("Date invalide").nullable();
-/**
- * Typed in euros (« 35 », « 35,50 »), kept in integer cents. Empty: none;
- * absent (field not offered, monthly flat instructor): the stored rate is kept.
- */
-const euroRateOrNull = z
+/** Typed in euros (« 35 », « 35,50 »), kept in integer cents. Empty: none. */
+const euroRate = z
   .string()
   .max(20)
-  .optional()
   .transform((v, ctx) => {
-    if (v === undefined) return undefined;
     const typed = v.trim();
     if (typed === "") return null;
     const cents = parseEuros(typed);
@@ -64,6 +61,18 @@ const euroRateOrNull = z
     }
     return cents;
   });
+/** Absent (field not offered, monthly flat instructor): the stored rate is kept. */
+const euroRateOrNull = euroRate.optional();
+
+/**
+ * A course's rate set from the instructor page (#276): the amount (empty: the
+ * usual rate) and the unit the page showed it in, which the server checks
+ * against the instructor's current pay mode (#268).
+ */
+export const validCourseRateEdit = z.object({
+  rate: euroRate,
+  unit: z.enum(payMode.enumValues),
+});
 
 /** Offered recurrences (#90). */
 export const RECURRENCES = {
@@ -111,7 +120,7 @@ const courseFields = z.object({
   /** Instructor the rate was typed for: a rate left over from another instructor is not kept (#191). */
   instructorRateFor: z.uuid().optional(),
   /** Unit the form showed for that rate (#268): the server refuses an amount typed in a pay mode no longer current. */
-  instructorRateUnit: z.enum(["hourly", "per_lesson", "monthly_flat"]).optional(),
+  instructorRateUnit: z.enum(payMode.enumValues).optional(),
 });
 
 export const validCourseInput = courseFields
@@ -261,6 +270,12 @@ async function resolveRoom(tx: Tx, s: CourseInput["room"]): Promise<string | nul
   return n.id;
 }
 
+/** A rate per course typed for a monthly flat instructor (#192). */
+const MONTHLY_FLAT = {
+  ok: false as const,
+  message: "Pas de tarif par cours pour un forfait mensuel pour l’instant (règle en attente).",
+};
+
 /** Resolves discipline, room and instructor; an inactive instructor is accepted only if it is `guard`. */
 async function values(tx: Tx, entry: CourseInput, guard?: string) {
   const found = tx
@@ -275,11 +290,7 @@ async function values(tx: Tx, entry: CourseInput, guard?: string) {
   // Saving a rate: the pay mode it is checked against cannot change before the commit (see updateInstructor).
   const [i] = entry.instructorRate != null ? await found.for("share") : await found;
   if (!i) return { ok: false as const, message: "Intervenant introuvable ou inactif." };
-  if (entry.instructorRate != null && !courseRateAllowed(i.payMode))
-    return {
-      ok: false as const,
-      message: "Pas de tarif par cours pour un forfait mensuel pour l’instant (règle en attente).",
-    };
+  if (entry.instructorRate != null && !courseRateAllowed(i.payMode)) return MONTHLY_FLAT;
   const roomId = await resolveRoom(tx, entry.room);
   if (!roomId) return { ok: false as const, message: "Salle introuvable." };
   const disciplineId = await resolveDiscipline(tx, entry.discipline);
@@ -373,7 +384,21 @@ async function replaceDates(tx: Tx, courseId: string, dates: string[]) {
     );
 }
 
+/**
+ * Locks a course row until the commit (FOR UPDATE), before reading what a save
+ * keeps of it: the course form and the instructor page's rate (#276) then save
+ * one after the other, each seeing the other's rate, instead of the later one
+ * writing back a rate read before the other's commit. Lock order: the course,
+ * then its instructor (FOR SHARE), on both paths.
+ */
+export async function lockCourse(tx: Tx, id: string): Promise<void> {
+  if (!z.uuid().safeParse(id).success) return;
+  await tx.select({ id: course.id }).from(course).where(eq(course.id, id)).for("update");
+}
+
 export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Promise<SaveResult> {
+  // Already locked by the action (before its audit read); kept here for any other caller.
+  await lockCourse(tx, id);
   const existing = await readCourse(tx, id);
   if (!existing) return { ok: false, message: "Ce cours n’existe plus." };
   const r = await values(tx, entry, existing.instructorId);
@@ -474,9 +499,13 @@ export async function coursePay(tx: Tx, courseId: string | null): Promise<Course
   };
 }
 
-/** Courses where the instructor has a specific rate (#191), newest season first: director's instructor page. */
-export function coursesWithOwnRate(tx: Tx, instructorId: string) {
-  return tx
+/**
+ * The instructor's courses (main instructor) with their own rate, if any
+ * (#191, #276), newest season first: director's instructor page.
+ */
+export async function instructorCourseRates(tx: Tx, instructorId: string) {
+  if (!z.uuid().safeParse(instructorId).success) return [];
+  const rows = await tx
     .select({
       id: course.id,
       discipline: discipline.name,
@@ -485,17 +514,94 @@ export function coursesWithOwnRate(tx: Tx, instructorId: string) {
       startTime: sql<string>`to_char(${course.startTime}, 'HH24:MI')`,
       durationMinutes: course.durationMinutes,
       season: season.label,
-      // Never null here: the query keeps only courses with a rate (isNotNull below),
-      // whose unit is then set too (check course_instructor_rate_unit).
-      rateCents: sql<number>`${course.instructorRateCents}`,
+      seasonEndDate: season.endDate,
+      rateCents: course.instructorRateCents,
       /** Unit of the rate (#268): the pay mode it was typed in, maybe not the instructor's current one. */
-      ratePayMode: sql<PayMode>`${course.instructorRatePayMode}`,
+      ratePayMode: course.instructorRatePayMode,
     })
     .from(course)
     .innerJoin(discipline, eq(discipline.id, course.disciplineId))
     .innerJoin(season, eq(season.id, course.seasonId))
-    .where(and(eq(course.instructorId, instructorId), isNotNull(course.instructorRateCents)))
+    .where(eq(course.instructorId, instructorId))
     .orderBy(desc(season.startDate), sql`${course.weekday} NULLS LAST`, course.startTime, discipline.name);
+  return rows.map(({ rateCents, ratePayMode, ...c }) => ({
+    ...c,
+    // Both set or both null (check course_instructor_rate_unit).
+    rate: rateCents === null || ratePayMode === null ? null : { cents: rateCents, payMode: ratePayMode },
+  }));
+}
+
+/**
+ * Sets (or clears, `rate` null: the usual rate) a course's instructor rate
+ * from the instructor page (#276), with the course form's rules: no rate per
+ * course for a monthly flat instructor (#192), the unit decided by
+ * `rateUnitAfterSave` (#268), the course row locked FOR UPDATE (see
+ * lockCourse), then the instructor row FOR SHARE so that their pay mode
+ * cannot change before the commit (see updateInstructor).
+ * Refused for a course no longer taught by this instructor, or of a past
+ * season (history, #192 Q5). `today` is a `YYYY-MM-DD` date in Paris.
+ * Returns the rate states before and after, for the audit log.
+ */
+export async function setCourseRate(
+  tx: Tx,
+  instructorId: string,
+  courseId: string,
+  edit: z.output<typeof validCourseRateEdit>,
+  today: string,
+): Promise<
+  | { ok: true; rate: CourseRate | null; before: CourseRateState; after: CourseRateState }
+  | { ok: false; message: string }
+> {
+  const noInstructor = { ok: false as const, message: "Cet intervenant n’existe plus." };
+  const gone = { ok: false as const, message: "Ce cours n’existe plus." };
+  if (!z.uuid().safeParse(instructorId).success) return noInstructor;
+  if (!z.uuid().safeParse(courseId).success) return gone;
+  // Lock order as in the course form: the course (FOR UPDATE, see lockCourse), then the instructor.
+  const [c] = await tx
+    .select({
+      instructorId: course.instructorId,
+      cents: course.instructorRateCents,
+      unit: course.instructorRatePayMode,
+      seasonEndDate: season.endDate,
+    })
+    .from(course)
+    .innerJoin(season, eq(season.id, course.seasonId))
+    .where(eq(course.id, courseId))
+    .for("update", { of: course });
+  if (!c) return gone;
+  // The pay mode checked here cannot change before the commit (updateInstructor locks the row FOR UPDATE).
+  const [i] = await tx
+    .select({ payMode: instructor.payMode })
+    .from(instructor)
+    .where(eq(instructor.id, instructorId))
+    .for("share");
+  if (!i) return noInstructor;
+  if (c.instructorId !== instructorId)
+    return { ok: false, message: "Ce cours est maintenant donné par un autre intervenant : rechargez la page." };
+  if (edit.rate !== null && !courseRateAllowed(i.payMode)) return MONTHLY_FLAT;
+  if (!courseRateEditable(c.seasonEndDate, today))
+    return { ok: false, message: "La saison de ce cours est terminée : son tarif est gardé tel quel." };
+  const stored = c.cents === null || c.unit === null ? null : { cents: c.cents, payMode: c.unit };
+  const unit = rateUnitAfterSave({
+    cents: edit.rate,
+    sent: edit.rate,
+    shownUnit: edit.unit,
+    stored,
+    sameInstructor: true,
+    payMode: i.payMode,
+  });
+  if (!unit) return STALE_UNIT;
+  const rate = edit.rate !== null && unit.unit !== null ? { cents: edit.rate, payMode: unit.unit } : null;
+  await tx
+    .update(course)
+    .set({ instructorRateCents: rate?.cents ?? null, instructorRatePayMode: rate?.payMode ?? null })
+    .where(eq(course.id, courseId));
+  return {
+    ok: true,
+    rate,
+    before: { instructorId, instructorRateCents: c.cents, instructorRatePayMode: c.unit },
+    after: { instructorId, instructorRateCents: rate?.cents ?? null, instructorRatePayMode: rate?.payMode ?? null },
+  };
 }
 
 /** A course's instructor and own rate, as written to the audit log. */

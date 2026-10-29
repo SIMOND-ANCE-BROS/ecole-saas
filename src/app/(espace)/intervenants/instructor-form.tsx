@@ -210,6 +210,12 @@ function Fields({ state, send, inProgress, edition, initial, back }: FieldsProps
           error: tariffMissing ? "Tarif obligatoire" : e.tariff,
           onChange: () => setTariffMissing(false),
           styles: { input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } },
+          // Where the owner looked for per-course rates (#276); none for a monthly flat (#192).
+          description:
+            mode === "monthly_flat"
+              ? undefined
+              : "Tarif habituel. Un cours payé autrement se règle sur la fiche de l’intervenant, partie « Tarifs par cours ».",
+          inputWrapperOrder: ["label", "input", "description", "error"],
         })}
       </Fieldset>
 

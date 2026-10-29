@@ -7,6 +7,7 @@ import {
   courseRateState,
   createCourse,
   deleteCourse,
+  lockCourse,
   logCourseRate,
   moveCourse,
   readCourse,
@@ -54,6 +55,9 @@ export async function saveCourse(
   }
   const today = todayInParis();
   const result = await withSchool(schoolId, async (tx) => {
+    // Locked before reading the rate kept and audited below: a rate saved meanwhile
+    // from the instructor page (#276) is seen, not overwritten.
+    if (id !== null) await lockCourse(tx, id);
     const existing = id !== null ? await readCourse(tx, id) : null;
     const target =
       id !== null

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Anchor, Paper, Table, TableTbody, TableTd, TableTh, TableThead, TableTr, Text, Title } from "@mantine/core";
+import { Anchor, Paper, Text, Title } from "@mantine/core";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { calendarState } from "@/db/calendar-feed";
@@ -7,17 +7,18 @@ import { PROVIDER_NAME } from "@/connectors/calendar/oauth";
 import { connectionState } from "@/db/calendar-connections";
 import { listUnavailabilities } from "@/db/unavailabilities";
 import { readInstructor, PAY_MODES, VAT_REGIMES, STATUSES, PAY_UNITS } from "@/db/instructors";
-import { coursesWithOwnRate } from "@/db/courses";
+import { instructorCourseRates } from "@/db/courses";
 import { DAY_NAMES } from "@/domain/schedule/days";
 import { ButtonLink } from "@/app/(espace)/_ui/button-link";
 import { BackToList } from "@/app/(espace)/_ui/list-return";
-import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { end } from "@/app/(espace)/planning/format";
-import { courseRateAllowed, rateInCurrentUnit } from "@/domain/payroll/rate";
-import { courseRateLabel } from "@/domain/payroll/rate-field";
+import { courseRateSections } from "@/domain/payroll/course-rates";
+import { courseRateAllowed } from "@/domain/payroll/rate";
+import { todayInParis } from "@/domain/people/age";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
 import { CalendarSubscription } from "./calendar-subscription";
+import { CourseRates } from "./course-rates";
 import { Unavailabilities } from "./unavailabilities";
 
 export const metadata: Metadata = { title: "Intervenant" };
@@ -33,7 +34,7 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
           calendar: await calendarState(tx, i.id),
           connection: await connectionState(tx, i.id),
           unavailabilities: await listUnavailabilities(tx, i.id, new Date()),
-          ownRates: await coursesWithOwnRate(tx, i.id),
+          courses: await instructorCourseRates(tx, i.id),
         }
       : null;
   });
@@ -43,8 +44,21 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
     calendar: calendar,
     connection: connection,
     unavailabilities: unavailabilities,
-    ownRates,
+    courses,
   } = parsed;
+  // Rates per course: hourly or per lesson pay only (#192); a monthly flat instructor's stored ones stay read-only.
+  const rated = courseRateAllowed(instructor.payMode);
+  const sections = courseRateSections(courses, todayInParis());
+  const storedRates = courses.filter((c) => c.rate !== null);
+  const row = (c: (typeof courses)[number]) => ({
+    id: c.id,
+    name: `${c.discipline}${c.level ? ` ${c.level}` : ""}`,
+    slot: c.weekday
+      ? `${DAY_NAMES[c.weekday]} ${c.startTime}–${end(c.startTime, c.durationMinutes)}`
+      : "À des dates précises",
+    season: c.season,
+    rate: c.rate,
+  });
 
   const name = `${instructor.firstName} ${instructor.name}`;
   return (
@@ -120,72 +134,24 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
             </Text>
           </Text>
           <Text mt="xs" size="xs" c="dimmed">
-            Tarif de référence. Ce montant n’est pas un relevé à payer.
+            {/* A monthly flat instructor has no rate per course below (#192). */}
+            {rated ? "Tarif habituel, sauf pour les cours ci-dessous. " : ""}Ce montant n’est pas un relevé à payer.
           </Text>
         </Paper>
       </div>
-      {ownRates.length > 0 && (
-        <Paper withBorder p="md" component="section" aria-labelledby="tarifs-cours">
-          <Title order={2} size="h5" id="tarifs-cours" mb="xs">
-            Cours à un autre tarif
-          </Title>
-          <Text size="sm" c="dimmed" mb="sm">
-            {courseRateAllowed(instructor.payMode)
-              ? `Pour ces cours, ce tarif remplace le tarif habituel de ${instructor.firstName}.`
-              : "Ces tarifs ne s’appliquent pas pour l’instant (forfait mensuel, règle en attente)."}
-          </Text>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableThead>
-                <TableTr>
-                  <TableTh>Cours</TableTh>
-                  <TableTh>Créneau</TableTh>
-                  <TableTh>Saison</TableTh>
-                  <TableTh ta="right">Tarif</TableTh>
-                </TableTr>
-              </TableThead>
-              <TableTbody>
-                {ownRates.map((c) => (
-                  <TableTr key={c.id}>
-                    <TableTd>
-                      <TextLink href={`/planning/cours/${c.id}`} size="sm">
-                        {c.discipline}
-                        {c.level ? ` ${c.level}` : ""}
-                      </TextLink>
-                    </TableTd>
-                    <TableTd>
-                      {c.weekday
-                        ? `${DAY_NAMES[c.weekday]} ${c.startTime}–${end(c.startTime, c.durationMinutes)}`
-                        : "À des dates précises"}
-                    </TableTd>
-                    <TableTd className="whitespace-nowrap">{c.season}</TableTd>
-                    <TableTd ta="right" className="whitespace-nowrap tabular-nums">
-                      {/* In the unit it was typed in (#268), which may be an older pay mode's. */}
-                      {rateInCurrentUnit(c.ratePayMode, instructor.payMode) ? (
-                        courseRateLabel({ cents: c.rateCents, payMode: c.ratePayMode })
-                      ) : c.ratePayMode === "monthly_flat" ? (
-                        <Text span size="sm" c="dimmed">
-                          {courseRateLabel({ cents: c.rateCents, payMode: c.ratePayMode })}
-                        </Text>
-                      ) : !courseRateAllowed(instructor.payMode) ? (
-                        <Text span size="sm" c="dimmed" td="line-through">
-                          {courseRateLabel({ cents: c.rateCents, payMode: c.ratePayMode })}
-                        </Text>
-                      ) : (
-                        <Text span size="sm" c="dimmed">
-                          {courseRateLabel({ cents: c.rateCents, payMode: c.ratePayMode })}
-                          <Text span size="xs" c="dimmed" display="block">
-                            ancien mode de rémunération
-                          </Text>
-                        </Text>
-                      )}
-                    </TableTd>
-                  </TableTr>
-                ))}
-              </TableTbody>
-            </Table>
-          </div>
-        </Paper>
+      {/* Always shown, so that the director finds per-course rates here (#276); a monthly flat instructor has none to set. */}
+      {(rated || storedRates.length > 0) && (
+        <CourseRates
+          instructor={{
+            id: instructor.id,
+            firstName: instructor.firstName,
+            payMode: instructor.payMode,
+            rateCents: instructor.rateCents,
+          }}
+          editable={rated}
+          current={rated ? sections.editable.map(row) : []}
+          history={rated ? sections.history.map(row) : storedRates.map(row)}
+        />
       )}
       <Unavailabilities
         instructorId={instructor.id}
