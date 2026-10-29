@@ -43,6 +43,37 @@ export function packLabel(p: PackCount): string {
   return `${size} — ${left} restante${left > 1 ? "s" : ""}`;
 }
 
+export type LessonStatus = "planned" | "done" | "cancelled";
+export type CourseType = "group" | "private" | "competition" | "workshop";
+
+/**
+ * Q2 (a lesson missed by the student), default: a lesson is counted unless it is
+ * cancelled. A cancelled lesson is never counted, and a counted lesson cannot be
+ * cancelled before its count is undone (`lessons.ts`, `cancelLesson`).
+ * The school's rules (2026-10-29) add: « Les cours particuliers non annulés 48h à
+ * l’avance seront dus ». Pending its confirmation, a lesson cancelled late by the
+ * student is left planned and counted; one cancelled in time is cancelled.
+ */
+export const isCountable = (status: LessonStatus): boolean => status !== "cancelled";
+
+export const USED_UP = "Ce carnet est épuisé.";
+
+/**
+ * Why this lesson cannot be counted on this pack, or null. Q3 default: one usage per
+ * pack and lesson, whoever attends among its students; a lesson already counted on
+ * the pack is not counted twice (the caller answers it as done).
+ */
+export function usageRefusal(u: {
+  courseType: CourseType;
+  lessonStatus: LessonStatus;
+  pack: PackCount;
+}): string | null {
+  if (u.courseType !== "private") return "Seules les séances de cours particulier se décomptent sur un carnet.";
+  if (!isCountable(u.lessonStatus)) return "Cette séance est annulée : elle ne se décompte pas.";
+  if (!isOpen(u.pack)) return USED_UP;
+  return null;
+}
+
 export type Sale = {
   lessonCount: number;
   /** People the pack is priced for (the grid's band). */

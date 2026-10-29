@@ -7,6 +7,7 @@ import {
   MAX_REASON_LENGTH,
   priceRefusal,
   saleRefusal,
+  usageRefusal,
 } from "../domain/lesson-pack/pack";
 import { priceLessonPack } from "../domain/tariff/lesson-pack";
 import { has } from "../lib/has";
@@ -14,7 +15,7 @@ import { rowsOf } from "./columns-of";
 import type { Tx } from "./index";
 import { displayedName, payableStudents } from "./people";
 import { currentSeason } from "./schedule";
-import { auditLog, lessonPack, lessonPackPerson, member, person } from "./schema";
+import { auditLog, course, lesson, lessonPack, lessonPackPerson, lessonPackUsage, member, person } from "./schema";
 import { listLessonPacks } from "./tariffs";
 
 /**
@@ -152,21 +153,29 @@ export type PackRow = {
 
 const usedCount = sql<number>`(SELECT count(*) FROM lesson_pack_usage u WHERE u.lesson_pack_id = ${lessonPack}.${sql.identifier("id")})::int`;
 
+const packId = sql`${lessonPack}.${sql.identifier("id")}`;
+
 /**
- * Packs paid by this person or naming them as a student, the most recent first.
- * `ids` reads given packs instead (a lesson's picker).
+ * Packs, the most recent first: the ones paid by this person or naming them as a
+ * student (`personId`), the ones counted on a lesson (`countedOn`), or every pack
+ * with lessons left (`open`, a lesson's picker; Q1: no expiry).
  */
-export async function packsOf(tx: Tx, of: { personId: string } | { ids: string[] }): Promise<PackRow[]> {
+export async function packsOf(
+  tx: Tx,
+  of: { personId: string } | { countedOn: string } | { open: true },
+): Promise<PackRow[]> {
   const where = has(of, "personId")
     ? isUuid(of.personId)
       ? or(
           eq(lessonPack.payerId, of.personId),
-          sql`EXISTS (SELECT 1 FROM lesson_pack_person p WHERE p.lesson_pack_id = ${lessonPack}.${sql.identifier("id")} AND p.person_id = ${of.personId})`,
+          sql`EXISTS (SELECT 1 FROM lesson_pack_person p WHERE p.lesson_pack_id = ${packId} AND p.person_id = ${of.personId})`,
         )
       : null
-    : of.ids.length > 0 && of.ids.every(isUuid)
-      ? inArray(lessonPack.id, of.ids)
-      : null;
+    : has(of, "countedOn")
+      ? isUuid(of.countedOn)
+        ? sql`EXISTS (SELECT 1 FROM lesson_pack_usage u WHERE u.lesson_pack_id = ${packId} AND u.lesson_id = ${of.countedOn})`
+        : null
+      : sql`${usedCount} < ${lessonPack.lessonCount}`;
   if (!where) return [];
   const packs = await tx
     .select({
@@ -208,4 +217,130 @@ export async function packsOf(tx: Tx, of: { personId: string } | { ids: string[]
     payer: displayedName({ name: payerName, firstName: payerFirstName, companyName: payerCompany }),
     participants: named.filter((n) => n.packId === p.id).map((n) => ({ id: n.id, name: displayedName(n) })),
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Counting private lessons on a pack (#286, PR 2)
+// ---------------------------------------------------------------------------
+
+export type UsageResult = { ok: true; already?: true } | { ok: false; message: string };
+
+const NO_LESSON = "Cette séance n’existe plus.";
+const NO_PACK = "Ce carnet n’existe plus.";
+
+/** The acting member of the current school, for the audit log. */
+async function memberOf(tx: Tx, userId: string): Promise<string | null> {
+  const [m] = await tx
+    .select({ id: member.id })
+    .from(member)
+    .where(and(eq(member.userId, userId), eq(member.active, true)));
+  return m?.id ?? null;
+}
+
+/**
+ * Counts `lessonId` on `packId` (rules in `usageRefusal`). The pack's row is locked
+ * first, until the end of the transaction: two counts on the same pack at the same
+ * moment run one after the other, and the second sees the first's usage, so a pack
+ * is never over-used. NO KEY UPDATE, not UPDATE: the usage's foreign key to the pack
+ * takes KEY SHARE, which UPDATE would block. The usages are counted in a statement of
+ * their own, after the lock, so that it sees a count committed meanwhile. The same
+ * count sent twice changes nothing.
+ */
+export async function countLesson(
+  tx: Tx,
+  userId: string,
+  lessonId: string,
+  lessonPackId: string,
+): Promise<UsageResult> {
+  if (!isUuid(lessonId)) return { ok: false, message: NO_LESSON };
+  if (!isUuid(lessonPackId)) return { ok: false, message: NO_PACK };
+  const [locked] = await tx
+    .select({ id: lessonPack.id, lessonCount: lessonPack.lessonCount })
+    .from(lessonPack)
+    .where(eq(lessonPack.id, lessonPackId))
+    .for("no key update");
+  if (!locked) return { ok: false, message: NO_PACK };
+  const [l] = await tx
+    .select({ status: lesson.status, courseType: course.type })
+    .from(lesson)
+    .innerJoin(course, eq(course.id, lesson.courseId))
+    .where(eq(lesson.id, lessonId))
+    // A cancellation at the same moment (`cancelLesson`, NO KEY UPDATE) is waited for and its status read.
+    .for("share", { of: lesson });
+  if (!l) return { ok: false, message: NO_LESSON };
+  const counted = await tx
+    .select({ lessonId: lessonPackUsage.lessonId })
+    .from(lessonPackUsage)
+    .where(eq(lessonPackUsage.lessonPackId, lessonPackId));
+  if (counted.some((u) => u.lessonId === lessonId)) return { ok: true, already: true };
+  const refusal = usageRefusal({
+    courseType: l.courseType,
+    lessonStatus: l.status,
+    pack: { lessonCount: locked.lessonCount, usedCount: counted.length },
+  });
+  if (refusal) return { ok: false, message: refusal };
+  const who = await memberOf(tx, userId);
+  if (!who) return { ok: false, message: "Accès refusé." };
+  await tx.insert(lessonPackUsage).values({ schoolId: CURRENT_SCHOOL, lessonPackId, lessonId });
+  await tx.insert(auditLog).values({
+    schoolId: CURRENT_SCHOOL,
+    actor: who,
+    targetTable: "lesson_pack_usage",
+    rowId: lessonPackId,
+    action: "insert",
+    after: { lessonPackId, lessonId },
+  });
+  return { ok: true };
+}
+
+/**
+ * « Annuler le décompte »: gives the lesson back to the pack; the audit log keeps the
+ * count and its removal. Undoing a count already undone changes nothing.
+ */
+export async function uncountLesson(
+  tx: Tx,
+  userId: string,
+  lessonId: string,
+  lessonPackId: string,
+): Promise<UsageResult> {
+  if (!isUuid(lessonId) || !isUuid(lessonPackId)) return { ok: false, message: NO_LESSON };
+  const who = await memberOf(tx, userId);
+  if (!who) return { ok: false, message: "Accès refusé." };
+  const removed = await tx
+    .delete(lessonPackUsage)
+    .where(and(eq(lessonPackUsage.lessonPackId, lessonPackId), eq(lessonPackUsage.lessonId, lessonId)))
+    .returning({ lessonId: lessonPackUsage.lessonId });
+  if (removed.length === 0) return { ok: true, already: true };
+  await tx.insert(auditLog).values({
+    schoolId: CURRENT_SCHOOL,
+    actor: who,
+    targetTable: "lesson_pack_usage",
+    rowId: lessonPackId,
+    action: "delete",
+    before: { lessonPackId, lessonId },
+  });
+  return { ok: true };
+}
+
+export type LessonPacks = {
+  /** Packs this lesson is counted on. */
+  counted: PackRow[];
+  /** Packs it can be counted on: open, not counted on it yet; the ones naming a student of the lesson first. */
+  offered: (PackRow & { ofLesson: boolean })[];
+};
+
+/**
+ * What a private lesson's « Carnet » panel shows. Every open pack is offered (a private
+ * course often has no enrollment to tell its students), the ones naming a student on
+ * the lesson's sheet first.
+ */
+export async function lessonPacks(tx: Tx, lessonId: string, studentIds: readonly string[]): Promise<LessonPacks> {
+  const counted = await packsOf(tx, { countedOn: lessonId });
+  const countedIds = new Set(counted.map((p) => p.id));
+  const students = new Set(studentIds);
+  const offered = (await packsOf(tx, { open: true }))
+    .filter((p) => !countedIds.has(p.id))
+    .map((p) => ({ ...p, ofLesson: p.participants.some((s) => students.has(s.id)) }))
+    .sort((a, b) => Number(b.ofLesson) - Number(a.ofLesson));
+  return { counted, offered };
 }

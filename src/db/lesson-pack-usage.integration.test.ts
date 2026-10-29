@@ -2,14 +2,15 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { deleteCourse, moveCourse } from "./courses";
 import { withSchool } from "./index";
+import { countLesson } from "./lesson-packs";
 import { addClosure, changeInstructor, deleteClosure, moveLesson, syncLessons } from "./lessons";
 
 /**
  * A lesson a lesson pack was counted on is never deleted (#225, recommended rule pending
  * the school's validation): a closure keeps it as is, so does a course change or a move
- * « et des suivantes », and a course deletion is refused. No app
- * code writes `lesson_pack_usage` yet: the rows are inserted here. Each case has its own
- * course. Fictitious data.
+ * « et des suivantes », and a course deletion is refused. The lessons are counted the
+ * way the application counts them (`countLesson`, #286), on private courses. Each case
+ * has its own course. Fictitious data.
  */
 
 const url = process.env.DATABASE_ADMIN_URL;
@@ -17,6 +18,7 @@ if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en
 const admin = postgres(url, { max: 1, onnotice: () => {} });
 
 const suffix = Math.random().toString(36).slice(2, 8);
+const frontDesk = `usage-accueil-${suffix}`;
 let school: string;
 let season: string;
 let discipline: string;
@@ -50,10 +52,17 @@ beforeAll(async () => {
   const [payer] =
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Zzpayeur', 'Zzprénom') RETURNING id`;
   [{ id: pack }] = await admin`INSERT INTO lesson_pack (school_id, payer_id, people_count, lesson_count, price_cents)
-    VALUES (${school}, ${payer.id}, 1, 5, 20000) RETURNING id`;
+    VALUES (${school}, ${payer.id}, 1, 10, 40000) RETURNING id`;
+  await admin`INSERT INTO "user" (id, name, email) VALUES (${frontDesk}, 'Zz Accueil', ${`${frontDesk}@exemple.test`})`;
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${frontDesk}, 'front_desk')`;
 });
 
 afterAll(async () => {
+  await admin.begin(async (t) => {
+    await t`ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only`;
+    await t`DELETE FROM audit_log WHERE school_id = ${school}`;
+    await t`ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only`;
+  });
   for (const t of [
     "lesson_pack_usage",
     "lesson_pack",
@@ -68,8 +77,10 @@ afterAll(async () => {
     "site",
     "discipline",
     "season",
+    "member",
   ])
     await admin.unsafe(`DELETE FROM ${t} WHERE school_id = $1`, [school]);
+  await admin`DELETE FROM "user" WHERE id = ${frontDesk}`;
   await admin`DELETE FROM school WHERE id = ${school}`;
   await admin.end();
 });
@@ -79,8 +90,8 @@ const sync = () => withSchool(school, (tx) => syncLessons(tx, season, TODAY));
 /** A Thursday 18:00 course of its own, with its lessons generated. */
 async function newCourse(): Promise<string> {
   const [{ id }] =
-    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-      VALUES (${school}, ${season}, ${discipline}, ${room}, ${teacher}, 4, '18:00', 60) RETURNING id`;
+    await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, type, weekday, start_time, duration_minutes)
+      VALUES (${school}, ${season}, ${discipline}, ${room}, ${teacher}, 'private', 4, '18:00', 60) RETURNING id`;
   await sync();
   return id as string;
 }
@@ -98,9 +109,11 @@ const lessonOn = async (courseId: string, date: string) => {
   if (!l) throw new Error(`no lesson on ${date}`);
   return l;
 };
-/** Counts a lesson of the pack on the lesson, as the private-lesson flow will. */
-const usePack = async (lessonId: string) =>
-  admin`INSERT INTO lesson_pack_usage (school_id, lesson_pack_id, lesson_id) VALUES (${school}, ${pack}, ${lessonId})`;
+/** Counts the lesson on the pack, as « Décompter sur un carnet » does. */
+const usePack = async (lessonId: string) => {
+  const r = await withSchool(school, (tx) => countLesson(tx, frontDesk, lessonId, pack));
+  if (!r.ok) throw new Error(r.message);
+};
 const closeCourse = async (courseId: string, start: string, end: string) => {
   const r = await withSchool(school, (tx) =>
     addClosure(tx, season, { scope: "courses", label: "Zz gala", start, end, courseIds: [courseId] }),

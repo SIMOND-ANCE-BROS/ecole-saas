@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isCountable,
   isOpen,
   NO_GRID_PRICE,
   packLabel,
@@ -8,6 +9,8 @@ import {
   REASON_REQUIRED,
   remainingLessons,
   saleRefusal,
+  USED_UP,
+  usageRefusal,
 } from "./pack";
 
 const A = "00000000-0000-4000-8000-00000000000a";
@@ -106,5 +109,32 @@ describe("price", () => {
     expect(priceRefusal({ gridPriceCents: 40000, priceCents: 1, reason: "x".repeat(201) }, "director")).toMatch(
       /Motif trop long/,
     );
+  });
+});
+
+describe("counting a lesson on a pack", () => {
+  const open = { lessonCount: 5, usedCount: 4 };
+
+  it("counts a planned or done private lesson on an open pack", () => {
+    expect(usageRefusal({ courseType: "private", lessonStatus: "planned", pack: open })).toBeNull();
+    expect(usageRefusal({ courseType: "private", lessonStatus: "done", pack: open })).toBeNull();
+  });
+
+  it("refuses a 6th lesson on a pack of 5", () => {
+    expect(usageRefusal({ courseType: "private", lessonStatus: "done", pack: { lessonCount: 5, usedCount: 5 } })).toBe(
+      USED_UP,
+    );
+  });
+
+  it("never counts a cancelled lesson (Q2 default)", () => {
+    expect(isCountable("cancelled")).toBe(false);
+    expect(usageRefusal({ courseType: "private", lessonStatus: "cancelled", pack: open })).toBe(
+      "Cette séance est annulée : elle ne se décompte pas.",
+    );
+  });
+
+  it("counts only lessons of a private course", () => {
+    for (const courseType of ["group", "competition", "workshop"] as const)
+      expect(usageRefusal({ courseType, lessonStatus: "planned", pack: open })).toMatch(/cours particulier/);
   });
 });

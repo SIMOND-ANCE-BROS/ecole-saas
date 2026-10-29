@@ -10,6 +10,8 @@ import { requireRole } from "@/lib/session";
 import { end } from "../../format";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { AttendanceRecord } from "./attendance-record";
+import { PackUsage } from "./pack-usage";
+import { lessonPacks } from "@/db/lesson-packs";
 import { coursePlanning } from "../../course-planning";
 
 export const metadata: Metadata = { title: "Appel" };
@@ -50,6 +52,15 @@ export default async function AttendancePage({ params }: PageProps<"/planning/se
       instructors: options,
       unavailable: availability?.unavailable ?? false,
       free: availability?.substitutes.filter((r) => r.free).length ?? 0,
+      // Private lessons only: the packs it is counted on, and the ones it can be (#286).
+      packs:
+        attendance.courseType === "private"
+          ? await lessonPacks(
+              tx,
+              attendance.id,
+              attendance.students.map((s) => s.id),
+            )
+          : null,
     };
   });
   if (!parsed) notFound();
@@ -106,6 +117,9 @@ export default async function AttendancePage({ params }: PageProps<"/planning/se
         }}
         instructors={instructors}
       />
+      {parsed.packs && (
+        <PackUsage lessonId={attendance.id} cancelled={attendance.status === "cancelled"} packs={parsed.packs} />
+      )}
     </section>
   );
 }
