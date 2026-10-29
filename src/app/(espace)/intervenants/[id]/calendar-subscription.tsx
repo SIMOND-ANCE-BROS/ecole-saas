@@ -4,6 +4,7 @@ import { Button, Group, List, Paper, Text, TextInput, Title } from "@mantine/cor
 import { useState, useTransition } from "react";
 import { createCalendarLink, disconnectCalendar, revokeCalendarLink, syncNow } from "../actions";
 import { has } from "@/lib/has";
+import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
 
 const shortDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 const dateTime = new Intl.DateTimeFormat("fr-FR", {
@@ -38,7 +39,10 @@ export function CalendarSubscription({
 
   const create = () =>
     startTransition(async () => {
-      const r = await createCalendarLink(instructorId);
+      const r = await orNotSaved(
+        () => createCalendarLink(instructorId),
+        () => ({ message: NOT_SAVED }),
+      );
       if (has(r, "url")) {
         setUrl(r);
         setMessage(null);
@@ -138,14 +142,36 @@ export function CalendarSubscription({
             <Button
               variant="default"
               disabled={inProgress}
-              onClick={() => startTransition(async () => setMessage((await syncNow(instructorId)).message))}
+              onClick={() =>
+                startTransition(async () =>
+                  setMessage(
+                    (
+                      await orNotSaved(
+                        () => syncNow(instructorId),
+                        () => ({ message: NOT_SAVED }),
+                      )
+                    ).message,
+                  ),
+                )
+              }
             >
               Synchroniser maintenant
             </Button>
             <Button
               variant="default"
               disabled={inProgress}
-              onClick={() => startTransition(async () => setMessage((await disconnectCalendar(instructorId)).message))}
+              onClick={() =>
+                startTransition(async () =>
+                  setMessage(
+                    (
+                      await orNotSaved(
+                        () => disconnectCalendar(instructorId),
+                        () => ({ message: NOT_SAVED }),
+                      )
+                    ).message,
+                  ),
+                )
+              }
             >
               Déconnecter
             </Button>
@@ -175,7 +201,10 @@ export function CalendarSubscription({
             disabled={inProgress}
             onClick={() =>
               startTransition(async () => {
-                const r = await revokeCalendarLink(instructorId);
+                const r = await orNotSaved(
+                  () => revokeCalendarLink(instructorId),
+                  () => ({ message: NOT_SAVED }),
+                );
                 setMessage(r.message);
                 if (!r.message) setUrl(null);
               })

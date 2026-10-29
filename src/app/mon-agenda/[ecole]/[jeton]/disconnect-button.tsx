@@ -3,6 +3,7 @@
 import { Button, Text } from "@mantine/core";
 import { useState, useTransition } from "react";
 import { disconnectMyCalendar } from "./actions";
+import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
 
 export function DisconnectButton({ schoolId: schoolId, token: token }: { schoolId: string; token: string }) {
   const [message, setMessage] = useState<string | null>(null);
@@ -13,7 +14,18 @@ export function DisconnectButton({ schoolId: schoolId, token: token }: { schoolI
         variant="default"
         className="self-start"
         disabled={inProgress}
-        onClick={() => startTransition(async () => setMessage((await disconnectMyCalendar(schoolId, token)).message))}
+        onClick={() =>
+          startTransition(async () =>
+            setMessage(
+              (
+                await orNotSaved(
+                  () => disconnectMyCalendar(schoolId, token),
+                  () => ({ message: NOT_SAVED }),
+                )
+              ).message,
+            ),
+          )
+        }
       >
         Déconnecter mon agenda
       </Button>

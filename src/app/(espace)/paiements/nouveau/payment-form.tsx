@@ -7,6 +7,8 @@ import { PAYMENT_METHODS, type Method } from "@/db/payments";
 import { formatEuros, parseEuros, typedEuros } from "@/lib/money";
 import { DateField, refusedDateField } from "../../_ui/date-field";
 import { collectPayments } from "../actions";
+import { orConnectionLost } from "@/lib/action-result";
+import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
 
 /** `id`: stable key of the row, so removing one keeps the others' fields in place. */
 type Row = { id: number; method: Method; amount: string; reference: string; issuer: string; payment: string };
@@ -80,7 +82,16 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
           plannedPayment: l.method === "cheque" && l.payment ? l.payment : null,
         }));
         setMessage(null);
-        startTransition(async () => setMessage((await collectPayments(payerId, entry, back)).message));
+        startTransition(async () =>
+          setMessage(
+            (
+              await orConnectionLost(
+                () => collectPayments(payerId, entry, back),
+                (message) => ({ message }),
+              )
+            ).message,
+          ),
+        );
       }}
     >
       <Text size="sm">
@@ -202,6 +213,7 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
           {message}
         </Text>
       )}
+      <CheckSaved message={message} href={back} label="Voir les paiements de la fiche" />
       <div className="flex flex-wrap gap-2 border-t border-bordure pt-4">
         {/* An unreadable amount is left out of the total: no « Encaisser » for a wrong sum. */}
         <Button type="submit" loading={sending} disabled={total === 0 || invalides.some(Boolean)}>

@@ -12,5 +12,9 @@ export function formFields<const N extends readonly string[]>(...names: N) {
     name: (n: Name): Name => n,
     /** Text value of a field, "" when absent. */
     read: (f: FormData, n: Name): string => String(f.get(n) ?? ""),
+    /** Text value of every field, "" when absent. */
+    readAll: (f: FormData): Record<Name, string> =>
+      // Every name of `names` is given a value, so the object is complete.
+      Object.fromEntries(names.map((n) => [n, String(f.get(n) ?? "")])) as Record<Name, string>,
   };
 }
