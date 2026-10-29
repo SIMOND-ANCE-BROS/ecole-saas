@@ -253,6 +253,13 @@
       "when": 1793240439642,
       "tag": "0035_submission",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793266112278,
+      "tag": "0036_course_instructor_rate_unit",
+      "breakpoints": true
     }
   ]
 }

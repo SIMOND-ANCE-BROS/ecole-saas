@@ -5,7 +5,8 @@ import type { Tx } from "./index";
 import { seasonById, type Season } from "./schedule";
 import { auditLog, course, discipline, instructor, member, room, season, site } from "./schema";
 import { planSeasonCopy, type SeasonCopyPlan } from "../domain/schedule/season-copy";
-import { courseRateAllowed } from "../domain/payroll/rate";
+import { courseRateAllowed, rateInCurrentUnit } from "../domain/payroll/rate";
+import type { CourseRate } from "./courses";
 
 /**
  * Copy of another season's planning (#190), always within the
@@ -36,8 +37,9 @@ const COPIED = {
   startTime: course.startTime,
   durationMinutes: course.durationMinutes,
   maxCapacity: course.maxCapacity,
-  // Belongs to the course and its instructor, both copied (#191).
+  // Belongs to the course and its instructor, both copied (#191), with its unit (#268).
   instructorRateCents: course.instructorRateCents,
+  instructorRatePayMode: course.instructorRatePayMode,
 } satisfies { [K in MustCopy]: (typeof course)[K] };
 
 async function coursesOf(tx: Tx, seasonId: string) {
@@ -64,10 +66,18 @@ async function coursesOf(tx: Tx, seasonId: string) {
     .orderBy(sql`${course.weekday} NULLS LAST`, course.startTime, discipline.name);
   // The fields the plan reads, next to the copied columns kept whole for the insert.
   return rows.map(({ instructorPayMode, ...r }) => {
-    // A rate the instructor's pay mode does not use (monthly flat) is not carried over. Otherwise it is,
-    // in the unit of their current pay mode: whether it should be is an open question (#192 Q4).
-    const columns = courseRateAllowed(instructorPayMode) ? r.columns : { ...r.columns, instructorRateCents: null };
-    return { ...r, columns, ...columns };
+    const { instructorRateCents: cents, instructorRatePayMode: unit } = r.columns;
+    // A rate is carried over only in the unit of the instructor's current pay mode (#268): never
+    // for a monthly flat instructor (#192), nor a rate of their older pay mode, kept as history
+    // in its own season. Whether a rate should be carried at all is an open question (#192 Q4).
+    const carried = rateInCurrentUnit(unit, instructorPayMode);
+    const columns = carried ? r.columns : { ...r.columns, instructorRateCents: null, instructorRatePayMode: null };
+    /** Rate of the instructor's older pay mode, not carried over: said on the copy screen. */
+    const oldUnitRate: CourseRate | null =
+      !carried && cents !== null && unit !== null && courseRateAllowed(instructorPayMode)
+        ? { cents, payMode: unit }
+        : null;
+    return { ...r, columns, ...columns, oldUnitRate };
   });
 }
 

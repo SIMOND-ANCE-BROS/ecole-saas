@@ -87,15 +87,16 @@ beforeAll(async () => {
   weekly = await insertCourse(school, source, a, a.active, 1, "17:00", ["2026-10-01", "2027-03-31"]);
   gone = await insertCourse(school, source, a, a.inactive, 3, "18:00");
   // A course rate its monthly flat instructor does not use (written before #191's checks, or imported).
-  await admin`UPDATE course SET instructor_rate_cents = 3000 WHERE id = ${gone}`;
+  await admin`UPDATE course SET instructor_rate_cents = 3000, instructor_rate_pay_mode = 'monthly_flat' WHERE id = ${gone}`;
   const workshop = await insertCourse(school, source, a, a.active, null, "14:00");
   await admin`INSERT INTO course_date (school_id, course_id, date) VALUES (${school}, ${workshop}, '2027-02-13')`;
   // Every column away from the defaults: type, recurrence, ages, level and places left empty, length,
   // the instructor's own rate for the course (#191).
   [{ id: competition }] = await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id,
-      type, recurrence, weekday, start_time, duration_minutes, level, age_min, age_max, max_capacity, instructor_rate_cents)
+      type, recurrence, weekday, start_time, duration_minutes, level, age_min, age_max, max_capacity,
+      instructor_rate_cents, instructor_rate_pay_mode)
     VALUES (${school}, ${source}, ${a.discipline}, ${a.room}, ${a.active},
-      'competition', 'biweekly', 6, '10:30', 90, NULL, 14, 25, NULL, 4550) RETURNING id`;
+      'competition', 'biweekly', 6, '10:30', 90, NULL, 14, 25, NULL, 4550, 'hourly') RETURNING id`;
   await insertCourse(otherSchool, foreignSeason, b, b.active, 2, "19:00");
 });
 
@@ -161,7 +162,7 @@ describe("copy of a season's planning (#190)", () => {
     for (const { source: from, copy } of pairs) {
       const differ = Object.keys(from).filter((k) => JSON.stringify(from[k]) !== JSON.stringify(copy[k]));
       // The monthly flat instructor's unused course rate is not carried over (#191).
-      const unusedRate = from.id === gone ? ["instructor_rate_cents"] : [];
+      const unusedRate = from.id === gone ? ["instructor_rate_cents", "instructor_rate_pay_mode"] : [];
       expect(differ.sort()).toEqual(
         [
           "id",
@@ -174,7 +175,8 @@ describe("copy of a season's planning (#190)", () => {
       expect(copy.season_id).toBe(target);
       expect([copy.start_date, copy.end_date]).toEqual([null, null]);
       if (from.id === gone) expect(copy.instructor_rate_cents).toBeNull();
-      if (from.id === competition) expect(copy.instructor_rate_cents).toBe(4550);
+      if (from.id === competition)
+        expect([copy.instructor_rate_cents, copy.instructor_rate_pay_mode]).toEqual([4550, "hourly"]);
     }
     // Lessons generated over the whole season: about 40 weeks, 20 for every other week.
     expect(pairs.map((p) => p.lessons).every((n) => n >= 15)).toBe(true);
@@ -199,5 +201,65 @@ describe("copy of a season's planning (#190)", () => {
   it("leaves the other school untouched", async () => {
     const [{ n }] = await admin`SELECT count(*)::int AS n FROM course WHERE school_id = ${otherSchool}`;
     expect(n).toBe(1);
+  });
+});
+
+describe("copy of course rates after a pay mode change (#268)", () => {
+  it("carries a rate only in the instructor's current unit, and says which ones it drops", async () => {
+    const seasonOf = async (label: string, start: string, end: string) =>
+      (
+        await admin`INSERT INTO season (school_id, label, start_date, end_date)
+          VALUES (${school}, ${label}, ${start}, ${end}) RETURNING id`
+      )[0].id as string;
+    const from = await seasonOf("2028-2029", "2028-09-01", "2029-06-30");
+    const to = await seasonOf("2029-2030", "2029-09-01", "2030-06-30");
+    const [{ discipline, room }] = await admin`
+      SELECT c.discipline_id AS discipline, c.room_id AS room FROM course c WHERE c.id = ${weekly}`;
+    const teacher = async (payMode: string) =>
+      (
+        await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
+          VALUES (${school}, 'Zzfaux', 'Mode', 'employee', 'not_applicable', ${payMode}, 3000) RETURNING id`
+      )[0].id as string;
+    const changed = await teacher("hourly");
+    const kept = await teacher("per_lesson");
+    const rated = async (instructorId: string, weekday: number, cents: number, unit: string) =>
+      (
+        await admin`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday,
+            start_time, duration_minutes, instructor_rate_cents, instructor_rate_pay_mode)
+          VALUES (${school}, ${from}, ${discipline}, ${room}, ${instructorId}, ${weekday}, '20:00', 60, ${cents}, ${unit})
+          RETURNING id`
+      )[0].id as string;
+    const hourlyRate = await rated(changed, 1, 4550, "hourly");
+    const perLessonRate = await rated(kept, 2, 5000, "per_lesson");
+    // The instructor is now paid by the lesson: their hourly rate is history of that season (#192 Q5).
+    await admin`UPDATE instructor SET pay_mode = 'per_lesson' WHERE id = ${changed}`;
+
+    const plan = await withSchool(school, (tx) => seasonCopyPlan(tx, from, to));
+    if (!plan.ok) throw new Error(plan.message);
+    const planned = (id: string) => plan.plan.copied.find((c) => c.id === id);
+    expect(planned(hourlyRate)).toMatchObject({
+      instructorRateCents: null,
+      instructorRatePayMode: null,
+      oldUnitRate: { cents: 4550, payMode: "hourly" },
+    });
+    expect(planned(perLessonRate)).toMatchObject({
+      instructorRateCents: 5000,
+      instructorRatePayMode: "per_lesson",
+      oldUnitRate: null,
+    });
+
+    expect(await withSchool(school, (tx) => copySeason(tx, director, from, to))).toMatchObject({ ok: true, copied: 2 });
+    const copies = await admin`
+      SELECT instructor_id, instructor_rate_cents AS cents, instructor_rate_pay_mode AS unit
+      FROM course WHERE season_id = ${to} ORDER BY weekday`;
+    expect(copies.map((c) => ({ ...c }))).toEqual([
+      // Not carried as 45,50 € per lesson: no rate, the instructor's default one applies.
+      { instructor_id: changed, cents: null, unit: null },
+      { instructor_id: kept, cents: 5000, unit: "per_lesson" },
+    ]);
+    // The source season keeps its rate in its own unit.
+    const [old] = await admin`SELECT instructor_rate_cents AS cents, instructor_rate_pay_mode AS unit
+      FROM course WHERE id = ${hourlyRate}`;
+    expect({ ...old }).toEqual({ cents: 4550, unit: "hourly" });
   });
 });

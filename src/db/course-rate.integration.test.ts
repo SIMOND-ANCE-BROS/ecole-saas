@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  courseOwnRate,
   courseRate,
   coursePay,
   coursesWithOwnRate,
@@ -33,6 +36,7 @@ let hourly: string;
 let flat: string;
 let otherHourly: string;
 let base: CourseInput;
+let roomId: string;
 
 /** Fixed "today" in the current test season, so the past / current season split does not depend on the clock. */
 const TODAY = "2026-10-29";
@@ -63,7 +67,7 @@ beforeAll(async () => {
   otherHourly = await teacher(otherSchool, "hourly", 2800);
   base = {
     discipline: { name: "Jazz" },
-    room: { id: room.id },
+    room: { id: (roomId = room.id) },
     instructorId: hourly,
     type: "group",
     recurrence: "weekly",
@@ -113,9 +117,9 @@ describe("instructor rate per course (#191)", () => {
 
   it("saves, changes and clears the course rate", async () => {
     const id = await create({ ...base, instructorRate: 4550 });
-    expect(await withSchool(school, (tx) => courseRate(tx, id))).toBe(4550);
+    expect(await withSchool(school, (tx) => courseRate(tx, id))).toEqual({ cents: 4550, payMode: "hourly" });
     await withSchool(school, (tx) => updateCourse(tx, id, { ...base, instructorRate: 5000 }));
-    expect(await withSchool(school, (tx) => courseRate(tx, id))).toBe(5000);
+    expect(await withSchool(school, (tx) => courseRate(tx, id))).toEqual({ cents: 5000, payMode: "hourly" });
     await withSchool(school, (tx) => updateCourse(tx, id, { ...base, instructorRate: null }));
     expect(await withSchool(school, (tx) => courseRate(tx, id))).toBeNull();
   });
@@ -136,7 +140,7 @@ describe("instructor rate per course (#191)", () => {
   it("keeps the stored rate when the form does not send one, for the same instructor", async () => {
     const id = await create({ ...base, weekday: 6, instructorRate: 4200 });
     await withSchool(school, (tx) => updateCourse(tx, id, { ...base, weekday: 6, instructorRate: undefined }));
-    expect(await withSchool(school, (tx) => courseRate(tx, id))).toBe(4200);
+    expect(await withSchool(school, (tx) => courseRate(tx, id))).toEqual({ cents: 4200, payMode: "hourly" });
   });
 
   it("on a change of instructor, keeps only a rate typed for the new one", async () => {
@@ -158,7 +162,7 @@ describe("instructor rate per course (#191)", () => {
     // Back to the first instructor, then a new instructor with the same amount typed deliberately: kept.
     await move(hourly, 4200, hourly);
     expect(await move(other, 4200, other)).toMatchObject({ ok: true, instructorRateCents: 4200 });
-    expect(await withSchool(school, (tx) => courseRate(tx, id))).toBe(4200);
+    expect(await withSchool(school, (tx) => courseRate(tx, id))).toEqual({ cents: 4200, payMode: "hourly" });
     // A monthly flat instructor: nothing sent, the previous instructor's rate is dropped.
     await move(flat, undefined);
     expect(await withSchool(school, (tx) => courseRate(tx, id))).toBeNull();
@@ -238,10 +242,45 @@ describe("instructor rate per course (#191)", () => {
     const change = (payMode: InstructorInput["payMode"]) =>
       withSchool(school, (tx) => updateInstructor(tx, teacher, entry(payMode), TODAY));
 
-    // A rate on a course of a season that ended: the change goes through, the rate is kept as history.
+    // A rate on a course of a season that ended: the change goes through, the rate is kept as history,
+    // in the unit it was typed in (#268).
     const old = await createIn(past, { ...base, instructorId: teacher, weekday: 3, instructorRate: 4000 });
     expect(await change("per_lesson")).toEqual({ ok: true });
-    expect(await withSchool(school, (tx) => courseRate(tx, old))).toBe(4000);
+    expect(await withSchool(school, (tx) => courseRate(tx, old))).toEqual({ cents: 4000, payMode: "hourly" });
+    expect(await withSchool(school, (tx) => courseOwnRate(tx, old))).toEqual({
+      cents: 4000,
+      payMode: "hourly",
+      current: false,
+    });
+    const listed = await withSchool(school, (tx) => coursesWithOwnRate(tx, teacher));
+    expect(listed.map((c) => [c.rateCents, c.ratePayMode])).toEqual([[4000, "hourly"]]);
+    expect((await withSchool(school, (tx) => coursePay(tx, old))).rate).toEqual({ cents: 4000, payMode: "hourly" });
+
+    // Saved again without the rate sent (left untouched in the form): kept in its own unit.
+    const resave = (instructorRate: number | null | undefined) =>
+      withSchool(school, (tx) =>
+        updateCourse(tx, old, {
+          ...base,
+          instructorId: teacher,
+          weekday: 3,
+          instructorRate,
+          instructorRateFor: teacher,
+        }),
+      );
+    expect(await resave(undefined)).toMatchObject({ ok: true, instructorRateCents: 4000 });
+    expect(await withSchool(school, (tx) => courseRate(tx, old))).toEqual({ cents: 4000, payMode: "hourly" });
+    // A new amount is typed in the current pay mode.
+    await resave(4200);
+    expect(await withSchool(school, (tx) => courseOwnRate(tx, old))).toEqual({
+      cents: 4200,
+      payMode: "per_lesson",
+      current: true,
+    });
+    // Cleared: neither amount nor unit.
+    await resave(null);
+    const [cleared] = await admin`SELECT instructor_rate_cents AS cents, instructor_rate_pay_mode AS unit
+      FROM course WHERE id = ${old}`;
+    expect({ ...cleared }).toEqual({ cents: null, unit: null });
 
     // A rate on a course of the current season still blocks, naming that season only.
     await createIn(season, { ...base, instructorId: teacher, weekday: 3, instructorRate: 4500 });
@@ -260,6 +299,53 @@ describe("instructor rate per course (#191)", () => {
     });
   });
 
+  it("stores a unit with every rate and only then; migration 0036 fills it from the instructor's pay mode (#268)", async () => {
+    const [{ id: discipline }] =
+      await admin`INSERT INTO discipline (school_id, name) VALUES (${school}, 'Zzunité') RETURNING id`;
+    const insert = (t: postgres.TransactionSql, instructorId: string, cents: number | null, unit: string | null) =>
+      t`INSERT INTO course (school_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time,
+          duration_minutes, instructor_rate_cents, instructor_rate_pay_mode)
+        VALUES (${school}, ${season}, ${discipline}, ${roomId}, ${instructorId}, 4, '08:00', 60, ${cents}, ${unit})
+        RETURNING id`;
+    const refused = async (cents: number | null, unit: string | null) => {
+      try {
+        await admin.begin((t) => insert(t, hourly, cents, unit));
+        return false;
+      } catch (e) {
+        return (e as { constraint_name?: string }).constraint_name === "course_instructor_rate_unit";
+      }
+    };
+    expect(await refused(4000, null)).toBe(true);
+    expect(await refused(null, "hourly")).toBe(true);
+
+    // The backfill of the migration, on rows written as before it, in a transaction rolled back.
+    const sql = readFileSync(join(process.cwd(), "migrations/0036_course_instructor_rate_unit.sql"), "utf8");
+    const backfill = sql.split("--> statement-breakpoint").find((s) => s.includes("UPDATE"));
+    if (!backfill) throw new Error("No backfill in migration 0036");
+    const ROLLBACK = new Error("rollback");
+    let filled: Record<string, unknown>[] = [];
+    await admin
+      .begin(async (t) => {
+        await t`ALTER TABLE course DROP CONSTRAINT course_instructor_rate_unit`;
+        const [a] = await insert(t, hourly, 4000, null);
+        const [b] = await insert(t, flat, 3000, null);
+        const [c] = await insert(t, hourly, null, null);
+        await t.unsafe(backfill);
+        filled = await t`SELECT id, instructor_rate_cents AS cents, instructor_rate_pay_mode AS unit FROM course
+          WHERE id IN (${a.id}, ${b.id}, ${c.id})`;
+        filled = filled.map((r) => ({ ...r, id: [a.id, b.id, c.id].indexOf(r.id) }));
+        throw ROLLBACK;
+      })
+      .catch((e) => {
+        if (e !== ROLLBACK) throw e;
+      });
+    expect(filled.sort((x, y) => Number(x.id) - Number(y.id))).toEqual([
+      { id: 0, cents: 4000, unit: "hourly" },
+      { id: 1, cents: 3000, unit: "monthly_flat" },
+      { id: 2, cents: null, unit: null },
+    ]);
+  });
+
   it("lists the instructor's courses with their own rate, and pay data, within the school only", async () => {
     const listed = await withSchool(school, (tx) => coursesWithOwnRate(tx, hourly));
     expect(listed.every((c) => typeof c.rateCents === "number")).toBe(true);
@@ -267,7 +353,7 @@ describe("instructor rate per course (#191)", () => {
     const pay = await withSchool(school, (tx) => coursePay(tx, null));
     expect(pay.instructors[hourly]).toEqual({ payMode: "hourly", rateCents: 3000 });
     expect(pay.instructors[otherHourly]).toBeUndefined();
-    expect(pay.rateCents).toBeNull();
+    expect(pay.rate).toBeNull();
   });
 
   it("records a rate change in the audit log, and nothing when it did not change", async () => {
@@ -275,25 +361,20 @@ describe("instructor rate per course (#191)", () => {
     const entries = () =>
       admin`SELECT action, before, after, actor IS NOT NULL AS has_actor FROM audit_log
         WHERE school_id = ${school} AND row_id = ${id} ORDER BY id`;
-    const after = { instructorId: hourly, instructorRateCents: 3500 };
+    const after = { instructorId: hourly, instructorRateCents: 3500, instructorRatePayMode: "hourly" as const };
+    const none = { instructorId: hourly, instructorRateCents: null, instructorRatePayMode: null };
+    const sameAmountPerLesson = { ...after, instructorRatePayMode: "per_lesson" as const };
     await withSchool(school, (tx) => logCourseRate(tx, director, id, null, after));
     await withSchool(school, (tx) => logCourseRate(tx, director, id, after, after));
-    await withSchool(school, (tx) =>
-      logCourseRate(tx, director, id, after, { instructorId: hourly, instructorRateCents: null }),
-    );
+    // The same amount in another unit is another rate (#268).
+    await withSchool(school, (tx) => logCourseRate(tx, director, id, after, sameAmountPerLesson));
+    await withSchool(school, (tx) => logCourseRate(tx, director, id, sameAmountPerLesson, none));
     // No rate before nor after: nothing to record, even for a new instructor.
-    await withSchool(school, (tx) =>
-      logCourseRate(
-        tx,
-        director,
-        id,
-        { instructorId: hourly, instructorRateCents: null },
-        { instructorId: flat, instructorRateCents: null },
-      ),
-    );
+    await withSchool(school, (tx) => logCourseRate(tx, director, id, none, { ...none, instructorId: flat }));
     expect(await entries()).toEqual([
       { action: "insert", before: null, after, has_actor: true },
-      { action: "update", before: after, after: { instructorId: hourly, instructorRateCents: null }, has_actor: true },
+      { action: "update", before: after, after: sameAmountPerLesson, has_actor: true },
+      { action: "update", before: sameAmountPerLesson, after: none, has_actor: true },
     ]);
   });
 });

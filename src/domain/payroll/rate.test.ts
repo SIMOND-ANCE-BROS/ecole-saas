@@ -3,43 +3,79 @@ import {
   courseRateAllowed,
   effectiveRate,
   rateAfterUpdate,
+  rateInCurrentUnit,
   seasonBlocksPayModeChange,
+  type PayMode,
   type RatedInstructor,
 } from "./rate";
 
 const hourly: RatedInstructor = { id: "i1", payMode: "hourly", rateCents: 3000 };
 
+/** A course of `instructorId` with its own rate typed in `unit`, or no rate of its own. */
+const rated = (instructorId: string, cents: number | null, unit: PayMode | null = null) => ({
+  instructorId,
+  instructorRateCents: cents,
+  instructorRatePayMode: unit,
+});
+
 describe("effectiveRate", () => {
   it("takes the course's own rate when it is set", () => {
-    expect(effectiveRate({ instructorId: "i1", instructorRateCents: 4550 }, hourly)).toBe(4550);
+    expect(effectiveRate(rated("i1", 4550, "hourly"), hourly)).toBe(4550);
   });
 
   it("falls back to the instructor's default rate", () => {
-    expect(effectiveRate({ instructorId: "i1", instructorRateCents: null }, hourly)).toBe(3000);
+    expect(effectiveRate(rated("i1", null), hourly)).toBe(3000);
   });
 
   it("keeps a course rate of zero rather than the default", () => {
-    expect(effectiveRate({ instructorId: "i1", instructorRateCents: 0 }, hourly)).toBe(0);
+    expect(effectiveRate(rated("i1", 0, "hourly"), hourly)).toBe(0);
   });
 
   it("applies to an instructor paid by the lesson", () => {
     const perLesson: RatedInstructor = { id: "i2", payMode: "per_lesson", rateCents: 4000 };
-    expect(effectiveRate({ instructorId: "i2", instructorRateCents: 5000 }, perLesson)).toBe(5000);
+    expect(effectiveRate(rated("i2", 5000, "per_lesson"), perLesson)).toBe(5000);
   });
 
   it("gives no rate per course for a monthly flat instructor, even with a stored one (#192)", () => {
     const flat: RatedInstructor = { id: "i3", payMode: "monthly_flat", rateCents: 120000 };
-    expect(effectiveRate({ instructorId: "i3", instructorRateCents: 5000 }, flat)).toBeNull();
-    expect(effectiveRate({ instructorId: "i3", instructorRateCents: null }, flat)).toBeNull();
+    expect(effectiveRate(rated("i3", 5000, "monthly_flat"), flat)).toBeNull();
+    expect(effectiveRate(rated("i3", 5000, "hourly"), flat)).toBeNull();
+    expect(effectiveRate(rated("i3", null), flat)).toBeNull();
     expect(courseRateAllowed("monthly_flat")).toBe(false);
     expect(courseRateAllowed("hourly")).toBe(true);
     expect(courseRateAllowed("per_lesson")).toBe(true);
   });
 
+  it("refuses a rate typed in another unit than the instructor's current pay mode (#268)", () => {
+    const perLesson: RatedInstructor = { id: "i1", payMode: "per_lesson", rateCents: 4000 };
+    // An hourly rate kept from before the change to per-lesson pay: neither it nor the default rate.
+    expect(effectiveRate(rated("i1", 4550, "hourly"), perLesson)).toBeNull();
+    expect(effectiveRate(rated("i1", 4550, "per_lesson"), hourly)).toBeNull();
+    // The same amount in the current unit is taken.
+    expect(effectiveRate(rated("i1", 4550, "per_lesson"), perLesson)).toBe(4550);
+    // No rate of its own: the default rate, whatever the course's history.
+    expect(effectiveRate(rated("i1", null), perLesson)).toBe(4000);
+  });
+
   it("decides nothing for a replacement instructor (open question #192)", () => {
     const other: RatedInstructor = { id: "i9", payMode: "hourly", rateCents: 2500 };
-    expect(effectiveRate({ instructorId: "i1", instructorRateCents: 4550 }, other)).toBeNull();
-    expect(effectiveRate({ instructorId: "i1", instructorRateCents: null }, other)).toBeNull();
+    expect(effectiveRate(rated("i1", 4550, "hourly"), other)).toBeNull();
+    expect(effectiveRate(rated("i1", null), other)).toBeNull();
+  });
+});
+
+describe("rateInCurrentUnit (#268)", () => {
+  it("holds only for a rate typed in the instructor's current pay mode", () => {
+    expect(rateInCurrentUnit("hourly", "hourly")).toBe(true);
+    expect(rateInCurrentUnit("per_lesson", "per_lesson")).toBe(true);
+    expect(rateInCurrentUnit("hourly", "per_lesson")).toBe(false);
+    expect(rateInCurrentUnit("per_lesson", "hourly")).toBe(false);
+    expect(rateInCurrentUnit(null, "hourly")).toBe(false);
+  });
+
+  it("never holds for a monthly flat instructor (#192)", () => {
+    expect(rateInCurrentUnit("monthly_flat", "monthly_flat")).toBe(false);
+    expect(rateInCurrentUnit("hourly", "monthly_flat")).toBe(false);
   });
 });
 

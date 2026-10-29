@@ -88,7 +88,7 @@ export function CourseForm({
     ageMax: course?.ageMax?.toString() ?? "",
     level: course?.level ?? "",
     maxCapacity: course?.maxCapacity?.toString() ?? "",
-    instructorRate: pay.rateCents === null ? "" : typedEuros(pay.rateCents),
+    instructorRate: pay.rate === null ? "" : typedEuros(pay.rate.cents),
   });
   // Dates of a one-off course; one empty row to start with.
   const [dates, setDates] = useState<string[]>(course?.dates.length ? course.dates : [date ?? ""]);
@@ -120,20 +120,36 @@ export function CourseForm({
   const instructorPay = pay.instructors[v.instructorId];
   const rateAllowed = instructorPay ? courseRateAllowed(instructorPay.payMode) : false;
   // A monthly flat instructor's course may still hold a rate (#192 Q2): the field stays, so it can be emptied.
-  const unusedRate = !rateAllowed && course?.instructorId === v.instructorId && pay.rateCents !== null;
-  const savedRate = pay.rateCents === null ? "" : typedEuros(pay.rateCents);
+  const ownInstructor = course?.instructorId === v.instructorId;
+  const unusedRate = !rateAllowed && ownInstructor && pay.rate !== null;
+  const savedRate = pay.rate === null ? "" : typedEuros(pay.rate.cents);
+  // A rate typed in the instructor's older pay mode (#268): shown in that unit, kept as it is
+  // unless changed; a new amount is typed in the current unit.
+  const oldUnit =
+    rateAllowed && ownInstructor && pay.rate !== null && pay.rate.payMode !== instructorPay?.payMode
+      ? pay.rate.payMode
+      : null;
+  const oldUnitShown = oldUnit !== null && v.instructorRate === savedRate;
+  // Unit of the amount in the field: the stored one while a rate of an older pay mode is untouched.
+  const shownUnit = oldUnitShown
+    ? oldUnit
+    : rateAllowed
+      ? instructorPay?.payMode
+      : unusedRate && v.instructorRate === savedRate
+        ? pay.rate?.payMode
+        : undefined;
   // What is sent: undefined lets the server keep (same instructor) or drop (new one) the stored rate.
-  const sentRate = rateAllowed
-    ? v.instructorRate
-    : unusedRate && v.instructorRate !== savedRate
+  const sentRate =
+    rateAllowed && oldUnit === null
       ? v.instructorRate
-      : undefined;
+      : (unusedRate || oldUnit !== null) && v.instructorRate !== savedRate
+        ? v.instructorRate
+        : undefined;
   const nameOf = (id: string) => r.instructors.find((i) => i.id === id);
-  // « 45,50 € / heure » for an amount typed for an instructor; the text as typed if it is not an amount.
-  const amountFor = (typedAmount: string, instructorId: string) => {
+  // « 45,50 € / heure » for the amount in the field; the text as typed if it is not an amount.
+  const shownAmount = (typedAmount: string) => {
     const cents = parseEuros(typedAmount);
-    const mode = pay.instructors[instructorId]?.payMode;
-    return cents === null || !mode ? typedAmount : `${formatEuros(cents)} / ${PAY_UNITS[mode]}`;
+    return cents === null || !shownUnit ? typedAmount : `${formatEuros(cents)} / ${PAY_UNITS[shownUnit]}`;
   };
 
   const entry = {
@@ -299,7 +315,7 @@ export function CourseForm({
             setRateCleared(
               typedAmount && previous
                 ? {
-                    amount: amountFor(typedAmount, v.instructorId),
+                    amount: shownAmount(typedAmount),
                     instructor: `${previous.firstName} ${previous.name}`,
                   }
                 : null,
@@ -323,15 +339,17 @@ export function CourseForm({
                 // Description under the field: its box lines up with « Intervenant ».
                 inputWrapperOrder={["label", "input", "description", "error"]}
                 description={
-                  rateAllowed
-                    ? `Vide : tarif habituel de ${nameOf(v.instructorId)?.firstName ?? "l’intervenant"}, ${formatEuros(instructorPay.rateCents)} / ${PAY_UNITS[instructorPay.payMode]}.`
-                    : "Ce tarif ne s’applique pas pour l’instant (forfait mensuel, règle en attente)."
+                  !rateAllowed
+                    ? "Ce tarif ne s’applique pas pour l’instant (forfait mensuel, règle en attente)."
+                    : oldUnitShown
+                      ? `Tarif de l’ancien mode de rémunération, gardé tel quel. Un nouveau montant sera en € / ${PAY_UNITS[instructorPay.payMode]} ; vide : tarif habituel de ${nameOf(v.instructorId)?.firstName ?? "l’intervenant"}, ${formatEuros(instructorPay.rateCents)} / ${PAY_UNITS[instructorPay.payMode]}.`
+                      : `Vide : tarif habituel de ${nameOf(v.instructorId)?.firstName ?? "l’intervenant"}, ${formatEuros(instructorPay.rateCents)} / ${PAY_UNITS[instructorPay.payMode]}.`
                 }
                 inputMode="decimal"
                 autoComplete="off"
                 rightSection={
                   <Text size="xs" c="dimmed" pr="xs">
-                    {rateAllowed ? `€ / ${PAY_UNITS[instructorPay.payMode]}` : "€"}
+                    {rateAllowed && shownUnit ? `€ / ${PAY_UNITS[shownUnit]}` : "€"}
                   </Text>
                 }
                 rightSectionWidth={90}

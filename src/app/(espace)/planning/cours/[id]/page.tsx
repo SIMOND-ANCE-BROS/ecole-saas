@@ -128,8 +128,8 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
             {course.instructor}
             {parsed.ownRate && (
               <Text size="xs" c="dimmed" className="tabular-nums print:hidden">
-                Tarif intervenant : {formatEuros(parsed.ownRate.cents)} / {PAY_UNITS[parsed.ownRate.payMode]} (propre à
-                ce cours)
+                Tarif intervenant : {formatEuros(parsed.ownRate.cents)} / {PAY_UNITS[parsed.ownRate.payMode]}{" "}
+                {parsed.ownRate.current ? "(propre à ce cours)" : "(tarif de l’ancien mode de rémunération)"}
               </Text>
             )}
           </dd>

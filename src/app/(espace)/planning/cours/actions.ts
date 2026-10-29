@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { withSchool, type Tx } from "@/db";
 import {
-  courseRate,
+  courseRateState,
   createCourse,
   deleteCourse,
   logCourseRate,
@@ -71,17 +71,12 @@ export async function saveCourse(
               ? "Cette saison n’existe plus."
               : "Aucune saison n’est paramétrée.",
       };
-    const before = existing
-      ? { instructorId: existing.instructorId, instructorRateCents: (await courseRate(tx, existing.id)) ?? null }
-      : null;
+    const before = existing ? await courseRateState(tx, existing.id) : null;
     const save = async () => {
       const r = id !== null ? await updateCourse(tx, id, parsed.data) : await createCourse(tx, target, parsed.data);
-      // A change of the instructor's rate for this course is kept in the audit log (#191).
-      if (r.ok)
-        await logCourseRate(tx, userId, r.id, before, {
-          instructorId: parsed.data.instructorId,
-          instructorRateCents: r.instructorRateCents,
-        });
+      // A change of the instructor's rate for this course, or of its unit, is kept in the audit log (#191, #268).
+      const after = r.ok ? await courseRateState(tx, r.id) : null;
+      if (r.ok && after) await logCourseRate(tx, userId, r.id, before, after);
       // Upcoming lessons recomputed in the same transaction (day changed, new course…).
       if (r.ok) await syncLessons(tx, target, today);
       return r.ok ? { ...r, season: await seasonOfLink(tx, target, today) } : r;
