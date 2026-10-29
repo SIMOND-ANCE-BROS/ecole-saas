@@ -51,6 +51,7 @@ afterAll(async () => {
     "room",
     "site",
     "discipline",
+    "closure",
     "season",
   ]) {
     await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [school, otherSchool]);
@@ -127,6 +128,36 @@ describe("seasons", () => {
         message: "Ces dates chevauchent la saison 2027-2028.",
       },
     );
+  });
+
+  it("refuses new dates that would leave closures outside the season, naming them (#194)", async () => {
+    // Season now 2026-08-25 → 2027-07-05.
+    await admin`INSERT INTO closure (school_id, season_id, label, start_date, end_date) VALUES
+      (${school}, ${season2026}, 'Zz Rentrée', '2026-08-25', '2026-08-25'),
+      (${school}, ${season2026}, 'Zz Noël', '2026-12-19', '2027-01-04'),
+      (${school}, ${season2026}, 'Zz Gala', '2027-06-28', '2027-07-05')`;
+    const edit = (startDate: string, endDate: string) =>
+      withSchool(school, (tx) => updateSeason(tx, season2026, { label: "2026-2027", startDate, endDate }));
+    const dates = async () =>
+      (await admin`SELECT start_date::text AS s, end_date::text AS e FROM season WHERE id = ${season2026}`)[0];
+
+    expect(await edit("2026-08-26", "2027-07-04")).toEqual({
+      ok: false,
+      message:
+        "Ces fermetures sortiraient de la saison : Zz Rentrée (le 25/08/2026), Zz Gala (du 28/06/2027 au 05/07/2027). Modifiez-les ou supprimez-les d’abord.",
+    });
+    expect(await edit("2026-08-25", "2027-07-04")).toEqual({
+      ok: false,
+      message:
+        "Cette fermeture sortirait de la saison : Zz Gala (du 28/06/2027 au 05/07/2027). Modifiez-la ou supprimez-la d’abord.",
+    });
+    expect(await dates()).toEqual({ s: "2026-08-25", e: "2027-07-05" });
+
+    // Closures still inside, on the very bounds: accepted.
+    expect((await edit("2026-08-25", "2027-07-05")).ok).toBe(true);
+    await admin`DELETE FROM closure WHERE season_id = ${season2026} AND label = 'Zz Gala'`;
+    expect((await edit("2026-08-20", "2027-06-30")).ok).toBe(true);
+    expect(await dates()).toEqual({ s: "2026-08-20", e: "2027-06-30" });
   });
 });
 

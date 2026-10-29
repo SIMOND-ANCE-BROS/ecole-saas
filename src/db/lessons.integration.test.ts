@@ -136,6 +136,21 @@ describe("closures and lesson generation", () => {
     }
   });
 
+  it("accepts a closure exactly on the season's bounds (#194)", async () => {
+    for (const [start, end] of [
+      ["2026-09-01", "2026-11-30"],
+      ["2026-09-01", "2026-09-01"],
+      ["2026-11-30", "2026-11-30"],
+    ]) {
+      const r = await withSchool(school, (tx) =>
+        addClosure(tx, season, { scope: "school", label: "Zz Bornes", start, end }),
+      );
+      expect(r.ok).toBe(true);
+      // Removed before any sync: the lessons of the next tests stay as they are.
+      await admin`DELETE FROM closure WHERE id = ${r.ok ? r.id : null}`;
+    }
+  });
+
   it("removes the lessons of a closure, then restores them when it is deleted", async () => {
     const r = await withSchool(school, (tx) =>
       addClosure(tx, season, { scope: "school", label: "Toussaint", start: "2026-10-17", end: "2026-11-01" }),
