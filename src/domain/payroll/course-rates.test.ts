@@ -3,7 +3,6 @@ import { formatEuros } from "../../lib/money";
 import { courseRateEditable, courseRateSections, rateEditStart, rateEditUnchanged, shownRate } from "./course-rates";
 
 const TODAY = "2026-10-29";
-const hourly = { payMode: "hourly" as const, rateCents: 4000 };
 
 describe("courseRateEditable (#276)", () => {
   it("lets the current and future seasons be edited, a season ended before today is history", () => {
@@ -35,19 +34,12 @@ describe("courseRateSections (#276)", () => {
 });
 
 describe("shownRate (#276)", () => {
-  it("names the usual rate with its unit when the course has none", () => {
-    expect(shownRate(null, hourly)).toEqual({
-      label: `tarif habituel (${formatEuros(4000)} / heure)`,
-      note: null,
-      usual: true,
-    });
-    expect(shownRate(null, { payMode: "per_lesson", rateCents: 2500 }).label).toBe(
-      `tarif habituel (${formatEuros(2500)} / séance)`,
-    );
+  it("says « Tarif habituel » without repeating the amount when the course has none", () => {
+    expect(shownRate(null, "hourly")).toEqual({ label: "Tarif habituel", note: null, usual: true });
   });
 
   it("shows the course's own rate in the unit it was typed in", () => {
-    expect(shownRate({ cents: 4550, payMode: "hourly" }, hourly)).toEqual({
+    expect(shownRate({ cents: 4550, payMode: "hourly" }, "hourly")).toEqual({
       label: `${formatEuros(4550)} / heure`,
       note: null,
       usual: false,
@@ -55,7 +47,7 @@ describe("shownRate (#276)", () => {
   });
 
   it("says when the own rate is an older pay mode's, without reading it in the new unit (#268)", () => {
-    expect(shownRate({ cents: 3000, payMode: "per_lesson" }, hourly)).toEqual({
+    expect(shownRate({ cents: 3000, payMode: "per_lesson" }, "hourly")).toEqual({
       label: `${formatEuros(3000)} / séance`,
       note: "ancien mode de rémunération",
       usual: false,
@@ -63,14 +55,13 @@ describe("shownRate (#276)", () => {
   });
 
   it("says a rate per course is not applied to a monthly flat instructor (#192)", () => {
-    const flat = { payMode: "monthly_flat" as const, rateCents: 120000 };
-    expect(shownRate({ cents: 3000, payMode: "hourly" }, flat)).toEqual({
+    expect(shownRate({ cents: 3000, payMode: "hourly" }, "monthly_flat")).toEqual({
       label: `${formatEuros(3000)} / heure`,
       note: "non appliqué (forfait mensuel)",
       usual: false,
     });
     // Stored with no unit of its own: the label already says it is not used.
-    expect(shownRate({ cents: 3000, payMode: "monthly_flat" }, flat)).toEqual({
+    expect(shownRate({ cents: 3000, payMode: "monthly_flat" }, "monthly_flat")).toEqual({
       label: `${formatEuros(3000)}, tarif non utilisé (forfait mensuel)`,
       note: null,
       usual: false,
@@ -91,16 +82,26 @@ describe("rateEditStart (#276)", () => {
 });
 
 describe("rateEditUnchanged (#276)", () => {
+  const own = { cents: 4550, payMode: "hourly" as const };
+
   it("sees the same amount however it is typed", () => {
-    expect(rateEditUnchanged("45,50", "45,5")).toBe(true);
-    expect(rateEditUnchanged("45", " 45,00 ")).toBe(true);
-    expect(rateEditUnchanged("", "  ")).toBe(true);
+    expect(rateEditUnchanged(own, "hourly", "45,5")).toBe(true);
+    expect(rateEditUnchanged(own, "hourly", "45.5")).toBe(true);
+    expect(rateEditUnchanged(own, "hourly", " 45,50 ")).toBe(true);
+    expect(rateEditUnchanged(null, "hourly", "  ")).toBe(true);
   });
 
   it("sees a new amount, a cleared one, a first one and an unreadable one as changes", () => {
-    expect(rateEditUnchanged("45,50", "46")).toBe(false);
-    expect(rateEditUnchanged("45,50", "")).toBe(false);
-    expect(rateEditUnchanged("", "45")).toBe(false);
-    expect(rateEditUnchanged("45", "abc")).toBe(false);
+    expect(rateEditUnchanged(own, "hourly", "46")).toBe(false);
+    expect(rateEditUnchanged(own, "hourly", "")).toBe(false);
+    expect(rateEditUnchanged(null, "hourly", "45")).toBe(false);
+    expect(rateEditUnchanged(own, "hourly", "abc")).toBe(false);
+  });
+
+  it("lets an older unit's rate be cleared or retyped: the field starts empty, the rate is still stored (#268)", () => {
+    const old = { cents: 3000, payMode: "per_lesson" as const };
+    expect(rateEditUnchanged(old, "hourly", "")).toBe(false);
+    // The same amount, now in the current unit: a change of unit.
+    expect(rateEditUnchanged(old, "hourly", "30")).toBe(false);
   });
 });

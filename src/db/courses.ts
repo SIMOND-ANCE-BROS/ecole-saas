@@ -15,6 +15,7 @@ import {
   member,
   room,
   lesson,
+  payMode,
   season,
   site,
 } from "./schema";
@@ -70,7 +71,7 @@ const euroRateOrNull = euroRate.optional();
  */
 export const validCourseRateEdit = z.object({
   rate: euroRate,
-  unit: z.enum(["hourly", "per_lesson", "monthly_flat"]),
+  unit: z.enum(payMode.enumValues),
 });
 
 /** Offered recurrences (#90). */
@@ -119,7 +120,7 @@ const courseFields = z.object({
   /** Instructor the rate was typed for: a rate left over from another instructor is not kept (#191). */
   instructorRateFor: z.uuid().optional(),
   /** Unit the form showed for that rate (#268): the server refuses an amount typed in a pay mode no longer current. */
-  instructorRateUnit: z.enum(["hourly", "per_lesson", "monthly_flat"]).optional(),
+  instructorRateUnit: z.enum(payMode.enumValues).optional(),
 });
 
 export const validCourseInput = courseFields
@@ -383,7 +384,21 @@ async function replaceDates(tx: Tx, courseId: string, dates: string[]) {
     );
 }
 
+/**
+ * Locks a course row until the commit (FOR UPDATE), before reading what a save
+ * keeps of it: the course form and the instructor page's rate (#276) then save
+ * one after the other, each seeing the other's rate, instead of the later one
+ * writing back a rate read before the other's commit. Lock order: the course,
+ * then its instructor (FOR SHARE), on both paths.
+ */
+export async function lockCourse(tx: Tx, id: string): Promise<void> {
+  if (!z.uuid().safeParse(id).success) return;
+  await tx.select({ id: course.id }).from(course).where(eq(course.id, id)).for("update");
+}
+
 export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Promise<SaveResult> {
+  // Already locked by the action (before its audit read); kept here for any other caller.
+  await lockCourse(tx, id);
   const existing = await readCourse(tx, id);
   if (!existing) return { ok: false, message: "Ce cours n’existe plus." };
   const r = await values(tx, entry, existing.instructorId);
@@ -520,8 +535,9 @@ export async function instructorCourseRates(tx: Tx, instructorId: string) {
  * Sets (or clears, `rate` null: the usual rate) a course's instructor rate
  * from the instructor page (#276), with the course form's rules: no rate per
  * course for a monthly flat instructor (#192), the unit decided by
- * `rateUnitAfterSave` (#268), and the instructor row locked FOR SHARE so that
- * their pay mode cannot change before the commit (see updateInstructor).
+ * `rateUnitAfterSave` (#268), the course row locked FOR UPDATE (see
+ * lockCourse), then the instructor row FOR SHARE so that their pay mode
+ * cannot change before the commit (see updateInstructor).
  * Refused for a course no longer taught by this instructor, or of a past
  * season (history, #192 Q5). `today` is a `YYYY-MM-DD` date in Paris.
  * Returns the rate states before and after, for the audit log.
@@ -540,14 +556,7 @@ export async function setCourseRate(
   const gone = { ok: false as const, message: "Ce cours n’existe plus." };
   if (!z.uuid().safeParse(instructorId).success) return noInstructor;
   if (!z.uuid().safeParse(courseId).success) return gone;
-  const [i] = await tx
-    .select({ payMode: instructor.payMode })
-    .from(instructor)
-    .where(eq(instructor.id, instructorId))
-    .for("share");
-  if (!i) return noInstructor;
-  if (edit.rate !== null && !courseRateAllowed(i.payMode)) return MONTHLY_FLAT;
-  // Locked: a course form saved meanwhile waits instead of being overwritten.
+  // Lock order as in the course form: the course (FOR UPDATE, see lockCourse), then the instructor.
   const [c] = await tx
     .select({
       instructorId: course.instructorId,
@@ -560,10 +569,18 @@ export async function setCourseRate(
     .where(eq(course.id, courseId))
     .for("update", { of: course });
   if (!c) return gone;
+  // The pay mode checked here cannot change before the commit (updateInstructor locks the row FOR UPDATE).
+  const [i] = await tx
+    .select({ payMode: instructor.payMode })
+    .from(instructor)
+    .where(eq(instructor.id, instructorId))
+    .for("share");
+  if (!i) return noInstructor;
   if (c.instructorId !== instructorId)
-    return { ok: false, message: "Ce cours est maintenant donné par un autre intervenant : rechargez la page." };
+    return { ok: false, message: "Ce cours est maintenant donné par un autre intervenant : rechargez la page." };
+  if (edit.rate !== null && !courseRateAllowed(i.payMode)) return MONTHLY_FLAT;
   if (!courseRateEditable(c.seasonEndDate, today))
-    return { ok: false, message: "La saison de ce cours est terminée : son tarif est gardé tel quel." };
+    return { ok: false, message: "La saison de ce cours est terminée : son tarif est gardé tel quel." };
   const stored = c.cents === null || c.unit === null ? null : { cents: c.cents, payMode: c.unit };
   const unit = rateUnitAfterSave({
     cents: edit.rate,

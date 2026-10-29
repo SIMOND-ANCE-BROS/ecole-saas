@@ -1,8 +1,8 @@
 /** Per-course rates on the instructor page (#276), pure. Amounts in integer cents. */
 
-import { formatEuros, parseEuros, typedEuros } from "../../lib/money";
+import { parseEuros, typedEuros } from "../../lib/money";
 import { courseRateAllowed, rateInCurrentUnit, seasonBlocksPayModeChange, type PayMode } from "./rate";
-import { courseRateLabel, PAY_UNITS, type StoredRate } from "./rate-field";
+import { courseRateLabel, type StoredRate } from "./rate-field";
 
 /**
  * Whether a course's rate can still be set from the instructor page: courses
@@ -33,33 +33,29 @@ export function courseRateSections<T extends { seasonEndDate: string; rate: Stor
 
 /** What the instructor page shows for one course's rate. */
 export type ShownRate = {
-  /** « tarif habituel (40,00 € / heure) », « 45,50 € / heure »… */
+  /** « Tarif habituel », « 45,50 € / heure »… */
   label: string;
   /** Said under the amount when it is not the rate paid today; null: none. */
   note: string | null;
-  /** No rate of its own: the instructor's usual rate applies. */
+  /** No rate of its own: the instructor's usual rate applies (named once, above the list). */
   usual: boolean;
 };
 
 /**
- * The course's rate as the instructor page shows it: the usual rate when it
- * has none, else its own rate in the unit it was typed in (#268), with a word
- * when that unit is no longer the instructor's pay mode.
+ * The course's rate as the instructor page shows it: « Tarif habituel » when
+ * it has none (its amount is said once, above the list), else its own rate in
+ * the unit it was typed in (#268), with a word when that unit is no longer the
+ * instructor's pay mode.
  */
-export function shownRate(rate: StoredRate | null, instructor: { payMode: PayMode; rateCents: number }): ShownRate {
-  if (rate === null)
-    return {
-      label: `tarif habituel (${formatEuros(instructor.rateCents)} / ${PAY_UNITS[instructor.payMode]})`,
-      note: null,
-      usual: true,
-    };
+export function shownRate(rate: StoredRate | null, payMode: PayMode): ShownRate {
+  if (rate === null) return { label: "Tarif habituel", note: null, usual: true };
   const label = courseRateLabel(rate);
   // A monthly flat "unit" already says it is not used.
-  if (rate.payMode === "monthly_flat" || rateInCurrentUnit(rate.payMode, instructor.payMode))
+  if (rate.payMode === "monthly_flat" || rateInCurrentUnit(rate.payMode, payMode))
     return { label, note: null, usual: false };
   return {
     label,
-    note: courseRateAllowed(instructor.payMode) ? "ancien mode de rémunération" : "non appliqué (forfait mensuel)",
+    note: courseRateAllowed(payMode) ? "ancien mode de rémunération" : "non appliqué (forfait mensuel)",
     usual: false,
   };
 }
@@ -73,14 +69,15 @@ export const rateEditStart = (rate: StoredRate | null, payMode: PayMode) =>
   rate !== null && rateInCurrentUnit(rate.payMode, payMode) ? typedEuros(rate.cents) : "";
 
 /**
- * Whether the field still says what it started with (« 45,5 » for « 45,50 »,
- * blanks around): nothing to save. An unreadable amount is a change, which
- * the server refuses with its message.
+ * Whether what is typed would leave the stored rate as it is: nothing to save.
+ * Compared with the stored rate, not with the field's starting value: an older
+ * unit's rate starts empty (`rateEditStart`), and emptying it is a change (it
+ * clears it), as is any amount, which the server then stores in the current
+ * unit. « 45,5 », « 45.50 » and « 45,50 » are the same amount; an unreadable
+ * one is a change, which the server refuses with its message.
  */
-export function rateEditUnchanged(start: string, typed: string): boolean {
-  const a = start.trim();
-  const b = typed.trim();
-  if (a === "" || b === "") return a === b;
-  const cents = parseEuros(b);
-  return cents !== null && cents === parseEuros(a);
+export function rateEditUnchanged(stored: StoredRate | null, payMode: PayMode, typed: string): boolean {
+  const t = typed.trim();
+  if (t === "") return stored === null;
+  return stored !== null && rateInCurrentUnit(stored.payMode, payMode) && parseEuros(t) === stored.cents;
 }

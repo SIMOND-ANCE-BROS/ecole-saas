@@ -134,7 +134,8 @@ export default async function InstructorPage({ params }: PageProps<"/intervenant
             </Text>
           </Text>
           <Text mt="xs" size="xs" c="dimmed">
-            Tarif de référence. Ce montant n’est pas un relevé à payer.
+            {/* A monthly flat instructor has no rate per course below (#192). */}
+            {rated ? "Tarif habituel, sauf pour les cours ci-dessous. " : ""}Ce montant n’est pas un relevé à payer.
           </Text>
         </Paper>
       </div>

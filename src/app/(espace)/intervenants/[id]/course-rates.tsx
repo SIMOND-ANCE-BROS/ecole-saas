@@ -24,11 +24,15 @@ export type CourseRateRow = {
 
 type Instructor = { id: string; firstName: string; payMode: PayMode; rateCents: number };
 
+/** Typographic space before a French « : » (U+00A0). */
+const NBSP = " ";
+
 /**
  * « Tarifs par cours » (#276): the instructor's courses of the current and
  * future seasons, each rate editable in place (Enter saves, Escape cancels,
- * empty: the usual rate); past seasons' own rates below, read-only. For a
- * monthly flat instructor (`editable` false), only the stored rates, read-only.
+ * empty: the usual rate; one row at a time); past seasons' own rates below,
+ * read-only. For a monthly flat instructor (`editable` false), only the stored
+ * rates, read-only.
  */
 export function CourseRates({
   instructor,
@@ -41,6 +45,8 @@ export function CourseRates({
   history: CourseRateRow[];
   editable: boolean;
 }) {
+  // The row being edited: opening another one cancels it.
+  const [open, setOpen] = useState<string | null>(null);
   return (
     <Paper withBorder p="md" component="section" aria-labelledby="tarifs-cours" className="flex min-w-0 flex-col gap-3">
       <div>
@@ -49,19 +55,30 @@ export function CourseRates({
         </Title>
         <Text size="sm" c="dimmed">
           {editable
-            ? `Un tarif saisi ici remplace, pour ce cours, le tarif habituel de ${instructor.firstName} (${formatEuros(instructor.rateCents)} / ${PAY_UNITS[instructor.payMode]}). Vide : tarif habituel.`
+            ? `Tarif habituel de ${instructor.firstName}${NBSP}: ${formatEuros(instructor.rateCents)} / ${PAY_UNITS[instructor.payMode]}. Un tarif saisi ici le remplace pour ce cours.`
             : "Ces tarifs ne s’appliquent pas pour l’instant (forfait mensuel, règle en attente)."}
         </Text>
       </div>
       {editable &&
         (current.length === 0 ? (
           <Text size="sm" c="dimmed">
-            Aucun cours cette saison ni les suivantes. Les cours se créent depuis le planning.
+            Aucun cours cette saison ni les suivantes. Les cours se créent depuis le{" "}
+            <TextLink href="/planning" size="sm">
+              planning
+            </TextLink>
+            .
           </Text>
         ) : (
           <RateList>
             {current.map((c) => (
-              <EditableRate key={c.id} row={c} instructor={instructor} />
+              <EditableRate
+                key={c.id}
+                row={c}
+                instructor={instructor}
+                open={open === c.id}
+                onOpen={() => setOpen(c.id)}
+                onClose={() => setOpen((o) => (o === c.id ? null : o))}
+              />
             ))}
           </RateList>
         ))}
@@ -81,7 +98,7 @@ export function CourseRates({
             {history.map((c) => (
               <li key={c.id} className={ROW}>
                 <CourseCell row={c} />
-                <RateText row={c} instructor={instructor} />
+                <RateText rate={c.rate} payMode={instructor.payMode} />
               </li>
             ))}
           </RateList>
@@ -115,11 +132,17 @@ function CourseCell({ row }: { row: CourseRateRow }) {
   );
 }
 
-function RateText({ row, instructor }: { row: CourseRateRow; instructor: Instructor }) {
-  const shown = shownRate(row.rate, instructor);
+function RateText({ rate, payMode }: { rate: StoredRate | null; payMode: PayMode }) {
+  const shown = shownRate(rate, payMode);
+  // A rate of its own is what stands out in the list; the usual one stays grey.
   return (
     <div className="tabular-nums sm:text-right">
-      <Text span size="sm" c={shown.usual || shown.note ? "dimmed" : undefined}>
+      <Text
+        span
+        size="sm"
+        fw={shown.usual || shown.note ? undefined : 500}
+        c={shown.usual || shown.note ? "dimmed" : undefined}
+      >
         {shown.label}
       </Text>
       {shown.note && (
@@ -131,24 +154,43 @@ function RateText({ row, instructor }: { row: CourseRateRow; instructor: Instruc
   );
 }
 
-function EditableRate({ row, instructor }: { row: CourseRateRow; instructor: Instructor }) {
+const sameRate = (a: StoredRate | null, b: StoredRate | null) =>
+  a === b || (a !== null && b !== null && a.cents === b.cents && a.payMode === b.payMode);
+
+function EditableRate({
+  row,
+  instructor,
+  open,
+  onOpen,
+  onClose,
+}: {
+  row: CourseRateRow;
+  instructor: Instructor;
+  open: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+}) {
+  // The saved rate, shown at once; follows the page's data when it is read again (refresh, another save).
   const [rate, setRate] = useState(row.rate);
-  const [typed, setTyped] = useState<string | null>(null);
+  const [received, setReceived] = useState(row.rate);
+  if (!sameRate(received, row.rate)) {
+    setReceived(row.rate);
+    setRate(row.rate);
+  }
+  const [typed, setTyped] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, startTransition] = useTransition();
   const edit = useRef<HTMLButtonElement>(null);
-  const start = rateEditStart(rate, instructor.payMode);
   const unit = PAY_UNITS[instructor.payMode];
-  const shown = { ...row, rate };
 
   const close = () => {
-    setTyped(null);
     setError(null);
+    onClose();
     // Focus back on « Modifier » once it is shown again.
     requestAnimationFrame(() => edit.current?.focus());
   };
   const save = (value: string) => {
-    if (rateEditUnchanged(start, value)) return close();
+    if (rateEditUnchanged(rate, instructor.payMode, value)) return close();
     startTransition(async () => {
       // A lost connection keeps what was typed, with a French message (#243).
       const r = await settle(() => saveCourseRate(instructor.id, row.id, { rate: value, unit: instructor.payMode }));
@@ -158,7 +200,7 @@ function EditableRate({ row, instructor }: { row: CourseRateRow; instructor: Ins
       notifications.show({
         color: "green",
         message: r.rate
-          ? `Tarif enregistré pour ${row.name} : ${courseRateLabel(r.rate)}.`
+          ? `Tarif enregistré pour ${row.name}${NBSP}: ${courseRateLabel(r.rate)}.`
           : `Tarif habituel rétabli pour ${row.name}.`,
       });
     });
@@ -167,69 +209,80 @@ function EditableRate({ row, instructor }: { row: CourseRateRow; instructor: Ins
   return (
     <li className={ROW}>
       <CourseCell row={row} />
-      {typed === null ? (
+      {!open ? (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:justify-end">
-          <RateText row={shown} instructor={instructor} />
+          <RateText rate={rate} payMode={instructor.payMode} />
           <Button
             ref={edit}
             size="compact-sm"
             variant="subtle"
             aria-label={`Modifier le tarif de ${row.name}, ${row.slot}, saison ${row.season}`}
-            onClick={() => setTyped(start)}
+            onClick={() => {
+              setTyped(rateEditStart(rate, instructor.payMode));
+              setError(null);
+              onOpen();
+            }}
           >
             Modifier
           </Button>
         </div>
       ) : (
         <form
-          className="flex flex-wrap items-start gap-2 sm:justify-end"
+          className="flex flex-col gap-1 sm:items-end"
           noValidate
           onSubmit={(e) => {
             e.preventDefault();
             save(typed);
           }}
         >
-          <TextInput
-            label={`Tarif pour ${row.name}`}
-            size="sm"
-            className="w-56"
-            autoFocus
-            inputMode="decimal"
-            placeholder="Tarif habituel"
-            value={typed}
-            onChange={(e) => {
-              setTyped(e.currentTarget.value);
-              setError(null);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                // Escape cancels this field only, never the side panel around the page.
-                e.preventDefault();
-                e.stopPropagation();
-                close();
+          <div className="flex flex-wrap items-end gap-2">
+            <TextInput
+              label="Tarif"
+              aria-label={`Tarif pour ${row.name}, ${row.slot}. Vide${NBSP}: tarif habituel.`}
+              size="sm"
+              // Full width on a phone, the buttons on the next line; beside them from `sm`.
+              className="w-full sm:w-44"
+              autoFocus
+              inputMode="decimal"
+              autoComplete="off"
+              value={typed}
+              onChange={(e) => {
+                setTyped(e.currentTarget.value);
+                setError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  // Escape cancels this field only, never the side panel around the page.
+                  e.preventDefault();
+                  e.stopPropagation();
+                  close();
+                }
+              }}
+              rightSection={
+                <Text span size="xs" c="dimmed" className="whitespace-nowrap">
+                  € / {unit}
+                </Text>
               }
-            }}
-            rightSection={
-              <Text span size="xs" c="dimmed" className="whitespace-nowrap">
-                € / {unit}
-              </Text>
-            }
-            rightSectionWidth={72}
-            description={
-              rate && start === ""
-                ? `Actuellement ${courseRateLabel(rate)}, ancien mode de rémunération. Vide : tarif habituel.`
-                : "Entrée : enregistrer. Échap : annuler. Vide : tarif habituel."
-            }
-            error={error}
-          />
-          <div className="flex gap-2 sm:mt-6">
-            <Button type="submit" size="compact-sm" variant="default" loading={saving}>
+              rightSectionWidth={72}
+              styles={{ input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } }}
+              error={error !== null}
+            />
+            <Button type="submit" variant="default" loading={saving}>
               Enregistrer
             </Button>
-            <Button type="button" size="compact-sm" variant="subtle" color="gray" onClick={close} disabled={saving}>
+            <Button type="button" variant="subtle" color="gray" onClick={close} disabled={saving}>
               Annuler
             </Button>
           </div>
+          {error ? (
+            <Text role="alert" size="xs" c="red">
+              {error}
+            </Text>
+          ) : (
+            <Text size="xs" c="dimmed">
+              Vide{NBSP}: tarif habituel.
+            </Text>
+          )}
         </form>
       )}
     </li>
