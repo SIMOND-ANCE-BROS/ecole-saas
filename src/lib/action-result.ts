@@ -47,5 +47,20 @@ export async function orNotSaved<T>(call: () => Promise<T>, failed: () => T): Pr
   }
 }
 
+/**
+ * Shown when an action that creates a record fails on its own: the answer may
+ * have been lost after the save, so retrying blindly could record it twice.
+ */
+export const CONNECTION_LOST =
+  "La connexion a été coupée : l’enregistrement a peut-être été fait. Vérifiez avant de réessayer.";
+
+/**
+ * `orNotSaved` for an action that creates a record (payment, enrollment,
+ * course, person…): `failed` receives `CONNECTION_LOST` to put in the answer,
+ * so the screen asks to check before retrying instead of inviting a duplicate.
+ */
+export const orConnectionLost = <T>(call: () => Promise<T>, failed: (message: typeof CONNECTION_LOST) => T) =>
+  orNotSaved(call, () => failed(CONNECTION_LOST));
+
 /** Whether a refusal comes from a call that never got an answer. */
 export const notSent = <T extends { ok: boolean }>(r: T | NotSent): r is NotSent => has(r, "sent") && r.sent === false;

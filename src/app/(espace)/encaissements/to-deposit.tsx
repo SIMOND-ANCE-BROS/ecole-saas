@@ -18,7 +18,8 @@ import { useState, useTransition } from "react";
 import { PAYMENT_METHODS } from "@/db/payments";
 import type { AuditLogRow } from "@/db/deposits";
 import type { DepositMethod } from "@/domain/payments/deposits";
-import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
+import { orConnectionLost } from "@/lib/action-result";
+import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
 import { frenchDate } from "@/lib/dates";
 import { formatEuros } from "@/lib/money";
 import { DateField, refusedDateField } from "../_ui/date-field";
@@ -125,9 +126,9 @@ export function ToDeposit({
           startTransition(async () =>
             setMessage(
               (
-                await orNotSaved(
+                await orConnectionLost(
                   () => deposit({ date, method: method, paymentIds: selection.map((p) => p.id) }),
-                  () => ({ message: NOT_SAVED }),
+                  (message) => ({ message }),
                 )
               ).message,
             ),
@@ -156,6 +157,7 @@ export function ToDeposit({
             {message}
           </Text>
         )}
+        <CheckSaved message={message} href="/encaissements?vue=remises" label="Voir les remises" />
       </form>
     </section>
   );

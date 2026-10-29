@@ -23,7 +23,8 @@ import type { DuplicateWithRole, StudentInput } from "@/db/students";
 import type { PersonInput } from "@/db/people";
 import type { FieldErrors, FieldPath } from "@/lib/form-errors";
 import { has } from "@/lib/has";
-import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
+import { CONNECTION_LOST, orNotSaved } from "@/lib/action-result";
+import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
 import { ofName } from "@/lib/french";
 
 /** Checked against the server schema: a value renamed on one side fails to compile. */
@@ -117,7 +118,8 @@ export function NewStudentGuide({
               },
               confirmed,
             ),
-          () => ({ message: NOT_SAVED, errors: {} }),
+          // The student may have been created before the answer was lost: check before retrying.
+          () => ({ message: CONNECTION_LOST, errors: {} }),
         ),
       ),
     );
@@ -298,6 +300,7 @@ export function NewStudentGuide({
           </Text>
         )
       )}
+      <CheckSaved message={refusal?.message} href="/eleves" label="Voir la liste des élèves" />
 
       <div className="flex flex-wrap items-center gap-2 border-t border-bordure pt-4">
         <Button type="submit" loading={sending}>

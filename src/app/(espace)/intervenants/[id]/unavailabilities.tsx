@@ -5,7 +5,7 @@ import { TimeInput } from "@mantine/dates";
 import { useState, useTransition } from "react";
 import { DateField, refusedDateField } from "@/app/(espace)/_ui/date-field";
 import { addUnavailabilityAction, removeUnavailability } from "../actions";
-import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
+import { CONNECTION_LOST, NOT_SAVED, orNotSaved } from "@/lib/action-result";
 
 export type DisplayedUnavailability = {
   id: string;
@@ -149,7 +149,8 @@ export function Unavailabilities({
           startTransition(async () => {
             const { message: error } = await orNotSaved(
               () => addUnavailabilityAction(instructorId, { ...v, toDate: v.toDate || v.fromDate }),
-              () => ({ message: NOT_SAVED }),
+              // The unavailability may have been added before the answer was lost: the list above shows it.
+              () => ({ message: CONNECTION_LOST }),
             );
             setMessage(error);
             if (!error) {

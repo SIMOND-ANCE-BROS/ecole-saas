@@ -8,7 +8,8 @@ import { createContact, updateIdentity, type Refusal } from "./actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
 import { DateField, refusedDateField } from "@/app/(espace)/_ui/date-field";
 import { BusinessSearch } from "@/app/(espace)/_ui/business-search";
-import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
+import { CONNECTION_LOST, NOT_SAVED, orNotSaved } from "@/lib/action-result";
+import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
 
 type Props = {
   /** Person being edited; null when creating a contact (a student is created with the guided form). */
@@ -67,7 +68,8 @@ export function PersonForm({ person: person, section: section, proposedName: pro
       setRefusal(
         await orNotSaved(
           () => (person ? updateIdentity(person.id, entry, section) : createContact(entry, confirmed)),
-          () => ({ message: NOT_SAVED, errors: {} }),
+          // A new person may have been created before the answer was lost: check before retrying.
+          () => ({ message: person ? NOT_SAVED : CONNECTION_LOST, errors: {} }),
         ),
       ),
     );
@@ -215,6 +217,11 @@ export function PersonForm({ person: person, section: section, proposedName: pro
           </Text>
         )
       )}
+      <CheckSaved
+        message={refusal?.message}
+        href={`/${section}`}
+        label={student ? "Voir la liste des élèves" : "Voir la liste des contacts"}
+      />
 
       <div className="flex flex-wrap items-center gap-2 border-t border-bordure pt-4">
         <Button type="submit" loading={sending}>

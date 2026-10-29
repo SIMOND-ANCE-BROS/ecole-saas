@@ -15,7 +15,8 @@ import { saveCourse, type Refusal, remove, checkSlot } from "./actions";
 import { Cancel } from "@/app/(espace)/_panel/panel";
 import { DateField, refusedDateField } from "@/app/(espace)/_ui/date-field";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
-import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
+import { CONNECTION_LOST, NOT_SAVED, orNotSaved } from "@/lib/action-result";
+import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
 
 const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const DURATIONS = [45, 60, 90, 120];
@@ -235,7 +236,8 @@ export function CourseForm({
           setRefusal(
             await orNotSaved(
               () => saveCourse(course?.id ?? null, entry, seasonId),
-              () => ({ message: NOT_SAVED, errors: {} }),
+              // A new course may have been created before the answer was lost: check before retrying.
+              () => ({ message: course ? NOT_SAVED : CONNECTION_LOST, errors: {} }),
             ),
           ),
         );
@@ -614,6 +616,7 @@ export function CourseForm({
           {refusal.message}
         </Text>
       )}
+      <CheckSaved message={refusal?.message} href={planning ?? "/planning"} label="Voir le planning" />
 
       <div className="flex flex-wrap items-center gap-2 border-t border-bordure pt-4">
         <Button type="submit" loading={sending}>

@@ -8,7 +8,8 @@ import { INSTRUCTOR, type InstructorField } from "./fields";
 import { Cancel } from "@/app/(espace)/_panel/panel";
 import { BusinessSearch } from "@/app/(espace)/_ui/business-search";
 import type { Business } from "@/connectors/business-registry/registry";
-import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
+import { CONNECTION_LOST, NOT_SAVED, orNotSaved } from "@/lib/action-result";
+import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
 
 type Mode = keyof typeof PAY_UNITS;
 
@@ -38,7 +39,8 @@ export function InstructorForm({ instructor }: { instructor: Instructor | null }
       () => saveInstructor(id, state, f),
       () => ({
         attempt: state.attempt + 1,
-        errors: { form: NOT_SAVED },
+        // A new instructor may have been created before the answer was lost: check before retrying.
+        errors: { form: id ? NOT_SAVED : CONNECTION_LOST },
         values: INSTRUCTOR.readAll(f),
       }),
     );
@@ -116,6 +118,7 @@ function Fields({ state, send, inProgress, edition, initial, back }: FieldsProps
           {e.form}
         </Alert>
       )}
+      <CheckSaved message={e.form} href="/intervenants" label="Voir la liste des intervenants" />
 
       <Fieldset legend="Identité" className="grid gap-3 sm:grid-cols-2">
         {field("firstName", "Prénom", {

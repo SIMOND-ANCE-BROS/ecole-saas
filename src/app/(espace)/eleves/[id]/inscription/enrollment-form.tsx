@@ -20,7 +20,8 @@ import { overlaps } from "@/domain/schedule/overlap";
 import { formatEuros } from "@/lib/money";
 import { deferredQuery } from "@/lib/deferred-query";
 import { preview, enroll, type FormInput } from "./actions";
-import { NOT_SAVED, orNotSaved } from "@/lib/action-result";
+import { orConnectionLost } from "@/lib/action-result";
+import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
 
 const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const AUDIENCES = [
@@ -118,9 +119,9 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
         startSend(async () =>
           setRefusal(
             (
-              await orNotSaved(
+              await orConnectionLost(
                 () => enroll(entry),
-                () => ({ message: NOT_SAVED }),
+                (message) => ({ message }),
               )
             ).message,
           ),
@@ -427,6 +428,11 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent }: P
             {refusal}
           </Text>
         )}
+        <CheckSaved
+          message={refusal}
+          href={`/eleves/${studentIds[0] ?? ""}`}
+          label="Voir les inscriptions de l’élève"
+        />
         <Button type="submit" disabled={!canSave} loading={sending}>
           Enregistrer l’inscription
         </Button>

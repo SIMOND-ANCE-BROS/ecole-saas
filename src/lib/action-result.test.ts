@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { notFound, redirect } from "next/navigation";
-import { actionResult, NOT_SAVED, notSent, orNotSaved, settle } from "./action-result";
+import {
+  actionResult,
+  CONNECTION_LOST,
+  NOT_SAVED,
+  notSent,
+  orConnectionLost,
+  orNotSaved,
+  settle,
+} from "./action-result";
 
 describe("settle", () => {
   it("turns a failed call (lost connection) into a French refusal marked not sent", async () => {
@@ -67,5 +75,26 @@ describe("orNotSaved", () => {
 
     expect(r).toEqual({ message: "Ce paiement n’existe plus." });
     expect(calls).toBe(0);
+  });
+});
+
+describe("orConnectionLost", () => {
+  it("asks to check before retrying when the call fails, never to simply retry", async () => {
+    const r = await orConnectionLost(
+      () => Promise.reject<{ message: string }>(new TypeError("Failed to fetch")),
+      (message) => ({ message }),
+    );
+
+    expect(r).toEqual({ message: CONNECTION_LOST });
+    expect(CONNECTION_LOST).not.toBe(NOT_SAVED);
+  });
+
+  it("lets a redirect through and passes the action's own answer", async () => {
+    const failed = (message: string) => ({ message });
+
+    await expect(orConnectionLost(async () => redirect("/eleves"), failed)).rejects.toThrow();
+    expect(await orConnectionLost(async () => ({ message: "Montant invalide." }), failed)).toEqual({
+      message: "Montant invalide.",
+    });
   });
 });
