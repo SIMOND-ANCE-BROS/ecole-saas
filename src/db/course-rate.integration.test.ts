@@ -34,6 +34,8 @@ let flat: string;
 let otherHourly: string;
 let base: CourseInput;
 
+/** Fixed "today" in the current test season, so the past / current season split does not depend on the clock. */
+const TODAY = "2026-10-29";
 const INSTRUCTOR = `(school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents, active)`;
 
 beforeAll(async () => {
@@ -184,19 +186,78 @@ describe("instructor rate per course (#191)", () => {
     };
     const id = await create({ ...base, instructorId: teacher, weekday: 1, startTime: "09:00", instructorRate: 4000 });
     await create({ ...base, instructorId: teacher, weekday: 1, startTime: "10:00", instructorRate: 4100 });
-    expect(await withSchool(school, (tx) => updateInstructor(tx, teacher, entry))).toEqual({
+    expect(await withSchool(school, (tx) => updateInstructor(tx, teacher, entry, TODAY))).toEqual({
       ok: false,
       message:
-        "2 cours ont un tarif propre pour cet intervenant : videz ces tarifs dans les fiches des cours avant de changer son mode de rémunération.",
+        "2 cours de la saison 2026-2027 ont un tarif propre pour cet intervenant : videz ces tarifs dans les fiches des cours avant de changer son mode de rémunération.",
     });
     // Other changes still go through with the same pay mode.
     expect(
-      await withSchool(school, (tx) => updateInstructor(tx, teacher, { ...entry, payMode: "hourly", rateCents: 3200 })),
+      await withSchool(school, (tx) =>
+        updateInstructor(tx, teacher, { ...entry, payMode: "hourly", rateCents: 3200 }, TODAY),
+      ),
     ).toEqual({ ok: true });
     await withSchool(school, (tx) =>
       updateCourse(tx, id, { ...base, instructorId: teacher, weekday: 1, startTime: "09:00", instructorRate: null }),
     );
-    expect((await withSchool(school, (tx) => updateInstructor(tx, teacher, entry))).ok).toBe(false);
+    expect((await withSchool(school, (tx) => updateInstructor(tx, teacher, entry, TODAY))).ok).toBe(false);
+  });
+
+  it("lets past-season course rates not block a pay mode change, the current and future ones still do (#192 Q5)", async () => {
+    const teacher = (
+      await admin.unsafe(
+        `INSERT INTO instructor ${INSTRUCTOR} VALUES ($1, 'Zzfaux', 'Saisons', 'employee', 'not_applicable', 'hourly', 3000, true)
+         RETURNING id`,
+        [school],
+      )
+    )[0].id as string;
+    const seasonOf = async (label: string, start: string, end: string) =>
+      (
+        await admin`INSERT INTO season (school_id, label, start_date, end_date)
+          VALUES (${school}, ${label}, ${start}, ${end}) RETURNING id`
+      )[0].id as string;
+    const past = await seasonOf("2025-2026", "2025-09-01", "2026-06-30");
+    const future = await seasonOf("2027-2028", "2027-09-01", "2028-06-30");
+    const createIn = async (seasonId: string, entry: CourseInput) => {
+      const r = await withSchool(school, (tx) => createCourse(tx, seasonId, entry));
+      if (!r.ok) throw new Error(r.message);
+      return r.id;
+    };
+    const entry = (payMode: InstructorInput["payMode"]): InstructorInput => ({
+      firstName: "Saisons",
+      name: "Zzfaux",
+      email: null,
+      status: "employee",
+      siren: null,
+      vatRegime: "not_applicable",
+      isOwner: false,
+      payMode,
+      rateCents: 3000,
+      active: true,
+    });
+    const change = (payMode: InstructorInput["payMode"]) =>
+      withSchool(school, (tx) => updateInstructor(tx, teacher, entry(payMode), TODAY));
+
+    // A rate on a course of a season that ended: the change goes through, the rate is kept as history.
+    const old = await createIn(past, { ...base, instructorId: teacher, weekday: 3, instructorRate: 4000 });
+    expect(await change("per_lesson")).toEqual({ ok: true });
+    expect(await withSchool(school, (tx) => courseRate(tx, old))).toBe(4000);
+
+    // A rate on a course of the current season still blocks, naming that season only.
+    await createIn(season, { ...base, instructorId: teacher, weekday: 3, instructorRate: 4500 });
+    expect(await change("hourly")).toEqual({
+      ok: false,
+      message:
+        "1 cours de la saison 2026-2027 a un tarif propre pour cet intervenant : videz ce tarif dans la fiche du cours avant de changer son mode de rémunération.",
+    });
+
+    // A future season counts too.
+    await createIn(future, { ...base, instructorId: teacher, weekday: 3, instructorRate: 4600 });
+    expect(await change("hourly")).toEqual({
+      ok: false,
+      message:
+        "2 cours des saisons 2026-2027 et 2027-2028 ont un tarif propre pour cet intervenant : videz ces tarifs dans les fiches des cours avant de changer son mode de rémunération.",
+    });
   });
 
   it("lists the instructor's courses with their own rate, and pay data, within the school only", async () => {

@@ -1,9 +1,11 @@
 import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { columnsOf } from "./columns-of";
 import { z } from "zod";
+import { frenchList } from "../lib/french-list";
+import { seasonBlocksPayModeChange } from "../domain/payroll/rate";
 import { deleteConnection } from "./calendar-connections";
 import type { Tx } from "./index";
-import { course, instructor } from "./schema";
+import { course, instructor, season } from "./schema";
 
 /** Instructors (teachers), always within the `withSchool()` transaction (RLS). */
 
@@ -106,14 +108,17 @@ export async function createInstructor(tx: Tx, entry: InstructorInput): Promise<
 
 /**
  * Refused if the instructor does not exist in the current school, or if the
- * pay mode changes while courses carry their own rate for them (#191): such a
- * rate is in the unit of the old pay mode, and what it becomes is an open
- * question (#192).
+ * pay mode changes while courses of the current or a future season carry their
+ * own rate for them (#191): such a rate is in the unit of the old pay mode.
+ * Rates of past seasons are kept untouched as history and do not block
+ * (#192 Q5, recommended rule pending the school's validation). `today` is a
+ * `YYYY-MM-DD` date in Paris (`todayInParis()`).
  */
 export async function updateInstructor(
   tx: Tx,
   id: string,
   entry: InstructorInput,
+  today: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const gone = { ok: false as const, message: "Cet intervenant n’existe plus." };
   if (!z.uuid().safeParse(id).success) return gone;
@@ -124,20 +129,26 @@ export async function updateInstructor(
     .where(eq(instructor.id, id))
     .for("update");
   if (!current) return gone;
-  // Courses of every season count, past ones included: whether those should block is #192 Q5.
   if (current.payMode !== entry.payMode) {
-    const [{ n }] = await tx
-      .select({ n: sql<number>`count(*)::int` })
+    const rated = await tx
+      .select({ season: season.label, seasonEndDate: season.endDate })
       .from(course)
-      .where(and(eq(course.instructorId, id), isNotNull(course.instructorRateCents)));
-    if (n > 0)
+      .innerJoin(season, eq(season.id, course.seasonId))
+      .where(and(eq(course.instructorId, id), isNotNull(course.instructorRateCents)))
+      .orderBy(asc(season.startDate));
+    const blocking = rated.filter((r) => seasonBlocksPayModeChange(r.seasonEndDate, today));
+    const n = blocking.length;
+    if (n > 0) {
+      const seasons = [...new Set(blocking.map((r) => r.season))];
+      const of = `${seasons.length > 1 ? "des saisons" : "de la saison"} ${frenchList(seasons)}`;
       return {
         ok: false,
         message:
           n > 1
-            ? `${n} cours ont un tarif propre pour cet intervenant : videz ces tarifs dans les fiches des cours avant de changer son mode de rémunération.`
-            : "1 cours a un tarif propre pour cet intervenant : videz ce tarif dans la fiche du cours avant de changer son mode de rémunération.",
+            ? `${n} cours ${of} ont un tarif propre pour cet intervenant : videz ces tarifs dans les fiches des cours avant de changer son mode de rémunération.`
+            : `1 cours ${of} a un tarif propre pour cet intervenant : videz ce tarif dans la fiche du cours avant de changer son mode de rémunération.`,
       };
+    }
   }
   // Deactivating an instructor also cuts off their subscription and connected calendar.
   const cutoff = entry.active ? {} : { calendarTokenHash: null, calendarTokenCreatedAt: null };

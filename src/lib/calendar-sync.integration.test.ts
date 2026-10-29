@@ -124,7 +124,7 @@ describe("syncCalendar", () => {
     if (!record) throw new Error("intervenant introuvable");
     const { id, ...entry } = record;
     expect(id).toBe(camille);
-    await withSchool(school, (tx) => updateInstructor(tx, camille, { ...entry, active: false }));
+    await withSchool(school, (tx) => updateInstructor(tx, camille, { ...entry, active: false }, "2026-10-29"));
     expect(await withSchool(school, (tx) => connectionState(tx, camille))).toBeNull();
     expect(
       await withSchool(school, (tx) =>

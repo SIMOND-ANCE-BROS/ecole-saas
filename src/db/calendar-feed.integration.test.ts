@@ -101,7 +101,7 @@ describe("iCal subscription", () => {
     if (!record) throw new Error("intervenant introuvable");
     const { id, ...entry } = record;
     expect(id).toBe(ines);
-    await withSchool(school, (tx) => updateInstructor(tx, ines, { ...entry, active: false }));
+    await withSchool(school, (tx) => updateInstructor(tx, ines, { ...entry, active: false }, "2026-10-29"));
     expect(await withSchool(school, (tx) => calendarState(tx, ines))).toBeNull();
 
     // Even if the hash came back (backup restore), an inactive instructor reads nothing.
