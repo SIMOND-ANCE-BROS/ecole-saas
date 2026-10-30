@@ -231,10 +231,18 @@ export async function recordIssued(
     ...(mismatch ? { send_error_code: "total_mismatch", tool_total_incl_tax_cents: doc.totalInclTaxCents } : {}),
   });
   // Issued, its installments can be settled (#305): what the payer already paid this business
-  // and no other installment holds goes to them, oldest due date first, in the same transaction.
-  const allocated = await allocatePayer(tx, null, rows[0].payerId, rows[0].billingEntityId, todayInParis());
-  // Never refused: the allocation is computed under its own locks; a refusal is a bug, rolled back.
-  if (!allocated.ok) throw new Error(`allocation refused after issuing invoice ${c.id}`);
+  // and no other installment holds goes to them, oldest due date first. In a savepoint: the
+  // record of an invoice the tool issued never depends on it; a failed allocation is caught up
+  // by the payer's next payment, deposit or issued invoice (`allocatePayments`).
+  try {
+    await tx.transaction(async (sp) => {
+      const allocated = await allocatePayer(sp, null, rows[0].payerId, rows[0].billingEntityId, todayInParis());
+      if (!allocated.ok) throw new Error("allocation refused");
+    });
+  } catch (e) {
+    // Technical ids only, never a name.
+    console.error(`Invoice ${c.id}: issued, payments not allocated`, e instanceof Error ? e.name : "");
+  }
   return true;
 }
 

@@ -255,6 +255,29 @@ describe("balancesByEntity", () => {
     expect(s.byEntity[A]).toMatchObject({ due: 1_500, outsideCalculation: {} });
   });
 
+  it("an issued credit note (negative total) lowers what is due", () => {
+    const s = balancesByEntity(
+      [
+        {
+          status: "dropped",
+          period: "year",
+          quarterCount: 0,
+          netPriceCents: 30_000,
+          billingEntityId: A,
+          invoiced: true,
+        },
+      ],
+      [],
+      [{ amountCents: 20_000, plannedPayment: null, billingEntityId: A }],
+      TODAY,
+      [
+        { billingEntityId: A, totalInclTaxCents: 30_000 },
+        { billingEntityId: A, totalInclTaxCents: -10_000 },
+      ],
+    );
+    expect(s.byEntity[A]).toMatchObject({ due: 20_000, paid: 20_000, remaining: 0 });
+  });
+
   it("an entity known by an invoice only still gets its balance", () => {
     const s = balancesByEntity([], [], [], TODAY, [{ billingEntityId: B, totalInclTaxCents: 8_000 }]);
     expect(s.byEntity[B]).toMatchObject({ due: 8_000, remaining: 8_000 });

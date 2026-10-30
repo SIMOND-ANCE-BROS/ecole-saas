@@ -356,6 +356,18 @@ describe("what the payer's money no longer covers", () => {
   });
 });
 
+describe("money left unallocated", () => {
+  it("the payer's next payment also spends what earlier payments left unallocated", async () => {
+    const payer = await person("Zzrattrape");
+    const e = await enroll(payer, 10_000);
+    // Paid before the invoice was issued, and nothing allocated it then.
+    await run((tx) => collect(tx, director, payer, [cash(5_000)], undefined, TODAY));
+    const q = await issue(payer, e, [["2026-10-01", 10_000]]);
+    await run((tx) => collect(tx, director, payer, [cash(1_000)], undefined, TODAY));
+    expect(await installments(q)).toEqual([{ status: "partial", allocated: 6_000 }]);
+  });
+});
+
 describe("balances without an invoice (#305)", () => {
   it("a payer without any invoice keeps the balance computed from prices", async () => {
     const payer = await person("Zzsans");

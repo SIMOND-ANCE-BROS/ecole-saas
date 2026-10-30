@@ -121,8 +121,10 @@ async function refreshStatuses(tx: Tx, ids: readonly string[], today: string) {
 }
 
 /**
- * Allocates these payments FIFO (#305, `allocateFifo`) over the open installments of their
- * payer's issued invoices with the same entity, within what each payment still offers once
+ * Allocates the money of these payments' payers with their entities FIFO (#305,
+ * `allocateFifo`): these payments, and whatever the payer's other payments to that entity
+ * left unallocated, over the open installments of the payer's issued invoices with the same
+ * entity, within what each payment still offers once
  * collected and net of corrections, and within what the payer's money to that entity still
  * offers after refunds (`entityPoolCents`). What no installment needs stays unallocated.
  * Refused, in French, if an allocation would exceed the payment or the installment (#254):
@@ -177,7 +179,11 @@ export async function allocatePayments(
           inArray(installment.status, [...OPEN_INSTALLMENT_STATUSES]),
         ),
       );
-    const targets = payments.filter((p) => ids.includes(p.id));
+    // Every payment of the pair, oldest first, not only those given: money left unallocated
+    // earlier (collected while an invoice was being issued, freed by a release) is spent too.
+    // A payment not locked here and corrected meanwhile is released by that correction, which
+    // waits for the installment locks above.
+    const targets = payments;
     const allocations = allocateFifo(targets, open, entityPoolCents(payments, today), today);
     // Checked again before writing: never more than a payment or an installment still holds.
     // A guard on what `allocateFifo` computed from the same reads; what keeps two writers apart
