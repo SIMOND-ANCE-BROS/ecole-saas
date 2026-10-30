@@ -207,7 +207,8 @@ export function Enrollments({
                         // Billed by an issued invoice (#358): counted at what it bills, as the balance.
                         <Text size="xs" c="dimmed" ta="right">
                           Facturé
-                          {i.invoicedCents !== i.seasonDueCents && ` (inscrit : ${formatEuros(i.seasonDueCents)})`}
+                          {i.invoicedCents !== i.seasonDueCents &&
+                            ` · prix de l’inscription : ${formatEuros(i.seasonDueCents)}`}
                         </Text>
                       )}
                       {i.period === "quarter" && i.invoicedCents === null && (
@@ -255,7 +256,7 @@ export function Enrollments({
       </Paper>
       {billed && (
         <Text size="xs" c="dimmed">
-          Une inscription facturée compte pour le montant de sa facture émise, comme dans le solde.
+          Une inscription facturée compte pour le montant de sa facture.
         </Text>
       )}
       {apart && (
