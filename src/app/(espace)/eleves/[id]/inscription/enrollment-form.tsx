@@ -13,6 +13,7 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { Preview } from "@/db/enrollments";
 import type { ScheduleCourse } from "@/db/schedule";
@@ -83,6 +84,7 @@ export function EnrollmentForm({ payerId, students, courses, taken, initialStude
   const [confirmedDuplicates, setConfirmedDuplicates] = useState<string | null>(null);
   const [duplicateTried, setDuplicateTried] = useState(false);
   const [sending, startSend] = useTransition();
+  const router = useRouter();
   // Same key for every attempt of this enrollment: a retry after a lost response enrolls nothing twice (#260).
   // A success leaves the form, so a new enrollment always gets a new key.
   const [key] = useState(() => crypto.randomUUID());
@@ -166,6 +168,7 @@ export function EnrollmentForm({ payerId, students, courses, taken, initialStude
   const duplicates = alreadyTaken(studentIds, courseIds, taken);
   const duplicatesKey = duplicates.map((d) => `${d.studentId}|${d.courseId}`).join(",");
   const duplicatesConfirmed = duplicates.length > 0 && confirmedDuplicates === duplicatesKey;
+  const unconfirmed = duplicateTried && !duplicatesConfirmed;
   const takenStatus = (courseId: string) => alreadyTaken(studentIds, [courseId], taken)[0]?.status;
   const courseLabel = (c: ScheduleCourse) =>
     `${c.discipline} ${c.weekday ? DAYS[c.weekday].toLowerCase() : ""} ${c.startTime}`;
@@ -197,22 +200,24 @@ export function EnrollmentForm({ payerId, students, courses, taken, initialStude
           );
           return;
         }
-        if (duplicateRefusal(duplicates.length, duplicatesConfirmed)) {
+        const duplicate = duplicateRefusal(duplicates.length, duplicatesConfirmed);
+        if (duplicate) {
           // A course the student already takes (#333): the front desk confirms it last, as the server does.
+          if (DUPLICATE_POLICY === "refuse") return setRefusal(duplicate);
           setDuplicateTried(true);
           requestAnimationFrame(() => document.getElementById(CONFIRM_DUPLICATES)?.focus());
           return;
         }
-        startSend(async () =>
-          setRefusal(
-            (
-              await orConnectionLost(
-                () => enroll({ ...entry, manualPrices, duplicatesConfirmed }, key),
-                (message) => ({ message }),
-              )
-            ).message,
-          ),
-        );
+        startSend(async () => {
+          const { message } = await orConnectionLost(
+            () => enroll({ ...entry, manualPrices, duplicatesConfirmed }, key),
+            (message) => ({ message }),
+          );
+          setRefusal(message);
+          // Refused: the courses already taken may have changed since the page loaded (another
+          // desk enrolled the student, #333); reloading them shows the confirmation if needed.
+          if (message) router.refresh();
+        });
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canSave) {
@@ -619,7 +624,7 @@ export function EnrollmentForm({ payerId, students, courses, taken, initialStude
         {duplicates.length > 0 && (
           <Alert role="status" color="yellow" p="xs">
             <Text size="sm" fw={500}>
-              {duplicates.length > 1 ? "Cours déjà suivis cette saison" : "Cours déjà suivi cette saison"}
+              Déjà inscrit à {duplicates.length > 1 ? "ces cours" : "ce cours"} cette saison
             </Text>
             <Text component="ul" size="xs">
               {duplicates.map((d) => {
@@ -634,19 +639,25 @@ export function EnrollmentForm({ payerId, students, courses, taken, initialStude
               })}
             </Text>
             {DUPLICATE_POLICY === "warn" && (
-              <Checkbox
-                id={CONFIRM_DUPLICATES}
-                mt="xs"
-                size="xs"
-                label="Inscrire quand même une deuxième fois"
-                checked={duplicatesConfirmed}
-                error={
-                  duplicateTried && !duplicatesConfirmed
-                    ? "Cochez pour confirmer, ou retirez ce cours de la sélection."
-                    : undefined
-                }
-                onChange={(e) => setConfirmedDuplicates(e.currentTarget.checked ? duplicatesKey : null)}
-              />
+              <>
+                <Checkbox
+                  id={CONFIRM_DUPLICATES}
+                  mt="xs"
+                  size="xs"
+                  radius="xs"
+                  label="Inscrire quand même une deuxième fois"
+                  checked={duplicatesConfirmed}
+                  error={unconfirmed}
+                  aria-invalid={unconfirmed}
+                  aria-describedby={unconfirmed ? `${CONFIRM_DUPLICATES}-erreur` : undefined}
+                  onChange={(e) => setConfirmedDuplicates(e.currentTarget.checked ? duplicatesKey : null)}
+                />
+                {unconfirmed && (
+                  <Text id={`${CONFIRM_DUPLICATES}-erreur`} size="xs" c="red" mt={4}>
+                    Cochez pour confirmer, ou retirez ce cours de la sélection.
+                  </Text>
+                )}
+              </>
             )}
             <Button
               size="compact-sm"

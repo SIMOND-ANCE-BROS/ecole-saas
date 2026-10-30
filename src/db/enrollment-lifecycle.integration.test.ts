@@ -531,7 +531,7 @@ describe("enrolling a student again in a course they take (#333)", () => {
 
   it("holds the enrollment back until the front desk confirms it, then lists the course once on the record", async () => {
     const f = await family(school, ["active"]);
-    expect(await again(f)).toEqual({ ok: false, message: expect.stringMatching(/confirmez/) });
+    expect(await again(f)).toEqual({ ok: false, message: expect.stringMatching(/Inscrire quand même/) });
     const [{ count }] = await admin`SELECT count(*)::int FROM enrollment_course WHERE student_id = ${f.students[0]}`;
     expect(count).toBe(1);
 

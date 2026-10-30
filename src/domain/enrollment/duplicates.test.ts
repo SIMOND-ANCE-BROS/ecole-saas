@@ -58,10 +58,15 @@ describe("courses a student already takes in the season", () => {
 });
 
 describe("saving with a course already taken", () => {
-  it("warns by default: saving asks for a confirmation, never refuses (#333, open question)", () => {
+  it("warns by default: saving asks for a confirmation, never refuses (#347, open question)", () => {
     expect(DUPLICATE_POLICY).toBe("warn");
-    expect(duplicateRefusal(1, false)).toMatch(/confirmez/);
+    expect(duplicateRefusal(1, false)).toMatch(/Inscrire quand même/);
     expect(duplicateRefusal(1, true)).toBeNull();
+  });
+
+  it("refuses even a confirmed entry when the school chooses to refuse", () => {
+    expect(duplicateRefusal(1, true, "refuse")).toMatch(/retirez-le/);
+    expect(duplicateRefusal(0, false, "refuse")).toBeNull();
   });
 
   it("lets an enrollment without any course already taken through", () => {
