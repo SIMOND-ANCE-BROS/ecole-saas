@@ -2,9 +2,9 @@ import { seasonDueCents } from "../enrollment/quarters";
 import type { Period } from "../tariff/types";
 
 /**
- * A payer's balance (#97), in cents. Until invoices exist, the amount due is
- * computed from the payer's enrollments and lesson packs, and payments are
- * recorded against the payer.
+ * A payer's balance (#97), in cents. What an issued invoice bills is due at the invoice's
+ * amount (#305); what no issued invoice bills yet is due at its enrollment or lesson pack
+ * price, as before invoices existed. Payments are recorded against the payer.
  */
 
 export type EnrollmentStatus = "trial" | "waitlist" | "active" | "dropped" | "ended";
@@ -23,6 +23,14 @@ export const DUE_STATUSES: EnrollmentStatus[] = ["active", "ended", "dropped"];
 export type EnrollmentDue = { status: EnrollmentStatus; period: Period; netPriceCents: number; quarterCount: number };
 export type BalancePayment = { amountCents: number; plannedPayment: string | null };
 
+/**
+ * Billed by a line of an issued invoice (#305): then due at the invoice's amount, not at its
+ * own price. Absent or false: counted from its price.
+ */
+export type MaybeInvoiced = { invoiced?: boolean };
+/** An issued invoice or credit note (negative) of the payer, at its VAT-inclusive total. */
+export type BalanceInvoice = { totalInclTaxCents: number };
+
 export type Balance = {
   due: number;
   paid: number;
@@ -39,14 +47,18 @@ export const amountDue = (enrollments: readonly EnrollmentDue[]): number =>
   enrollments.filter((i) => DUE_STATUSES.includes(i.status)).reduce((s, i) => s + seasonDueCents(i), 0);
 
 export function payerBalance(
-  enrollments: EnrollmentDue[],
-  lessonPacks: { priceCents: number }[],
-  payments: BalancePayment[],
+  enrollments: readonly (EnrollmentDue & MaybeInvoiced)[],
+  lessonPacks: readonly ({ priceCents: number } & MaybeInvoiced)[],
+  payments: readonly BalancePayment[],
   today: string,
+  invoices: readonly BalanceInvoice[] = [],
 ): Balance {
-  let due = lessonPacks.reduce((s, c) => s + c.priceCents, 0);
+  let due =
+    invoices.reduce((s, f) => s + f.totalInclTaxCents, 0) +
+    lessonPacks.filter((c) => !c.invoiced).reduce((s, c) => s + c.priceCents, 0);
   const outsideCalculation: Balance["outsideCalculation"] = {};
   for (const i of enrollments) {
+    if (i.invoiced) continue;
     if (DUE_STATUSES.includes(i.status)) due += seasonDueCents(i);
     else outsideCalculation[i.status] = (outsideCalculation[i.status] ?? 0) + seasonDueCents(i);
   }
@@ -61,25 +73,27 @@ export function payerBalance(
 type OfEntity = { billingEntityId: string };
 
 /**
- * A payer's balance per billing entity, plus the family total (#300). Each business
+ * A payer's balance per billing entity, plus the family total (#300), reading the payer's
+ * issued invoices when there are any (#305, `payerBalance`). Each business
  * cashes into its own account (#288 Q4): a payment only settles what is owed to its
  * own entity, an overpayment to one is never netted against the other, and a reverse
  * entry (correction, rejection) carries the entity of the payment it cancels. Only the
  * entities the payer owes or paid appear in `byEntity`.
  */
 export function balancesByEntity(
-  enrollments: readonly (EnrollmentDue & OfEntity)[],
-  lessonPacks: readonly ({ priceCents: number } & OfEntity)[],
+  enrollments: readonly (EnrollmentDue & MaybeInvoiced & OfEntity)[],
+  lessonPacks: readonly ({ priceCents: number } & MaybeInvoiced & OfEntity)[],
   payments: readonly (BalancePayment & OfEntity)[],
   today: string,
+  invoices: readonly (BalanceInvoice & OfEntity)[] = [],
 ): { byEntity: Record<string, Balance>; total: Balance } {
-  const ids = new Set([...enrollments, ...lessonPacks, ...payments].map((x) => x.billingEntityId));
+  const ids = new Set([...enrollments, ...lessonPacks, ...payments, ...invoices].map((x) => x.billingEntityId));
   const byEntity: Record<string, Balance> = {};
   for (const id of ids) {
     const mine = <T extends OfEntity>(rows: readonly T[]) => rows.filter((r) => r.billingEntityId === id);
-    byEntity[id] = payerBalance(mine(enrollments), mine(lessonPacks), mine(payments), today);
+    byEntity[id] = payerBalance(mine(enrollments), mine(lessonPacks), mine(payments), today, mine(invoices));
   }
-  return { byEntity, total: payerBalance([...enrollments], [...lessonPacks], [...payments], today) };
+  return { byEntity, total: payerBalance(enrollments, lessonPacks, payments, today, invoices) };
 }
 
 /**

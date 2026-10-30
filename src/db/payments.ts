@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { type Balance, balancesByEntity } from "../domain/payments/balance";
 import type { Tx } from "./index";
@@ -10,6 +10,7 @@ import {
   bankDeposit,
   bankDepositPayment,
   billingEntity,
+  invoice,
   member,
   payment,
   person,
@@ -32,6 +33,11 @@ import {
 } from "../domain/payments/refund";
 import { mayCancelRefund, refundCancellationRefusal, refundLeftCents } from "../domain/payments/refund-cancellation";
 import { quarterCountSql } from "./enrollments";
+import { alreadyCorrected } from "./payments-sql";
+import { allocatePayments, releaseUncovered } from "./allocations";
+import { allOrNothing } from "./all-or-nothing";
+import { SETTLED_INVOICE_STATUS } from "../domain/payments/allocation";
+import { todayInParis } from "../domain/people/age";
 
 /**
  * Payments (#97): payments recorded against the payer, immutable
@@ -77,16 +83,7 @@ export const validPayments = z.array(validPayment).min(1, "Aucun règlement").ma
 
 export type Result = { ok: true; ids: string[] } | { ok: false; message: string };
 
-/**
- * Amount already cancelled by reverse entries, in the direction that cancels: the corrections
- * and rejection of a payment (negative entries under a positive payment), or the cancellations
- * of a refund (positive entries under a negative refund, #346). Positive in both cases; an
- * entry of the wrong sign under a payment would lower it instead of hiding (the database does
- * not check what a reverse entry targets, the code does). Identifiers written with the table
- * name: in a `select`, Drizzle would write them alone, and they would then refer to the
- * subquery's row.
- */
-export const alreadyCorrected = sql<number>`coalesce((SELECT sign(-${payment}.${sql.identifier("amount_cents")}) * sum(c.amount_cents) FROM payment c WHERE c.corrects_id = ${payment}.${sql.identifier("id")}), 0)::int`;
+export { alreadyCorrected };
 
 /** Member of the current school who enters the data (for `entered_by` and the audit log). */
 async function memberOf(tx: Tx, userId: string): Promise<string | null> {
@@ -128,6 +125,7 @@ export async function collect(
   payerId: string,
   entry: z.input<typeof validPayments>,
   billingEntityId?: string,
+  today: string = todayInParis(),
 ): Promise<Result> {
   const r = validPayments.safeParse(entry);
   if (!r.success) return { ok: false, message: r.error.issues[0].message };
@@ -154,8 +152,25 @@ export async function collect(
   const resolved = await resolveEntity(tx, billingEntityId);
   if (!resolved.ok) return resolved;
   const entity = resolved.id;
+  // The payments and their allocations (#305) are written together, or not at all.
+  return allOrNothing(tx, async (tx) => {
+    const ids = await insertPayments(tx, who, payerId, entity, r.data);
+    // Money collected when recorded (cash, transfer, card…) settles the oldest installments
+    // of the entity right away; a cheque waits for its deposit (`allocatePayments`).
+    const allocated = await allocatePayments(tx, who, ids, today);
+    return allocated.ok ? { ok: true as const, ids } : allocated;
+  });
+}
+
+async function insertPayments(
+  tx: Tx,
+  who: string,
+  payerId: string,
+  entity: string,
+  entries: z.output<typeof validPayments>,
+): Promise<string[]> {
   const ids: string[] = [];
-  for (const x of r.data) {
+  for (const x of entries) {
     const [{ id }] = await tx
       .insert(payment)
       .values({
@@ -180,7 +195,7 @@ export async function collect(
     });
     ids.push(id);
   }
-  return { ok: true, ids };
+  return ids;
 }
 
 /**
@@ -278,6 +293,9 @@ export async function correctPayment(
     // The deposit slip keeps the payment as printed; the audit log says which one it was on.
     ...(deposited ? { rejected: true, bank_deposit_id: o.depositId } : {}),
   });
+  // What the payment settled beyond what the correction leaves goes back to its installments
+  // (#305), under the lock taken above: an allocation saved at the same moment waited for it.
+  await releaseUncovered(tx, who.id, [paymentId], today);
   return { ok: true, ids: [id] };
 }
 
@@ -373,6 +391,10 @@ export async function balanceOf(tx: Tx, payerId: string, today: string): Promise
   };
 }
 
+/** Billed by a line (alias `l`) of an issued invoice (#305, `SETTLED_INVOICE_STATUS`). */
+const invoicedBy = (line: SQL) =>
+  sql<boolean>`EXISTS (SELECT 1 FROM invoice_line l JOIN invoice i ON i.id = l.invoice_id WHERE ${line} AND i.status = ${SETTLED_INVOICE_STATUS})`;
+
 /** A payer's balance per entity id and in total (#300), or null if they never paid nor owed anything. */
 async function balancesOf(tx: Tx, payerId: string, today: string) {
   const enrollments = await tx
@@ -383,14 +405,24 @@ async function balancesOf(tx: Tx, payerId: string, today: string) {
       billingEntityId: enrollment.billingEntityId,
       // A quarterly enrollment owes its price once per covered quarter (#291).
       quarterCount: quarterCountSql,
+      invoiced: invoicedBy(sql`l.enrollment_id = ${enrollment.id}`),
     })
     .from(enrollment)
     .where(eq(enrollment.payerId, payerId))
     .orderBy(asc(enrollment.createdAt));
   const lessonPacks = await tx
-    .select({ priceCents: lessonPack.priceCents, billingEntityId: lessonPack.billingEntityId })
+    .select({
+      priceCents: lessonPack.priceCents,
+      billingEntityId: lessonPack.billingEntityId,
+      invoiced: invoicedBy(sql`l.lesson_pack_id = ${lessonPack.id}`),
+    })
     .from(lessonPack)
     .where(eq(lessonPack.payerId, payerId));
+  // Issued invoices and credit notes (#305): what they bill is due at their amount.
+  const invoices = await tx
+    .select({ billingEntityId: invoice.billingEntityId, totalInclTaxCents: invoice.totalInclTaxCents })
+    .from(invoice)
+    .where(and(eq(invoice.payerId, payerId), eq(invoice.status, SETTLED_INVOICE_STATUS)));
   const payments = await tx
     .select({
       amountCents: payment.amountCents,
@@ -404,8 +436,9 @@ async function balancesOf(tx: Tx, payerId: string, today: string) {
     .from(payment)
     .leftJoin(bankDepositPayment, eq(bankDepositPayment.paymentId, payment.id))
     .where(eq(payment.payerId, payerId));
-  if (enrollments.length === 0 && lessonPacks.length === 0 && payments.length === 0) return null;
-  const { byEntity, total } = balancesByEntity(enrollments, lessonPacks, payments, today);
+  if (enrollments.length === 0 && lessonPacks.length === 0 && payments.length === 0 && invoices.length === 0)
+    return null;
+  const { byEntity, total } = balancesByEntity(enrollments, lessonPacks, payments, today, invoices);
   // What each entity may pay back (#294): its overpayment, less the cheques it has not
   // collected yet and what its enrollments on trial or on the waitlist would cost.
   const refunds: Record<string, Refundable> = {};

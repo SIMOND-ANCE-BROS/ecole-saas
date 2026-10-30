@@ -10,6 +10,9 @@ import {
 } from "../domain/payments/deposits";
 import type { ReversalKind } from "../domain/payments/rejection";
 import type { Tx } from "./index";
+import { allOrNothing } from "./all-or-nothing";
+import { allocatePayments, releaseUncovered } from "./allocations";
+import { todayInParis } from "../domain/people/age";
 import { alreadyCorrected, type Method } from "./payments";
 import { auditLog, member, payment, person, bankDeposit, bankDepositPayment, billingEntity } from "./schema";
 
@@ -171,6 +174,24 @@ export async function createDeposit(
   const entity = entities[0].id;
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
+  // The deposit and the allocations of its now collected payments (#305) go together.
+  return allOrNothing(tx, async (tx) => {
+    const id = await insertDeposit(tx, who, entity, date, method, ids);
+    // Deposited, a cheque is collected: it settles the oldest installments of its payer with
+    // this entity, under the payment locks taken above, then the installments' (#254).
+    const allocated = await allocatePayments(tx, who, ids, today);
+    return allocated.ok ? { ok: true as const, id } : allocated;
+  });
+}
+
+async function insertDeposit(
+  tx: Tx,
+  who: string,
+  entity: string,
+  date: string,
+  method: DepositMethod,
+  ids: readonly string[],
+): Promise<string> {
   const [{ id }] = await tx
     .insert(bankDeposit)
     .values({ schoolId: CURRENT_SCHOOL, billingEntityId: entity, date, method: method, createdBy: who })
@@ -194,11 +215,16 @@ export async function createDeposit(
     action: "insert",
     after: { date, method: method, payments: ids.length, billing_entity_id: entity },
   });
-  return { ok: true, id };
+  return id;
 }
 
 /** Cancels a deposit made by mistake (management): its payments go back to pending; logged in the audit log. */
-export async function cancelDeposit(tx: Tx, userId: string, id: string): Promise<Result> {
+export async function cancelDeposit(
+  tx: Tx,
+  userId: string,
+  id: string,
+  today: string = todayInParis(),
+): Promise<Result> {
   if (!isUuid(id)) return { ok: false, message: "Cette remise n’existe plus." };
   const [x] = await tx
     .select({ date: bankDeposit.date, method: bankDeposit.method })
@@ -208,7 +234,7 @@ export async function cancelDeposit(tx: Tx, userId: string, id: string): Promise
   // Same lock as createDeposit and correctPayment (#247, #253), ordered by id: a rejection
   // saved at the same moment is seen by the read below, or waits for the cancellation and
   // then finds the payment no longer deposited. A separate statement, for a fresh snapshot.
-  await tx
+  const held = await tx
     .select({ id: payment.id })
     .from(payment)
     .innerJoin(bankDepositPayment, eq(bankDepositPayment.paymentId, payment.id))
@@ -246,6 +272,14 @@ export async function cancelDeposit(tx: Tx, userId: string, id: string): Promise
     action: "delete",
     before: { date: x.date, method: x.method },
   });
+  // Back in the drawer, its cheques are no longer collected: what they settled goes back to
+  // the installments (#305), under the payment locks taken above.
+  await releaseUncovered(
+    tx,
+    who,
+    held.map((p) => p.id),
+    today,
+  );
   return { ok: true, id };
 }
 

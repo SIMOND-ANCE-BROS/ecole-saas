@@ -2,6 +2,8 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { columnsOf, rowsOf } from "./columns-of";
 import { CURRENT_SCHOOL } from "./invoice-draft-discard";
 import { db, type Tx } from "./index";
+import { allocatePayer } from "./allocations";
+import { todayInParis } from "../domain/people/age";
 import { auditLog, billingEntity, installment, invoice, invoiceLine, invoicingConnector, person } from "./schema";
 import type { EntityConnectorConfig } from "../connectors/invoicing/connector";
 import type { StoredLine } from "../connectors/invoicing/payload";
@@ -219,7 +221,7 @@ export async function recordIssued(
       sendErrorCode: mismatch ? "total_mismatch" : null,
     })
     .where(ours(c.id, c.claim))
-    .returning({ id: invoice.id });
+    .returning({ id: invoice.id, payerId: invoice.payerId, billingEntityId: invoice.billingEntityId });
   if (rows.length === 0) return false;
   await audit(tx, c.id, {
     status: "issued",
@@ -228,6 +230,19 @@ export async function recordIssued(
     issued_on: doc.issuedOn,
     ...(mismatch ? { send_error_code: "total_mismatch", tool_total_incl_tax_cents: doc.totalInclTaxCents } : {}),
   });
+  // Issued, its installments can be settled (#305): what the payer already paid this business
+  // and no other installment holds goes to them, oldest due date first. In a savepoint: the
+  // record of an invoice the tool issued never depends on it; a failed allocation is caught up
+  // by the payer's next payment, deposit or issued invoice (`allocatePayments`).
+  try {
+    await tx.transaction(async (sp) => {
+      const allocated = await allocatePayer(sp, null, rows[0].payerId, rows[0].billingEntityId, todayInParis());
+      if (!allocated.ok) throw new Error("allocation refused");
+    });
+  } catch (e) {
+    // Technical ids only, never a name.
+    console.error(`Invoice ${c.id}: issued, payments not allocated`, e instanceof Error ? e.name : "");
+  }
   return true;
 }
 
