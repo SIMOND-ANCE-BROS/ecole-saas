@@ -35,6 +35,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { ROLE_VALUES } from "../domain/team/rules";
 import { REVERSAL_KINDS } from "../domain/payments/rejection";
+import { PAYMENT_METHOD_VALUES } from "../domain/payments/methods";
 import { DOCUMENT_TYPES } from "../domain/people/documents";
 import { VAT_CATEGORIES } from "../domain/billing/vat";
 
@@ -62,16 +63,7 @@ export const period = pgEnum("period", ["quarter", "year", "single"]);
 export const enrollmentStatus = pgEnum("enrollment_status", ["trial", "waitlist", "active", "dropped", "ended"]);
 export const invoiceStatus = pgEnum("invoice_status", ["to_send", "tool_draft", "issued", "rejected", "cancelled"]);
 export const invoicingTool = pgEnum("invoicing_tool", ["pennylane", "abby", "shine"]);
-export const paymentMethod = pgEnum("payment_method", [
-  "cheque",
-  "cash",
-  "card",
-  "transfer",
-  "direct_debit",
-  "holiday_voucher",
-  "pass_sport",
-  "other",
-]);
+export const paymentMethod = pgEnum("payment_method", PAYMENT_METHOD_VALUES);
 /** Kind of a reverse entry (#272): a correction, or the rejection of a deposited payment. */
 export const reversalKind = pgEnum("reversal_kind", REVERSAL_KINDS);
 export const installmentStatus = pgEnum("installment_status", ["upcoming", "paid", "partial", "overdue", "cancelled"]);
@@ -519,6 +511,26 @@ export const documentRequirement = pgTable(
     check("document_requirement_type", sql`${t.type} <> 'other'`),
     check("document_requirement_validity", sql`${t.validityMonths} BETWEEN 1 AND 120`),
     check("document_requirement_due", sql`${t.dueWithinDays} BETWEEN 0 AND 365`),
+  ],
+);
+
+/**
+ * Payment methods the school accepts (#293), one row per method it set; a method
+ * without a row follows `DEFAULT_METHOD_SETTING` (src/domain/payments/methods.ts).
+ * `desk_hint`: guidance shown at the desk next to the method (« règlement de la totalité »).
+ */
+export const paymentMethodSetting = pgTable(
+  "payment_method_setting",
+  {
+    schoolId: schoolIdColumn(),
+    method: paymentMethod("method").notNull(),
+    accepted: boolean("accepted").notNull(),
+    deskHint: text("desk_hint"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.schoolId, t.method] }),
+    check("payment_method_setting_hint", sql`char_length(${t.deskHint}) BETWEEN 1 AND 120`),
   ],
 );
 

@@ -5,6 +5,7 @@ import { withSchool } from "@/db";
 import { isStudent } from "@/db/students";
 import { balanceOf } from "@/db/payments";
 import { entityChoices } from "@/db/billing-entities";
+import { readMethodSettings } from "@/db/payment-methods";
 import { entityOwingMost, familyOwed } from "@/domain/payments/balance";
 import { readPerson, displayedName } from "@/db/people";
 import { todayInParis } from "@/domain/people/age";
@@ -30,6 +31,7 @@ export default async function CollectPaymentPage({ searchParams }: PageProps<"/p
                 student: await isStudent(tx, p.id),
                 balance: await balanceOf(tx, p.id, today),
                 entities: await entityChoices(tx),
+                methods: await readMethodSettings(tx),
               }
             : null;
         })
@@ -81,6 +83,8 @@ export default async function CollectPaymentPage({ searchParams }: PageProps<"/p
         remaining={remaining}
         familyRemaining={familyRemaining}
         entities={entities}
+        // Only the methods the school accepts (#293), each with its desk hint.
+        methods={parsed.methods.filter((m) => m.accepted)}
         initialEntity={initialEntity}
         today={today}
         back={back}
