@@ -33,8 +33,9 @@ beforeAll(async () => {
   const s = ids.school;
   [{ id: ids.a }] = await admin`SELECT id FROM billing_entity WHERE school_id = ${s} AND is_default`;
   [{ id: ids.b }] = await admin`
-    INSERT INTO billing_entity (school_id, name, legal_name, vat_regime)
-    VALUES (${s}, 'Zz Entreprise B', 'Zz Entreprise B', 'not_applicable') RETURNING id`;
+    INSERT INTO billing_entity (school_id, name, legal_name, vat_regime, default_vat_treatment_id)
+    VALUES (${s}, 'Zz Entreprise B', 'Zz Entreprise B', 'not_applicable',
+      (SELECT default_vat_treatment_id FROM billing_entity WHERE school_id = ${s} AND is_default)) RETURNING id`;
   for (const [user, role] of [
     [frontDesk, "front_desk"],
     [teacher, "teacher"],

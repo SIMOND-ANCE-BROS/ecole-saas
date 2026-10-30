@@ -344,6 +344,13 @@
       "when": 1793323557832,
       "tag": "0048_lesson_regular_instructor",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793333668327,
+      "tag": "0049_vat_treatment",
+      "breakpoints": true
     }
   ]
 }

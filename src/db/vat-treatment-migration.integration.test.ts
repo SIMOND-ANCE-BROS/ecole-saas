@@ -6,13 +6,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrationsBefore } from "./migration.integration-helpers";
 
 /**
- * Migration 0047 (#301) replayed on a throwaway database: migrated up to the migration
+ * Migration 0049 (#301) replayed on a throwaway database: migrated up to the migration
  * before it, filled with two schools, courses, a lesson pack and an invoice line as they
  * were before (no VAT treatment), then migrated to the end. Needs a role allowed to
  * create a database (the local and CI owner role is).
  */
 
-const MIGRATION = "0047_vat_treatment";
+const MIGRATION = "0049_vat_treatment";
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");
