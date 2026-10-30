@@ -131,6 +131,16 @@ export function ClosuresManagement({
     focusAfter.current = null;
     target?.focus();
   }, [inProgress, closures]);
+  /** Where focus goes once a course left to decide is ticked (its line is gone): the next one, or the list. */
+  const focusAfterTick = useRef<string | null>(null);
+  useEffect(() => {
+    if (focusAfterTick.current === null) return;
+    const target = focusAfterTick.current;
+    focusAfterTick.current = null;
+    const next = document.querySelector<HTMLElement>(`[data-undecided-tick="${target}"]`);
+    if (next) next.focus();
+    else choice.current?.focus();
+  }, [v.courseIds]);
 
   // A single site is the whole school: « Certains sites » is only offered with two or more.
   const kinds = [
@@ -213,6 +223,15 @@ export function ClosuresManagement({
       setV(form);
       if (picked) setPicked({ ...picked, stale: true });
     }
+  };
+
+  // Courses left to decide by the last audience button, until management ticks them.
+  const left = picked ? picked.undecided.filter((c) => !v.courseIds.includes(c.value)) : [];
+
+  // Ticks a course left to decide; its line goes away, so focus moves to the next one (or the list).
+  const tickAlso = (courseId: string, nextId: string | null) => {
+    focusAfterTick.current = nextId ?? "";
+    setCourses([...v.courseIds, courseId]);
   };
 
   const setCourses = (courseIds: string[]) => {
@@ -363,47 +382,42 @@ export function ClosuresManagement({
               <>
                 <Text size="sm">{picked.text}</Text>
                 {picked.stale && (
-                  <Text size="sm" c="orange">
+                  <Alert color="yellow" p="xs">
                     Dates modifiées : recliquez sur un bouton pour remettre la liste à jour.
-                  </Text>
+                  </Alert>
                 )}
               </>
             )}
           </div>
         )}
-        {v.scope === "courses" &&
-          picked &&
-          (() => {
-            // Courses left to decide, until management ticks them.
-            const left = picked.undecided.filter((c) => !v.courseIds.includes(c.value));
-            return left.length === 0 ? null : (
-              <div className="flex flex-col gap-1">
-                <Text size="sm" c="dimmed">
-                  À décider, non cochés :
-                </Text>
-                <ul className="flex flex-col gap-1 text-sm">
-                  {left.map((c) => (
-                    <li key={c.value} className="flex flex-wrap items-center gap-x-2">
-                      <span>
-                        {c.label}{" "}
-                        <Text span size="sm" c="dimmed">
-                          ({undecidedReason(c)})
-                        </Text>
-                      </span>
-                      <Button
-                        size="compact-xs"
-                        variant="subtle"
-                        aria-label={`Cocher aussi ${c.label}`}
-                        onClick={() => setCourses([...v.courseIds, c.value])}
-                      >
-                        Cocher aussi
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })()}
+        {v.scope === "courses" && left.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <Text size="sm" c="dimmed">
+              À décider, non cochés :
+            </Text>
+            <ul className="flex flex-col gap-1 text-sm">
+              {left.map((c, i) => (
+                <li key={c.value} className="flex flex-wrap items-center gap-x-2">
+                  <span>
+                    {c.label}{" "}
+                    <Text span size="sm" c="dimmed">
+                      ({undecidedReason(c)})
+                    </Text>
+                  </span>
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    aria-label={`Cocher aussi ${c.label}`}
+                    data-undecided-tick={c.value}
+                    onClick={() => tickAlso(c.value, (left[i + 1] ?? left[i - 1])?.value ?? null)}
+                  >
+                    Cocher aussi
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <Button type="submit" loading={inProgress} className="self-start">
           Ajouter
         </Button>
