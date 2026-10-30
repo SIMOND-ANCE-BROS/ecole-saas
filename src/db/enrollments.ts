@@ -33,6 +33,7 @@ import {
 } from "../domain/enrollment/quarters";
 import { todayInParis } from "../domain/people/age";
 import { has } from "../lib/has";
+import { SETTLED_INVOICE_STATUS } from "../domain/payments/allocation";
 import { computeTariff } from "../domain/tariff/compute";
 import { requestsByEntity, type EntityCourse } from "../domain/enrollment/entities";
 import type {
@@ -580,6 +581,11 @@ export type SeasonEnrollment = {
   payerId: string;
   /** A line of an invoice handed to the tool refers to it: only a credit note can undo it. */
   invoiced: boolean;
+  /**
+   * What issued invoices bill for it (#358), credit notes included: what the balance counts
+   * for it (`dueCents`); null while no issued invoice bills it.
+   */
+  invoicedCents: number | null;
   /** What the front desk can do with it (#284). */
   actions: EnrollmentActions;
   /** Business that sells it (#299); null when the school has only one. */
@@ -600,6 +606,15 @@ export const quarterCountSql = sql<number>`(SELECT count(*) FROM enrollment_quar
  */
 const invoicedSql = sql<boolean>`EXISTS (SELECT 1 FROM invoice_line l JOIN invoice i ON i.id = l.invoice_id
   WHERE l.enrollment_id = ${enrollmentId} AND NOT ${UNSENT_DRAFT})`;
+
+/**
+ * What the lines of issued invoices (and credit notes) bill for the enrollment of the row
+ * (#358), null when none does: the balance counts it so (`invoicedBy` in `src/db/payments.ts`,
+ * `SETTLED_INVOICE_STATUS`).
+ */
+const invoicedCentsSql = sql<number | null>`(SELECT sum(l.incl_tax_cents) FROM invoice_line l
+  JOIN invoice i ON i.id = l.invoice_id
+  WHERE l.enrollment_id = ${enrollmentId} AND i.status = ${SETTLED_INVOICE_STATUS})::int`;
 
 /**
  * Attendance was taken for a student of the enrollment of the row in one of its courses,
@@ -647,6 +662,7 @@ export async function seasonEnrollments(
       enrolledOn: enrollment.enrolledOn,
       payerId: enrollment.payerId,
       invoiced: invoicedSql,
+      invoicedCents: invoicedCentsSql,
       attended: attendedSql,
       entity: billingEntity.name,
     })
@@ -708,6 +724,7 @@ export async function seasonEnrollments(
         enrolledOn: l.enrolledOn,
         payerId: l.payerId,
         invoiced: l.invoiced,
+        invoicedCents: l.invoicedCents,
         actions: enrollmentActions(l.status, { invoiced: l.invoiced, attended: l.attended }),
         cancelRefusal: cancelRefusal({ invoiced: l.invoiced, attended: l.attended }),
         entity: namedEntity ? l.entity : null,

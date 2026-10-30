@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import type { Tx } from "./index";
 import { alreadyCorrected } from "./payments-sql";
@@ -90,9 +90,13 @@ async function log(
   });
 }
 
-/** Sets each installment's status from what is now allocated to it (`installmentStatusOf`). */
-async function refreshStatuses(tx: Tx, ids: readonly string[], today: string) {
-  if (ids.length === 0) return;
+/**
+ * Sets each installment's status from what is now allocated to it (`installmentStatusOf`);
+ * returns how many changed. Only the status is written: what the frozen invoice allows (`0052`).
+ */
+async function refreshStatuses(tx: Tx, ids: readonly string[], today: string): Promise<number> {
+  if (ids.length === 0) return 0;
+  let changed = 0;
   const rows = await tx
     .select({
       id: installment.id,
@@ -106,8 +110,29 @@ async function refreshStatuses(tx: Tx, ids: readonly string[], today: string) {
   for (const r of rows) {
     if (r.status === "cancelled") continue;
     const status = installmentStatusOf(r, today);
-    if (status !== r.status) await tx.update(installment).set({ status }).where(eq(installment.id, r.id));
+    if (status === r.status) continue;
+    await tx.update(installment).set({ status }).where(eq(installment.id, r.id));
+    changed += 1;
   }
+  return changed;
+}
+
+/**
+ * Marks `overdue` the open installments of issued invoices whose due date is past (#358),
+ * nothing being allocated to them: `installmentStatusOf`, the day after the due date, `today`
+ * being Europe/Paris (`todayInParis`). Run once a day by `npm run installments:overdue`; an
+ * allocation or a release also refreshes the statuses it touches. Starts at rank 3 of
+ * `src/db/payment-locks.ts`: the installments, ordered by id, then their status read again
+ * after the lock, so a payment allocated meanwhile leaves its installment paid or partial.
+ * Returns how many installments changed. Within `withSchool()` (RLS): one school at a time.
+ */
+export async function markOverdue(tx: Tx, today: string): Promise<number> {
+  if (!z.iso.date().safeParse(today).success) return 0;
+  const ids = await lockInstallments(
+    tx,
+    and(eq(invoice.status, SETTLED_INVOICE_STATUS), eq(installment.status, "upcoming"), lt(installment.dueDate, today)),
+  );
+  return refreshStatuses(tx, ids, today);
 }
 
 /**
@@ -140,77 +165,95 @@ export async function allocatePayments(
 
   const written: Allocation[] = [];
   for (const pair of pairs) {
-    const payments = await paymentsOf(tx, pair);
-    // Only the installments locked above: one whose invoice was issued since waits for the next allocation.
-    const open: OpenInstallment[] = await tx
-      .select({
-        id: installment.id,
-        invoiceId: installment.invoiceId,
-        rank: installment.rank,
-        dueDate: installment.dueDate,
-        amountCents: installment.amountCents,
-        allocatedCents: allocatedOfInstallment,
-      })
-      .from(installment)
-      .innerJoin(invoice, eq(invoice.id, installment.invoiceId))
-      .where(
-        and(
-          issuedInstallmentsOf([pair]),
-          inArray(installment.id, locked),
-          inArray(installment.status, [...OPEN_INSTALLMENT_STATUSES]),
-        ),
-      );
-    // Every payment of the pair, oldest first, not only those given: money left unallocated
-    // earlier (collected while an invoice was being issued, freed by a release) is spent too.
-    // A payment not locked here and corrected meanwhile is released by that correction, which
-    // waits for the installment locks above.
-    const targets = payments;
-    const allocations = allocateFifo(targets, open, entityPoolCents(payments, today), today);
-    // Checked again before writing: never more than a payment or an installment still holds.
-    // A guard on what `allocateFifo` computed from the same reads; what keeps two writers apart
-    // is the locks above (#254), under which those reads were taken.
-    const offered = new Map(targets.map((p) => [p.id, availableCents(p, today)]));
-    const owed = new Map(open.map((i) => [i.id, i.amountCents - i.allocatedCents]));
-    for (const a of allocations) {
-      const refusal = allocationRefusal({
-        amountCents: a.amountCents,
-        availableCents: offered.get(a.paymentId) ?? 0,
-        remainingCents: owed.get(a.installmentId) ?? 0,
-      });
-      if (refusal) return { ok: false, message: refusal };
-      offered.set(a.paymentId, (offered.get(a.paymentId) ?? 0) - a.amountCents);
-      owed.set(a.installmentId, (owed.get(a.installmentId) ?? 0) - a.amountCents);
-      const [{ total }] = await tx
-        .insert(paymentAllocation)
-        .values({
-          schoolId: CURRENT_SCHOOL,
-          billingEntityId: pair.billingEntityId,
-          paymentId: a.paymentId,
-          installmentId: a.installmentId,
-          amountCents: a.amountCents,
-        })
-        .onConflictDoUpdate({
-          target: [paymentAllocation.paymentId, paymentAllocation.installmentId],
-          set: { amountCents: sql`${paymentAllocation.amountCents} + excluded.amount_cents` },
-        })
-        .returning({ total: paymentAllocation.amountCents });
-      // Added to an allocation already there (the payment settled part of it before): an update.
-      const row = { installment_id: a.installmentId, billing_entity_id: pair.billingEntityId };
-      if (total === a.amountCents) await log(tx, actor, a.paymentId, "insert", null, { ...row, amount_cents: total });
-      else
-        await log(
-          tx,
-          actor,
-          a.paymentId,
-          "update",
-          { ...row, amount_cents: total - a.amountCents },
-          { ...row, amount_cents: total },
-        );
-    }
-    await refreshStatuses(tx, [...new Set(allocations.map((a) => a.installmentId))], today);
-    written.push(...allocations);
+    const r = await allocatePair(tx, actor, pair, locked, today);
+    if (!r.ok) return r;
+    written.push(...r.allocations);
   }
   return { ok: true, allocations: written };
+}
+
+/**
+ * Allocates FIFO what a payer's money to one entity has left over the open installments among
+ * `locked` (`allocatePayments`). The caller holds the locks: the payments it was given, then
+ * `locked`, every installment of the pair's issued invoices.
+ */
+async function allocatePair(
+  tx: Tx,
+  actor: string | null,
+  pair: Pair,
+  locked: readonly string[],
+  today: string,
+): Promise<AllocationOutcome> {
+  if (locked.length === 0) return { ok: true, allocations: [] };
+  const payments = await paymentsOf(tx, pair);
+  // Only the installments locked above: one whose invoice was issued since waits for the next allocation.
+  const open: OpenInstallment[] = await tx
+    .select({
+      id: installment.id,
+      invoiceId: installment.invoiceId,
+      rank: installment.rank,
+      dueDate: installment.dueDate,
+      amountCents: installment.amountCents,
+      allocatedCents: allocatedOfInstallment,
+    })
+    .from(installment)
+    .innerJoin(invoice, eq(invoice.id, installment.invoiceId))
+    .where(
+      and(
+        issuedInstallmentsOf([pair]),
+        inArray(installment.id, locked),
+        inArray(installment.status, [...OPEN_INSTALLMENT_STATUSES]),
+      ),
+    );
+  // Every payment of the pair, oldest first, not only those given: money left unallocated
+  // earlier (collected while an invoice was being issued, freed by a release) is spent too.
+  // A payment not locked here and corrected meanwhile is released by that correction, which
+  // waits for the installment locks above.
+  const targets = payments;
+  const allocations = allocateFifo(targets, open, entityPoolCents(payments, today), today);
+  // Checked again before writing: never more than a payment or an installment still holds.
+  // A guard on what `allocateFifo` computed from the same reads; what keeps two writers apart
+  // is the locks above (#254), under which those reads were taken.
+  const offered = new Map(targets.map((p) => [p.id, availableCents(p, today)]));
+  const owed = new Map(open.map((i) => [i.id, i.amountCents - i.allocatedCents]));
+  for (const a of allocations) {
+    const refusal = allocationRefusal({
+      amountCents: a.amountCents,
+      availableCents: offered.get(a.paymentId) ?? 0,
+      remainingCents: owed.get(a.installmentId) ?? 0,
+    });
+    if (refusal) return { ok: false, message: refusal };
+    offered.set(a.paymentId, (offered.get(a.paymentId) ?? 0) - a.amountCents);
+    owed.set(a.installmentId, (owed.get(a.installmentId) ?? 0) - a.amountCents);
+    const [{ total }] = await tx
+      .insert(paymentAllocation)
+      .values({
+        schoolId: CURRENT_SCHOOL,
+        billingEntityId: pair.billingEntityId,
+        paymentId: a.paymentId,
+        installmentId: a.installmentId,
+        amountCents: a.amountCents,
+      })
+      .onConflictDoUpdate({
+        target: [paymentAllocation.paymentId, paymentAllocation.installmentId],
+        set: { amountCents: sql`${paymentAllocation.amountCents} + excluded.amount_cents` },
+      })
+      .returning({ total: paymentAllocation.amountCents });
+    // Added to an allocation already there (the payment settled part of it before): an update.
+    const row = { installment_id: a.installmentId, billing_entity_id: pair.billingEntityId };
+    if (total === a.amountCents) await log(tx, actor, a.paymentId, "insert", null, { ...row, amount_cents: total });
+    else
+      await log(
+        tx,
+        actor,
+        a.paymentId,
+        "update",
+        { ...row, amount_cents: total - a.amountCents },
+        { ...row, amount_cents: total },
+      );
+  }
+  await refreshStatuses(tx, [...new Set(allocations.map((a) => a.installmentId))], today);
+  return { ok: true, allocations };
 }
 
 /**
@@ -240,26 +283,33 @@ export async function allocatePayer(
  * collected); then, for their payer with that entity, whatever all the allocations hold beyond
  * the payer's money net of refunds (`heldCapCents`: a correction made after a refund). Taken
  * from the latest due installment first (`releaseExcess`), whose status goes back to partial,
- * overdue or upcoming. Same lock order as `allocatePayments` (`src/db/payment-locks.ts`): the
- * payers, the payments, then every installment of the payer's issued invoices with that
- * entity, ordered by id.
+ * overdue or upcoming. Then spends again, in the same transaction, what each payer's money to
+ * that entity has left unallocated (#358, `allocatePair`): another payment's money settles
+ * the installments the release reopened. Refused, in French, like `allocatePayments`: the
+ * caller's writes are then to be rolled back (`allOrNothing`).
+ *
+ * Lock order of `src/db/payment-locks.ts`: the caller holds every payment of these payments'
+ * payers with their entity (rank 2, one statement: `lockPayerAndPaymentsOf`,
+ * `lockPaymentsOfDepositPayers`), since the release and the allocation read them all; then
+ * every installment of the payers' issued invoices with that entity, ordered by id, here.
  */
 export async function releaseUncovered(
   tx: Tx,
   actor: string | null,
   paymentIds: readonly string[],
   today: string,
-): Promise<void> {
+): Promise<AllocationOutcome> {
   const ids = [...new Set(paymentIds)].filter(isUuid);
-  if (ids.length === 0) return;
+  if (ids.length === 0) return { ok: true, allocations: [] };
+  // Already held by the caller with the rest of the pair's payments: asking again returns at once.
   await lockPayments(tx, ids);
   const pairs = await tx
     .selectDistinct({ payerId: payment.payerId, billingEntityId: payment.billingEntityId })
     .from(payment)
     .where(inArray(payment.id, ids))
     .orderBy(asc(payment.billingEntityId), asc(payment.payerId));
-  if (pairs.length === 0) return;
-  await lockInstallments(tx, issuedInstallmentsOf(pairs));
+  if (pairs.length === 0) return { ok: true, allocations: [] };
+  const locked = await lockInstallments(tx, issuedInstallmentsOf(pairs));
   const touched = new Set<string>();
   for (const pair of pairs) {
     const payments = await paymentsOf(tx, pair);
@@ -276,7 +326,6 @@ export async function releaseUncovered(
       .innerJoin(installment, eq(installment.id, paymentAllocation.installmentId))
       .innerJoin(payment, eq(payment.id, paymentAllocation.paymentId))
       .where(and(eq(payment.payerId, pair.payerId), eq(payment.billingEntityId, pair.billingEntityId)));
-    if (held.length === 0) continue;
     const key = (a: { paymentId: string; installmentId: string }) => `${a.paymentId}/${a.installmentId}`;
     const before = new Map(held.map((a) => [key(a), a.amountCents]));
     const now = new Map(held.map((a) => [key(a), { ...a }]));
@@ -308,4 +357,14 @@ export async function releaseUncovered(
     }
   }
   await refreshStatuses(tx, [...touched], today);
+  // What the release freed, or what the pair's other payments still hold unallocated, settles
+  // the open installments again right away (#358), under the same locks: payment A corrected
+  // while payment B has money left, B settles what A gave back.
+  const written: Allocation[] = [];
+  for (const pair of pairs) {
+    const r = await allocatePair(tx, actor, pair, locked, today);
+    if (!r.ok) return r;
+    written.push(...r.allocations);
+  }
+  return { ok: true, allocations: written };
 }

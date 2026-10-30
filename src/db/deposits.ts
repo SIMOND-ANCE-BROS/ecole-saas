@@ -12,7 +12,7 @@ import type { ReversalKind } from "../domain/payments/rejection";
 import type { Tx } from "./index";
 import { allOrNothing } from "./all-or-nothing";
 import { allocatePayments, releaseUncovered } from "./allocations";
-import { lockPayments } from "./payment-locks";
+import { lockPayments, lockPaymentsOfDepositPayers } from "./payment-locks";
 import { todayInParis } from "../domain/people/age";
 import { alreadyCorrected, type Method } from "./payments";
 import { auditLog, member, payment, person, bankDeposit, bankDepositPayment, billingEntity } from "./schema";
@@ -231,15 +231,16 @@ export async function cancelDeposit(
   // Same lock as createDeposit and correctPayment (#247, #253), rank 2 of
   // `src/db/payment-locks.ts` (#360, no payer: nothing here inserts a payment), ordered by
   // id: a rejection saved at the same moment is seen by the read below, or waits for the
-  // cancellation and then finds the payment no longer deposited. A separate statement, for a
-  // fresh snapshot.
+  // cancellation and then finds the payment no longer deposited. Every payment of the slip's
+  // payers with its business, not only the slip's, in one statement: what the cheques gave
+  // back is spent again from the payers' other money (#358, `releaseUncovered`), which reads
+  // them all. The slip's payments are read after, in a separate statement, for a fresh snapshot.
+  await lockPaymentsOfDepositPayers(tx, id);
   const held = await tx
-    .select({ id: payment.id })
-    .from(payment)
-    .innerJoin(bankDepositPayment, eq(bankDepositPayment.paymentId, payment.id))
+    .select({ id: bankDepositPayment.paymentId })
+    .from(bankDepositPayment)
     .where(eq(bankDepositPayment.bankDepositId, id))
-    .orderBy(asc(payment.id))
-    .for("no key update", { of: payment });
+    .orderBy(asc(bankDepositPayment.paymentId));
   // A payment of the deposit rejected by the bank: the slip was used, it stays. Decided by
   // what correctPayment wrote under the same lock (a deposited payment is only ever rejected),
   // not by timestamps: a correction made before the deposit never blocks it (#253). Read
@@ -259,27 +260,31 @@ export async function cancelDeposit(
     return { ok: false, message: "Un paiement de cette remise a été rejeté : la remise ne peut plus être annulée." };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
-  // Two cancellations at the same moment both pass the lock above (#273): the second
-  // deletes nothing, and must neither succeed nor log a second deletion.
-  const deleted = await tx.delete(bankDeposit).where(eq(bankDeposit.id, id)).returning({ id: bankDeposit.id });
-  if (deleted.length === 0) return { ok: false, message: "Cette remise a déjà été annulée." };
-  await tx.insert(auditLog).values({
-    schoolId: CURRENT_SCHOOL,
-    actor: who,
-    targetTable: "bank_deposit",
-    rowId: id,
-    action: "delete",
-    before: { date: x.date, method: x.method },
+  // The cancellation and what it gives back to the installments go together, or not at all.
+  return allOrNothing(tx, async (tx) => {
+    // Two cancellations at the same moment both pass the lock above (#273): the second
+    // deletes nothing, and must neither succeed nor log a second deletion.
+    const deleted = await tx.delete(bankDeposit).where(eq(bankDeposit.id, id)).returning({ id: bankDeposit.id });
+    if (deleted.length === 0) return { ok: false, message: "Cette remise a déjà été annulée." };
+    await tx.insert(auditLog).values({
+      schoolId: CURRENT_SCHOOL,
+      actor: who,
+      targetTable: "bank_deposit",
+      rowId: id,
+      action: "delete",
+      before: { date: x.date, method: x.method },
+    });
+    // Back in the drawer, its cheques are no longer collected: what they settled goes back to
+    // the installments (#305), and the payers' other money settles them again (#358), under
+    // the payment locks taken above.
+    const released = await releaseUncovered(
+      tx,
+      who,
+      held.map((p) => p.id),
+      today,
+    );
+    return released.ok ? { ok: true as const, id } : released;
   });
-  // Back in the drawer, its cheques are no longer collected: what they settled goes back to
-  // the installments (#305), under the payment locks taken above.
-  await releaseUncovered(
-    tx,
-    who,
-    held.map((p) => p.id),
-    today,
-  );
-  return { ok: true, id };
 }
 
 export type DepositRow = {

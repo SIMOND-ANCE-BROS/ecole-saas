@@ -17,7 +17,7 @@ import type { SeasonEnrollment } from "@/db/enrollments";
 import type { PersonRecord } from "@/db/people";
 import type { Season } from "@/db/schedule";
 import { ENROLLMENT_STATUS_LABELS as STATUT } from "@/domain/enrollment/statuses";
-import { amountDue, DUE_STATUSES } from "@/domain/payments/balance";
+import { amountDue, dueCents, isCounted } from "@/domain/payments/balance";
 import { formatEuros } from "@/lib/money";
 import { DAYS } from "../planning/format";
 import { TextLink } from "../_ui/text-link";
@@ -128,7 +128,9 @@ export function FollowedCourses({ courses }: { courses: PersonRecord["courses"] 
 /**
  * Enrollments of the season (#284): every status, each with what the front desk can do
  * (confirm, drop-out, cancel). The total is what `payerId` owes for them (`amountDue`, the
- * balance's rule): a commitment, not a payment; trial and waitlist are left out. Without
+ * balance's rule): a commitment, not a payment; trial and waitlist are left out. Once an
+ * issued invoice bills an enrollment, it counts at what the invoice bills, as the balance
+ * does (#358), and the row says so. Without
  * `payerId` (a student whose enrollments someone else pays), no total.
  */
 export function Enrollments({
@@ -145,7 +147,8 @@ export function Enrollments({
   if (enrollments.length === 0) return null;
   const paid = enrollments.filter((i) => i.payerId === payerId);
   const total = amountDue(paid);
-  const apart = paid.some((i) => !DUE_STATUSES.includes(i.status));
+  const apart = paid.some((i) => !isCounted(i));
+  const billed = paid.some((i) => i.invoicedCents !== null);
   return (
     <section aria-labelledby={ENROLLMENTS_HEADING} className="flex flex-col gap-2">
       <Title order={2} size="h5" id={ENROLLMENTS_HEADING} tabIndex={-1}>
@@ -170,7 +173,7 @@ export function Enrollments({
           </TableThead>
           <TableTbody>
             {enrollments.map((i) => {
-              const owed = DUE_STATUSES.includes(i.status) && i.payerId === payerId;
+              const owed = isCounted(i) && i.payerId === payerId;
               const changes = (
                 <EnrollmentChanges
                   enrollment={i}
@@ -199,8 +202,15 @@ export function Enrollments({
                       {PUBLIC[i.audience]}, {PERIOD[i.period]}
                     </TableTd>
                     <TableTd ta="right" className="tabular-nums" c={owed ? undefined : "dimmed"}>
-                      {formatEuros(i.seasonDueCents)}
-                      {i.period === "quarter" && (
+                      {formatEuros(dueCents(i))}
+                      {i.invoicedCents !== null && (
+                        // Billed by an issued invoice (#358): counted at what it bills, as the balance.
+                        <Text size="xs" c="dimmed" ta="right">
+                          Facturé
+                          {i.invoicedCents !== i.seasonDueCents && ` (inscrit : ${formatEuros(i.seasonDueCents)})`}
+                        </Text>
+                      )}
+                      {i.period === "quarter" && i.invoicedCents === null && (
                         // Quarterly (#291): the quarter's price, once per covered quarter.
                         <Text size="xs" c="dimmed" ta="right" title={i.quarters.join(", ")}>
                           {formatEuros(i.netPriceCents)} × {i.quarterCount} trimestre{i.quarterCount > 1 ? "s" : ""}
@@ -232,7 +242,7 @@ export function Enrollments({
                   Total
                 </TableTd>
                 <TableTd colSpan={3} ta="right" fw={500} className="hidden sm:table-cell">
-                  Total de la saison (montant inscrit)
+                  {billed ? "Total de la saison" : "Total de la saison (montant inscrit)"}
                 </TableTd>
                 <TableTd ta="right" fw={600} className="tabular-nums">
                   {formatEuros(total)}
@@ -243,6 +253,11 @@ export function Enrollments({
           )}
         </Table>
       </Paper>
+      {billed && (
+        <Text size="xs" c="dimmed">
+          Une inscription facturée compte pour le montant de sa facture émise, comme dans le solde.
+        </Text>
+      )}
       {apart && (
         <Text size="xs" c="dimmed">
           Les inscriptions à l’essai ou en attente ne sont pas comptées dans le total.
