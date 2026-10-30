@@ -2,7 +2,8 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
 import { correctPayment, collect, PAYMENT_METHODS } from "./payments";
-import { toCsv, totals } from "../domain/payments/deposits";
+import { DEPOSIT_METHODS, type DepositGroup, type DepositMethod, toCsv, totals } from "../domain/payments/deposits";
+import type { AuditLogRow } from "./deposits";
 import { formatEuros } from "../lib/money";
 import { exportRowOf } from "../domain/payments/payment-log";
 import { cancelDeposit, createDeposit, paymentLog, readDeposit, listDeposits, paymentsToDeposit } from "./deposits";
@@ -107,7 +108,12 @@ afterAll(async () => {
   await admin.end();
 });
 
-const toDeposit = () => withSchool(school, (tx) => paymentsToDeposit(tx, TODAY));
+/** Payments to deposit by method, every entity together (this school has a single one). */
+const byMethod = (groups: DepositGroup<AuditLogRow>[]) =>
+  Object.fromEntries(
+    DEPOSIT_METHODS.map((m) => [m, groups.filter((g) => g.method === m).flatMap((g) => g.payments)]),
+  ) as Record<DepositMethod, AuditLogRow[]>;
+const toDeposit = () => withSchool(school, (tx) => paymentsToDeposit(tx, TODAY)).then(byMethod);
 
 describe("bank deposits", () => {
   let chequesDeposit: string;
@@ -193,7 +199,7 @@ describe("bank deposits", () => {
 
   it("another school sees nothing and cannot deposit these payments", async () => {
     expect(await withSchool(otherSchool, (tx) => listDeposits(tx))).toEqual([]);
-    expect((await withSchool(otherSchool, (tx) => paymentsToDeposit(tx, TODAY))).cheque).toEqual([]);
+    expect(await withSchool(otherSchool, (tx) => paymentsToDeposit(tx, TODAY))).toEqual([]);
     expect(
       (
         await withSchool(otherSchool, (tx) =>

@@ -4,14 +4,15 @@ import {
   TableCaption,
   TableTbody,
   TableTd,
+  TableTfoot,
   TableTh,
   TableThead,
   TableTr,
   Text,
   Title,
 } from "@mantine/core";
-import { type PaymentRow, PAYMENT_METHODS } from "@/db/payments";
-import type { Balance } from "@/domain/payments/balance";
+import { type PayerBalances, type PaymentRow, PAYMENT_METHODS } from "@/db/payments";
+import { familyOwed } from "@/domain/payments/balance";
 import { frenchDate } from "@/lib/dates";
 import { formatEuros } from "@/lib/money";
 import { ButtonLink } from "../_ui/button-link";
@@ -75,7 +76,7 @@ const OUTSIDE_CALCULATION = {
 
 type Props = {
   payerId: string;
-  balance: Balance | null;
+  balance: PayerBalances | null;
   payments: PaymentRow[];
   /** Record to return to after a payment. */
   back: string;
@@ -93,6 +94,11 @@ export function PaymentsSection({
   isDirector,
   today: today,
 }: Props) {
+  const total = balance?.total ?? null;
+  const perEntity = balance?.byEntity ?? [];
+  // With a single entity nothing names it (#300).
+  const several = balance?.severalEntities ?? false;
+  const family = perEntity.length > 0 ? familyOwed(perEntity.map((e) => e.balance)) : null;
   return (
     <section aria-labelledby="paiements" className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-2">
@@ -104,14 +110,14 @@ export function PaymentsSection({
           Encaisser
         </ButtonLink>
       </div>
-      {balance && (
+      {total && perEntity.length === 0 && (
         <Paper component="dl" withBorder p="sm" className="grid grid-cols-3 gap-2">
           <div>
             <Text component="dt" size="xs" c="dimmed">
               Dû
             </Text>
             <Text component="dd" size="sm" fw={500} className="tabular-nums">
-              {formatEuros(balance.due)}
+              {formatEuros(total.due)}
             </Text>
           </div>
           <div>
@@ -119,34 +125,114 @@ export function PaymentsSection({
               Payé
             </Text>
             <Text component="dd" size="sm" fw={500} className="tabular-nums">
-              {formatEuros(balance.paid)}
+              {formatEuros(total.paid)}
             </Text>
           </div>
           <div>
             <Text component="dt" size="xs" c="dimmed">
-              {balance.remaining < 0 ? "Trop-perçu" : "Reste à payer"}
+              {total.remaining < 0 ? "Trop-perçu" : "Reste à payer"}
             </Text>
             <Text
               component="dd"
               size="sm"
               fw={600}
-              c={balance.remaining > 0 ? "red" : undefined}
+              c={total.remaining > 0 ? "red" : undefined}
               className="tabular-nums"
             >
-              {formatEuros(Math.abs(balance.remaining))}
+              {formatEuros(Math.abs(total.remaining))}
             </Text>
           </div>
-          {balance.toCollect > 0 && (
+          {total.toCollect > 0 && (
             <Text size="xs" c="dimmed" className="col-span-3">
-              Dont {formatEuros(balance.toCollect)} en chèques à encaisser plus tard.
+              Dont {formatEuros(total.toCollect)} en chèques à encaisser plus tard.
             </Text>
           )}
-          {Object.entries(balance.outsideCalculation).map(([status, amount]) => (
+          {Object.entries(total.outsideCalculation).map(([status, amount]) => (
             <Text key={status} size="xs" c="dimmed" className="col-span-3">
               Inscriptions {OUTSIDE_CALCULATION[status as keyof typeof OUTSIDE_CALCULATION] ?? status} :{" "}
               {formatEuros(amount ?? 0)}, non comptées dans le dû.
             </Text>
           ))}
+        </Paper>
+      )}
+      {/* Each business cashes into its own account (#300): one row per entity, and a total
+          whose « Reste à payer » never lets an overpayment to one hide a debt to the other. */}
+      {total && family && perEntity.length > 0 && (
+        <Paper withBorder className="flex flex-col">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableCaption className="sr-only">Solde par entreprise</TableCaption>
+              <TableThead>
+                <TableTr>
+                  <TableTh>Entreprise</TableTh>
+                  <TableTh ta="right">Dû</TableTh>
+                  <TableTh ta="right">Payé</TableTh>
+                  <TableTh ta="right">Reste à payer</TableTh>
+                </TableTr>
+              </TableThead>
+              <TableTbody>
+                {perEntity.map((e) => (
+                  <TableTr key={e.id}>
+                    <TableTd>{e.name}</TableTd>
+                    <TableTd ta="right" className="tabular-nums whitespace-nowrap">
+                      {formatEuros(e.balance.due)}
+                    </TableTd>
+                    <TableTd ta="right" className="tabular-nums whitespace-nowrap">
+                      {formatEuros(e.balance.paid)}
+                    </TableTd>
+                    <TableTd
+                      ta="right"
+                      fw={600}
+                      c={e.balance.remaining > 0 ? "red" : undefined}
+                      className="tabular-nums whitespace-nowrap"
+                    >
+                      {e.balance.remaining < 0
+                        ? `Trop-perçu ${formatEuros(-e.balance.remaining)}`
+                        : formatEuros(e.balance.remaining)}
+                    </TableTd>
+                  </TableTr>
+                ))}
+              </TableTbody>
+              <TableTfoot>
+                <TableTr>
+                  <TableTh>Total</TableTh>
+                  <TableTd ta="right" fw={600} className="tabular-nums whitespace-nowrap">
+                    {formatEuros(total.due)}
+                  </TableTd>
+                  <TableTd ta="right" fw={600} className="tabular-nums whitespace-nowrap">
+                    {formatEuros(total.paid)}
+                  </TableTd>
+                  <TableTd
+                    ta="right"
+                    fw={700}
+                    c={family.owed > 0 ? "red" : undefined}
+                    className="tabular-nums whitespace-nowrap"
+                  >
+                    {formatEuros(family.owed)}
+                  </TableTd>
+                </TableTr>
+              </TableTfoot>
+            </Table>
+          </div>
+          <div className="flex flex-col gap-1 px-3 pb-2">
+            {family.overpaid > 0 && (
+              <Text size="xs" c="dimmed">
+                Trop-perçu de {formatEuros(family.overpaid)}, non déduit du reste : chaque entreprise a son propre
+                compte.
+              </Text>
+            )}
+            {total.toCollect > 0 && (
+              <Text size="xs" c="dimmed">
+                Dont {formatEuros(total.toCollect)} en chèques à encaisser plus tard.
+              </Text>
+            )}
+            {Object.entries(total.outsideCalculation).map(([status, amount]) => (
+              <Text key={status} size="xs" c="dimmed">
+                Inscriptions {OUTSIDE_CALCULATION[status as keyof typeof OUTSIDE_CALCULATION] ?? status} :{" "}
+                {formatEuros(amount ?? 0)}, non comptées dans le dû.
+              </Text>
+            ))}
+          </div>
         </Paper>
       )}
       {payments.length === 0 ? (
@@ -172,6 +258,7 @@ export function PaymentsSection({
                   {p.amountCents < 0
                     ? reference(p) || cashing(p, today)
                     : [reference(p), cashing(p, today)].filter(Boolean).join(" · ")}
+                  {several && ` · ${p.entity}`}
                 </Text>
                 {isDirector && <Correction payment={p} back={back} today={today} />}
               </Paper>
@@ -199,7 +286,15 @@ export function PaymentsSection({
                     <TableTd ta="right" className="tabular-nums whitespace-nowrap">
                       {formatEuros(p.amountCents)}
                     </TableTd>
-                    <TableTd className="whitespace-nowrap">{cashing(p, today)}</TableTd>
+                    <TableTd className="whitespace-nowrap">
+                      {cashing(p, today)}
+                      {/* Under the date, not a column of its own: the table keeps its width (#300). */}
+                      {several && (
+                        <Text span size="xs" c="dimmed" className="block">
+                          {p.entity}
+                        </Text>
+                      )}
+                    </TableTd>
                     {isDirector && (
                       <TableTd>
                         <Correction payment={p} back={back} today={today} />

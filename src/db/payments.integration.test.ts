@@ -96,11 +96,10 @@ describe("collect", () => {
     if (!r.ok) throw new Error(r.message);
     ids = r.ids;
     expect(await withSchool(school, (tx) => balanceOf(tx, payer, TODAY))).toEqual({
-      due: 30000,
-      paid: 30000,
-      remaining: 0,
-      toCollect: 20000,
-      outsideCalculation: { trial: 9000 },
+      total: { due: 30000, paid: 30000, remaining: 0, toCollect: 20000, outsideCalculation: { trial: 9000 } },
+      // A single entity: nothing per entity to show (#300).
+      byEntity: [],
+      severalEntities: false,
     });
     const traces =
       await admin`SELECT action, after->>'montant_centimes' AS amount, actor IS NOT NULL AS signed FROM audit_log WHERE school_id = ${school} AND target_table = 'payment'`;
@@ -180,7 +179,7 @@ describe("collect", () => {
       ok: false,
       message: "Ce paiement ne peut pas être corrigé.",
     });
-    expect((await withSchool(school, (tx) => balanceOf(tx, payer, TODAY)))?.remaining).toBe(4000);
+    expect((await withSchool(school, (tx) => balanceOf(tx, payer, TODAY)))?.total.remaining).toBe(4000);
   });
 
   it("another school sees neither the payments nor the balance", async () => {
@@ -241,7 +240,7 @@ describe("a payment rejected after its bank deposit (#253)", () => {
 
   it("the payment shows as deposited and the payer owes nothing", async () => {
     expect((await withSchool(school, (tx) => paymentsOf(tx, bounced)))[0]).toMatchObject({ depositedOn: "2026-10-12" });
-    expect((await withSchool(school, (tx) => balanceOf(tx, bounced, TODAY)))?.remaining).toBe(0);
+    expect((await withSchool(school, (tx) => balanceOf(tx, bounced, TODAY)))?.total.remaining).toBe(0);
   });
 
   it("front desk is refused, with or without a date", async () => {
@@ -304,13 +303,9 @@ describe("a payment rejected after its bank deposit (#253)", () => {
     expect(slip?.payments.map((p) => p.id)).toEqual([id]);
     // Nothing new to deposit: the rejection is a negative entry, never on a slip.
     const pending = await withSchool(school, (tx) => paymentsToDeposit(tx, TODAY));
-    expect(
-      Object.values(pending)
-        .flat()
-        .map((p) => p.id),
-    ).not.toContain(r.ids[0]);
+    expect(pending.flatMap((g) => g.payments).map((p) => p.id)).not.toContain(r.ids[0]);
 
-    expect(await withSchool(school, (tx) => balanceOf(tx, bounced, TODAY))).toMatchObject({
+    expect((await withSchool(school, (tx) => balanceOf(tx, bounced, TODAY)))?.total).toMatchObject({
       due: 12000,
       paid: 0,
       remaining: 12000,

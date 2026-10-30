@@ -1,11 +1,17 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { rowsOf } from "./columns-of";
 import { z } from "zod";
-import { toDeposit, DEPOSIT_METHODS, type DepositMethod } from "../domain/payments/deposits";
+import {
+  depositGroups,
+  toDeposit,
+  DEPOSIT_METHODS,
+  type DepositGroup,
+  type DepositMethod,
+} from "../domain/payments/deposits";
 import type { ReversalKind } from "../domain/payments/rejection";
 import type { Tx } from "./index";
 import { alreadyCorrected, type Method } from "./payments";
-import { auditLog, member, payment, person, bankDeposit, bankDepositPayment } from "./schema";
+import { auditLog, member, payment, person, bankDeposit, bankDepositPayment, billingEntity } from "./schema";
 
 /**
  * Payments log and bank deposits (#98). A deposit links
@@ -32,6 +38,9 @@ export type AuditLogRow = {
   plannedPayment: string | null;
   depositId: string | null;
   dateDeposit: string | null;
+  /** The billing entity that cashed it, and its name (#300). */
+  billingEntityId: string;
+  entity: string;
 };
 
 function rows(tx: Tx) {
@@ -50,9 +59,12 @@ function rows(tx: Tx) {
       plannedPayment: payment.depositPlannedOn,
       depositId: bankDepositPayment.bankDepositId,
       dateDeposit: bankDeposit.date,
+      billingEntityId: payment.billingEntityId,
+      entity: billingEntity.name,
     })
     .from(payment)
     .innerJoin(person, eq(person.id, payment.payerId))
+    .innerJoin(billingEntity, eq(billingEntity.id, payment.billingEntityId))
     .leftJoin(bankDepositPayment, eq(bankDepositPayment.paymentId, payment.id))
     .leftJoin(bankDeposit, eq(bankDeposit.id, bankDepositPayment.bankDepositId));
 }
@@ -72,8 +84,11 @@ export async function paymentLog(tx: Tx, from: string, to: string, method: Metho
   );
 }
 
-/** Cheques that have come due, cash and holiday vouchers not yet deposited, by method. */
-export async function paymentsToDeposit(tx: Tx, today: string): Promise<Record<DepositMethod, AuditLogRow[]>> {
+/**
+ * Cheques that have come due, cash and holiday vouchers not yet deposited, one group per
+ * billing entity and method (#300): each group is one deposit slip for that entity's account.
+ */
+export async function paymentsToDeposit(tx: Tx, today: string): Promise<DepositGroup<AuditLogRow>[]> {
   const candidates = await rows(tx)
     .where(
       and(
@@ -83,13 +98,23 @@ export async function paymentsToDeposit(tx: Tx, today: string): Promise<Record<D
       ),
     )
     .orderBy(asc(sql`coalesce(${payment.depositPlannedOn}, ${payment.date})`), asc(payment.createdAt));
-  return toDeposit(candidates, today);
+  const order = await tx
+    .select({ id: billingEntity.id })
+    .from(billingEntity)
+    .orderBy(desc(billingEntity.isDefault), asc(billingEntity.name));
+  return depositGroups(
+    candidates,
+    today,
+    order.map((e) => e.id),
+  );
 }
 
 export const validDeposit = z.object({
   date: z.iso.date("Date invalide"),
   method: z.enum(DEPOSIT_METHODS),
   paymentIds: z.array(z.uuid()).min(1, "Sélectionnez au moins un paiement.").max(500),
+  /** The entity whose slip the form showed (#300): checked against the payments' own. */
+  billingEntityId: z.uuid().optional(),
 });
 
 export type Result = { ok: true; id: string } | { ok: false; message: string };
@@ -132,13 +157,14 @@ export async function createDeposit(
         "Un des paiements choisis n’est plus à remettre (déjà remis, corrigé, pas encore à encaisser ou d’un autre moyen).",
     };
   }
-  // A slip goes to one entity's bank account (#298): its payments all belong to that entity.
-  // With a single entity (until #300 groups the deposits by entity) this always holds.
+  // A slip goes to one entity's bank account (#298, #300): its payments all belong to that
+  // entity, the one whose group the form showed. The page groups them so; a crafted or stale
+  // request mixing two is refused here, and by the deposit line's key in the database.
   const entities = await tx
     .selectDistinct({ id: payment.billingEntityId })
     .from(payment)
     .where(inArray(payment.id, ids));
-  if (entities.length !== 1)
+  if (entities.length !== 1 || (r.data.billingEntityId !== undefined && entities[0].id !== r.data.billingEntityId))
     return { ok: false, message: "Une remise ne regroupe que les paiements d’une même entreprise." };
   const entity = entities[0].id;
   const who = await memberOf(tx, userId);
@@ -164,7 +190,7 @@ export async function createDeposit(
     targetTable: "bank_deposit",
     rowId: id,
     action: "insert",
-    after: { date, method: method, payments: ids.length },
+    after: { date, method: method, payments: ids.length, billing_entity_id: entity },
   });
   return { ok: true, id };
 }
@@ -221,7 +247,15 @@ export async function cancelDeposit(tx: Tx, userId: string, id: string): Promise
   return { ok: true, id };
 }
 
-export type DepositRow = { id: string; date: string; method: DepositMethod; count: number; totalCents: number };
+export type DepositRow = {
+  id: string;
+  date: string;
+  method: DepositMethod;
+  count: number;
+  totalCents: number;
+  /** Name of the billing entity whose account it goes to (#300). */
+  entity: string;
+};
 
 /** Deposits, most recent first. */
 export function listDeposits(tx: Tx): Promise<DepositRow[]> {
@@ -232,20 +266,37 @@ export function listDeposits(tx: Tx): Promise<DepositRow[]> {
       method: bankDeposit.method,
       count: sql<number>`count(${bankDepositPayment.paymentId})::int`,
       totalCents: sql<number>`coalesce(sum(${payment.amountCents}), 0)::int`,
+      entity: billingEntity.name,
     })
     .from(bankDeposit)
+    .innerJoin(billingEntity, eq(billingEntity.id, bankDeposit.billingEntityId))
     .leftJoin(bankDepositPayment, eq(bankDepositPayment.bankDepositId, bankDeposit.id))
     .leftJoin(payment, eq(payment.id, bankDepositPayment.paymentId))
-    .groupBy(bankDeposit.id)
+    .groupBy(bankDeposit.id, billingEntity.id)
     .orderBy(desc(bankDeposit.date), desc(bankDeposit.createdAt));
 }
 
+/** A deposit slip: the deposit, its payments, and the entity's legal name and account label printed on it (#300). */
+export type DepositSlip = DepositRow & {
+  payments: AuditLogRow[];
+  legalName: string;
+  bankAccountLabel: string | null;
+};
+
 /** A deposit and its payments (deposit slip), or null. */
-export async function readDeposit(tx: Tx, id: string): Promise<(DepositRow & { payments: AuditLogRow[] }) | null> {
+export async function readDeposit(tx: Tx, id: string): Promise<DepositSlip | null> {
   if (!isUuid(id)) return null;
   const [x] = await tx
-    .select({ id: bankDeposit.id, date: bankDeposit.date, method: bankDeposit.method })
+    .select({
+      id: bankDeposit.id,
+      date: bankDeposit.date,
+      method: bankDeposit.method,
+      entity: billingEntity.name,
+      legalName: billingEntity.legalName,
+      bankAccountLabel: billingEntity.bankAccountLabel,
+    })
     .from(bankDeposit)
+    .innerJoin(billingEntity, eq(billingEntity.id, bankDeposit.billingEntityId))
     .where(eq(bankDeposit.id, id));
   if (!x) return null;
   const payments = await rows(tx)

@@ -90,7 +90,7 @@ const auditOf = async (id: string) =>
 
 describe("selling a lesson pack", () => {
   it("stores the pack at the grid price and raises the payer's balance by it", async () => {
-    const before = (await withSchool(school, (tx) => balanceOf(tx, parent, TODAY)))?.remaining ?? 0;
+    const before = (await withSchool(school, (tx) => balanceOf(tx, parent, TODAY)))?.total.remaining ?? 0;
     const r = await sell();
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -104,7 +104,7 @@ describe("selling a lesson pack", () => {
       purchased_on: TODAY,
     });
     const after = await withSchool(school, (tx) => balanceOf(tx, parent, TODAY));
-    expect(after?.remaining).toBe(before + 40000);
+    expect(after?.total.remaining).toBe(before + 40000);
     const audit = await auditOf(r.id);
     expect(audit.action).toBe("insert");
     expect(audit.after).toEqual({

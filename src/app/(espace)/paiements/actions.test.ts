@@ -157,12 +157,35 @@ describe("collectPayments", () => {
       "tx",
       "payment",
       SUBMISSION,
-      { payerId: PAYER, entry: PAID },
+      { payerId: PAYER, entry: PAID, billingEntityId: undefined },
       expect.anything(),
       expect.any(Function),
     );
-    expect(collect).toHaveBeenCalledWith("tx", "user-a", PAYER, PAID);
+    expect(collect).toHaveBeenCalledWith("tx", "user-a", PAYER, PAID, undefined);
     expect(redirect).toHaveBeenCalledWith(`${RECORD}?encaisse=1`);
+  });
+
+  it("passes the chosen entity on, and keys the retry on it too (#300)", async () => {
+    const ENTITY = "5e6f7081-92a3-4b4c-9d5e-6f708192a3b4";
+    withSchool.mockImplementation((_school, run: (tx: string) => unknown) => run("tx"));
+    collect.mockResolvedValue({ ok: true, ids: [PAYMENT] });
+    await collectPayments(PAYER, PAID, RECORD, SUBMISSION, ENTITY);
+    expect(once).toHaveBeenCalledWith(
+      "tx",
+      "payment",
+      SUBMISSION,
+      { payerId: PAYER, entry: PAID, billingEntityId: ENTITY },
+      expect.anything(),
+      expect.any(Function),
+    );
+    expect(collect).toHaveBeenCalledWith("tx", "user-a", PAYER, PAID, ENTITY);
+  });
+
+  it("refuses a malformed entity before reading anything", async () => {
+    expect(await collectPayments(PAYER, PAID, RECORD, SUBMISSION, "not-a-uuid")).toEqual({
+      message: "Choisissez l’entreprise qui encaisse ce paiement.",
+    });
+    expect(withSchool).not.toHaveBeenCalled();
   });
 
   it("gives the refusal back without redirecting", async () => {
