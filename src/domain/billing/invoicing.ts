@@ -21,3 +21,11 @@ export const FAKE_NUMBER_PREFIX = "TEST-";
  * sales?), default approved by the owner: off until the accountant confirms.
  */
 export const PAYMENT_E_REPORTING = false;
+
+/**
+ * Whether the database accepts `number` on an invoice of `tool` (CHECK `invoice_fake_number`):
+ * a « TEST- » number from the fake tool only, and no other number from it. Checked before the
+ * number is written, so a tool breaking the rule ends as a structured failure, not a crash.
+ */
+export const numberFitsTool = (tool: InvoicingToolName, number: string): boolean =>
+  number.startsWith(FAKE_NUMBER_PREFIX) === (tool === "fake");

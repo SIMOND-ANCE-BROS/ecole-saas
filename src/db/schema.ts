@@ -1073,6 +1073,18 @@ export const invoice = pgTable(
     totalInclTaxCents: integer("total_incl_tax_cents").notNull().default(0),
     creditNoteOf: uuid("credit_note_of"),
     pdfUrl: text("pdf_url"),
+    // Outbox (#304, ADR 0007): attempts so far (counted when a run claims the invoice, never
+    // decreasing: a draft attempted once may be in the tool and is never drafted again), the
+    // claim's end (another run skips it until then), the earliest next attempt (backoff), and
+    // the last failure as a technical kind and code (never a tool's text: no personal data).
+    attempts: smallint("attempts").notNull().default(0),
+    claimedUntil: timestamp("claimed_until", { withTimezone: true }),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    sendErrorKind: text("send_error_kind"),
+    sendErrorCode: text("send_error_code"),
+    // VAT-inclusive total of the document the tool issued, as it answered (#303): differs from
+    // ours on a `total_mismatch`, the amount a correcting credit note starts from.
+    toolTotalInclTaxCents: integer("tool_total_incl_tax_cents"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -1090,10 +1102,18 @@ export const invoice = pgTable(
       "invoice_fake_number",
       sql`${t.number} IS NULL OR (left(${t.number}, ${sql.raw(String(FAKE_NUMBER_PREFIX.length))}) = ${sql.raw(`'${FAKE_NUMBER_PREFIX}'`)}) = (coalesce(${t.tool}::text, '') = 'fake')`,
     ),
-    // At most one draft per payer, entity and season (#302): drafting again replaces it.
+    // At most one unsent draft per payer, entity and season (#302): drafting again replaces it.
+    // A draft the outbox already attempted (#304) is no longer unsent: a new one may join it.
     uniqueIndex("invoice_one_draft")
       .on(t.schoolId, t.payerId, t.billingEntityId, t.seasonId)
-      .where(sql`${t.status} = 'to_send' AND ${t.creditNoteOf} IS NULL AND ${t.seasonId} IS NOT NULL`),
+      .where(
+        sql`${t.status} = 'to_send' AND ${t.attempts} = 0 AND ${t.creditNoteOf} IS NULL AND ${t.seasonId} IS NOT NULL`,
+      ),
+    check("invoice_attempts", sql`${t.attempts} >= 0`),
+    // What the outbox picks up, per business, in the order it is due.
+    index("invoice_outbox")
+      .on(t.billingEntityId, t.nextAttemptAt)
+      .where(sql`${t.status} IN ('to_send', 'tool_draft') AND ${t.creditNoteOf} IS NULL`),
     index().on(t.payerId),
     index().on(t.seasonId),
     sameSchoolTarget(t),

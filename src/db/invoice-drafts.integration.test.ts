@@ -270,4 +270,36 @@ describe("draftPayerInvoices (#302)", () => {
       ]);
     });
   });
+
+  describe("once the outbox took a draft (#304)", () => {
+    const draftsOfB = () =>
+      admin`SELECT id, status, attempts, total_incl_tax_cents FROM invoice
+        WHERE school_id = ${ids.school} AND billing_entity_id = ${ids.b} ORDER BY created_at`;
+
+    it("drafting again never redoes a draft the outbox attempted: the tool may hold it", async () => {
+      const [b] = await draftsOfB();
+      await admin`UPDATE invoice SET attempts = 1 WHERE id = ${b.id}`;
+      expect(await draft()).toMatchObject({ ok: true });
+      expect((await draftsOfB()).map((r) => [r.id, r.status, r.attempts])).toEqual([[b.id, "to_send", 1]]);
+    });
+
+    it("a draft rejected before the tool held any document of it gives its lines back", async () => {
+      const [b] = await draftsOfB();
+      await admin`UPDATE invoice SET status = 'rejected', send_error_kind = 'rejected' WHERE id = ${b.id}`;
+      expect(await draft()).toMatchObject({ ok: true });
+      const rows = await draftsOfB();
+      expect(rows.map((r) => [r.id === b.id, r.status, r.total_incl_tax_cents])).toEqual([
+        [true, "rejected", 36000],
+        [false, "to_send", 36000],
+      ]);
+    });
+
+    it("an invoice rejected while the tool holds a draft of it keeps its lines", async () => {
+      const [, again] = await draftsOfB();
+      await admin`UPDATE invoice SET status = 'rejected', attempts = 1, tool = 'fake', tool_ref = 'zz-draft'
+        WHERE id = ${again.id}`;
+      expect(await draft()).toMatchObject({ ok: true });
+      expect((await draftsOfB()).map((r) => r.status)).toEqual(["rejected", "rejected"]);
+    });
+  });
 });

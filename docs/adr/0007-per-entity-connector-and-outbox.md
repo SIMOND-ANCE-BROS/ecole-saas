@@ -58,3 +58,30 @@ and the front desk must never wait for a third-party service.
 - `JOBS_SECRET` and `INVOICING_FAKE_ALLOWED` go into `.env.example` with the
   step that uses them.
 - `CLAUDE.md` §6 and §7: pg-boss is deferred, one connector per entity.
+
+## Implementation notes (#304)
+
+- The sweep route is `POST /api/taches/factures`; `invoicing_due_work()` (migration 0056)
+  only returns pairs whose business has an active connector. A business whose connector cannot be
+  built (fake tool refused, unreadable credentials, tool not available yet) is skipped without
+  counting an attempt.
+- A run claims one invoice at a time in a short transaction and calls the tool outside any
+  transaction; every later write names the claim (`claimed_until`), so a run whose claim ran out
+  records nothing.
+- Retried: timeout, network, 5xx, refused credentials, and this software's own errors; anything
+  else rejects at once. A `tool_draft` tried again first reads its status in the tool (an answer
+  lost after the issue is recorded, not issued twice); one the tool no longer knows is created
+  again (the fake tool's memory after a restart).
+- A total mismatch on an issued document (after `finalize`, or read with `readStatus` after a lost
+  answer) records the invoice as issued with the tool's number and total
+  (`tool_total_incl_tax_cents`), flagged for a credit note; it is listed for management with the
+  rejected ones. A rejection keeps the tool's reference whenever the tool returned a document.
+- `invoicing_due_work()` lets any `app_user` session list the (school, business) id pairs with
+  due invoices across schools: ids only, a deliberate and narrow exception to tenant isolation.
+- The outbox writes nothing on an issued invoice: the issuing statement writes everything at once,
+  so the immutability trigger of #302 is unchanged.
+- A draft attempted once is never drafted again (the tool may hold it). A `cancelled` invoice, or
+  one `rejected` before the tool held any document of it, gives its lines back to the next
+  drafting; one rejected while the tool holds a draft keeps them (`billsItsLines`).
+- Nothing is sent while #176 Q1 (when yearly packages and lesson packs are due) is open: a draft
+  goes only once its installments add up to its total (`isSendable`).

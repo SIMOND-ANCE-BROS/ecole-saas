@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { rowsOf } from "./columns-of";
-import { discardDrafts, draftsBillingEnrollment } from "./invoice-draft-discard";
+import { discardDrafts, draftsBillingEnrollment, UNSENT_DRAFT } from "./invoice-draft-discard";
 import { z } from "zod";
 import { discountImpacts } from "../domain/enrollment/impacts";
 import { alreadyTaken, duplicateRefusal, TAKEN_STATUSES, type TakenCourse } from "../domain/enrollment/duplicates";
@@ -596,9 +596,10 @@ export const quarterCountSql = sql<number>`(SELECT count(*) FROM enrollment_quar
 /**
  * A line of an invoice other than an unsent draft refers to the enrollment of the row. An
  * unsent draft (#302) never reached the tool: cancelling the enrollment throws the draft away.
+ * A draft the outbox attempted (#304) may be in the tool: it counts as invoiced.
  */
 const invoicedSql = sql<boolean>`EXISTS (SELECT 1 FROM invoice_line l JOIN invoice i ON i.id = l.invoice_id
-  WHERE l.enrollment_id = ${enrollmentId} AND i.status <> 'to_send')`;
+  WHERE l.enrollment_id = ${enrollmentId} AND NOT ${UNSENT_DRAFT})`;
 
 /**
  * Attendance was taken for a student of the enrollment of the row in one of its courses,
