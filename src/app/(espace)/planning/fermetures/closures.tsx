@@ -1,8 +1,14 @@
 "use client";
 
-import { Alert, Button, Input, MultiSelect, Paper, SegmentedControl, Text, TextInput } from "@mantine/core";
+import { Alert, Button, Group, Input, MultiSelect, Paper, SegmentedControl, Text, TextInput } from "@mantine/core";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { Closure } from "@/db/lessons";
+import {
+  meetsDuring,
+  pickByAudience,
+  type AudienceCourse,
+  type AudiencePick,
+} from "@/domain/schedule/closure-audience";
 import type { ClosureScope } from "@/domain/schedule/closure-scope";
 import { settle, type ActionResult } from "@/lib/action-result";
 import { ConfirmRemoval, type Removal } from "../../_ui/confirm-removal";
@@ -18,6 +24,21 @@ const shortDate = new Intl.DateTimeFormat("fr-FR", {
 const day = (iso: string) => shortDate.format(new Date(`${iso}T00:00:00Z`));
 
 type Option = { value: string; label: string };
+
+/** A course of the season, with what ticking it by audience needs (#295). */
+export type CourseOption = Option &
+  Omit<AudienceCourse, "id"> &
+  Parameters<typeof meetsDuring>[0] & {
+    /** « 12 à 17 ans », null when no age is filled in. */
+    ages: string | null;
+  };
+
+/** The audience buttons (#295), in the order management reads them. */
+const AUDIENCES: { pick: AudiencePick; label: string; ticked: string }[] = [
+  { pick: "children", label: "Enfants et ados", ticked: "enfants et ados" },
+  { pick: "adults", label: "Adultes", ticked: "adultes" },
+  { pick: "all", label: "Tous les cours collectifs", ticked: "collectifs" },
+];
 type Kind = ClosureScope["kind"];
 
 type Props = {
@@ -28,7 +49,7 @@ type Props = {
   seasonId: string;
   /** Sites and courses of the season a closure can be limited to (#200). */
   sites: Option[];
-  courses: Option[];
+  courses: CourseOption[];
 };
 
 const EMPTY = {
@@ -69,6 +90,8 @@ export function ClosuresManagement({
   const choice = useRef<HTMLInputElement>(null);
   const label = useRef<HTMLInputElement>(null);
   const [removal, setRemoval] = useState<Removal | null>(null);
+  /** What the last audience button ticked, and the courses it left for management to decide (#295). */
+  const [picked, setPicked] = useState<{ label: string; count: number; undecided: CourseOption[] } | null>(null);
   /** Where focus goes once a removal is saved and the list redrawn (its button is gone). */
   const focusAfter = useRef<string | null>(null);
   useEffect(() => {
@@ -126,7 +149,27 @@ export function ClosuresManagement({
             },
       );
       setV(EMPTY);
+      setPicked(null);
       label.current?.focus();
+    });
+  };
+
+  // Ticks the group courses of an audience that meet on the closure's dates (all of them while no
+  // date is typed), replacing the list: management then adds or removes courses one by one.
+  const tick = (a: (typeof AUDIENCES)[number]) => {
+    const period = v.start ? { start: v.start, end: v.end || v.start } : null;
+    const season = { start: seasonStart, end: seasonEnd };
+    const held = courses.filter((c) => !period || meetsDuring(c, season, period));
+    const { courseIds, undecidedIds } = pickByAudience(
+      held.map((c) => ({ ...c, id: c.value })),
+      a.pick,
+    );
+    setChoiceError(null);
+    setV({ ...v, courseIds });
+    setPicked({
+      label: a.ticked,
+      count: courseIds.length,
+      undecided: held.filter((c) => undecidedIds.includes(c.value)),
     });
   };
 
@@ -202,6 +245,7 @@ export function ClosuresManagement({
               value={v.scope}
               onChange={(scope) => {
                 setChoiceError(null);
+                setPicked(null);
                 if (isKind(scope)) setV({ ...v, scope });
               }}
               className="max-w-full overflow-x-auto"
@@ -224,11 +268,29 @@ export function ClosuresManagement({
             />
           )}
           {v.scope === "courses" && (
+            <Input.Wrapper
+              label="Cocher les cours"
+              id="fermeture-public"
+              labelElement="div"
+              classNames={{ label: "block" }}
+              description="Selon l’âge du cours ; cours particuliers et compétition exclus."
+              className="max-w-full"
+            >
+              <Group gap="xs" mt={4} role="group" aria-labelledby="fermeture-public-label">
+                {AUDIENCES.map((a) => (
+                  <Button key={a.pick} size="compact-sm" variant="default" onClick={() => tick(a)}>
+                    {a.label}
+                  </Button>
+                ))}
+              </Group>
+            </Input.Wrapper>
+          )}
+          {v.scope === "courses" && (
             <MultiSelect
               ref={choice}
               label="Cours annulés"
               placeholder={v.courseIds.length === 0 ? "Choisir les cours (tapez pour chercher)" : undefined}
-              className="min-w-[16rem] flex-1"
+              className="min-w-[16rem] flex-1 basis-full"
               data={courses}
               description="Les séances de ces cours sont retirées du planning à ces dates."
               value={v.courseIds}
@@ -243,6 +305,30 @@ export function ClosuresManagement({
             />
           )}
         </div>
+        {v.scope === "courses" && picked && (
+          <div role="status" className="flex flex-col gap-1">
+            <Text size="sm">
+              {picked.count === 0
+                ? `Aucun cours ${picked.label} ${v.start ? "ces jours-là" : "cette saison"}.`
+                : `${picked.count} cours ${picked.label} coché${picked.count > 1 ? "s" : ""}.`}
+            </Text>
+            {picked.undecided.length > 0 && (
+              <>
+                <Text size="sm" c="dimmed">
+                  À décider, non cochés (pas d’âge ou mineurs et adultes ensemble) : ajoutez-les dans la liste si
+                  besoin.
+                </Text>
+                <ul className="list-disc pl-5 text-sm">
+                  {picked.undecided.map((c) => (
+                    <li key={c.value}>
+                      {c.label} ({c.ages ?? "âge non renseigné"})
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        )}
         <Button type="submit" loading={inProgress} className="self-start">
           Ajouter
         </Button>

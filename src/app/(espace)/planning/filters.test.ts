@@ -19,6 +19,7 @@ const base: ScheduleCourse = {
   dates: [],
   instructorId: "prof-1",
   instructor: "Intervenant fictif",
+  type: "group",
   ageMin: null,
   ageMax: null,
   level: null,

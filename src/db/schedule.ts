@@ -97,6 +97,8 @@ export type ScheduleCourse = {
   instructorId: string;
   /** « Prénom Nom » */
   instructor: string;
+  /** Group, private, competition or workshop: only group courses are ticked by an audience (#295). */
+  type: "group" | "private" | "competition" | "workshop";
   ageMin: number | null;
   ageMax: number | null;
   level: string | null;
@@ -151,6 +153,7 @@ async function readScheduleCourse(tx: Tx, filter: SQL): Promise<ScheduleCourse[]
       instructorId: course.instructorId,
       firstName: instructor.firstName,
       name: instructor.lastName,
+      type: course.type,
       ageMin: course.ageMin,
       ageMax: course.ageMax,
       level: course.level,

@@ -9,6 +9,7 @@ import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { TextLink } from "../../_ui/text-link";
 import { ClosuresManagement } from "./closures";
+import { ages } from "../format";
 import { seasonParam, withSeason } from "../season-link";
 
 export const metadata: Metadata = { title: "Fermetures" };
@@ -30,7 +31,22 @@ export default async function ClosuresPage({ searchParams }: PageProps<"/plannin
       closures: s ? await listClosures(tx, s.id) : [],
       sites: (await listPlaces(tx)).map((p) => ({ value: p.id, label: p.name })),
       // The season's courses a closure can be limited to (#200).
-      courses: s ? (await seasonCourses(tx, s.id)).map((c) => ({ value: c.id, label: closedCourseLabel(c) })) : [],
+      // Type, ages and recurrence: to tick them by audience on the closure's dates (#295).
+      courses: s
+        ? (await seasonCourses(tx, s.id)).map((c) => ({
+            value: c.id,
+            label: closedCourseLabel(c),
+            ages: ages(c.ageMin, c.ageMax),
+            type: c.type,
+            ageMin: c.ageMin,
+            ageMax: c.ageMax,
+            recurrence: c.recurrence,
+            weekday: c.weekday,
+            startDate: c.startDate,
+            endDate: c.endDate,
+            dates: c.dates,
+          }))
+        : [],
     };
   });
   const planning = season ? withSeason("/planning", seasonParam(season.id, current?.id)) : "/planning";
