@@ -45,7 +45,7 @@ import type {
 } from "../domain/tariff/types";
 import { severalEntities } from "./billing-entities";
 import type { Tx } from "./index";
-import { hasNonStudent, NOT_A_STUDENT_YET, payableStudents } from "./people";
+import { paysForNonStudent, NOT_A_STUDENT_YET, payableStudents } from "./people";
 import {
   auditLog,
   billingEntity,
@@ -228,7 +228,7 @@ async function validate(
 
   const payables = new Set((await payableStudents(tx, payerId)).map((d) => d.id));
   if (!studentIds.every((id) => payables.has(id)))
-    return (await hasNonStudent(tx, studentIds))
+    return (await paysForNonStudent(tx, payerId, studentIds))
       ? NOT_A_STUDENT_YET
       : "Cette personne ne paie pas pour ce danseur : ajoutez le lien « paie pour » sur sa fiche.";
 
@@ -378,27 +378,28 @@ export async function enrollmentPreview(
       price: result.enrollments.find((i) => i.reference === r.reference)!,
     })),
     // A trial or waitlist enrollment does not count as a sibling (Q3): the others' discounts stay as they are.
-    existingImpacts: countsAsSibling(entry.status ?? "active")
-      ? await impactsOn(tx, payerId, existing, result.enrollments)
-      : [],
+    existingImpacts: countsAsSibling(entry.status ?? "active") ? await impactsOn(tx, existing, result.enrollments) : [],
     quarters,
   };
 }
 
 /** Q2 (#284): the payer's saved enrollments whose discount would change, named by their students' first names. */
-async function impactsOn(
-  tx: Tx,
-  payerId: string,
-  existing: Existing[],
-  recomputed: EnrollmentResult[],
-): Promise<ExistingImpact[]> {
+async function impactsOn(tx: Tx, existing: Existing[], recomputed: EnrollmentResult[]): Promise<ExistingImpact[]> {
   const impacts = discountImpacts(
     // A typed price is final (#292 Q2): its discount moving changes nothing to report.
     existing.filter((e) => !e.manual).map((e) => ({ reference: e.reference, savedDiscountCents: e.savedDeposit })),
     recomputed,
   );
   if (impacts.length === 0) return [];
-  const firstNames = new Map((await payableStudents(tx, payerId)).map((d) => [d.id, d.firstName]));
+  // Named after the students the enrollments hold, even one no longer marked as a student (#314).
+  const ids = [...new Set(existing.flatMap((e) => e.studentIds))];
+  const named = ids.length
+    ? await tx
+        .select({ id: person.id, firstName: person.firstName, name: person.lastName })
+        .from(person)
+        .where(inArray(person.id, ids))
+    : [];
+  const firstNames = new Map(named.map((d) => [d.id, d.firstName ?? d.name]));
   return impacts.map((i) => ({
     reference: i.reference,
     students: (existing.find((e) => e.reference === i.reference)?.studentIds ?? [])
@@ -845,7 +846,7 @@ async function confirmationOf(tx: Tx, e: Saved): Promise<ConfirmationPreview> {
           ? (manualPrice?.priceCents ?? null)
           : null,
     savedNetPriceCents: savedNetPrice(e),
-    existingImpacts: await impactsOn(tx, e.payerId, existing, result.enrollments),
+    existingImpacts: await impactsOn(tx, existing, result.enrollments),
   };
 }
 
@@ -946,7 +947,7 @@ export async function leavingImpacts(tx: Tx, id: string): Promise<ExistingImpact
     discounts: await loadDiscounts(tx, e.seasonId),
     enrollments: remaining,
   });
-  return impactsOn(tx, e.payerId, remaining, result.enrollments);
+  return impactsOn(tx, remaining, result.enrollments);
 }
 
 /**

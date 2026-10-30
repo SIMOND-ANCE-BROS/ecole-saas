@@ -182,6 +182,14 @@ describe("selling a lesson pack", () => {
     expect(await admin`SELECT 1 FROM lesson_pack_person WHERE person_id = ${contact}`).toHaveLength(0);
   });
 
+  it("asks for the « paie pour » link, not the student flag, for a contact the payer does not pay for", async () => {
+    const unrelated = await insertPerson(school, "Zzinconnu", false);
+    expect(await sell({ participantIds: [unrelated] })).toEqual({
+      ok: false,
+      message: "Cette personne ne paie pas pour cet élève : ajoutez le lien « paie pour » sur sa fiche.",
+    });
+  });
+
   it("lets an adult student buy a pack for themselves", async () => {
     const r = await sell({ participantIds: [stranger] }, stranger);
     expect(r.ok).toBe(true);

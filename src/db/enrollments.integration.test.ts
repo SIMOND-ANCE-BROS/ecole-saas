@@ -156,6 +156,17 @@ describe("Enrollment", () => {
     expect(a.existingImpacts[0]).toMatchObject({ students: "Zoé", savedDeposit: 0, recalculatedDiscount: 1100 });
   });
 
+  it("still names a student of a saved enrollment once no longer marked as a student (#314)", async () => {
+    await admin`UPDATE person SET is_student = false WHERE id = ${ids.zoe}`;
+    try {
+      const a = await preview(childEntry([ids.noe], [ids.jazz60]));
+      if (a.status !== "ok") throw new Error(a.message);
+      expect(a.existingImpacts.map((i) => i.students)).toEqual(["Zoé"]);
+    } finally {
+      await admin`UPDATE person SET is_student = true WHERE id = ${ids.zoe}`;
+    }
+  });
+
   it("saves the second child with the siblings discount (two courses of the same discipline)", async () => {
     const r = await save(childEntry([ids.noe], [ids.jazz45, ids.jazz60]));
     if (!r.ok) throw new Error(r.message);

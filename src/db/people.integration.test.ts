@@ -215,17 +215,19 @@ describe("payableStudents and payersOf", () => {
     expect((await withSchool(school, (tx) => payableStudents(tx, alex))).map((d) => d.id)).toEqual([alex]);
   });
 
-  it("offers a contact they pay for only once they are a student (#314)", async () => {
+  it("offers a contact they pay for only once they are a student (#314)", async ({ onTestFinished }) => {
     // Hélène pays for a contact who is not a student: offered only once added to the students.
     const contact = await insert(school, { last_name: "Zzcontact", first_name: "Zzpasélève" });
+    // Removed even if an assertion fails, so the other tests see Hélène's family unchanged.
+    onTestFinished(async () => {
+      await admin`DELETE FROM relationship WHERE related_person_id = ${contact}`;
+      await admin`DELETE FROM person WHERE id = ${contact}`;
+    });
     await link(helene, contact, "other", true);
     const offered = async () => (await withSchool(school, (tx) => payableStudents(tx, helene))).map((d) => d.id);
     expect(await offered()).not.toContain(contact);
     await admin`UPDATE person SET is_student = true WHERE id = ${contact}`;
     expect(await offered()).toContain(contact);
-    // Removed so the other tests see Hélène's family unchanged.
-    await admin`DELETE FROM relationship WHERE related_person_id = ${contact}`;
-    await admin`DELETE FROM person WHERE id = ${contact}`;
   });
 
   it("returns a student's payers", async () => {

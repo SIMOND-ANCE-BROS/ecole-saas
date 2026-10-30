@@ -13,7 +13,7 @@ import { priceLessonPack } from "../domain/tariff/lesson-pack";
 import { has } from "../lib/has";
 import { rowsOf } from "./columns-of";
 import type { Tx } from "./index";
-import { displayedName, hasNonStudent, NOT_A_STUDENT_YET, payableStudents } from "./people";
+import { displayedName, paysForNonStudent, NOT_A_STUDENT_YET, payableStudents } from "./people";
 import { currentSeason } from "./schedule";
 import { entityChoices, resolveEntity } from "./billing-entities";
 import { resolveTreatment } from "./vat-treatments";
@@ -104,7 +104,7 @@ export async function sellLessonPack(
   if (!e.participantIds.every((id) => payables.has(id)))
     return {
       ok: false,
-      message: (await hasNonStudent(tx, e.participantIds))
+      message: (await paysForNonStudent(tx, payerId, e.participantIds))
         ? NOT_A_STUDENT_YET
         : "Cette personne ne paie pas pour cet élève : ajoutez le lien « paie pour » sur sa fiche.",
     };

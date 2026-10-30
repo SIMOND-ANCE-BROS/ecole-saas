@@ -317,14 +317,23 @@ export async function payableStudents(
 export const NOT_A_STUDENT_YET =
   "Cette personne n’est pas encore élève : « Ajouter aux élèves » sur sa fiche de contact.";
 
-/** Whether one of these people is a contact of this school, not a student (#314). */
-export async function hasNonStudent(tx: Tx, ids: readonly string[]): Promise<boolean> {
+/** Whether one of these people is the payer or someone they pay for, but not a student yet (#314). */
+export async function paysForNonStudent(tx: Tx, payerId: string, ids: readonly string[]): Promise<boolean> {
   const valid = ids.filter((id) => z.uuid().safeParse(id).success);
-  if (valid.length === 0) return false;
+  if (valid.length === 0 || !z.uuid().safeParse(payerId).success) return false;
   const rows = await tx
     .select({ id: person.id })
     .from(person)
-    .where(and(inArray(person.id, valid), eq(person.isStudent, false)))
+    .where(
+      and(
+        inArray(person.id, valid),
+        eq(person.isStudent, false),
+        or(
+          eq(person.id, payerId),
+          sql`EXISTS (SELECT 1 FROM relationship l WHERE l.person_id = ${payerId} AND l.related_person_id = ${currentId} AND l.pays_for)`,
+        ),
+      ),
+    )
     .limit(1);
   return rows.length > 0;
 }
