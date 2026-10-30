@@ -6,9 +6,15 @@ export type EscapeTarget = {
 
 /**
  * Where a page's drop-down lists, calendars, menus and dialogs are rendered: each Mantine
- * `Portal` is a `[data-portal]` node. A side panel passes its own portal instead.
+ * `Portal` is a `[data-portal]` node. A side panel passes its own portal instead. A key pressed
+ * in there never cancels the form: an inline form rendered inside a Mantine Modal or Drawer
+ * would need its own portal selector.
  */
 export const PAGE_PORTALS = "[data-portal]";
+
+/** Whether the element with this id is on screen (outside a browser: never). */
+const shownOnPage = (id: string) =>
+  typeof document !== "undefined" && (document.getElementById(id)?.checkVisibility() ?? false);
 
 /**
  * Whether Escape pressed on `target` belongs to a list, calendar, menu or dialog that closes
@@ -18,14 +24,22 @@ export const PAGE_PORTALS = "[data-portal]";
  *   there; they mark an open list with `data-expanded` (with `data-mantine-stop-propagation`,
  *   the attribute Mantine's own modals read to leave such an Escape to the list). `DateField`
  *   marks its open calendar the same way. `aria-expanded` covers the other controls
- *   (popovers, disclosure buttons);
+ *   (popovers, disclosure buttons). An `Autocomplete` without any match stays marked while it
+ *   shows nothing: when the field names its list (`aria-controls`), that list must be `shown`,
+ *   or Escape would seem to do nothing;
  * - inside the dropdown or dialog itself (a menu item, a button of « Abandonner la saisie ? »),
  *   rendered in `portal`.
  */
-export function listOpenOn(target: EscapeTarget, portal: string = PAGE_PORTALS): boolean {
+export function listOpenOn(
+  target: EscapeTarget,
+  portal: string = PAGE_PORTALS,
+  shown: (id: string) => boolean = shownOnPage,
+): boolean {
+  const marked =
+    target.getAttribute("data-mantine-stop-propagation") !== null || target.getAttribute("data-expanded") !== null;
+  const list = target.getAttribute("aria-controls");
   return (
-    target.getAttribute("data-mantine-stop-propagation") !== null ||
-    target.getAttribute("data-expanded") !== null ||
+    (marked && (list === null || shown(list))) ||
     target.getAttribute("aria-expanded") === "true" ||
     target.closest(portal) !== null
   );

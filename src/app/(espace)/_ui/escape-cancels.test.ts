@@ -1,6 +1,7 @@
 import { createElement, type ComponentType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Autocomplete, MantineProvider, Select } from "@mantine/core";
+import { DateInput } from "@mantine/dates";
 import { describe, expect, it, vi } from "vitest";
 import { cancelOnEscape, escapeCancels, escapeOutcome, listOpenOn, type EscapeTarget } from "./escape-cancels";
 
@@ -42,6 +43,14 @@ describe("listOpenOn", () => {
     expect(listOpenOn(element({ "aria-expanded": "true" }))).toBe(true);
     expect(listOpenOn(element({ "aria-expanded": "false" }))).toBe(false);
     expect(listOpenOn(element({}))).toBe(false);
+  });
+
+  it("ignores an Autocomplete marked open whose list shows nothing (no match)", () => {
+    const marked = element({ "data-expanded": "true", "aria-controls": "zz-list" });
+    expect(listOpenOn(marked, "[data-portal]", () => false)).toBe(false);
+    expect(listOpenOn(marked, "[data-portal]", (id) => id === "zz-list")).toBe(true);
+    // A calendar or menu target names no list: its mark is enough.
+    expect(listOpenOn(element({ "data-expanded": "true" }), "[data-portal]", () => false)).toBe(true);
   });
 
   it("sees a key pressed inside a dropdown or dialog, in the page's portals or the panel's", () => {
@@ -123,5 +132,22 @@ describe("cancelOnEscape", () => {
     expect(close).not.toHaveBeenCalled();
     expect(ask).not.toHaveBeenCalled();
     expect(e.preventDefault).not.toHaveBeenCalled();
+  });
+});
+
+describe("DateField's open calendar mark", () => {
+  it("reaches the input: Mantine's DateInput passes data-expanded on (#339)", () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        MantineProvider,
+        null,
+        createElement(DateInput as ComponentType<{ label: string; "data-expanded": boolean }>, {
+          label: "Du",
+          "data-expanded": true,
+        }),
+      ),
+    );
+    const tag = html.match(/<input [^>]*data-dates-input[^>]*>/)?.[0] ?? "";
+    expect(tag).toContain("data-expanded");
   });
 });

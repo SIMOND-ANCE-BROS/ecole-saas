@@ -19,10 +19,16 @@ export type EscapeCancels = {
  * « Abandonner la saisie ? » first, focus on « Continuer la saisie ». The form's own
  * « Annuler » does not ask: it says what it does. The hook lives as long as the form: an edit
  * opened in a list goes through `<EscapeCancelsForm>` or `<EscapeCancelsRow>`, so that each
- * opened row starts afresh.
+ * opened row starts afresh. `changed` adds what the fields cannot show (a row added with its
+ * proposed values).
  */
-export function useEscapeCancels(root: RefObject<HTMLElement | null>, close: () => void): EscapeCancels {
-  const holdsInput = useUnsavedInput(root);
+export function useEscapeCancels(
+  root: RefObject<HTMLElement | null>,
+  close: () => void,
+  changed: () => boolean = () => false,
+): EscapeCancels {
+  const fieldsHoldInput = useUnsavedInput(root);
+  const holdsInput = () => changed() || fieldsHoldInput();
   const [asking, setAsking] = useState(false);
   /** The field Escape was pressed in: « Continuer la saisie » gives the focus back there. */
   const from = useRef<HTMLElement | null>(null);

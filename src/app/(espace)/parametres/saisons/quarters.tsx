@@ -45,7 +45,8 @@ export function QuartersEditor({ season, onClose }: { season: SeasonRow; onClose
   const addId = `ajouter-trimestre-${season.id}`;
   // Escape closes the editor, asking first if a quarter was changed, added or removed (#339).
   const form = useRef<HTMLFormElement>(null);
-  const escape = useEscapeCancels(form, onClose);
+  // A quarter added starts from its proposed dates, which no field shows as changed.
+  const escape = useEscapeCancels(form, onClose, () => rows.some((r) => r.id === null));
 
   return (
     <Paper
