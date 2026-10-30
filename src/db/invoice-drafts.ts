@@ -1,7 +1,7 @@
 import { and, asc, between, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { rowsOf } from "./columns-of";
-import { discardDrafts, lockDrafts } from "./invoice-draft-discard";
+import { BILLS_ITS_LINES, discardDrafts, lockDrafts } from "./invoice-draft-discard";
 import { loadGrid } from "./enrollments";
 import type { Tx } from "./index";
 import {
@@ -140,12 +140,14 @@ export async function draftPayerInvoices(
 }
 
 /**
- * Billed by a line of an invoice (the unsent drafts are gone by then): not drafted again, even
- * on an invoice the tool rejected or that was cancelled, until the sending (#304) and credit
- * notes decide what such an invoice gives back.
+ * Billed by a line of an invoice still billing its lines (the unsent drafts are gone by then):
+ * not drafted again. A cancelled invoice, or one rejected before the tool held any document of
+ * it, gives its lines back (#304, `billsItsLines`).
  */
-const billedEnrollment = sql`EXISTS (SELECT 1 FROM invoice_line l WHERE l.enrollment_id = ${enrollment.id})`;
-const billedPack = sql`EXISTS (SELECT 1 FROM invoice_line l WHERE l.lesson_pack_id = ${lessonPack.id})`;
+const billedEnrollment = sql`EXISTS (SELECT 1 FROM invoice_line l JOIN invoice i ON i.id = l.invoice_id
+  WHERE l.enrollment_id = ${enrollment.id} AND ${BILLS_ITS_LINES})`;
+const billedPack = sql`EXISTS (SELECT 1 FROM invoice_line l JOIN invoice i ON i.id = l.invoice_id
+  WHERE l.lesson_pack_id = ${lessonPack.id} AND ${BILLS_ITS_LINES})`;
 
 /** The payer's enrollments of the season no invoice bills yet, with their courses, students and quarters. */
 async function billableEnrollments(tx: Tx, payerId: string, seasonId: string): Promise<BillableEnrollment[]> {

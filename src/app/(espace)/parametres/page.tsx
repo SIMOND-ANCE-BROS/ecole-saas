@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
-import { Paper, Text, Title } from "@mantine/core";
+import { Badge, Paper, Text, Title } from "@mantine/core";
 import Link from "next/link";
 import { withSchool } from "@/db";
 import { listDisciplines, listPlaces, listSeasons } from "@/db/settings";
 import { listEntities } from "@/db/billing-entities";
+import { sendingProblemCount } from "@/db/invoice-outbox";
 import { readMethodSettings } from "@/db/payment-methods";
 import { offeredMethods } from "@/domain/payments/methods";
+import { has } from "@/lib/has";
 import { requireRole } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Paramètres" };
@@ -19,12 +21,14 @@ export default async function SettingsPage() {
     seats: seats,
     entities,
     methods,
+    problems,
   } = await withSchool(schoolId, async (tx) => ({
     seasons: await listSeasons(tx),
     disciplines: await listDisciplines(tx),
     seats: await listPlaces(tx),
     entities: await listEntities(tx),
     methods: await readMethodSettings(tx),
+    problems: await sendingProblemCount(tx),
   }));
   const accepted = offeredMethods(methods).length;
   const rooms = seats.reduce((n, s) => n + s.rooms.length, 0);
@@ -59,6 +63,8 @@ export default async function SettingsPage() {
       href: "/parametres/entreprises",
       title: "Entreprises",
       detail: `${entities.length} entreprise${entities.length > 1 ? "s" : ""} : SIREN, TVA et compte bancaire`,
+      // Invoices the tool could not issue (#304): said on the card, where management looks.
+      alert: problems > 0 ? `${problems} facture${problems > 1 ? "s" : ""} à reprendre` : null,
     },
     {
       href: "/parametres/moyens-de-paiement",
@@ -88,6 +94,11 @@ export default async function SettingsPage() {
                 <Text span size="sm" c="dimmed">
                   {r.detail}
                 </Text>
+                {has(r, "alert") && r.alert && (
+                  <Badge color="orange" variant="light" className="self-start">
+                    {r.alert}
+                  </Badge>
+                )}
               </Paper>
             </Link>
           </li>
