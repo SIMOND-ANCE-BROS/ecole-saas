@@ -55,6 +55,7 @@ export default async function SettingsPage() {
       title: "Entreprises",
       detail: `${entities.length} entreprise${entities.length > 1 ? "s" : ""} : SIREN, TVA et compte bancaire`,
     },
+    { href: "/parametres/tva", title: "TVA", detail: "Exonération ou taux de TVA des cours et des carnets" },
     { href: "/intervenants", title: "Intervenants", detail: "Professeurs, statut et rémunération" },
     { href: "/parametres/equipe", title: "Équipe", detail: "Accès de la direction et de l’accueil, invitations" },
   ];

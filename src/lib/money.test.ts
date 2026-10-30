@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyRate, formatEuros, parseEuros, prorate, split, typedEuros } from "./money";
+import { allocate, applyRate, formatEuros, parseEuros, prorate, split, typedEuros, vatOfInclusive } from "./money";
 
 describe("prorate", () => {
   it("prices minutes at an hourly rate, half a cent up", () => {
@@ -86,5 +86,83 @@ describe("typedEuros", () => {
   it("refuses a negative or non-integer amount", () => {
     expect(() => typedEuros(-1)).toThrow(TypeError);
     expect(() => typedEuros(12.5)).toThrow(TypeError);
+  });
+});
+
+describe("vatOfInclusive", () => {
+  it("takes 20 % VAT out of a VAT-inclusive price (415,00 € → 69,17 € of VAT, 345,83 € excl.)", () => {
+    expect(vatOfInclusive(41500, 2000)).toBe(6917);
+    expect(41500 - vatOfInclusive(41500, 2000)).toBe(34583);
+  });
+
+  it("rounds half a cent away from zero, on both signs", () => {
+    // 0,06 € at 20 %: 6 × 2000 / 12000 = 1 exactly; 0,03 €: 0,5 cent → 1 cent.
+    expect(vatOfInclusive(6, 2000)).toBe(1);
+    expect(vatOfInclusive(3, 2000)).toBe(1);
+    expect(vatOfInclusive(-3, 2000)).toBe(-1);
+    // 0,02 €: 0,33 cent → 0.
+    expect(vatOfInclusive(2, 2000)).toBe(0);
+    expect(vatOfInclusive(-41500, 2000)).toBe(-6917);
+  });
+
+  it("handles other rates: 5,5 % and 10 %", () => {
+    // 10550 × 550 / 10550 = 550 exactly.
+    expect(vatOfInclusive(10550, 550)).toBe(550);
+    // 1000 × 1000 / 11000 = 90,909… → 91.
+    expect(vatOfInclusive(1000, 1000)).toBe(91);
+  });
+
+  it("is zero at a zero rate or on a zero amount", () => {
+    expect(vatOfInclusive(41500, 0)).toBe(0);
+    expect(vatOfInclusive(0, 2000)).toBe(0);
+  });
+
+  it("refuses a non-integer amount or rate, and a negative rate", () => {
+    expect(() => vatOfInclusive(10.5, 2000)).toThrow(TypeError);
+    expect(() => vatOfInclusive(1000, 20.5)).toThrow(TypeError);
+    expect(() => vatOfInclusive(1000, -1)).toThrow(TypeError);
+  });
+});
+
+describe("allocate", () => {
+  it("spreads an amount in proportion to the weights, with an exact sum", () => {
+    expect(allocate(100, [1, 1, 1])).toEqual([34, 33, 33]);
+    expect(allocate(6917, [20000, 15000, 6500])).toEqual([3334, 2500, 1083]);
+  });
+
+  it("gives the cents left over to the largest remainders, ties to the lowest index", () => {
+    // 10 × 1/3 = 3,33 each: one cent left, to the first.
+    expect(allocate(10, [1, 1, 1])).toEqual([4, 3, 3]);
+    // 10 × (1, 2, 2)/5 = 2, 4, 4: nothing left over.
+    expect(allocate(10, [1, 2, 2])).toEqual([2, 4, 4]);
+    // 7 × (1, 1, 2)/4 = 1,75, 1,75, 3,5: the first two have the largest remainder.
+    expect(allocate(7, [1, 1, 2])).toEqual([2, 2, 3]);
+  });
+
+  it("handles a negative weight (a discount line) and keeps the exact sum", () => {
+    expect(allocate(4500, [30000, -3000])).toEqual([5000, -500]);
+    const parts = allocate(4499, [30001, -3001, 7]);
+    expect(parts.reduce((a, b) => a + b, 0)).toBe(4499);
+  });
+
+  it("is symmetric for a negative amount", () => {
+    expect(allocate(-10, [1, 1, 1])).toEqual([-4, -3, -3]);
+    expect(allocate(-6917, [20000, 15000, 6500])).toEqual([-3334, -2500, -1083]);
+  });
+
+  it("gives zeros for a zero amount, whatever the weights", () => {
+    expect(allocate(0, [3000, -3000])).toEqual([0, 0]);
+  });
+
+  it("stays exact on large amounts (no floating-point product)", () => {
+    const parts = allocate(999_999_999, [999_999_937, 999_999_929, 1]);
+    expect(parts.reduce((a, b) => a + b, 0)).toBe(999_999_999);
+  });
+
+  it("refuses weights summing to zero for a non-zero amount, and non-integers", () => {
+    expect(() => allocate(10, [1, -1])).toThrow(RangeError);
+    expect(() => allocate(10, [])).toThrow(RangeError);
+    expect(() => allocate(10.5, [1])).toThrow(TypeError);
+    expect(() => allocate(10, [1.5])).toThrow(TypeError);
   });
 });

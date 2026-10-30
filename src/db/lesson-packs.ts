@@ -16,6 +16,7 @@ import type { Tx } from "./index";
 import { displayedName, payableStudents } from "./people";
 import { currentSeason } from "./schedule";
 import { entityChoices, resolveEntity } from "./billing-entities";
+import { resolveTreatment } from "./vat-treatments";
 import { auditLog, course, lesson, lessonPack, lessonPackPerson, lessonPackUsage, member, person } from "./schema";
 import { readAttendance } from "./lessons";
 import { listLessonPacks } from "./tariffs";
@@ -119,12 +120,16 @@ export async function sellLessonPack(
     return { ok: false, message: ENTITY_REQUIRED };
   const entity = await resolveEntity(tx, e.billingEntityId);
   if (!entity.ok) return entity;
+  // Its business's default VAT treatment (#301), checked against the business's regime.
+  const treatment = await resolveTreatment(tx, { wanted: undefined, entityId: entity.id });
+  if (!treatment.ok) return treatment;
 
   const [{ id }] = await tx
     .insert(lessonPack)
     .values({
       schoolId: CURRENT_SCHOOL,
       billingEntityId: entity.id,
+      vatTreatmentId: treatment.id,
       payerId,
       peopleCount: e.peopleCount,
       lessonCount: e.lessonCount,

@@ -8,6 +8,8 @@ import { PAY_UNITS, rateField } from "@/domain/payroll/rate-field";
 import { formatEuros, parseEuros, typedEuros } from "@/lib/money";
 import type { ScheduleCourse } from "@/db/schedule";
 import type { EntityChoice } from "@/db/billing-entities";
+import type { CourseVat } from "@/db/vat-treatments";
+import { proposedTreatment, treatmentRefusal } from "@/domain/billing/vat";
 import { conflicts } from "@/domain/schedule/overlap";
 import { lessonDatesOf, type SeasonCalendar } from "@/domain/schedule/lessons";
 import { outsideHours } from "@/domain/schedule/hours";
@@ -35,6 +37,8 @@ type Props = {
   entities: EntityChoice[];
   /** Why the course's entity can no longer change (enrollments, counted lessons); null: it can. */
   entityLock?: string | null;
+  /** VAT treatments, businesses' regimes and defaults, instructors' last treatments (#301). */
+  vat: CourseVat;
   /** Instructors' pay modes and this course's own rate (#191): director pages only. */
   pay: CoursePay;
   schedule: ScheduleCourse[];
@@ -62,6 +66,7 @@ export function CourseForm({
   referential: referential,
   entities,
   entityLock = null,
+  vat,
   pay,
   schedule: schedule,
   calendar,
@@ -74,6 +79,25 @@ export function CourseForm({
   planning = "/planning",
 }: Props) {
   const r = referential;
+  // Treatments a business can use: none with a rate under the franchise (#301).
+  const allowedFor = (entityId: string) =>
+    vat.treatments
+      .filter((t) => {
+        const e = vat.entities[entityId];
+        return !e || treatmentRefusal(e.regime, t.category) === null;
+      })
+      .map((t) => t.id);
+  // Proposed for a new course (UI help only): the instructor's last course's, else the business's default.
+  const proposal = (instructorId: string, entityId: string) =>
+    proposedTreatment({
+      instructorLast: vat.lastByInstructor[instructorId] ?? null,
+      entityDefault: vat.entities[entityId]?.defaultTreatment ?? null,
+      allowed: allowedFor(entityId),
+    }) ?? "";
+  const initialInstructor = course?.instructorId ?? r.instructors[0]?.id ?? "";
+  const initialEntity = course?.billingEntityId ?? entities[0]?.id ?? "";
+  // Chosen by hand: a later change of instructor or business no longer replaces it.
+  const [treatmentChosen, setTreatmentChosen] = useState(course !== null);
   const [v, setV] = useState({
     discipline: course?.discipline ?? "",
     roomId: course?.roomId ?? r.rooms.find((s) => s.id === room)?.id ?? r.rooms[0]?.id ?? NEW,
@@ -82,9 +106,10 @@ export function CourseForm({
     siteId: r.sites[0]?.id ?? NEW,
     newSite: "",
     siteAddress: "",
-    instructorId: course?.instructorId ?? r.instructors[0]?.id ?? "",
+    instructorId: initialInstructor,
     // A new course is preselected on the default entity (#299; #288 Q1 may refine it).
-    billingEntityId: course?.billingEntityId ?? entities[0]?.id ?? "",
+    billingEntityId: initialEntity,
+    vatTreatmentId: course?.vatTreatmentId ?? proposal(initialInstructor, initialEntity),
     type: course?.type ?? "group",
     recurrence: course?.recurrence ?? "weekly",
     startDate: course?.startDate ?? "",
@@ -163,6 +188,8 @@ export function CourseForm({
     instructorId: v.instructorId,
     // Only sent when there is a choice: otherwise the default entity, or the course's own.
     billingEntityId: entities.length > 1 && v.billingEntityId ? v.billingEntityId : undefined,
+    // Absent: the course's own, or its business's default (the server checks it against the regime).
+    vatTreatmentId: v.vatTreatmentId || undefined,
     type: v.type,
     recurrence: v.recurrence,
     weekday: oneOff ? null : Number(v.weekday),
@@ -310,6 +337,7 @@ export function CourseForm({
                 ...v,
                 instructorId: value,
                 instructorRate: savedRate,
+                vatTreatmentId: treatmentChosen ? v.vatTreatmentId : proposal(value, v.billingEntityId),
               });
               return;
             }
@@ -323,7 +351,13 @@ export function CourseForm({
                   }
                 : null,
             );
-            setV({ ...v, instructorId: value, instructorRate: "" });
+            setV({
+              ...v,
+              instructorId: value,
+              instructorRate: "",
+              // A new course follows its instructor's usual treatment until one is chosen by hand.
+              vatTreatmentId: treatmentChosen ? v.vatTreatmentId : proposal(value, v.billingEntityId),
+            });
           }}
           description={
             r.instructors.length === 0 ? (
@@ -404,8 +438,38 @@ export function CourseForm({
             allowDeselect={false}
             data={entities.map((e) => ({ value: e.id, label: e.name }))}
             value={v.billingEntityId || null}
-            onChange={set("billingEntityId")}
+            onChange={(value) =>
+              value &&
+              setV({
+                ...v,
+                billingEntityId: value,
+                vatTreatmentId: treatmentChosen ? v.vatTreatmentId : proposal(v.instructorId, value),
+              })
+            }
             error={error("billingEntityId")}
+          />
+        )}
+        {vat.treatments.length > 1 && (
+          <Select
+            label="TVA"
+            // Description under the field: its box lines up with « Type ».
+            inputWrapperOrder={["label", "input", "description", "error"]}
+            description={
+              course
+                ? "Exonération ou taux de TVA du cours ; les prix restent TTC."
+                : "Proposée d’après le dernier cours de l’intervenant ; les prix restent TTC."
+            }
+            allowDeselect={false}
+            data={vat.treatments
+              .filter((t) => t.id === v.vatTreatmentId || allowedFor(v.billingEntityId).includes(t.id))
+              .map((t) => ({ value: t.id, label: t.label }))}
+            value={v.vatTreatmentId || null}
+            onChange={(value) => {
+              if (!value) return;
+              setTreatmentChosen(true);
+              setV({ ...v, vatTreatmentId: value });
+            }}
+            error={error("vatTreatmentId")}
           />
         )}
       </Fieldset>

@@ -41,6 +41,7 @@ const entry = {
   vatRegime: "not_applicable" as const,
   vatMention: "",
   bankAccountLabel: "Compte Zz Banque B",
+  defaultVatTreatmentId: "",
 };
 
 beforeAll(async () => {

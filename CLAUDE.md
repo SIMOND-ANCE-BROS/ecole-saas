@@ -108,7 +108,7 @@ These values live in data (`billing_entity`, `tariff`, `discount`, `site`, `room
 - In code:
   - The software **never generates an invoice number**: it stores the one returned by the tool; numbers are unique per billing entity.
   - An issued invoice is never modified: issue a **credit note**.
-  - VAT mentions are data: the invoice-level mention and regime come from the billing entity (`billing_entity.vat_regime`, `billing_entity.vat_mention`), the line-level mention and rate will come from the VAT treatment of the course (`vat_treatment`, to come with #301), copied onto the invoice line.
+  - VAT mentions are data: the invoice-level mention and regime come from the billing entity (`billing_entity.vat_regime`, `billing_entity.vat_mention`), the line-level category, rate and mention come from the VAT treatment of the course or lesson pack (`vat_treatment`, #301), copied onto the invoice line. Prices are VAT-inclusive: VAT is taken out once per treatment (`vatOfInclusive` in `src/lib/money.ts`, half a cent away from zero) and spread over the lines (`allocate`, `vatBreakdown` in `src/domain/billing/vat.ts`).
 - Each business's VAT regime and its tool are **pending the accountant's opinion**: keep them configurable.
 
 ## 6. Stack

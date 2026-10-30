@@ -3,6 +3,7 @@ import { Text, Title } from "@mantine/core";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { entityChoices } from "@/db/billing-entities";
+import { courseVat } from "@/db/vat-treatments";
 import { coursePay, entityLock, readCourse, scheduleReferential } from "@/db/courses";
 import { seasonCourses } from "@/db/schedule";
 import { seasonCalendar } from "@/db/lessons";
@@ -26,6 +27,7 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
       planning: await coursePlanning(tx, course.id),
       referential: await scheduleReferential(tx, course.instructorId),
       entities: await entityChoices(tx, course.billingEntityId),
+      vat: await courseVat(tx),
       entityLock: await entityLock(tx, course.id),
       pay: await coursePay(tx, course.id),
       schedule: await seasonCourses(tx, course.seasonId),
@@ -60,6 +62,7 @@ export default async function EditCoursePage({ params }: PageProps<"/planning/co
         course={course}
         referential={parsed.referential}
         entities={parsed.entities}
+        vat={parsed.vat}
         entityLock={parsed.entityLock}
         pay={parsed.pay}
         schedule={parsed.schedule}

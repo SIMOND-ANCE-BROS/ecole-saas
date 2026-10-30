@@ -168,6 +168,8 @@ describe("copy of a season's planning (#190)", () => {
         [
           "id",
           "season_id",
+          // A new course, created now (#301).
+          "created_at",
           ...(from.start_date ? ["start_date"] : []),
           ...(from.end_date ? ["end_date"] : []),
           ...unusedRate,
