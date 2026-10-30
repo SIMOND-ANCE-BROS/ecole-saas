@@ -499,8 +499,9 @@ export async function refundPayer(
   if (!who) return { ok: false, message: "Accès refusé." };
   if (!mayRefund(who.role)) return { ok: false, message: "Seule la direction peut rembourser un payeur." };
   // Refunds of one payer wait for each other, and for a payment or a reverse entry being
-  // saved for them (rank 1 of `src/db/payment-locks.ts`, which every payment write takes
-  // first): the balance read below, in a statement of its own, sees what they wrote once committed.
+  // saved for them (rank 1 of `src/db/payment-locks.ts`, which every write inserting a payment
+  // takes first; FOR UPDATE here): the balance read below, in a statement of its own, sees
+  // what they wrote once committed. Deposits and allocations are waited for on the payments.
   const [p] = await lockPayers(tx, [payerId], "update");
   if (!p) return { ok: false, message: "Payeur introuvable." };
   const entities = await listEntities(tx);

@@ -92,7 +92,7 @@ export async function payersOfPayments(tx: Tx, paymentIds: readonly string[]): P
   return rows.map((r) => r.id);
 }
 
-/** Ranks 1 and 2 for a write that names its payments: their payers, then the payments. */
+/** Ranks 1 and 2 for a write that names the payment it reverses (`correctPayment`): its payer, then the payment. */
 export async function lockPayersAndPayments(tx: Tx, paymentIds: readonly string[]): Promise<void> {
   await lockPayers(tx, await payersOfPayments(tx, paymentIds));
   await lockPayments(tx, paymentIds);

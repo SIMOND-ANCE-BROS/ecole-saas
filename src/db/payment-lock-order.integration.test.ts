@@ -136,6 +136,7 @@ describe("lock order of payment writes (#360)", () => {
     if (!a.ok || !b.ok) throw new Error("cheques not recorded");
 
     // Holds KEY SHARE on both payers, as attendance, a couple enrolled or a relationship does.
+    // `!`: each Promise executor below assigns its resolver synchronously, before any use.
     let release!: () => void;
     const released = new Promise<void>((resolve) => (release = resolve));
     let held!: () => void;
@@ -149,16 +150,18 @@ describe("lock order of payment writes (#360)", () => {
     });
     link.catch(() => undefined);
     await holding;
+    const deposit = withSchool(school, (tx) =>
+      createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [...a.ids, ...b.ids] }, TODAY),
+    );
+    deposit.catch(() => undefined);
     try {
-      const deposit = withSchool(school, (tx) =>
-        createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [...a.ids, ...b.ids] }, TODAY),
-      );
       const timeout = new Promise<"waited">((resolve) => setTimeout(() => resolve("waited"), 3000));
       const outcome = await Promise.race([deposit, timeout]);
       expect(outcome).toMatchObject({ ok: true });
     } finally {
       release();
-      await link;
+      // Both settle before the cleanup deletes their rows, even when the deposit had to wait.
+      await Promise.allSettled([link, deposit]);
     }
   });
 });
