@@ -207,6 +207,59 @@ describe("balancesByEntity", () => {
     expect(s.total.outsideCalculation).toEqual({ trial: 1_500, waitlist: 9_000 });
   });
 
+  it("an issued invoice replaces the price of what it bills; what no invoice bills keeps its price (#305)", () => {
+    const s = balancesByEntity(
+      [
+        // Billed by the invoice: its amount is the invoice's, not the enrollment's.
+        {
+          status: "active",
+          period: "year",
+          quarterCount: 0,
+          netPriceCents: 30_000,
+          billingEntityId: A,
+          invoiced: true,
+        },
+        // Enrolled after the invoice was issued: still counted from its price.
+        { status: "active", period: "year", quarterCount: 0, netPriceCents: 5_000, billingEntityId: A },
+        { status: "active", period: "year", quarterCount: 0, netPriceCents: 20_000, billingEntityId: B },
+      ],
+      [{ priceCents: 12_000, billingEntityId: A, invoiced: true }],
+      [{ amountCents: 10_000, plannedPayment: null, billingEntityId: A }],
+      TODAY,
+      [{ billingEntityId: A, totalInclTaxCents: 41_990 }],
+    );
+    expect(s.byEntity[A]).toMatchObject({ due: 46_990, paid: 10_000, remaining: 36_990 });
+    expect(s.byEntity[B]).toMatchObject({ due: 20_000, remaining: 20_000 });
+    expect(s.total).toMatchObject({ due: 66_990, remaining: 56_990 });
+  });
+
+  it("a payer without any invoice keeps the balance computed from prices", () => {
+    const enrollments = [
+      { status: "active", period: "year", quarterCount: 0, netPriceCents: 30_000, billingEntityId: A },
+    ] as const;
+    const payments = [{ amountCents: 10_000, plannedPayment: null, billingEntityId: A }];
+    expect(balancesByEntity(enrollments, [], payments, TODAY, [])).toEqual(
+      balancesByEntity(enrollments, [], payments, TODAY),
+    );
+    expect(balancesByEntity(enrollments, [], payments, TODAY).total).toMatchObject({ due: 30_000, remaining: 20_000 });
+  });
+
+  it("an invoiced enrollment on trial is no longer shown apart: the invoice counts it", () => {
+    const s = balancesByEntity(
+      [{ status: "trial", period: "year", quarterCount: 0, netPriceCents: 1_500, billingEntityId: A, invoiced: true }],
+      [],
+      [],
+      TODAY,
+      [{ billingEntityId: A, totalInclTaxCents: 1_500 }],
+    );
+    expect(s.byEntity[A]).toMatchObject({ due: 1_500, outsideCalculation: {} });
+  });
+
+  it("an entity known by an invoice only still gets its balance", () => {
+    const s = balancesByEntity([], [], [], TODAY, [{ billingEntityId: B, totalInclTaxCents: 8_000 }]);
+    expect(s.byEntity[B]).toMatchObject({ due: 8_000, remaining: 8_000 });
+  });
+
   it("an empty payer: no entity, a zero total", () => {
     expect(balancesByEntity([], [], [], TODAY)).toEqual({
       byEntity: {},
