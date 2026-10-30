@@ -1,23 +1,20 @@
 /**
- * Deletes the submission keys older than a week, in every school (#262).
- * Scheduled task, for example once a day:
+ * Deletes the submission keys older than a week, in every school (#262). Scheduled task, once a
+ * day (docs/guides/deployment.md, #337):
  *
  *   npm run submissions:purge
  *
- * Administration script, like calendars:sync: the owner connection only lists
- * the schools that have old keys; each school is then purged by the
- * application, under its own RLS (`withSchool`). No personal data in the output.
+ * Administration script, like calendars:sync: the owner connection only lists the schools that
+ * have old keys; each school is then purged by the application, under its own RLS
+ * (`withSchool`). No personal data in the output.
  */
-import postgres from "postgres";
 import { withSchool } from "../src/db";
 import { purgeOldSubmissions, SUBMISSION_RETENTION_DAYS } from "../src/db/submissions";
+import { errorLabel } from "../src/jobs/scheduled-task";
+import { runScheduledTask } from "./lib/scheduled-task";
 
-const url = process.env.DATABASE_ADMIN_URL;
-if (!url) throw new Error("DATABASE_ADMIN_URL manquante");
-const admin = postgres(url, { max: 1, onnotice: () => {} });
-
-async function main() {
-  const schools = await admin`SELECT DISTINCT school_id AS id FROM submission
+runScheduledTask({ name: "submissions:purge", timeoutMs: 10 * 60_000 }, async (admin) => {
+  const schools = await admin<{ id: string }[]>`SELECT DISTINCT school_id AS id FROM submission
     WHERE created_at < now() - make_interval(days => ${SUBMISSION_RETENTION_DAYS})`;
   let deleted = 0;
   let failed = 0;
@@ -27,20 +24,11 @@ async function main() {
       deleted += await withSchool(id, (tx) => purgeOldSubmissions(tx));
     } catch (e: unknown) {
       failed += 1;
-      console.error(`École ${id} : purge en échec`, e);
+      console.error(`École ${id} : purge en échec (${errorLabel(e)}).`);
     }
   }
-  console.log(`Clés de saisie purgées : ${deleted} (écoles : ${schools.length} ; en échec : ${failed}).`);
-  if (failed > 0) process.exitCode = 1;
-}
-
-// The application pool (src/db) keeps the process alive: exit explicitly.
-void main()
-  .catch((e: unknown) => {
-    console.error(e);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await admin.end();
-    process.exit(process.exitCode ?? 0);
-  });
+  return {
+    summary: `clés de saisie purgées : ${deleted} (écoles : ${schools.length} ; en échec : ${failed}).`,
+    failures: failed,
+  };
+});

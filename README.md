@@ -19,16 +19,20 @@ npm run dev
 
 ## Scripts
 
-| Script                     | Rôle                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------ |
-| `npm run dev`              | serveur de développement                                                       |
-| `npm test`                 | tests unitaires (Vitest)                                                       |
-| `npm run test:integration` | tests d’intégration contre la base locale (dont le garde-fou RLS)              |
-| `npm run typecheck`        | vérification TypeScript                                                        |
-| `npm run lint`             | ESLint                                                                         |
-| `npm run db:generate`      | génère une migration après modification de `src/db/schema.ts`                  |
-| `npm run db:migrate`       | applique les migrations (refuse un rôle soumis à la RLS, voir ci-dessous)      |
-| `npm run db:seed`          | données de démonstration locales (école fictive, comptes accueil et direction) |
+| Script                      | Rôle                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| `npm run dev`               | serveur de développement                                                       |
+| `npm test`                  | tests unitaires (Vitest)                                                       |
+| `npm run test:integration`  | tests d’intégration contre la base locale (dont le garde-fou RLS)              |
+| `npm run typecheck`         | vérification TypeScript                                                        |
+| `npm run lint`              | ESLint                                                                         |
+| `npm run db:generate`       | génère une migration après modification de `src/db/schema.ts`                  |
+| `npm run db:migrate`        | applique les migrations (refuse un rôle soumis à la RLS, voir ci-dessous)      |
+| `npm run db:seed`           | données de démonstration locales (école fictive, comptes accueil et direction) |
+| `npm run calendars:sync`    | tâche planifiée : synchronise les agendas des intervenants (toutes les heures) |
+| `npm run submissions:purge` | tâche planifiée : purge les clés de saisie de plus d’une semaine (chaque nuit) |
+
+Tâches planifiées en production, codes de sortie et procédure : `docs/guides/deployment.md`.
 
 ## Architecture
 

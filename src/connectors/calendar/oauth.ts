@@ -111,11 +111,16 @@ export function verifyState(state: string, secret: string, now = Date.now()): St
 type Fetch = typeof fetch;
 export class AccessRemoved extends Error {}
 
+/** Every call to a calendar provider gives up after this delay (#337); the next sync retries. */
+export const CALENDAR_TIMEOUT_MS = 10_000;
+const timeout = () => AbortSignal.timeout(CALENDAR_TIMEOUT_MS);
+
 async function requestToken(f: Provider, id: Credentials, body: Record<string, string>, query: Fetch) {
   const response = await query(POINTS[f].token, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ client_id: id.identifier, client_secret: id.secret, ...body }),
+    signal: timeout(),
   });
   const json = (await response.json()) as Record<string, string | undefined>;
   if (!response.ok) {
@@ -218,6 +223,7 @@ export async function readBusyRanges(
         timeMax: window.end.toISOString(),
         items: [{ id: "primary" }],
       }),
+      signal: timeout(),
     });
     if (!response.ok) throw new Error(`Google free/busy : réponse ${response.status}`);
     return googleRanges(await response.json());
@@ -227,7 +233,10 @@ export async function readBusyRanges(
     `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${window.start.toISOString()}&endDateTime=${window.end.toISOString()}` +
     "&$select=start,end,showAs,isCancelled&$top=200";
   for (let pages = 0; url && pages < 20; pages++) {
-    const response: Response = await query(url, { headers: { ...requestHeaders, Prefer: 'outlook.timezone="UTC"' } });
+    const response: Response = await query(url, {
+      headers: { ...requestHeaders, Prefer: 'outlook.timezone="UTC"' },
+      signal: timeout(),
+    });
     if (!response.ok) throw new Error(`Microsoft calendarView : réponse ${response.status}`);
     const json = (await response.json()) as { "@odata.nextLink"?: string };
     ranges.push(...microsoftRanges(json));
