@@ -152,8 +152,8 @@ function EntityForm({
               : "Donné aux carnets vendus par cette entreprise et proposé pour ses nouveaux cours."
           }
           inputWrapperOrder={["label", "input", "description", "error"]}
-          placeholder="Aucun"
-          clearable
+          placeholder="À choisir"
+          allowDeselect={false}
           // A business without VAT is offered no treatment with a rate (#301).
           data={treatments
             .filter((t) => t.id === v.defaultVatTreatmentId || treatmentRefusal(v.vatRegime, t.category) === null)

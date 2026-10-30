@@ -27,22 +27,35 @@ describe("vatBreakdown", () => {
     ]);
   });
 
-  it("computes VAT once per treatment, then spreads it over three lines with the cents left over", () => {
+  it("computes VAT once per treatment, and takes the cents left over off the lines", () => {
     // 100,00 € each: 16,666… of VAT per line, 50,00 € on the total.
     const lines = [10000, 10000, 10000].map((inclTaxCents) => ({ inclTaxCents, vatTreatmentId: "t20" }));
     const b = vatBreakdown(lines, ALL);
     expect(b.byTreatment[0].vatCents).toBe(5000);
-    // Line by line it would be 3 × 16,67 € = 50,01 €: the group's VAT is spread instead.
-    expect(b.lines.map((l) => l.vatCents)).toEqual([1667, 1667, 1666]);
+    // Line by line it would be 3 × 16,67 € = 50,01 €: the extra cent comes off one line.
+    expect(b.lines.map((l) => l.vatCents)).toEqual([1666, 1667, 1667]);
     expect(sum(b.lines.map((l) => l.vatCents))).toBe(5000);
-    expect(b.lines.map((l) => l.exclTaxCents)).toEqual([8333, 8333, 8334]);
+    expect(b.lines.map((l) => l.exclTaxCents)).toEqual([8334, 8333, 8333]);
     expect(sum(b.lines.map((l) => l.exclTaxCents))).toBe(b.byTreatment[0].exclTaxCents);
   });
 
-  it("gives the leftover cent to the lowest index when remainders tie", () => {
+  it("moves the cent left over on the lowest index when lines tie", () => {
     const lines = [100, 100, 100].map((inclTaxCents) => ({ inclTaxCents, vatTreatmentId: "t20" }));
-    // 3,00 € at 20 %: 0,50 € of VAT, 16,66… cents per line.
-    expect(vatBreakdown(lines, ALL).lines.map((l) => l.vatCents)).toEqual([17, 17, 16]);
+    // 3,00 € at 20 %: 0,50 € of VAT, 16,66… cents per line (17 each, one too many).
+    expect(vatBreakdown(lines, ALL).lines.map((l) => l.vatCents)).toEqual([16, 17, 17]);
+  });
+
+  it("keeps each line's own VAT when a discount nearly cancels it", () => {
+    const b = vatBreakdown(
+      [
+        { inclTaxCents: 41500, vatTreatmentId: "t20" },
+        { inclTaxCents: -41400, vatTreatmentId: "t20" },
+      ],
+      ALL,
+    );
+    // Spreading the group's 0,17 € in proportion would give the first line 70,55 € of VAT.
+    expect(b.lines.map((l) => l.vatCents)).toEqual([6917, -6900]);
+    expect(b.byTreatment[0].vatCents).toBe(17);
   });
 
   it("takes VAT off a negative discount line too", () => {
@@ -89,7 +102,7 @@ describe("vatBreakdown", () => {
     ]);
   });
 
-  it("gives no VAT to a group whose lines cancel out", () => {
+  it("gives no VAT to a group whose lines cancel out, each line keeping its own", () => {
     const b = vatBreakdown(
       [
         { inclTaxCents: 3000, vatTreatmentId: "t20" },
@@ -97,7 +110,7 @@ describe("vatBreakdown", () => {
       ],
       ALL,
     );
-    expect(b.lines.map((l) => l.vatCents)).toEqual([0, 0]);
+    expect(b.lines.map((l) => l.vatCents)).toEqual([500, -500]);
     expect(b.byTreatment[0].vatCents).toBe(0);
   });
 

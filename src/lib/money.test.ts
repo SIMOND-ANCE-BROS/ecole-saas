@@ -150,6 +150,11 @@ describe("allocate", () => {
     expect(allocate(-6917, [20000, 15000, 6500])).toEqual([-3334, -2500, -1083]);
   });
 
+  it("gives the whole amount to a single weight", () => {
+    expect(allocate(6917, [41500])).toEqual([6917]);
+    expect(allocate(-500, [-3000])).toEqual([-500]);
+  });
+
   it("gives zeros for a zero amount, whatever the weights", () => {
     expect(allocate(0, [3000, -3000])).toEqual([0, 0]);
   });

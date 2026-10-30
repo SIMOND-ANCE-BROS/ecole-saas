@@ -1052,6 +1052,7 @@ export const invoiceLine = pgTable(
     index().on(t.invoiceId),
     index().on(t.enrollmentId),
     index().on(t.lessonPackId),
+    index().on(t.vatTreatmentId),
     sameEntity(t, t.invoiceId, invoice),
     sameEntity(t, t.enrollmentId, enrollment),
     sameEntity(t, t.lessonPackId, lessonPack),

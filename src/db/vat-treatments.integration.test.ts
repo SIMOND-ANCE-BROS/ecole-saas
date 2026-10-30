@@ -6,6 +6,7 @@ import { withSchool } from "./index";
 import { sellLessonPack } from "./lesson-packs";
 import {
   createTreatment,
+  DEFAULT_TREATMENT_REQUIRED,
   deleteTreatment,
   lastTreatmentByInstructor,
   listTreatments,
@@ -298,6 +299,15 @@ describe("a business's regime", () => {
         }),
       ),
     ).toMatchObject({ ok: false });
+  });
+
+  it("needs a default treatment once the school has one it can use", async () => {
+    const e = await entityRow(ids.franchise);
+    expect(
+      await inSchool((tx) =>
+        updateEntity(tx, director, ids.franchise, { ...entityEntry(e, "franchise_293b"), defaultVatTreatmentId: "" }),
+      ),
+    ).toEqual({ ok: false, message: DEFAULT_TREATMENT_REQUIRED });
   });
 });
 

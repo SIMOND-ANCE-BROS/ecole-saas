@@ -83,6 +83,8 @@ ALTER TABLE "billing_entity" ADD CONSTRAINT "billing_entity_default_vat_treatmen
 ALTER TABLE "course" ADD CONSTRAINT "course_vat_treatment_same_school_fk" FOREIGN KEY ("school_id","vat_treatment_id") REFERENCES "public"."vat_treatment"("school_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "invoice_line" ADD CONSTRAINT "invoice_line_vat_treatment_same_school_fk" FOREIGN KEY ("school_id","vat_treatment_id") REFERENCES "public"."vat_treatment"("school_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "lesson_pack" ADD CONSTRAINT "lesson_pack_vat_treatment_same_school_fk" FOREIGN KEY ("school_id","vat_treatment_id") REFERENCES "public"."vat_treatment"("school_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+-- The foreign key's check when a treatment is removed, and the lines of a treatment.
+CREATE INDEX "invoice_line_vat_treatment_id_index" ON "invoice_line" USING btree ("vat_treatment_id");--> statement-breakpoint
 ALTER TABLE "invoice_line" ADD CONSTRAINT "invoice_line_vat_sum" CHECK ("invoice_line"."excl_tax_cents" + "invoice_line"."vat_cents" = "invoice_line"."incl_tax_cents");--> statement-breakpoint
 ALTER TABLE "invoice_line" ADD CONSTRAINT "invoice_line_vat_rate" CHECK ("invoice_line"."vat_rate_bps" BETWEEN 0 AND 10000 AND ("invoice_line"."vat_category" = 'standard') = ("invoice_line"."vat_rate_bps" > 0));--> statement-breakpoint
 ALTER TABLE "invoice_line" ADD CONSTRAINT "invoice_line_vat_mention" CHECK ("invoice_line"."vat_category" = 'standard' OR ("invoice_line"."vat_cents" = 0 AND coalesce(btrim("invoice_line"."vat_mention"), '') <> ''));--> statement-breakpoint

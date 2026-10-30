@@ -1,5 +1,5 @@
 {
-  "id": "02449174-4559-439c-bc35-5ad05ea44db0",
+  "id": "be1d2c76-b606-4fda-b008-d30cd720fabe",
   "prevId": "0d401d78-b2e3-451b-8206-e639f3c28460",
   "version": "7",
   "dialect": "postgresql",
@@ -3101,6 +3101,21 @@
           "columns": [
             {
               "expression": "lesson_pack_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "invoice_line_vat_treatment_id_index": {
+          "name": "invoice_line_vat_treatment_id_index",
+          "columns": [
+            {
+              "expression": "vat_treatment_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

@@ -4,6 +4,7 @@ import { columnsOf } from "./columns-of";
 import type { Tx } from "./index";
 import { auditLog, billingEntity, course, invoiceLine, lessonPack, member, season, vatTreatment } from "./schema";
 import {
+  NO_VAT_CHARGED,
   parseRate,
   treatmentRefusal,
   treatmentShapeRefusal,
@@ -117,7 +118,7 @@ export async function lastTreatmentByInstructor(tx: Tx): Promise<Record<string, 
     .selectDistinctOn([course.instructorId], { instructorId: course.instructorId, id: course.vatTreatmentId })
     .from(course)
     .innerJoin(season, eq(season.id, course.seasonId))
-    .orderBy(course.instructorId, sql`${season.startDate} DESC`, sql`${course.createdAt} DESC`);
+    .orderBy(course.instructorId, sql`${season.startDate} DESC`, sql`${course.createdAt} DESC`, course.id);
   return Object.fromEntries(rows.map((r) => [r.instructorId, r.id]));
 }
 
@@ -163,10 +164,12 @@ export async function resolveTreatment(
   tx: Tx,
   p: { wanted: string | undefined; entityId: string; current?: string },
 ): Promise<Result> {
+  // Shared lock: its regime cannot change to one without VAT before the commit (see regimeRefusal).
   const [entity] = await tx
     .select({ regime: billingEntity.vatRegime, defaultTreatment: billingEntity.defaultVatTreatmentId })
     .from(billingEntity)
-    .where(eq(billingEntity.id, p.entityId));
+    .where(eq(billingEntity.id, p.entityId))
+    .for("share");
   if (!entity) return { ok: false, message: "Entreprise introuvable." };
   const id = p.wanted ?? p.current ?? entity.defaultTreatment;
   if (!id) return { ok: false, message: NO_DEFAULT_TREATMENT };
@@ -182,16 +185,28 @@ export async function resolveTreatment(
   return refused ? { ok: false, message: refused } : { ok: true, id: t.id };
 }
 
+/** Said when a business could have a default treatment but none was chosen. */
+export const DEFAULT_TREATMENT_REQUIRED =
+  "Choisissez le traitement de TVA par défaut : il est donné aux carnets vendus par cette entreprise.";
+
 /**
- * Why a business of `regime` cannot keep its treatments (#301): its default one, or one of
- * its courses or lesson packs, has a VAT rate its regime refuses. Null when it can.
+ * Why a business of `regime` cannot keep its treatments (#301): its default one is missing
+ * while the school has one it could use (its lesson packs need it), is gone, or has a VAT
+ * rate its regime refuses; or one of its courses or lesson packs has such a rate. Null
+ * when it can. The business row is locked by the caller; the treatments read are locked
+ * FOR SHARE, so a treatment cannot turn into a rate meanwhile (see updateTreatment).
  */
 export async function regimeRefusal(
   tx: Tx,
   p: { entityId: string | null; regime: VatRegime; defaultTreatment: string | null },
 ): Promise<string | null> {
-  if (treatmentRefusal(p.regime, "standard") === null) return null;
-  const standard = tx.select({ id: vatTreatment.id }).from(vatTreatment).where(eq(vatTreatment.category, "standard"));
+  const usable = (
+    await tx
+      .select({ id: vatTreatment.id, category: vatTreatment.category })
+      .from(vatTreatment)
+      .orderBy(asc(vatTreatment.id))
+      .for("share")
+  ).filter((t) => treatmentRefusal(p.regime, t.category) === null);
   if (p.defaultTreatment) {
     const [d] = await tx
       .select({ category: vatTreatment.category })
@@ -200,8 +215,9 @@ export async function regimeRefusal(
     if (!d) return GONE;
     const refused = treatmentRefusal(p.regime, d.category);
     if (refused) return `Traitement de TVA par défaut : ${refused}`;
-  }
-  if (!p.entityId) return null;
+  } else if (usable.length > 0) return DEFAULT_TREATMENT_REQUIRED;
+  if (treatmentRefusal(p.regime, "standard") === null || !p.entityId) return null;
+  const standard = tx.select({ id: vatTreatment.id }).from(vatTreatment).where(eq(vatTreatment.category, "standard"));
   const [courses] = await tx
     .select({ n: count() })
     .from(course)
@@ -277,12 +293,15 @@ export async function updateTreatment(tx: Tx, userId: string, id: string, entry:
     .for("update");
   if (!before) return { ok: false, message: GONE };
   if (t.data.category === "standard" && before.category !== "standard") {
+    // Every business locked first: none switches to a regime without VAT while this check runs,
+    // and the check below then reads their committed regimes (see regimeRefusal).
+    await tx.select({ id: billingEntity.id }).from(billingEntity).orderBy(asc(billingEntity.id)).for("share");
     const [user] = await tx
       .select({ id: billingEntity.id })
       .from(billingEntity)
       .where(
         and(
-          inArray(billingEntity.vatRegime, ["franchise_293b", "not_applicable"]),
+          inArray(billingEntity.vatRegime, [...NO_VAT_CHARGED]),
           sql`(${billingEntity.defaultVatTreatmentId} = ${id}
             OR EXISTS (SELECT 1 FROM course c WHERE c.billing_entity_id = "billing_entity"."id" AND c.vat_treatment_id = ${id})
             OR EXISTS (SELECT 1 FROM lesson_pack p WHERE p.billing_entity_id = "billing_entity"."id" AND p.vat_treatment_id = ${id}))`,

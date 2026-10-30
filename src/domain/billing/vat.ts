@@ -2,7 +2,7 @@
  * VAT treatments (#301, ADR 0006): how VAT applies to a course or a lesson pack,
  * copied onto invoice lines. Prices are VAT-inclusive; VAT is taken out of the
  * sum of each treatment's lines (`vatOfInclusive`, half a cent away from zero),
- * then spread over those lines (`allocate`). Pure functions, no database.
+ * then shared between those lines (`allocate` for the cents left over). Pure functions, no database.
  *
  * The wording of a mention is data (`vat_treatment.mention`), never written here.
  */
@@ -30,8 +30,11 @@ export type VatAmounts = { inclTaxCents: number; exclTaxCents: number; vatCents:
 
 /**
  * VAT of invoice lines priced VAT-inclusive. Per treatment, VAT is computed once
- * on the sum of its lines, then spread over them in proportion to their amounts
- * (a negative discount line takes back its share); each line's excl. amount is
+ * on the sum of its lines (the invoice's total); each line first gets its own
+ * rounded VAT, then the cents between the two (at most one per line) are spread
+ * with `allocate` in proportion to the lines' sizes. A line's VAT thus never
+ * strays more than a cent from its own, even when a discount line nearly cancels
+ * it; a negative discount line takes back its VAT. Each line's excl. amount is
  * incl − VAT. Lines in input order, groups in the order of their first line.
  */
 export function vatBreakdown(
@@ -50,12 +53,16 @@ export function vatBreakdown(
     const t = byId.get(id);
     const incl = indexes.reduce((a, i) => a + lines[i].inclTaxCents, 0);
     const total = t?.category === "standard" ? vatOfInclusive(incl, t.rateBps) : 0;
-    // A group adding up to zero has no VAT to spread (its weights would cancel out).
-    if (total !== 0)
-      allocate(
-        total,
-        indexes.map((i) => lines[i].inclTaxCents),
-      ).forEach((cents, k) => (vat[indexes[k]] = cents));
+    if (t?.category === "standard") {
+      for (const i of indexes) vat[i] = vatOfInclusive(lines[i].inclTaxCents, t.rateBps);
+      const gap = total - indexes.reduce((a, i) => a + vat[i], 0);
+      // Lines adding up to nothing but zero amounts have no gap: their weights are never all zero here.
+      if (gap !== 0)
+        allocate(
+          gap,
+          indexes.map((i) => Math.abs(lines[i].inclTaxCents)),
+        ).forEach((cents, k) => (vat[indexes[k]] += cents));
+    }
     return { vatTreatmentId: id, inclTaxCents: incl, exclTaxCents: incl - total, vatCents: total };
   });
   return {
@@ -72,7 +79,7 @@ export function vatBreakdown(
  * Regimes under which a business charges no VAT at all: a treatment with a VAT
  * rate is refused there (an exemption or out-of-scope treatment is accepted).
  */
-const NO_VAT_CHARGED: readonly VatRegime[] = ["franchise_293b", "not_applicable"];
+export const NO_VAT_CHARGED: readonly VatRegime[] = ["franchise_293b", "not_applicable"];
 
 /** Why a business of `regime` cannot use a treatment of `category`, in French; null when it can. */
 export function treatmentRefusal(regime: VatRegime, category: VatCategory): string | null {
