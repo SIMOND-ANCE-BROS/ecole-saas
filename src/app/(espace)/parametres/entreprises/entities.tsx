@@ -10,6 +10,7 @@ import { type ActionResult, settle } from "@/lib/action-result";
 import { isKeyOf } from "@/lib/has";
 import { compact } from "@/domain/billing/entity";
 import { BusinessSearch } from "../../_ui/business-search";
+import { cancelOnEscape } from "../../_ui/escape-cancels";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { changeEntity, defaultEntity, newEntity } from "../actions";
 
@@ -90,12 +91,7 @@ function EntityForm({
       aria-label={title}
       className="flex flex-col gap-3"
       // Escape first closes an open list (the VAT regime, the registry results), then cancels.
-      onKeyDown={(e) =>
-        e.key === "Escape" &&
-        e.target instanceof HTMLElement &&
-        e.target.getAttribute("aria-expanded") !== "true" &&
-        close()
-      }
+      onKeyDown={cancelOnEscape(close)}
       onSubmit={(e) => {
         e.preventDefault();
         submit(v);

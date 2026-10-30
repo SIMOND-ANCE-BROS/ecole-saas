@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import type { SiteRow } from "@/db/settings";
 import { type ActionResult, settle } from "@/lib/action-result";
 import { ConfirmRemoval, type Removal } from "../../_ui/confirm-removal";
+import { cancelOnEscape } from "../../_ui/escape-cancels";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { changeRoom, changeSite, newSite, newRoom, removeRoom, removeSite } from "../actions";
 import { SiteHours } from "./site-hours";
@@ -167,12 +168,7 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                   <li key={x.id} className="px-3 py-2">
                     <form
                       // Escape first closes an open list (the site choice), then cancels.
-                      onKeyDown={(e) =>
-                        e.key === "Escape" &&
-                        e.target instanceof HTMLElement &&
-                        e.target.getAttribute("aria-expanded") !== "true" &&
-                        closeRoom(x.id)
-                      }
+                      onKeyDown={cancelOnEscape(() => closeRoom(x.id))}
                       className="flex flex-wrap items-end gap-2"
                       onSubmit={(e) => {
                         e.preventDefault();

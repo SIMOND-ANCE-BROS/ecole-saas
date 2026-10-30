@@ -6,6 +6,7 @@ import type { TreatmentInput, TreatmentRow } from "@/db/vat-treatments";
 import { formatRate, typedRate, VAT_CATEGORIES, VAT_CATEGORY_LABELS, type VatCategory } from "@/domain/billing/vat";
 import { type ActionResult, settle } from "@/lib/action-result";
 import { isKeyOf } from "@/lib/has";
+import { cancelOnEscape } from "../../_ui/escape-cancels";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { changeTreatment, newTreatment, removeTreatment } from "./actions";
 
@@ -55,12 +56,7 @@ function TreatmentForm({
       aria-label={title}
       className="flex flex-col gap-3"
       // Escape first closes an open list (the category), then cancels.
-      onKeyDown={(e) =>
-        e.key === "Escape" &&
-        e.target instanceof HTMLElement &&
-        e.target.getAttribute("aria-expanded") !== "true" &&
-        close()
-      }
+      onKeyDown={cancelOnEscape(close)}
       onSubmit={(e) => {
         e.preventDefault();
         submit(v);
