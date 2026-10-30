@@ -4,6 +4,7 @@
  */
 import { csvAmount, csvDocument, csvText } from "../../lib/csv";
 import { frenchDate } from "../../lib/dates";
+import type { ReversalKind } from "./rejection";
 
 export const DEPOSIT_METHODS = ["cheque", "cash", "holiday_voucher"] as const;
 export type DepositMethod = (typeof DEPOSIT_METHODS)[number];
@@ -64,17 +65,23 @@ export function depositGroups<T extends DepositablePayment & { billingEntityId: 
   });
 }
 
-/** Grand total and total per method. */
-export function totals<T extends { method: string; amountCents: number }>(
+/**
+ * Grand total, total per method of what came in, and refunds apart (#294): money paid
+ * back to payers is never netted into a method's total (a cheque refund would hide the
+ * cheques received), it shows as its own negative amount. `total` is the net of all of them.
+ */
+export function totals<T extends { method: string; amountCents: number; reversalKind?: ReversalKind | null }>(
   rows: T[],
-): { total: number; byMethod: Record<string, number> } {
+): { total: number; byMethod: Record<string, number>; refunded: number } {
   const byMethod: Record<string, number> = {};
   let total = 0;
+  let refunded = 0;
   for (const l of rows) {
-    byMethod[l.method] = (byMethod[l.method] ?? 0) + l.amountCents;
     total += l.amountCents;
+    if (l.reversalKind === "refund") refunded += l.amountCents;
+    else byMethod[l.method] = (byMethod[l.method] ?? 0) + l.amountCents;
   }
-  return { total, byMethod };
+  return { total, byMethod, refunded };
 }
 
 export type ExportRow = {

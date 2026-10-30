@@ -106,6 +106,8 @@ describe("collect", () => {
       // A single entity: nothing per entity to show (#300).
       byEntity: [],
       severalEntities: false,
+      // Nothing overpaid: nothing to pay back (#294).
+      refunds: [],
     });
     const traces =
       await admin`SELECT action, after->>'montant_centimes' AS amount, actor IS NOT NULL AS signed FROM audit_log WHERE school_id = ${school} AND target_table = 'payment'`;
@@ -352,8 +354,14 @@ describe("migration 0037: the kind of the reverse entries written before it (#27
     const from = statements.findIndex((s) => s.includes("DISABLE TRIGGER"));
     const to = statements.findIndex((s) => s.includes("ENABLE TRIGGER"));
     if (from < 0 || to < from) throw new Error("No backfill in migration 0037");
-    // The backfill, the trigger enabled again, then the constraint, which must accept the backfilled rows.
-    const backfill = statements.slice(from);
+    // The backfill and the trigger enabled again, then the checks as they stand today, which
+    // must accept the backfilled rows. Not 0037's own check: 0055 replaced it, and a refund
+    // (#294), a reverse entry with no payment it corrects, already in the database breaks it.
+    const current = readFileSync(join(process.cwd(), "migrations/0055_payment_refund.sql"), "utf8")
+      .split("--> statement-breakpoint")
+      .filter((s) => s.includes("ADD CONSTRAINT"));
+    if (current.length !== 2) throw new Error("Migration 0055 no longer adds the two payment checks");
+    const backfill = [...statements.slice(from, to + 1), ...current];
 
     const ROLLBACK = new Error("rollback");
     let filled: Record<string, unknown>[] = [];
@@ -362,6 +370,8 @@ describe("migration 0037: the kind of the reverse entries written before it (#27
       .begin(async (t) => {
         // Rows as written before the migration: no kind, the label as reference.
         await t`ALTER TABLE payment DROP CONSTRAINT payment_reversal_kind`;
+        // Added after 0037 (#294): a negative payment without a kind did not exist yet as a rule.
+        await t`ALTER TABLE payment DROP CONSTRAINT payment_sign`;
         const insert = (amount: number, reference: string | null, issuer: string | null, corrects: string | null) =>
           t`INSERT INTO payment (school_id, billing_entity_id, payer_id, date, amount_cents, method, reference, issuer, corrects_id)
             VALUES (${school}, ${entity}, ${payer}, ${TODAY}, ${amount}, 'cheque', ${reference}, ${issuer}, ${corrects})

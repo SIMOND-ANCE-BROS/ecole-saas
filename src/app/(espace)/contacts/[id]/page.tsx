@@ -12,6 +12,7 @@ import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { Banner, Enrollments, Telephone } from "../../_people/sections";
 import { PaymentsSection } from "../../_people/payments-section";
+import { mayRefund } from "@/domain/payments/refund";
 import { LessonPacks } from "../../_people/lesson-packs";
 import { BecomeStudent } from "./become-student";
 import { ButtonLink } from "../../_ui/button-link";
@@ -169,6 +170,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
             payments={payments}
             back={`/contacts/${c.id}`}
             isDirector={role === "director"}
+            canRefund={mayRefund(role)}
             today={today}
           />
         </div>

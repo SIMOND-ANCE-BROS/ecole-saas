@@ -155,6 +155,17 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
                   </Text>
                 </div>
               ))}
+            {/* Money paid back to payers (#294), apart from what came in by each method. */}
+            {t.refunded !== 0 && (
+              <div>
+                <Text component="dt" size="sm" className="inline" c="dimmed">
+                  Remboursements :{" "}
+                </Text>
+                <Text component="dd" size="sm" className="inline tabular-nums">
+                  {formatEuros(t.refunded)}
+                </Text>
+              </div>
+            )}
           </dl>
           {/* useSearchParams requires a Suspense boundary. */}
           <Suspense>

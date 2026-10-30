@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { withSchool } from "@/db";
-import { correctPayment, collect } from "@/db/payments";
+import { correctPayment, collect, refundPayer } from "@/db/payments";
+import { REFUND_METHODS, REFUND_ROLES } from "@/domain/payments/refund";
 import { once, storedPayments } from "@/db/submissions";
 import { todayInParis } from "@/domain/people/age";
 import { type ActionResult, actionResult } from "@/lib/action-result";
@@ -78,6 +79,59 @@ export async function correct(correction: z.input<typeof validCorrection>): Prom
   const r = await withSchool(schoolId, (tx) =>
     once(tx, "payment", key, { paymentId, amountCents, rejectedOn }, storedPayments, () =>
       correctPayment(tx, userId, paymentId, amountCents, todayInParis(), rejectedOn),
+    ),
+  );
+  if (!r.ok) return actionResult(r);
+  const path = safeReturnPath(back);
+  if (path) revalidatePath(path);
+  revalidatePath("/encaissements");
+  return { ok: true };
+}
+
+/**
+ * What the refund form sends (#294): the payer, the entity paying back (only when the
+ * school has several), how, how much and when, an optional cheque number, the record to
+ * refresh, and the key generated once per opening of the form (#260).
+ */
+const validRefundRequest = z.object({
+  payerId: z.uuid(),
+  billingEntityId: z.uuid().optional(),
+  method: z.enum(REFUND_METHODS),
+  amountCents: z.number().int().positive(),
+  date: z.iso.date(),
+  reference: z.string().max(60).nullable().default(null),
+  back: z.string().max(200).nullable(),
+  key: z.uuid(),
+});
+
+/** Pays a payer back their overpayment with a negative payment of kind `refund`: management only (#294). */
+export async function refund(request: z.input<typeof validRefundRequest>): Promise<ActionResult> {
+  const { schoolId: schoolId, userId } = await requireRole(...REFUND_ROLES);
+  const c = validRefundRequest.safeParse(request);
+  if (!c.success) {
+    // The amount, the method and the date are typed or chosen; anything else is a stale or tampered form.
+    const errors = topErrorsOf(c.error);
+    const fields = Object.keys(errors);
+    const only = (field: keyof typeof errors) => errors[field] !== undefined && fields.length === 1;
+    return {
+      ok: false,
+      message: only("amountCents")
+        ? "Montant du remboursement invalide."
+        : only("date")
+          ? "Date du remboursement invalide."
+          : only("method")
+            ? "Choisissez comment vous remboursez."
+            : only("reference")
+              ? "Référence trop longue (60 caractères au plus)."
+              : "Remboursement impossible : rechargez la fiche.",
+    };
+  }
+  const { payerId, billingEntityId, method, amountCents, date, reference, back, key } = c.data;
+  const entry = { method, amountCents, date, reference };
+  // A retry after a lost response returns the first result instead of a second refund.
+  const r = await withSchool(schoolId, (tx) =>
+    once(tx, "payment", key, { refund: { payerId, billingEntityId, entry } }, storedPayments, () =>
+      refundPayer(tx, userId, payerId, entry, todayInParis(), billingEntityId),
     ),
   );
   if (!r.ok) return actionResult(r);

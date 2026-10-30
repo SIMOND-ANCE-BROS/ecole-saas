@@ -118,10 +118,10 @@ describe("totals of the rows shown", () => {
   });
 
   it("keeps a 1-cent payment exact", () =>
-    expect(totals(shown("moyen.parmi.Carte"))).toEqual({ total: 1, byMethod: { card: 1 } }));
+    expect(totals(shown("moyen.parmi.Carte"))).toEqual({ total: 1, byMethod: { card: 1 }, refunded: 0 }));
 
   it("is zero for an empty result", () =>
-    expect(totals(shown("payeur.contient.Personne"))).toEqual({ total: 0, byMethod: {} }));
+    expect(totals(shown("payeur.contient.Personne"))).toEqual({ total: 0, byMethod: {}, refunded: 0 }));
 
   it("adds every method up", () => expect(totals(shownPaymentLog(ROWS, EMPTY_FILTER, null, TODAY)).total).toBe(31001));
 });

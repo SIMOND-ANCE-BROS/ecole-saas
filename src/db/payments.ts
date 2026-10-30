@@ -19,7 +19,16 @@ import { issuePath } from "../lib/form-errors";
 import { METHOD_LABELS, PAYMENT_METHOD_VALUES, refusedMethod, type Method } from "../domain/payments/methods";
 import { readMethodSettings } from "./payment-methods";
 import { formatEuros } from "../lib/money";
-import { entityChoices, listEntities, resolveEntity } from "./billing-entities";
+import { defaultEntityId, entityChoices, listEntities, NO_DEFAULT_ENTITY, resolveEntity } from "./billing-entities";
+import {
+  heldForPendingEnrollments,
+  mayRefund,
+  overpaidOf,
+  REFUND_METHODS,
+  refundableCents,
+  refundRefusal,
+  uncollectedCents,
+} from "../domain/payments/refund";
 import { quarterCountSql } from "./enrollments";
 
 /**
@@ -325,11 +334,41 @@ export type EntityBalance = { id: string; name: string; balance: Balance };
  * « Several » counts every entity, active or not (as `severalEntities`, #299): a debt to a
  * deactivated business stays visible. Only the payment form's choice is limited to active ones.
  */
-export type PayerBalances = { total: Balance; byEntity: EntityBalance[]; severalEntities: boolean };
+export type PayerBalances = {
+  total: Balance;
+  byEntity: EntityBalance[];
+  severalEntities: boolean;
+  /** Each entity holding an overpayment, with what it may pay back already (#294), in the school's order. */
+  refunds: EntityRefund[];
+};
+
+/**
+ * An overpayment, what of it is not collected yet, what is held for enrollments on trial or
+ * on the waitlist, and the part a refund may pay back (#294).
+ */
+export type Refundable = { overpaid: number; uncollected: number; held: number; refundable: number };
+export type EntityRefund = Refundable & { id: string; name: string };
 
 /** Balance of a payer over all their enrollments and lesson packs; null if they never paid nor owed anything. */
 export async function balanceOf(tx: Tx, payerId: string, today: string): Promise<PayerBalances | null> {
   if (!isUuid(payerId)) return null;
+  const balances = await balancesOf(tx, payerId, today);
+  if (!balances) return null;
+  const { byEntity, total, refunds } = balances;
+  const entities = await listEntities(tx);
+  const severalEntities = entities.length > 1;
+  return {
+    total,
+    severalEntities,
+    byEntity: severalEntities
+      ? entities.flatMap((e) => (byEntity[e.id] ? [{ id: e.id, name: e.name, balance: byEntity[e.id] }] : []))
+      : [],
+    refunds: entities.flatMap((e) => (refunds[e.id] ? [{ id: e.id, name: e.name, ...refunds[e.id] }] : [])),
+  };
+}
+
+/** A payer's balance per entity id and in total (#300), or null if they never paid nor owed anything. */
+async function balancesOf(tx: Tx, payerId: string, today: string) {
   const enrollments = await tx
     .select({
       status: enrollment.status,
@@ -351,18 +390,128 @@ export async function balanceOf(tx: Tx, payerId: string, today: string): Promise
       amountCents: payment.amountCents,
       plannedPayment: payment.depositPlannedOn,
       billingEntityId: payment.billingEntityId,
+      method: payment.method,
+      deposited: sql<boolean>`${bankDepositPayment.bankDepositId} IS NOT NULL`,
+      correctedCents: alreadyCorrected,
     })
     .from(payment)
+    .leftJoin(bankDepositPayment, eq(bankDepositPayment.paymentId, payment.id))
     .where(eq(payment.payerId, payerId));
   if (enrollments.length === 0 && lessonPacks.length === 0 && payments.length === 0) return null;
   const { byEntity, total } = balancesByEntity(enrollments, lessonPacks, payments, today);
+  // What each entity may pay back (#294): its overpayment, less the cheques it has not
+  // collected yet and what its enrollments on trial or on the waitlist would cost.
+  const refunds: Record<string, Refundable> = {};
+  for (const [id, balance] of Object.entries(byEntity)) {
+    const overpaid = overpaidOf(balance);
+    if (overpaid === 0) continue;
+    const uncollected = uncollectedCents(
+      payments.filter((p) => p.billingEntityId === id),
+      today,
+    );
+    const held = heldForPendingEnrollments(balance.outsideCalculation);
+    refunds[id] = { overpaid, uncollected, held, refundable: refundableCents(overpaid, uncollected, held) };
+  }
+  return { byEntity, total, refunds };
+}
+
+export const validRefund = z.object({
+  method: z.enum(REFUND_METHODS, "Choisissez comment vous remboursez."),
+  amountCents: z.int("Montant invalide").min(1, "Montant invalide").max(10_000_00, "Montant trop élevé"),
+  date: z.iso.date("Date invalide"),
+  // Cheque number or transfer label, as for a payment.
+  reference: shortText(60),
+});
+
+/** Shown when a school with several entities gets a refund without the entity that pays it back. */
+export const REFUND_ENTITY_REQUIRED = "Choisissez l’entreprise qui rembourse : rechargez la fiche.";
+
+/**
+ * Pays a payer back what a business received in excess (#294), typically after a works
+ * council cheque for an enrollment already paid in full: a negative payment of kind
+ * `refund`, cancelling no payment, by cheque, cash or transfer (`REFUND_METHODS`), never
+ * on a deposit slip. Management only (`mayRefund`). At most the payer's overpayment with
+ * that entity already collected (`refundableCents`: a cheque to cash later or not yet
+ * deposited never funds a refund), read under a lock on the payer so that two refunds, or
+ * a refund and a payment or correction saved at the same moment, never pay back more than
+ * was received in excess. With several entities the one refunding is always named (each has its own
+ * account, an overpayment to one is never paid back from the other); with one, it is the
+ * default. The invoice is left unchanged (#294 question 2, default).
+ */
+export async function refundPayer(
+  tx: Tx,
+  userId: string,
+  payerId: string,
+  entry: z.input<typeof validRefund>,
+  today: string,
+  billingEntityId?: string,
+): Promise<Result> {
+  const r = validRefund.safeParse(entry);
+  if (!r.success) return { ok: false, message: r.error.issues[0].message };
+  if (!z.iso.date().safeParse(today).success) return { ok: false, message: "Date invalide." };
+  if (billingEntityId !== undefined && !isUuid(billingEntityId))
+    return { ok: false, message: "Entreprise introuvable." };
+  if (!isUuid(payerId)) return { ok: false, message: "Payeur introuvable." };
+  const who = await memberAndRole(tx, userId);
+  if (!who) return { ok: false, message: "Accès refusé." };
+  if (!mayRefund(who.role)) return { ok: false, message: "Seule la direction peut rembourser un payeur." };
+  // Refunds of one payer wait for each other, and for a payment or a reverse entry being
+  // saved for them (its key to the payer takes KEY SHARE, which FOR UPDATE waits for):
+  // the balance read below, in a statement of its own, sees what they wrote once committed.
+  const [p] = await tx.select({ id: person.id }).from(person).where(eq(person.id, payerId)).for("update");
+  if (!p) return { ok: false, message: "Payeur introuvable." };
   const entities = await listEntities(tx);
-  const severalEntities = entities.length > 1;
-  return {
-    total,
-    severalEntities,
-    byEntity: severalEntities
-      ? entities.flatMap((e) => (byEntity[e.id] ? [{ id: e.id, name: e.name, balance: byEntity[e.id] }] : []))
-      : [],
-  };
+  let entity: string;
+  if (billingEntityId === undefined) {
+    // The record was opened before a second entity was added: it did not say which one refunds.
+    if (entities.length > 1) return { ok: false, message: REFUND_ENTITY_REQUIRED };
+    const id = await defaultEntityId(tx);
+    if (!id) return { ok: false, message: NO_DEFAULT_ENTITY };
+    entity = id;
+  } else {
+    // An inactive entity may still pay back what it received in excess.
+    if (!entities.some((e) => e.id === billingEntityId)) return { ok: false, message: "Entreprise introuvable." };
+    entity = billingEntityId;
+  }
+  // Same lock as createDeposit, cancelDeposit and correctPayment (#247, #253), ordered by id:
+  // a deposit cancelled or a cheque rejected at the same moment is seen by the read below,
+  // so a refund is never paid out of a cheque that is no longer collected.
+  await tx
+    .select({ id: payment.id })
+    .from(payment)
+    .where(and(eq(payment.payerId, payerId), eq(payment.billingEntityId, entity)))
+    .orderBy(asc(payment.id))
+    .for("no key update");
+  const owed = (await balancesOf(tx, payerId, today))?.refunds[entity];
+  const refusal = refundRefusal({
+    amountCents: r.data.amountCents,
+    overpaidCents: owed?.overpaid ?? 0,
+    refundableCents: owed?.refundable ?? 0,
+    uncollectedCents: owed?.uncollected ?? 0,
+    date: r.data.date,
+    today,
+  });
+  if (refusal) return { ok: false, message: refusal };
+  const [{ id }] = await tx
+    .insert(payment)
+    .values({
+      schoolId: CURRENT_SCHOOL,
+      billingEntityId: entity,
+      payerId: payerId,
+      date: r.data.date,
+      amountCents: -r.data.amountCents,
+      method: r.data.method,
+      reference: r.data.reference,
+      reversalKind: "refund",
+      enteredBy: who.id,
+    })
+    .returning({ id: payment.id });
+  await log(tx, who.id, id, {
+    montant_centimes: -r.data.amountCents,
+    method: r.data.method,
+    date: r.data.date,
+    reversal_kind: "refund",
+    billing_entity_id: entity,
+  });
+  return { ok: true, ids: [id] };
 }
