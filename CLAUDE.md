@@ -183,7 +183,7 @@ DESIGN.md                    interface rules
 
 - Payments and the audit log are **immutable** (database triggers): an error is fixed by a reverse entry.
 - An issued invoice, its lines and its installments are **frozen** (triggers of `0052_invoice_drafts.sql`; only `pdf_url` and an installment's status still change): a credit note corrects them. A draft (`to_send`) has no number and may be drafted again.
-- Every payment write (collect, correct or reject, refund, cancel a refund, deposit, cancel a deposit, allocate) takes its row locks in one order: payers, then payments, then installments, each ordered by id, through `src/db/payment-locks.ts` (#360), where the order and its reasons are written down. Never lock a payment before its payer.
+- Every payment write (collect, correct or reject, refund, cancel a refund, deposit, cancel a deposit, allocate) takes its row locks in one order: payer, then payments, then installments, each ordered by id, through `src/db/payment-locks.ts` (#360), where the order and its reasons are written down. A write may start at a later rank (a deposit locks no payer), never go back: never lock a payer after a payment.
 - Never edit an applied migration: create a new one. Renaming a table or column is a new migration too.
 - Validate every external input (forms, API, webhooks) with Zod.
 - Server actions return `{ ok: true, … } | { ok: false, message }`, `message` being French text for the user; never throw an error message at the user.

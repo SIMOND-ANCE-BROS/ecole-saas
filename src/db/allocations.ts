@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Tx } from "./index";
 import { alreadyCorrected } from "./payments-sql";
 import { auditLog, bankDepositPayment, installment, invoice, payment, paymentAllocation } from "./schema";
-import { lockInstallments, lockPayers, lockPayersAndPayments, lockPaymentsOfPayer } from "./payment-locks";
+import { lockInstallments, lockPayers, lockPayments, lockPaymentsOfPayer } from "./payment-locks";
 import {
   type AllocatablePayment,
   allocateFifo,
@@ -21,10 +21,11 @@ import {
 
 /**
  * Payment allocations (#305), written under the locks of #254, taken in the order of every
- * payment write (`src/db/payment-locks.ts`, #360): the payers, then the payments, then the
- * installments they may settle, each ordered by id, before any total is read: the reads then
- * see what a transaction that held the same rows committed. The callers lock the payers first
- * (asking again here returns at once). Always within `withSchool()` (RLS).
+ * payment write (`src/db/payment-locks.ts`, #360): the payments, then the installments they
+ * may settle, each ordered by id, before any total is read: the reads then see what a
+ * transaction that held the same rows committed. An allocation inserts no payment, so it
+ * locks no payer; a caller that inserts one (collect, correctPayment) locked it first.
+ * Always within `withSchool()` (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
@@ -127,7 +128,7 @@ export async function allocatePayments(
 ): Promise<AllocationOutcome> {
   const ids = [...new Set(paymentIds)].filter(isUuid);
   if (ids.length === 0) return { ok: true, allocations: [] };
-  await lockPayersAndPayments(tx, ids);
+  await lockPayments(tx, ids);
   const pairs = await tx
     .selectDistinct({ payerId: payment.payerId, billingEntityId: payment.billingEntityId })
     .from(payment)
@@ -226,6 +227,7 @@ export async function allocatePayer(
   today: string,
 ): Promise<AllocationOutcome> {
   if (!isUuid(payerId) || !isUuid(billingEntityId)) return { ok: true, allocations: [] };
+  // A payer outside the school (RLS) or gone locks nothing, and then has no payment either.
   await lockPayers(tx, [payerId]);
   const ids = await lockPaymentsOfPayer(tx, payerId, billingEntityId);
   return allocatePayments(tx, actor, ids, today);
@@ -250,7 +252,7 @@ export async function releaseUncovered(
 ): Promise<void> {
   const ids = [...new Set(paymentIds)].filter(isUuid);
   if (ids.length === 0) return;
-  await lockPayersAndPayments(tx, ids);
+  await lockPayments(tx, ids);
   const pairs = await tx
     .selectDistinct({ payerId: payment.payerId, billingEntityId: payment.billingEntityId })
     .from(payment)

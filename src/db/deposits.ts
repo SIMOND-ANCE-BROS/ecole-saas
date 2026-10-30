@@ -12,7 +12,7 @@ import type { ReversalKind } from "../domain/payments/rejection";
 import type { Tx } from "./index";
 import { allOrNothing } from "./all-or-nothing";
 import { allocatePayments, releaseUncovered } from "./allocations";
-import { lockPayersAndPayments } from "./payment-locks";
+import { lockPayments } from "./payment-locks";
 import { todayInParis } from "../domain/people/age";
 import { alreadyCorrected, type Method } from "./payments";
 import { auditLog, member, payment, person, bankDeposit, bankDepositPayment, billingEntity } from "./schema";
@@ -144,11 +144,12 @@ export async function createDeposit(
   if (!r.success) return { ok: false, message: r.error.issues[0].message };
   const { date, method: method, paymentIds: paymentIds } = r.data;
   const ids = [...new Set(paymentIds)];
-  // Same locks as correctPayment (#247), in the order of `src/db/payment-locks.ts` (#360):
-  // the payers, then the payments, each ordered by id. A deposit and a correction, or two
+  // Same lock as correctPayment (#247), rank 2 of `src/db/payment-locks.ts` (#360): a
+  // deposit inserts no payment, so it locks no payer. A deposit and a correction, or two
   // deposits, of the same payment wait for each other, so the read below sees the other
-  // one; separate statements so the read takes a snapshot after the wait.
-  await lockPayersAndPayments(tx, ids);
+  // one. Ordered by id so two deposits sharing several payments cannot deadlock; a separate
+  // statement so the read takes a snapshot after the wait.
+  await lockPayments(tx, ids);
   const chosen = await rows(tx).where(inArray(payment.id, ids));
   const eligibles = new Set(toDeposit(chosen, date > today ? date : today)[method].map((p) => p.id));
   if (chosen.length !== ids.length || !ids.every((id) => eligibles.has(id))) {
@@ -227,20 +228,18 @@ export async function cancelDeposit(
     .from(bankDeposit)
     .where(eq(bankDeposit.id, id));
   if (!x) return { ok: false, message: "Cette remise n’existe plus." };
-  // Same locks as createDeposit and correctPayment (#247, #253), in the order of
-  // `src/db/payment-locks.ts` (#360): the payers, then the payments of the deposit. A
-  // rejection saved at the same moment is seen by the reads below, or waits for the
-  // cancellation and then finds the payment no longer deposited. Separate statements, for a
-  // fresh snapshot. A deposit's payments are never changed, only deleted with it: a
-  // cancellation committed meanwhile is caught by the delete below.
+  // Same lock as createDeposit and correctPayment (#247, #253), rank 2 of
+  // `src/db/payment-locks.ts` (#360, no payer: nothing here inserts a payment), ordered by
+  // id: a rejection saved at the same moment is seen by the read below, or waits for the
+  // cancellation and then finds the payment no longer deposited. A separate statement, for a
+  // fresh snapshot.
   const held = await tx
-    .select({ id: bankDepositPayment.paymentId })
-    .from(bankDepositPayment)
-    .where(eq(bankDepositPayment.bankDepositId, id));
-  await lockPayersAndPayments(
-    tx,
-    held.map((p) => p.id),
-  );
+    .select({ id: payment.id })
+    .from(payment)
+    .innerJoin(bankDepositPayment, eq(bankDepositPayment.paymentId, payment.id))
+    .where(eq(bankDepositPayment.bankDepositId, id))
+    .orderBy(asc(payment.id))
+    .for("no key update", { of: payment });
   // A payment of the deposit rejected by the bank: the slip was used, it stays. Decided by
   // what correctPayment wrote under the same lock (a deposited payment is only ever rejected),
   // not by timestamps: a correction made before the deposit never blocks it (#253). Read

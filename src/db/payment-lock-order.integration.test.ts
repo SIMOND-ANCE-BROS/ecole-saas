@@ -3,6 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
 import { defaultEntityFor } from "./billing-entity.integration-helpers";
 import { balanceOf, collect, correctPayment, refundPayer } from "./payments";
+import { createDeposit } from "./deposits";
+import { relationship } from "./schema";
 
 /**
  * The lock order of payment writes (#360, `src/db/payment-locks.ts`): a refund and a
@@ -27,6 +29,7 @@ const director = `verrou-direction-${suffix}`;
 const TODAY = "2026-11-02";
 let school: string;
 let payer: string;
+let partner: string;
 
 const cash = (amountCents: number) => ({
   method: "cash" as const,
@@ -38,8 +41,9 @@ const cash = (amountCents: number) => ({
 });
 
 /**
- * Waits until a backend waits for a lock held by backend `pid`, and returns its pid: only this
- * test's connections are watched (`pg_blocking_pids`), never another session of the server.
+ * Waits until a backend waits for a lock held by backend `pid`, and returns its pid
+ * (`pg_blocking_pids`): a wait elsewhere on the server is ignored, and integration files run
+ * one after another (`fileParallelism: false`), so the one found here is this test's.
  */
 async function blockedBy(pid: number, timeoutMs = 5000): Promise<number> {
   const until = Date.now() + timeoutMs;
@@ -58,6 +62,8 @@ beforeAll(async () => {
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${director}, 'director')`;
   [{ id: payer }] =
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Zzverrou', 'Zoé') RETURNING id`;
+  [{ id: partner }] =
+    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${school}, 'Zzverrou', 'Zack') RETURNING id`;
   const [s] = await admin`
     INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${school}, ${`2026-2027 ${suffix}`}, '2026-09-01', '2027-06-30') RETURNING id`;
@@ -67,6 +73,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await admin`DELETE FROM bank_deposit WHERE school_id = ${school}`;
   await admin.begin(async (t) => {
     await t`ALTER TABLE payment DISABLE TRIGGER payment_immutable`;
     await t`ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only`;
@@ -76,7 +83,7 @@ afterAll(async () => {
     await t`ALTER TABLE payment ENABLE TRIGGER payment_immutable`;
     await t`ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only`;
   });
-  for (const t of ["enrollment", "season", "person", "member"])
+  for (const t of ["relationship", "enrollment", "season", "person", "member"])
     await admin.unsafe(`DELETE FROM ${t} WHERE school_id = $1`, [school]);
   await admin`DELETE FROM "user" WHERE id = ${director}`;
   await admin`DELETE FROM school WHERE id = ${school}`;
@@ -120,5 +127,38 @@ describe("lock order of payment writes (#360)", () => {
     }
     // 330 − 10 − 20 = 300,00 € kept for 280,00 € owed: 20,00 € still overpaid.
     expect((await withSchool(school, (tx) => balanceOf(tx, payer, TODAY)))?.total.remaining).toBe(-2000);
+  });
+
+  it("a deposit never waits for an insert keyed to its payers (a relationship being saved between two of them)", async () => {
+    const cheque = (reference: string) => ({ ...cash(3000), method: "cheque" as const, reference });
+    const a = await withSchool(school, (tx) => collect(tx, director, payer, [cheque("V0001")]));
+    const b = await withSchool(school, (tx) => collect(tx, director, partner, [cheque("V0002")]));
+    if (!a.ok || !b.ok) throw new Error("cheques not recorded");
+
+    // Holds KEY SHARE on both payers, as attendance, a couple enrolled or a relationship does.
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let held!: () => void;
+    const holding = new Promise<void>((resolve) => (held = resolve));
+    const link = withSchool(school, async (tx) => {
+      await tx
+        .insert(relationship)
+        .values({ schoolId: school, personId: partner, relatedPersonId: payer, type: "partner" });
+      held();
+      await released;
+    });
+    link.catch(() => undefined);
+    await holding;
+    try {
+      const deposit = withSchool(school, (tx) =>
+        createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [...a.ids, ...b.ids] }, TODAY),
+      );
+      const timeout = new Promise<"waited">((resolve) => setTimeout(() => resolve("waited"), 3000));
+      const outcome = await Promise.race([deposit, timeout]);
+      expect(outcome).toMatchObject({ ok: true });
+    } finally {
+      release();
+      await link;
+    }
   });
 });
