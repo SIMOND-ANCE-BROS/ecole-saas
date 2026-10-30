@@ -37,15 +37,18 @@ const cash = (amountCents: number) => ({
   plannedPayment: null,
 });
 
-/** Waits until `n` lock requests are waiting (integration files run one after another). */
-async function waiters(n: number, timeoutMs = 5000) {
+/**
+ * Waits until a backend waits for a lock held by backend `pid`, and returns its pid: only this
+ * test's connections are watched (`pg_blocking_pids`), never another session of the server.
+ */
+async function blockedBy(pid: number, timeoutMs = 5000): Promise<number> {
   const until = Date.now() + timeoutMs;
   while (Date.now() < until) {
-    const [w] = await admin`SELECT count(*)::int AS n FROM pg_locks WHERE NOT granted`;
-    if (w.n >= n) return;
+    const [w] = await admin`SELECT pid FROM pg_stat_activity WHERE ${pid}::int = ANY(pg_blocking_pids(pid)) LIMIT 1`;
+    if (w) return w.pid as number;
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
-  throw new Error(`fewer than ${n} lock waits after ${timeoutMs} ms`);
+  throw new Error(`no backend waits for ${pid} after ${timeoutMs} ms`);
 }
 
 beforeAll(async () => {
@@ -90,18 +93,19 @@ describe("lock order of payment writes (#360)", () => {
 
     const gate = await admin.reserve();
     try {
+      const [{ pid: gatePid }] = await gate`SELECT pg_backend_pid() AS pid`;
       await gate`BEGIN`;
       await gate`LOCK TABLE bank_deposit IN ACCESS EXCLUSIVE MODE`;
       // Cancels 10,00 € of the second payment: waits on bank_deposit, its first locks taken.
       const correction = withSchool(school, (tx) => correctPayment(tx, director, corrected, 1000, TODAY));
       correction.catch(() => undefined);
-      await waiters(1);
+      const correctionPid = await blockedBy(gatePid as number);
       // Pays back 20,00 €: waits for a lock the correction holds.
       const refund = withSchool(school, (tx) =>
         refundPayer(tx, director, payer, { method: "cash", amountCents: 2000, date: TODAY, reference: null }, TODAY),
       );
       refund.catch(() => undefined);
-      await waiters(2);
+      await blockedBy(correctionPid);
       await gate`COMMIT`;
       const outcomes = await Promise.allSettled([correction, refund]);
       // Drizzle wraps the driver's error: its Postgres code (40P01 for a deadlock) is on the cause.
