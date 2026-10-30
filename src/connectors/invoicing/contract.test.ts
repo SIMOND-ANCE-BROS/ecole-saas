@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { encrypt } from "../../lib/encryption";
 import { FAKE_NUMBER_PREFIX, PAYMENT_E_REPORTING } from "../../domain/billing/invoicing";
 import { type CustomerPayload, type InvoicePayload, type InvoicingConnector, InvoicingError } from "./contract";
-import { connectorFor } from "./connector";
+import { connectorFor, toolAvailable } from "./connector";
 import { FAKE_REFUSED_TOKEN, type FakeFault, fakeStoreOf } from "./fake";
 import { creditNotePayload, invoicePayload, type StoredLine, totalsOf } from "./payload";
 import { guarded } from "./guard";
@@ -508,5 +508,15 @@ describe("connectorFor", () => {
         paidOn: "2027-09-01",
       }),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("toolAvailable", () => {
+  it("offers the fake tool only where INVOICING_FAKE_ALLOWED=1, and no real tool yet", () => {
+    expect(toolAvailable("fake", { INVOICING_FAKE_ALLOWED: "1" })).toBe(true);
+    expect(toolAvailable("fake", {})).toBe(false);
+    expect(toolAvailable("fake", { INVOICING_FAKE_ALLOWED: "true" })).toBe(false);
+    for (const tool of ["pennylane", "abby", "shine"] as const)
+      expect(toolAvailable(tool, { INVOICING_FAKE_ALLOWED: "1" })).toBe(false);
   });
 });

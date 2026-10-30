@@ -1,0 +1,226 @@
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { z } from "zod";
+import { rowsOf } from "./columns-of";
+import { CURRENT_SCHOOL } from "./invoice-draft-discard";
+import { draftPayerInvoices } from "./invoice-drafts";
+import type { Tx } from "./index";
+import {
+  auditLog,
+  billingEntity,
+  installment,
+  invoice,
+  invoiceLine,
+  invoicingConnector,
+  member,
+  paymentAllocation,
+} from "./schema";
+import type { InvoicingToolName } from "../domain/billing/invoicing";
+import { sendAgainMode, type InvoiceStatus } from "../domain/invoicing/progress";
+
+/**
+ * A payer's invoices on their record, and what management does with a rejected one (#352).
+ * Always within `withSchool()` (RLS). The sending itself is the outbox (#304).
+ */
+
+const isUuid = (v: unknown): v is string => z.uuid().safeParse(v).success;
+
+export type PayerInvoice = {
+  id: string;
+  billingEntityId: string;
+  billingEntity: string;
+  status: InvoiceStatus;
+  number: string | null;
+  issuedOn: string | null;
+  totalInclTaxCents: number;
+  toolTotalInclTaxCents: number | null;
+  toolRef: string | null;
+  attempts: number;
+  nextAttemptAt: Date;
+  sendErrorKind: string | null;
+  sendErrorCode: string | null;
+  /** The business's active connector's tool, null when it has none. */
+  connectorTool: InvoicingToolName | null;
+  createdAt: Date;
+  lines: { label: string; inclTaxCents: number }[];
+  installments: { dueDate: string; amountCents: number }[];
+};
+
+/**
+ * The payer's invoices of the season, its credit notes and cancelled invoices left out (a
+ * cancelled one was set aside, its lines drafted again), newest first per business.
+ */
+export async function payerInvoices(tx: Tx, payerId: string, seasonId: string): Promise<PayerInvoice[]> {
+  if (!isUuid(payerId) || !isUuid(seasonId)) return [];
+  const rows = await tx
+    .select({
+      id: invoice.id,
+      billingEntityId: invoice.billingEntityId,
+      billingEntity: billingEntity.name,
+      status: invoice.status,
+      number: invoice.number,
+      issuedOn: invoice.issuedOn,
+      totalInclTaxCents: invoice.totalInclTaxCents,
+      toolTotalInclTaxCents: invoice.toolTotalInclTaxCents,
+      toolRef: invoice.toolRef,
+      attempts: invoice.attempts,
+      nextAttemptAt: invoice.nextAttemptAt,
+      sendErrorKind: invoice.sendErrorKind,
+      sendErrorCode: invoice.sendErrorCode,
+      connectorTool: invoicingConnector.tool,
+      createdAt: invoice.createdAt,
+    })
+    .from(invoice)
+    .innerJoin(billingEntity, eq(billingEntity.id, invoice.billingEntityId))
+    .leftJoin(
+      invoicingConnector,
+      and(eq(invoicingConnector.billingEntityId, invoice.billingEntityId), eq(invoicingConnector.active, true)),
+    )
+    .where(
+      and(
+        eq(invoice.payerId, payerId),
+        eq(invoice.seasonId, seasonId),
+        isNull(invoice.creditNoteOf),
+        ne(invoice.status, "cancelled"),
+      ),
+    )
+    .orderBy(desc(billingEntity.isDefault), asc(billingEntity.name), desc(invoice.createdAt), asc(invoice.id));
+  if (rows.length === 0) return [];
+  const ids = rows.map((r) => r.id);
+  const lines = await tx
+    .select({ invoiceId: invoiceLine.invoiceId, label: invoiceLine.label, inclTaxCents: invoiceLine.inclTaxCents })
+    .from(invoiceLine)
+    .where(inArray(invoiceLine.invoiceId, ids))
+    // As the tool receives them: charges first, then discounts.
+    .orderBy(sql`${invoiceLine.inclTaxCents} < 0`, asc(invoiceLine.id));
+  const dues = await tx
+    .select({ invoiceId: installment.invoiceId, dueDate: installment.dueDate, amountCents: installment.amountCents })
+    .from(installment)
+    .where(inArray(installment.invoiceId, ids))
+    .orderBy(asc(installment.rank));
+  return rows.map((r) => ({
+    ...r,
+    lines: lines.filter((l) => l.invoiceId === r.id).map(({ invoiceId: _, ...l }) => l),
+    installments: dues.filter((d) => d.invoiceId === r.id).map(({ invoiceId: _, ...d }) => d),
+  }));
+}
+
+export type RejectedOutcome =
+  | { ok: true; mode: "retry_in_tool" | "abandoned" }
+  | { ok: true; mode: "redraft"; drafted: number }
+  | { ok: false; message: string };
+
+const GONE = "Cette facture n’est plus à reprendre : rechargez la page.";
+const PAID =
+  "Un paiement est affecté à une échéance de cette facture : elle ne peut pas être abandonnée ni refaite ici.";
+
+/** The rejected invoice, locked for the transaction; null when it is not rejected (any more). */
+async function lockRejected(tx: Tx, invoiceId: string) {
+  const [row] = await tx
+    .select({
+      id: invoice.id,
+      status: invoice.status,
+      toolRef: invoice.toolRef,
+      payerId: invoice.payerId,
+      seasonId: invoice.seasonId,
+    })
+    .from(invoice)
+    .where(and(eq(invoice.id, invoiceId), eq(invoice.status, "rejected"), isNull(invoice.creditNoteOf)))
+    .for("update");
+  return row ?? null;
+}
+
+/** A payment allocated to one of its installments: setting the invoice aside would lose it. */
+async function hasAllocation(tx: Tx, invoiceId: string): Promise<boolean> {
+  const rows = await tx
+    .select({ one: sql`1` })
+    .from(paymentAllocation)
+    .innerJoin(installment, eq(installment.id, paymentAllocation.installmentId))
+    .where(eq(installment.invoiceId, invoiceId))
+    .limit(1);
+  return rows.length > 0;
+}
+
+async function setAside(tx: Tx, actor: string | null, invoiceId: string, reason: "abandoned" | "redrafted") {
+  await tx
+    .update(invoice)
+    .set({ status: "cancelled", claimedUntil: null })
+    .where(and(eq(invoice.id, invoiceId), eq(invoice.status, "rejected")));
+  await audit(tx, actor, invoiceId, { status: "cancelled", reason });
+}
+
+/**
+ * « Envoyer à nouveau » on a rejected invoice (`sendAgainMode`): one the tool holds goes back
+ * to `tool_draft`, due at once (its attempts never decrease: one more failure rejects it again
+ * once past the limit); one the tool never held is set aside and the payer's season drafted
+ * again. The caller wakes the sending after the commit (`sendSoon`).
+ */
+export async function sendRejectedAgain(tx: Tx, userId: string, invoiceId: string): Promise<RejectedOutcome> {
+  if (!isUuid(invoiceId)) return { ok: false, message: "Saisie invalide." };
+  const actor = await memberOf(tx, userId);
+  const row = await lockRejected(tx, invoiceId);
+  const mode = row ? sendAgainMode(row) : null;
+  if (!row || !mode) return { ok: false, message: GONE };
+  if (mode === "retry_in_tool") {
+    await tx
+      .update(invoice)
+      .set({
+        status: "tool_draft",
+        nextAttemptAt: sql`now()`,
+        claimedUntil: null,
+        sendErrorKind: null,
+        sendErrorCode: null,
+      })
+      .where(eq(invoice.id, invoiceId));
+    await audit(tx, actor, invoiceId, { status: "tool_draft", reason: "sent_again" });
+    return { ok: true, mode };
+  }
+  if (!row.seasonId) return { ok: false, message: GONE };
+  if (await hasAllocation(tx, invoiceId)) return { ok: false, message: PAID };
+  await setAside(tx, actor, invoiceId, "redrafted");
+  const drafted = await draftPayerInvoices(tx, actor, row.payerId, row.seasonId);
+  if (!drafted.ok) throw new RedraftRefused(drafted.message);
+  return { ok: true, mode, drafted: drafted.invoiceIds.length };
+}
+
+/** Rolls the setting aside back with the drafting that failed after it; its message is French. */
+export class RedraftRefused extends Error {}
+
+/**
+ * « Abandonner » a rejected invoice: it is set aside (`cancelled`) and gives its lines back, so
+ * the next drafting of the payer bills them again. For one the tool holds, management has first
+ * deleted its draft in the tool (the screen asks).
+ */
+export async function abandonRejected(tx: Tx, userId: string, invoiceId: string): Promise<RejectedOutcome> {
+  if (!isUuid(invoiceId)) return { ok: false, message: "Saisie invalide." };
+  const actor = await memberOf(tx, userId);
+  const row = await lockRejected(tx, invoiceId);
+  if (!row) return { ok: false, message: GONE };
+  if (await hasAllocation(tx, invoiceId)) return { ok: false, message: PAID };
+  await setAside(tx, actor, invoiceId, "abandoned");
+  return { ok: true, mode: "abandoned" };
+}
+
+/** The payer's invoices of the season drafted again (`draftPayerInvoices`), signed by the member. */
+export async function draftForPayer(tx: Tx, userId: string, payerId: string, seasonId: string) {
+  return draftPayerInvoices(tx, await memberOf(tx, userId), payerId, seasonId);
+}
+
+/** The member of the current school acting, for the audit log; null if no longer one. */
+async function memberOf(tx: Tx, userId: string): Promise<string | null> {
+  const [m] = await tx
+    .select({ id: member.id })
+    .from(member)
+    .where(and(eq(member.userId, userId), eq(member.active, true)));
+  return m?.id ?? null;
+}
+
+// Ids, statuses and technical codes only: never a name in the audit log.
+async function audit(tx: Tx, actor: string | null, id: string, after: Record<string, unknown>) {
+  await tx
+    .insert(auditLog)
+    .values(
+      rowsOf(auditLog, [
+        { schoolId: CURRENT_SCHOOL, actor, targetTable: "invoice", rowId: id, action: "update", after },
+      ]),
+    );
+}

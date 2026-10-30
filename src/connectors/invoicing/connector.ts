@@ -28,6 +28,25 @@ export const fakeAllowed = (env: Readonly<Record<string, string | undefined>> = 
   env.INVOICING_FAKE_ALLOWED === "1";
 
 /**
+ * Whether `connectorFor` can build a connector of `tool` on this server, credentials aside: what
+ * the payer's record says of a draft's sending (#352). Kept next to `connectorFor`: a real tool
+ * becomes available here with its connector (#288).
+ */
+export function toolAvailable(
+  tool: InvoicingToolName,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  switch (tool) {
+    case "fake":
+      return fakeAllowed(env);
+    case "pennylane":
+    case "abby":
+    case "shine":
+      return false;
+  }
+}
+
+/**
  * The connector of one billing entity (ADR 0007), built from that entity's own
  * decrypted credentials: two businesses of a school never share a tool account.
  * The decrypted credentials stay inside the tool's client, never returned nor

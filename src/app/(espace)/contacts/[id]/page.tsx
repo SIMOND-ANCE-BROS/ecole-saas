@@ -6,6 +6,10 @@ import { readContact } from "@/db/students";
 import { seasonEnrollments } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
 import { packsOf } from "@/db/lesson-packs";
+import { severalEntities } from "@/db/billing-entities";
+import { payerInvoices } from "@/db/payer-invoices";
+import { mayDraft } from "@/domain/invoicing/progress";
+import { InvoicesSection } from "../../_people/invoices-section";
 import { displayedName } from "@/db/people";
 import { currentSeason } from "@/db/schedule";
 import { todayInParis } from "@/domain/people/age";
@@ -49,10 +53,12 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
       balance: await balanceOf(tx, contact.id, today),
       payments: await paymentsOf(tx, contact.id),
       packs: await packsOf(tx, { personId: contact.id }),
+      invoices: season ? await payerInvoices(tx, contact.id, season.id) : [],
+      severalEntities: await severalEntities(tx),
     };
   });
   if (!parsed) notFound();
-  const { contact: c, season: season, billed, balance: balance, payments: payments, packs } = parsed;
+  const { contact: c, season: season, billed, balance: balance, payments: payments, packs, invoices } = parsed;
   // A pack is sold to someone who pays for a student (or is one).
   const sells = c.isStudent || c.students.some((s) => s.paysFor);
   const name = displayedName(c);
@@ -164,6 +170,15 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
           {season && <Enrollments enrollments={billed} season={season} today={today} payerId={c.id} />}
           {(sells || packs.length > 0) && (
             <LessonPacks packs={packs} personId={c.id} sellHref={sells ? `/carnets/nouveau?payeur=${c.id}` : null} />
+          )}
+          {season && (billed.length > 0 || packs.length > 0 || invoices.length > 0) && (
+            <InvoicesSection
+              payerId={c.id}
+              season={season}
+              invoices={invoices}
+              showEntity={parsed.severalEntities}
+              canDraft={mayDraft(role)}
+            />
           )}
           <PaymentsSection
             payerId={c.id}
