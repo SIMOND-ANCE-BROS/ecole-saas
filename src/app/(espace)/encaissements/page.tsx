@@ -155,11 +155,12 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
                   </Text>
                 </div>
               ))}
-            {/* Money paid back to payers (#294), apart from what came in by each method. */}
+            {/* Money paid back to payers (#294), apart from what came in by each method. Positive
+                when the period holds the cancellation of a refund made before it (#346). */}
             {t.refunded !== 0 && (
               <div>
                 <Text component="dt" size="sm" className="inline" c="dimmed">
-                  Remboursements :{" "}
+                  {t.refunded > 0 ? "Remboursements annulés" : "Remboursements"} :{" "}
                 </Text>
                 <Text component="dd" size="sm" className="inline tabular-nums">
                   {formatEuros(t.refunded)}

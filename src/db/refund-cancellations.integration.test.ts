@@ -253,6 +253,13 @@ describe("cancelling a refund entered by mistake (#346)", () => {
     ).toEqual(["Annulation de remboursement, R0001", "Annulation de remboursement, R0001"]);
   });
 
+  it("in a period without its refund, totals as refunds cancelled", async () => {
+    const log = await withSchool(school, (tx) => paymentLog(tx, TODAY, TODAY, null));
+    const mine = log.filter((l) => l.payerId === family);
+    // The refund is dated 30/10, its cancellations today: only these are in the period.
+    expect(totals(mine)).toEqual({ total: 48000, byMethod: { cash: 28000, transfer: 10000 }, refunded: 10000 });
+  });
+
   it("is refused by the database without the refund it cancels, or negative", async () => {
     await expect(admin`
       INSERT INTO payment (school_id, billing_entity_id, payer_id, amount_cents, method, reversal_kind)
@@ -307,6 +314,25 @@ describe("cancellations under concurrency", () => {
     expect(first.ok).toBe(true);
     expect(second).toEqual({ ok: false, message: "Ce remboursement est déjà annulé." });
     expect((await balance(race))?.remaining).toBe(-10000);
+  });
+
+  it("a cancellation and a new refund at the same time: the refund waits and sees the overpayment again", async () => {
+    // `race` is overpaid by 100 € again; its refund of 100 € cancelled, then refunded once more.
+    const r = await withSchool(school, (tx) => refundPayer(tx, director, race, refund(10000, "cash"), TODAY));
+    if (!r.ok) throw new Error(r.message);
+    const [first, second] = await overlapping(
+      admin,
+      (hold) =>
+        withSchool(school, async (tx) => {
+          const result = await cancelRefundPayment(tx, director, r.ids[0], 10000, TODAY);
+          await hold();
+          return result;
+        }),
+      () => withSchool(school, (tx) => refundPayer(tx, director, race, refund(10000, "cash"), TODAY)),
+    );
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect((await balance(race))?.remaining).toBe(0);
   });
 });
 

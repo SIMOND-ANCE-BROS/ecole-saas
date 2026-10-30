@@ -81,13 +81,10 @@ function Correction({
   if (isRefund(p)) {
     if (!canCancelRefund) return null;
     const left = refundLeftCents({ amountCents: p.amountCents, cancelledCents: p.correctedCents });
-    if (left > 0)
-      return <CorrectPayment paymentId={p.id} remaining={left} back={back} rejection={null} cancelsRefund />;
-    return (
-      <Text span size="xs" c="dimmed">
-        annulé
-      </Text>
-    );
+    // Fully cancelled: « annulé » already shows in the « Encaissement » column (`refundState`).
+    return left > 0 ? (
+      <CorrectPayment paymentId={p.id} remaining={left} back={back} rejection={null} cancelsRefund />
+    ) : null;
   }
   if (!isDirector || isReverse(p)) return null;
   const remaining = p.amountCents - p.correctedCents;
@@ -340,8 +337,8 @@ export function PaymentsSection({
                   </Text>
                 </div>
                 <Text size="xs" c="dimmed">
-                  {/* A reverse entry already says what it is in its reference. */}
-                  {isReverse(p)
+                  {/* A reverse entry already says what it is in its reference; a refund also says what of it is cancelled. */}
+                  {isReverse(p) && !isRefund(p)
                     ? reference(p) || cashing(p, today)
                     : [reference(p), cashing(p, today)].filter(Boolean).join(" · ")}
                   {several && ` · ${p.entity}`}

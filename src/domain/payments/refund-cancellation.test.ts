@@ -46,6 +46,16 @@ describe("refundCancellationRefusal", () => {
     );
   });
 
+  it("cancels down to the last cent, then nothing more", () => {
+    // 100,00 € refunded: 99,99 € cancelled, then the last 0,01 €, then nothing.
+    expect(refundCancellationRefusal({ amountCents: 9_999, leftCents: 10_000 })).toBeNull();
+    const left = refundLeftCents({ amountCents: -10_000, cancelledCents: 9_999 });
+    expect(left).toBe(1);
+    expect(refundCancellationRefusal({ amountCents: 1, leftCents: left })).toBeNull();
+    expect(refundCancellationRefusal({ amountCents: 2, leftCents: left })).not.toBeNull();
+    expect(refundLeftCents({ amountCents: -10_000, cancelledCents: 10_000 })).toBe(0);
+  });
+
   it("refuses a refund already cancelled in full", () => {
     expect(refundCancellationRefusal({ amountCents: 1, leftCents: 0 })).toBe("Ce remboursement est déjà annulé.");
   });

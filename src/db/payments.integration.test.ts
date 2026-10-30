@@ -355,12 +355,12 @@ describe("migration 0037: the kind of the reverse entries written before it (#27
     const to = statements.findIndex((s) => s.includes("ENABLE TRIGGER"));
     if (from < 0 || to < from) throw new Error("No backfill in migration 0037");
     // The backfill and the trigger enabled again, then the checks as they stand today, which
-    // must accept the backfilled rows. Not 0037's own check: 0055 replaced it, and a refund
-    // (#294), a reverse entry with no payment it corrects, already in the database breaks it.
-    const current = readFileSync(join(process.cwd(), "migrations/0055_payment_refund.sql"), "utf8")
+    // must accept the backfilled rows. Not 0037's own check: 0055 then 0056 replaced it, and a
+    // refund (#294) or a refund's cancellation (#346) already in the database breaks the older ones.
+    const current = readFileSync(join(process.cwd(), "migrations/0056_payment_refund_cancellation.sql"), "utf8")
       .split("--> statement-breakpoint")
       .filter((s) => s.includes("ADD CONSTRAINT"));
-    if (current.length !== 2) throw new Error("Migration 0055 no longer adds the two payment checks");
+    if (current.length !== 2) throw new Error("Migration 0056 no longer adds the two payment checks");
     const backfill = [...statements.slice(from, to + 1), ...current];
 
     const ROLLBACK = new Error("rollback");

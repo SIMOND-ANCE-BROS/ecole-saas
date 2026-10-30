@@ -78,12 +78,15 @@ export const validPayments = z.array(validPayment).min(1, "Aucun règlement").ma
 export type Result = { ok: true; ids: string[] } | { ok: false; message: string };
 
 /**
- * Amount already cancelled by reverse entries, as a positive amount: the corrections and
- * rejection of a payment (negative), or the cancellations of a refund (positive, #346).
- * Identifier written with the table name: in a `select`, Drizzle would write it alone, and
- * it would then refer to the subquery's row.
+ * Amount already cancelled by reverse entries, in the direction that cancels: the corrections
+ * and rejection of a payment (negative entries under a positive payment), or the cancellations
+ * of a refund (positive entries under a negative refund, #346). Positive in both cases; an
+ * entry of the wrong sign under a payment would lower it instead of hiding (the database does
+ * not check what a reverse entry targets, the code does). Identifiers written with the table
+ * name: in a `select`, Drizzle would write them alone, and they would then refer to the
+ * subquery's row.
  */
-export const alreadyCorrected = sql<number>`coalesce((SELECT abs(sum(c.amount_cents)) FROM payment c WHERE c.corrects_id = ${payment}.${sql.identifier("id")}), 0)::int`;
+export const alreadyCorrected = sql<number>`coalesce((SELECT sign(-${payment}.${sql.identifier("amount_cents")}) * sum(c.amount_cents) FROM payment c WHERE c.corrects_id = ${payment}.${sql.identifier("id")}), 0)::int`;
 
 /** Member of the current school who enters the data (for `entered_by` and the audit log). */
 async function memberOf(tx: Tx, userId: string): Promise<string | null> {
@@ -289,7 +292,7 @@ export type PaymentRow = {
   correctedId: string | null;
   /** Kind of a reverse entry, null for an ordinary payment (#272). */
   reversalKind: ReversalKind | null;
-  /** Amount already cancelled by corrections (positive payments). */
+  /** Amount already cancelled: by corrections for a payment, by cancellations for a refund (#346). */
   correctedCents: number;
   enteredBy: string | null;
   /** Date of the bank deposit holding this payment, or null: a deposited payment is rejected, not corrected (#253). */
