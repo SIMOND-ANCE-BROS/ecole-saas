@@ -22,7 +22,7 @@ export function listOpenOn(target: AttributeReader): boolean {
 /**
  * Whether an Escape key press cancels the form around it: not when a list
  * open on the target closes first (a second Escape cancels), nor when a
- * control already handled it (the date field's calendar).
+ * control already handled it and prevented its default.
  */
 export function escapeCancels(key: string, defaultPrevented: boolean, target: AttributeReader | null): boolean {
   return key === "Escape" && !defaultPrevented && !(target && listOpenOn(target));

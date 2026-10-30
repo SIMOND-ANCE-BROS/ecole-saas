@@ -56,7 +56,7 @@ describe("escapeCancels", () => {
 
   it("ignores other keys and an Escape a control already handled", () => {
     expect(escapeCancels("Enter", false, attributes({}))).toBe(false);
-    // The date field's calendar closes on Escape and prevents its default.
+    // A control that already handled Escape prevents its default.
     expect(escapeCancels("Escape", true, attributes({}))).toBe(false);
   });
 });
