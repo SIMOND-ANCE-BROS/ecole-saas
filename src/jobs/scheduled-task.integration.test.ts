@@ -19,13 +19,16 @@ afterAll(async () => {
 describe("exclusively", () => {
   it("skips a run of the same task while another one is running, from another connection", async () => {
     let release: () => void = () => {};
+    let started: () => void = () => {};
     const blocked = new Promise<void>((resolve) => (release = resolve));
+    const holding = new Promise<void>((resolve) => (started = resolve));
     const running = exclusively(first, "zz-test-task", async () => {
+      started();
       await blocked;
       return "first";
     });
-    // Let the first run take its lock.
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // The first run holds its lock once its task has started.
+    await holding;
 
     expect(await exclusively(second, "zz-test-task", async () => "second")).toEqual({ ran: false });
     // Another task is not blocked.

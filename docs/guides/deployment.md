@@ -27,13 +27,15 @@ Times are `Europe/Paris`; the nightly purge can run at any quiet hour (03:00 for
 
 The two scripts use `DATABASE_ADMIN_URL` only to list which schools have work; each school is then
 handled with `DATABASE_URL` under its own row-level security (`withSchool`). The npm scripts load
-`.env` (`tsx --env-file=.env`): on the host, provide the variables in a `.env` file next to the
-code or run `npx tsx scripts/<script>.ts` with them in the environment.
+`.env` (`tsx --env-file=.env`) and fail at once, outside the exit codes below, when that file is
+missing: on a host whose variables come from the environment only, run
+`npx tsx scripts/sync-calendars.ts` and `npx tsx scripts/purge-submissions.ts` instead.
 
 ## Guarantees
 
 - **Safe to run twice, or concurrently.** Every task is idempotent. The two scripts take a
-  PostgreSQL advisory lock per task (`exclusively` in `src/jobs/scheduled-task.ts`): a run started
+  PostgreSQL advisory lock per task (`exclusively` in `src/jobs/scheduled-task.ts`, runner in
+  `scripts/lib/scheduled-task.ts`): a run started
   while another is still going prints « une autre exécution est en cours » and exits 0. The lock
   needs a direct or session-pooled connection for `DATABASE_ADMIN_URL`, never a transaction
   pooler. The sweep needs no lock: invoices are claimed with `FOR UPDATE SKIP LOCKED`.
@@ -55,11 +57,19 @@ calendar failing (revoked access, provider down) does not fail the run: it is re
 connection, shown to the school, and retried next hour. An invoice the tool rejects does not fail
 the sweep either: management sees it with the rejected invoices.
 
+The run does not fail either when **every** calendar fails, for example `GOOGLE_*` missing on the
+host or the OAuth client secret revoked: the summary line then shows `agendas synchronisés : 0`
+with a non-zero `en échec`. Watch for that line after any change to the provider variables.
+
+Configure the scheduler **without retries**: the next scheduled run is the retry, and an HTTP cron
+retrying a 500 at once only adds load on a tool that is already failing.
+
 For a scheduler that runs commands, the sweep can be called with curl, the secret read from a file
 so that it never appears in the process list:
 
 ```sh
 # /etc/ecole-saas/jobs-header contains one line: Authorization: Bearer <JOBS_SECRET>
+# Owned by the scheduler's user, readable by it only: chmod 600 /etc/ecole-saas/jobs-header
 curl --fail --silent --show-error --max-time 300 -X POST \
   -H @/etc/ecole-saas/jobs-header https://<host>/api/taches/factures
 ```

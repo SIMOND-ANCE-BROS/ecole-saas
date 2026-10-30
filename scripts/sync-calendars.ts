@@ -10,7 +10,8 @@
  * run; a school that fails as a whole fails the run. No personal data in the output.
  */
 import { syncSchool } from "../src/lib/calendar-sync";
-import { errorLabel, runScheduledTask } from "../src/jobs/scheduled-task";
+import { errorLabel } from "../src/jobs/scheduled-task";
+import { runScheduledTask } from "./lib/scheduled-task";
 
 runScheduledTask({ name: "calendars:sync", timeoutMs: 15 * 60_000 }, async (admin) => {
   const schools = await admin<{ id: string }[]>`SELECT DISTINCT school_id AS id FROM calendar_connection`;

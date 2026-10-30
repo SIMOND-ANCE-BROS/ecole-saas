@@ -10,7 +10,8 @@
  */
 import { withSchool } from "../src/db";
 import { purgeOldSubmissions, SUBMISSION_RETENTION_DAYS } from "../src/db/submissions";
-import { errorLabel, runScheduledTask } from "../src/jobs/scheduled-task";
+import { errorLabel } from "../src/jobs/scheduled-task";
+import { runScheduledTask } from "./lib/scheduled-task";
 
 runScheduledTask({ name: "submissions:purge", timeoutMs: 10 * 60_000 }, async (admin) => {
   const schools = await admin<{ id: string }[]>`SELECT DISTINCT school_id AS id FROM submission

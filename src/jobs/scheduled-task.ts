@@ -1,10 +1,11 @@
-import postgres, { type Sql } from "postgres";
+import type { Sql } from "postgres";
 
 /**
- * Frame of the administration scripts run on a schedule in production (#337, list and runbook in
- * `docs/guides/deployment.md`): one run at a time per task, a bounded duration, an exit code the
- * host's scheduler can alert on, and logs carrying counts, ids and error kinds only (never a
- * name, an address nor an error message, which may quote a row's values).
+ * Building blocks of the administration scripts run on a schedule in production (#337, list and
+ * runbook in `docs/guides/deployment.md`; the runner itself, which opens the owner connection,
+ * is `scripts/lib/scheduled-task.ts`): one run at a time per task, an exit code the host's
+ * scheduler can alert on, and logs carrying counts, ids and error kinds only (never a name, an
+ * address nor an error message, which may quote a row's values).
  */
 
 /** Exit codes of a scheduled task. A run skipped because another one is running exits `ok`. */
@@ -51,51 +52,4 @@ export async function exclusively<T>(
   } finally {
     lock.release();
   }
-}
-
-/**
- * Entry point of a scheduled script: connects with `DATABASE_ADMIN_URL` (used only to list the
- * schools to process; each school is then handled under its own RLS), runs `fn` once if no other
- * run of `name` is under way, prints one summary line and exits with an `EXIT_CODE`. Past
- * `timeoutMs`, the process exits with `timedOut`: the next run takes over, every task being
- * idempotent.
- */
-export function runScheduledTask(
-  task: { name: string; timeoutMs: number },
-  fn: (admin: Sql) => Promise<TaskResult>,
-): void {
-  const url = process.env.DATABASE_ADMIN_URL;
-  if (!url) {
-    console.error(`${task.name} : DATABASE_ADMIN_URL manquante.`);
-    process.exit(EXIT_CODE.failed);
-  }
-  // Two connections: one holds the task's lock, the other lists the schools.
-  const admin = postgres(url, { max: 2, connect_timeout: 10, onnotice: () => {} });
-  const watchdog = setTimeout(() => {
-    console.error(`${task.name} : arrêtée après ${Math.round(task.timeoutMs / 1000)} s (délai dépassé).`);
-    process.exit(EXIT_CODE.timedOut);
-  }, task.timeoutMs);
-  watchdog.unref();
-
-  let code: number = EXIT_CODE.failed;
-  // The application pool (src/db) keeps the process alive: exit explicitly.
-  void exclusively(admin, task.name, () => fn(admin))
-    .then((outcome) => {
-      if (!outcome.ran) {
-        process.stdout.write(`${task.name} : une autre exécution est en cours, rien à faire.\n`);
-        code = EXIT_CODE.ok;
-        return;
-      }
-      process.stdout.write(`${task.name} : ${outcome.value.summary}\n`);
-      code = exitCodeOf(outcome.value);
-    })
-    .catch((e: unknown) => {
-      console.error(`${task.name} : échec (${errorLabel(e)}).`);
-      code = EXIT_CODE.failed;
-    })
-    .finally(async () => {
-      clearTimeout(watchdog);
-      await admin.end({ timeout: 5 }).catch(() => {});
-      process.exit(code);
-    });
 }
