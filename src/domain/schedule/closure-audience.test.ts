@@ -122,4 +122,8 @@ describe("meetsDuring (#295)", () => {
     expect(meetsDuring(dated, season, holidays)).toBe(true);
     expect(meetsDuring({ ...dated, dates: ["2027-12-01"] }, season, holidays)).toBe(false);
   });
+
+  it("leaves out a regular course without a day, which has no lesson at all", () => {
+    expect(meetsDuring({ ...weekly, weekday: null }, season, holidays)).toBe(false);
+  });
 });

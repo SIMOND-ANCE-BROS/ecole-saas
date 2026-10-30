@@ -33,12 +33,33 @@ export type CourseOption = Option &
     ages: string | null;
   };
 
-/** The audience buttons (#295), in the order management reads them. */
-const AUDIENCES: { pick: AudiencePick; label: string; ticked: string }[] = [
-  { pick: "children", label: "Enfants et ados", ticked: "enfants et ados" },
-  { pick: "adults", label: "Adultes", ticked: "adultes" },
-  { pick: "all", label: "Tous les cours collectifs", ticked: "collectifs" },
+/** The audience buttons (#295), in the order management reads them, with what they ticked as a whole sentence. */
+const AUDIENCES: { pick: AudiencePick; label: string; ticked: (n: number, when: string) => string }[] = [
+  {
+    pick: "children",
+    label: "Enfants et ados",
+    ticked: (n, when) =>
+      n === 0
+        ? `Aucun cours pour enfants et ados ${when}.`
+        : `${n} cours pour enfants et ados coché${n > 1 ? "s" : ""}.`,
+  },
+  {
+    pick: "adults",
+    label: "Adultes",
+    ticked: (n, when) =>
+      n === 0 ? `Aucun cours réservé aux adultes ${when}.` : `${n} cours pour adultes coché${n > 1 ? "s" : ""}.`,
+  },
+  {
+    pick: "all",
+    label: "Tous les cours collectifs",
+    ticked: (n, when) =>
+      n === 0 ? `Aucun cours collectif ${when}.` : `${n} cours collectif${n > 1 ? "s" : ""} coché${n > 1 ? "s" : ""}.`,
+  },
 ];
+
+/** Why a group course is left to management: no age, or minors and adults together (#295 Q3). */
+const undecidedReason = (c: CourseOption) =>
+  c.ages ? `${c.ages} : mineurs et adultes ensemble` : "âge non renseigné : pour tous les âges ?";
 type Kind = ClosureScope["kind"];
 
 type Props = {
@@ -90,8 +111,18 @@ export function ClosuresManagement({
   const choice = useRef<HTMLInputElement>(null);
   const label = useRef<HTMLInputElement>(null);
   const [removal, setRemoval] = useState<Removal | null>(null);
-  /** What the last audience button ticked, and the courses it left for management to decide (#295). */
-  const [picked, setPicked] = useState<{ label: string; count: number; undecided: CourseOption[] } | null>(null);
+  /**
+   * What the last audience button ticked, and the courses it left for management to decide (#295).
+   * `auto`: the list is still the button's own, so a change of dates ticks it again; once edited by
+   * hand it is kept, and `stale` says the dates moved since.
+   */
+  const [picked, setPicked] = useState<{
+    audience: (typeof AUDIENCES)[number];
+    text: string;
+    undecided: CourseOption[];
+    auto: boolean;
+    stale: boolean;
+  } | null>(null);
   /** Where focus goes once a removal is saved and the list redrawn (its button is gone). */
   const focusAfter = useRef<string | null>(null);
   useEffect(() => {
@@ -156,8 +187,8 @@ export function ClosuresManagement({
 
   // Ticks the group courses of an audience that meet on the closure's dates (all of them while no
   // date is typed), replacing the list: management then adds or removes courses one by one.
-  const tick = (a: (typeof AUDIENCES)[number]) => {
-    const period = v.start ? { start: v.start, end: v.end || v.start } : null;
+  const tick = (a: (typeof AUDIENCES)[number], form = v) => {
+    const period = form.start ? { start: form.start, end: form.end || form.start } : null;
     const season = { start: seasonStart, end: seasonEnd };
     const held = courses.filter((c) => !period || meetsDuring(c, season, period));
     const { courseIds, undecidedIds } = pickByAudience(
@@ -165,12 +196,29 @@ export function ClosuresManagement({
       a.pick,
     );
     setChoiceError(null);
-    setV({ ...v, courseIds });
+    setV({ ...form, courseIds });
     setPicked({
-      label: a.ticked,
-      count: courseIds.length,
+      audience: a,
+      text: `Liste remplacée : ${a.ticked(courseIds.length, period ? "ces jours-là" : "cette saison")}`,
       undecided: held.filter((c) => undecidedIds.includes(c.value)),
+      auto: true,
+      stale: false,
     });
+  };
+
+  // New dates: a list still as a button left it is ticked again for them; one edited by hand is kept.
+  const setDates = (form: typeof v) => {
+    if (form.scope === "courses" && picked?.auto) tick(picked.audience, form);
+    else {
+      setV(form);
+      if (picked) setPicked({ ...picked, stale: true });
+    }
+  };
+
+  const setCourses = (courseIds: string[]) => {
+    setChoiceError(null);
+    setV({ ...v, courseIds });
+    if (picked) setPicked({ ...picked, auto: false });
   };
 
   const entry = () => {
@@ -221,14 +269,14 @@ export function ClosuresManagement({
             minDate={seasonStart}
             maxDate={seasonEnd}
             value={v.start}
-            onChange={(start) => setV({ ...v, start })}
+            onChange={(start) => setDates({ ...v, start })}
           />
           <DateField
             label="Au (inclus)"
             minDate={v.start || seasonStart}
             maxDate={seasonEnd}
             value={v.end}
-            onChange={(end) => setV({ ...v, end })}
+            onChange={(end) => setDates({ ...v, end })}
           />
         </div>
         <div className="flex flex-wrap items-start gap-3">
@@ -269,14 +317,20 @@ export function ClosuresManagement({
           )}
           {v.scope === "courses" && (
             <Input.Wrapper
-              label="Cocher les cours"
+              label="Remplir la liste avec"
               id="fermeture-public"
               labelElement="div"
               classNames={{ label: "block" }}
-              description="Selon l’âge du cours ; cours particuliers et compétition exclus."
+              description="Remplace les cours annulés, selon l’âge du cours ; cours particuliers, compétition et stages exclus."
               className="max-w-full"
             >
-              <Group gap="xs" mt={4} role="group" aria-labelledby="fermeture-public-label">
+              <Group
+                gap="xs"
+                mt={4}
+                role="group"
+                aria-labelledby="fermeture-public-label"
+                aria-describedby="fermeture-public-description"
+              >
                 {AUDIENCES.map((a) => (
                   <Button key={a.pick} size="compact-sm" variant="default" onClick={() => tick(a)}>
                     {a.label}
@@ -297,38 +351,59 @@ export function ClosuresManagement({
               searchable
               onSearchChange={() => setChoiceError(null)}
               nothingFoundMessage="Aucun cours trouvé"
-              onChange={(courseIds) => {
-                setChoiceError(null);
-                setV({ ...v, courseIds });
-              }}
+              onChange={setCourses}
               error={choiceError}
             />
           )}
         </div>
-        {v.scope === "courses" && picked && (
+        {/* Always there in « Certains cours », so that screen readers announce what a button did. */}
+        {v.scope === "courses" && (
           <div role="status" className="flex flex-col gap-1">
-            <Text size="sm">
-              {picked.count === 0
-                ? `Aucun cours ${picked.label} ${v.start ? "ces jours-là" : "cette saison"}.`
-                : `${picked.count} cours ${picked.label} coché${picked.count > 1 ? "s" : ""}.`}
-            </Text>
-            {picked.undecided.length > 0 && (
+            {picked && (
               <>
-                <Text size="sm" c="dimmed">
-                  À décider, non cochés (pas d’âge ou mineurs et adultes ensemble) : ajoutez-les dans la liste si
-                  besoin.
-                </Text>
-                <ul className="list-disc pl-5 text-sm">
-                  {picked.undecided.map((c) => (
-                    <li key={c.value}>
-                      {c.label} ({c.ages ?? "âge non renseigné"})
-                    </li>
-                  ))}
-                </ul>
+                <Text size="sm">{picked.text}</Text>
+                {picked.stale && (
+                  <Text size="sm" c="orange">
+                    Dates modifiées : recliquez sur un bouton pour remettre la liste à jour.
+                  </Text>
+                )}
               </>
             )}
           </div>
         )}
+        {v.scope === "courses" &&
+          picked &&
+          (() => {
+            // Courses left to decide, until management ticks them.
+            const left = picked.undecided.filter((c) => !v.courseIds.includes(c.value));
+            return left.length === 0 ? null : (
+              <div className="flex flex-col gap-1">
+                <Text size="sm" c="dimmed">
+                  À décider, non cochés :
+                </Text>
+                <ul className="flex flex-col gap-1 text-sm">
+                  {left.map((c) => (
+                    <li key={c.value} className="flex flex-wrap items-center gap-x-2">
+                      <span>
+                        {c.label}{" "}
+                        <Text span size="sm" c="dimmed">
+                          ({undecidedReason(c)})
+                        </Text>
+                      </span>
+                      <Button
+                        size="compact-xs"
+                        variant="subtle"
+                        aria-label={`Cocher aussi ${c.label}`}
+                        onClick={() => setCourses([...v.courseIds, c.value])}
+                      >
+                        Cocher aussi
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
         <Button type="submit" loading={inProgress} className="self-start">
           Ajouter
         </Button>
