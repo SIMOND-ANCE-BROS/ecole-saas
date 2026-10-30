@@ -46,7 +46,8 @@ import { installment, invoice, payment, person } from "./schema";
  *
  * Outside this order: the invoice row. The sending (`recordIssued`, #304) holds the invoice it
  * records before it allocates (payer, payments, installments); no payment write locks an
- * invoice row. Enrollments and drafts lock the payer `FOR NO KEY UPDATE` (`lockPayer`,
+ * invoice row. Sending a rejected invoice again or abandoning it (`src/db/payer-invoices.ts`,
+ * #352) locks that invoice only, never a payer, payment or installment. Enrollments and drafts lock the payer `FOR NO KEY UPDATE` (`lockPayer`,
  * `draftPayerInvoices`), then their own rows, never a payment; their inserts, attendance and
  * relationships take KEY SHARE on other people (students), which a payer lock in
  * `FOR NO KEY UPDATE` never blocks.
