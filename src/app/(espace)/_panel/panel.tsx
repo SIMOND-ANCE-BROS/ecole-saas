@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, type ReactNode, use, useEffect, useId, useRef, useState } from "react";
+import { elementOf, escapeCancels } from "../_ui/escape-cancels";
 import { FOCUS_SEARCH } from "../_ui/focus-search";
 import { useListReturn } from "../_ui/list-return";
 import { useUnloadGuard, useUnsavedInput } from "../_ui/unsaved-input";
@@ -171,17 +172,15 @@ function PanelDialog({ title, children, path }: Props & { path: string }) {
           if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") e.preventDefault();
           return;
         }
-        // Escape with a list, calendar or menu open closes only that (Mantine does
-        // it): without its default action, the dialog gets no « cancel » and stays
-        // open. Open dropdowns are the visible children of the panel's portal
-        // (Autocomplete sets no aria-expanded).
-        const portal = document.getElementById(PORTAL_ID);
-        const listOpen = [...(portal?.children ?? [])].some((c) => c.checkVisibility());
         if (e.key === "Escape") {
+          // Escape with a list, calendar or menu open closes only that (Mantine does it): the
+          // same check as the inline settings forms (#339), with the panel's own portal.
+          const leaves = escapeCancels(e.key, false, elementOf(e.target), `#${PORTAL_ID}`);
           // Handled here rather than through « cancel »: a prevented keydown sends the browser
-          // no close request, so it can never force the dialog shut without asking.
+          // no close request, so it can never force the dialog shut without asking. Without
+          // its default action, the dialog gets no « cancel » and stays open for the list.
           e.preventDefault();
-          if (!listOpen) requestLeave(close);
+          if (leaves) requestLeave(close);
         } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
           e.preventDefault();
           // Held down or pressed twice: one Back only.

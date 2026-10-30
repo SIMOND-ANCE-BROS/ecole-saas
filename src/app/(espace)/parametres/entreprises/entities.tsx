@@ -10,7 +10,7 @@ import { type ActionResult, settle } from "@/lib/action-result";
 import { isKeyOf } from "@/lib/has";
 import { compact } from "@/domain/billing/entity";
 import { BusinessSearch } from "../../_ui/business-search";
-import { cancelOnEscape } from "../../_ui/escape-cancels";
+import { useEscapeCancels } from "../../_ui/escape-asks";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { changeEntity, defaultEntity, newEntity } from "../actions";
 
@@ -77,6 +77,8 @@ function EntityForm({
   message: string | null;
 }) {
   const [v, setV] = useState(initial);
+  const form = useRef<HTMLFormElement>(null);
+  const escape = useEscapeCancels(form, close);
   const alert = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
     if (message) alert.current?.focus();
@@ -88,10 +90,12 @@ function EntityForm({
   );
   return (
     <form
+      ref={form}
       aria-label={title}
       className="flex flex-col gap-3"
-      // Escape first closes an open list (the VAT regime, the registry results), then cancels.
-      onKeyDown={cancelOnEscape(close)}
+      // Escape first closes an open list (the VAT regime, the registry results), then cancels,
+      // asking first if anything was typed or chosen (#339).
+      onKeyDown={escape.onKeyDown}
       onSubmit={(e) => {
         e.preventDefault();
         submit(v);
@@ -195,6 +199,7 @@ function EntityForm({
           Annuler
         </Button>
       </Group>
+      {escape.confirm}
     </form>
   );
 }

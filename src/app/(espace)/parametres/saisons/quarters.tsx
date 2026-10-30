@@ -2,11 +2,12 @@
 
 import { Button, Group, Paper, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import type { SeasonRow } from "@/db/settings";
 import { addMonths } from "@/domain/invoicing/installments";
 import { settle } from "@/lib/action-result";
 import { DateField, refusedDateField } from "../../_ui/date-field";
+import { useEscapeCancels } from "../../_ui/escape-asks";
 import { seasonQuarters } from "../actions";
 
 type Row = { key: string; id: string | null; label: string; startDate: string; endDate: string };
@@ -42,9 +43,13 @@ export function QuartersEditor({ season, onClose }: { season: SeasonRow; onClose
     setRows((all) => all.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const titleId = `trimestres-${season.id}`;
   const addId = `ajouter-trimestre-${season.id}`;
+  // Escape closes the editor, asking first if a quarter was changed, added or removed (#339).
+  const form = useRef<HTMLFormElement>(null);
+  const escape = useEscapeCancels(form, onClose);
 
   return (
     <Paper
+      ref={form}
       withBorder
       component="form"
       p="md"
@@ -67,9 +72,7 @@ export function QuartersEditor({ season, onClose }: { season: SeasonRow; onClose
           }
         });
       }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
-      }}
+      onKeyDown={escape.onKeyDown}
     >
       <div>
         <Title order={2} size="h6" id={titleId}>
@@ -168,6 +171,7 @@ export function QuartersEditor({ season, onClose }: { season: SeasonRow; onClose
           Annuler
         </Button>
       </Group>
+      {escape.confirm}
     </Paper>
   );
 }

@@ -6,6 +6,7 @@ import { useOptimistic, useState, useTransition } from "react";
 import type { DisciplineRow } from "@/db/settings";
 import { type ActionResult, settle } from "@/lib/action-result";
 import { ConfirmRemoval, type Removal } from "../../_ui/confirm-removal";
+import { EscapeCancelsForm } from "../../_ui/escape-asks";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { adultCertificate, newDiscipline, rename, removeDiscipline } from "../actions";
 
@@ -80,8 +81,9 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
           {disciplines.map((d) => (
             <li key={d.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2">
               {edition?.id === d.id ? (
-                <form
-                  onKeyDown={(e) => e.key === "Escape" && closeEdit(d.id)}
+                // Escape cancels, asking first if the name was changed (#339).
+                <EscapeCancelsForm
+                  close={() => closeEdit(d.id)}
                   className="flex flex-wrap items-center gap-2"
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -103,7 +105,7 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
                   <Button type="button" size="compact-sm" variant="subtle" color="gray" onClick={() => closeEdit(d.id)}>
                     Annuler
                   </Button>
-                </form>
+                </EscapeCancelsForm>
               ) : (
                 <span className="font-medium">{d.name}</span>
               )}

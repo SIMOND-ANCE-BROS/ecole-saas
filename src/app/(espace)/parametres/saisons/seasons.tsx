@@ -4,6 +4,7 @@ import { Alert, Button, Group, Paper, Select, Table, Text, TextInput } from "@ma
 import { useState, useTransition } from "react";
 import type { SeasonRow } from "@/db/settings";
 import { DateField, refusedDateField } from "../../_ui/date-field";
+import { EscapeCancelsRow } from "../../_ui/escape-asks";
 import { PHONE_LABEL, PHONE_TABLE } from "../../_ui/phone-table";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { changeSeason, newSeason } from "../actions";
@@ -86,16 +87,17 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
             <Table.Tbody className={PHONE_TABLE.body}>
               {seasons.map((s) =>
                 edition?.id === s.id ? (
-                  <Table.Tr
+                  <EscapeCancelsRow
                     key={s.id}
                     className={PHONE_TABLE.row}
-                    // A table row cannot hold a form: Enter saves and Escape cancels by hand.
+                    // A table row cannot hold a form: Enter saves by hand. Escape cancels, asking
+                    // first if anything was changed (#339).
+                    close={() => closeEdit(s.id)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
                         e.preventDefault();
                         if (!refusedDateField(e.currentTarget)) saveEdition(s.id, edition);
                       }
-                      if (e.key === "Escape") closeEdit(s.id);
                     }}
                   >
                     <Table.Td className={`${cell} ${PHONE_TABLE.title}`}>
@@ -153,7 +155,7 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
                         </Button>
                       </Group>
                     </Table.Td>
-                  </Table.Tr>
+                  </EscapeCancelsRow>
                 ) : (
                   <Table.Tr key={s.id} className={PHONE_TABLE.row}>
                     <Table.Td className={`${cell} ${PHONE_TABLE.title} font-medium`}>{s.label}</Table.Td>

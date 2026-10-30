@@ -90,6 +90,9 @@ export function DateField({
       fixOnBlur={false}
       minDate={minDate}
       maxDate={maxDate}
+      // An open calendar is marked like an open list, so Escape closes it first, in a side panel
+      // and in an inline form alike (`listOpenOn`, #339): Mantine's DateInput marks nothing.
+      data-expanded={open || undefined}
       popoverProps={{
         ...popoverProps,
         opened: open,
