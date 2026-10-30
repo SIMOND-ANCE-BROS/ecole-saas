@@ -5,6 +5,7 @@
 import { csvAmount, csvDocument, csvText } from "../../lib/csv";
 import { frenchDate } from "../../lib/dates";
 import type { ReversalKind } from "./rejection";
+import { isRefundSide } from "./refund-cancellation";
 
 export const DEPOSIT_METHODS = ["cheque", "cash", "holiday_voucher"] as const;
 export type DepositMethod = (typeof DEPOSIT_METHODS)[number];
@@ -19,17 +20,21 @@ export type DepositablePayment = {
   correctedCents: number;
   plannedPayment: string | null;
   depositId: string | null;
+  /** Kind of a reverse entry (#272); absent or null for an ordinary payment. */
+  reversalKind?: ReversalKind | null;
 };
 
 /**
  * Payments to deposit, by method: cheques (once their cashing date has
  * come), cash and holiday vouchers, not yet deposited nor fully cancelled
- * by a correction.
+ * by a correction. Never a reverse entry: a negative one, nor the positive
+ * cancellation of a refund (#346), which gives back no paper to the bank.
  */
 export function toDeposit<T extends DepositablePayment>(payments: T[], today: string): Record<DepositMethod, T[]> {
   const r: Record<DepositMethod, T[]> = { cheque: [], cash: [], holiday_voucher: [] };
   for (const p of payments) {
     if (!isDepositable(p.method) || p.amountCents <= 0 || p.depositId !== null) continue;
+    if (p.reversalKind != null) continue;
     if (p.amountCents - p.correctedCents <= 0) continue;
     if (p.plannedPayment !== null && p.plannedPayment > today) continue;
     r[p.method].push(p);
@@ -68,7 +73,8 @@ export function depositGroups<T extends DepositablePayment & { billingEntityId: 
 /**
  * Grand total, total per method of what came in, and refunds apart (#294): money paid
  * back to payers is never netted into a method's total (a cheque refund would hide the
- * cheques received), it shows as its own negative amount. `total` is the net of all of them.
+ * cheques received), it shows as its own negative amount, net of refunds cancelled (#346).
+ * `total` is the net of all of them.
  */
 export function totals<T extends { method: string; amountCents: number; reversalKind?: ReversalKind | null }>(
   rows: T[],
@@ -78,7 +84,8 @@ export function totals<T extends { method: string; amountCents: number; reversal
   let refunded = 0;
   for (const l of rows) {
     total += l.amountCents;
-    if (l.reversalKind === "refund") refunded += l.amountCents;
+    // A refund cancelled by mistake (#346) nets out among the refunds, not in its method.
+    if (isRefundSide(l.reversalKind)) refunded += l.amountCents;
     else byMethod[l.method] = (byMethod[l.method] ?? 0) + l.amountCents;
   }
   return { total, byMethod, refunded };

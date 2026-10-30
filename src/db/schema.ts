@@ -1177,7 +1177,7 @@ export const installment = pgTable(
   ],
 );
 
-/** Immutable: an error or a refund = a negative payment. */
+/** Immutable: an error or a refund = a negative payment; a refund entered by mistake is cancelled by a positive one (#346). */
 export const payment = pgTable(
   "payment",
   {
@@ -1195,9 +1195,10 @@ export const payment = pgTable(
     depositPlannedOn: date("deposit_planned_on"),
     // Correction: negative payment cancelling all or part of this payment.
     correctsId: uuid("corrects_id"),
-    // What a negative payment is (#272): a correction or a rejection, set exactly when
-    // `corrects_id` is, its `reference` staying the original's (cheque number); or a refund
-    // paid back to the payer (#294), without `corrects_id`. The label is derived for display.
+    // What a reverse entry is (#272): a correction or a rejection (negative), its `reference`
+    // staying the original's (cheque number); a refund paid back to the payer (#294, negative,
+    // without `corrects_id`); or the cancellation of a refund entered by mistake (#346,
+    // positive, `corrects_id` = the refund). The label is derived for display.
     reversalKind: reversalKind("reversal_kind"),
     enteredBy: uuid("entered_by"),
     toolSynced: boolean("tool_synced").notNull().default(false),
@@ -1205,15 +1206,20 @@ export const payment = pgTable(
   },
   (t) => [
     check("payment_amount", sql`${t.amountCents} <> 0`),
-    // A correction or a rejection cancels the payment in `corrects_id`; a refund (#294)
-    // cancels none. Written without naming « refund »: a value added to an enum cannot be
-    // used in the transaction that adds it.
+    // A correction, a rejection or a refund cancellation (#346) cancels the payment in
+    // `corrects_id`; a refund (#294) cancels none. The kinds are compared as text: a value
+    // added to an enum cannot be named in the transaction that adds it, and a new database
+    // applies every migration in one.
     check(
       "payment_reversal_kind",
-      sql`coalesce(${t.reversalKind} IN ('correction', 'rejection'), false) = (${t.correctsId} IS NOT NULL)`,
+      sql`coalesce(${t.reversalKind}::text <> 'refund', false) = (${t.correctsId} IS NOT NULL)`,
     ),
-    // Every negative payment says what it is (correction, rejection, refund); an ordinary one is positive.
-    check("payment_sign", sql`(${t.reversalKind} IS NULL) = (${t.amountCents} > 0)`),
+    // An ordinary payment and a refund cancellation are positive; a correction, a rejection
+    // and a refund negative.
+    check(
+      "payment_sign",
+      sql`(${t.reversalKind} IS NULL OR ${t.reversalKind}::text = 'refund_cancellation') = (${t.amountCents} > 0)`,
+    ),
     sameSchoolTarget(t),
     sameEntityTarget(t),
     sameSchool(t, t.billingEntityId, billingEntity),

@@ -43,20 +43,24 @@ export const overpaidOf = (balance: { remaining: number }): number => Math.max(0
  */
 export const COLLECTED_ON_DEPOSIT = ["cheque", "holiday_voucher"] as const satisfies readonly Method[];
 
-/** A payment as the refund reads it: its method, cashing date, deposit and what corrections cancelled. */
+/** A payment as the refund reads it: its method, cashing date, deposit, what corrections cancelled and its kind. */
 export type CollectablePayment = {
   amountCents: number;
   method: Method;
   plannedPayment: string | null;
   deposited: boolean;
   correctedCents: number;
+  reversalKind: ReversalKind | null;
 };
 
 /**
  * A payment counted in the balance whose money is not in yet: a cheque to cash after today
  * (« à encaisser plus tard »), or a cheque or paper voucher not deposited at the bank yet.
+ * Never a reverse entry: the cancellation of a refund (#346), positive and of the refund's
+ * method, gives back money already collected, it never waits for a deposit.
  */
 export const isUncollected = (p: CollectablePayment, today: string): boolean =>
+  p.reversalKind === null &&
   p.amountCents > 0 &&
   ((p.plannedPayment !== null && p.plannedPayment > today) ||
     (!p.deposited && (COLLECTED_ON_DEPOSIT as readonly Method[]).includes(p.method)));

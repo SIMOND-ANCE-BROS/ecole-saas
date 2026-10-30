@@ -20,6 +20,7 @@ import { CorrectPayment } from "./correct-payment";
 import { isRejection, rejectionLabel, rejectionNotYet } from "@/domain/payments/rejection";
 import { referenceOf } from "@/domain/payments/payment-log";
 import { isRefund } from "@/domain/payments/refund";
+import { isRefundCancellation, refundLeftCents } from "@/domain/payments/refund-cancellation";
 import { RefundPayer } from "./refund-payer";
 
 // Tables show days as « 21/10/2026 », like the payment log and the lists (#201).
@@ -28,14 +29,30 @@ const day = frenchDate;
 /** Cheque number and bank, or the reference given; a reverse entry says what it is first (#272). */
 const reference = (p: PaymentRow) => referenceOf(p) ?? "";
 
-/** When the money is in: a refund, a correction or a rejection, a cheque to cash later, deposited, or cashed. */
+/** A reverse entry: a correction, a rejection, a refund or a refund's cancellation (#346), not money received. */
+const isReverse = (p: PaymentRow) => p.reversalKind !== null;
+
+/** A refund at a glance (#346): paid back, cancelled in part (how much), or cancelled. */
+const refundState = (p: PaymentRow) =>
+  refundLeftCents({ amountCents: p.amountCents, cancelledCents: p.correctedCents }) === 0
+    ? "annulé"
+    : p.correctedCents > 0
+      ? `remboursé, ${formatEuros(p.correctedCents)} annulés`
+      : "remboursé";
+
+/**
+ * When the money is in: a refund, its cancellation, a correction or a rejection, a cheque
+ * to cash later, deposited, or cashed.
+ */
 const cashing = (p: PaymentRow, today: string) =>
-  p.amountCents < 0
+  isReverse(p)
     ? isRefund(p)
-      ? "remboursé"
-      : isRejection(p)
-        ? "rejet"
-        : "correction"
+      ? refundState(p)
+      : isRefundCancellation(p)
+        ? "annulation"
+        : isRejection(p)
+          ? "rejet"
+          : "correction"
     : p.depositedOn
       ? `remis le ${day(p.depositedOn)}`
       : p.plannedPayment && p.plannedPayment > today
@@ -45,9 +62,31 @@ const cashing = (p: PaymentRow, today: string) =>
 /**
  * « Corriger » while something is left to correct, « corrigé » once it is all
  * corrected. A deposited payment is « Chèque rejeté » / « Paiement rejeté »
- * instead, dated the day the bank returned it (#253).
+ * instead, dated the day the bank returned it (#253). A refund is « Annuler le
+ * remboursement » until it is all cancelled (#346).
  */
-function Correction({ payment: p, back, today }: { payment: PaymentRow; back: string; today: string }) {
+function Correction({
+  payment: p,
+  back,
+  today,
+  isDirector,
+  canCancelRefund,
+}: {
+  payment: PaymentRow;
+  back: string;
+  today: string;
+  isDirector: boolean;
+  canCancelRefund: boolean;
+}) {
+  if (isRefund(p)) {
+    if (!canCancelRefund) return null;
+    const left = refundLeftCents({ amountCents: p.amountCents, cancelledCents: p.correctedCents });
+    // Fully cancelled: « annulé » already shows in the « Encaissement » column (`refundState`).
+    return left > 0 ? (
+      <CorrectPayment paymentId={p.id} remaining={left} back={back} rejection={null} cancelsRefund />
+    ) : null;
+  }
+  if (!isDirector || isReverse(p)) return null;
   const remaining = p.amountCents - p.correctedCents;
   // A deposit dated after today: no rejection before that day, so no form whose dates could not fit.
   if (p.amountCents > 0 && remaining > 0 && p.depositedOn && rejectionNotYet(p.depositedOn, today))
@@ -88,6 +127,8 @@ type Props = {
   isDirector: boolean;
   /** May pay an overpayment back (#294, `mayRefund`). */
   canRefund: boolean;
+  /** May cancel a refund entered by mistake (#346, `mayCancelRefund`). */
+  canCancelRefund: boolean;
   today: string;
 };
 
@@ -99,8 +140,11 @@ export function PaymentsSection({
   back: back,
   isDirector,
   canRefund,
+  canCancelRefund,
   today: today,
 }: Props) {
+  // The « Correction » column: correcting a payment, or cancelling a refund.
+  const corrects = isDirector || canCancelRefund;
   const total = balance?.total ?? null;
   const perEntity = balance?.byEntity ?? [];
   // With a single entity nothing names it (#300).
@@ -283,7 +327,7 @@ export function PaymentsSection({
           {/* On a phone, one card per payment: nothing hides off-screen (#242). */}
           <ul aria-label="Paiements reçus" className="flex flex-col gap-2 sm:hidden">
             {payments.map((p) => (
-              <Paper component="li" key={p.id} withBorder p="sm" c={p.amountCents < 0 ? "dimmed" : undefined}>
+              <Paper component="li" key={p.id} withBorder p="sm" c={isReverse(p) ? "dimmed" : undefined}>
                 <div className="flex items-baseline justify-between gap-2">
                   <Text size="sm" fw={500}>
                     {day(p.date)} · {PAYMENT_METHODS[p.method]}
@@ -293,13 +337,21 @@ export function PaymentsSection({
                   </Text>
                 </div>
                 <Text size="xs" c="dimmed">
-                  {/* A correction or a rejection already says so in its reference. */}
-                  {p.amountCents < 0
+                  {/* A reverse entry already says what it is in its reference; a refund also says what of it is cancelled. */}
+                  {isReverse(p) && !isRefund(p)
                     ? reference(p) || cashing(p, today)
                     : [reference(p), cashing(p, today)].filter(Boolean).join(" · ")}
                   {several && ` · ${p.entity}`}
                 </Text>
-                {isDirector && <Correction payment={p} back={back} today={today} />}
+                {corrects && (
+                  <Correction
+                    payment={p}
+                    back={back}
+                    today={today}
+                    isDirector={isDirector}
+                    canCancelRefund={canCancelRefund}
+                  />
+                )}
               </Paper>
             ))}
           </ul>
@@ -313,12 +365,12 @@ export function PaymentsSection({
                   <TableTh>Référence</TableTh>
                   <TableTh ta="right">Montant</TableTh>
                   <TableTh>Encaissement</TableTh>
-                  {isDirector && <TableTh>Correction</TableTh>}
+                  {corrects && <TableTh>Correction</TableTh>}
                 </TableTr>
               </TableThead>
               <TableTbody>
                 {payments.map((p) => (
-                  <TableTr key={p.id} c={p.amountCents < 0 ? "dimmed" : undefined}>
+                  <TableTr key={p.id} c={isReverse(p) ? "dimmed" : undefined}>
                     <TableTd className="whitespace-nowrap">{day(p.date)}</TableTd>
                     <TableTd>{PAYMENT_METHODS[p.method]}</TableTd>
                     <TableTd>{reference(p) || "—"}</TableTd>
@@ -334,9 +386,15 @@ export function PaymentsSection({
                         </Text>
                       )}
                     </TableTd>
-                    {isDirector && (
+                    {corrects && (
                       <TableTd>
-                        <Correction payment={p} back={back} today={today} />
+                        <Correction
+                          payment={p}
+                          back={back}
+                          today={today}
+                          isDirector={isDirector}
+                          canCancelRefund={canCancelRefund}
+                        />
                       </TableTd>
                     )}
                   </TableTr>

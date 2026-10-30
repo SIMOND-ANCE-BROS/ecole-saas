@@ -94,6 +94,8 @@ export async function paymentsToDeposit(tx: Tx, today: string): Promise<DepositG
       and(
         inArray(payment.method, [...DEPOSIT_METHODS]),
         sql`${payment.amountCents} > 0`,
+        // Never a reverse entry: the cancellation of a refund is positive too (#346).
+        sql`${payment.reversalKind} IS NULL`,
         sql`${bankDepositPayment.bankDepositId} IS NULL`,
       ),
     )

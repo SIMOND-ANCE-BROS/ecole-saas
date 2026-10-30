@@ -11,13 +11,14 @@ import { frenchDate } from "../../lib/dates";
  */
 
 /**
- * Kind of a negative payment (`payment.reversal_kind`, #272): a correction of a
- * payment not deposited, or the rejection of a deposited one, both cancelling the
- * payment in `corrects_id`; or a refund paid back to the payer (#294), which cancels
- * no payment. Stored as data, so rewording a label never reclassifies a row; NULL for
- * an ordinary payment, and only for one (database checks).
+ * Kind of a reverse entry (`payment.reversal_kind`, #272): a correction of a payment
+ * not deposited, or the rejection of a deposited one, both negative and cancelling
+ * the payment in `corrects_id`; a refund paid back to the payer (#294), negative and
+ * cancelling no payment; or the cancellation of a refund entered by mistake (#346),
+ * positive, its `corrects_id` being the refund. Stored as data, so rewording a label
+ * never reclassifies a row; NULL for an ordinary payment, and only for one (database checks).
  */
-export const REVERSAL_KINDS = ["correction", "rejection", "refund"] as const;
+export const REVERSAL_KINDS = ["correction", "rejection", "refund", "refund_cancellation"] as const;
 export type ReversalKind = (typeof REVERSAL_KINDS)[number];
 
 /** What a reverse entry is called on screen and in the export. */
@@ -25,6 +26,7 @@ export const REVERSAL_LABELS: Record<ReversalKind, string> = {
   correction: "Correction",
   rejection: "Paiement rejeté",
   refund: "Remboursement",
+  refund_cancellation: "Annulation de remboursement",
 };
 
 /** The label of a reverse entry, or null for an ordinary payment. */

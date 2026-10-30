@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { withSchool } from "@/db";
-import { correctPayment, collect, refundPayer } from "@/db/payments";
+import { cancelRefundPayment, correctPayment, collect, refundPayer } from "@/db/payments";
 import { REFUND_METHODS, REFUND_ROLES } from "@/domain/payments/refund";
+import { CANCEL_REFUND_ROLES } from "@/domain/payments/refund-cancellation";
 import { once, storedPayments } from "@/db/submissions";
 import { todayInParis } from "@/domain/people/age";
 import { type ActionResult, actionResult } from "@/lib/action-result";
@@ -132,6 +133,44 @@ export async function refund(request: z.input<typeof validRefundRequest>): Promi
   const r = await withSchool(schoolId, (tx) =>
     once(tx, "payment", key, { refund: { payerId, billingEntityId, entry } }, storedPayments, () =>
       refundPayer(tx, userId, payerId, entry, todayInParis(), billingEntityId),
+    ),
+  );
+  if (!r.ok) return actionResult(r);
+  const path = safeReturnPath(back);
+  if (path) revalidatePath(path);
+  revalidatePath("/encaissements");
+  return { ok: true };
+}
+
+/**
+ * What the refund cancellation form sends (#346): the refund, the amount in cents, the
+ * record to refresh, and the key generated once per opening of the form (#260).
+ */
+const validRefundCancellation = z.object({
+  refundId: z.uuid(),
+  amountCents: z.number().int().positive(),
+  back: z.string().max(200).nullable(),
+  key: z.uuid(),
+});
+
+/** Cancels all or part of a refund entered by mistake with a positive reverse entry: management only (#346). */
+export async function cancelRefund(cancellation: z.input<typeof validRefundCancellation>): Promise<ActionResult> {
+  const { schoolId: schoolId, userId } = await requireRole(...CANCEL_REFUND_ROLES);
+  const c = validRefundCancellation.safeParse(cancellation);
+  if (!c.success) {
+    // Only the amount is typed by the user; a tampered id or return path cannot be fixed in a field.
+    const errors = topErrorsOf(c.error);
+    const only = errors.amountCents !== undefined && Object.keys(errors).length === 1;
+    return {
+      ok: false,
+      message: only ? "Montant de l’annulation invalide." : "Annulation impossible : rechargez la fiche.",
+    };
+  }
+  const { refundId, amountCents, back, key } = c.data;
+  // A retry after a lost response returns the first result instead of a second cancellation.
+  const r = await withSchool(schoolId, (tx) =>
+    once(tx, "payment", key, { cancelRefund: { refundId, amountCents } }, storedPayments, () =>
+      cancelRefundPayment(tx, userId, refundId, amountCents, todayInParis()),
     ),
   );
   if (!r.ok) return actionResult(r);
