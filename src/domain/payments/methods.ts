@@ -34,8 +34,8 @@ export const METHOD_LABELS: Record<Method, string> = {
   card: "Carte",
   transfer: "Virement",
   direct_debit: "Prélèvement",
-  holiday_voucher: "Chèques vacances (papier)",
-  holiday_voucher_online: "ANCV Connect",
+  holiday_voucher: "Chèques vacances",
+  holiday_voucher_online: "Chèques vacances en ligne (ANCV Connect)",
   pass_sport: "Pass’Sport",
   other: "Autre",
 };

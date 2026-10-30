@@ -130,7 +130,7 @@ export async function collect(
   if (refused)
     return {
       ok: false,
-      message: `L’école n’accepte plus ce moyen de paiement « ${METHOD_LABELS[refused]} » : rechargez la page.`,
+      message: `Le paiement par « ${METHOD_LABELS[refused]} » n’est plus accepté : rechargez la page pour choisir un autre moyen.`,
     };
   // No entity sent while several are active: the form was opened before a second one was added.
   if (billingEntityId === undefined && (await entityChoices(tx)).length > 1)

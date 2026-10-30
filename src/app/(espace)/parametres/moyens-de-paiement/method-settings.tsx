@@ -68,9 +68,10 @@ export function MethodSettings({ settings }: { settings: MethodSetting[] }) {
                 {r.accepted && (
                   <TextInput
                     className="pl-8"
-                    label="Consigne pour l’accueil (facultatif)"
-                    aria-label={`Consigne pour l’accueil, ${METHOD_LABELS[r.method]} (facultatif)`}
-                    placeholder={r.method === "transfer" ? "Par exemple : règlement de la totalité" : undefined}
+                    label={`Consigne pour l’accueil, ${METHOD_LABELS[r.method]} (facultatif)`}
+                    placeholder={
+                      r.method === "transfer" ? "Par exemple : Virement : règlement de la totalité" : undefined
+                    }
                     maxLength={DESK_HINT_MAX}
                     value={r.hint}
                     onChange={(e) => change(r.method, { hint: e.currentTarget.value })}

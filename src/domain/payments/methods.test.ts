@@ -20,7 +20,7 @@ const setting = (method: MethodSetting["method"], accepted: boolean, deskHint: s
 describe("payment methods", () => {
   it("has a French label for every method, ANCV Connect apart from paper vouchers", () => {
     for (const m of PAYMENT_METHOD_VALUES) expect(METHOD_LABELS[m]).toBeTruthy();
-    expect(METHOD_LABELS.holiday_voucher_online).toBe("ANCV Connect");
+    expect(METHOD_LABELS.holiday_voucher_online).toBe("Chèques vacances en ligne (ANCV Connect)");
     expect(METHOD_LABELS.holiday_voucher).not.toBe(METHOD_LABELS.holiday_voucher_online);
   });
 

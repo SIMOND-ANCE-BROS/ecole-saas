@@ -55,6 +55,12 @@ export async function saveMethodSettings(
 ): Promise<Result> {
   const r = validMethodSettings.safeParse(entry);
   if (!r.success) return { ok: false, message: r.error.issues[0]?.message ?? "Saisie invalide." };
+  // Two saves of the school wait for each other (lock released at commit): the second one compares
+  // with what the first saved and writes every difference, so the result is always a whole checked
+  // list, never one save's « décoché » merged with the other's (none accepted).
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext('payment_method_setting'), hashtext(${CURRENT_SCHOOL}::text))`,
+  );
   const before = await readMethodSettings(tx);
   const [m] = await tx.select({ id: member.id }).from(member).where(eq(member.userId, userId));
   const actor = m?.id ?? null;

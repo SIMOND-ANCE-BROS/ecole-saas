@@ -195,10 +195,11 @@ export function PaymentForm({
       >
         {rows.map((l, i) => (
           // Aligned on the top of the fields: a message under one field does not shift the others.
-          <Paper key={l.id} withBorder p="sm" className="grid gap-2 sm:grid-cols-[10rem_8rem_1fr_auto] sm:items-start">
+          <Paper key={l.id} withBorder p="sm" className="grid gap-2 sm:grid-cols-[14rem_8rem_1fr_auto] sm:items-start">
             <NativeSelect
               label="Moyen"
               data={methodOptions}
+              aria-describedby={hintOf(l.method) ? `method-hint-${l.id}` : undefined}
               value={l.method}
               onChange={(e) => updated(l.id, { method: e.currentTarget.value as Method })}
             />
@@ -235,8 +236,8 @@ export function PaymentForm({
               <span />
             )}
             {hintOf(l.method) && (
-              <Text size="sm" c="dimmed" className="sm:col-span-4">
-                {METHOD_LABELS[l.method]} : {hintOf(l.method)}
+              <Text id={`method-hint-${l.id}`} size="sm" c="dimmed" className="sm:col-span-4">
+                {hintOf(l.method)}
               </Text>
             )}
             {l.method === "cheque" && (

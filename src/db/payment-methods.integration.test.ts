@@ -128,7 +128,7 @@ describe("payment methods the school accepts (#293)", () => {
     const r = await withSchool(school, (tx) => collect(tx, director, payer, [pay("cheque"), pay("pass_sport")]));
     expect(r).toEqual({
       ok: false,
-      message: "L’école n’accepte plus ce moyen de paiement « Pass’Sport » : rechargez la page.",
+      message: "Le paiement par « Pass’Sport » n’est plus accepté : rechargez la page pour choisir un autre moyen.",
     });
     expect(await withSchool(school, (tx) => paymentsOf(tx, payer))).toHaveLength(3);
   });
