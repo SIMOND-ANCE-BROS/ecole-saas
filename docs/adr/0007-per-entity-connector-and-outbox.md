@@ -61,7 +61,7 @@ and the front desk must never wait for a third-party service.
 
 ## Implementation notes (#304)
 
-- The sweep route is `POST /api/taches/factures`; `invoicing_due_work()` (migration 0056)
+- The sweep route is `POST /api/taches/factures`; `invoicing_due_work()` (migration 0057)
   only returns pairs whose business has an active connector. A business whose connector cannot be
   built (fake tool refused, unreadable credentials, tool not available yet) is skipped without
   counting an attempt.

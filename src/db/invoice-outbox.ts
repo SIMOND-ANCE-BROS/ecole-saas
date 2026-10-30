@@ -21,7 +21,7 @@ export type DueWork = { schoolId: string; billingEntityId: string };
 /**
  * The (school, business) pairs with an invoice due for sending, across schools: the one
  * cross-school read of the sending, through the SECURITY DEFINER function
- * `invoicing_due_work()` (migration 0056), which returns ids only. Each pair is then handled
+ * `invoicing_due_work()` (migration 0057), which returns ids only. Each pair is then handled
  * inside `withSchool()`.
  */
 export async function dueWork(): Promise<DueWork[]> {

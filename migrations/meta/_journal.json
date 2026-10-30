@@ -400,6 +400,13 @@
       "when": 1793357481649,
       "tag": "0056_payment_refund_cancellation",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1793369529921,
+      "tag": "0057_invoice_outbox",
+      "breakpoints": true
     }
   ]
 }
