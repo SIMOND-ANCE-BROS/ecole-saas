@@ -37,6 +37,10 @@ describe("settings actions", () => {
 
   it("refuse an unknown id with the record's own message, without touching the database", async () => {
     expect(await actions.removeDiscipline("x")).toEqual({ ok: false, message: "Cette discipline n’existe plus." });
+    expect(await actions.adultCertificate("x", false)).toEqual({
+      ok: false,
+      message: "Cette discipline n’existe plus.",
+    });
     expect(await actions.removeSite("x")).toEqual({ ok: false, message: "Ce site n’existe plus." });
     expect(await actions.removeRoom("x")).toEqual({ ok: false, message: "Cette salle n’existe plus." });
     expect(await actions.removeLessonPack("x")).toEqual({ ok: false, message: "Ce carnet n’existe plus." });
@@ -65,6 +69,7 @@ describe("settings actions", () => {
       message: "L’heure de fermeture doit suivre l’ouverture.",
     });
     expect(await actions.newDiscipline(any<string>(null))).toEqual({ ok: false, message: "Nom obligatoire" });
+    expect(await actions.adultCertificate(ID, any<boolean>("non"))).toEqual({ ok: false, message: "Saisie invalide." });
     expect(
       await actions.newSeason({ label: "2027-2028", startDate: "2027-09-01", endDate: "2028-06-30" }, "not-a-uuid"),
     ).toEqual({ ok: false, message: "Saison de référence introuvable." });

@@ -258,7 +258,14 @@ export async function updateSeason(
 // Disciplines
 // ---------------------------------------------------------------------------
 
-export type DisciplineRow = { id: string; name: string; course: number; tariffs: number };
+export type DisciplineRow = {
+  id: string;
+  name: string;
+  /** Adults enrolled in it bring a medical certificate (#306). */
+  adultsNeedCertificate: boolean;
+  course: number;
+  tariffs: number;
+};
 
 export function listDisciplines(tx: Tx): Promise<DisciplineRow[]> {
   const id = sql`${discipline}.${sql.identifier("id")}`;
@@ -266,6 +273,7 @@ export function listDisciplines(tx: Tx): Promise<DisciplineRow[]> {
     .select({
       id: discipline.id,
       name: discipline.name,
+      adultsNeedCertificate: discipline.adultsNeedCertificate,
       course: account(sql`SELECT count(*) FROM course c WHERE c.discipline_id = ${id}`),
       tariffs: account(sql`SELECT count(*) FROM tariff t WHERE t.discipline_id = ${id}`),
     })
@@ -300,6 +308,21 @@ export async function renameDiscipline(tx: Tx, id: string, name: string): Promis
   const rows = await tx
     .update(discipline)
     .set({ name: n.data })
+    .where(eq(discipline.id, id))
+    .returning({ id: discipline.id });
+  return rows.length === 1 ? { ok: true, id } : { ok: false, message: "Cette discipline n’existe plus." };
+}
+
+/**
+ * Whether adults enrolled in the discipline bring a medical certificate (#306):
+ * off for couple dances at the founding school. Minors and competitors always do.
+ */
+export async function setAdultsNeedCertificate(tx: Tx, id: string, value: boolean): Promise<Result> {
+  if (!isUuid(id)) return { ok: false, message: "Cette discipline n’existe plus." };
+  if (typeof value !== "boolean") return { ok: false, message: "Saisie invalide." };
+  const rows = await tx
+    .update(discipline)
+    .set({ adultsNeedCertificate: value })
     .where(eq(discipline.id, id))
     .returning({ id: discipline.id });
   return rows.length === 1 ? { ok: true, id } : { ok: false, message: "Cette discipline n’existe plus." };

@@ -1,9 +1,10 @@
 import { sql } from "drizzle-orm";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { effectiveRequirements, missingDocuments, validUntilFor } from "../domain/people/documents";
+import { DOCUMENT_LABELS, effectiveRequirements, missingDocuments, validUntilFor } from "../domain/people/documents";
 import { withSchool } from "./index";
 import {
+  enrolledCourses,
   firstEnrollmentDate,
   readRequirements,
   receiveToday,
@@ -37,6 +38,8 @@ let zoe: string; // minor, enrolled on 2026-09-05: the certificate is overdue si
 let alex: string; // adult, on trial since 2026-10-20: due until 2026-11-04
 let noe: string; // minor, not enrolled
 let foreign: string; // other school's student
+let roomId: string;
+let teacherId: string;
 
 async function student(schoolId: string, firstName: string, birthDate: string) {
   const [{ id }] = await admin`INSERT INTO person (school_id, last_name, first_name, birth_date, is_student)
@@ -64,6 +67,8 @@ beforeAll(async () => {
   const [teacher] =
     await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
     VALUES (${school}, 'Roux', 'Mathis', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
+  roomId = room.id;
+  teacherId = teacher.id;
   const [jazz] =
     await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
     VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${d.id}, ${room.id}, ${teacher.id}, 3, '17:00', 60) RETURNING id`;
@@ -295,7 +300,16 @@ describe("« Documents manquants » on the students list", () => {
     const documents = await as((tx) => studentDocuments(tx, zoe));
     const enrolledOn = await as((tx) => firstEnrollmentDate(tx, zoe, season));
     expect(enrolledOn).toBe("2026-09-05");
-    const domain = missingDocuments({ requirements, documents, birthDate: "2015-03-10", enrolledOn, today: TODAY });
+    const courses = await as((tx) => enrolledCourses(tx, zoe, season));
+    expect(courses).toEqual([{ competition: false, adultsNeedCertificate: true }]);
+    const domain = missingDocuments({
+      requirements,
+      documents,
+      birthDate: "2015-03-10",
+      enrolledOn,
+      today: TODAY,
+      courses,
+    });
     expect(domain).toEqual(["medical_certificate"]);
     expect((await missingColumn()).Zoé).toEqual(["Certificat médical"]);
     expect(await as((tx) => firstEnrollmentDate(tx, noe, season))).toBeNull();
@@ -324,5 +338,94 @@ describe("« Documents manquants » on the students list", () => {
     const none = requirements.map((r) => ({ ...r, required: false }));
     const rows = await as((tx) => listStudents(tx, "", { today: TODAY, seasonId: season, requirements: none }));
     expect(rows.every((r) => r.missingDocuments.length === 0)).toBe(true);
+  });
+});
+
+describe("medical certificate of adults, by discipline and competition (#306)", () => {
+  const ENROLLED_ON = "2026-09-05"; // the certificate is overdue since 2026-09-21
+  const ADULT = "1990-06-15";
+  const MINOR = "2014-02-20";
+
+  async function newCourse(disciplineId: string, type: "group" | "competition") {
+    const [c] =
+      await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, type, weekday, start_time, duration_minutes)
+      VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${disciplineId}, ${roomId}, ${teacherId}, ${type}, 5, '20:00', 60) RETURNING id`;
+    return c.id as string;
+  }
+  async function enroll(who: string, status: string, courses: string[]) {
+    const [i] =
+      await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents, status, enrolled_on)
+      VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${who}, 'adult', 'year', 10000, ${status}, ${ENROLLED_ON}) RETURNING id`;
+    for (const c of courses)
+      await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id) VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${i.id}), ${i.id}, ${who}, ${c})`;
+  }
+
+  // Each student's birth date and enrollments (status, courses), created before the tests.
+  const BIRTH_DATES = { Rémi: ADULT, Inès: ADULT, Lucas: ADULT, Maël: MINOR, Yann: ADULT } as const;
+  const ids: Record<string, string> = {};
+
+  beforeAll(async () => {
+    const [jazzDiscipline] =
+      await admin`SELECT id, adults_need_certificate FROM discipline WHERE school_id = ${school}`;
+    // A new discipline asks adults for a certificate until the school says otherwise.
+    expect(jazzDiscipline.adults_need_certificate).toBe(true);
+    const [rock] =
+      await admin`INSERT INTO discipline (school_id, name, adults_need_certificate) VALUES (${school}, 'Rock', false) RETURNING id`;
+    const couple = await newCourse(rock.id, "group"); // a couple dance: no certificate asked of adults
+    const coupleCompetition = await newCourse(rock.id, "competition");
+    const jazzCourse = await newCourse(jazzDiscipline.id, "group");
+    const enrollments: Record<keyof typeof BIRTH_DATES, [string, string[]][]> = {
+      Rémi: [["active", [couple]]], // couple dance only: not asked
+      Inès: [["active", [couple, jazzCourse]]], // also jazz: asked
+      Lucas: [["trial", [coupleCompetition]]], // competitor: asked
+      Maël: [["active", [couple]]], // a minor: always asked
+      Yann: [
+        ["active", [couple]],
+        ["waitlist", [jazzCourse]],
+      ], // jazz on the waiting list only: not asked
+    };
+    for (const [firstName, birthDate] of Object.entries(BIRTH_DATES)) {
+      ids[firstName] = await student(school, firstName, birthDate);
+      for (const [status, courses] of enrollments[firstName as keyof typeof BIRTH_DATES])
+        await enroll(ids[firstName], status, courses);
+    }
+  });
+
+  it("asks no adult in couple dances only, an adult in jazz and any competitor; the record and the list agree", async () => {
+    const column = await missingColumn();
+    expect(Object.fromEntries(Object.keys(BIRTH_DATES).map((n) => [n, column[n]]))).toEqual({
+      Rémi: [],
+      Inès: ["Certificat médical"],
+      Lucas: ["Certificat médical"],
+      Maël: ["Certificat médical"],
+      Yann: [],
+    });
+
+    // The record's rule (domain) says the same, student by student.
+    const requirements = await as((tx) => readRequirements(tx));
+    for (const [firstName, birthDate] of Object.entries(BIRTH_DATES)) {
+      const id = ids[firstName];
+      const domain = missingDocuments({
+        requirements,
+        documents: await as((tx) => studentDocuments(tx, id)),
+        birthDate,
+        enrolledOn: await as((tx) => firstEnrollmentDate(tx, id, season)),
+        today: TODAY,
+        courses: await as((tx) => enrolledCourses(tx, id, season)),
+      });
+      expect(
+        domain.map((t) => DOCUMENT_LABELS[t]),
+        firstName,
+      ).toEqual(column[firstName]);
+    }
+  });
+
+  it("follows the school's setting: a certificate for minors only is asked of no adult, competing or not", async () => {
+    const requirements = (await as((tx) => readRequirements(tx))).map((r) =>
+      r.type === "medical_certificate" ? { ...r, minorsOnly: true } : r,
+    );
+    const rows = await as((tx) => listStudents(tx, "Zzdoc", { today: TODAY, seasonId: season, requirements }));
+    const missing = Object.fromEntries(rows.map((r) => [r.firstName, r.missingDocuments]));
+    expect([missing.Inès, missing.Lucas, missing.Maël]).toEqual([[], [], ["Certificat médical"]]);
   });
 });

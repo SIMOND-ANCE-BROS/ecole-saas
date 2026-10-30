@@ -1,0 +1,1 @@
+ALTER TABLE "discipline" ADD COLUMN "adults_need_certificate" boolean DEFAULT true NOT NULL;

@@ -14,6 +14,7 @@ import {
   updateSite,
   renameDiscipline,
   deleteDiscipline,
+  setAdultsNeedCertificate,
   deleteRoom,
   deleteSite,
   roomSiteId,
@@ -122,6 +123,14 @@ export async function rename(id: string, name: string) {
     "disciplines",
     () => nameRefusal(name) ?? refusal(validId, id, DISCIPLINE_GONE),
     (tx) => renameDiscipline(tx, id, name),
+  );
+}
+/** « Certificat médical exigé des adultes » on a discipline (#306). */
+export async function adultCertificate(id: string, value: boolean) {
+  return act(
+    "disciplines",
+    () => refusal(validId, id, DISCIPLINE_GONE) ?? refusal(z.boolean(), value, "Saisie invalide."),
+    (tx) => setAdultsNeedCertificate(tx, id, value),
   );
 }
 export async function removeDiscipline(id: string) {

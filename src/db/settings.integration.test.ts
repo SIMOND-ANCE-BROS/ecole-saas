@@ -16,6 +16,7 @@ import {
   updateRoom,
   renameDiscipline,
   deleteDiscipline,
+  setAdultsNeedCertificate,
   deleteRoom,
   deleteSite,
 } from "./settings";
@@ -217,6 +218,24 @@ describe("disciplines", () => {
       "Hip-hop",
       "Modern’jazz",
     ]);
+  });
+
+  it("asks adults for a medical certificate by default, until the school unticks the discipline (#306)", async () => {
+    const certificate = async () =>
+      (await withSchool(school, (tx) => listDisciplines(tx))).find((d) => d.id === jazz)?.adultsNeedCertificate;
+    expect(await certificate()).toBe(true);
+    expect(await withSchool(school, (tx) => setAdultsNeedCertificate(tx, jazz, false))).toEqual({ ok: true, id: jazz });
+    expect(await certificate()).toBe(false);
+    await withSchool(school, (tx) => setAdultsNeedCertificate(tx, jazz, true));
+    expect(await certificate()).toBe(true);
+    // The other school's discipline is out of reach.
+    const [foreign] = await admin`SELECT id FROM discipline WHERE school_id = ${otherSchool}`;
+    expect(await withSchool(school, (tx) => setAdultsNeedCertificate(tx, foreign.id, false))).toEqual({
+      ok: false,
+      message: "Cette discipline n’existe plus.",
+    });
+    const [still] = await admin`SELECT adults_need_certificate FROM discipline WHERE id = ${foreign.id}`;
+    expect(still.adults_need_certificate).toBe(true);
   });
 });
 

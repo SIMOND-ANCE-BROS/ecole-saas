@@ -15,6 +15,11 @@ import { isMinor } from "./age";
  *     enrollment, and only overdue after that day.
  * Each of these is a school setting; the defaults live in `DEFAULT_REQUIREMENTS`
  * below, and nowhere else.
+ *
+ * The medical certificate is asked of every minor, and of an adult only through
+ * their courses (#306): a course in a discipline the school marks « certificat
+ * médical exigé des adultes » (jazz, not couple dances), or any competition
+ * course. The mark is data on each discipline, set by the school (on by default).
  */
 
 /** Document types, in the order of the `document_type` database enum. */
@@ -99,13 +104,53 @@ export function documentState(doc: ReceivedDocument | undefined, today: string):
   return doc.granted ? "received" : "refused";
 }
 
-/** Required documents that apply to this student (age on `today`), whatever they handed in. */
+/** A course the student is enrolled in this season (active or trial), as the documents see it (#306). */
+export type EnrolledCourse = {
+  /** A competition course: every competitor brings a medical certificate. */
+  competition: boolean;
+  /** Its discipline asks adults for a medical certificate (a school setting). */
+  adultsNeedCertificate: boolean;
+};
+
+/** The one document whose requirement of adults follows their courses (#306). */
+export const COURSE_DEPENDENT_TYPE = "medical_certificate" satisfies RequirableType;
+
+/** Whether these courses ask an adult for a medical certificate: one in a discipline that requires it, or competing. */
+export function certificateAskedOfAdult(courses: readonly EnrolledCourse[]): boolean {
+  return courses.some((c) => c.competition || c.adultsNeedCertificate);
+}
+
+/**
+ * Required documents that apply to this student (age on `today`, courses of
+ * the season), whatever they handed in. A document set for minors only is
+ * never asked of an adult; the medical certificate, asked of every student,
+ * is asked of an adult only when `certificateAskedOfAdult`.
+ */
 export function expectedDocuments(
   requirements: readonly Requirement[],
   birthDate: string | null,
   today: string,
+  courses: readonly EnrolledCourse[],
 ): RequirableType[] {
-  return requirements.filter((r) => r.required && (!r.minorsOnly || isMinor(birthDate, today))).map((r) => r.type);
+  const minor = isMinor(birthDate, today);
+  const askedOfAdult = (r: Requirement) =>
+    !r.minorsOnly && (r.type !== COURSE_DEPENDENT_TYPE || certificateAskedOfAdult(courses));
+  return requirements.filter((r) => r.required && (minor || askedOfAdult(r))).map((r) => r.type);
+}
+
+/**
+ * Required documents the record offers to enter for this student, whatever
+ * their courses: an adult not enrolled yet, or only in couple dances, may
+ * still hand in a medical certificate (#306). Those `expectedDocuments` keeps
+ * are the ones actually asked.
+ */
+export function recordableDocuments(
+  requirements: readonly Requirement[],
+  birthDate: string | null,
+  today: string,
+): RequirableType[] {
+  const minor = isMinor(birthDate, today);
+  return requirements.filter((r) => r.required && (minor || !r.minorsOnly)).map((r) => r.type);
 }
 
 /** A required document still to bring: due on `dueOn` (included), overdue after it. */
@@ -118,7 +163,8 @@ export type DocumentToBring = { type: RequirableType; dueOn: string; overdue: bo
  * school only chases papers of students who dance this season. Each is due
  * `dueWithinDays` after that date, or after the day it expired when that is
  * later (a certificate running out mid-season gets the same delay to be
- * renewed). A refused answer is an answer: not to bring.
+ * renewed). A refused answer is an answer: not to bring. `courses`: the
+ * student's courses of the season, for `expectedDocuments`.
  */
 export function documentsToBring({
   requirements,
@@ -126,15 +172,17 @@ export function documentsToBring({
   birthDate,
   enrolledOn,
   today,
+  courses,
 }: {
   requirements: readonly Requirement[];
   documents: readonly ReceivedDocument[];
   birthDate: string | null;
   enrolledOn: string | null;
   today: string;
+  courses: readonly EnrolledCourse[];
 }): DocumentToBring[] {
   if (enrolledOn === null) return [];
-  const expected = expectedDocuments(requirements, birthDate, today);
+  const expected = expectedDocuments(requirements, birthDate, today, courses);
   return requirements.flatMap((r) => {
     if (!expected.includes(r.type)) return [];
     const doc = documents.find((d) => d.type === r.type);
