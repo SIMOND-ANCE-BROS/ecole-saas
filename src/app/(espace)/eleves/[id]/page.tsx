@@ -10,7 +10,7 @@ import { displayedName } from "@/db/people";
 import { currentSeason } from "@/db/schedule";
 import { enrolledCourses, firstEnrollmentDate, readRequirements, studentDocuments } from "@/db/student-documents";
 import { ageAt, isMinor, todayInParis } from "@/domain/people/age";
-import { documentsToBring, documentState, expectedDocuments } from "@/domain/people/documents";
+import { documentsToBring, documentState, expectedDocuments, recordableDocuments } from "@/domain/people/documents";
 import { ofName } from "@/lib/french";
 import { requireRole } from "@/lib/session";
 import { PaymentsSection } from "../../_people/payments-section";
@@ -68,10 +68,11 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   const { requirements, documents, enrolledOn, courses, packs } = parsed;
   const toBring = documentsToBring({ requirements, documents, birthDate: e.birthDate, enrolledOn, today, courses });
   const expected = expectedDocuments(requirements, e.birthDate, today, courses);
-  // Documents the school asks of this student, and any other already recorded.
+  // Documents the school may ask of this student (an adult hands in a certificate before enrolling), and any other recorded.
+  const recordable = recordableDocuments(requirements, e.birthDate, today);
   const documentLines: DocumentLine[] = requirements.flatMap((r) => {
     const doc = documents.find((d) => d.type === r.type) ?? null;
-    if (!expected.includes(r.type) && !doc) return [];
+    if (!recordable.includes(r.type) && !doc) return [];
     return [
       {
         type: r.type,

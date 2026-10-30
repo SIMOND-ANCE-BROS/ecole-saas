@@ -153,7 +153,7 @@ async function main() {
       // A couple dance asks adults for no medical certificate (#306).
       const [d] =
         await admin`INSERT INTO discipline (school_id, name, adults_need_certificate) VALUES (${school.id}, ${name}, ${name !== "Salsa"})
-        ON CONFLICT (school_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id`;
+        ON CONFLICT (school_id, name) DO UPDATE SET adults_need_certificate = EXCLUDED.adults_need_certificate RETURNING id`;
       disciplines[name] = d.id;
     }
     const profs: Record<string, string> = {};

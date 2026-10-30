@@ -6,6 +6,7 @@ import {
   type EnrolledCourse,
   effectiveRequirements,
   expectedDocuments,
+  recordableDocuments,
   missingDocuments,
   type ReceivedDocument,
   type Requirement,
@@ -134,6 +135,19 @@ describe("expectedDocuments", () => {
   it("drops what the school does not ask for", () => {
     const none = defaults.map((r) => ({ ...r, required: false }));
     expect(expectedDocuments(none, CHILD, TODAY, [JAZZ])).toEqual([]);
+  });
+});
+
+describe("recordableDocuments", () => {
+  it("offers the certificate on an adult's record whatever their courses, so one handed in early can be entered", () => {
+    expect(recordableDocuments(defaults, ADULT, TODAY)).toEqual(["medical_certificate"]);
+    expect(recordableDocuments(all, ADULT, TODAY)).toEqual(["medical_certificate", "image_rights"]);
+    expect(recordableDocuments(all, CHILD, TODAY)).toEqual(["medical_certificate", "parental_consent", "image_rights"]);
+  });
+
+  it("leaves out what the school does not ask for", () => {
+    const none = defaults.map((r) => ({ ...r, required: false }));
+    expect(recordableDocuments(none, ADULT, TODAY)).toEqual([]);
   });
 });
 

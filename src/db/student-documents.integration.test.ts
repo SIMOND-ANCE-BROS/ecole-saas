@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { effectiveRequirements, missingDocuments, validUntilFor } from "../domain/people/documents";
+import { DOCUMENT_LABELS, effectiveRequirements, missingDocuments, validUntilFor } from "../domain/people/documents";
 import { withSchool } from "./index";
 import {
   enrolledCourses,
@@ -345,9 +345,6 @@ describe("medical certificate of adults, by discipline and competition (#306)", 
   const ENROLLED_ON = "2026-09-05"; // the certificate is overdue since 2026-09-21
   const ADULT = "1990-06-15";
   const MINOR = "2014-02-20";
-  let couple: string; // a couple dance: no certificate asked of adults
-  let jazzCourse: string;
-  let coupleCompetition: string;
 
   async function newCourse(disciplineId: string, type: "group" | "competition") {
     const [c] =
@@ -363,6 +360,10 @@ describe("medical certificate of adults, by discipline and competition (#306)", 
       await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id) VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${i.id}), ${i.id}, ${who}, ${c})`;
   }
 
+  // Each student's birth date and enrollments (status, courses), created before the tests.
+  const BIRTH_DATES = { Rémi: ADULT, Inès: ADULT, Lucas: ADULT, Maël: MINOR, Yann: ADULT } as const;
+  const ids: Record<string, string> = {};
+
   beforeAll(async () => {
     const [jazzDiscipline] =
       await admin`SELECT id, adults_need_certificate FROM discipline WHERE school_id = ${school}`;
@@ -370,33 +371,29 @@ describe("medical certificate of adults, by discipline and competition (#306)", 
     expect(jazzDiscipline.adults_need_certificate).toBe(true);
     const [rock] =
       await admin`INSERT INTO discipline (school_id, name, adults_need_certificate) VALUES (${school}, 'Rock', false) RETURNING id`;
-    couple = await newCourse(rock.id, "group");
-    coupleCompetition = await newCourse(rock.id, "competition");
-    jazzCourse = await newCourse(jazzDiscipline.id, "group");
+    const couple = await newCourse(rock.id, "group"); // a couple dance: no certificate asked of adults
+    const coupleCompetition = await newCourse(rock.id, "competition");
+    const jazzCourse = await newCourse(jazzDiscipline.id, "group");
+    const enrollments: Record<keyof typeof BIRTH_DATES, [string, string[]][]> = {
+      Rémi: [["active", [couple]]], // couple dance only: not asked
+      Inès: [["active", [couple, jazzCourse]]], // also jazz: asked
+      Lucas: [["trial", [coupleCompetition]]], // competitor: asked
+      Maël: [["active", [couple]]], // a minor: always asked
+      Yann: [
+        ["active", [couple]],
+        ["waitlist", [jazzCourse]],
+      ], // jazz on the waiting list only: not asked
+    };
+    for (const [firstName, birthDate] of Object.entries(BIRTH_DATES)) {
+      ids[firstName] = await student(school, firstName, birthDate);
+      for (const [status, courses] of enrollments[firstName as keyof typeof BIRTH_DATES])
+        await enroll(ids[firstName], status, courses);
+    }
   });
 
   it("asks no adult in couple dances only, an adult in jazz and any competitor; the record and the list agree", async () => {
-    const people = {
-      Rémi: [ADULT, [["active", [couple]]]], // couple dance only: not asked
-      Inès: [ADULT, [["active", [couple, jazzCourse]]]], // also jazz: asked
-      Lucas: [ADULT, [["trial", [coupleCompetition]]]], // competitor: asked
-      Maël: [MINOR, [["active", [couple]]]], // a minor: always asked
-      Yann: [
-        ADULT,
-        [
-          ["active", [couple]],
-          ["waitlist", [jazzCourse]],
-        ],
-      ], // jazz on the waiting list only: not asked
-    } as const;
-    const ids: Record<string, string> = {};
-    for (const [firstName, [birthDate, enrollments]] of Object.entries(people)) {
-      ids[firstName] = await student(school, firstName, birthDate);
-      for (const [status, courses] of enrollments) await enroll(ids[firstName], status, [...courses]);
-    }
-
     const column = await missingColumn();
-    expect(Object.fromEntries(Object.keys(people).map((n) => [n, column[n]]))).toEqual({
+    expect(Object.fromEntries(Object.keys(BIRTH_DATES).map((n) => [n, column[n]]))).toEqual({
       Rémi: [],
       Inès: ["Certificat médical"],
       Lucas: ["Certificat médical"],
@@ -406,7 +403,7 @@ describe("medical certificate of adults, by discipline and competition (#306)", 
 
     // The record's rule (domain) says the same, student by student.
     const requirements = await as((tx) => readRequirements(tx));
-    for (const [firstName, [birthDate]] of Object.entries(people)) {
+    for (const [firstName, birthDate] of Object.entries(BIRTH_DATES)) {
       const id = ids[firstName];
       const domain = missingDocuments({
         requirements,
@@ -416,7 +413,10 @@ describe("medical certificate of adults, by discipline and competition (#306)", 
         today: TODAY,
         courses: await as((tx) => enrolledCourses(tx, id, season)),
       });
-      expect(domain.length > 0, firstName).toBe(column[firstName].length > 0);
+      expect(
+        domain.map((t) => DOCUMENT_LABELS[t]),
+        firstName,
+      ).toEqual(column[firstName]);
     }
   });
 

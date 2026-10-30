@@ -1,6 +1,7 @@
 "use client";
 
 import { Button, Checkbox, Group, Paper, Text, TextInput } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { useOptimistic, useState, useTransition } from "react";
 import type { DisciplineRow } from "@/db/settings";
 import { type ActionResult, settle } from "@/lib/action-result";
@@ -107,16 +108,23 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
                 <span className="font-medium">{d.name}</span>
               )}
               <Checkbox
-                size="xs"
+                radius="xs"
                 label="Certificat médical exigé des adultes"
                 aria-label={`Certificat médical exigé des adultes en ${d.name}`}
                 checked={certificates.get(d.id) ?? d.adultsNeedCertificate}
                 onChange={(e) => {
                   const value = e.currentTarget.checked;
-                  act(() => {
-                    setCertificate([d.id, value]);
-                    return adultCertificate(d.id, value);
-                  });
+                  act(
+                    () => {
+                      setCertificate([d.id, value]);
+                      return adultCertificate(d.id, value);
+                    },
+                    () =>
+                      notifications.show({
+                        color: "green",
+                        message: `${d.name} : certificat médical ${value ? "exigé" : "plus exigé"} des adultes.`,
+                      }),
+                  );
                 }}
               />
               <Text span size="sm" c="dimmed">

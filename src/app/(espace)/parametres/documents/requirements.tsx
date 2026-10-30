@@ -71,8 +71,8 @@ export function Requirements({ requirements }: { requirements: Requirement[] }) 
                 <Radio.Group
                   label="À qui"
                   description={
-                    r.type === COURSE_DEPENDENT_TYPE && !r.minorsOnly
-                      ? "Aux adultes, seulement dans les disciplines qui l’exigent (Paramètres › Disciplines) ou en compétition."
+                    r.type === COURSE_DEPENDENT_TYPE
+                      ? "Pour « Tous les élèves » : aux adultes, seulement dans les disciplines qui l’exigent (Paramètres › Disciplines) ou en compétition."
                       : undefined
                   }
                   value={r.minorsOnly ? "minors" : "all"}

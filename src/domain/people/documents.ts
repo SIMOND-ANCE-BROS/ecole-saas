@@ -138,6 +138,21 @@ export function expectedDocuments(
   return requirements.filter((r) => r.required && (minor || askedOfAdult(r))).map((r) => r.type);
 }
 
+/**
+ * Required documents the record offers to enter for this student, whatever
+ * their courses: an adult not enrolled yet, or only in couple dances, may
+ * still hand in a medical certificate (#306). Those `expectedDocuments` keeps
+ * are the ones actually asked.
+ */
+export function recordableDocuments(
+  requirements: readonly Requirement[],
+  birthDate: string | null,
+  today: string,
+): RequirableType[] {
+  const minor = isMinor(birthDate, today);
+  return requirements.filter((r) => r.required && (minor || !r.minorsOnly)).map((r) => r.type);
+}
+
 /** A required document still to bring: due on `dueOn` (included), overdue after it. */
 export type DocumentToBring = { type: RequirableType; dueOn: string; overdue: boolean };
 
