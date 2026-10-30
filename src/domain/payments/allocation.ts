@@ -56,11 +56,22 @@ export function byOldestDue(
 }
 
 /**
+ * Whether a payment's money counts as collected for an allocation: as for refunds
+ * (`isUncollected`), except that a payment on a bank deposit slip counts as collected even
+ * when the slip is dated after its planned cashing day passes today (a deposit may be dated
+ * ahead, #98): once the paper is handed to the bank, nothing else will come to settle it. A
+ * cheque the bank returns is cancelled by its rejection (`correctedCents`). Pending the
+ * school's confirmation (#305 open question); the only place this rule lives.
+ */
+export const isCollectedForAllocation = (p: CollectablePayment, today: string): boolean =>
+  p.deposited || !isUncollected(p, today);
+
+/**
  * What a payment may still settle: its amount net of corrections and rejections, less what
  * it already settles; nothing while its money is not collected, nothing for a reverse entry.
  */
 export function availableCents(p: AllocatablePayment, today: string): number {
-  if (p.amountCents <= 0 || p.reversalKind !== null || isUncollected(p, today)) return 0;
+  if (p.amountCents <= 0 || p.reversalKind !== null || !isCollectedForAllocation(p, today)) return 0;
   return Math.max(0, p.amountCents - p.correctedCents - p.allocatedCents);
 }
 
@@ -111,32 +122,47 @@ export function allocateFifo(
   return out;
 }
 
-/** One allocation of a payment, as `releaseExcess` reads it. */
+/** An allocation already written, as `releaseExcess` reads it. */
 export type HeldAllocation = Pick<OpenInstallment, "invoiceId" | "rank" | "dueDate"> & {
+  paymentId: string;
   installmentId: string;
   amountCents: number;
 };
 
 /**
- * What a payment's allocations become once it settles only `keepCents` (after a correction,
- * a rejected cheque or a cancelled deposit): taken back from the latest due installment
- * first, so the oldest stays paid. Returns the allocations to change with their new amount,
- * 0 meaning deleted.
+ * What allocations become once they may hold only `keepCents` in all: one payment's after a
+ * correction, a rejected cheque or a cancelled deposit, or all of a payer's with one entity
+ * once refunds leave less money than they hold (`heldCapCents`). Taken back from the latest
+ * due installment first, so the oldest stays paid; on one installment, from the latest
+ * payment id first so that the order is always the same. Returns the allocations to change
+ * with their new amount, 0 meaning deleted.
  */
-export function releaseExcess(
-  allocations: readonly HeldAllocation[],
-  keepCents: number,
-): { installmentId: string; amountCents: number }[] {
+export function releaseExcess<T extends HeldAllocation>(allocations: readonly T[], keepCents: number): T[] {
   let excess = allocations.reduce((s, a) => s + a.amountCents, 0) - Math.max(0, keepCents);
-  const out: { installmentId: string; amountCents: number }[] = [];
-  for (const a of [...allocations].sort(byOldestDue).reverse()) {
+  const out: T[] = [];
+  const order = [...allocations].sort(
+    (a, b) => byOldestDue(a, b) || (a.paymentId < b.paymentId ? -1 : a.paymentId > b.paymentId ? 1 : 0),
+  );
+  for (const a of order.reverse()) {
     if (excess <= 0) break;
     const back = Math.min(excess, a.amountCents);
-    out.push({ installmentId: a.installmentId, amountCents: a.amountCents - back });
+    out.push({ ...a, amountCents: a.amountCents - back });
     excess -= back;
   }
   return out;
 }
+
+/**
+ * What all of a payer's allocations with one entity may hold: their collected money net of
+ * corrections, less refunds not cancelled (`entityPoolCents` before any allocation). A
+ * correction made after a refund can leave less than that: `releaseExcess` then takes back
+ * the difference across the payer's payments.
+ */
+export const heldCapCents = (payments: readonly AllocatablePayment[], today: string): number =>
+  entityPoolCents(
+    payments.map((p) => ({ ...p, allocatedCents: 0 })),
+    today,
+  );
 
 export type InstallmentStatus = "upcoming" | "paid" | "partial" | "overdue" | "cancelled";
 

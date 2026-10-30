@@ -9,6 +9,7 @@ import {
   allocationRefusal,
   availableCents,
   entityPoolCents,
+  heldCapCents,
   installmentStatusOf,
   OPEN_INSTALLMENT_STATUSES,
   releaseExcess,
@@ -37,11 +38,13 @@ export type AllocationOutcome = { ok: true; allocations: Allocation[] } | { ok: 
 const allocatedOfPayment = sql<number>`coalesce((SELECT sum(a.amount_cents) FROM payment_allocation a WHERE a.payment_id = ${payment}.${sql.identifier("id")}), 0)::int`;
 const allocatedOfInstallment = sql<number>`coalesce((SELECT sum(a.amount_cents) FROM payment_allocation a WHERE a.installment_id = ${installment}.${sql.identifier("id")}), 0)::int`;
 
-/** Installments a payment may settle: open, on an issued invoice of the same payer and entity. */
-function openInstallmentsOf(pairs: readonly Pair[]): SQL | undefined {
+/**
+ * Installments of the issued invoices of these payers with these entities, whatever their
+ * status: the set locked does not depend on a status another transaction may change meanwhile.
+ */
+function issuedInstallmentsOf(pairs: readonly Pair[]): SQL | undefined {
   return and(
     eq(invoice.status, SETTLED_INVOICE_STATUS),
-    inArray(installment.status, [...OPEN_INSTALLMENT_STATUSES]),
     or(...pairs.map((p) => and(eq(invoice.payerId, p.payerId), eq(installment.billingEntityId, p.billingEntityId)))),
   );
 }
@@ -140,17 +143,19 @@ export async function allocatePayments(
     .where(and(inArray(payment.id, ids), sql`${payment.amountCents} > 0`))
     .orderBy(asc(payment.billingEntityId), asc(payment.payerId));
   if (pairs.length === 0) return { ok: true, allocations: [] };
-  await tx
+  const locked = await tx
     .select({ id: installment.id })
     .from(installment)
     .innerJoin(invoice, eq(invoice.id, installment.invoiceId))
-    .where(openInstallmentsOf(pairs))
+    .where(issuedInstallmentsOf(pairs))
     .orderBy(asc(installment.id))
     .for("no key update", { of: installment });
+  if (locked.length === 0) return { ok: true, allocations: [] };
 
   const written: Allocation[] = [];
   for (const pair of pairs) {
     const payments = await paymentsOf(tx, pair);
+    // Only the installments locked above: one whose invoice was issued since waits for the next allocation.
     const open: OpenInstallment[] = await tx
       .select({
         id: installment.id,
@@ -162,10 +167,21 @@ export async function allocatePayments(
       })
       .from(installment)
       .innerJoin(invoice, eq(invoice.id, installment.invoiceId))
-      .where(openInstallmentsOf([pair]));
+      .where(
+        and(
+          issuedInstallmentsOf([pair]),
+          inArray(
+            installment.id,
+            locked.map((l) => l.id),
+          ),
+          inArray(installment.status, [...OPEN_INSTALLMENT_STATUSES]),
+        ),
+      );
     const targets = payments.filter((p) => ids.includes(p.id));
     const allocations = allocateFifo(targets, open, entityPoolCents(payments, today), today);
-    // Checked again before writing (#254): never more than a payment or an installment still holds.
+    // Checked again before writing: never more than a payment or an installment still holds.
+    // A guard on what `allocateFifo` computed from the same reads; what keeps two writers apart
+    // is the locks above (#254), under which those reads were taken.
     const offered = new Map(targets.map((p) => [p.id, availableCents(p, today)]));
     const owed = new Map(open.map((i) => [i.id, i.amountCents - i.allocatedCents]));
     for (const a of allocations) {
@@ -177,7 +193,7 @@ export async function allocatePayments(
       if (refusal) return { ok: false, message: refusal };
       offered.set(a.paymentId, (offered.get(a.paymentId) ?? 0) - a.amountCents);
       owed.set(a.installmentId, (owed.get(a.installmentId) ?? 0) - a.amountCents);
-      await tx
+      const [{ total }] = await tx
         .insert(paymentAllocation)
         .values({
           schoolId: CURRENT_SCHOOL,
@@ -189,12 +205,20 @@ export async function allocatePayments(
         .onConflictDoUpdate({
           target: [paymentAllocation.paymentId, paymentAllocation.installmentId],
           set: { amountCents: sql`${paymentAllocation.amountCents} + excluded.amount_cents` },
-        });
-      await log(tx, actor, a.paymentId, "insert", null, {
-        installment_id: a.installmentId,
-        amount_cents: a.amountCents,
-        billing_entity_id: pair.billingEntityId,
-      });
+        })
+        .returning({ total: paymentAllocation.amountCents });
+      // Added to an allocation already there (the payment settled part of it before): an update.
+      const row = { installment_id: a.installmentId, billing_entity_id: pair.billingEntityId };
+      if (total === a.amountCents) await log(tx, actor, a.paymentId, "insert", null, { ...row, amount_cents: total });
+      else
+        await log(
+          tx,
+          actor,
+          a.paymentId,
+          "update",
+          { ...row, amount_cents: total - a.amountCents },
+          { ...row, amount_cents: total },
+        );
     }
     await refreshStatuses(tx, [...new Set(allocations.map((a) => a.installmentId))], today);
     written.push(...allocations);
@@ -230,11 +254,14 @@ export async function allocatePayer(
 }
 
 /**
- * Takes back what these payments settle beyond what they still hold (#305, #254): after a
- * correction or a rejected cheque (net of corrections), or a cancelled deposit (a cheque back
- * in the drawer is no longer collected). Taken from the latest due installment first
- * (`releaseExcess`), whose status goes back to partial, overdue or upcoming. Same lock order
- * as `allocatePayments`: the payments, then their installments, ordered by id.
+ * Takes back what allocations hold beyond the money behind them (#305, #254): what these
+ * payments settle beyond their own net amount once collected, after a correction or a rejected
+ * cheque (net of corrections) or a cancelled deposit (a cheque back in the drawer is no longer
+ * collected); then, for their payer with that entity, whatever all the allocations hold beyond
+ * the payer's money net of refunds (`heldCapCents`: a correction made after a refund). Taken
+ * from the latest due installment first (`releaseExcess`), whose status goes back to partial,
+ * overdue or upcoming. Same lock order as `allocatePayments`: the payments, then every
+ * installment of the payer's issued invoices with that entity, ordered by id.
  */
 export async function releaseUncovered(
   tx: Tx,
@@ -245,31 +272,25 @@ export async function releaseUncovered(
   const ids = [...new Set(paymentIds)].filter(isUuid);
   if (ids.length === 0) return;
   await lockPayments(tx, ids);
+  const pairs = await tx
+    .selectDistinct({ payerId: payment.payerId, billingEntityId: payment.billingEntityId })
+    .from(payment)
+    .where(inArray(payment.id, ids))
+    .orderBy(asc(payment.billingEntityId), asc(payment.payerId));
+  if (pairs.length === 0) return;
   await tx
     .select({ id: installment.id })
     .from(installment)
-    .innerJoin(paymentAllocation, eq(paymentAllocation.installmentId, installment.id))
-    .where(inArray(paymentAllocation.paymentId, ids))
+    .innerJoin(invoice, eq(invoice.id, installment.invoiceId))
+    .where(issuedInstallmentsOf(pairs))
     .orderBy(asc(installment.id))
     .for("no key update", { of: installment });
-  const payments = await tx
-    .select({
-      id: payment.id,
-      amountCents: payment.amountCents,
-      method: payment.method,
-      plannedPayment: payment.depositPlannedOn,
-      deposited: sql<boolean>`${bankDepositPayment.bankDepositId} IS NOT NULL`,
-      correctedCents: alreadyCorrected,
-      reversalKind: payment.reversalKind,
-    })
-    .from(payment)
-    .leftJoin(bankDepositPayment, eq(bankDepositPayment.paymentId, payment.id))
-    .where(inArray(payment.id, ids))
-    .orderBy(asc(payment.id));
   const touched = new Set<string>();
-  for (const p of payments) {
+  for (const pair of pairs) {
+    const payments = await paymentsOf(tx, pair);
     const held = await tx
       .select({
+        paymentId: paymentAllocation.paymentId,
         installmentId: paymentAllocation.installmentId,
         amountCents: paymentAllocation.amountCents,
         invoiceId: installment.invoiceId,
@@ -278,26 +299,37 @@ export async function releaseUncovered(
       })
       .from(paymentAllocation)
       .innerJoin(installment, eq(installment.id, paymentAllocation.installmentId))
-      .where(eq(paymentAllocation.paymentId, p.id));
+      .innerJoin(payment, eq(payment.id, paymentAllocation.paymentId))
+      .where(and(eq(payment.payerId, pair.payerId), eq(payment.billingEntityId, pair.billingEntityId)));
     if (held.length === 0) continue;
-    const keep = availableCents({ ...p, allocatedCents: 0 }, today);
-    for (const change of releaseExcess(held, keep)) {
-      const before = held.find((h) => h.installmentId === change.installmentId)?.amountCents ?? 0;
+    const key = (a: { paymentId: string; installmentId: string }) => `${a.paymentId}/${a.installmentId}`;
+    const before = new Map(held.map((a) => [key(a), a.amountCents]));
+    const now = new Map(held.map((a) => [key(a), { ...a }]));
+    // Each payment within its own money first, then all of them within the payer's.
+    for (const p of payments.filter((x) => ids.includes(x.id))) {
+      const mine = [...now.values()].filter((a) => a.paymentId === p.id);
+      for (const c of releaseExcess(mine, availableCents({ ...p, allocatedCents: 0 }, today))) now.set(key(c), c);
+    }
+    for (const c of releaseExcess([...now.values()], heldCapCents(payments, today))) now.set(key(c), c);
+    for (const a of now.values()) {
+      const was = before.get(key(a)) ?? 0;
+      if (a.amountCents === was) continue;
       const where = and(
-        eq(paymentAllocation.paymentId, p.id),
-        eq(paymentAllocation.installmentId, change.installmentId),
+        eq(paymentAllocation.paymentId, a.paymentId),
+        eq(paymentAllocation.installmentId, a.installmentId),
       );
-      if (change.amountCents === 0) await tx.delete(paymentAllocation).where(where);
-      else await tx.update(paymentAllocation).set({ amountCents: change.amountCents }).where(where);
+      if (a.amountCents === 0) await tx.delete(paymentAllocation).where(where);
+      else await tx.update(paymentAllocation).set({ amountCents: a.amountCents }).where(where);
+      const row = { installment_id: a.installmentId, billing_entity_id: pair.billingEntityId };
       await log(
         tx,
         actor,
-        p.id,
-        change.amountCents === 0 ? "delete" : "update",
-        { installment_id: change.installmentId, amount_cents: before },
-        change.amountCents === 0 ? null : { installment_id: change.installmentId, amount_cents: change.amountCents },
+        a.paymentId,
+        a.amountCents === 0 ? "delete" : "update",
+        { ...row, amount_cents: was },
+        a.amountCents === 0 ? null : { ...row, amount_cents: a.amountCents },
       );
-      touched.add(change.installmentId);
+      touched.add(a.installmentId);
     }
   }
   await refreshStatuses(tx, [...touched], today);

@@ -6,6 +6,8 @@ import {
   availableCents,
   byOldestDue,
   entityPoolCents,
+  heldCapCents,
+  isCollectedForAllocation,
   installmentStatusOf,
   releaseExcess,
   type OpenInstallment,
@@ -171,23 +173,80 @@ describe("availableCents and entityPoolCents", () => {
 
 describe("releaseExcess", () => {
   const allocations = [
-    { installmentId: "q1", invoiceId: "inv-1", rank: 1, dueDate: "2026-10-01", amountCents: 10_000 },
-    { installmentId: "q2", invoiceId: "inv-1", rank: 2, dueDate: "2027-01-01", amountCents: 10_000 },
+    { paymentId: "p", installmentId: "q1", invoiceId: "inv-1", rank: 1, dueDate: "2026-10-01", amountCents: 10_000 },
+    { paymentId: "p", installmentId: "q2", invoiceId: "inv-1", rank: 2, dueDate: "2027-01-01", amountCents: 10_000 },
   ];
+  const changes = (a: { paymentId: string; installmentId: string; amountCents: number }[]) =>
+    a.map(({ paymentId, installmentId, amountCents }) => ({ paymentId, installmentId, amountCents }));
 
   it("a correction takes back from the latest due installment first", () => {
-    expect(releaseExcess(allocations, 13_000)).toEqual([{ installmentId: "q2", amountCents: 3_000 }]);
+    expect(changes(releaseExcess(allocations, 13_000))).toEqual([
+      { paymentId: "p", installmentId: "q2", amountCents: 3_000 },
+    ]);
   });
 
   it("a rejected cheque releases every allocation", () => {
-    expect(releaseExcess(allocations, 0)).toEqual([
-      { installmentId: "q2", amountCents: 0 },
-      { installmentId: "q1", amountCents: 0 },
+    expect(changes(releaseExcess(allocations, 0))).toEqual([
+      { paymentId: "p", installmentId: "q2", amountCents: 0 },
+      { paymentId: "p", installmentId: "q1", amountCents: 0 },
     ]);
   });
 
   it("enough left: nothing to release", () => {
     expect(releaseExcess(allocations, 20_000)).toEqual([]);
+  });
+
+  it("across several payments: the latest due installment first, then the latest payment on it", () => {
+    const two = [
+      { ...allocations[0], paymentId: "a", amountCents: 6_000 },
+      { ...allocations[0], paymentId: "b", amountCents: 4_000 },
+      { ...allocations[1], paymentId: "b", amountCents: 2_000 },
+    ];
+    expect(changes(releaseExcess(two, 7_000))).toEqual([
+      { paymentId: "b", installmentId: "q2", amountCents: 0 },
+      { paymentId: "b", installmentId: "q1", amountCents: 1_000 },
+    ]);
+  });
+});
+
+describe("heldCapCents", () => {
+  it("a correction after a refund: the payer's allocations may hold less than they do", () => {
+    // 100,00 € cash, 60,00 € allocated, 40,00 € refunded, then 40,00 € corrected: 20,00 € left.
+    const payments = [
+      cash("p", 10_000, { allocatedCents: 6_000, correctedCents: 4_000 }),
+      cash("r", -4_000, { reversalKind: "refund" }),
+    ];
+    expect(heldCapCents(payments, TODAY)).toBe(2_000);
+  });
+});
+
+describe("a deposit dated ahead", () => {
+  it("a deposited cheque counts as collected even before its planned cashing day", () => {
+    const ahead = cash("p", 10_000, { method: "cheque", plannedPayment: "2026-11-05", deposited: true });
+    expect(isCollectedForAllocation(ahead, TODAY)).toBe(true);
+    expect(availableCents(ahead, TODAY)).toBe(10_000);
+    expect(isCollectedForAllocation({ ...ahead, deposited: false }, TODAY)).toBe(false);
+  });
+});
+
+describe("leftover cents", () => {
+  it("100,01 € over 33,34 / 33,34 / 33,33: every cent lands, none twice", () => {
+    const open = [
+      due("a", "2026-10-01", 3_334, { rank: 1 }),
+      due("b", "2027-01-01", 3_334, { rank: 2 }),
+      due("c", "2027-04-01", 3_333, { rank: 3 }),
+    ];
+    expect(allocateFifo([cash("p", 10_001)], open, 10_001, TODAY).map((x) => x.amountCents)).toEqual([
+      3_334, 3_334, 3_333,
+    ]);
+    expect(allocateFifo([cash("p", 6_669)], open, 6_669, TODAY).map((x) => x.amountCents)).toEqual([3_334, 3_334, 1]);
+  });
+
+  it("an installment of 0 or already paid receives nothing", () => {
+    const open = [due("z", "2026-09-01", 0), due("a", "2026-10-01", 1_000)];
+    expect(allocateFifo([cash("p", 500)], open, 500, TODAY)).toEqual([
+      { paymentId: "p", installmentId: "a", amountCents: 500 },
+    ]);
   });
 });
 

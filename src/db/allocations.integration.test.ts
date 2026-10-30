@@ -319,6 +319,43 @@ describe("refunds and their cancellations (#294, #346)", () => {
   });
 });
 
+describe("what the payer's money no longer covers", () => {
+  it("a correction after a refund takes back what the refund and the correction leave uncovered", async () => {
+    const payer = await person("Zzapresremb");
+    const [q] = await issue(payer, await enroll(payer, 6_000), [["2026-10-01", 6_000]]);
+    await run((tx) => collect(tx, director, payer, [cash(10_000)], undefined, TODAY));
+    const refunded = await run((tx) =>
+      refundPayer(
+        tx,
+        director,
+        payer,
+        { method: "cash", amountCents: 4_000, date: TODAY, reference: null },
+        TODAY,
+        entity,
+      ),
+    );
+    if (!refunded.ok) throw new Error(refunded.message);
+    const [p] = await paymentIdsOf(payer);
+    expect(await run((tx) => correctPayment(tx, director, p, 4_000, TODAY))).toMatchObject({ ok: true });
+    // 100,00 € in, 40,00 € refunded, 40,00 € corrected: 20,00 € left to settle the 60,00 €.
+    expect(await installments([q])).toEqual([{ status: "partial", allocated: 2_000 }]);
+    expect((await run((tx) => balanceOf(tx, payer, TODAY)))?.total).toMatchObject({ due: 6_000, remaining: 4_000 });
+  });
+
+  it("a cheque on a deposit dated ahead of its cashing day is allocated once deposited", async () => {
+    const payer = await person("Zzavant");
+    const q = await issue(payer, await enroll(payer, 10_000), [["2026-10-01", 10_000]]);
+    const ahead = { ...cheque(10_000, "0005"), plannedPayment: "2026-11-05" };
+    await run((tx) => collect(tx, director, payer, [ahead], undefined, TODAY));
+    const [p] = await paymentIdsOf(payer);
+    const deposit = await run((tx) =>
+      createDeposit(tx, director, { date: "2026-11-05", method: "cheque", paymentIds: [p] }, TODAY),
+    );
+    if (!deposit.ok) throw new Error(deposit.message);
+    expect(await installments(q)).toEqual([{ status: "paid", allocated: 10_000 }]);
+  });
+});
+
 describe("balances without an invoice (#305)", () => {
   it("a payer without any invoice keeps the balance computed from prices", async () => {
     const payer = await person("Zzsans");
