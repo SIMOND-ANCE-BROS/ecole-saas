@@ -960,6 +960,9 @@ export const invoiceLine = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     schoolId: schoolIdColumn(),
+    // The invoice's entity (#318), which must also sell the invoiced enrollment or lesson pack:
+    // an invoice never bills another business's package.
+    billingEntityId: uuid("billing_entity_id").notNull(),
     invoiceId: uuid("invoice_id").notNull(),
     label: text("label").notNull(),
     quantityThousandths: integer("quantity_thousandths").notNull().default(1000), // 1000 = 1
@@ -969,9 +972,13 @@ export const invoiceLine = pgTable(
     lessonPackId: uuid("lesson_pack_id"), // NULL: workshop, rental, ticket…
   },
   (t) => [
-    sameSchool(t, t.invoiceId, invoice),
-    sameSchool(t, t.enrollmentId, enrollment),
-    sameSchool(t, t.lessonPackId, lessonPack),
+    // Lookups by invoice, and the keys' checks when an enrollment or a pack changes or goes.
+    index().on(t.invoiceId),
+    index().on(t.enrollmentId),
+    index().on(t.lessonPackId),
+    sameEntity(t, t.invoiceId, invoice),
+    sameEntity(t, t.enrollmentId, enrollment),
+    sameEntity(t, t.lessonPackId, lessonPack),
   ],
 );
 

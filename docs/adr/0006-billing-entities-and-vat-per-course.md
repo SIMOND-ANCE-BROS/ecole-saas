@@ -32,9 +32,10 @@ had no issuer.
 - The entity is **not a tenant**: Row Level Security stays per school (the
   front desk is shared). Consistency comes from **composite foreign keys**
   `(school_id, x_id, billing_entity_id)` on invoice, installment, payment
-  (including `corrects_id`), payment allocation, bank deposit and deposit line:
-  the database refuses an allocation, a deposit line, a reverse entry or a
-  credit note that mixes two entities.
+  (including `corrects_id`), payment allocation, bank deposit and deposit line,
+  then enrollment course (#299) and invoice line (#318): the database refuses
+  an allocation, a deposit line, a reverse entry, a credit note, a package or
+  an invoice line that mixes two entities.
 - Legal name, SIREN, SIRET, VAT number, address, VAT regime, invoice-level VAT
   mention and the bank account label (never an IBAN) live on the entity; the
   school keeps its name, slug and time zone.
