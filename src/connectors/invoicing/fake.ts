@@ -18,8 +18,10 @@ import {
  * unless `INVOICING_FAKE_ALLOWED=1`, and the interface shows « Mode simulation ».
  *
  * Its documents live in memory, one store per billing entity, kept across
- * requests of the same server process. A number is derived from our own id, so
- * a restarted server gives the same document the same number again.
+ * requests of the same server process only: after a restart, or on another
+ * instance, they are gone (`not_found`), as with a tool account emptied. A
+ * number is derived from our own id, so the same invoice sent again gets the
+ * same number.
  */
 
 /** Credentials of the fake tool: any non-empty token; « refuse » plays wrong credentials. */
@@ -34,12 +36,21 @@ export type FakeFault =
   | { kind: "network" }
   /** A 5xx answer. */
   | { kind: "server" }
+  /** The tool does the work, then its answer is lost (a 5xx on the way back). */
+  | { kind: "lost_response" }
   /** The document is refused (a 4xx answer). */
   | { kind: "rejected" }
   /** The tool's VAT-inclusive total differs from ours by this many cents. */
   | { kind: "total_offset"; cents: number };
 
-type Stored = ToolDocument & { externalRef: string; kind: "invoice" | "credit_note"; payments: Set<string> };
+type Stored = ToolDocument & {
+  externalRef: string;
+  kind: "invoice" | "credit_note";
+  customerRef: string;
+  payments: Set<string>;
+  /** Credit notes issued against it, as a positive amount. */
+  creditedCents: number;
+};
 
 export type FakeStore = {
   customers: Map<string, string>;
@@ -98,7 +109,9 @@ export function fakeTool(store: FakeStore, credentials: FakeCredentials): ToolCl
     if (fault?.kind === "server") throw new InvoicingError("server", "connectorFor", "status_503");
     if (fault?.kind === "rejected") throw new InvoicingError("rejected", "connectorFor", "status_422");
     if (credentials.token === FAKE_REFUSED_TOKEN) throw new InvoicingError("credentials", "connectorFor", "status_401");
-    return run(fault?.kind === "total_offset" ? fault.cents : 0);
+    const result = run(fault?.kind === "total_offset" ? fault.cents : 0);
+    if (fault?.kind === "lost_response") throw new InvoicingError("server", "connectorFor", "status_504");
+    return result;
   }
 
   function create(
@@ -111,12 +124,21 @@ export function fakeTool(store: FakeStore, credentials: FakeCredentials): ToolCl
     if (![...store.customers.values()].includes(payload.customerRef)) {
       throw new InvoicingError("rejected", "connectorFor", "unknown_customer");
     }
+    const linesTotal = payload.lines.reduce((sum, line) => sum + line.inclTaxCents, 0);
+    if (linesTotal !== payload.totals.inclTaxCents) throw new InvoicingError("rejected", "connectorFor", "lines_total");
     if (has(payload, "creditedToolRef")) {
       const credited = found(payload.creditedToolRef);
       if (credited.status !== "issued") throw new InvoicingError("rejected", "connectorFor", "credited_not_issued");
+      if (credited.customerRef !== payload.customerRef) {
+        throw new InvoicingError("rejected", "connectorFor", "credited_other_customer");
+      }
+      // A credit note cancels all or part of the invoice, never more.
+      const amount = -payload.totals.inclTaxCents;
+      if (amount <= 0 || credited.creditedCents + amount > credited.totalInclTaxCents) {
+        throw new InvoicingError("rejected", "connectorFor", "credit_exceeds_invoice");
+      }
+      credited.creditedCents += amount;
     }
-    const linesTotal = payload.lines.reduce((sum, line) => sum + line.inclTaxCents, 0);
-    if (linesTotal !== payload.totals.inclTaxCents) throw new InvoicingError("rejected", "connectorFor", "lines_total");
     const toolRef = `fake_${kind}_${payload.externalRef}`;
     const doc: Stored = {
       toolRef,
@@ -127,7 +149,9 @@ export function fakeTool(store: FakeStore, credentials: FakeCredentials): ToolCl
       issuedOn: null,
       totalInclTaxCents: linesTotal,
       pdfUrl: null,
+      customerRef: payload.customerRef,
       payments: new Set(),
+      creditedCents: 0,
     };
     store.documents.set(toolRef, doc);
     store.byExternalRef.set(payload.externalRef, toolRef);

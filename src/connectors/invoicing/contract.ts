@@ -28,6 +28,8 @@ export type LinePayload = {
   label: string;
   /** 1000 = 1: no floating-point quantity. */
   quantityThousandths: number;
+  /** VAT-inclusive unit price as stored; the line's own amounts stay the source of truth. */
+  unitPriceCents: number;
   /** Source of truth; excl. + VAT = incl., as stored on the line. */
   inclTaxCents: number;
   exclTaxCents: number;
@@ -35,6 +37,11 @@ export type LinePayload = {
   vat: LineVat;
 };
 
+/**
+ * Every amount of the contract is integer cents (`invoicePayload` checks it). A
+ * real connector converting to a tool's euro strings goes through
+ * `src/lib/money.ts`, never a division by 100 on a float.
+ */
 export type Totals = { inclTaxCents: number; exclTaxCents: number; vatCents: number };
 
 /** A payer as the tool's customer. Personal data: never logged, never in an error. */
@@ -148,21 +155,34 @@ export type InvoicingErrorKind =
 
 const RETRYABLE: readonly InvoicingErrorKind[] = ["timeout", "network", "server"];
 
+/** A technical code: lowercase letters, digits and underscores, never a tool's free text. */
+const CODE = /^[a-z0-9_]{1,64}$/;
+
 /**
  * Typed failure of an invoicing call. Its message names the operation, the kind
  * and a technical code only: never a payload, a name or an amount, so it can be
- * logged (CLAUDE.md §8, personal data of minors).
+ * logged (CLAUDE.md §8, personal data of minors). A code that is not a plain
+ * technical code (a tool's error text…) is replaced by `unrecognised`.
+ *
+ * `document`: what the tool holds despite the failure. On a `total_mismatch`
+ * after `finalize` or `createCreditNote`, the tool has already issued and
+ * numbered the document: the caller records it (number, date) and never treats
+ * it as never issued; only a credit note in the tool corrects it.
  */
 export class InvoicingError extends Error {
   readonly retryable: boolean;
+  readonly code: string | null;
   constructor(
     readonly kind: InvoicingErrorKind,
     readonly operation: InvoicingOperation,
     /** Technical code such as `total_mismatch`; no personal data. */
-    readonly code: string | null = null,
+    code: string | null = null,
+    readonly document: ToolDocument | null = null,
   ) {
-    super(`Invoicing ${operation} failed (${kind}${code ? `: ${code}` : ""})`);
+    const safe = code === null || CODE.test(code) ? code : "unrecognised";
+    super(`Invoicing ${operation} failed (${kind}${safe ? `: ${safe}` : ""})`);
     this.name = "InvoicingError";
+    this.code = safe;
     this.retryable = RETRYABLE.includes(kind);
   }
 }

@@ -49,8 +49,10 @@ export function guarded(client: ToolClient, options: GuardOptions): InvoicingCon
     }
   }
 
+  // On a mismatch the error carries the tool's document: once issued, it is numbered there
+  // and must be recorded (then corrected by a credit note), never forgotten.
   const checked = (operation: InvoicingOperation, ours: number) => (doc: ToolDocument) => {
-    if (doc.totalInclTaxCents !== ours) throw new InvoicingError("rejected", operation, "total_mismatch");
+    if (doc.totalInclTaxCents !== ours) throw new InvoicingError("rejected", operation, "total_mismatch", doc);
     return doc;
   };
 
@@ -81,7 +83,7 @@ export function guarded(client: ToolClient, options: GuardOptions): InvoicingCon
 /** Whatever was thrown, as an `InvoicingError`; the original error (and its text) is dropped. */
 function typed(e: unknown, operation: InvoicingOperation, signal: AbortSignal): InvoicingError {
   if (e instanceof InvoicingError) {
-    return e.operation === operation ? e : new InvoicingError(e.kind, operation, e.code);
+    return e.operation === operation ? e : new InvoicingError(e.kind, operation, e.code, e.document);
   }
   if (signal.aborted || (e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError"))) {
     return new InvoicingError("timeout", operation);

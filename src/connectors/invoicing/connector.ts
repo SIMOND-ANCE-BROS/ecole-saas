@@ -16,7 +16,10 @@ export type ConnectorOptions = {
   env?: Readonly<Record<string, string | undefined>>;
   timeoutMs?: number;
   pauseMs?: number;
-  /** Tests only: overrides `PAYMENT_E_REPORTING`. */
+  /**
+   * Overrides `PAYMENT_E_REPORTING` (#303 Q1, off). Contract tests only: no
+   * application code passes it while the question is open.
+   */
   recordPayment?: boolean;
 };
 
@@ -55,6 +58,10 @@ export function connectorFor(config: EntityConnectorConfig, options: ConnectorOp
 
 /** Decrypted JSON credentials; their content never reaches an error message. */
 function credentialsOf(encrypted: string): unknown {
+  // A server without its key is not a school with wrong credentials: say which.
+  if (Buffer.from(process.env.CLE_CHIFFREMENT ?? "", "base64").length !== 32) {
+    throw new InvoicingError("configuration", "connectorFor", "encryption_key_missing");
+  }
   try {
     return JSON.parse(decrypt(encrypted));
   } catch {

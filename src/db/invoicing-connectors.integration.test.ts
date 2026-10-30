@@ -68,6 +68,14 @@ describe("fake tool numbers", () => {
 describe("simulation mode", () => {
   it("is on only while the school's own business has an active fake connector", async () => {
     expect(await withSchool(school, inSimulation)).toBe(false);
+    // A real tool on another business of the school is no simulation.
+    const realEntity = await admin<{ id: string }[]>`
+      INSERT INTO billing_entity (school_id, name, legal_name, vat_regime, default_vat_treatment_id)
+      SELECT school_id, 'Zz Danse S2', 'Zz Danse S2', 'not_applicable', default_vat_treatment_id
+      FROM billing_entity WHERE id = ${entity} RETURNING id`;
+    await admin`INSERT INTO invoicing_connector (school_id, billing_entity_id, tool, encrypted_credentials)
+                VALUES (${school}, ${realEntity[0].id}, 'abby', 'zz-chiffre')`;
+    expect(await withSchool(school, inSimulation)).toBe(false);
     await admin`INSERT INTO invoicing_connector (school_id, billing_entity_id, tool, encrypted_credentials)
                 VALUES (${otherSchool}, ${otherEntity}, 'fake', 'zz-chiffre')`;
     expect(await withSchool(school, inSimulation)).toBe(false);

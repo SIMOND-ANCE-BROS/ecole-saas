@@ -9,7 +9,9 @@ export type InvoicingToolName = (typeof INVOICING_TOOLS)[number];
 
 /**
  * Prefix of every number the fake tool gives; the database refuses it on an
- * invoice of a real tool, and refuses any other number on a fake one.
+ * invoice of a real tool, and refuses any other number on a fake one. The check
+ * (`invoice_fake_number`, migration 0054) spells it out: changing it needs a
+ * new migration, and it must stay free of quotes.
  */
 export const FAKE_NUMBER_PREFIX = "TEST-";
 
