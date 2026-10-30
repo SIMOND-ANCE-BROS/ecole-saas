@@ -78,6 +78,8 @@ export type TreatmentRow = {
   mention: string | null;
   /** Courses, lesson packs and invoice lines that carry it: a used treatment cannot be removed. */
   uses: number;
+  /** Businesses whose default it is: it cannot be removed either. */
+  defaultOf: string[];
 };
 
 /** The school's treatments, by name, with how many rows use them. */
@@ -93,6 +95,8 @@ export async function listTreatments(tx: Tx): Promise<TreatmentRow[]> {
         (SELECT count(*) FROM course c WHERE c.vat_treatment_id = "vat_treatment"."id")
         + (SELECT count(*) FROM lesson_pack p WHERE p.vat_treatment_id = "vat_treatment"."id")
         + (SELECT count(*) FROM invoice_line l WHERE l.vat_treatment_id = "vat_treatment"."id"))::int`,
+      defaultOf: sql<string[]>`coalesce((SELECT array_agg(e.name ORDER BY e.name) FROM billing_entity e
+        WHERE e.default_vat_treatment_id = "vat_treatment"."id"), '{}')`,
     })
     .from(vatTreatment)
     .orderBy(asc(vatTreatment.label));
@@ -187,7 +191,7 @@ export async function resolveTreatment(
 
 /** Said when a business could have a default treatment but none was chosen. */
 export const DEFAULT_TREATMENT_REQUIRED =
-  "Choisissez le traitement de TVA par défaut : il est donné aux carnets vendus par cette entreprise.";
+  "Choisissez le traitement de TVA par défaut : il est appliqué aux carnets vendus par cette entreprise.";
 
 /**
  * Why a business of `regime` cannot keep its treatments (#301): its default one is missing
@@ -214,7 +218,7 @@ export async function regimeRefusal(
       .where(eq(vatTreatment.id, p.defaultTreatment));
     if (!d) return GONE;
     const refused = treatmentRefusal(p.regime, d.category);
-    if (refused) return `Traitement de TVA par défaut : ${refused}`;
+    if (refused) return `Traitement de TVA par défaut : ${refused.charAt(0).toLowerCase()}${refused.slice(1)}`;
   } else if (usable.length > 0) return DEFAULT_TREATMENT_REQUIRED;
   if (treatmentRefusal(p.regime, "standard") === null || !p.entityId) return null;
   const standard = tx.select({ id: vatTreatment.id }).from(vatTreatment).where(eq(vatTreatment.category, "standard"));
@@ -281,6 +285,10 @@ export async function updateTreatment(tx: Tx, userId: string, id: string, entry:
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
   if (await labelTaken(tx, t.data.label, id)) return { ok: false, message: TAKEN };
+  // Every business locked first, before the treatment, in the order a business's save takes
+  // them (the business, then the treatments, see regimeRefusal): none switches to a regime
+  // without VAT while the check below runs, and the two saves never wait for each other.
+  await tx.select({ id: billingEntity.id }).from(billingEntity).orderBy(asc(billingEntity.id)).for("share");
   const [before] = await tx
     .select({
       label: vatTreatment.label,
@@ -293,9 +301,6 @@ export async function updateTreatment(tx: Tx, userId: string, id: string, entry:
     .for("update");
   if (!before) return { ok: false, message: GONE };
   if (t.data.category === "standard" && before.category !== "standard") {
-    // Every business locked first: none switches to a regime without VAT while this check runs,
-    // and the check below then reads their committed regimes (see regimeRefusal).
-    await tx.select({ id: billingEntity.id }).from(billingEntity).orderBy(asc(billingEntity.id)).for("share");
     const [user] = await tx
       .select({ id: billingEntity.id })
       .from(billingEntity)
@@ -312,7 +317,7 @@ export async function updateTreatment(tx: Tx, userId: string, id: string, entry:
       return {
         ok: false,
         message:
-          "Une entreprise sans TVA (franchise en base ou non assujettie) utilise ce traitement : il ne peut pas recevoir de taux.",
+          "Une entreprise sans TVA (franchise en base ou TVA non applicable) utilise ce traitement : il ne peut pas recevoir de taux.",
       };
   }
   const fields = changedFields(before, t.data);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { vatOfInclusive } from "../../lib/money";
 import {
   formatRate,
   parseRate,
@@ -43,6 +44,19 @@ describe("vatBreakdown", () => {
     const lines = [100, 100, 100].map((inclTaxCents) => ({ inclTaxCents, vatTreatmentId: "t20" }));
     // 3,00 € at 20 %: 0,50 € of VAT, 16,66… cents per line (17 each, one too many).
     expect(vatBreakdown(lines, ALL).lines.map((l) => l.vatCents)).toEqual([16, 17, 17]);
+  });
+
+  it("moves the cents left over onto the lines rounded the wrong way, never more than one each", () => {
+    const incl = [120000, 3, 3, 3, 3, 3, 3];
+    const b = vatBreakdown(
+      incl.map((inclTaxCents) => ({ inclTaxCents, vatTreatmentId: "t20" })),
+      ALL,
+    );
+    // Own VAT: 200,00 € and six times 0,5 cent rounded up; the group's VAT is 200,03 €.
+    expect(b.byTreatment[0].vatCents).toBe(20003);
+    expect(b.lines.map((l) => l.vatCents)).toEqual([20000, 0, 0, 0, 1, 1, 1]);
+    for (const [i, l] of b.lines.entries())
+      expect(Math.abs(l.vatCents - vatOfInclusive(incl[i], 2000))).toBeLessThanOrEqual(1);
   });
 
   it("keeps each line's own VAT when a discount nearly cancels it", () => {

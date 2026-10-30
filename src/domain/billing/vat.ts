@@ -2,11 +2,11 @@
  * VAT treatments (#301, ADR 0006): how VAT applies to a course or a lesson pack,
  * copied onto invoice lines. Prices are VAT-inclusive; VAT is taken out of the
  * sum of each treatment's lines (`vatOfInclusive`, half a cent away from zero),
- * then shared between those lines (`allocate` for the cents left over). Pure functions, no database.
+ * then shared between those lines, each keeping its own VAT within a cent. Pure functions, no database.
  *
  * The wording of a mention is data (`vat_treatment.mention`), never written here.
  */
-import { allocate, vatOfInclusive } from "../../lib/money";
+import { vatOfInclusive } from "../../lib/money";
 
 /** EN 16931 categories: S (standard rate), E (exempt), O (outside the scope of VAT). */
 export const VAT_CATEGORIES = ["standard", "exempt", "not_subject"] as const;
@@ -14,7 +14,7 @@ export type VatCategory = (typeof VAT_CATEGORIES)[number];
 
 /** Categories as the school reads them. */
 export const VAT_CATEGORY_LABELS = {
-  standard: "Avec TVA (taux)",
+  standard: "Avec TVA",
   exempt: "Exonéré de TVA",
   not_subject: "Hors champ de la TVA",
 } as const satisfies Record<VatCategory, string>;
@@ -31,11 +31,13 @@ export type VatAmounts = { inclTaxCents: number; exclTaxCents: number; vatCents:
 /**
  * VAT of invoice lines priced VAT-inclusive. Per treatment, VAT is computed once
  * on the sum of its lines (the invoice's total); each line first gets its own
- * rounded VAT, then the cents between the two (at most one per line) are spread
- * with `allocate` in proportion to the lines' sizes. A line's VAT thus never
- * strays more than a cent from its own, even when a discount line nearly cancels
- * it; a negative discount line takes back its VAT. Each line's excl. amount is
- * incl − VAT. Lines in input order, groups in the order of their first line.
+ * rounded VAT, then the cents between the two go one by one to the lines whose
+ * own rounding went furthest the other way (ties to the lowest index). Each
+ * line's rounding error is under half a cent, so there are always enough of
+ * them: a line's VAT never strays more than a cent from its own, even next to a
+ * discount that nearly cancels it; a negative discount line takes back its VAT.
+ * Each line's excl. amount is incl − VAT. Lines in input order, groups in the
+ * order of their first line.
  */
 export function vatBreakdown(
   lines: readonly { inclTaxCents: number; vatTreatmentId: string }[],
@@ -56,12 +58,14 @@ export function vatBreakdown(
     if (t?.category === "standard") {
       for (const i of indexes) vat[i] = vatOfInclusive(lines[i].inclTaxCents, t.rateBps);
       const gap = total - indexes.reduce((a, i) => a + vat[i], 0);
-      // Lines adding up to nothing but zero amounts have no gap: their weights are never all zero here.
-      if (gap !== 0)
-        allocate(
-          gap,
-          indexes.map((i) => Math.abs(lines[i].inclTaxCents)),
-        ).forEach((cents, k) => (vat[indexes[k]] += cents));
+      // Rounding error of each line, times (10000 + rate) to stay in integers: own VAT − exact VAT.
+      const scale = 10000 + t.rateBps;
+      const error = (i: number) => vat[i] * scale - lines[i].inclTaxCents * t.rateBps;
+      // A cent too many in all (gap < 0): off the lines rounded furthest up; too few: onto those rounded furthest down.
+      const order = [...indexes].sort((a, b) =>
+        error(a) === error(b) ? a - b : gap < 0 ? error(b) - error(a) : error(a) - error(b),
+      );
+      for (const i of order.slice(0, Math.abs(gap))) vat[i] += Math.sign(gap);
     }
     return { vatTreatmentId: id, inclTaxCents: incl, exclTaxCents: incl - total, vatCents: total };
   });
@@ -84,7 +88,7 @@ export const NO_VAT_CHARGED: readonly VatRegime[] = ["franchise_293b", "not_appl
 /** Why a business of `regime` cannot use a treatment of `category`, in French; null when it can. */
 export function treatmentRefusal(regime: VatRegime, category: VatCategory): string | null {
   return category === "standard" && NO_VAT_CHARGED.includes(regime)
-    ? "Cette entreprise ne facture pas de TVA (franchise en base ou non assujettie) : choisissez un traitement sans TVA."
+    ? "Cette entreprise ne facture pas de TVA (franchise en base ou TVA non applicable) : choisissez un traitement sans TVA."
     : null;
 }
 

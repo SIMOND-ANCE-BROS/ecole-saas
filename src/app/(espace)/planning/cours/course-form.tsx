@@ -457,7 +457,7 @@ export function CourseForm({
             description={
               course
                 ? "Exonération ou taux de TVA du cours ; les prix restent TTC."
-                : "Proposée d’après le dernier cours de l’intervenant ; les prix restent TTC."
+                : "Proposée d’après l’intervenant ou l’entreprise ; les prix restent TTC."
             }
             allowDeselect={false}
             data={vat.treatments

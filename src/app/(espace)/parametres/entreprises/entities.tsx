@@ -149,7 +149,9 @@ function EntityForm({
           description={
             treatments.length === 0
               ? "Aucun traitement de TVA : ajoutez-en dans Paramètres › TVA."
-              : "Donné aux carnets vendus par cette entreprise et proposé pour ses nouveaux cours."
+              : treatmentRefusal(v.vatRegime, "standard")
+                ? "Appliqué aux carnets vendus par cette entreprise et proposé pour ses nouveaux cours. Sans TVA, les traitements avec un taux ne sont pas proposés."
+                : "Appliqué aux carnets vendus par cette entreprise et proposé pour ses nouveaux cours."
           }
           inputWrapperOrder={["label", "input", "description", "error"]}
           placeholder="À choisir"
@@ -211,7 +213,7 @@ function Summary({ e, treatments }: { e: EntityRow; treatments: TreatmentChoice[
     ["Adresse", address || null],
     ["TVA", VAT_REGIMES[e.vatRegime] + (e.vatNumber ? ` · ${e.vatNumber}` : "")],
     ["Mention sur les factures", e.vatMention],
-    ["TVA par défaut des cours", treatments.find((t) => t.id === e.defaultVatTreatmentId)?.label ?? null],
+    ["Traitement de TVA par défaut", treatments.find((t) => t.id === e.defaultVatTreatmentId)?.label ?? null],
     ["Compte bancaire", e.bankAccountLabel],
   ];
   return (

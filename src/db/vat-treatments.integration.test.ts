@@ -184,7 +184,7 @@ describe("managing treatments", () => {
     ).toEqual({
       ok: false,
       message:
-        "Une entreprise sans TVA (franchise en base ou non assujettie) utilise ce traitement : il ne peut pas recevoir de taux.",
+        "Une entreprise sans TVA (franchise en base ou TVA non applicable) utilise ce traitement : il ne peut pas recevoir de taux.",
     });
     expect((await admin`SELECT category FROM vat_treatment WHERE id = ${ids.exempt}`)[0].category).toBe("exempt");
   });
@@ -202,7 +202,7 @@ describe("the treatment of a course", () => {
       expect(await inSchool((tx) => createCourse(tx, ids.season, input({ entity, treatment: ids.vat20 })))).toEqual({
         ok: false,
         message:
-          "Cette entreprise ne facture pas de TVA (franchise en base ou non assujettie) : choisissez un traitement sans TVA.",
+          "Cette entreprise ne facture pas de TVA (franchise en base ou TVA non applicable) : choisissez un traitement sans TVA.",
       });
     const r = await inSchool((tx) =>
       createCourse(tx, ids.season, input({ entity: ids.registered, treatment: ids.vat20, instructor: ids.taxed })),

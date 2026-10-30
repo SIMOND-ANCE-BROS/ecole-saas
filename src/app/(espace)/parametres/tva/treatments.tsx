@@ -143,6 +143,8 @@ export function Treatments({ treatments }: { treatments: TreatmentRow[] }) {
   const [busy, startTransition] = useTransition();
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // The treatment whose removal is being confirmed.
+  const [confirming, setConfirming] = useState<string | null>(null);
   const focusAfter = useFocusAfter();
   // A refusal or a lost connection keeps what was typed, with its message (#243).
   const act = (action: () => Promise<ActionResult>, after?: () => void) =>
@@ -222,22 +224,54 @@ export function Treatments({ treatments }: { treatments: TreatmentRow[] }) {
                   >
                     Modifier
                   </Button>
-                  {t.uses === 0 && (
+                  {t.uses === 0 && t.defaultOf.length === 0 && confirming !== t.id && (
                     <Button
                       size="compact-sm"
                       variant="subtle"
                       color="red"
                       disabled={busy}
                       aria-label={`Supprimer le traitement ${t.label}`}
-                      onClick={() =>
-                        act(
-                          () => removeTreatment(t.id),
-                          () => focusAfter("#add-treatment"),
-                        )
-                      }
+                      onClick={() => {
+                        setMessage(null);
+                        setConfirming(t.id);
+                        focusAfter(`[data-confirm="${t.id}"]`);
+                      }}
                     >
                       Supprimer
                     </Button>
+                  )}
+                  {confirming === t.id && (
+                    <>
+                      <Text size="sm">Supprimer ce traitement ?</Text>
+                      <Button
+                        size="compact-sm"
+                        color="red"
+                        data-confirm={t.id}
+                        loading={busy}
+                        onClick={() =>
+                          act(
+                            () => removeTreatment(t.id),
+                            () => {
+                              setConfirming(null);
+                              focusAfter("#add-treatment");
+                            },
+                          )
+                        }
+                      >
+                        Oui, supprimer
+                      </Button>
+                      <Button
+                        size="compact-sm"
+                        variant="subtle"
+                        color="gray"
+                        onClick={() => {
+                          setConfirming(null);
+                          focusAfter(`[data-edit="${t.id}"]`);
+                        }}
+                      >
+                        Non
+                      </Button>
+                    </>
                   )}
                 </Group>
               </div>
@@ -250,9 +284,14 @@ export function Treatments({ treatments }: { treatments: TreatmentRow[] }) {
                 </Text>
               )}
               <Text size="sm" c="dimmed">
-                {t.uses === 0
-                  ? "Utilisé nulle part."
-                  : `Utilisé par ${t.uses} cours, carnet${t.uses > 1 ? "s" : ""} ou ligne${t.uses > 1 ? "s" : ""} de facture.`}
+                {[
+                  t.defaultOf.length > 0 && `Par défaut pour ${t.defaultOf.join(", ")}.`,
+                  t.uses === 0
+                    ? t.defaultOf.length === 0 && "Utilisé nulle part."
+                    : `Utilisé ${t.uses} fois (cours, carnets, factures).`,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
               </Text>
             </>
           )}
