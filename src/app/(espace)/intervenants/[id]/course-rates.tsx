@@ -3,6 +3,7 @@
 import { Button, Paper, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { type ReactNode, useRef, useState, useTransition } from "react";
+import { EscapeCancelsForm } from "@/app/(espace)/_ui/escape-asks";
 import { TextLink } from "@/app/(espace)/_ui/text-link";
 import { rateEditStart, rateEditUnchanged, shownRate } from "@/domain/payroll/course-rates";
 import type { PayMode } from "@/domain/payroll/rate";
@@ -227,7 +228,11 @@ function EditableRate({
           </Button>
         </div>
       ) : (
-        <form
+        // Escape cancels the edit, asking first once the rate was changed (#343), like the
+        // other inline forms: one rule, even for a single field.
+        <EscapeCancelsForm
+          close={close}
+          busy={saving}
           className="flex flex-col gap-1 sm:items-end"
           noValidate
           onSubmit={(e) => {
@@ -249,14 +254,6 @@ function EditableRate({
               onChange={(e) => {
                 setTyped(e.currentTarget.value);
                 setError(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  // Escape cancels this field only, never the side panel around the page.
-                  e.preventDefault();
-                  e.stopPropagation();
-                  close();
-                }
               }}
               rightSection={
                 <Text span size="xs" c="dimmed" className="whitespace-nowrap">
@@ -283,7 +280,7 @@ function EditableRate({
               Vide{NBSP}: tarif habituel.
             </Text>
           )}
-        </form>
+        </EscapeCancelsForm>
       )}
     </li>
   );
