@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { type Balance, payerBalance } from "../domain/payments/balance";
+import { type Balance, balancesByEntity } from "../domain/payments/balance";
 import type { Tx } from "./index";
 import { type ReversalKind, rejectionDateRefusal } from "../domain/payments/rejection";
 import {
@@ -9,6 +9,7 @@ import {
   auditLog,
   bankDeposit,
   bankDepositPayment,
+  billingEntity,
   member,
   payment,
   person,
@@ -16,7 +17,7 @@ import {
 } from "./schema";
 import { issuePath } from "../lib/form-errors";
 import { formatEuros } from "../lib/money";
-import { defaultEntityId, NO_DEFAULT_ENTITY } from "./billing-entities";
+import { entityChoices, listEntities, resolveEntity } from "./billing-entities";
 
 /**
  * Payments (#97): payments recorded against the payer, immutable
@@ -102,23 +103,36 @@ async function log(tx: Tx, who: string, id: string, after: Record<string, unknow
   });
 }
 
-/** Records one or more payments from a payer (three dated cheques, cheque + cash…). */
+/** Shown when a school with several entities gets a payment without the entity that cashes it. */
+export const ENTITY_REQUIRED = "Choisissez l’entreprise qui encaisse ce paiement.";
+
+/**
+ * Records one or more payments from a payer (three dated cheques, cheque + cash…), all
+ * cashed by one billing entity (#300): the one chosen, which must be active. With several
+ * active entities (the form then offers the choice) it is always chosen; with one, it is
+ * the school's default.
+ */
 export async function collect(
   tx: Tx,
   userId: string,
   payerId: string,
   entry: z.input<typeof validPayments>,
+  billingEntityId?: string,
 ): Promise<Result> {
   const r = validPayments.safeParse(entry);
   if (!r.success) return { ok: false, message: r.error.issues[0].message };
+  if (billingEntityId !== undefined && !isUuid(billingEntityId))
+    return { ok: false, message: "Entreprise introuvable ou inactive." };
   if (!isUuid(payerId)) return { ok: false, message: "Payeur introuvable." };
   const [p] = await tx.select({ id: person.id }).from(person).where(eq(person.id, payerId));
   if (!p) return { ok: false, message: "Payeur introuvable." };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
-  // Cashed by the school's default entity until the payment form offers a choice (#300).
-  const entity = await defaultEntityId(tx);
-  if (!entity) return { ok: false, message: NO_DEFAULT_ENTITY };
+  if (billingEntityId === undefined && (await entityChoices(tx)).length > 1)
+    return { ok: false, message: ENTITY_REQUIRED };
+  const resolved = await resolveEntity(tx, billingEntityId);
+  if (!resolved.ok) return resolved;
+  const entity = resolved.id;
   const ids: string[] = [];
   for (const x of r.data) {
     const [{ id }] = await tx
@@ -141,6 +155,7 @@ export async function collect(
       method: x.method,
       date: x.date,
       encaissement_prevu: x.plannedPayment,
+      billing_entity_id: entity,
     });
     ids.push(id);
   }
@@ -261,6 +276,8 @@ export type PaymentRow = {
   enteredBy: string | null;
   /** Date of the bank deposit holding this payment, or null: a deposited payment is rejected, not corrected (#253). */
   depositedOn: string | null;
+  /** Name of the billing entity that cashed it (#300). */
+  entity: string;
 };
 
 /** Payments of a payer, most recent first. */
@@ -280,8 +297,10 @@ export async function paymentsOf(tx: Tx, payerId: string): Promise<PaymentRow[]>
       correctedCents: alreadyCorrected,
       enteredBy: user.name,
       depositedOn: bankDeposit.date,
+      entity: billingEntity.name,
     })
     .from(payment)
+    .innerJoin(billingEntity, eq(billingEntity.id, payment.billingEntityId))
     .leftJoin(member, eq(member.id, payment.enteredBy))
     .leftJoin(user, eq(user.id, member.userId))
     .leftJoin(bankDepositPayment, eq(bankDepositPayment.paymentId, payment.id))
@@ -290,22 +309,49 @@ export async function paymentsOf(tx: Tx, payerId: string): Promise<PaymentRow[]>
     .orderBy(desc(payment.date), desc(payment.createdAt));
 }
 
+/** A payer's balance with one entity (#300). */
+export type EntityBalance = { id: string; name: string; balance: Balance };
+
+/**
+ * A payer's balances (#300): the family total, and, for a school with several billing
+ * entities, one balance per entity the payer owes or paid, in the school's order (the
+ * default first). With a single entity `byEntity` is empty: the screens show the total only.
+ */
+export type PayerBalances = { total: Balance; byEntity: EntityBalance[]; severalEntities: boolean };
+
 /** Balance of a payer over all their enrollments and lesson packs; null if they never paid nor owed anything. */
-export async function balanceOf(tx: Tx, payerId: string, today: string): Promise<Balance | null> {
+export async function balanceOf(tx: Tx, payerId: string, today: string): Promise<PayerBalances | null> {
   if (!isUuid(payerId)) return null;
   const enrollments = await tx
-    .select({ status: enrollment.status, netPriceCents: sql<number>`${enrollment.netPriceCents}::int` })
+    .select({
+      status: enrollment.status,
+      netPriceCents: sql<number>`${enrollment.netPriceCents}::int`,
+      billingEntityId: enrollment.billingEntityId,
+    })
     .from(enrollment)
     .where(eq(enrollment.payerId, payerId))
     .orderBy(asc(enrollment.createdAt));
   const lessonPacks = await tx
-    .select({ priceCents: lessonPack.priceCents })
+    .select({ priceCents: lessonPack.priceCents, billingEntityId: lessonPack.billingEntityId })
     .from(lessonPack)
     .where(eq(lessonPack.payerId, payerId));
   const payments = await tx
-    .select({ amountCents: payment.amountCents, plannedPayment: payment.depositPlannedOn })
+    .select({
+      amountCents: payment.amountCents,
+      plannedPayment: payment.depositPlannedOn,
+      billingEntityId: payment.billingEntityId,
+    })
     .from(payment)
     .where(eq(payment.payerId, payerId));
   if (enrollments.length === 0 && lessonPacks.length === 0 && payments.length === 0) return null;
-  return payerBalance(enrollments, lessonPacks, payments, today);
+  const { byEntity, total } = balancesByEntity(enrollments, lessonPacks, payments, today);
+  const entities = await listEntities(tx);
+  const severalEntities = entities.length > 1;
+  return {
+    total,
+    severalEntities,
+    byEntity: severalEntities
+      ? entities.flatMap((e) => (byEntity[e.id] ? [{ id: e.id, name: e.name, balance: byEntity[e.id] }] : []))
+      : [],
+  };
 }

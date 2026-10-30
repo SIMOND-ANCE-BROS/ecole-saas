@@ -4,6 +4,7 @@ import { EMPTY_FILTER, readFilter } from "../filters/filters";
 import { totals } from "./deposits";
 import {
   exportReference,
+  exportRowOf,
   futureCashing,
   paymentLogQuery,
   paymentLogValue,
@@ -31,6 +32,7 @@ const row = (r: Partial<Row> & Pick<Row, "method">): Row => ({
   issuer: null,
   plannedPayment: null,
   dateDeposit: null,
+  entity: "Zz Danse",
   ...r,
 });
 
@@ -42,7 +44,7 @@ const ROWS: Row[] = [
   row({ payer: "Zz Arnaud", method: "cheque", amountCents: 9000, date: "2026-10-02", dateDeposit: "2026-10-10" }),
   row({ payer: "Zz Colin", method: "holiday_voucher", amountCents: 5000 }),
   row({ payer: "Zz Durand", method: "pass_sport", amountCents: 5000 }),
-  row({ payer: "Zz Petit", method: "card", amountCents: 1 }),
+  row({ payer: "Zz Petit", method: "card", amountCents: 1, entity: "Zz Studio" }),
 ];
 const filter = (...f: string[]) => readFilter(f, null, PAYMENT_COLUMNS);
 const shown = (...f: string[]) => shownPaymentLog(ROWS, filter(...f), null, TODAY);
@@ -83,6 +85,14 @@ describe("shownPaymentLog", () => {
     expect(shown("moyen.parmi.Chèques vacances|Pass’Sport").map((r) => r.payer)).toEqual(["Zz Colin", "Zz Durand"]));
 
   it("filters payments not yet deposited (empty « Remise »)", () => expect(shown("remise.vide")).toHaveLength(6));
+
+  it("filters the entity by checkboxes (#300)", () => {
+    expect(shown("entreprise.parmi.Zz Studio").map((r) => r.payer)).toEqual(["Zz Petit"]);
+    expect(shown("entreprise.parmi.Zz Danse")).toHaveLength(ROWS.length - 1);
+  });
+
+  it("exports the entity's name in the last column (#300)", () =>
+    expect(exportRowOf(ROWS[ROWS.length - 1]).entity).toBe("Zz Studio"));
 
   it("sorts by amount, the correction first in ascending order", () =>
     expect(

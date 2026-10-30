@@ -326,7 +326,7 @@ describe("waitlist and drop-outs", () => {
   it("a drop-out stays due on the payer's balance (the school neither carries over nor refunds)", async () => {
     const f = await family(school, ["active"]);
     await inSchool((tx) => dropEnrollment(tx, desk, f.enrollments[0], "2027-11-15"));
-    expect(await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20"))).toMatchObject({
+    expect((await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20")))?.total).toMatchObject({
       due: 11000,
       outsideCalculation: {},
     });
@@ -362,7 +362,7 @@ describe("cancelling a mistaken enrollment", () => {
       },
     });
     const balance = await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20"));
-    expect(balance).toMatchObject({ due: 0, paid: 5000, remaining: -5000 });
+    expect(balance?.total).toMatchObject({ due: 0, paid: 5000, remaining: -5000 });
     expect(await inSchool((tx) => cancelEnrollment(tx, desk, e))).toEqual({
       ok: false,
       message: "Cette inscription a déjà été annulée.",

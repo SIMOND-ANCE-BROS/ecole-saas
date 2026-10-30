@@ -15,17 +15,44 @@ type Row = { id: number; method: Method; amount: string; reference: string; issu
 const EMPTY_ROW: Omit<Row, "id"> = { method: "cheque", amount: "", reference: "", issuer: "", payment: "" };
 const METHOD_OPTIONS = Object.entries(PAYMENT_METHODS).map(([value, label]) => ({ value, label }));
 
-type Props = { payerId: string; payer: string; remaining: number | null; today: string; back: string };
+/** An entity the payment can be cashed by, with what the payer still owes it (#300). */
+export type EntityOption = { id: string; name: string; remaining: number };
+
+type Props = {
+  payerId: string;
+  payer: string;
+  /** What the payer still owes, all entities together; null if they never owed nor paid anything. */
+  remaining: number | null;
+  /** Empty with a single active entity: no choice shown, the school's default cashes. */
+  entities: EntityOption[];
+  /** The entity preselected: the one the payer owes the most. */
+  initialEntity: string | null;
+  today: string;
+  back: string;
+};
+
+const prefill = (owed: number | null) => (owed && owed > 0 ? typedEuros(owed) : "");
 
 /**
  * Payment from a payer (#97): one row per payment (three dated cheques,
  * a cheque and some cash…), a shared date received, total compared with
- * the amount still due.
+ * the amount still due. With several entities, the one that cashes is chosen
+ * first and the amount due is that entity's (#300).
  */
-export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaining, today: today, back: back }: Props) {
-  const [rows, setRows] = useState<Row[]>([
-    { ...EMPTY_ROW, id: 0, amount: remaining && remaining > 0 ? typedEuros(remaining) : "" },
-  ]);
+export function PaymentForm({
+  payerId: payerId,
+  payer: payer,
+  remaining: familyRemaining,
+  entities,
+  initialEntity,
+  today: today,
+  back: back,
+}: Props) {
+  const [entity, setEntity] = useState(initialEntity ?? "");
+  const chosen = entities.find((e) => e.id === entity);
+  // What is left to pay where this payment goes: the chosen entity's, or the total with one entity.
+  const remaining = entities.length > 0 && familyRemaining !== null ? (chosen?.remaining ?? null) : familyRemaining;
+  const [rows, setRows] = useState<Row[]>([{ ...EMPTY_ROW, id: 0, amount: prefill(remaining) }]);
   const nextId = useRef(1);
   // Row added with « Ajouter un règlement »: its amount gets the focus once rendered.
   const added = useRef<number | null>(null);
@@ -89,7 +116,7 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
           setMessage(
             (
               await orConnectionLost(
-                () => collectPayments(payerId, entry, back, key),
+                () => collectPayments(payerId, entry, back, key, entities.length > 0 ? entity : undefined),
                 (message) => ({ message }),
               )
             ).message,
@@ -108,9 +135,31 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
               : remaining < 0
                 ? `trop-perçu ${formatEuros(-remaining)}`
                 : "à jour"}
+            {chosen && ` auprès de ${chosen.name}`}
           </Text>
         )}
       </Text>
+      {entities.length > 0 && (
+        <NativeSelect
+          label="Entreprise"
+          description="Celle qui encaisse : le paiement ira sur son compte bancaire."
+          required
+          w={{ base: "100%", sm: 360 }}
+          data={entities.map((e) => ({
+            value: e.id,
+            label: e.remaining > 0 ? `${e.name} — reste ${formatEuros(e.remaining)}` : e.name,
+          }))}
+          value={entity}
+          onChange={(e) => {
+            const next = e.currentTarget.value;
+            const owedNext = entities.find((x) => x.id === next)?.remaining ?? null;
+            // The amount still the one proposed for the previous entity follows the new one.
+            if (rows.length === 1 && rows[0].amount === prefill(remaining))
+              setRows([{ ...rows[0], amount: prefill(owedNext) }]);
+            setEntity(next);
+          }}
+        />
+      )}
       <DateField label="Reçu le" required w={160} value={date} onChange={setDate} />
 
       <Fieldset

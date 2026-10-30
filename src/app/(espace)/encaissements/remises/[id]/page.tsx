@@ -1,4 +1,3 @@
-import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
@@ -16,7 +15,6 @@ import {
 } from "@mantine/core";
 import { withSchool } from "@/db";
 import { readDeposit } from "@/db/deposits";
-import { school } from "@/db/schema";
 import { frenchDate } from "@/lib/dates";
 import { formatEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
@@ -32,13 +30,8 @@ const DEPOSIT_KIND = { cheque: "chèques", cash: "espèces", holiday_voucher: "c
 export default async function DepositPage({ params, searchParams }: PageProps<"/encaissements/remises/[id]">) {
   const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
   const [{ id }, { cree }] = await Promise.all([params, searchParams]);
-  const parsed = await withSchool(schoolId, async (tx) => {
-    const r = await readDeposit(tx, id);
-    const [e] = await tx.select({ name: school.name }).from(school).where(eq(school.id, schoolId));
-    return r ? { r, school: e?.name ?? "" } : null;
-  });
-  if (!parsed) notFound();
-  const { r } = parsed;
+  const r = await withSchool(schoolId, (tx) => readDeposit(tx, id));
+  if (!r) notFound();
 
   return (
     <article className="flex flex-col gap-4">
@@ -58,8 +51,10 @@ export default async function DepositPage({ params, searchParams }: PageProps<"/
       )}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
+          {/* The slip goes to the entity's own bank account (#300): its legal name and account label. */}
           <Text size="sm" c="dimmed">
-            {parsed.school}
+            {r.legalName}
+            {r.bankAccountLabel && ` · Compte : ${r.bankAccountLabel}`}
           </Text>
           <Title order={1} fz="xl">
             Bordereau de remise de {DEPOSIT_KIND[r.method]} du {day(r.date)}
