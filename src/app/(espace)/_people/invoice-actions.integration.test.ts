@@ -171,10 +171,14 @@ const runAfter = async () => {
   for (const fn of pending.splice(0)) await fn();
 };
 const invoices = () =>
-  admin`SELECT id, billing_entity_id, status, number, attempts, tool_ref, send_error_kind, next_attempt_at <= now() AS due
+  admin`SELECT id, billing_entity_id, season_id, status, number, attempts, tool_ref, send_error_kind,
+      next_attempt_at <= now() AS due
     FROM invoice WHERE school_id = ${ids.school} ORDER BY created_at, id`;
+/** The business's invoices of the season still standing. */
 const live = async (entity: string) =>
-  (await invoices()).filter((i) => i.billing_entity_id === entity && i.status !== "cancelled");
+  (await invoices()).filter(
+    (i) => i.billing_entity_id === entity && i.season_id === ids.season && i.status !== "cancelled",
+  );
 /** How many invoices still billing their lines bill the enrollment (never two). */
 const billing = async (enrollmentId: string) =>
   (
@@ -276,14 +280,35 @@ describe("a rejected invoice (#352)", () => {
     });
   });
 
-  it("held by the tool: tried again there at once, its attempts never decreasing", async () => {
+  it("held by the tool: tried again there at once, asking the tool first, its attempts never decreasing", async () => {
     as("director");
+    // A draft held for its due dates (#176) never goes back to the tool this way.
     const [a] = await live(ids.a);
     await reject(a.id, "zz-ref");
-    expect(await sendAgain(a.id)).toEqual({ ok: true, result: "retry_in_tool" });
-    const [row] = await live(ids.a);
-    expect(row).toMatchObject({ id: a.id, status: "tool_draft", attempts: 10, send_error_kind: null, due: true });
+    expect(await sendAgain(a.id)).toMatchObject({ ok: false, message: expect.stringMatching(/échéances/) });
+    expect((await live(ids.a))[0]).toMatchObject({ id: a.id, status: "rejected" });
+    expect(pending).toHaveLength(0);
+    // One the tool held a draft of (its installments cover its total), of no season.
+    const [{ id }] = await admin`INSERT INTO invoice (school_id, billing_entity_id, payer_id, status, tool, tool_ref,
+        attempts, send_error_kind, total_incl_tax_cents, total_excl_tax_cents, total_vat_cents)
+      VALUES (${ids.school}, ${ids.a}, ${ids.payer}, 'rejected', 'fake', 'zz-gone', 10, 'network', 6000, 6000, 0)
+      RETURNING id`;
+    await admin`INSERT INTO invoice_line (school_id, billing_entity_id, invoice_id, label, unit_price_cents,
+        incl_tax_cents, excl_tax_cents, vat_cents, vat_treatment_id, vat_category, vat_mention)
+      VALUES (${ids.school}, ${ids.a}, ${id}, 'Zz cours', 6000, 6000, 6000, 0, ${ids.exempt}, 'exempt', 'Zz mention')`;
+    await admin`INSERT INTO installment (school_id, billing_entity_id, invoice_id, rank, due_date, amount_cents)
+      VALUES (${ids.school}, ${ids.a}, ${id}, 1, '2027-10-01', 6000)`;
+    expect(await sendAgain(id)).toEqual({ ok: true, result: "retry_in_tool" });
+    const row = async () => (await invoices()).find((i) => i.id === id);
+    expect(await row()).toMatchObject({ status: "tool_draft", attempts: 10, send_error_kind: null, due: true });
     expect(pending).toHaveLength(1);
+    // Sent: the tool is asked where it stands first (its draft is gone: created again), issued once.
+    fakeStoreOf(ids.a).calls.length = 0;
+    await runAfter();
+    const calls = fakeStoreOf(ids.a).calls;
+    expect(calls[0]).toBe("readStatus");
+    expect(calls.filter((c) => c === "finalize")).toHaveLength(1);
+    expect(await row()).toMatchObject({ status: "issued", attempts: 11, number: expect.stringMatching(/^TEST-/) });
   });
 
   it("abandoned: set aside, its lines back on the payer's next drafting", async () => {
@@ -299,6 +324,34 @@ describe("a rejected invoice (#352)", () => {
     expect(await billing(ids.yearly)).toBe(1);
     const audit = await admin`SELECT after FROM audit_log WHERE row_id = ${a.id} AND action = 'update' ORDER BY id`;
     expect(audit.at(-1)?.after).toEqual({ status: "cancelled", reason: "abandoned" });
+  });
+
+  it("rolls everything back when drafting afresh is refused: the invoice stays rejected", async () => {
+    as("director");
+    const [a] = await live(ids.a);
+    await reject(a.id, null);
+    // An unsent draft of business B with a payment allocated: drafting the payer again is refused.
+    const [{ id: blocking }] = await admin`INSERT INTO invoice (school_id, billing_entity_id, payer_id, season_id,
+        status, total_incl_tax_cents) VALUES (${ids.school}, ${ids.b}, ${ids.payer}, ${ids.season}, 'to_send', 5000)
+      RETURNING id`;
+    const [{ id: inst }] =
+      await admin`INSERT INTO installment (school_id, billing_entity_id, invoice_id, rank, due_date,
+        amount_cents) VALUES (${ids.school}, ${ids.b}, ${blocking}, 1, '2027-10-01', 5000) RETURNING id`;
+    const [{ id: payment }] =
+      await admin`INSERT INTO payment (school_id, billing_entity_id, payer_id, amount_cents, method, date)
+      VALUES (${ids.school}, ${ids.b}, ${ids.payer}, 5000, 'cash', '2027-10-01') RETURNING id`;
+    await admin`INSERT INTO payment_allocation (school_id, billing_entity_id, payment_id, installment_id, amount_cents)
+      VALUES (${ids.school}, ${ids.b}, ${payment}, ${inst}, 5000)`;
+    const audits = async () => (await admin`SELECT count(*)::int AS n FROM audit_log WHERE row_id = ${a.id}`)[0].n;
+    const before = await audits();
+    const r = await sendAgain(a.id);
+    expect(r).toMatchObject({ ok: false, message: expect.stringMatching(/paiement/) });
+    expect((await admin`SELECT status FROM invoice WHERE id = ${a.id}`)[0].status).toBe("rejected");
+    expect(await audits()).toBe(before);
+    expect(pending).toHaveLength(0);
+    await admin`DELETE FROM payment_allocation WHERE payment_id = ${payment}`;
+    await admin`DELETE FROM installment WHERE id = ${inst}`;
+    await admin`DELETE FROM invoice WHERE id = ${blocking}`;
   });
 
   it("refuses an invoice not rejected, of another school, or with a payment allocated", async () => {
@@ -337,9 +390,7 @@ describe("a rejected invoice (#352)", () => {
 });
 
 describe("sending after the answer", () => {
-  it("leaves a business's fake tool state to its own store", () => {
-    // The fake tool kept B's issued invoice in its memory, never A's held draft.
-    expect(fakeStoreOf(ids.a).calls).not.toContain("createInvoice");
+  it("issued B's invoice once, whatever was drafted again since", () => {
     expect(fakeStoreOf(ids.b).calls.filter((c) => c === "finalize")).toHaveLength(1);
   });
 });

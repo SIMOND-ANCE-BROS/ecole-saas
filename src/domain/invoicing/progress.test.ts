@@ -64,6 +64,20 @@ describe("invoiceProgress", () => {
     expect(p.detail).toMatch(/avoir/);
   });
 
+  it("says a tool unusable here before a failed attempt, and an issued mismatch without the tool's total", () => {
+    expect(invoiceProgress(draft({ attempts: 2, sendErrorKind: "timeout", connection: "unavailable" })).kind).toBe(
+      "not_connected",
+    );
+    expect(invoiceProgress(draft({ status: "tool_draft", toolRef: "t-1", connection: "none" })).kind).toBe(
+      "not_connected",
+    );
+    const p = invoiceProgress(
+      draft({ status: "issued", sendErrorCode: "total_mismatch", toolTotalInclTaxCents: null }),
+    );
+    expect(p).toMatchObject({ kind: "issued_mismatch" });
+    expect(p.detail).toMatch(/avoir/);
+  });
+
   it("shows a rejected invoice with its reason and who takes it up", () => {
     const p = invoiceProgress(draft({ status: "rejected", attempts: 10, sendErrorKind: "network" }));
     expect(p).toMatchObject({ kind: "rejected", label: "Non émise" });

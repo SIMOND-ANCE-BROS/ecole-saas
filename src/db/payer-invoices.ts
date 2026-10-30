@@ -15,6 +15,7 @@ import {
   paymentAllocation,
 } from "./schema";
 import type { InvoicingToolName } from "../domain/billing/invoicing";
+import { isSendable } from "../domain/invoicing/outbox";
 import { sendAgainMode, type InvoiceStatus } from "../domain/invoicing/progress";
 
 /**
@@ -129,6 +130,24 @@ async function lockRejected(tx: Tx, invoiceId: string) {
   return row ?? null;
 }
 
+const HELD =
+  "Cette facture n’a pas d’échéances couvrant son total : elle ne peut pas encore partir. « Abandonner » rend ses lignes au payeur.";
+
+/** Its installments add up to its total (`isSendable`, #176). */
+async function coversTotal(tx: Tx, invoiceId: string): Promise<boolean> {
+  const [i] = await tx
+    .select({ totalInclTaxCents: invoice.totalInclTaxCents })
+    .from(invoice)
+    .where(eq(invoice.id, invoiceId));
+  const dues = await tx
+    .select({ amountCents: installment.amountCents })
+    .from(installment)
+    .where(eq(installment.invoiceId, invoiceId));
+  return (
+    !!i && isSendable({ totalInclTaxCents: i.totalInclTaxCents, installmentsCents: dues.map((d) => d.amountCents) })
+  );
+}
+
 /** A payment allocated to one of its installments: setting the invoice aside would lose it. */
 async function hasAllocation(tx: Tx, invoiceId: string): Promise<boolean> {
   const rows = await tx
@@ -161,6 +180,9 @@ export async function sendRejectedAgain(tx: Tx, userId: string, invoiceId: strin
   const mode = row ? sendAgainMode(row) : null;
   if (!row || !mode) return { ok: false, message: GONE };
   if (mode === "retry_in_tool") {
+    // Back as `tool_draft`, the claim no longer checks its installments (`SENDABLE`): checked
+    // here, so a draft held for its due dates (#176) never goes this way.
+    if (!(await coversTotal(tx, invoiceId))) return { ok: false, message: HELD };
     await tx
       .update(invoice)
       .set({
