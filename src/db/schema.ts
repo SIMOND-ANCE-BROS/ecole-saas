@@ -38,6 +38,7 @@ import { REVERSAL_KINDS } from "../domain/payments/rejection";
 import { PAYMENT_METHOD_VALUES } from "../domain/payments/methods";
 import { DOCUMENT_TYPES } from "../domain/people/documents";
 import { VAT_CATEGORIES } from "../domain/billing/vat";
+import { FAKE_NUMBER_PREFIX, INVOICING_TOOLS } from "../domain/billing/invoicing";
 
 // ---------------------------------------------------------------------------
 // Enumerated types
@@ -62,7 +63,8 @@ export const tariffAudience = pgEnum("tariff_audience", ["child", "adult", "coup
 export const period = pgEnum("period", ["quarter", "year", "single"]);
 export const enrollmentStatus = pgEnum("enrollment_status", ["trial", "waitlist", "active", "dropped", "ended"]);
 export const invoiceStatus = pgEnum("invoice_status", ["to_send", "tool_draft", "issued", "rejected", "cancelled"]);
-export const invoicingTool = pgEnum("invoicing_tool", ["pennylane", "abby", "shine"]);
+/** `fake`: the simulation tool (#303), refused unless INVOICING_FAKE_ALLOWED=1. */
+export const invoicingTool = pgEnum("invoicing_tool", INVOICING_TOOLS);
 export const paymentMethod = pgEnum("payment_method", PAYMENT_METHOD_VALUES);
 /** Kind of a reverse entry (#272): a correction, or the rejection of a deposited payment. */
 export const reversalKind = pgEnum("reversal_kind", REVERSAL_KINDS);
@@ -1080,6 +1082,13 @@ export const invoice = pgTable(
     check(
       "invoice_number_status",
       sql`(${t.status} <> 'to_send' OR ${t.number} IS NULL) AND (${t.status} <> 'issued' OR (${t.number} IS NOT NULL AND ${t.issuedOn} IS NOT NULL))`,
+    ),
+    // A « TEST- » number comes from the fake tool only, and the fake tool gives no other (#303):
+    // a simulated invoice never passes for a real one. `tool::text`: the enum value is new in
+    // the same migration transaction, where it cannot be used as a literal yet.
+    check(
+      "invoice_fake_number",
+      sql`${t.number} IS NULL OR (left(${t.number}, ${sql.raw(String(FAKE_NUMBER_PREFIX.length))}) = ${sql.raw(`'${FAKE_NUMBER_PREFIX}'`)}) = (coalesce(${t.tool}::text, '') = 'fake')`,
     ),
     // At most one draft per payer, entity and season (#302): drafting again replaces it.
     uniqueIndex("invoice_one_draft")

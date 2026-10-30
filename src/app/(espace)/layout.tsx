@@ -1,7 +1,9 @@
-import { Anchor } from "@mantine/core";
+import { Alert, Anchor } from "@mantine/core";
 import { Suspense } from "react";
 import { eq } from "drizzle-orm";
 import { withSchool } from "@/db";
+import { inSimulation } from "@/db/invoicing-connectors";
+import { fakeAllowed } from "@/connectors/invoicing/connector";
 import { school } from "@/db/schema";
 import { schoolContext, currentSession } from "@/lib/session";
 import { signOut } from "./actions";
@@ -20,12 +22,23 @@ const ROLE_LABEL = { director: "Direction", front_desk: "Accueil", teacher: "Pro
  */
 export default async function WorkspaceLayout({ children, modal }: LayoutProps<"/">) {
   const [{ schoolId: schoolId, role }, { user }] = await Promise.all([schoolContext(), currentSession()]);
-  const [{ name: name }] = await withSchool(schoolId, (tx) =>
-    tx.select({ name: school.name }).from(school).where(eq(school.id, schoolId)),
-  );
+  const { name, simulation } = await withSchool(schoolId, async (tx) => {
+    const [row] = await tx.select({ name: school.name }).from(school).where(eq(school.id, schoolId));
+    return { name: row.name, simulation: fakeAllowed() && (await inSimulation(tx)) };
+  });
 
   return (
     <Frame
+      banner={
+        // The fake invoicing tool is active (#303): configured for a business and allowed on this
+        // server. Nothing it numbers is a real invoice.
+        simulation && (
+          <Alert role="status" color="yellow" radius={0} p="xs" className="print:hidden" title="Mode simulation">
+            Les factures créées ici sont des essais : leurs numéros commencent par « TEST- » et ce ne sont pas de vraies
+            factures.
+          </Alert>
+        )
+      }
       header={
         // useSearchParams requires a Suspense boundary.
         <Suspense>{role !== "teacher" && <GlobalSearch />}</Suspense>
