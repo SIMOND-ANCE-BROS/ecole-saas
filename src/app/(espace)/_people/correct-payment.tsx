@@ -81,6 +81,8 @@ export function CorrectPayment({
           setShown(false);
           setMessage(null);
           setRejectedOn(rejection?.today ?? "");
+          // « Abandonner » or « Fermer » drops what was typed: each opening starts from all that is left.
+          setAmount(typedEuros(remaining));
           setKey(crypto.randomUUID());
           setOpen(true);
         }}
@@ -113,6 +115,7 @@ export function CorrectPayment({
     // first once the amount or the date was changed (#343). Mounted with each opening.
     <EscapeCancelsForm
       close={close}
+      busy={sending}
       onSubmit={(e) => {
         e.preventDefault();
         setShown(true);

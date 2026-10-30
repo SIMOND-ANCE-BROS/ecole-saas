@@ -18,7 +18,7 @@ import { DateField, refusedDateField } from "../../_ui/date-field";
 import { useEscapeCancels } from "../../_ui/escape-asks";
 import { TextLink } from "../../_ui/text-link";
 import { useFocusAfter } from "../../_ui/use-focus-after";
-import { useUnloadGuard, useUnsavedInput } from "../../_ui/unsaved-input";
+import { useUnloadGuard } from "../../_ui/unsaved-input";
 import { dayOf, WARNING } from "../../_people/sections";
 import { editDocument, receiveDocumentToday, unreceiveDocument } from "./document-actions";
 
@@ -345,14 +345,15 @@ function DocumentForm({
   save: () => void;
 }) {
   const form = useRef<HTMLFormElement>(null);
-  useUnloadGuard(useUnsavedInput(form));
   const escape = useEscapeCancels(form, close);
+  useUnloadGuard(escape.holdsInput);
   return (
     <form
       ref={form}
       aria-label={`${recorded ? "Modifier" : "Saisir"} : ${label}`}
       className="flex flex-col gap-2"
-      onKeyDown={escape.onKeyDown}
+      // While saving, Escape does nothing: a refusal must stay on screen with what was typed.
+      onKeyDown={(e) => !inProgress && escape.onKeyDown(e)}
       onSubmit={(e) => {
         e.preventDefault();
         if (refusedDateField(e.currentTarget)) return;

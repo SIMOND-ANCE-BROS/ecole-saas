@@ -10,6 +10,8 @@ export type EscapeCancels = {
   onKeyDown: (e: EscapeKeyEvent) => void;
   /** « Abandonner la saisie ? », rendered anywhere inside the form's component. */
   confirm: ReactNode;
+  /** Whether the form holds unsaved input: what the reload guard (`useUnloadGuard`) needs too. */
+  holdsInput: () => boolean;
 };
 
 /**
@@ -42,6 +44,7 @@ export function useEscapeCancels(
     requestAnimationFrame(() => back?.isConnected && back.focus());
   };
   return {
+    holdsInput,
     // While the question is asked, its own keys (Escape answers « Continuer la saisie ») stay there.
     onKeyDown: (e) => {
       if (!asking) cancelOnEscape(close, { holdsInput, ask })(e);
@@ -62,13 +65,16 @@ export function useEscapeCancels(
 /**
  * An inline edit opened in a list (a site, a room, a discipline): a `<form>` that Escape
  * cancels as `useEscapeCancels` says. Mounted with the edit, so each one starts untouched.
+ * While `busy` (a save is running), Escape does nothing: the save's outcome and any refusal
+ * stay on screen.
  */
 export function EscapeCancelsForm({
   close,
+  busy = false,
   onKeyDown,
   children,
   ...props
-}: Omit<ComponentProps<"form">, "ref"> & { close: () => void }) {
+}: Omit<ComponentProps<"form">, "ref"> & { close: () => void; busy?: boolean }) {
   const root = useRef<HTMLFormElement>(null);
   const escape = useEscapeCancels(root, close);
   return (
@@ -77,7 +83,7 @@ export function EscapeCancelsForm({
       ref={root}
       onKeyDown={(e) => {
         onKeyDown?.(e);
-        escape.onKeyDown(e);
+        if (!busy) escape.onKeyDown(e);
       }}
     >
       {children}

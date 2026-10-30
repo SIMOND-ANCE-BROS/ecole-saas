@@ -232,6 +232,7 @@ function EditableRate({
         // other inline forms: one rule, even for a single field.
         <EscapeCancelsForm
           close={close}
+          busy={saving}
           className="flex flex-col gap-1 sm:items-end"
           noValidate
           onSubmit={(e) => {
