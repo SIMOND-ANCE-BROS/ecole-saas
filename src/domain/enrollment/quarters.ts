@@ -62,6 +62,11 @@ export function quarterEnrollmentRefusal(quarters: readonly QuarterDates[], enro
  * package: the siblings discount is taken off each quarter alike (#291 Q3 default), and the
  * quarters all owe the same whole cents, so nothing is split nor rounded. Yearly and drop-in:
  * the net price once.
+ *
+ * A dropped quarterly enrollment still owes every quarter it covers, the ones after its
+ * drop-out day included: #291 Q2 default (enrolled for every remaining quarter) with #284 Q1
+ * (a drop-out is neither carried over nor refunded). Whether it should owe only the quarters
+ * started by its drop-out day is an open question to the school (#99).
  */
 export function seasonDueCents(e: { period: Period; netPriceCents: number; quarterCount: number }): number {
   return e.period === "quarter" ? e.netPriceCents * e.quarterCount : e.netPriceCents;

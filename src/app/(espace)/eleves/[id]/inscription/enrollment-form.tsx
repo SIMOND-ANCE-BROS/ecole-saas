@@ -21,7 +21,7 @@ import { INITIAL_STATUSES, isFull, overfilledCourses } from "@/domain/enrollment
 import { ENROLLMENT_STATUS_LABELS } from "@/domain/enrollment/statuses";
 import { deferredQuery } from "@/lib/deferred-query";
 import { formatEuros } from "@/lib/money";
-import { quarterMonths } from "@/domain/enrollment/quarters";
+import { quarterMonths, seasonDueCents } from "@/domain/enrollment/quarters";
 import { preview, enroll, type FormInput } from "./actions";
 import { ManualPriceField } from "./manual-price-field";
 import { readTypedPrice, type TypedPrice } from "@/domain/enrollment/manual-price";
@@ -507,6 +507,7 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
                 typed={typed}
                 onChange={(t) => setTyped(n, t)}
                 tried={tried}
+                quarterCount={quarters.length}
               />
             )}
           </section>
@@ -531,9 +532,20 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
               {quarters.map((q) => `${q.label} (${quarterMonths(q)})`).join(", ")}
             </Text>
             <Text component="div" size="md" fw={600} className="flex justify-between gap-2">
-              <span>{status === "active" ? "Total de la saison" : "Total de la saison à la confirmation"}</span>
+              <span>{status === "active" ? "Total de la saison" : "Total de la saison, dû à la confirmation"}</span>
               <span className="tabular-nums">
-                {formatEuros(prices.reduce((t, p) => t + (p.netPriceCents ?? 0), 0) * quarters.length)}
+                {formatEuros(
+                  prices.reduce(
+                    (t, p) =>
+                      t +
+                      seasonDueCents({
+                        period: "quarter",
+                        netPriceCents: p.netPriceCents ?? 0,
+                        quarterCount: quarters.length,
+                      }),
+                    0,
+                  ),
+                )}
               </span>
             </Text>
             <Text size="xs" c="dimmed">

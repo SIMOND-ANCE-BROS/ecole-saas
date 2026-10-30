@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState, useTransition } from "react";
 import type { ConfirmationPreview, ExistingImpact } from "@/db/enrollments";
 import { dropDateBounds, type EnrollmentActions } from "@/domain/enrollment/lifecycle";
+import { seasonDueCents } from "@/domain/enrollment/quarters";
+import type { Period } from "@/domain/tariff/types";
 import { NOT_SAVED, settle } from "@/lib/action-result";
 import { ofName } from "@/lib/french";
 import { formatEuros } from "@/lib/money";
@@ -29,6 +31,9 @@ export type ChangeableEnrollment = {
   courses: string[];
   /** What it costs over the season: a quarterly price once per covered quarter (#291). */
   seasonDueCents: number;
+  period: Period;
+  /** Quarters a quarterly enrollment covers (#291); its price is one quarter's. */
+  quarterCount: number;
   /** Why it cannot be cancelled (invoiced, attended), shown instead of « Annuler… »; null when it can. */
   cancelRefusal: string | null;
   /** Day it was entered: a drop-out cannot be dated before. */
@@ -203,6 +208,16 @@ function ChangeDialog({
     );
   } else if (preview.kind === "confirm") {
     const r = preview.result;
+    // Quarterly (#291): the price below is one quarter's, owed for each covered quarter.
+    const n = enrollment.quarterCount;
+    const quarterly =
+      enrollment.period === "quarter" && confirmedNet !== null ? (
+        <Text size="sm" fw={500}>
+          Prix par trimestre, pour {n} trimestre{n > 1 ? "s" : ""} :{" "}
+          {formatEuros(seasonDueCents({ period: "quarter", netPriceCents: confirmedNet, quarterCount: n }))} sur la
+          saison.
+        </Text>
+      ) : null;
     body =
       r.status === "invalid" ? (
         <Text role="alert" size="sm">
@@ -219,6 +234,7 @@ function ChangeDialog({
               Prix calculé aujourd’hui avec la grille : {formatEuros(r.price.netPriceCents)}.
             </Text>
           )}
+          {quarterly}
           <DiscountImpacts impacts={r.existingImpacts} />
         </>
       ) : r.price.status === "error" ? (
@@ -234,6 +250,7 @@ function ChangeDialog({
               Prix enregistré à l’inscription : {formatEuros(r.savedNetPriceCents)}.
             </Text>
           )}
+          {quarterly}
           <DiscountImpacts impacts={r.existingImpacts} />
         </>
       );

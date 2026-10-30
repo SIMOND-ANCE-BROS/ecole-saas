@@ -173,7 +173,7 @@ export default async function FrontDesk() {
                       </TableTd>
                       <TableTd>{d.students}</TableTd>
                       <TableTd ta="right" className="tabular-nums">
-                        {formatEuros(d.netPriceCents)}
+                        {formatEuros(d.seasonDueCents)}
                       </TableTd>
                     </TableTr>
                   ))}

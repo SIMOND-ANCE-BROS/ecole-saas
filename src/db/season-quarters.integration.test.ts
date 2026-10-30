@@ -256,7 +256,7 @@ describe("quarterly enrollments (#291)", () => {
     expect(r).toEqual({
       ok: false,
       message:
-        "Le trimestre « 3e trimestre » est payé par des inscriptions : il ne peut pas être supprimé, seulement modifié.",
+        "Le trimestre « 3e trimestre » est compté dans des inscriptions : il ne peut pas être retiré, seulement modifié.",
     });
     expect(await quartersOf()).toHaveLength(3);
   });

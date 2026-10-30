@@ -17,7 +17,7 @@ export async function seasonFigures(tx: Tx, seasonId: string): Promise<SeasonFig
   const rows = await tx
     .select({
       period: enrollment.period,
-      netPriceCents: sql<number>`${enrollment.netPriceCents}::int`,
+      netPriceCents: sql<number>`coalesce(${enrollment.netPriceCents}, 0)::int`,
       quarterCount: quarterCountSql,
     })
     .from(enrollment)
@@ -40,6 +40,8 @@ export type LastEnrollment = {
   payer: string;
   students: string;
   netPriceCents: number;
+  /** What it costs over the season: a quarterly price once per covered quarter (#291). */
+  seasonDueCents: number;
 };
 
 /** Latest enrollments of the season, most recent first. */
@@ -52,6 +54,8 @@ export async function lastEnrollments(tx: Tx, seasonId: string, limit = 8): Prom
       firstName: person.firstName,
       companyName: person.companyName,
       netPriceCents: enrollment.netPriceCents,
+      period: enrollment.period,
+      quarterCount: quarterCountSql,
       students: sql<string | null>`(
         SELECT string_agg(DISTINCT coalesce(d.first_name, d.last_name), ' et ') FROM enrollment_course ic
         JOIN person d ON d.id = ic.student_id
@@ -70,5 +74,10 @@ export async function lastEnrollments(tx: Tx, seasonId: string, limit = 8): Prom
     payer: displayedName(l),
     students: l.students ?? "—",
     netPriceCents: l.netPriceCents ?? 0,
+    seasonDueCents: seasonDueCents({
+      period: l.period,
+      netPriceCents: l.netPriceCents ?? 0,
+      quarterCount: l.quarterCount,
+    }),
   }));
 }

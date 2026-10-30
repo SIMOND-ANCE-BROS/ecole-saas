@@ -330,7 +330,7 @@ export async function balanceOf(tx: Tx, payerId: string, today: string): Promise
     .select({
       status: enrollment.status,
       period: enrollment.period,
-      netPriceCents: sql<number>`${enrollment.netPriceCents}::int`,
+      netPriceCents: sql<number>`coalesce(${enrollment.netPriceCents}, 0)::int`,
       billingEntityId: enrollment.billingEntityId,
       // A quarterly enrollment owes its price once per covered quarter (#291).
       quarterCount: quarterCountSql,

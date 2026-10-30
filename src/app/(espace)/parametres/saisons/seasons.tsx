@@ -256,7 +256,13 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
           value={copy}
           onChange={(c) => setCopy(c ?? "")}
         />
-        <Button type="submit" loading={inProgress} className="sm:col-span-2 sm:justify-self-start lg:col-span-4">
+        <Button
+          type="submit"
+          // One primary button per view: the quarters editor's while it is open.
+          variant={quartersOf ? "default" : "filled"}
+          loading={inProgress}
+          className="sm:col-span-2 sm:justify-self-start lg:col-span-4"
+        >
           Créer la saison
         </Button>
       </Paper>

@@ -140,6 +140,11 @@ describe("quarterlyDues (#291 Q2 default: each quarter due at its own cashing)",
     );
   });
 
+  it("a free quarter (0 €) and a one-cent price stay whole cents per quarter", () => {
+    expect(quarterlyDues(QUARTERS, 0, "2027-09-15").map((d) => d.amountCents)).toEqual([0, 0, 0]);
+    expect(quarterlyDues(QUARTERS, 1, "2027-09-15").map((d) => d.amountCents)).toEqual([1, 1, 1]);
+  });
+
   it("refuses a price that is not whole cents", () => {
     expect(() => quarterlyDues(QUARTERS, 110.5, "2027-09-15")).toThrow(TypeError);
   });

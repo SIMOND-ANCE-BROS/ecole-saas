@@ -386,8 +386,8 @@ export async function saveSeasonQuarters(tx: Tx, seasonId: string, entries: Quar
         ok: false,
         message:
           named.length === 1
-            ? `Le trimestre ${named[0]} est payé par des inscriptions : il ne peut pas être supprimé, seulement modifié.`
-            : `Les trimestres ${named.join(", ")} sont payés par des inscriptions : ils ne peuvent pas être supprimés, seulement modifiés.`,
+            ? `Le trimestre ${named[0]} est compté dans des inscriptions : il ne peut pas être retiré, seulement modifié.`
+            : `Les trimestres ${named.join(", ")} sont comptés dans des inscriptions : ils ne peuvent pas être retirés, seulement modifiés.`,
       };
     await tx.delete(seasonQuarter).where(
       inArray(

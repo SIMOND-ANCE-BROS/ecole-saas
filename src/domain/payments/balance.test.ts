@@ -90,6 +90,16 @@ describe("quarterly enrollments (#291)", () => {
     expect(s).toMatchObject({ due: 22_000, outsideCalculation: { waitlist: 18_000 } });
   });
 
+  it("a quarterly drop-out still owes every covered quarter (#291 Q2 default with #284 Q1)", () => {
+    const s = payerBalance(
+      [{ status: "dropped", period: "quarter", quarterCount: 3, netPriceCents: 11_000 }],
+      [],
+      [],
+      TODAY,
+    );
+    expect(s).toMatchObject({ due: 33_000, outsideCalculation: {} });
+  });
+
   it("amountDue counts each quarter covered", () => {
     expect(
       amountDue([
