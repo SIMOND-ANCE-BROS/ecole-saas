@@ -8,6 +8,8 @@ import { PHONE_LABEL, PHONE_TABLE } from "../../_ui/phone-table";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { changeSeason, newSeason } from "../actions";
 import { type ActionResult, settle } from "@/lib/action-result";
+import { quarterMonths } from "@/domain/enrollment/quarters";
+import { QuartersEditor } from "./quarters";
 
 const date = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const day = (iso: string) => date.format(new Date(`${iso}T00:00:00Z`));
@@ -34,6 +36,8 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
   const [edition, setEdition] = useState<{ id: string; label: string; startDate: string; endDate: string } | null>(
     null,
   );
+  // Season whose quarters are being edited (#291), under the table.
+  const [quartersOf, setQuartersOf] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   // Lessons a date edit left outside the season's new dates (#270): a warning, not a refusal.
   const [note, setNote] = useState<string | null>(null);
@@ -73,6 +77,7 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
                 <Table.Th>Au</Table.Th>
                 <Table.Th className="text-right">Cours</Table.Th>
                 <Table.Th className="text-right">Tarifs</Table.Th>
+                <Table.Th>Trimestres</Table.Th>
                 <Table.Th>
                   <span className="sr-only">Actions</span>
                 </Table.Th>
@@ -129,6 +134,7 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
                     </Table.Td>
                     <Table.Td className={`${number} max-sm:hidden`}>{s.course}</Table.Td>
                     <Table.Td className={`${number} max-sm:hidden`}>{s.tariffs}</Table.Td>
+                    <Table.Td className={`${cell} max-sm:hidden`}>{s.quarters.map(quarterMonths).join(" · ")}</Table.Td>
                     <Table.Td className={`${cell} ${PHONE_TABLE.title}`}>
                       <Group gap="xs" wrap="nowrap">
                         <Button
@@ -167,16 +173,32 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
                       <span className={PHONE_LABEL}>Tarifs</span>
                       {s.tariffs}
                     </Table.Td>
+                    <Table.Td className={cell}>
+                      <span className={PHONE_LABEL}>Trimestres</span>
+                      {s.quarters.length === 0 ? "Aucun" : s.quarters.map(quarterMonths).join(" · ")}
+                    </Table.Td>
                     <Table.Td className={`${cell} max-sm:ml-auto`}>
-                      <Button
-                        size="compact-sm"
-                        variant="subtle"
-                        aria-label={`Modifier la saison ${s.label}`}
-                        data-edit={s.id}
-                        onClick={() => setEdition(s)}
-                      >
-                        Modifier
-                      </Button>
+                      <Group gap={4} wrap="nowrap">
+                        <Button
+                          size="compact-sm"
+                          variant="subtle"
+                          aria-label={`Modifier la saison ${s.label}`}
+                          data-edit={s.id}
+                          onClick={() => setEdition(s)}
+                        >
+                          Modifier
+                        </Button>
+                        <Button
+                          size="compact-sm"
+                          variant="subtle"
+                          aria-label={`Trimestres de la saison ${s.label}`}
+                          aria-expanded={quartersOf === s.id}
+                          data-quarters={s.id}
+                          onClick={() => setQuartersOf(quartersOf === s.id ? null : s.id)}
+                        >
+                          Trimestres
+                        </Button>
+                      </Group>
                     </Table.Td>
                   </Table.Tr>
                 ),
@@ -185,6 +207,19 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
           </Table>
         </Paper>
       )}
+      {seasons
+        .filter((s) => s.id === quartersOf)
+        .map((s) => (
+          <QuartersEditor
+            key={s.id}
+            season={s}
+            onClose={() => {
+              // Back to the row's « Trimestres » button, as after a season edit (#186).
+              focusAfter(`[data-quarters="${s.id}"]`);
+              setQuartersOf(null);
+            }}
+          />
+        ))}
 
       <Paper
         withBorder
@@ -221,7 +256,13 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
           value={copy}
           onChange={(c) => setCopy(c ?? "")}
         />
-        <Button type="submit" loading={inProgress} className="sm:col-span-2 sm:justify-self-start lg:col-span-4">
+        <Button
+          type="submit"
+          // One primary button per view: the quarters editor's while it is open.
+          variant={quartersOf ? "default" : "filled"}
+          loading={inProgress}
+          className="sm:col-span-2 sm:justify-self-start lg:col-span-4"
+        >
           Créer la saison
         </Button>
       </Paper>

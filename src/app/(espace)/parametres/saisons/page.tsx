@@ -14,7 +14,7 @@ export default async function SeasonsPage() {
     <section className="flex w-full min-w-0 flex-col gap-4">
       <SettingsHeader
         title="Saisons"
-        help="La saison courante est celle qui contient la date du jour. Une nouvelle saison peut reprendre la grille tarifaire, les réductions et les carnets d’une autre."
+        help="La saison courante est celle qui contient la date du jour. Une nouvelle saison peut reprendre la grille tarifaire, les réductions et les carnets d’une autre. Ses trimestres, proposés d’office et modifiables, servent aux inscriptions au trimestre."
       />
       <Seasons seasons={seasons} />
     </section>

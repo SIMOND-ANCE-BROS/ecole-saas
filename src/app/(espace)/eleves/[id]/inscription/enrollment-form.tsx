@@ -21,6 +21,7 @@ import { INITIAL_STATUSES, isFull, overfilledCourses } from "@/domain/enrollment
 import { ENROLLMENT_STATUS_LABELS } from "@/domain/enrollment/statuses";
 import { deferredQuery } from "@/lib/deferred-query";
 import { formatEuros } from "@/lib/money";
+import { quarterMonths, seasonDueCents } from "@/domain/enrollment/quarters";
 import { preview, enroll, type FormInput } from "./actions";
 import { ManualPriceField } from "./manual-price-field";
 import { readTypedPrice, type TypedPrice } from "@/domain/enrollment/manual-price";
@@ -110,6 +111,8 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
   );
   // One enrollment per business selling the chosen courses (#299), all saved together.
   const news = result?.status === "ok" ? result.newEnrollments : [];
+  // Quarters a quarterly enrollment made today covers (#291); none for a yearly one.
+  const quarters = result?.status === "ok" ? result.quarters : [];
   // A price typed for one enrollment (#292) belongs to its business, students, formula and
   // courses: another selection shows the computed price again, the typed one comes back with it.
   const typedKey = (n: (typeof news)[number]) =>
@@ -140,7 +143,9 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
       ? [{ billingEntityId: p.n.billingEntityId, priceCents: p.read.cents, reason: p.typed.reason }]
       : [],
   );
-  const totalLabel = status === "active" ? "Total" : "Total à la confirmation";
+  // Quarterly (#291): the computed total is one quarter's; the season's follows the quarters.
+  const totalLabel =
+    quarters.length > 0 ? "Prix par trimestre" : status === "active" ? "Total" : "Total à la confirmation";
 
   // Courses suited to the chosen student(s)' age first; the others remain selectable.
   const chosenAges = students.filter((d) => studentIds.includes(d.id) && d.age !== null).map((d) => d.age as number);
@@ -502,15 +507,51 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
                 typed={typed}
                 onChange={(t) => setTyped(n, t)}
                 tried={tried}
+                quarterCount={quarters.length}
               />
             )}
           </section>
         ))}
         {news.length > 1 && prices.every((p) => p.netPriceCents !== null) && (
           <Text component="div" size="md" fw={600} className="flex justify-between gap-2 border-t border-bordure pt-3">
-            <span>{status === "active" ? "Total des inscriptions" : "Total à la confirmation"}</span>
+            <span>
+              {quarters.length > 0
+                ? "Total par trimestre"
+                : status === "active"
+                  ? "Total des inscriptions"
+                  : "Total à la confirmation"}
+            </span>
             <span className="tabular-nums">{formatEuros(prices.reduce((t, p) => t + (p.netPriceCents ?? 0), 0))}</span>
           </Text>
+        )}
+        {quarters.length > 0 && prices.length > 0 && prices.every((p) => p.netPriceCents !== null) && (
+          // Quarterly (#291): the price above is one quarter's, owed for each remaining quarter.
+          <div className="flex flex-col gap-1 border-t border-bordure pt-3">
+            <Text size="sm">
+              {quarters.length === 1 ? "Trimestre restant" : `${quarters.length} trimestres restants`} :{" "}
+              {quarters.map((q) => `${q.label} (${quarterMonths(q)})`).join(", ")}
+            </Text>
+            <Text component="div" size="md" fw={600} className="flex justify-between gap-2">
+              <span>{status === "active" ? "Total de la saison" : "Total de la saison, dû à la confirmation"}</span>
+              <span className="tabular-nums">
+                {formatEuros(
+                  prices.reduce(
+                    (t, p) =>
+                      t +
+                      seasonDueCents({
+                        period: "quarter",
+                        netPriceCents: p.netPriceCents ?? 0,
+                        quarterCount: quarters.length,
+                      }),
+                    0,
+                  ),
+                )}
+              </span>
+            </Text>
+            <Text size="xs" c="dimmed">
+              Un trimestre commencé compte en entier ; chaque trimestre se règle à son début.
+            </Text>
+          </div>
         )}
         {result?.status === "ok" && <DiscountImpacts impacts={result.existingImpacts} />}
         {refusal && (

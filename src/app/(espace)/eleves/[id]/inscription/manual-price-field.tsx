@@ -16,7 +16,13 @@ export function ManualPriceField({
   typed,
   onChange,
   tried,
+  quarterCount = 0,
 }: {
+  /**
+   * Quarters a quarterly enrollment covers (#291): the typed price is then one quarter's,
+   * owed for each of them. 0 for any other period.
+   */
+  quarterCount?: number;
   /** Unique per enrollment of the form, for the field ids. */
   id: string;
   computedNetCents: number | null;
@@ -50,7 +56,7 @@ export function ManualPriceField({
     <div className="flex flex-col gap-2">
       <TextInput
         id={`${id}-prix`}
-        label="Prix saisi (€)"
+        label={quarterCount > 0 ? "Prix par trimestre (€)" : "Prix saisi (€)"}
         required
         inputMode="decimal"
         styles={{ input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } }}
@@ -58,7 +64,15 @@ export function ManualPriceField({
         onChange={(e) => onChange({ ...typed, price: e.currentTarget.value })}
         onBlur={() => setLeft(true)}
         // Off the grid, the message above already says the price is to be typed.
-        description={computedNetCents === null ? undefined : "Le prix saisi remplace le prix calculé."}
+        description={
+          quarterCount > 0
+            ? quarterCount === 1
+              ? "Dû pour le trimestre restant."
+              : `Dû pour chacun des ${quarterCount} trimestres restants.`
+            : computedNetCents === null
+              ? undefined
+              : "Le prix saisi remplace le prix calculé."
+        }
         error={read.problem && shown ? read.problem : undefined}
       />
       {(read.differs || computedNetCents === null) && (
@@ -89,7 +103,7 @@ export function ManualPriceField({
       )}
       {read.differs && read.cents !== null && (
         <Text size="sm" fw={600} className="flex justify-between gap-2">
-          <span>Prix retenu</span>
+          <span>{quarterCount > 0 ? "Prix retenu par trimestre" : "Prix retenu"}</span>
           <span className="tabular-nums">{formatEuros(read.cents)}</span>
         </Text>
       )}

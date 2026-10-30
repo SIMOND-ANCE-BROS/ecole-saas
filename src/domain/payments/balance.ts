@@ -1,3 +1,6 @@
+import { seasonDueCents } from "../enrollment/quarters";
+import type { Period } from "../tariff/types";
+
 /**
  * A payer's balance (#97), in cents. Until invoices exist, the amount due is
  * computed from the payer's enrollments and lesson packs, and payments are
@@ -13,7 +16,11 @@ export type EnrollmentStatus = "trial" | "waitlist" | "active" | "dropped" | "en
  */
 export const DUE_STATUSES: EnrollmentStatus[] = ["active", "ended", "dropped"];
 
-export type EnrollmentDue = { status: EnrollmentStatus; netPriceCents: number };
+/**
+ * An enrollment as the balance counts it: its net price, owed once a season, or once per
+ * covered quarter for a quarterly package (#291, `seasonDueCents`).
+ */
+export type EnrollmentDue = { status: EnrollmentStatus; period: Period; netPriceCents: number; quarterCount: number };
 export type BalancePayment = { amountCents: number; plannedPayment: string | null };
 
 export type Balance = {
@@ -29,7 +36,7 @@ export type Balance = {
 
 /** Amount due for these enrollments: the ones whose status is in `DUE_STATUSES`. */
 export const amountDue = (enrollments: readonly EnrollmentDue[]): number =>
-  enrollments.filter((i) => DUE_STATUSES.includes(i.status)).reduce((s, i) => s + i.netPriceCents, 0);
+  enrollments.filter((i) => DUE_STATUSES.includes(i.status)).reduce((s, i) => s + seasonDueCents(i), 0);
 
 export function payerBalance(
   enrollments: EnrollmentDue[],
@@ -40,8 +47,8 @@ export function payerBalance(
   let due = lessonPacks.reduce((s, c) => s + c.priceCents, 0);
   const outsideCalculation: Balance["outsideCalculation"] = {};
   for (const i of enrollments) {
-    if (DUE_STATUSES.includes(i.status)) due += i.netPriceCents;
-    else outsideCalculation[i.status] = (outsideCalculation[i.status] ?? 0) + i.netPriceCents;
+    if (DUE_STATUSES.includes(i.status)) due += seasonDueCents(i);
+    else outsideCalculation[i.status] = (outsideCalculation[i.status] ?? 0) + seasonDueCents(i);
   }
   const paid = payments.reduce((s, p) => s + p.amountCents, 0);
   const toCollect = payments

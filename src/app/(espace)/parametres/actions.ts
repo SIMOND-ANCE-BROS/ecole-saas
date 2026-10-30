@@ -23,6 +23,9 @@ import {
   validSeasonInput,
   validSiteInput,
   validName,
+  saveSeasonQuarters,
+  validQuarters,
+  type QuarterEntry,
 } from "@/db/settings";
 import { syncRoomSeasons } from "@/db/lessons";
 import { todayInParis } from "@/domain/people/age";
@@ -109,6 +112,15 @@ export async function changeSeason(
   revalidatePath("/planning", "layout");
   revalidatePath("/");
   return r.ok ? { ok: true, note: outsideNote(r.outside) } : { ok: false, message: r.message };
+}
+
+/** The season's quarters (#291), saved as a whole; enrollments already saved keep theirs. */
+export async function seasonQuarters(seasonId: string, entries: QuarterEntry[]) {
+  return act(
+    "saisons",
+    () => refusal(validId, seasonId, SEASON_GONE) ?? refusal(validQuarters, entries),
+    (tx) => saveSeasonQuarters(tx, seasonId, entries),
+  );
 }
 
 export async function newDiscipline(name: string) {

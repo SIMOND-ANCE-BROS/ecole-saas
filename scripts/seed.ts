@@ -8,6 +8,7 @@ import postgres from "postgres";
 import { withSchool } from "../src/db";
 import { syncLessons } from "../src/db/lessons";
 import { todayInParis } from "../src/domain/people/age";
+import { defaultQuarters } from "../src/domain/enrollment/quarters";
 import { createAccount } from "../src/lib/accounts";
 
 const PASSWORD = process.env.SEED_MOT_DE_PASSE ?? "demo-ecole-de-danse";
@@ -99,6 +100,13 @@ async function main() {
     INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${school.id}, '2026-2027', '2026-09-01', '2027-06-30')
     ON CONFLICT DO NOTHING`;
+  // Its default quarters (#291), as `createSeason` gives a new season, once.
+  const [demoSeason] = await admin`SELECT id FROM season WHERE school_id = ${school.id} AND label = '2026-2027'`;
+  for (const q of defaultQuarters({ startDate: "2026-09-01", endDate: "2027-06-30" }))
+    await admin`
+      INSERT INTO season_quarter (school_id, season_id, label, start_date, end_date)
+      SELECT ${school.id}, ${demoSeason.id}, ${q.label}, ${q.startDate}, ${q.endDate}
+      WHERE NOT EXISTS (SELECT 1 FROM season_quarter WHERE season_id = ${demoSeason.id} AND label = ${q.label})`;
 
   for (const account of ACCOUNTS) {
     const [existing] = await admin`SELECT id FROM "user" WHERE email = ${account.email}`;

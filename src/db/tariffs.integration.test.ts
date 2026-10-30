@@ -1,4 +1,5 @@
 import postgres from "postgres";
+import { withDefaultQuarters } from "./season-quarters.integration-helpers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
 import { enrollmentPreview } from "./enrollments";
@@ -30,11 +31,15 @@ let payer: string;
 
 const price = (s: Parameters<typeof savePrice>[2]) => withSchool(school, (tx) => savePrice(tx, season, s));
 
+// Enrolled before the season's first quarter: a quarterly enrollment covers its three quarters (#291).
+const ENROLLED_ON = "2026-09-15";
+
 beforeAll(async () => {
   [{ id: school }] = await schoolWithDefaultEntity(admin, "École A", `ta-${suffix}`);
   [{ id: otherSchool }] = await schoolWithDefaultEntity(admin, "École B", `tb-${suffix}`);
   [{ id: season }] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
+  await withDefaultQuarters(admin, season);
   [{ id: zumba }] = await admin`INSERT INTO discipline (school_id, name) VALUES (${school}, 'Zumba') RETURNING id`;
   const [s] =
     await admin`INSERT INTO site (school_id, name, address) VALUES (${school}, 'Centre', '1 rue Test') RETURNING id`;
@@ -132,12 +137,18 @@ describe("tariff grid", () => {
 
   it("the tariff engine uses the entered price", async () => {
     const r = await withSchool(school, (tx) =>
-      enrollmentPreview(tx, payer, season, {
-        studentIds: [ines],
-        audience: "adult",
-        period: "quarter",
-        courseIds: [zumbaCourse],
-      }),
+      enrollmentPreview(
+        tx,
+        payer,
+        season,
+        {
+          studentIds: [ines],
+          audience: "adult",
+          period: "quarter",
+          courseIds: [zumbaCourse],
+        },
+        ENROLLED_ON,
+      ),
     );
     expect(r).toMatchObject({ status: "ok", newEnrollments: [{ price: { status: "ok", grossPriceCents: 12500 } }] });
   });

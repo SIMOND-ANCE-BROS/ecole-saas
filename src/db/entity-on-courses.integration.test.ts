@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
+import { withDefaultQuarters } from "./season-quarters.integration-helpers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { OTHER_ENTITY } from "../domain/lesson-pack/pack";
 import { createCourse, entityLock, readCourse, updateCourse, type CourseInput } from "./courses";
@@ -33,6 +34,9 @@ const child = (studentId: string, courseIds: string[]): EnrollmentInput => ({
   courseIds,
 });
 
+// Enrolled before the season's first quarter: a quarterly enrollment covers its three quarters (#291).
+const ENROLLED_ON = "2026-09-15";
+
 beforeAll(async () => {
   [{ id: ids.school }] = await schoolWithDefaultEntity(admin, "Zz École deux entreprises", `zz2e-${suffix}`);
   const s = ids.school;
@@ -50,6 +54,7 @@ beforeAll(async () => {
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${s}, ${frontDesk}, 'front_desk')`;
   [{ id: ids.season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${s}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
+  await withDefaultQuarters(admin, ids.season);
   for (const [combination, price] of [
     ["{45}", 8500],
     ["{60}", 11000],
@@ -155,7 +160,7 @@ describe("composite foreign keys carrying the entity", () => {
 describe("enrolling in courses of two entities (#299)", () => {
   it("previews one enrollment per entity, each priced on its own courses", async () => {
     const p = await withSchool(ids.school, (tx) =>
-      enrollmentPreview(tx, ids.payer, ids.season, child(ids.zoe, [ids.rockB, ids.jazzA])),
+      enrollmentPreview(tx, ids.payer, ids.season, child(ids.zoe, [ids.rockB, ids.jazzA]), ENROLLED_ON),
     );
     if (p.status !== "ok") throw new Error(p.message);
     // The default entity first; not the « 45 min + 1 h » package of both (165 €).
@@ -171,7 +176,7 @@ describe("enrolling in courses of two entities (#299)", () => {
     const run = () =>
       withSchool(ids.school, (tx) =>
         once(tx, "enrollment", key, { payerId: ids.payer, ...entry }, storedEnrollment, () =>
-          saveEnrollment(tx, frontDesk, ids.payer, ids.season, entry),
+          saveEnrollment(tx, frontDesk, ids.payer, ids.season, entry, ENROLLED_ON),
         ),
       );
     const first = await run();
@@ -192,7 +197,7 @@ describe("enrolling in courses of two entities (#299)", () => {
   it("counts the siblings across entities, each discount on its own enrollment", async () => {
     // Zoé is enrolled with both entities (previous test); Noé takes a course of B only.
     const p = await withSchool(ids.school, (tx) =>
-      enrollmentPreview(tx, ids.payer, ids.season, child(ids.noe, [ids.rockB])),
+      enrollmentPreview(tx, ids.payer, ids.season, child(ids.noe, [ids.rockB]), ENROLLED_ON),
     );
     if (p.status !== "ok") throw new Error(p.message);
     expect(p.newEnrollments).toMatchObject([

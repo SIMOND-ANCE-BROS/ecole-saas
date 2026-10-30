@@ -1,6 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
+import { withDefaultQuarters } from "./season-quarters.integration-helpers";
 import { overlapping } from "./overlap.integration-helpers";
 import { defaultEntityFor } from "./billing-entity.integration-helpers";
 import { correctPayment, collect, paymentsOf, balanceOf } from "./payments";
@@ -51,7 +52,12 @@ beforeAll(async () => {
   const [s] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${school}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents) VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${s.id}, ${payer}, 'child', 'year', 30000)`;
-  await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents, status) VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${s.id}, ${payer}, 'child', 'quarter', 9000, 'trial')`;
+  // A quarterly trial covering the season's last two quarters (#291): 2 × 90,00 € shown apart.
+  const [, q2, q3] = await withDefaultQuarters(admin, s.id);
+  const [trial] =
+    await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents, status) VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${s.id}, ${payer}, 'child', 'quarter', 9000, 'trial') RETURNING id`;
+  for (const q of [q2, q3])
+    await admin`INSERT INTO enrollment_quarter (school_id, enrollment_id, quarter_id) VALUES (${school}, ${trial.id}, ${q})`;
   await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents) VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${s.id}, ${bounced}, 'child', 'year', 12000)`;
 });
 
@@ -96,7 +102,7 @@ describe("collect", () => {
     if (!r.ok) throw new Error(r.message);
     ids = r.ids;
     expect(await withSchool(school, (tx) => balanceOf(tx, payer, TODAY))).toEqual({
-      total: { due: 30000, paid: 30000, remaining: 0, toCollect: 20000, outsideCalculation: { trial: 9000 } },
+      total: { due: 30000, paid: 30000, remaining: 0, toCollect: 20000, outsideCalculation: { trial: 18000 } },
       // A single entity: nothing per entity to show (#300).
       byEntity: [],
       severalEntities: false,

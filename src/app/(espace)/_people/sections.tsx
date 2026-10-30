@@ -198,7 +198,13 @@ export function Enrollments({
                       {PUBLIC[i.audience]}, {PERIOD[i.period]}
                     </TableTd>
                     <TableTd ta="right" className="tabular-nums" c={owed ? undefined : "dimmed"}>
-                      {formatEuros(i.netPriceCents)}
+                      {formatEuros(i.seasonDueCents)}
+                      {i.period === "quarter" && (
+                        // Quarterly (#291): the quarter's price, once per covered quarter.
+                        <Text size="xs" c="dimmed" ta="right" title={i.quarters.join(", ")}>
+                          {formatEuros(i.netPriceCents)} × {i.quarterCount} trimestre{i.quarterCount > 1 ? "s" : ""}
+                        </Text>
+                      )}
                       {i.priceReason && (
                         // A price typed by the front desk (#292): its reason under it.
                         <Text size="xs" c="dimmed" ta="right">
