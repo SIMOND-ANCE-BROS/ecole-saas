@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Tx } from "./index";
 import { alreadyCorrected } from "./payments-sql";
 import { auditLog, bankDepositPayment, installment, invoice, payment, paymentAllocation } from "./schema";
+import { lockInstallments, lockPayers, lockPayersAndPayments, lockPaymentsOfPayer } from "./payment-locks";
 import {
   type AllocatablePayment,
   allocateFifo,
@@ -19,14 +20,11 @@ import {
 } from "../domain/payments/allocation";
 
 /**
- * Payment allocations (#305), written under the locks of #254: the payments first
- * (`FOR NO KEY UPDATE`, as correctPayment, createDeposit and refundPayer take them, ordered
- * by id), then the installments they may settle, ordered by id, each in a statement of its
- * own, before any total is read: the reads then see what a transaction that held the same
- * rows committed. NO KEY UPDATE on the installment too: an allocation's key to it takes
- * KEY SHARE, which only `discardDrafts` (FOR UPDATE) waits for. A row lock fires no
- * trigger; the installment's status alone is updated, as the frozen invoice allows
- * (`0052_invoice_drafts.sql`). Always within `withSchool()` (RLS).
+ * Payment allocations (#305), written under the locks of #254, taken in the order of every
+ * payment write (`src/db/payment-locks.ts`, #360): the payers, then the payments, then the
+ * installments they may settle, each ordered by id, before any total is read: the reads then
+ * see what a transaction that held the same rows committed. The callers lock the payers first
+ * (asking again here returns at once). Always within `withSchool()` (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
@@ -50,15 +48,6 @@ function issuedInstallmentsOf(pairs: readonly Pair[]): SQL | undefined {
 }
 
 type Pair = { payerId: string; billingEntityId: string };
-
-async function lockPayments(tx: Tx, ids: readonly string[]) {
-  await tx
-    .select({ id: payment.id })
-    .from(payment)
-    .where(inArray(payment.id, [...ids]))
-    .orderBy(asc(payment.id))
-    .for("no key update");
-}
 
 /** A payer's payments to one entity as the allocation reads them, oldest first. */
 async function paymentsOf(tx: Tx, p: Pair): Promise<(AllocatablePayment & { date: string })[]> {
@@ -138,20 +127,14 @@ export async function allocatePayments(
 ): Promise<AllocationOutcome> {
   const ids = [...new Set(paymentIds)].filter(isUuid);
   if (ids.length === 0) return { ok: true, allocations: [] };
-  await lockPayments(tx, ids);
+  await lockPayersAndPayments(tx, ids);
   const pairs = await tx
     .selectDistinct({ payerId: payment.payerId, billingEntityId: payment.billingEntityId })
     .from(payment)
     .where(and(inArray(payment.id, ids), sql`${payment.amountCents} > 0`))
     .orderBy(asc(payment.billingEntityId), asc(payment.payerId));
   if (pairs.length === 0) return { ok: true, allocations: [] };
-  const locked = await tx
-    .select({ id: installment.id })
-    .from(installment)
-    .innerJoin(invoice, eq(invoice.id, installment.invoiceId))
-    .where(issuedInstallmentsOf(pairs))
-    .orderBy(asc(installment.id))
-    .for("no key update", { of: installment });
+  const locked = await lockInstallments(tx, issuedInstallmentsOf(pairs));
   if (locked.length === 0) return { ok: true, allocations: [] };
 
   const written: Allocation[] = [];
@@ -172,10 +155,7 @@ export async function allocatePayments(
       .where(
         and(
           issuedInstallmentsOf([pair]),
-          inArray(
-            installment.id,
-            locked.map((l) => l.id),
-          ),
+          inArray(installment.id, locked),
           inArray(installment.status, [...OPEN_INSTALLMENT_STATUSES]),
         ),
       );
@@ -235,7 +215,8 @@ export async function allocatePayments(
 /**
  * Allocates whatever a payer's collected money to one entity has left (#305), for when an
  * invoice is issued after the payer paid (#304 calls it once the tool issues one). Locks
- * every payment of the payer with that entity, ordered by id, before `allocatePayments`.
+ * the payer, then every payment of the payer with that entity, ordered by id
+ * (`src/db/payment-locks.ts`), before `allocatePayments`.
  */
 export async function allocatePayer(
   tx: Tx,
@@ -245,18 +226,9 @@ export async function allocatePayer(
   today: string,
 ): Promise<AllocationOutcome> {
   if (!isUuid(payerId) || !isUuid(billingEntityId)) return { ok: true, allocations: [] };
-  const rows = await tx
-    .select({ id: payment.id })
-    .from(payment)
-    .where(and(eq(payment.payerId, payerId), eq(payment.billingEntityId, billingEntityId)))
-    .orderBy(asc(payment.id))
-    .for("no key update");
-  return allocatePayments(
-    tx,
-    actor,
-    rows.map((r) => r.id),
-    today,
-  );
+  await lockPayers(tx, [payerId]);
+  const ids = await lockPaymentsOfPayer(tx, payerId, billingEntityId);
+  return allocatePayments(tx, actor, ids, today);
 }
 
 /**
@@ -266,8 +238,9 @@ export async function allocatePayer(
  * collected); then, for their payer with that entity, whatever all the allocations hold beyond
  * the payer's money net of refunds (`heldCapCents`: a correction made after a refund). Taken
  * from the latest due installment first (`releaseExcess`), whose status goes back to partial,
- * overdue or upcoming. Same lock order as `allocatePayments`: the payments, then every
- * installment of the payer's issued invoices with that entity, ordered by id.
+ * overdue or upcoming. Same lock order as `allocatePayments` (`src/db/payment-locks.ts`): the
+ * payers, the payments, then every installment of the payer's issued invoices with that
+ * entity, ordered by id.
  */
 export async function releaseUncovered(
   tx: Tx,
@@ -277,20 +250,14 @@ export async function releaseUncovered(
 ): Promise<void> {
   const ids = [...new Set(paymentIds)].filter(isUuid);
   if (ids.length === 0) return;
-  await lockPayments(tx, ids);
+  await lockPayersAndPayments(tx, ids);
   const pairs = await tx
     .selectDistinct({ payerId: payment.payerId, billingEntityId: payment.billingEntityId })
     .from(payment)
     .where(inArray(payment.id, ids))
     .orderBy(asc(payment.billingEntityId), asc(payment.payerId));
   if (pairs.length === 0) return;
-  await tx
-    .select({ id: installment.id })
-    .from(installment)
-    .innerJoin(invoice, eq(invoice.id, installment.invoiceId))
-    .where(issuedInstallmentsOf(pairs))
-    .orderBy(asc(installment.id))
-    .for("no key update", { of: installment });
+  await lockInstallments(tx, issuedInstallmentsOf(pairs));
   const touched = new Set<string>();
   for (const pair of pairs) {
     const payments = await paymentsOf(tx, pair);

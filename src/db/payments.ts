@@ -13,7 +13,6 @@ import {
   invoice,
   member,
   payment,
-  person,
   user,
 } from "./schema";
 import { issuePath } from "../lib/form-errors";
@@ -35,6 +34,7 @@ import { mayCancelRefund, refundCancellationRefusal, refundLeftCents } from "../
 import { quarterCountSql } from "./enrollments";
 import { alreadyCorrected } from "./payments-sql";
 import { allocatePayments, releaseUncovered } from "./allocations";
+import { lockPayers, lockPayersAndPayments, lockPayments, lockPaymentsOfPayer } from "./payment-locks";
 import { allOrNothing } from "./all-or-nothing";
 import { SETTLED_INVOICE_STATUS } from "../domain/payments/allocation";
 import { todayInParis } from "../domain/people/age";
@@ -42,8 +42,9 @@ import { todayInParis } from "../domain/people/age";
 /**
  * Payments (#97): payments recorded against the payer, immutable
  * (trigger); an error is fixed by a negative payment linked to the original
- * payment. Every write leaves a trace in the audit log. Always within
- * the `withSchool()` transaction (RLS).
+ * payment. Every write leaves a trace in the audit log and takes its locks in the
+ * order of `src/db/payment-locks.ts` (#360): payer, payments, installments. Always
+ * within the `withSchool()` transaction (RLS).
  */
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
@@ -132,7 +133,9 @@ export async function collect(
   if (billingEntityId !== undefined && !isUuid(billingEntityId))
     return { ok: false, message: "Entreprise introuvable ou inactive." };
   if (!isUuid(payerId)) return { ok: false, message: "Payeur introuvable." };
-  const [p] = await tx.select({ id: person.id }).from(person).where(eq(person.id, payerId));
+  // Rank 1 of the lock order (#360), before the inserts take KEY SHARE on the payer: a refund
+  // saved at the same moment waits for these payments, or they wait for it.
+  const [p] = await lockPayers(tx, [payerId]);
   if (!p) return { ok: false, message: "Payeur introuvable." };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
@@ -220,13 +223,13 @@ export async function correctPayment(
   if (!Number.isInteger(amountCents) || amountCents <= 0) return { ok: false, message: "Montant invalide" };
   if (!z.iso.date().safeParse(today).success) return { ok: false, message: "Date invalide." };
   // Two corrections of the same payment wait for each other (#247), so the total read
-  // below includes a correction saved at the same moment. NO KEY UPDATE, not UPDATE: the
-  // correction's foreign key to this payment takes KEY SHARE, which UPDATE would block.
-  // The lock is its own statement: a query that waits on a lock keeps its first snapshot
-  // for the subquery of the total, a new statement sees the other correction once
-  // committed. A row lock fires no trigger (payment_immutable is on UPDATE and DELETE).
-  // createDeposit takes the same lock: whether the payment is deposited is read after it.
-  await tx.select({ id: payment.id }).from(payment).where(eq(payment.id, paymentId)).for("no key update");
+  // below includes a correction saved at the same moment. The payer first, then the payment
+  // (`src/db/payment-locks.ts`, #360): the reverse entry's key to the payer takes KEY SHARE,
+  // so a refund holding the payer while waiting for this payment would otherwise deadlock.
+  // The locks are statements of their own: a query that waits on a lock keeps its first
+  // snapshot for the subquery of the total, a new statement sees the other correction once
+  // committed. createDeposit takes the same locks: whether the payment is deposited is read after them.
+  await lockPayersAndPayments(tx, [paymentId]);
   const [o] = await tx
     .select({
       payerId: payment.payerId,
@@ -496,9 +499,9 @@ export async function refundPayer(
   if (!who) return { ok: false, message: "Accès refusé." };
   if (!mayRefund(who.role)) return { ok: false, message: "Seule la direction peut rembourser un payeur." };
   // Refunds of one payer wait for each other, and for a payment or a reverse entry being
-  // saved for them (its key to the payer takes KEY SHARE, which FOR UPDATE waits for):
-  // the balance read below, in a statement of its own, sees what they wrote once committed.
-  const [p] = await tx.select({ id: person.id }).from(person).where(eq(person.id, payerId)).for("update");
+  // saved for them (rank 1 of `src/db/payment-locks.ts`, which every payment write takes
+  // first): the balance read below, in a statement of its own, sees what they wrote once committed.
+  const [p] = await lockPayers(tx, [payerId]);
   if (!p) return { ok: false, message: "Payeur introuvable." };
   const entities = await listEntities(tx);
   let entity: string;
@@ -513,15 +516,10 @@ export async function refundPayer(
     if (!entities.some((e) => e.id === billingEntityId)) return { ok: false, message: "Entreprise introuvable." };
     entity = billingEntityId;
   }
-  // Same lock as createDeposit, cancelDeposit and correctPayment (#247, #253), ordered by id:
+  // Rank 2, as createDeposit, cancelDeposit and correctPayment take it (#247, #253, #360):
   // a deposit cancelled or a cheque rejected at the same moment is seen by the read below,
   // so a refund is never paid out of a cheque that is no longer collected.
-  await tx
-    .select({ id: payment.id })
-    .from(payment)
-    .where(and(eq(payment.payerId, payerId), eq(payment.billingEntityId, entity)))
-    .orderBy(asc(payment.id))
-    .for("no key update");
+  await lockPaymentsOfPayer(tx, payerId, entity);
   const owed = (await balancesOf(tx, payerId, today))?.refunds[entity];
   const refusal = refundRefusal({
     amountCents: r.data.amountCents,
@@ -563,8 +561,8 @@ export async function refundPayer(
  * payment_corrects_same_entity_fk), method, reference and issuer, dated today, at most what
  * is not cancelled yet. It is never on a deposit slip (`toDeposit`) and the payment log
  * totals it with the refunds (`totals`). Management only (`mayCancelRefund`, default of #346
- * question 1). The payer is locked first, as `refundPayer` does: two cancellations of one
- * refund, or a cancellation and a refund for the same payer, wait for each other.
+ * question 1). The payer is locked first, then the refund (`src/db/payment-locks.ts`): two
+ * cancellations of one refund, or a cancellation and a refund for the same payer, wait for each other.
  */
 export async function cancelRefundPayment(
   tx: Tx,
@@ -584,10 +582,9 @@ export async function cancelRefundPayment(
     .from(payment)
     .where(eq(payment.id, refundId));
   if (!r) return { ok: false, message: "Ce remboursement n’existe plus." };
-  await tx.select({ id: person.id }).from(person).where(eq(person.id, r.payerId)).for("update");
-  // Only the refund's row: a correction or a deposit locks the payments it handles, then
-  // waits for the payer when it inserts, so locking them all here could deadlock with it.
-  await tx.select({ id: payment.id }).from(payment).where(eq(payment.id, refundId)).for("no key update");
+  await lockPayers(tx, [r.payerId]);
+  // Only the refund's row: nothing else of the payer is read to cancel it.
+  await lockPayments(tx, [refundId]);
   // A statement of its own, after the locks: it sees a cancellation committed meanwhile.
   const [o] = await tx
     .select({
