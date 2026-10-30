@@ -167,3 +167,25 @@ describe("busy ranges", () => {
     expect(attendances[1]).toBe("https://graph.test/page2 Bearer acces");
   });
 });
+
+describe("timeouts", () => {
+  it("bounds every call to the provider in time (#337)", async () => {
+    const signals: (AbortSignal | null | undefined)[] = [];
+    const record = (json: unknown) => async (_u: string | URL | Request, init?: RequestInit) => {
+      signals.push(init?.signal);
+      return response(200, json);
+    };
+    const window = { start: new Date("2026-11-01T00:00:00Z"), end: new Date("2026-12-01T00:00:00Z") };
+    await refresh("google", id, "r", record({ access_token: "a" }));
+    await exchangeCode(
+      "google",
+      id,
+      { code: "c", verifier: "v", redirectUri: "https://app.test/r" },
+      record({ refresh_token: "r" }),
+    );
+    await readBusyRanges("google", "a", window, record({}));
+    await readBusyRanges("microsoft", "a", window, record({ value: [] }));
+    expect(signals).toHaveLength(4);
+    for (const s of signals) expect(s).toBeInstanceOf(AbortSignal);
+  });
+});
