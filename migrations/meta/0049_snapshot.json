@@ -1,5 +1,5 @@
 {
-  "id": "66e93241-60c8-4d87-af8f-b0dce54eb37f",
+  "id": "be1d2c76-b606-4fda-b008-d30cd720fabe",
   "prevId": "0d401d78-b2e3-451b-8206-e639f3c28460",
   "version": "7",
   "dialect": "postgresql",
@@ -653,6 +653,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "default_vat_treatment_id": {
+          "name": "default_vat_treatment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "is_default": {
           "name": "is_default",
           "type": "boolean",
@@ -705,6 +711,21 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "billing_entity_default_vat_treatment_same_school_fk": {
+          "name": "billing_entity_default_vat_treatment_same_school_fk",
+          "tableFrom": "billing_entity",
+          "tableTo": "vat_treatment",
+          "columnsFrom": [
+            "school_id",
+            "default_vat_treatment_id"
+          ],
+          "columnsTo": [
+            "school_id",
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -1174,6 +1195,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "vat_treatment_id": {
+          "name": "vat_treatment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "discipline_id": {
           "name": "discipline_id",
           "type": "uuid",
@@ -1274,6 +1301,13 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {
@@ -1320,6 +1354,21 @@
           "columnsFrom": [
             "school_id",
             "billing_entity_id"
+          ],
+          "columnsTo": [
+            "school_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "course_vat_treatment_same_school_fk": {
+          "name": "course_vat_treatment_same_school_fk",
+          "tableFrom": "course",
+          "tableTo": "vat_treatment",
+          "columnsFrom": [
+            "school_id",
+            "vat_treatment_id"
           ],
           "columnsTo": [
             "school_id",
@@ -2162,105 +2211,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.enrollment_quarter": {
-      "name": "enrollment_quarter",
-      "schema": "",
-      "columns": {
-        "school_id": {
-          "name": "school_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "enrollment_id": {
-          "name": "enrollment_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "quarter_id": {
-          "name": "quarter_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "enrollment_quarter_quarter_id_index": {
-          "name": "enrollment_quarter_quarter_id_index",
-          "columns": [
-            {
-              "expression": "quarter_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "enrollment_quarter_school_id_school_id_fk": {
-          "name": "enrollment_quarter_school_id_school_id_fk",
-          "tableFrom": "enrollment_quarter",
-          "tableTo": "school",
-          "columnsFrom": [
-            "school_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "enrollment_quarter_enrollment_same_school_fk": {
-          "name": "enrollment_quarter_enrollment_same_school_fk",
-          "tableFrom": "enrollment_quarter",
-          "tableTo": "enrollment",
-          "columnsFrom": [
-            "school_id",
-            "enrollment_id"
-          ],
-          "columnsTo": [
-            "school_id",
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "enrollment_quarter_quarter_same_school_fk": {
-          "name": "enrollment_quarter_quarter_same_school_fk",
-          "tableFrom": "enrollment_quarter",
-          "tableTo": "season_quarter",
-          "columnsFrom": [
-            "school_id",
-            "quarter_id"
-          ],
-          "columnsTo": [
-            "school_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "enrollment_quarter_enrollment_id_quarter_id_pk": {
-          "name": "enrollment_quarter_enrollment_id_quarter_id_pk",
-          "columns": [
-            "enrollment_id",
-            "quarter_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.installment": {
       "name": "installment",
       "schema": "",
@@ -3058,12 +3008,49 @@
           "primaryKey": false,
           "notNull": true
         },
+        "incl_tax_cents": {
+          "name": "incl_tax_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "excl_tax_cents": {
+          "name": "excl_tax_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vat_cents": {
+          "name": "vat_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vat_treatment_id": {
+          "name": "vat_treatment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vat_category": {
+          "name": "vat_category",
+          "type": "vat_category",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
         "vat_rate_bps": {
           "name": "vat_rate_bps",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "vat_mention": {
+          "name": "vat_mention",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "enrollment_id": {
           "name": "enrollment_id",
@@ -3114,6 +3101,21 @@
           "columns": [
             {
               "expression": "lesson_pack_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "invoice_line_vat_treatment_id_index": {
+          "name": "invoice_line_vat_treatment_id_index",
+          "columns": [
+            {
+              "expression": "vat_treatment_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3189,12 +3191,40 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "invoice_line_vat_treatment_same_school_fk": {
+          "name": "invoice_line_vat_treatment_same_school_fk",
+          "tableFrom": "invoice_line",
+          "tableTo": "vat_treatment",
+          "columnsFrom": [
+            "school_id",
+            "vat_treatment_id"
+          ],
+          "columnsTo": [
+            "school_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "invoice_line_vat_sum": {
+          "name": "invoice_line_vat_sum",
+          "value": "\"invoice_line\".\"excl_tax_cents\" + \"invoice_line\".\"vat_cents\" = \"invoice_line\".\"incl_tax_cents\""
+        },
+        "invoice_line_vat_rate": {
+          "name": "invoice_line_vat_rate",
+          "value": "\"invoice_line\".\"vat_rate_bps\" BETWEEN 0 AND 10000 AND (\"invoice_line\".\"vat_category\" = 'standard') = (\"invoice_line\".\"vat_rate_bps\" > 0)"
+        },
+        "invoice_line_vat_mention": {
+          "name": "invoice_line_vat_mention",
+          "value": "\"invoice_line\".\"vat_category\" = 'standard' OR (\"invoice_line\".\"vat_cents\" = 0 AND coalesce(btrim(\"invoice_line\".\"vat_mention\"), '') <> '')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.invoicing_connector": {
@@ -3524,6 +3554,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "vat_treatment_id": {
+          "name": "vat_treatment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "people_count": {
           "name": "people_count",
           "type": "smallint",
@@ -3572,6 +3608,21 @@
           "columnsFrom": [
             "school_id",
             "billing_entity_id"
+          ],
+          "columnsTo": [
+            "school_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "lesson_pack_vat_treatment_same_school_fk": {
+          "name": "lesson_pack_vat_treatment_same_school_fk",
+          "tableFrom": "lesson_pack",
+          "tableTo": "vat_treatment",
+          "columnsFrom": [
+            "school_id",
+            "vat_treatment_id"
           ],
           "columnsTo": [
             "school_id",
@@ -4969,125 +5020,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.season_quarter": {
-      "name": "season_quarter",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "school_id": {
-          "name": "school_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "season_id": {
-          "name": "season_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "label": {
-          "name": "label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "start_date": {
-          "name": "start_date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "end_date": {
-          "name": "end_date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "season_quarter_season_id_start_date_index": {
-          "name": "season_quarter_season_id_start_date_index",
-          "columns": [
-            {
-              "expression": "season_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "start_date",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "season_quarter_school_id_school_id_fk": {
-          "name": "season_quarter_school_id_school_id_fk",
-          "tableFrom": "season_quarter",
-          "tableTo": "school",
-          "columnsFrom": [
-            "school_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "season_quarter_season_same_school_fk": {
-          "name": "season_quarter_season_same_school_fk",
-          "tableFrom": "season_quarter",
-          "tableTo": "season",
-          "columnsFrom": [
-            "school_id",
-            "season_id"
-          ],
-          "columnsTo": [
-            "school_id",
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "season_quarter_school_id_id_unique": {
-          "name": "season_quarter_school_id_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "school_id",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "season_quarter_dates": {
-          "name": "season_quarter_dates",
-          "value": "\"season_quarter\".\"end_date\" >= \"season_quarter\".\"start_date\""
-        },
-        "season_quarter_label": {
-          "name": "season_quarter_label",
-          "value": "btrim(\"season_quarter\".\"label\") <> ''"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.session": {
       "name": "session",
       "schema": "",
@@ -6003,6 +5935,105 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.vat_treatment": {
+      "name": "vat_treatment",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "school_id": {
+          "name": "school_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "vat_category",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rate_bps": {
+          "name": "rate_bps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "mention": {
+          "name": "mention",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "vat_treatment_school_id_school_id_fk": {
+          "name": "vat_treatment_school_id_school_id_fk",
+          "tableFrom": "vat_treatment",
+          "tableTo": "school",
+          "columnsFrom": [
+            "school_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "vat_treatment_school_id_id_unique": {
+          "name": "vat_treatment_school_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "school_id",
+            "id"
+          ]
+        },
+        "vat_treatment_label_unique": {
+          "name": "vat_treatment_label_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "school_id",
+            "label"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "vat_treatment_rate": {
+          "name": "vat_treatment_rate",
+          "value": "\"vat_treatment\".\"rate_bps\" BETWEEN 0 AND 10000 AND (\"vat_treatment\".\"category\" = 'standard') = (\"vat_treatment\".\"rate_bps\" > 0)"
+        },
+        "vat_treatment_mention": {
+          "name": "vat_treatment_mention",
+          "value": "\"vat_treatment\".\"category\" = 'standard' OR coalesce(btrim(\"vat_treatment\".\"mention\"), '') <> ''"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.verification": {
       "name": "verification",
       "schema": "",
@@ -6272,6 +6303,15 @@
         "manual",
         "google",
         "microsoft"
+      ]
+    },
+    "public.vat_category": {
+      "name": "vat_category",
+      "schema": "public",
+      "values": [
+        "standard",
+        "exempt",
+        "not_subject"
       ]
     },
     "public.vat_regime": {

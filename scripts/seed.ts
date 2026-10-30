@@ -86,6 +86,16 @@ async function main() {
     INSERT INTO billing_entity (school_id, name, legal_name, vat_regime, bank_account_label, is_default)
     SELECT ${school.id}, 'Danse Démo', 'Danse Démo EI', 'not_applicable', 'Compte courant Banque Démo', true
     WHERE NOT EXISTS (SELECT 1 FROM billing_entity WHERE school_id = ${school.id})`;
+  // Its VAT treatments (#301), demo wording; its business proposes the exemption by default.
+  await admin`
+    INSERT INTO vat_treatment (school_id, label, category, rate_bps, mention)
+    VALUES (${school.id}, 'Exonéré (démo)', 'exempt', 0, 'Mention d’exonération de démonstration'),
+      (${school.id}, 'TVA 20 % (démo)', 'standard', 2000, NULL)
+    ON CONFLICT (school_id, label) DO NOTHING`;
+  await admin`
+    UPDATE billing_entity SET default_vat_treatment_id =
+      (SELECT id FROM vat_treatment WHERE school_id = ${school.id} AND label = 'Exonéré (démo)')
+    WHERE school_id = ${school.id} AND default_vat_treatment_id IS NULL`;
   await admin`
     INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${school.id}, '2026-2027', '2026-09-01', '2027-06-30')

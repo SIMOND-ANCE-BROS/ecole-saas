@@ -381,8 +381,10 @@ describe("cancelling a mistaken enrollment", () => {
     const [e] = f.enrollments;
     const [inv] =
       await admin`INSERT INTO invoice (school_id, billing_entity_id, payer_id) VALUES (${school}, ${entity}, ${f.payer}) RETURNING id`;
-    await admin`INSERT INTO invoice_line (school_id, billing_entity_id, invoice_id, label, unit_price_cents, enrollment_id)
-      VALUES (${school}, ${entity}, ${inv.id}, 'Forfait', 11000, ${e})`;
+    await admin`INSERT INTO invoice_line (school_id, billing_entity_id, invoice_id, label, unit_price_cents, enrollment_id,
+        incl_tax_cents, excl_tax_cents, vat_cents, vat_treatment_id, vat_category, vat_mention)
+      VALUES (${school}, ${entity}, ${inv.id}, 'Forfait', 11000, ${e}, 11000, 11000, 0,
+        (SELECT default_vat_treatment_id FROM billing_entity WHERE id = ${entity}), 'exempt', 'Zz mention')`;
     expect(await inSchool((tx) => cancelEnrollment(tx, desk, e))).toEqual({
       ok: false,
       message: "Cette inscription est facturée : passez par un avoir.",

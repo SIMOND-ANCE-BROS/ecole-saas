@@ -348,8 +348,15 @@
     {
       "idx": 49,
       "version": "7",
-      "when": 1793333895739,
-      "tag": "0049_season_quarters",
+      "when": 1793334390023,
+      "tag": "0049_vat_treatment",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793336983209,
+      "tag": "0050_season_quarters",
       "breakpoints": true
     }
   ]
