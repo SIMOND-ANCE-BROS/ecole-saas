@@ -1,0 +1,1 @@
+CREATE INDEX "submission_school_id_created_at_index" ON "submission" USING btree ("school_id","created_at");

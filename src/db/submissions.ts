@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Tx } from ".";
 import { allOrNothing } from "./all-or-nothing";
@@ -93,4 +93,28 @@ export async function once<T extends { ok: true }, F extends Refused>(
   // Only technical ids are stored (and the planning link of a course), never personal data.
   await tx.update(submission).set({ result: r }).where(mine);
   return r;
+}
+
+/**
+ * How long a submission key is kept (#262). A retry after a lost response comes
+ * within seconds or minutes; a week leaves room for a form left open over a weekend.
+ */
+export const SUBMISSION_RETENTION_DAYS = 7;
+
+/**
+ * Deletes the current school's submission keys older than the retention (#262),
+ * under RLS: only the school set by `withSchool()` is touched. Uses the
+ * `(school_id, created_at)` index. Returns the number of keys deleted.
+ */
+export async function purgeOldSubmissions(tx: Tx): Promise<number> {
+  const deleted = await tx
+    .delete(submission)
+    .where(
+      and(
+        eq(submission.schoolId, CURRENT_SCHOOL),
+        lt(submission.createdAt, sql`now() - make_interval(days => ${SUBMISSION_RETENTION_DAYS})`),
+      ),
+    )
+    .returning({ key: submission.key });
+  return deleted.length;
 }
