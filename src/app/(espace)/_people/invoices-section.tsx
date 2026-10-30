@@ -69,7 +69,7 @@ function InvoiceCard({ i, showEntity, isDirector }: { i: PayerInvoice; showEntit
       )}
       {isDirector && (p.kind === "rejected" || p.kind === "issued_mismatch") && (
         <TextLink href="/parametres/entreprises" size="sm" className="self-start">
-          Reprendre dans Factures à reprendre
+          Reprendre cette facture
         </TextLink>
       )}
       <ul aria-label="Lignes de la facture" className="flex flex-col text-sm">

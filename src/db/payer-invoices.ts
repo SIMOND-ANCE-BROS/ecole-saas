@@ -241,14 +241,14 @@ export async function rejectedInTool(
 ): Promise<{ toolRef: string | null; connector: EntityConnectorConfig | null } | null> {
   if (!isUuid(invoiceId)) return null;
   const [row] = await tx
-    .select({ toolRef: invoice.toolRef, billingEntityId: invoice.billingEntityId })
+    .select({ toolRef: invoice.toolRef, tool: invoice.tool, billingEntityId: invoice.billingEntityId })
     .from(invoice)
     .where(and(eq(invoice.id, invoiceId), eq(invoice.status, "rejected"), isNull(invoice.creditNoteOf)));
   if (!row) return null;
-  return {
-    toolRef: row.toolRef,
-    connector: row.toolRef ? await connectorConfigOf(tx, row.billingEntityId) : null,
-  };
+  const connector = row.toolRef ? await connectorConfigOf(tx, row.billingEntityId) : null;
+  // Another tool than the one holding the document would answer « not found » for a document
+  // it never had: never asked (the caller then treats the tool as unreachable).
+  return { toolRef: row.toolRef, connector: connector && connector.tool === row.tool ? connector : null };
 }
 
 /**

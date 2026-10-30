@@ -343,6 +343,11 @@ describe("a rejected invoice (#352)", () => {
     expect(await abandon(a.id)).toMatchObject({ ok: false, message: expect.stringMatching(/l’a émise/) });
     expect((await live(ids.a))[0]).toMatchObject({ id: a.id, status: "rejected" });
     expect(await billing(ids.yearly)).toBe(1);
+    // Its business now on another tool: that tool is never asked, the lines stay.
+    await admin`UPDATE invoicing_connector SET tool = 'pennylane' WHERE billing_entity_id = ${ids.a}`;
+    store.documents.delete("zz-held");
+    expect(await abandon(a.id)).toMatchObject({ ok: false, message: expect.stringMatching(/pas pu être consulté/) });
+    await admin`UPDATE invoicing_connector SET tool = 'fake' WHERE billing_entity_id = ${ids.a}`;
     // Cancelled in the tool: abandoned.
     store.documents.set("zz-held", { ...doc, status: "cancelled" });
     expect(await abandon(a.id)).toEqual({ ok: true, result: "abandoned" });
