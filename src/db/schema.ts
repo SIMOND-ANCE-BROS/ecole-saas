@@ -823,9 +823,18 @@ export const enrollment = pgTable(
     // Day of the drop-out (#284): the student stays on attendance sheets up to this day included.
     // Only on a dropped enrollment; NULL on a drop-out written before #284.
     droppedOn: date("dropped_on"),
+    // Grid price and its discounts, as computed by the tariff engine. Without a package in the
+    // grid for the courses (price typed by hand, #292), the typed price and no discount.
     grossPriceCents: integer("gross_price_cents").notNull(),
     discountCents: integer("discount_cents").notNull().default(0),
-    netPriceCents: integer("net_price_cents").generatedAlwaysAs(sql`gross_price_cents - discount_cents`),
+    // Price typed by the front desk instead of the computed one (#292), with its reason: the
+    // final price, the siblings discount does not apply to it (Q2 default). NULL: the grid's.
+    manualPriceCents: integer("manual_price_cents"),
+    priceReason: text("price_reason"),
+    // What the enrollment costs: `savedNetPrice` in `domain/enrollment/manual-price.ts`.
+    netPriceCents: integer("net_price_cents").generatedAlwaysAs(
+      sql`coalesce(manual_price_cents, gross_price_cents - discount_cents)`,
+    ),
     discounts: text("discounts")
       .array()
       .notNull()
@@ -834,6 +843,11 @@ export const enrollment = pgTable(
   },
   (t) => [
     check("enrollment_dropped_on", sql`${t.droppedOn} IS NULL OR ${t.status} = 'dropped'`),
+    // A typed price always has its reason (#292), and is never negative.
+    check(
+      "enrollment_manual_price",
+      sql`(${t.manualPriceCents} IS NULL) = (${t.priceReason} IS NULL) AND (${t.manualPriceCents} IS NULL OR ${t.manualPriceCents} >= 0)`,
+    ),
     index().on(t.payerId, t.seasonId),
     sameSchoolTarget(t),
     sameEntityTarget(t),
