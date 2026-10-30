@@ -1,3 +1,4 @@
+import { formatEuros, parseEuros } from "../../lib/money";
 import type { Role } from "../team/rules";
 
 /**
@@ -58,6 +59,31 @@ export function manualPriceRefusal(
 export function keptManualPrice(computedNetCents: number | null, manual: ManualPrice | null): ManualPrice | null {
   if (manual === null || !differs(computedNetCents, manual)) return null;
   return { priceCents: manual.priceCents, reason: manual.reason.trim() };
+}
+
+/** What the front desk typed in the form for one enrollment; `price` as typed, in euros. */
+export type TypedPrice = { price: string; reason: string };
+
+export const PRICE_TOO_HIGH = `Prix trop élevé (${formatEuros(MAX_PRICE_CENTS)} au plus)`;
+
+/**
+ * The form's reading of a typed price: its cents, whether it differs from the computed
+ * price (then a reason is needed), whether it can be sent, and what is wrong with the
+ * amount. No typed price: sendable when the grid prices the enrollment.
+ */
+export function readTypedPrice(computedNetCents: number | null, typed: TypedPrice | null) {
+  if (typed === null) return { cents: null, differs: false, valid: computedNetCents !== null, problem: null };
+  const cents = typed.price.trim() === "" ? null : parseEuros(typed.price);
+  const differs = cents !== null && cents !== computedNetCents;
+  const problem =
+    typed.price.trim() === ""
+      ? "Indiquez le prix"
+      : cents === null
+        ? "Montant non reconnu"
+        : cents > MAX_PRICE_CENTS
+          ? PRICE_TOO_HIGH
+          : null;
+  return { cents, differs, valid: problem === null && (!differs || typed.reason.trim() !== ""), problem };
 }
 
 /**

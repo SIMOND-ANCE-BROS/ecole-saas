@@ -825,6 +825,8 @@ export const enrollment = pgTable(
     droppedOn: date("dropped_on"),
     // Grid price and its discounts, as computed by the tariff engine. Without a package in the
     // grid for the courses (price typed by hand, #292), the typed price and no discount.
+    // With a typed price, both (and `discounts`) are for information only: what is owed and
+    // invoiced is `net_price_cents`, with no discount line (#292 Q2).
     grossPriceCents: integer("gross_price_cents").notNull(),
     discountCents: integer("discount_cents").notNull().default(0),
     // Price typed by the front desk instead of the computed one (#292), with its reason: the
@@ -843,10 +845,10 @@ export const enrollment = pgTable(
   },
   (t) => [
     check("enrollment_dropped_on", sql`${t.droppedOn} IS NULL OR ${t.status} = 'dropped'`),
-    // A typed price always has its reason (#292), and is never negative.
+    // A typed price always has its reason, never blank (#292), and is never negative.
     check(
       "enrollment_manual_price",
-      sql`(${t.manualPriceCents} IS NULL) = (${t.priceReason} IS NULL) AND (${t.manualPriceCents} IS NULL OR ${t.manualPriceCents} >= 0)`,
+      sql`(${t.manualPriceCents} IS NULL) = (${t.priceReason} IS NULL) AND (${t.manualPriceCents} IS NULL OR ${t.manualPriceCents} >= 0) AND (${t.priceReason} IS NULL OR btrim(${t.priceReason}) <> '')`,
     ),
     index().on(t.payerId, t.seasonId),
     sameSchoolTarget(t),

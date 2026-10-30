@@ -2,11 +2,59 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_REASON_LENGTH,
   NO_GRID_PRICE,
+  PRICE_TOO_HIGH,
   REASON_REQUIRED,
   keptManualPrice,
   manualPriceRefusal,
+  readTypedPrice,
   savedNetPrice,
 } from "./manual-price";
+
+describe("readTypedPrice (the form's reading)", () => {
+  it("nothing typed: sendable when the grid prices it, not off the grid", () => {
+    expect(readTypedPrice(11000, null)).toMatchObject({ valid: true, differs: false });
+    expect(readTypedPrice(null, null)).toMatchObject({ valid: false });
+  });
+
+  it("an empty price is missing", () => {
+    expect(readTypedPrice(null, { price: " ", reason: "x" })).toMatchObject({
+      valid: false,
+      problem: "Indiquez le prix",
+    });
+  });
+
+  it("an amount being typed (« 80, ») is not readable yet", () => {
+    expect(readTypedPrice(11000, { price: "80,", reason: "x" })).toMatchObject({
+      valid: false,
+      problem: "Montant non reconnu",
+    });
+  });
+
+  it("refuses an amount above the form's bound", () => {
+    expect(readTypedPrice(11000, { price: "10000,01", reason: "x" })).toMatchObject({
+      valid: false,
+      problem: PRICE_TOO_HIGH,
+    });
+  });
+
+  it("the computed price typed as is needs no reason", () => {
+    expect(readTypedPrice(11000, { price: "110,00", reason: "" })).toMatchObject({
+      cents: 11000,
+      differs: false,
+      valid: true,
+    });
+  });
+
+  it("another price needs its reason, off the grid too", () => {
+    expect(readTypedPrice(11000, { price: "80", reason: "" })).toMatchObject({
+      cents: 8000,
+      differs: true,
+      valid: false,
+    });
+    expect(readTypedPrice(11000, { price: "80", reason: "Pro rata" })).toMatchObject({ valid: true });
+    expect(readTypedPrice(null, { price: "80", reason: "" })).toMatchObject({ differs: true, valid: false });
+  });
+});
 
 describe("manualPriceRefusal", () => {
   it("accepts the computed price when nothing is typed", () => {

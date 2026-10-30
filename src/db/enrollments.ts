@@ -711,7 +711,13 @@ async function confirmationOf(tx: Tx, e: Saved): Promise<ConfirmationPreview> {
     price,
     manualPrice,
     // Q2 (#292): a typed price stays the final price, whatever the grid says now.
-    netPriceCents: manualPrice?.priceCents ?? (price.status === "ok" ? price.netPriceCents : null),
+    // It stands in for a missing package only: without a course, nothing can be confirmed.
+    netPriceCents:
+      price.status === "ok"
+        ? (manualPrice?.priceCents ?? price.netPriceCents)
+        : price.error.code === "missing_combination"
+          ? (manualPrice?.priceCents ?? null)
+          : null,
     savedNetPriceCents: savedNetPrice(e),
     existingImpacts: await impactsOn(tx, e.payerId, existing, result.enrollments),
   };
@@ -745,7 +751,9 @@ export async function confirmEnrollment(
   const preview = await confirmationOf(tx, e);
   if (preview.status === "invalid") return { ok: false, message: preview.message };
   const r = preview.price;
-  if (r.status === "error" && preview.manualPrice === null) return { ok: false, message: r.error.message };
+  // A typed price stands in for a missing package only; any other refusal (no course) stays.
+  if (r.status === "error" && (preview.manualPrice === null || r.error.code !== "missing_combination"))
+    return { ok: false, message: r.error.message };
   if (preview.netPriceCents !== expectedNetCents)
     return { ok: false, message: "Le prix a changé depuis son affichage : vérifiez-le avant de confirmer." };
   const who = await memberOf(tx, userId);
@@ -770,15 +778,30 @@ export async function confirmEnrollment(
       })
       .where(eq(enrollment.id, id));
   else await tx.update(enrollment).set({ status: "active" }).where(eq(enrollment.id, id));
-  const typed = e.manualPriceCents !== null ? { manualPriceCents: e.manualPriceCents } : {};
+  // The net is said on both sides: under a typed price it stays, whatever gross and discount become.
+  const typed = e.manualPriceCents !== null ? { manualPriceCents: e.manualPriceCents, reason: e.priceReason } : {};
+  const net = (p: { grossPriceCents: number; discountCents: number }) =>
+    savedNetPrice({ ...p, manualPriceCents: e.manualPriceCents });
   await tx.insert(auditLog).values({
     schoolId: CURRENT_SCHOOL,
     actor: who.id,
     targetTable: "enrollment",
     rowId: id,
     action: "update",
-    before: { status: e.status, grossPriceCents: e.grossPriceCents, discountCents: e.discountCents, ...typed },
-    after: { status: "active", grossPriceCents: price.grossPriceCents, discountCents: price.discountCents, ...typed },
+    before: {
+      status: e.status,
+      grossPriceCents: e.grossPriceCents,
+      discountCents: e.discountCents,
+      netPriceCents: net(e),
+      ...typed,
+    },
+    after: {
+      status: "active",
+      grossPriceCents: price.grossPriceCents,
+      discountCents: price.discountCents,
+      netPriceCents: net(price),
+      ...typed,
+    },
   });
   return { ok: true, id };
 }

@@ -1,29 +1,9 @@
 "use client";
 
 import { Button, Text, TextInput } from "@mantine/core";
-import { MAX_PRICE_CENTS, MAX_REASON_LENGTH, NO_GRID_PRICE } from "@/domain/enrollment/manual-price";
-import { formatEuros, parseEuros, typedEuros } from "@/lib/money";
-
-/** What the front desk typed for one enrollment (#292); `price` as typed, in euros. */
-export type TypedPrice = { price: string; reason: string };
-
-/** The typed price read: cents and whether it can be sent. */
-export function readTypedPrice(computedNetCents: number | null, typed: TypedPrice | null) {
-  if (typed === null) return { cents: null, differs: false, valid: computedNetCents !== null, problem: null };
-  const cents = typed.price.trim() === "" ? null : parseEuros(typed.price);
-  const differs = cents !== null && cents !== computedNetCents;
-  const problem =
-    typed.price.trim() === ""
-      ? computedNetCents === null
-        ? NO_GRID_PRICE
-        : "Indiquez le prix"
-      : cents === null
-        ? "Montant non reconnu"
-        : cents > MAX_PRICE_CENTS
-          ? `Prix trop élevé (${formatEuros(MAX_PRICE_CENTS)} au plus)`
-          : null;
-  return { cents, differs, valid: problem === null && (!differs || typed.reason.trim() !== ""), problem };
-}
+import { useState } from "react";
+import { MAX_REASON_LENGTH, PRICE_TOO_HIGH, readTypedPrice, type TypedPrice } from "@/domain/enrollment/manual-price";
+import { formatEuros, typedEuros } from "@/lib/money";
 
 /**
  * « Modifier le prix » of one enrollment (#292): a price typed instead of the computed
@@ -45,13 +25,17 @@ export function ManualPriceField({
   /** The front desk tried to save: missing values are said. */
   tried: boolean;
 }) {
+  // The amount was left once: an unreadable amount is said then, not while typing « 80, ».
+  const [left, setLeft] = useState(false);
   if (typed === null)
     return computedNetCents === null ? null : (
       <Button
+        id={`${id}-modifier`}
         variant="subtle"
         size="compact-sm"
         className="self-start"
         onClick={() => {
+          setLeft(false);
           onChange({ price: typedEuros(computedNetCents), reason: "" });
           // The amount is what changes: focus goes to it, selected.
           requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`#${id}-prix`)?.select());
@@ -61,6 +45,7 @@ export function ManualPriceField({
       </Button>
     );
   const read = readTypedPrice(computedNetCents, typed);
+  const shown = read.problem === PRICE_TOO_HIGH || tried || (left && typed.price.trim() !== "");
   return (
     <div className="flex flex-col gap-2">
       <TextInput
@@ -71,12 +56,10 @@ export function ManualPriceField({
         styles={{ input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } }}
         value={typed.price}
         onChange={(e) => onChange({ ...typed, price: e.currentTarget.value })}
-        description={
-          computedNetCents === null
-            ? "Pas de forfait dans la grille : saisissez le prix"
-            : `Prix calculé : ${formatEuros(computedNetCents)}. Le prix saisi est le prix final.`
-        }
-        error={read.problem && (tried || typed.price.trim() !== "") ? read.problem : undefined}
+        onBlur={() => setLeft(true)}
+        // Off the grid, the message above already says the price is to be typed.
+        description={computedNetCents === null ? undefined : "Le prix saisi remplace le prix calculé."}
+        error={read.problem && shown ? read.problem : undefined}
       />
       {(read.differs || computedNetCents === null) && (
         <TextInput
@@ -91,7 +74,16 @@ export function ManualPriceField({
         />
       )}
       {computedNetCents !== null && (
-        <Button variant="subtle" size="compact-sm" className="self-start" onClick={() => onChange(null)}>
+        <Button
+          variant="subtle"
+          size="compact-sm"
+          className="self-start"
+          onClick={() => {
+            onChange(null);
+            // The fields go away: focus goes back to « Modifier le prix », drawn again in their place.
+            requestAnimationFrame(() => document.getElementById(`${id}-modifier`)?.focus());
+          }}
+        >
           Revenir au prix calculé
         </Button>
       )}

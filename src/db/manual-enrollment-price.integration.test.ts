@@ -324,6 +324,48 @@ describe("price typed by the front desk (#292)", () => {
     expect(await row(w.id)).toMatchObject({ manual_price_cents: 20000, net_price_cents: 20000 });
   });
 
+  it("confirms a trial priced by hand on the grid: the grid price is recomputed under it, the typed price stays", async () => {
+    const trial = await withSchool(ids.school, (tx) =>
+      saveEnrollment(
+        tx,
+        frontDesk,
+        ids.otherPayer,
+        ids.season,
+        child(ids.eve, [ids.jazz45], {
+          status: "trial",
+          manualPrices: [{ billingEntityId: ids.a, priceCents: 6000, reason: "Arrivée en cours de trimestre" }],
+        }),
+      ),
+    );
+    if (!trial.ok) throw new Error(trial.message);
+    const p = await withSchool(ids.school, (tx) => confirmationPreview(tx, trial.id));
+    // Grid: 8 500 less 10 % (Tom is a sibling) = 7 650; the typed price stays.
+    expect(p).toMatchObject({ price: { status: "ok", netPriceCents: 7650 }, netPriceCents: 6000 });
+    // The grid's price is not what was shown: refused.
+    expect(await withSchool(ids.school, (tx) => confirmEnrollment(tx, frontDesk, trial.id, 7650))).toMatchObject({
+      ok: false,
+      message: expect.stringContaining("Le prix a changé"),
+    });
+    expect(await withSchool(ids.school, (tx) => confirmEnrollment(tx, frontDesk, trial.id, 6000))).toEqual({
+      ok: true,
+      id: trial.id,
+    });
+    expect(await row(trial.id)).toMatchObject({
+      gross_price_cents: 8500,
+      discount_cents: 850,
+      manual_price_cents: 6000,
+      net_price_cents: 6000,
+    });
+    const [log] = await admin`SELECT before, after FROM audit_log WHERE row_id = ${trial.id} AND action = 'update'`;
+    expect(log.before).toMatchObject({ status: "trial", netPriceCents: 6000, manualPriceCents: 6000 });
+    expect(log.after).toMatchObject({
+      status: "active",
+      netPriceCents: 6000,
+      manualPriceCents: 6000,
+      reason: "Arrivée en cours de trimestre",
+    });
+  });
+
   it("refuses a waitlist enrollment off the grid without a typed price at confirmation", async () => {
     // Not possible through saveEnrollment: written directly, as a row from before #292 could be.
     const [e] = await admin`

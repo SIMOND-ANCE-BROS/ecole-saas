@@ -22,7 +22,8 @@ import { ENROLLMENT_STATUS_LABELS } from "@/domain/enrollment/statuses";
 import { deferredQuery } from "@/lib/deferred-query";
 import { formatEuros } from "@/lib/money";
 import { preview, enroll, type FormInput } from "./actions";
-import { ManualPriceField, readTypedPrice, type TypedPrice } from "./manual-price-field";
+import { ManualPriceField } from "./manual-price-field";
+import { readTypedPrice, type TypedPrice } from "@/domain/enrollment/manual-price";
 import { orConnectionLost } from "@/lib/action-result";
 import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
 import { DiscountImpacts, PriceDetail } from "@/app/(espace)/_people/price-detail";
@@ -134,7 +135,8 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
   const complete = prices.every((p) => p.read.valid);
   const canSave = priceable && !calculation && !sending;
   const manualPrices = prices.flatMap((p) =>
-    p.typed && p.read.cents !== null
+    // Only a price apart from the computed one: kept as computed, it follows a recomputation on save.
+    p.typed && p.read.cents !== null && p.read.differs
       ? [{ billingEntityId: p.n.billingEntityId, priceCents: p.read.cents, reason: p.typed.reason }]
       : [],
   );
@@ -428,8 +430,10 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
           </Text>
           {status !== "active" && (
             <Text size="xs" fw={500}>
-              {ENROLLMENT_STATUS_LABELS[status]} : rien à régler pour l’instant, le prix sera recalculé à la
-              confirmation{prices.some((p) => p.read.differs) ? " (un prix saisi est gardé)" : ""}.
+              {ENROLLMENT_STATUS_LABELS[status]} : rien à régler pour l’instant ;{" "}
+              {prices.some((p) => p.read.differs)
+                ? "le prix saisi sera gardé à la confirmation."
+                : "le prix sera recalculé à la confirmation."}
             </Text>
           )}
         </div>
