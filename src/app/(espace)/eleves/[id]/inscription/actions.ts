@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { withSchool } from "@/db";
-import { type Preview, enrollmentPreview, saveEnrollment } from "@/db/enrollments";
+import { type Preview, enrollmentPreview, saveEnrollment, validManualPrices } from "@/db/enrollments";
 import { currentSeason } from "@/db/schedule";
 import { once, storedEnrollment } from "@/db/submissions";
 import { INITIAL_STATUSES } from "@/domain/enrollment/lifecycle";
@@ -20,6 +20,10 @@ const validInput = z.object({
 });
 
 export type FormInput = z.infer<typeof validInput>;
+
+/** What is saved: the form's input and the prices typed by the front desk, one per business at most (#292). */
+const validEnrollment = validInput.extend({ manualPrices: validManualPrices });
+export type EnrollInput = z.infer<typeof validEnrollment>;
 
 const NO_SEASON_MESSAGE = "Aucune saison n’est paramétrée.";
 const WITHOUT_SEASON: Preview = { status: "invalid", message: NO_SEASON_MESSAGE };
@@ -40,16 +44,16 @@ export async function preview(entry: FormInput): Promise<Preview> {
  * Saves the enrollment; when refused, returns the message to display. `key` is
  * generated once by the form: a retry after a lost response enrolls nothing twice (#260).
  */
-export async function enroll(entry: FormInput, key: string): Promise<{ message: string }> {
-  const { schoolId: schoolId } = await requireRole("director", "front_desk");
-  const parsed = validInput.safeParse(entry);
+export async function enroll(entry: EnrollInput, key: string): Promise<{ message: string }> {
+  const { schoolId: schoolId, userId } = await requireRole("director", "front_desk");
+  const parsed = validEnrollment.safeParse(entry);
   if (!parsed.success || !z.uuid().safeParse(key).success) return { message: "Saisie invalide." };
   const { payerId: payerId, ...rest } = parsed.data;
   const result = await withSchool(schoolId, async (tx) => {
     const season = await currentSeason(tx, todayInParis());
     if (!season) return { ok: false as const, message: NO_SEASON_MESSAGE };
     return once(tx, "enrollment", key, parsed.data, storedEnrollment, () =>
-      saveEnrollment(tx, payerId, season.id, rest),
+      saveEnrollment(tx, userId, payerId, season.id, rest),
     );
   });
   if (!result.ok) return { message: result.message };

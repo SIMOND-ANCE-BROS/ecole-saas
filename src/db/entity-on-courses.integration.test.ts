@@ -14,7 +14,7 @@ import { defaultEntityFor, schoolWithDefaultEntity } from "./billing-entity.inte
 /**
  * Courses, enrollments and lesson packs sold by one business each (#299, ADR 0006), run
  * as the application (app_user, RLS) on a school with two entities. Fictitious data
- * deleted at the end; nothing here writes to the audit log.
+ * deleted at the end, the audit log included (saving an enrollment writes to it, #292).
  */
 
 const url = process.env.DATABASE_ADMIN_URL;
@@ -88,6 +88,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // The audit log is append-only: its trigger is disabled for the cleanup only.
+  await admin.begin(async (t) => {
+    await t`ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only`;
+    await t`DELETE FROM audit_log WHERE school_id IN (${ids.school}, ${ids.otherSchool})`;
+    await t`ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only`;
+  });
   for (const t of [
     "lesson_pack_usage",
     "lesson_pack_person",
@@ -163,7 +169,7 @@ describe("enrolling in courses of two entities (#299)", () => {
     const run = () =>
       withSchool(ids.school, (tx) =>
         once(tx, "enrollment", key, { payerId: ids.payer, ...entry }, storedEnrollment, () =>
-          saveEnrollment(tx, ids.payer, ids.season, entry),
+          saveEnrollment(tx, frontDesk, ids.payer, ids.season, entry),
         ),
       );
     const first = await run();

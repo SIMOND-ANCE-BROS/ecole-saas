@@ -334,8 +334,15 @@
     {
       "idx": 47,
       "version": "7",
-      "when": 1793322686503,
-      "tag": "0047_lesson_regular_instructor",
+      "when": 1793322641683,
+      "tag": "0047_manual_enrollment_price",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793323557832,
+      "tag": "0048_lesson_regular_instructor",
       "breakpoints": true
     }
   ]

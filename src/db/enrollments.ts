@@ -14,6 +14,14 @@ import {
   type EnrollmentActions,
   type InitialStatus,
 } from "../domain/enrollment/lifecycle";
+import {
+  keptManualPrice,
+  manualPriceRefusal,
+  MAX_PRICE_CENTS,
+  MAX_REASON_LENGTH,
+  savedNetPrice,
+  type ManualPrice,
+} from "../domain/enrollment/manual-price";
 import { STATUS_PRIORITY, type EnrollmentStatus } from "../domain/enrollment/statuses";
 import { has } from "../lib/has";
 import { computeTariff } from "../domain/tariff/compute";
@@ -56,7 +64,29 @@ export type EnrollmentInput = {
   courseIds: string[];
   /** « Inscrit » by default; « À l’essai » or « En attente » for a family not committed yet (#284). */
   status?: InitialStatus;
+  /**
+   * Prices typed by the front desk (#292), at most one per business of the new enrollments
+   * (#299): it replaces the computed price of that business's enrollment, with a reason.
+   */
+  manualPrices?: ManualPriceEntry[];
 };
+
+/** A typed price for the new enrollment of one business (#292). */
+export type ManualPriceEntry = ManualPrice & { billingEntityId: string };
+
+/** What the form may send as typed prices; the rules are in `manualPriceRefusal`. */
+export const validManualPrices = z
+  .array(
+    z.object({
+      billingEntityId: z.uuid(),
+      priceCents: z.int().min(0).max(MAX_PRICE_CENTS),
+      reason: z.string().max(MAX_REASON_LENGTH * 2),
+    }),
+  )
+  .max(10);
+
+/** A typed price for a business none of the chosen courses belongs to any more. */
+export const STALE_MANUAL_PRICE = "Un prix saisi ne correspond plus aux cours choisis : vérifiez-le.";
 
 const uuid = z.uuid();
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
@@ -89,7 +119,8 @@ export async function loadDiscounts(tx: Tx, seasonId: string): Promise<DiscountR
     .where(eq(discount.seasonId, seasonId));
 }
 
-type Existing = EnrollmentRequest & { savedDeposit: number };
+/** `manual`: its price was typed by hand (#292), so a change of its discount changes nothing it costs. */
+type Existing = EnrollmentRequest & { savedDeposit: number; manual: boolean };
 
 /**
  * Enrollments of the payer for the season counted as siblings (`SIBLING_STATUSES`, #284 Q3),
@@ -102,6 +133,7 @@ async function existingEnrollments(tx: Tx, payerId: string, seasonId: string, ex
       audience: enrollment.audience,
       period: enrollment.period,
       deposit: enrollment.discountCents,
+      manual: sql<boolean>`${enrollment.manualPriceCents} IS NOT NULL`,
     })
     .from(enrollment)
     .where(
@@ -118,7 +150,7 @@ async function existingEnrollments(tx: Tx, payerId: string, seasonId: string, ex
 /** Saved enrollments with their students and courses, as requests to the engine. */
 async function withCourses(
   tx: Tx,
-  rows: { id: string; audience: Audience; period: Period; deposit: number }[],
+  rows: { id: string; audience: Audience; period: Period; deposit: number; manual: boolean }[],
 ): Promise<Existing[]> {
   if (rows.length === 0) return [];
   const relationships = await tx
@@ -150,6 +182,7 @@ async function withCourses(
       period: l.period,
       courses: [...uniqueCourses.values()],
       savedDeposit: l.deposit,
+      manual: l.manual,
     };
   });
 }
@@ -286,7 +319,8 @@ async function impactsOn(
   recomputed: EnrollmentResult[],
 ): Promise<ExistingImpact[]> {
   const impacts = discountImpacts(
-    existing.map((e) => ({ reference: e.reference, savedDiscountCents: e.savedDeposit })),
+    // A typed price is final (#292 Q2): its discount moving changes nothing to report.
+    existing.filter((e) => !e.manual).map((e) => ({ reference: e.reference, savedDiscountCents: e.savedDeposit })),
     recomputed,
   );
   if (impacts.length === 0) return [];
@@ -305,28 +339,62 @@ async function impactsOn(
  * Saves the enrollments at the prices recomputed here (never the ones sent by the
  * browser): one per business selling the chosen courses (#299), all or none. `id` is
  * the first (the default entity's when it sells one of the courses), `ids` all of them.
+ * A price typed by the front desk (#292) replaces the computed one of its business's
+ * enrollment, with a reason, or prices a combination the grid has no package for. Each
+ * enrollment is written to the audit log (technical ids, amounts and the typed reason).
  */
 export async function saveEnrollment(
   tx: Tx,
+  userId: string,
   payerId: string,
   seasonId: string,
   entry: EnrollmentInput,
 ): Promise<{ ok: true; id: string; ids: string[] } | { ok: false; message: string }> {
-  if (!uuid.safeParse(payerId).success) return { ok: false, message: "Saisie invalide." };
+  const typed = validManualPrices.safeParse(entry.manualPrices ?? []);
+  if (!uuid.safeParse(payerId).success || !typed.success) return { ok: false, message: "Saisie invalide." };
+  if (new Set(typed.data.map((m) => m.billingEntityId)).size !== typed.data.length)
+    return { ok: false, message: "Saisie invalide." };
   await lockPayer(tx, payerId);
   const preview = await enrollmentPreview(tx, payerId, seasonId, entry);
   if (preview.status === "invalid") return { ok: false, message: preview.message };
+  if (!typed.data.every((m) => preview.newEnrollments.some((n) => n.billingEntityId === m.billingEntityId)))
+    return { ok: false, message: STALE_MANUAL_PRICE };
+  const who = await memberOf(tx, userId);
+  if (!who) return { ok: false, message: "Accès refusé." };
+
   const several = preview.newEnrollments.length > 1;
-  for (const n of preview.newEnrollments)
-    if (n.price.status === "error")
-      return { ok: false, message: several ? `${n.entity} : ${n.price.error.message}` : n.price.error.message };
+  const named = (n: NewEnrollment, message: string) => ({
+    ok: false as const,
+    message: several ? `${n.entity} : ${message}` : message,
+  });
+  const priced: { n: NewEnrollment; manual: ManualPrice | null }[] = [];
+  for (const n of preview.newEnrollments) {
+    const m = typed.data.find((x) => x.billingEntityId === n.billingEntityId);
+    const manual = m ? { priceCents: m.priceCents, reason: m.reason } : null;
+    // Only a missing package is priced by hand; an enrollment without a course stays refused.
+    if (n.price.status === "error" && (manual === null || n.price.error.code !== "missing_combination"))
+      return named(n, n.price.error.message);
+    const computedNetCents = n.price.status === "ok" ? n.price.netPriceCents : null;
+    const refusal = manualPriceRefusal({ computedNetCents, manual }, who.role);
+    if (refusal) return named(n, refusal);
+    priced.push({ n, manual: keptManualPrice(computedNetCents, manual) });
+  }
 
   const studentIds = [...new Set(entry.studentIds)];
+  const status = entry.status ?? "active";
   const ids: string[] = [];
-  for (const n of preview.newEnrollments) {
+  for (const { n, manual } of priced) {
     const r = n.price;
-    // Checked above: every new enrollment is priced.
-    if (r.status === "error") continue;
+    // Without a package (checked above: a price is then typed), the typed price and no discount.
+    const price =
+      r.status === "ok"
+        ? {
+            tariffId: r.tariffRowId,
+            grossPriceCents: r.grossPriceCents,
+            discountCents: r.discountCents,
+            discounts: r.discounts.filter((d) => d.status === "applied").map((d) => d.code),
+          }
+        : { tariffId: null, grossPriceCents: manual?.priceCents ?? 0, discountCents: 0, discounts: [] };
     const [{ id }] = await tx
       .insert(enrollment)
       .values({
@@ -334,16 +402,43 @@ export async function saveEnrollment(
         billingEntityId: n.billingEntityId,
         payerId: payerId,
         seasonId: seasonId,
-        status: entry.status ?? "active",
-        tariffId: r.tariffRowId,
+        status,
+        tariffId: price.tariffId,
         audience: entry.audience,
         period: entry.period,
-        grossPriceCents: r.grossPriceCents,
-        discountCents: r.discountCents,
-        discounts: r.discounts.filter((d) => d.status === "applied").map((d) => d.code),
+        grossPriceCents: price.grossPriceCents,
+        discountCents: price.discountCents,
+        discounts: price.discounts,
+        manualPriceCents: manual?.priceCents ?? null,
+        priceReason: manual?.reason ?? null,
       })
       .returning({ id: enrollment.id });
     ids.push(id);
+    await tx.insert(auditLog).values({
+      schoolId: CURRENT_SCHOOL,
+      actor: who.id,
+      targetTable: "enrollment",
+      rowId: id,
+      action: "insert",
+      // Technical ids and amounts; the reason is what the member typed for a price apart from the grid.
+      after: {
+        payerId,
+        seasonId,
+        billingEntityId: n.billingEntityId,
+        status,
+        studentIds,
+        courseIds: n.courseIds,
+        grossPriceCents: price.grossPriceCents,
+        discountCents: price.discountCents,
+        ...(manual
+          ? {
+              manualPriceCents: manual.priceCents,
+              computedNetPriceCents: r.status === "ok" ? r.netPriceCents : null,
+              reason: manual.reason,
+            }
+          : {}),
+      },
+    });
     if (n.courseIds.length > 0) {
       await tx.insert(enrollmentCourse).values(
         rowsOf(
@@ -373,6 +468,8 @@ export type SeasonEnrollment = {
   period: Period;
   courses: string[];
   netPriceCents: number;
+  /** Reason of a price typed by hand (#292); null when the price is the grid's. */
+  priceReason: string | null;
   status: EnrollmentStatus;
   droppedOn: string | null;
   enrolledOn: string;
@@ -432,6 +529,7 @@ export async function seasonEnrollments(
       audience: enrollment.audience,
       period: enrollment.period,
       netPriceCents: enrollment.netPriceCents,
+      priceReason: enrollment.priceReason,
       status: enrollment.status,
       droppedOn: enrollment.droppedOn,
       enrolledOn: enrollment.enrolledOn,
@@ -476,6 +574,7 @@ export async function seasonEnrollments(
         audience: l.audience,
         period: l.period,
         netPriceCents: l.netPriceCents ?? 0,
+        priceReason: l.priceReason,
         status: l.status,
         droppedOn: l.droppedOn,
         enrolledOn: l.enrolledOn,
@@ -512,6 +611,9 @@ type Saved = {
   period: Period;
   grossPriceCents: number;
   discountCents: number;
+  /** Price typed by hand (#292) and its reason, or null. */
+  manualPriceCents: number | null;
+  priceReason: string | null;
   droppedOn: string | null;
   enrolledOn: string;
   invoiced: boolean;
@@ -541,6 +643,8 @@ async function readSaved(tx: Tx, id: string, lock = false): Promise<Saved | null
           period: enrollment.period,
           grossPriceCents: enrollment.grossPriceCents,
           discountCents: enrollment.discountCents,
+          manualPriceCents: enrollment.manualPriceCents,
+          priceReason: enrollment.priceReason,
           droppedOn: enrollment.droppedOn,
           enrolledOn: enrollment.enrolledOn,
           invoiced: invoicedSql,
@@ -557,13 +661,13 @@ async function readSaved(tx: Tx, id: string, lock = false): Promise<Saved | null
   return read();
 }
 
-/** Member of the current school making the change, for the audit log. */
-async function memberOf(tx: Tx, userId: string): Promise<string | null> {
+/** Member of the current school making the change (audit log, typed price), with their role. */
+async function memberOf(tx: Tx, userId: string) {
   const [m] = await tx
-    .select({ id: member.id })
+    .select({ id: member.id, role: member.role })
     .from(member)
     .where(and(eq(member.userId, userId), eq(member.active, true)));
-  return m?.id ?? null;
+  return m ?? null;
 }
 
 /** Price of a trial or waitlist enrollment if it were confirmed now, and its effect on the payer's others. */
@@ -573,6 +677,10 @@ export type ConfirmationPreview =
       status: "ok";
       /** Recomputed with the payer's current active enrollments (#284 Q4). */
       price: EnrollmentResult;
+      /** Price typed by hand at trial or waitlist time (#292): kept at confirmation, it stays the final price. */
+      manualPrice: ManualPrice | null;
+      /** What the enrollment will cost once confirmed; null when it cannot be priced. */
+      netPriceCents: number | null;
       /** Net price saved at trial or waitlist time. */
       savedNetPriceCents: number;
       existingImpacts: ExistingImpact[];
@@ -584,7 +692,7 @@ async function confirmationOf(tx: Tx, e: Saved): Promise<ConfirmationPreview> {
     : transitionRefusal(e.status, "active");
   if (refusal) return { status: "invalid", message: refusal };
   const [target] = await withCourses(tx, [
-    { id: e.id, audience: e.audience, period: e.period, deposit: e.discountCents },
+    { id: e.id, audience: e.audience, period: e.period, deposit: e.discountCents, manual: e.manualPriceCents !== null },
   ]);
   const existing = await existingEnrollments(tx, e.payerId, e.seasonId, e.id);
   const result = computeTariff({
@@ -592,11 +700,25 @@ async function confirmationOf(tx: Tx, e: Saved): Promise<ConfirmationPreview> {
     discounts: await loadDiscounts(tx, e.seasonId),
     enrollments: [...existing, target],
   });
+  // The engine returns one result per request, the target included.
+  const price = result.enrollments.find((r) => r.reference === e.id)!;
+  const manualPrice =
+    e.manualPriceCents !== null && e.priceReason !== null
+      ? { priceCents: e.manualPriceCents, reason: e.priceReason }
+      : null;
   return {
     status: "ok",
-    // The engine returns one result per request, the target included.
-    price: result.enrollments.find((r) => r.reference === e.id)!,
-    savedNetPriceCents: e.grossPriceCents - e.discountCents,
+    price,
+    manualPrice,
+    // Q2 (#292): a typed price stays the final price, whatever the grid says now.
+    // It stands in for a missing package only: without a course, nothing can be confirmed.
+    netPriceCents:
+      price.status === "ok"
+        ? (manualPrice?.priceCents ?? price.netPriceCents)
+        : price.error.code === "missing_combination"
+          ? (manualPrice?.priceCents ?? null)
+          : null,
+    savedNetPriceCents: savedNetPrice(e),
     existingImpacts: await impactsOn(tx, e.payerId, existing, result.enrollments),
   };
 }
@@ -612,8 +734,10 @@ export type ChangeResult = { ok: true; id: string; already?: true } | { ok: fals
 /**
  * Confirms a trial or waitlist enrollment (→ active) at the price recomputed now, which
  * must be the one the front desk saw (`expectedNetCents`): otherwise nothing is saved and
- * the new price is to be checked. A second click, or a retry after a lost response, finds
- * it active and changes nothing (#260).
+ * the new price is to be checked. A price typed by hand (#292) is kept and stays the
+ * price; the grid price and discount under it are still recomputed when the grid has a
+ * package. A second click, or a retry after a lost response, finds it active and changes
+ * nothing (#260).
  */
 export async function confirmEnrollment(
   tx: Tx,
@@ -627,33 +751,57 @@ export async function confirmEnrollment(
   const preview = await confirmationOf(tx, e);
   if (preview.status === "invalid") return { ok: false, message: preview.message };
   const r = preview.price;
-  if (r.status === "error") return { ok: false, message: r.error.message };
-  if (r.netPriceCents !== expectedNetCents)
+  // A typed price stands in for a missing package only; any other refusal (no course) stays.
+  if (r.status === "error" && (preview.manualPrice === null || r.error.code !== "missing_combination"))
+    return { ok: false, message: r.error.message };
+  if (preview.netPriceCents !== expectedNetCents)
     return { ok: false, message: "Le prix a changé depuis son affichage : vérifiez-le avant de confirmer." };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
-  const price = confirmationPrice(
-    { grossPriceCents: e.grossPriceCents, discountCents: e.discountCents },
-    { grossPriceCents: r.grossPriceCents, discountCents: r.discountCents },
-  );
-  await tx
-    .update(enrollment)
-    .set({
-      status: "active",
-      tariffId: r.tariffRowId,
-      grossPriceCents: price.grossPriceCents,
-      discountCents: price.discountCents,
-      discounts: r.discounts.filter((d) => d.status === "applied").map((d) => d.code),
-    })
-    .where(eq(enrollment.id, id));
+  // Still no package in the grid (a typed price, checked above): the saved price stays as it is.
+  const price =
+    r.status === "ok"
+      ? confirmationPrice(
+          { grossPriceCents: e.grossPriceCents, discountCents: e.discountCents },
+          { grossPriceCents: r.grossPriceCents, discountCents: r.discountCents },
+        )
+      : { grossPriceCents: e.grossPriceCents, discountCents: e.discountCents };
+  if (r.status === "ok")
+    await tx
+      .update(enrollment)
+      .set({
+        status: "active",
+        tariffId: r.tariffRowId,
+        grossPriceCents: price.grossPriceCents,
+        discountCents: price.discountCents,
+        discounts: r.discounts.filter((d) => d.status === "applied").map((d) => d.code),
+      })
+      .where(eq(enrollment.id, id));
+  else await tx.update(enrollment).set({ status: "active" }).where(eq(enrollment.id, id));
+  // The net is said on both sides: under a typed price it stays, whatever gross and discount become.
+  const typed = e.manualPriceCents !== null ? { manualPriceCents: e.manualPriceCents, reason: e.priceReason } : {};
+  const net = (p: { grossPriceCents: number; discountCents: number }) =>
+    savedNetPrice({ ...p, manualPriceCents: e.manualPriceCents });
   await tx.insert(auditLog).values({
     schoolId: CURRENT_SCHOOL,
-    actor: who,
+    actor: who.id,
     targetTable: "enrollment",
     rowId: id,
     action: "update",
-    before: { status: e.status, grossPriceCents: e.grossPriceCents, discountCents: e.discountCents },
-    after: { status: "active", grossPriceCents: price.grossPriceCents, discountCents: price.discountCents },
+    before: {
+      status: e.status,
+      grossPriceCents: e.grossPriceCents,
+      discountCents: e.discountCents,
+      netPriceCents: net(e),
+      ...typed,
+    },
+    after: {
+      status: "active",
+      grossPriceCents: price.grossPriceCents,
+      discountCents: price.discountCents,
+      netPriceCents: net(price),
+      ...typed,
+    },
   });
   return { ok: true, id };
 }
@@ -698,7 +846,7 @@ export async function dropEnrollment(tx: Tx, userId: string, id: string, dropped
   await tx.update(enrollment).set({ status: "dropped", droppedOn }).where(eq(enrollment.id, id));
   await tx.insert(auditLog).values({
     schoolId: CURRENT_SCHOOL,
-    actor: who,
+    actor: who.id,
     targetTable: "enrollment",
     rowId: id,
     action: "update",
@@ -729,7 +877,7 @@ export async function cancelEnrollment(tx: Tx, userId: string, id: string): Prom
   await tx.delete(enrollment).where(eq(enrollment.id, id));
   await tx.insert(auditLog).values({
     schoolId: CURRENT_SCHOOL,
-    actor: who,
+    actor: who.id,
     targetTable: "enrollment",
     rowId: id,
     action: "delete",
@@ -739,6 +887,7 @@ export async function cancelEnrollment(tx: Tx, userId: string, id: string): Prom
       status: e.status,
       grossPriceCents: e.grossPriceCents,
       discountCents: e.discountCents,
+      ...(e.manualPriceCents !== null ? { manualPriceCents: e.manualPriceCents } : {}),
       courses,
     },
   });

@@ -199,6 +199,12 @@ export function Enrollments({
                     </TableTd>
                     <TableTd ta="right" className="tabular-nums" c={owed ? undefined : "dimmed"}>
                       {formatEuros(i.netPriceCents)}
+                      {i.priceReason && (
+                        // A price typed by the front desk (#292): its reason under it.
+                        <Text size="xs" c="dimmed" ta="right">
+                          Prix saisi : {i.priceReason}
+                        </Text>
+                      )}
                     </TableTd>
                     <TableTd className="hidden sm:table-cell">{changes}</TableTd>
                   </TableTr>

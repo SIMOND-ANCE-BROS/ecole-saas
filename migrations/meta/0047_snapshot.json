@@ -1,5 +1,5 @@
 {
-  "id": "63ea9917-9f19-40aa-b470-6572ad763ed0",
+  "id": "032e9758-69c7-433c-af2b-c2ae3fe1591e",
   "prevId": "0e7e8556-dfbf-4280-879a-6dd3da68113b",
   "version": "7",
   "dialect": "postgresql",
@@ -1879,13 +1879,25 @@
           "notNull": true,
           "default": 0
         },
+        "manual_price_cents": {
+          "name": "manual_price_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_reason": {
+          "name": "price_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "net_price_cents": {
           "name": "net_price_cents",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "generated": {
-            "as": "gross_price_cents - discount_cents",
+            "as": "coalesce(manual_price_cents, gross_price_cents - discount_cents)",
             "type": "stored"
           }
         },
@@ -2027,6 +2039,10 @@
         "enrollment_dropped_on": {
           "name": "enrollment_dropped_on",
           "value": "\"enrollment\".\"dropped_on\" IS NULL OR \"enrollment\".\"status\" = 'dropped'"
+        },
+        "enrollment_manual_price": {
+          "name": "enrollment_manual_price",
+          "value": "(\"enrollment\".\"manual_price_cents\" IS NULL) = (\"enrollment\".\"price_reason\" IS NULL) AND (\"enrollment\".\"manual_price_cents\" IS NULL OR \"enrollment\".\"manual_price_cents\" >= 0) AND (\"enrollment\".\"price_reason\" IS NULL OR btrim(\"enrollment\".\"price_reason\") <> '')"
         }
       },
       "isRLSEnabled": false
@@ -3230,12 +3246,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
-        },
-        "regular_instructor_id": {
-          "name": "regular_instructor_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -3271,21 +3281,6 @@
             },
             {
               "expression": "date",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "lesson_regular_instructor_id_index": {
-          "name": "lesson_regular_instructor_id_index",
-          "columns": [
-            {
-              "expression": "regular_instructor_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3333,21 +3328,6 @@
           "columnsFrom": [
             "school_id",
             "instructor_id"
-          ],
-          "columnsTo": [
-            "school_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "lesson_regular_instructor_same_school_fk": {
-          "name": "lesson_regular_instructor_same_school_fk",
-          "tableFrom": "lesson",
-          "tableTo": "instructor",
-          "columnsFrom": [
-            "school_id",
-            "regular_instructor_id"
           ],
           "columnsTo": [
             "school_id",

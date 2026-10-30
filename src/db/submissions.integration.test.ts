@@ -213,7 +213,7 @@ describe("once: enrollments and courses", () => {
     const run = () =>
       withSchool(ids.school, (tx) =>
         once(tx, "enrollment", key, { payerId: ids.payer, ...entry }, storedEnrollment, () =>
-          saveEnrollment(tx, ids.payer, ids.season, entry),
+          saveEnrollment(tx, frontDesk, ids.payer, ids.season, entry),
         ),
       );
     const first = await run();
