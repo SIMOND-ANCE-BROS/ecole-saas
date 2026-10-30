@@ -122,7 +122,8 @@ export function SendingProblems({ problems, showEntity }: { problems: SendingPro
                 <TableTd ta="right" className="whitespace-nowrap tabular-nums">
                   {formatEuros(p.totalInclTaxCents)}
                 </TableTd>
-                <TableTd>
+                {/* Wide enough for « Non émise »: the reason's column would squeeze the badge to « Non… ». */}
+                <TableTd className="min-w-28">
                   <State p={p} />
                 </TableTd>
                 <TableTd>
