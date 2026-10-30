@@ -5,6 +5,7 @@ import { withSchool } from "@/db";
 import { severalEntities } from "@/db/billing-entities";
 import { readStudent } from "@/db/students";
 import { payableStudents, displayedName } from "@/db/people";
+import { takenCourses } from "@/db/enrollments";
 import { seasonCourses, currentSeason } from "@/db/schedule";
 import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
@@ -29,12 +30,21 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
     const payerId =
       student.billedTo.type === "person" ? student.billedTo.id : student.billedTo.type === "self" ? student.id : null;
     const season = await currentSeason(tx, today);
+    const students = payerId ? await payableStudents(tx, payerId) : [];
     return {
       student,
       payerId,
       season,
-      students: payerId ? await payableStudents(tx, payerId) : [],
+      students,
       courses: season ? await seasonCourses(tx, season.id) : [],
+      // Courses each student already takes this season (#333): marked « déjà inscrit » in the form.
+      taken: season
+        ? await takenCourses(
+            tx,
+            students.map((d) => d.id),
+            season.id,
+          )
+        : [],
       severalEntities: await severalEntities(tx),
     };
   });
@@ -89,6 +99,7 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
             age: d.birthDate ? ageAt(d.birthDate, today) : null,
           }))}
           courses={courses}
+          taken={parsed.taken}
           initialStudent={student.id}
           severalEntities={parsed.severalEntities}
         />

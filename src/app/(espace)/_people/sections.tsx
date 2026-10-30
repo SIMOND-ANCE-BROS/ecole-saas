@@ -78,6 +78,7 @@ export function FollowedCourses({ courses }: { courses: PersonRecord["courses"] 
         ) : (
           <Paper withBorder component="ul" className="divide-y divide-bordure text-sm">
             {current.map((c) => (
+              // Unique: `readPerson` lists a course once per status (#333).
               <li key={`${c.id}-${c.status}`} className="flex flex-wrap items-baseline gap-x-3 px-3 py-2">
                 <TextLink href={`/planning/cours/${c.id}`} size="sm" fw={500}>
                   {c.discipline}

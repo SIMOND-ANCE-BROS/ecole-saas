@@ -13,11 +13,13 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { Preview } from "@/db/enrollments";
 import type { ScheduleCourse } from "@/db/schedule";
 import { overlaps } from "@/domain/schedule/overlap";
 import { INITIAL_STATUSES, isFull, overfilledCourses } from "@/domain/enrollment/lifecycle";
+import { alreadyTaken, DUPLICATE_POLICY, duplicateRefusal, type TakenCourse } from "@/domain/enrollment/duplicates";
 import { ENROLLMENT_STATUS_LABELS } from "@/domain/enrollment/statuses";
 import { deferredQuery } from "@/lib/deferred-query";
 import { formatEuros } from "@/lib/money";
@@ -37,6 +39,7 @@ const AUDIENCES = [
   ["student", "Étudiant"],
 ] as const;
 const SAVE_BUTTON = "enregistrer-inscription";
+const CONFIRM_DUPLICATES = "confirmer-doublon";
 /** What the save button says for an enrollment not committed yet. */
 const STATUS_SAVE = { trial: "l’inscription à l’essai", waitlist: "l’inscription en attente" } as const;
 const PERIODS = [
@@ -48,13 +51,15 @@ type Props = {
   payerId: string;
   students: { id: string; firstName: string; age: number | null }[];
   courses: ScheduleCourse[];
+  /** Courses the payer's students already take this season (#333): marked, and saving them again asks first. */
+  taken: TakenCourse[];
   /** Student chosen in advance (« Inscrire » button on their record). */
   initialStudent?: string;
   /** The school has several businesses (#299): each course and each enrollment names its own. */
   severalEntities?: boolean;
 };
 
-export function EnrollmentForm({ payerId, students, courses, initialStudent, severalEntities = false }: Props) {
+export function EnrollmentForm({ payerId, students, courses, taken, initialStudent, severalEntities = false }: Props) {
   const initial = students.find((d) => d.id === initialStudent) ?? (students.length === 1 ? students[0] : undefined);
   const [studentIds, setStudentIds] = useState<string[]>(initial ? [initial.id] : []);
   const [chosenAudience, setAudience] = useState<FormInput["audience"]>(
@@ -75,7 +80,11 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
   // Prices typed by the front desk (#292), by enrollment (`typedKey`).
   const [typedPrices, setTypedPrices] = useState<Record<string, TypedPrice>>({});
   const [tried, setTried] = useState(false);
+  // Which duplicates the front desk confirmed (#333): another choice asks again.
+  const [confirmedDuplicates, setConfirmedDuplicates] = useState<string | null>(null);
+  const [duplicateTried, setDuplicateTried] = useState(false);
   const [sending, startSend] = useTransition();
+  const router = useRouter();
   // Same key for every attempt of this enrollment: a retry after a lost response enrolls nothing twice (#260).
   // A success leaves the form, so a new enrollment always gets a new key.
   const [key] = useState(() => crypto.randomUUID());
@@ -155,6 +164,14 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
   const sortedCourses = [...visibleCourses.filter(adapted), ...visibleCourses.filter((c) => !adapted(c))];
 
   const chosen = courses.filter((c) => courseIds.includes(c.id));
+  // #333: chosen courses a chosen student already takes this season (not dropped or ended).
+  const duplicates = alreadyTaken(studentIds, courseIds, taken);
+  const duplicatesKey = duplicates.map((d) => `${d.studentId}|${d.courseId}`).join(",");
+  const duplicatesConfirmed = duplicates.length > 0 && confirmedDuplicates === duplicatesKey;
+  const unconfirmed = duplicateTried && !duplicatesConfirmed;
+  const takenStatus = (courseId: string) => alreadyTaken(studentIds, [courseId], taken)[0]?.status;
+  const courseLabel = (c: ScheduleCourse) =>
+    `${c.discipline} ${c.weekday ? DAYS[c.weekday].toLowerCase() : ""} ${c.startTime}`;
   // Q5 (#284): a course this enrollment would overfill proposes the waitlist, never blocks.
   const fullCourses = overfilledCourses(status, chosen, Math.max(studentIds.length, 1));
 
@@ -183,16 +200,24 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
           );
           return;
         }
-        startSend(async () =>
-          setRefusal(
-            (
-              await orConnectionLost(
-                () => enroll({ ...entry, manualPrices }, key),
-                (message) => ({ message }),
-              )
-            ).message,
-          ),
-        );
+        const duplicate = duplicateRefusal(duplicates.length, duplicatesConfirmed);
+        if (duplicate) {
+          // A course the student already takes (#333): the front desk confirms it last, as the server does.
+          if (DUPLICATE_POLICY === "refuse") return setRefusal(duplicate);
+          setDuplicateTried(true);
+          requestAnimationFrame(() => document.getElementById(CONFIRM_DUPLICATES)?.focus());
+          return;
+        }
+        startSend(async () => {
+          const { message } = await orConnectionLost(
+            () => enroll({ ...entry, manualPrices, duplicatesConfirmed }, key),
+            (message) => ({ message }),
+          );
+          setRefusal(message);
+          // Refused: the courses already taken may have changed since the page loaded (another
+          // desk enrolled the student, #333); reloading them shows the confirmation if needed.
+          if (message) router.refresh();
+        });
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canSave) {
@@ -336,6 +361,7 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
             )}
             {sortedCourses.map((c) => {
               const restantes = c.maxCapacity === null ? null : c.maxCapacity - c.enrolled;
+              const already = takenStatus(c.id);
               return (
                 <li key={c.id} className="border-b border-bordure last:border-0">
                   {/* The whole row is the checkbox's label: one click target, the course as its name. */}
@@ -360,6 +386,11 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
                             {severalEntities ? ` · ${c.entity}` : ""}
                           </Text>
                           {/* A tag rather than faded text: still readable, still selectable. */}
+                          {already && (
+                            <Badge color="yellow" variant="light" radius="sm" tt="none" fw={500}>
+                              déjà {ENROLLMENT_STATUS_LABELS[already].toLowerCase()}
+                            </Badge>
+                          )}
                           {!adapted(c) && (
                             <Badge color="gray" variant="light" radius="sm" tt="none" fw={400}>
                               hors tranche d’âge
@@ -575,12 +606,7 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
                 : "Plus assez de places"}{" "}
               : inscrire en attente ?
             </Text>
-            <Text size="xs">
-              {fullCourses
-                .map((c) => `${c.discipline} ${c.weekday ? DAYS[c.weekday].toLowerCase() : ""} ${c.startTime}`)
-                .join(" ; ")}
-              . « Inscrit » reste possible.
-            </Text>
+            <Text size="xs">{fullCourses.map(courseLabel).join(" ; ")}. « Inscrit » reste possible.</Text>
             <Button
               size="compact-sm"
               variant="default"
@@ -592,6 +618,58 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
               }}
             >
               Inscrire en attente
+            </Button>
+          </Alert>
+        )}
+        {duplicates.length > 0 && (
+          <Alert role="status" color="yellow" p="xs">
+            <Text size="sm" fw={500}>
+              Déjà inscrit à {duplicates.length > 1 ? "ces cours" : "ce cours"} cette saison
+            </Text>
+            <Text component="ul" size="xs">
+              {duplicates.map((d) => {
+                const c = courses.find((x) => x.id === d.courseId);
+                const who = students.find((x) => x.id === d.studentId)?.firstName;
+                return (
+                  <li key={`${d.studentId}|${d.courseId}`}>
+                    {studentIds.length > 1 && who ? `${who} : ` : ""}
+                    {c ? courseLabel(c) : ""} ({ENROLLMENT_STATUS_LABELS[d.status].toLowerCase()})
+                  </li>
+                );
+              })}
+            </Text>
+            {DUPLICATE_POLICY === "warn" && (
+              <>
+                <Checkbox
+                  id={CONFIRM_DUPLICATES}
+                  mt="xs"
+                  size="xs"
+                  radius="xs"
+                  label="Inscrire quand même une deuxième fois"
+                  checked={duplicatesConfirmed}
+                  error={unconfirmed}
+                  aria-invalid={unconfirmed}
+                  aria-describedby={unconfirmed ? `${CONFIRM_DUPLICATES}-erreur` : undefined}
+                  onChange={(e) => setConfirmedDuplicates(e.currentTarget.checked ? duplicatesKey : null)}
+                />
+                {unconfirmed && (
+                  <Text id={`${CONFIRM_DUPLICATES}-erreur`} size="xs" c="red" mt={4}>
+                    Cochez pour confirmer, ou retirez ce cours de la sélection.
+                  </Text>
+                )}
+              </>
+            )}
+            <Button
+              size="compact-sm"
+              variant="default"
+              mt="xs"
+              onClick={() => {
+                const twice = new Set(duplicates.map((d) => d.courseId));
+                setCourseIds(courseIds.filter((id) => !twice.has(id)));
+                requestAnimationFrame(() => document.getElementById("filtre-cours")?.focus());
+              }}
+            >
+              {duplicates.length > 1 ? "Retirer ces cours de la sélection" : "Retirer ce cours de la sélection"}
             </Button>
           </Alert>
         )}

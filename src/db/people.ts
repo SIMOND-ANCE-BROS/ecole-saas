@@ -4,6 +4,7 @@ import { issuePath } from "../lib/form-errors";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { displayedName } from "../domain/people/name";
+import { oneRowPerCourseAndStatus } from "../domain/enrollment/duplicates";
 import {
   guardianRefusal,
   type PersonType,
@@ -182,7 +183,7 @@ export type PersonRecord = {
   address: string | null;
   notes: string | null;
   relationships: RelationshipItem[];
-  /** Courses attended as a student, most recent season first. */
+  /** Courses attended as a student, most recent season first, once per course and status (#333). */
   courses: {
     id: string;
     season: string;
@@ -281,7 +282,8 @@ export async function readPerson(tx: Tx, id: string): Promise<PersonRecord | nul
       emergencyContact: l.emergencyContact,
       paysFor: l.paysFor,
     })),
-    courses: followed.map((c) => ({ ...c, startTime: c.startTime.slice(0, 5) })),
+    // A course taken twice with the same status (a duplicate enrolled by mistake, #333) shows once.
+    courses: oneRowPerCourseAndStatus(followed).map((c) => ({ ...c, startTime: c.startTime.slice(0, 5) })),
   };
 }
 

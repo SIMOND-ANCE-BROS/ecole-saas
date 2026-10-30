@@ -21,8 +21,11 @@ const validInput = z.object({
 
 export type FormInput = z.infer<typeof validInput>;
 
-/** What is saved: the form's input and the prices typed by the front desk, one per business at most (#292). */
-const validEnrollment = validInput.extend({ manualPrices: validManualPrices });
+/**
+ * What is saved: the form's input, the prices typed by the front desk, one per business at
+ * most (#292), and whether enrolling a student again in a course they take was confirmed (#333).
+ */
+const validEnrollment = validInput.extend({ manualPrices: validManualPrices, duplicatesConfirmed: z.boolean() });
 export type EnrollInput = z.infer<typeof validEnrollment>;
 
 const NO_SEASON_MESSAGE = "Aucune saison n’est paramétrée.";
