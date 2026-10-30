@@ -288,8 +288,9 @@ export async function readPerson(tx: Tx, id: string): Promise<PersonRecord | nul
 }
 
 /**
- * Students a payer can enroll: themselves if they are a student, and
- * the people they pay for (relationship « paie pour »). By first name.
+ * Students a payer can enroll or name on a lesson pack: themselves, and the
+ * people they pay for (relationship « paie pour »), students only (#314): a
+ * contact they pay for is offered once added to the students. By first name.
  */
 export async function payableStudents(
   tx: Tx,
@@ -300,14 +301,41 @@ export async function payableStudents(
     .select({ id: person.id, firstName: person.firstName, name: person.lastName, birthDate: person.birthDate })
     .from(person)
     .where(
-      or(
-        // The payer themselves only if they are a student: a paying parent is not offered for enrollment.
-        and(eq(person.id, payerId), eq(person.isStudent, true)),
-        sql`EXISTS (SELECT 1 FROM relationship l WHERE l.person_id = ${payerId} AND l.related_person_id = ${currentId} AND l.pays_for)`,
+      and(
+        eq(person.isStudent, true),
+        or(
+          eq(person.id, payerId),
+          sql`EXISTS (SELECT 1 FROM relationship l WHERE l.person_id = ${payerId} AND l.related_person_id = ${currentId} AND l.pays_for)`,
+        ),
       ),
     )
     .orderBy(asc(person.firstName), asc(person.lastName));
   return rows.map((l) => ({ ...l, firstName: l.firstName ?? l.name }));
+}
+
+/** Refusal when a payer names a contact they pay for who is not a student yet (#314). */
+export const NOT_A_STUDENT_YET =
+  "Cette personne n’est pas encore élève : « Ajouter aux élèves » sur sa fiche de contact.";
+
+/** Whether one of these people is the payer or someone they pay for, but not a student yet (#314). */
+export async function paysForNonStudent(tx: Tx, payerId: string, ids: readonly string[]): Promise<boolean> {
+  const valid = ids.filter((id) => z.uuid().safeParse(id).success);
+  if (valid.length === 0 || !z.uuid().safeParse(payerId).success) return false;
+  const rows = await tx
+    .select({ id: person.id })
+    .from(person)
+    .where(
+      and(
+        inArray(person.id, valid),
+        eq(person.isStudent, false),
+        or(
+          eq(person.id, payerId),
+          sql`EXISTS (SELECT 1 FROM relationship l WHERE l.person_id = ${payerId} AND l.related_person_id = ${currentId} AND l.pays_for)`,
+        ),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
 }
 
 /** People who pay for a student (relationship « paie pour »). */
