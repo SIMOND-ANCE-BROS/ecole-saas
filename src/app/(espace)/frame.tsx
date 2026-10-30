@@ -4,14 +4,14 @@ import { Button } from "@mantine/core";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-type Props = { pane: ReactNode; header: ReactNode; children: ReactNode };
+type Props = { pane: ReactNode; header: ReactNode; children: ReactNode; banner?: ReactNode };
 
 /**
  * Frame of the signed-in workspace. On desktop, the sidebar is always
  * visible; on phones, it folds behind a « Menu » button next to the search,
  * and closes on every navigation or with Escape.
  */
-export function Frame({ pane: pane, header: header, children }: Props) {
+export function Frame({ pane: pane, header: header, children, banner }: Props) {
   const [open, setOpen] = useState(false);
   const path = usePathname();
   const [openPath, setOpenPath] = useState(path);
@@ -68,6 +68,7 @@ export function Frame({ pane: pane, header: header, children }: Props) {
           </Button>
           {header}
         </header>
+        {banner}
         <main id="contenu" tabIndex={-1} className="w-full min-w-0 flex-1 p-3 sm:p-4 md:p-6">
           {children}
         </main>

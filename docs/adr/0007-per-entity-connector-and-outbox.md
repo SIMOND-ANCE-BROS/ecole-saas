@@ -34,6 +34,13 @@ and the front desk must never wait for a third-party service.
   attempts; a rejected invoice is visible to management.
 - The VAT-inclusive total returned by the tool must equal ours, or the invoice
   is rejected.
+  Each line goes with its VAT-inclusive, excl. and VAT amounts exactly as
+  stored on `invoice_line` (a tool computing VAT line by line may differ by a
+  cent per line).
+- **Tool selection criterion**: the tool must accept VAT-inclusive line prices
+  (#303).
+- Payment e-reporting (`recordPayment`) stays off (`PAYMENT_E_REPORTING`) until
+  the accountant confirms it applies to the school's B2C sales (#303).
 
 ## Alternatives considered
 
