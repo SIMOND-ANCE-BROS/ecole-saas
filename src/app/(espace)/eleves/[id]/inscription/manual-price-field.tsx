@@ -66,7 +66,9 @@ export function ManualPriceField({
         // Off the grid, the message above already says the price is to be typed.
         description={
           quarterCount > 0
-            ? `Dû pour chacun des ${quarterCount} trimestre${quarterCount > 1 ? "s" : ""} restant${quarterCount > 1 ? "s" : ""}.`
+            ? quarterCount === 1
+              ? "Dû pour le trimestre restant."
+              : `Dû pour chacun des ${quarterCount} trimestres restants.`
             : computedNetCents === null
               ? undefined
               : "Le prix saisi remplace le prix calculé."

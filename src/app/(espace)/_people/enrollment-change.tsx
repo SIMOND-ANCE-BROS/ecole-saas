@@ -213,9 +213,8 @@ function ChangeDialog({
     const quarterly =
       enrollment.period === "quarter" && confirmedNet !== null ? (
         <Text size="sm" fw={500}>
-          Prix par trimestre, pour {n} trimestre{n > 1 ? "s" : ""} :{" "}
-          {formatEuros(seasonDueCents({ period: "quarter", netPriceCents: confirmedNet, quarterCount: n }))} sur la
-          saison.
+          Sur la saison : {n} trimestre{n > 1 ? "s" : ""} × {formatEuros(confirmedNet)} ={" "}
+          {formatEuros(seasonDueCents({ period: "quarter", netPriceCents: confirmedNet, quarterCount: n }))}.
         </Text>
       ) : null;
     body =
