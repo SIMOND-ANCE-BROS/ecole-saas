@@ -186,7 +186,7 @@ export function CorrectPayment({
       ) : (
         <Input.Wrapper
           id={id}
-          label={cancelsRefund ? "Montant du remboursement à annuler (€)" : "Montant de la correction (€)"}
+          label={cancelsRefund ? "Montant à annuler (€)" : "Montant de la correction (€)"}
           description={`Au plus ${formatEuros(remaining)}`}
           error={shown ? refusal : null}
           size="xs"
