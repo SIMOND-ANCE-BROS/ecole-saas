@@ -947,7 +947,8 @@ export async function dropEnrollment(tx: Tx, userId: string, id: string, dropped
  * its ids and amounts; the payer's payments are untouched and stay on the balance.
  * Refused once invoiced (a credit note is the way back) or once attendance was taken
  * for it (a drop-out is then what happened). The unsent invoice drafts billing it are thrown
- * away (#302): the payer's invoices are drafted again without it.
+ * away whole (#302), with the payer's other lines of that business and season: they come back
+ * at the next drafting (`draftPayerInvoices`), which nothing triggers yet.
  */
 export async function cancelEnrollment(tx: Tx, userId: string, id: string): Promise<ChangeResult> {
   const e = await readSaved(tx, id, true);

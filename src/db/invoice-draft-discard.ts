@@ -47,6 +47,12 @@ export async function discardDrafts(
   ids: readonly string[],
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   if (ids.length === 0) return { ok: true };
+  // Their installments locked first: a payment allocated meanwhile waits, then finds them gone.
+  await tx
+    .select({ id: installment.id })
+    .from(installment)
+    .where(inArray(installment.invoiceId, [...ids]))
+    .for("update");
   const paid = await tx
     .select({ one: sql`1` })
     .from(paymentAllocation)
