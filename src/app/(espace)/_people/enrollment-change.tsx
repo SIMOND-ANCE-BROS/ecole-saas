@@ -150,14 +150,16 @@ function ChangeDialog({
     };
   }, [change, enrollment.id, attempt]);
   const preview = loaded?.attempt === attempt ? loaded.preview : null;
-  const price = preview?.kind === "confirm" && preview.result.status === "ok" ? preview.result.price : null;
-  const ready = change === "confirm" ? price?.status === "ok" : preview !== null && preview.kind !== "failed";
+  // What it will cost once confirmed: a typed price (#292) stays, otherwise the recomputed one.
+  const confirmedNet =
+    preview?.kind === "confirm" && preview.result.status === "ok" ? preview.result.netPriceCents : null;
+  const ready = change === "confirm" ? confirmedNet !== null : preview !== null && preview.kind !== "failed";
 
   const save = () =>
     startSending(async () => {
       const r = await settle(() =>
         change === "confirm"
-          ? confirmAction(enrollment.id, price?.status === "ok" ? price.netPriceCents : -1)
+          ? confirmAction(enrollment.id, confirmedNet ?? -1)
           : change === "drop"
             ? dropAction(enrollment.id, droppedOn)
             : cancelAction(enrollment.id),
@@ -205,6 +207,19 @@ function ChangeDialog({
         <Text role="alert" size="sm">
           {r.message}
         </Text>
+      ) : r.manualPrice ? (
+        <>
+          <Text size="sm">
+            {who} passe à « Inscrit » au prix saisi à l’inscription : {formatEuros(r.manualPrice.priceCents)} (motif :{" "}
+            {r.manualPrice.reason}).
+          </Text>
+          {r.price.status === "ok" && (
+            <Text size="xs" c="dimmed">
+              Prix calculé aujourd’hui avec la grille : {formatEuros(r.price.netPriceCents)}.
+            </Text>
+          )}
+          <DiscountImpacts impacts={r.existingImpacts} />
+        </>
       ) : r.price.status === "error" ? (
         <Text role="alert" size="sm">
           {r.price.error.message}

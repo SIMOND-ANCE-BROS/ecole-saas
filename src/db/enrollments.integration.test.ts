@@ -14,10 +14,13 @@ const admin = postgres(url, { max: 1, onnotice: () => {} });
 
 const suffix = Math.random().toString(36).slice(2, 8);
 const ids = {} as Record<string, string>;
+const frontDesk = `sub-accueil-i-${suffix}`;
 
 beforeAll(async () => {
   [{ id: ids.school }] = await schoolWithDefaultEntity(admin, "École I", `i-${suffix}`);
   const e = ids.school;
+  await admin`INSERT INTO "user" (id, name, email) VALUES (${frontDesk}, 'Zz Accueil', ${`${frontDesk}@exemple.test`})`;
+  await admin`INSERT INTO member (school_id, user_id, role) VALUES (${e}, ${frontDesk}, 'front_desk')`;
   [{ id: ids.season }] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${e}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   [{ id: ids.otherSeason }] =
@@ -69,6 +72,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // The audit log is append-only: its trigger is disabled for the cleanup only.
+  await admin.begin(async (t) => {
+    await t`ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only`;
+    await t`DELETE FROM audit_log WHERE school_id = ${ids.school}`;
+    await t`ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only`;
+  });
   for (const t of [
     "enrollment_course",
     "enrollment",
@@ -82,9 +91,11 @@ afterAll(async () => {
     "discount",
     "tariff",
     "season",
+    "member",
   ]) {
     await admin.unsafe(`DELETE FROM ${t} WHERE school_id = $1`, [ids.school]);
   }
+  await admin`DELETE FROM "user" WHERE id = ${frontDesk}`;
   await admin`DELETE FROM school WHERE id = ${ids.school}`;
   await admin.end();
 });
@@ -98,7 +109,7 @@ const childEntry = (studentIds: string[], courseIds: string[]) => ({
 const preview = (entry: ReturnType<typeof childEntry>) =>
   withSchool(ids.school, (tx) => enrollmentPreview(tx, ids.payer, ids.season, entry));
 const save = (entry: ReturnType<typeof childEntry>) =>
-  withSchool(ids.school, (tx) => saveEnrollment(tx, ids.payer, ids.season, entry));
+  withSchool(ids.school, (tx) => saveEnrollment(tx, frontDesk, ids.payer, ids.season, entry));
 
 describe("Enrollment", () => {
   it("previews the price for a first child, without siblings discount", async () => {
@@ -209,7 +220,7 @@ describe("Status at creation (#284)", () => {
     // Priced with the active siblings (Noé), but a trial does not count as a sibling: nothing to flag.
     expect(p.newEnrollments[0].price).toMatchObject({ status: "ok", discountCents: 1100 });
     expect(p.existingImpacts).toEqual([]);
-    const r = await withSchool(ids.school, (tx) => saveEnrollment(tx, ids.payer, ids.season, entry));
+    const r = await withSchool(ids.school, (tx) => saveEnrollment(tx, frontDesk, ids.payer, ids.season, entry));
     if (!r.ok) throw new Error(r.message);
     const [row] = await admin`SELECT status, discount_cents FROM enrollment WHERE id = ${r.id}`;
     expect(row).toEqual({ status: "trial", discount_cents: 1100 });
@@ -221,7 +232,7 @@ describe("Status at creation (#284)", () => {
 
   it("saves a waitlist enrollment, the default being « Inscrit »", async () => {
     const r = await withSchool(ids.school, (tx) =>
-      saveEnrollment(tx, ids.otherPayer, ids.season, {
+      saveEnrollment(tx, frontDesk, ids.otherPayer, ids.season, {
         ...childEntry([ids.foreign], [ids.jazz60]),
         status: "waitlist",
       }),
@@ -229,7 +240,7 @@ describe("Status at creation (#284)", () => {
     if (!r.ok) throw new Error(r.message);
     expect((await admin`SELECT status FROM enrollment WHERE id = ${r.id}`)[0].status).toBe("waitlist");
     const d = await withSchool(ids.school, (tx) =>
-      saveEnrollment(tx, ids.otherPayer, ids.season, childEntry([ids.foreign], [ids.classical60])),
+      saveEnrollment(tx, frontDesk, ids.otherPayer, ids.season, childEntry([ids.foreign], [ids.classical60])),
     );
     if (!d.ok) throw new Error(d.message);
     expect((await admin`SELECT status FROM enrollment WHERE id = ${d.id}`)[0].status).toBe("active");

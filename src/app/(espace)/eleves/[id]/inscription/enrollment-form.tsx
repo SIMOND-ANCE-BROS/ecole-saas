@@ -22,6 +22,8 @@ import { ENROLLMENT_STATUS_LABELS } from "@/domain/enrollment/statuses";
 import { deferredQuery } from "@/lib/deferred-query";
 import { formatEuros } from "@/lib/money";
 import { preview, enroll, type FormInput } from "./actions";
+import { ManualPriceField } from "./manual-price-field";
+import { readTypedPrice, type TypedPrice } from "@/domain/enrollment/manual-price";
 import { orConnectionLost } from "@/lib/action-result";
 import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
 import { DiscountImpacts, PriceDetail } from "@/app/(espace)/_people/price-detail";
@@ -69,6 +71,9 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
   } | null>(null);
   const [calculationAttempt, setCalculationAttempt] = useState(0);
   const [refusal, setRefusal] = useState<string | null>(null);
+  // Prices typed by the front desk (#292), by enrollment (`typedKey`).
+  const [typedPrices, setTypedPrices] = useState<Record<string, TypedPrice>>({});
+  const [tried, setTried] = useState(false);
   const [sending, startSend] = useTransition();
   // Same key for every attempt of this enrollment: a retry after a lost response enrolls nothing twice (#260).
   // A success leaves the form, so a new enrollment always gets a new key.
@@ -105,8 +110,36 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
   );
   // One enrollment per business selling the chosen courses (#299), all saved together.
   const news = result?.status === "ok" ? result.newEnrollments : [];
-  const priced = news.flatMap((n) => (n.price.status === "ok" ? [{ ...n, price: n.price }] : []));
-  const canSave = news.length > 0 && priced.length === news.length && !calculation && !sending;
+  // A price typed for one enrollment (#292) belongs to its business, students, formula and
+  // courses: another selection shows the computed price again, the typed one comes back with it.
+  const typedKey = (n: (typeof news)[number]) =>
+    [n.billingEntityId, chosenAudience, period, ...studentIds, ...n.courseIds].join("|");
+  const prices = news.map((n) => {
+    const computedNetCents = n.price.status === "ok" ? n.price.netPriceCents : null;
+    // No package in the grid for these courses: the price is typed directly.
+    const offGrid = n.price.status === "error" && n.price.error.code === "missing_combination";
+    const typed = typedPrices[typedKey(n)] ?? (offGrid ? { price: "", reason: "" } : null);
+    const read = readTypedPrice(computedNetCents, typed);
+    return {
+      n,
+      offGrid,
+      computedNetCents,
+      typed,
+      read,
+      netPriceCents: read.differs ? read.cents : computedNetCents,
+    };
+  });
+  const setTyped = (n: (typeof news)[number], typed: TypedPrice | null) =>
+    setTypedPrices(({ [typedKey(n)]: _replaced, ...others }) => (typed ? { ...others, [typedKey(n)]: typed } : others));
+  const priceable = news.length > 0 && prices.every((p) => p.computedNetCents !== null || p.offGrid);
+  const complete = prices.every((p) => p.read.valid);
+  const canSave = priceable && !calculation && !sending;
+  const manualPrices = prices.flatMap((p) =>
+    // Only a price apart from the computed one: kept as computed, it follows a recomputation on save.
+    p.typed && p.read.cents !== null && p.read.differs
+      ? [{ billingEntityId: p.n.billingEntityId, priceCents: p.read.cents, reason: p.typed.reason }]
+      : [],
+  );
   const totalLabel = status === "active" ? "Total" : "Total à la confirmation";
 
   // Courses suited to the chosen student(s)' age first; the others remain selectable.
@@ -130,16 +163,26 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
 
   return (
     <form
+      // The typed price's fields say what is missing themselves, in French (#292).
+      noValidate
       className="grid gap-6 lg:grid-cols-[1fr_22rem]"
       onSubmit={(e) => {
         e.preventDefault();
         if (!canSave) return;
         setRefusal(null);
+        if (!complete) {
+          // A typed price unreadable or without its reason: the field says why, focus goes to it.
+          setTried(true);
+          requestAnimationFrame(() =>
+            document.querySelector<HTMLElement>('#prix-inscription [aria-invalid="true"]')?.focus(),
+          );
+          return;
+        }
         startSend(async () =>
           setRefusal(
             (
               await orConnectionLost(
-                () => enroll(entry, key),
+                () => enroll({ ...entry, manualPrices }, key),
                 (message) => ({ message }),
               )
             ).message,
@@ -387,8 +430,10 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
           </Text>
           {status !== "active" && (
             <Text size="xs" fw={500}>
-              {ENROLLMENT_STATUS_LABELS[status]} : rien à régler pour l’instant, le prix sera recalculé à la
-              confirmation.
+              {ENROLLMENT_STATUS_LABELS[status]} : rien à régler pour l’instant ;{" "}
+              {prices.some((p) => p.read.differs)
+                ? "le prix saisi sera gardé à la confirmation."
+                : "le prix sera recalculé à la confirmation."}
             </Text>
           )}
         </div>
@@ -427,7 +472,7 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
             </Text>
           </Alert>
         )}
-        {news.map((n) => (
+        {prices.map(({ n, offGrid, computedNetCents, typed, read }) => (
           <section
             key={n.billingEntityId}
             aria-label={severalEntities ? `Inscription ${n.entity}` : undefined}
@@ -439,22 +484,32 @@ export function EnrollmentForm({ payerId, students, courses, initialStudent, sev
               </Title>
             )}
             {n.price.status === "error" ? (
-              <Text role="alert" size="sm">
+              <Text role={offGrid ? undefined : "alert"} size="sm">
                 {n.price.error.message}
               </Text>
             ) : (
               <PriceDetail
                 price={n.price}
-                totalLabel={news.length > 1 ? `Sous-total ${n.entity}` : totalLabel}
-                subtotal={news.length > 1}
+                // A typed price replaces the computed total, still shown for comparison (#292).
+                totalLabel={read.differs ? "Prix calculé" : news.length > 1 ? `Sous-total ${n.entity}` : totalLabel}
+                subtotal={news.length > 1 || read.differs}
+              />
+            )}
+            {(computedNetCents !== null || offGrid) && (
+              <ManualPriceField
+                id={`prix-saisi-${n.billingEntityId}`}
+                computedNetCents={computedNetCents}
+                typed={typed}
+                onChange={(t) => setTyped(n, t)}
+                tried={tried}
               />
             )}
           </section>
         ))}
-        {news.length > 1 && priced.length === news.length && (
+        {news.length > 1 && prices.every((p) => p.netPriceCents !== null) && (
           <Text component="div" size="md" fw={600} className="flex justify-between gap-2 border-t border-bordure pt-3">
             <span>{status === "active" ? "Total des inscriptions" : "Total à la confirmation"}</span>
-            <span className="tabular-nums">{formatEuros(priced.reduce((t, n) => t + n.price.netPriceCents, 0))}</span>
+            <span className="tabular-nums">{formatEuros(prices.reduce((t, p) => t + (p.netPriceCents ?? 0), 0))}</span>
           </Text>
         )}
         {result?.status === "ok" && <DiscountImpacts impacts={result.existingImpacts} />}
