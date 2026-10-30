@@ -1,11 +1,23 @@
-import { and, asc, desc, eq, ne, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, or, type SQL, sql } from "drizzle-orm";
 import { columnsOf, rowsOf } from "./columns-of";
 import { z } from "zod";
 import type { Hours } from "../domain/schedule/hours";
 import type { Tx } from "./index";
-import { closure, course, discipline, lesson, siteHours, season, room, site } from "./schema";
+import {
+  closure,
+  course,
+  discipline,
+  enrollmentQuarter,
+  lesson,
+  siteHours,
+  season,
+  seasonQuarter,
+  room,
+  site,
+} from "./schema";
 import { syncLessons } from "./lessons";
 import { closedCourseLabel } from "../domain/schedule/closure-scope";
+import { defaultQuarters, quartersOutside, quartersRefusal, type SeasonQuarter } from "../domain/enrollment/quarters";
 import { biweeklySwapped, recurrenceOf } from "../domain/schedule/lessons";
 import { frenchDate } from "../lib/dates";
 import { issuePath } from "../lib/form-errors";
@@ -37,11 +49,30 @@ export type SeasonRow = {
   endDate: string;
   course: number;
   tariffs: number;
+  /** Its quarters (#291), in date order. */
+  quarters: SeasonQuarter[];
 };
 
-export function listSeasons(tx: Tx): Promise<SeasonRow[]> {
-  const id = sql`${season}.${sql.identifier("id")}`;
+/** Quarters of these seasons (#291), in date order. */
+export async function seasonQuarters(tx: Tx, seasonIds: string[]): Promise<(SeasonQuarter & { seasonId: string })[]> {
+  const valid = seasonIds.filter(isUuid);
+  if (valid.length === 0) return [];
   return tx
+    .select({
+      id: seasonQuarter.id,
+      seasonId: seasonQuarter.seasonId,
+      label: seasonQuarter.label,
+      startDate: seasonQuarter.startDate,
+      endDate: seasonQuarter.endDate,
+    })
+    .from(seasonQuarter)
+    .where(inArray(seasonQuarter.seasonId, valid))
+    .orderBy(asc(seasonQuarter.startDate));
+}
+
+export async function listSeasons(tx: Tx): Promise<SeasonRow[]> {
+  const id = sql`${season}.${sql.identifier("id")}`;
+  const rows = await tx
     .select({
       id: season.id,
       label: season.label,
@@ -52,6 +83,14 @@ export function listSeasons(tx: Tx): Promise<SeasonRow[]> {
     })
     .from(season)
     .orderBy(desc(season.startDate));
+  const quarters = await seasonQuarters(
+    tx,
+    rows.map((r) => r.id),
+  );
+  return rows.map((r) => ({
+    ...r,
+    quarters: quarters.filter((q) => q.seasonId === r.id).map(({ seasonId: _s, ...q }) => q),
+  }));
 }
 
 const seasonFields = z.object(
@@ -94,8 +133,9 @@ async function checkSeason(tx: Tx, s: z.output<typeof validSeasonInput>, except?
 }
 
 /**
- * Creates a season; with `copyFrom`, copies that season's tariff grid,
- * discounts and lesson packs (prices still to be reviewed).
+ * Creates a season with its default quarters (#291, `defaultQuarters`, to be edited after);
+ * with `copyFrom`, copies that season's tariff grid, discounts and lesson packs (prices still
+ * to be reviewed).
  */
 export async function createSeason(
   tx: Tx,
@@ -117,6 +157,20 @@ export async function createSeason(
     .insert(season)
     .values(columnsOf(season, { ...seasonRow(s.data), schoolId: CURRENT_SCHOOL }))
     .returning({ id: season.id });
+  const quarters = defaultQuarters(s.data);
+  if (quarters.length > 0)
+    await tx.insert(seasonQuarter).values(
+      rowsOf(
+        seasonQuarter,
+        quarters.map((q) => ({
+          schoolId: CURRENT_SCHOOL,
+          seasonId: id,
+          label: q.label,
+          startDate: q.startDate,
+          endDate: q.endDate,
+        })),
+      ),
+    );
   if (copyFrom) {
     await tx.execute(sql`
       INSERT INTO tariff (school_id, season_id, audience, period, combination, discipline_id, price_cents)
@@ -228,6 +282,7 @@ export async function updateSeason(
   const refusal =
     (await checkSeason(tx, s.data, id)) ??
     (await closuresOutside(tx, id, s.data)) ??
+    (await quartersLeftOutside(tx, id, s.data)) ??
     (before.start !== after.start ? await swappedBiweekly(tx, id, before, after, today) : null);
   if (refusal) return { ok: false, message: refusal };
   const rows = await tx
@@ -252,6 +307,116 @@ export async function updateSeason(
       ),
     );
   return { ok: true, id, outside };
+}
+
+/** New season dates must keep its quarters inside them (#291): refused, naming them. */
+async function quartersLeftOutside(
+  tx: Tx,
+  seasonId: string,
+  s: z.output<typeof validSeasonInput>,
+): Promise<string | null> {
+  const outside = quartersOutside(await seasonQuarters(tx, [seasonId]), s);
+  if (outside.length === 0) return null;
+  const names = outside.map((q) => `${q.label} (du ${frenchDate(q.startDate)} au ${frenchDate(q.endDate)})`).join(", ");
+  return outside.length === 1
+    ? `Ce trimestre sortirait de la saison : ${names}. Modifiez d’abord les trimestres de la saison.`
+    : `Ces trimestres sortiraient de la saison : ${names}. Modifiez d’abord les trimestres de la saison.`;
+}
+
+const quarterFields = z.object(
+  {
+    // null: a quarter to add.
+    id: z.uuid().nullable(),
+    label: z
+      .string({ error: "Libellé du trimestre obligatoire" })
+      .trim()
+      .min(1, "Libellé du trimestre obligatoire")
+      .max(30, "Libellé du trimestre : 30 caractères au plus"),
+    startDate: z.iso.date("Date de trimestre invalide"),
+    endDate: z.iso.date("Date de trimestre invalide"),
+  },
+  { error: "Saisie invalide." },
+);
+export const validQuarters = z.array(quarterFields).max(12, "12 trimestres au plus.");
+export type QuarterEntry = z.input<typeof quarterFields>;
+
+/**
+ * Replaces the quarters of a season (#291): the ones with an id are updated, the others
+ * added, the missing ones removed. Checked as a whole (`quartersRefusal`) under a lock on
+ * the season row, so two saves or a season date change wait for each other. A quarter an
+ * enrollment covers cannot be removed (its enrollments would owe less without a trace);
+ * its dates and label can change. Quarters added or moved do not change the quarters of
+ * enrollments already saved.
+ */
+export async function saveSeasonQuarters(tx: Tx, seasonId: string, entries: QuarterEntry[]): Promise<Result> {
+  const parsed = validQuarters.safeParse(entries);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
+  if (!isUuid(seasonId)) return { ok: false, message: "Cette saison n’existe plus." };
+  const [s] = await tx
+    .select({ startDate: season.startDate, endDate: season.endDate })
+    .from(season)
+    .where(eq(season.id, seasonId))
+    .for("update");
+  if (!s) return { ok: false, message: "Cette saison n’existe plus." };
+  const quarters = parsed.data;
+  const refusal = quartersRefusal(quarters, s);
+  if (refusal) return { ok: false, message: refusal };
+
+  const current = await seasonQuarters(tx, [seasonId]);
+  const kept = new Set(quarters.flatMap((q) => (q.id ? [q.id] : [])));
+  if (
+    quarters.some((q) => q.id && !current.some((c) => c.id === q.id)) ||
+    kept.size !== quarters.filter((q) => q.id).length
+  )
+    return { ok: false, message: "Un trimestre a été modifié entre-temps : rechargez la page." };
+  const removed = current.filter((c) => !kept.has(c.id));
+  if (removed.length > 0) {
+    const used = await tx
+      .selectDistinct({ quarterId: enrollmentQuarter.quarterId })
+      .from(enrollmentQuarter)
+      .where(
+        inArray(
+          enrollmentQuarter.quarterId,
+          removed.map((r) => r.id),
+        ),
+      );
+    const named = removed.filter((r) => used.some((u) => u.quarterId === r.id)).map((r) => `« ${r.label} »`);
+    if (named.length > 0)
+      return {
+        ok: false,
+        message:
+          named.length === 1
+            ? `Le trimestre ${named[0]} est payé par des inscriptions : il ne peut pas être supprimé, seulement modifié.`
+            : `Les trimestres ${named.join(", ")} sont payés par des inscriptions : ils ne peuvent pas être supprimés, seulement modifiés.`,
+      };
+    await tx.delete(seasonQuarter).where(
+      inArray(
+        seasonQuarter.id,
+        removed.map((r) => r.id),
+      ),
+    );
+  }
+  for (const q of quarters)
+    if (q.id)
+      await tx
+        .update(seasonQuarter)
+        .set({ label: q.label, startDate: q.startDate, endDate: q.endDate })
+        .where(and(eq(seasonQuarter.id, q.id), eq(seasonQuarter.seasonId, seasonId)));
+  const added = quarters.filter((q) => !q.id);
+  if (added.length > 0)
+    await tx.insert(seasonQuarter).values(
+      rowsOf(
+        seasonQuarter,
+        added.map((q) => ({
+          schoolId: CURRENT_SCHOOL,
+          seasonId,
+          label: q.label,
+          startDate: q.startDate,
+          endDate: q.endDate,
+        })),
+      ),
+    );
+  return { ok: true, id: seasonId };
 }
 
 // ---------------------------------------------------------------------------

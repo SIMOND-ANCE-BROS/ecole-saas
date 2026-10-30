@@ -27,7 +27,8 @@ export type ChangeableEnrollment = {
   /** « Zoé », « Léa et Hugo ». */
   students: string;
   courses: string[];
-  netPriceCents: number;
+  /** What it costs over the season: a quarterly price once per covered quarter (#291). */
+  seasonDueCents: number;
   /** Why it cannot be cancelled (invoiced, attended), shown instead of « Annuler… »; null when it can. */
   cancelRefusal: string | null;
   /** Day it was entered: a drop-out cannot be dated before. */
@@ -178,7 +179,7 @@ function ChangeDialog({
     });
 
   const who = enrollment.students;
-  const summary = `${enrollment.courses.join(", ") || "sans cours"}, ${formatEuros(enrollment.netPriceCents)}`;
+  const summary = `${enrollment.courses.join(", ") || "sans cours"}, ${formatEuros(enrollment.seasonDueCents)}`;
   let body: ReactNode;
   if (preview === null) {
     body = (
@@ -250,7 +251,7 @@ function ChangeDialog({
         />
         <Text size="sm">
           {who} n’apparaîtra plus sur les appels des séances après cette date. Le prix de l’inscription (
-          {formatEuros(enrollment.netPriceCents)}) reste dû ; un avoir éventuel se décide à part.
+          {formatEuros(enrollment.seasonDueCents)}) reste dû ; un avoir éventuel se décide à part.
         </Text>
         <DiscountImpacts impacts={preview.impacts} />
       </>

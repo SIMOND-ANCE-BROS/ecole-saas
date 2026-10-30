@@ -329,6 +329,30 @@ export const season = pgTable(
   ],
 );
 
+/**
+ * A quarter of a season (#291): a period a quarterly package is sold and cashed by. Data of
+ * each season (Paramètres › Saisons), three by default (`defaultQuarters`); within the season,
+ * never two overlapping (checked by `quartersRefusal` under a lock on the season row).
+ */
+export const seasonQuarter = pgTable(
+  "season_quarter",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    schoolId: schoolIdColumn(),
+    seasonId: uuid("season_id").notNull(),
+    label: text("label").notNull(),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date").notNull(),
+  },
+  (t) => [
+    check("season_quarter_dates", sql`${t.endDate} >= ${t.startDate}`),
+    check("season_quarter_label", sql`btrim(${t.label}) <> ''`),
+    index().on(t.seasonId, t.startDate),
+    sameSchoolTarget(t),
+    sameSchool(t, t.seasonId, season).onDelete("cascade"),
+  ],
+);
+
 export const closure = pgTable(
   "closure",
   {
@@ -880,6 +904,27 @@ export const enrollmentCourse = pgTable(
     sameEntity(t, t.enrollmentId, enrollment),
     sameSchool(t, t.studentId, person),
     sameEntity(t, t.courseId, course),
+  ],
+);
+
+/**
+ * Quarters a quarterly enrollment covers (#291), set when it is saved: by default the
+ * remaining ones from its enrollment day (`coveredQuarters`). What it owes is its net price
+ * once per covered quarter (`seasonDueCents`). A quarter covered by an enrollment cannot be
+ * removed from its season.
+ */
+export const enrollmentQuarter = pgTable(
+  "enrollment_quarter",
+  {
+    schoolId: schoolIdColumn(),
+    enrollmentId: uuid("enrollment_id").notNull(),
+    quarterId: uuid("quarter_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.enrollmentId, t.quarterId] }),
+    index().on(t.quarterId),
+    sameSchool(t, t.enrollmentId, enrollment).onDelete("cascade"),
+    sameSchool(t, t.quarterId, seasonQuarter),
   ],
 );
 

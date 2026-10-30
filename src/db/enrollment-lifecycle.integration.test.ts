@@ -1,4 +1,5 @@
 import postgres from "postgres";
+import { withDefaultQuarters } from "./season-quarters.integration-helpers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
 import {
@@ -32,6 +33,8 @@ let school: string;
 let otherSchool: string;
 let entity: string;
 const ids: Record<string, string> = {};
+/** Quarters of each school's season (#291), which every quarterly enrollment of `family` covers. */
+const quarters: Record<string, string[]> = {};
 
 beforeAll(async () => {
   [{ id: school }] = await admin`INSERT INTO school (name, slug) VALUES ('École C', ${`ca-${suffix}`}) RETURNING id`;
@@ -45,6 +48,7 @@ beforeAll(async () => {
     const [season] =
       await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${s}, '2027-2028', '2027-09-01', '2028-06-30') RETURNING id`;
     ids[`season-${s}`] = season.id;
+    quarters[s] = await withDefaultQuarters(admin, season.id);
     await admin`INSERT INTO tariff (school_id, season_id, audience, period, combination, price_cents)
       VALUES (${s}, ${season.id}, 'child', 'quarter', '{60}'::smallint[], 11000)`;
     await admin`INSERT INTO discount (school_id, season_id, code, rate_bps, min_students, audiences, combinable_with_multi_discipline)
@@ -125,6 +129,8 @@ async function family(
       INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents, status)
       VALUES (${s}, (SELECT id FROM billing_entity WHERE school_id = ${s} AND is_default), ${ids[`season-${s}`]}, ${payer.id}, 'child', 'quarter', 11000, ${status}) RETURNING id`;
     await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id) VALUES (${s}, (SELECT billing_entity_id FROM enrollment WHERE id = ${e.id}), ${e.id}, ${child.id}, ${ids[`course-${s}`]})`;
+    for (const quarter of quarters[s])
+      await admin`INSERT INTO enrollment_quarter (school_id, enrollment_id, quarter_id) VALUES (${s}, ${e.id}, ${quarter})`;
     students.push(child.id);
     enrollments.push(e.id);
   }
@@ -326,8 +332,9 @@ describe("waitlist and drop-outs", () => {
   it("a drop-out stays due on the payer's balance (the school neither carries over nor refunds)", async () => {
     const f = await family(school, ["active"]);
     await inSchool((tx) => dropEnrollment(tx, desk, f.enrollments[0], "2027-11-15"));
+    // 110,00 € a quarter, enrolled for the season's three quarters (#291).
     expect((await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20")))?.total).toMatchObject({
-      due: 11000,
+      due: 33000,
       outsideCalculation: {},
     });
   });

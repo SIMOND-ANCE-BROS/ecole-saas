@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import postgres from "postgres";
+import { withDefaultQuarters } from "./season-quarters.integration-helpers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createCourse, type CourseInput } from "./courses";
 import { saveEnrollment } from "./enrollments";
@@ -28,6 +29,9 @@ const TODAY = "2026-10-21";
 const ids = {} as Record<string, string>;
 let courseInput: CourseInput;
 
+// Enrolled before the season's first quarter: a quarterly enrollment covers its three quarters (#291).
+const ENROLLED_ON = "2026-09-15";
+
 beforeAll(async () => {
   [{ id: ids.school }] =
     await admin`INSERT INTO school (name, slug) VALUES ('Zz École A', ${`sa-${suffix}`}) RETURNING id`;
@@ -49,6 +53,7 @@ beforeAll(async () => {
     VALUES (${e}, ${ids.payer}, ${ids.student}, 'legal_guardian', true)`;
   [{ id: ids.season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${e}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
+  await withDefaultQuarters(admin, ids.season);
   await admin`INSERT INTO tariff (school_id, season_id, audience, period, combination, price_cents)
     VALUES (${e}, ${ids.season}, 'child', 'quarter', '{60}'::smallint[], 11000)`;
   const [site] =
@@ -213,7 +218,7 @@ describe("once: enrollments and courses", () => {
     const run = () =>
       withSchool(ids.school, (tx) =>
         once(tx, "enrollment", key, { payerId: ids.payer, ...entry }, storedEnrollment, () =>
-          saveEnrollment(tx, frontDesk, ids.payer, ids.season, entry),
+          saveEnrollment(tx, frontDesk, ids.payer, ids.season, entry, ENROLLED_ON),
         ),
       );
     const first = await run();

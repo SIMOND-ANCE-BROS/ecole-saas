@@ -2,26 +2,35 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import type { Tx } from "./index";
 import { displayedName } from "./people";
 import { enrollment, person } from "./schema";
+import { quarterCountSql } from "./enrollments";
+import { seasonDueCents } from "../domain/enrollment/quarters";
 
 /** Dashboard reads, always within the `withSchool()` transaction (RLS). */
 
 export type SeasonFigures = { enrollments: number; students: number; netTotalCents: number };
 
-/** Active enrollments of the season, distinct enrolled students, total enrolled amount. */
+/**
+ * Active enrollments of the season, distinct enrolled students, total enrolled amount: what
+ * they cost over the season, a quarterly one once per covered quarter (#291).
+ */
 export async function seasonFigures(tx: Tx, seasonId: string): Promise<SeasonFigures> {
-  const [row] = await tx
+  const rows = await tx
     .select({
-      enrollments: sql<number>`count(*)::int`,
-      netTotalCents: sql<number>`coalesce(sum(${enrollment.netPriceCents}), 0)::int`,
-      students: sql<number>`(
-        SELECT count(DISTINCT ic.student_id)::int FROM enrollment_course ic
-        JOIN enrollment i ON i.id = ic.enrollment_id
-        WHERE i.season_id = ${seasonId} AND i.status = 'active'
-      )`,
+      period: enrollment.period,
+      netPriceCents: sql<number>`${enrollment.netPriceCents}::int`,
+      quarterCount: quarterCountSql,
     })
     .from(enrollment)
     .where(and(eq(enrollment.seasonId, seasonId), eq(enrollment.status, "active")));
-  return row;
+  const [{ students }] = await tx.execute<{ students: number }>(sql`
+    SELECT count(DISTINCT ic.student_id)::int AS students FROM enrollment_course ic
+    JOIN enrollment i ON i.id = ic.enrollment_id
+    WHERE i.season_id = ${seasonId} AND i.status = 'active'`);
+  return {
+    enrollments: rows.length,
+    students,
+    netTotalCents: rows.reduce((total, r) => total + seasonDueCents(r), 0),
+  };
 }
 
 export type LastEnrollment = {
