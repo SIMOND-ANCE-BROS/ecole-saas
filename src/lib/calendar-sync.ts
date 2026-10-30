@@ -22,20 +22,28 @@ export async function syncCalendar(
 ): Promise<{ ok: true; ranges: number } | { ok: false; message: string }> {
   const connection = await withSchool(schoolId, (tx) => readConnection(tx, instructorId));
   if (!connection) return { ok: false, message: "Aucun agenda connecté." };
+  // A refresh token the provider rotated is saved even when the read that follows fails (#368).
+  let renewedToken: string | null = null;
   const failure = async (message: string) => {
-    await withSchool(schoolId, (tx) => recordSync(tx, instructorId, { error: message }));
+    await withSchool(schoolId, (tx) =>
+      recordSync(tx, instructorId, {
+        error: message,
+        encryptedToken: renewedToken ? encrypt(renewedToken) : undefined,
+      }),
+    );
     return { ok: false as const, message };
   };
   const id = credentials(connection.provider);
   if (!id) return failure("Connexion à ce fournisseur non configurée sur le serveur.");
 
   try {
-    const { access: access, newRefreshToken: newRefreshToken } = await refresh(
+    const { access, newRefreshToken } = await refresh(
       connection.provider,
       id,
       decrypt(connection.encryptedToken),
       query,
     );
+    renewedToken = newRefreshToken;
     const window = {
       start: new Date(now.getTime() - BEFORE * DAY),
       end: new Date(now.getTime() + AFTER * DAY),
