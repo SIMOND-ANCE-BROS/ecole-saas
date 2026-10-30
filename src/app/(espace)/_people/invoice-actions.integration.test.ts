@@ -261,6 +261,12 @@ describe("a rejected invoice (#352)", () => {
     await expect(sendAgain(a.id)).rejects.toThrow("NEXT_REDIRECT");
     await expect(abandon(a.id)).rejects.toThrow("NEXT_REDIRECT");
     expect((await live(ids.a))[0].status).toBe("rejected");
+    // The front desk drafts meanwhile: its lines, given back, go on a new draft; the record no longer
+    // shows the rejected one beside it (the same amount twice), management still has it.
+    expect(await draft()).toEqual({ ok: true, drafted: 1 });
+    const shown = await withSchool(ids.school, (tx) => payerInvoices(tx, ids.payer, ids.season));
+    expect(shown.filter((i) => i.billingEntityId === ids.a).map((i) => i.status)).toEqual(["to_send"]);
+    expect(await billing(ids.yearly)).toBe(1);
   });
 
   it("never held by the tool: sent again by drafting its lines afresh, never billed twice", async () => {
@@ -311,12 +317,36 @@ describe("a rejected invoice (#352)", () => {
     expect(await row()).toMatchObject({ status: "issued", attempts: 11, number: expect.stringMatching(/^TEST-/) });
   });
 
-  it("abandoned: set aside, its lines back on the payer's next drafting", async () => {
+  it("abandoned only once the tool says it never issued it, then its lines back on the next drafting", async () => {
     as("director");
     const [a] = await live(ids.a);
-    await reject(a.id, "zz-ref");
+    await reject(a.id, "zz-held");
     expect(await billing(ids.yearly)).toBe(1);
+    const store = fakeStoreOf(ids.a);
+    const doc: Parameters<typeof store.documents.set>[1] = {
+      toolRef: "zz-held",
+      status: "draft",
+      number: null,
+      issuedOn: null,
+      totalInclTaxCents: 40000,
+      pdfUrl: null,
+      externalRef: a.id,
+      kind: "invoice",
+      customerRef: "zz-client",
+      payments: new Set(),
+      creditedCents: 0,
+    };
+    // Still a draft in the tool, or issued there after a lost answer: refused, lines kept.
+    store.documents.set("zz-held", doc);
+    expect(await abandon(a.id)).toMatchObject({ ok: false, message: expect.stringMatching(/supprimez-le/) });
+    store.documents.set("zz-held", { ...doc, status: "issued", number: "TEST-ZZ-1", issuedOn: "2027-09-20" });
+    expect(await abandon(a.id)).toMatchObject({ ok: false, message: expect.stringMatching(/l’a émise/) });
+    expect((await live(ids.a))[0]).toMatchObject({ id: a.id, status: "rejected" });
+    expect(await billing(ids.yearly)).toBe(1);
+    // Cancelled in the tool: abandoned.
+    store.documents.set("zz-held", { ...doc, status: "cancelled" });
     expect(await abandon(a.id)).toEqual({ ok: true, result: "abandoned" });
+    store.documents.delete("zz-held");
     expect(await live(ids.a)).toHaveLength(0);
     expect(await billing(ids.yearly)).toBe(0);
     as("front_desk");

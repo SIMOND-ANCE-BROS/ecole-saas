@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { encrypt } from "../../lib/encryption";
-import { FAKE_NUMBER_PREFIX, PAYMENT_E_REPORTING } from "../../domain/billing/invoicing";
+import { FAKE_NUMBER_PREFIX, INVOICING_TOOLS, PAYMENT_E_REPORTING } from "../../domain/billing/invoicing";
 import { type CustomerPayload, type InvoicePayload, type InvoicingConnector, InvoicingError } from "./contract";
 import { connectorFor, toolAvailable } from "./connector";
 import { FAKE_REFUSED_TOKEN, type FakeFault, fakeStoreOf } from "./fake";
@@ -518,5 +518,19 @@ describe("toolAvailable", () => {
     expect(toolAvailable("fake", { INVOICING_FAKE_ALLOWED: "true" })).toBe(false);
     for (const tool of ["pennylane", "abby", "shine"] as const)
       expect(toolAvailable(tool, { INVOICING_FAKE_ALLOWED: "1" })).toBe(false);
+  });
+
+  it("agrees with connectorFor for every tool, valid credentials given", () => {
+    const encryptedCredentials = credentials();
+    for (const tool of INVOICING_TOOLS)
+      for (const env of [{ INVOICING_FAKE_ALLOWED: "1" }, {}]) {
+        let built = true;
+        try {
+          connectorFor({ billingEntityId: entityId, tool, encryptedCredentials }, { ...FAST, env });
+        } catch {
+          built = false;
+        }
+        expect(toolAvailable(tool, env)).toBe(built);
+      }
   });
 });

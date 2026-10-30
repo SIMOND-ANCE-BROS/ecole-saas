@@ -178,6 +178,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
               invoices={invoices}
               showEntity={parsed.severalEntities}
               canDraft={mayDraft(role)}
+              isDirector={role === "director"}
             />
           )}
           <PaymentsSection

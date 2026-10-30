@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { notSent, settle } from "@/lib/action-result";
 import { abandon, sendAgain } from "./actions";
+import type { TakenUp } from "./taken-up";
 
 const FAILED = "Non enregistré : réessayez. Si le problème continue, vérifiez la connexion.";
 
@@ -27,8 +28,16 @@ export function ProblemActions({ invoiceId, inTool, payer }: { invoiceId: string
         return;
       }
       setMessage(null);
-      // The row leaves the list with the refresh.
-      router.refresh();
+      // The row leaves the list; the page says what became of it (`TAKEN_UP` banners).
+      const done: TakenUp =
+        r.result === "retry_in_tool"
+          ? "renvoyee"
+          : r.result === "abandoned"
+            ? "abandonnee"
+            : r.drafted
+              ? "refaite"
+              : "retiree";
+      router.replace(`/parametres/entreprises?reprise=${done}`, { scroll: false });
     });
   return (
     <div className="flex flex-col gap-1">
@@ -36,7 +45,8 @@ export function ProblemActions({ invoiceId, inTool, payer }: { invoiceId: string
         <div className="flex flex-col gap-2">
           {inTool && (
             <Text size="sm" fw={500}>
-              Supprimez d’abord son brouillon dans l’outil de facturation : il ne doit jamais être émis.
+              Supprimez d’abord son brouillon dans l’outil de facturation. Le logiciel vérifie auprès de l’outil qu’elle
+              n’a pas été émise avant de l’abandonner.
             </Text>
           )}
           <Text size="sm">

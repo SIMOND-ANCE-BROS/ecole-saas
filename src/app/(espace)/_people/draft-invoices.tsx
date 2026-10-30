@@ -9,10 +9,13 @@ import { draftInvoices } from "./invoice-actions";
 // Drafting again replaces the unsent drafts in place: retrying never makes a second set.
 const FAILED = "Factures non préparées : réessayez. Si le problème continue, vérifiez la connexion.";
 
-const prepared = (n: number) =>
+/** `again`: drafts not sent yet existed, and were replaced. */
+const prepared = (n: number, again: boolean) =>
   n === 0
     ? "Rien de nouveau à facturer : tout est déjà sur une facture."
-    : `${n} facture${n > 1 ? "s" : ""} préparée${n > 1 ? "s" : ""}.`;
+    : again
+      ? "Factures mises à jour."
+      : `${n} facture${n > 1 ? "s" : ""} préparée${n > 1 ? "s" : ""}.`;
 
 /**
  * « Préparer les factures » (#352): drafts the payer's invoices of the season, one per
@@ -35,7 +38,9 @@ export function DraftInvoices({ payerId, seasonId, again }: { payerId: string; s
           startTransition(async () => {
             const r = await settle(() => draftInvoices({ payerId, seasonId }));
             setMessage(
-              r.ok ? { ok: true, text: prepared(r.drafted) } : { ok: false, text: notSent(r) ? FAILED : r.message },
+              r.ok
+                ? { ok: true, text: prepared(r.drafted, again) }
+                : { ok: false, text: notSent(r) ? FAILED : r.message },
             );
             if (r.ok) router.refresh();
           });

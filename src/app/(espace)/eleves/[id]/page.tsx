@@ -244,6 +244,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
                   invoices={parsed.invoices}
                   showEntity={parsed.severalEntities}
                   canDraft={mayDraft(role)}
+                  isDirector={role === "director"}
                 />
               )}
               <PaymentsSection

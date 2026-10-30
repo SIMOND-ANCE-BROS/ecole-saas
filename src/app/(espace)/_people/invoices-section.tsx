@@ -1,7 +1,8 @@
 import { Badge, Paper, Text, Title } from "@mantine/core";
 import { toolAvailable } from "@/connectors/invoicing/connector";
 import type { PayerInvoice } from "@/db/payer-invoices";
-import { type Connection, invoiceProgress, type ProgressKind } from "@/domain/invoicing/progress";
+import { type Connection, invoiceProgress, isUnsentDraft, type ProgressKind } from "@/domain/invoicing/progress";
+import { TextLink } from "../_ui/text-link";
 import { frenchDate } from "@/lib/dates";
 import { formatEuros } from "@/lib/money";
 import { DraftInvoices } from "./draft-invoices";
@@ -24,13 +25,17 @@ const connectionOf = (i: PayerInvoice): Connection =>
 const at = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", dateStyle: "short", timeStyle: "short" });
 
 /** One invoice: its business, total, where it stands, its lines and installments. */
-function InvoiceCard({ i, showEntity }: { i: PayerInvoice; showEntity: boolean }) {
+function InvoiceCard({ i, showEntity, isDirector }: { i: PayerInvoice; showEntity: boolean; isDirector: boolean }) {
   const p = invoiceProgress({
     ...i,
     installmentsCents: i.installments.map((d) => d.amountCents),
     connection: connectionOf(i),
   });
-  const title = i.number ? `Facture n° ${i.number}` : "Facture en préparation";
+  const title = i.number
+    ? `Facture n° ${i.number}`
+    : i.status === "to_send" || i.status === "tool_draft"
+      ? "Facture en préparation"
+      : "Facture";
   const subtitle = [showEntity ? i.billingEntity : null, i.issuedOn ? `émise le ${frenchDate(i.issuedOn)}` : null]
     .filter(Boolean)
     .join(" · ");
@@ -62,9 +67,14 @@ function InvoiceCard({ i, showEntity }: { i: PayerInvoice; showEntity: boolean }
           {p.kind === "retrying" && ` Prochain essai : ${at.format(i.nextAttemptAt)}.`}
         </Text>
       )}
+      {isDirector && (p.kind === "rejected" || p.kind === "issued_mismatch") && (
+        <TextLink href="/parametres/entreprises" size="sm" className="self-start">
+          Reprendre dans Factures à reprendre
+        </TextLink>
+      )}
       <ul aria-label="Lignes de la facture" className="flex flex-col text-sm">
-        {i.lines.map((l, k) => (
-          <li key={k} className="flex justify-between gap-3">
+        {i.lines.map((l) => (
+          <li key={l.id} className="flex justify-between gap-3">
             <span className="min-w-0">{l.label}</span>
             <span className="whitespace-nowrap tabular-nums">{formatEuros(l.inclTaxCents)}</span>
           </li>
@@ -90,14 +100,17 @@ export function InvoicesSection({
   invoices,
   showEntity,
   canDraft,
+  isDirector,
 }: {
   payerId: string;
   season: { id: string; label: string };
   invoices: PayerInvoice[];
   showEntity: boolean;
   canDraft: boolean;
+  /** Management: a link to « Factures à reprendre » on a rejected invoice. */
+  isDirector: boolean;
 }) {
-  const unsent = invoices.some((i) => i.status === "to_send" && i.attempts === 0);
+  const unsent = invoices.some(isUnsentDraft);
   return (
     <section aria-labelledby="factures" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -114,7 +127,7 @@ export function InvoicesSection({
       ) : (
         <Paper withBorder component="ul" className="divide-y divide-bordure">
           {invoices.map((i) => (
-            <InvoiceCard key={i.id} i={i} showEntity={showEntity} />
+            <InvoiceCard key={i.id} i={i} showEntity={showEntity} isDirector={isDirector} />
           ))}
         </Paper>
       )}

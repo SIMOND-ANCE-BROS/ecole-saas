@@ -53,7 +53,7 @@ export type InvoiceProgress = { kind: ProgressKind; label: string; detail: strin
  * draft billing a yearly or drop-in package or a lesson pack does not go (`isSendable`).
  */
 export const HELD_DETAIL =
-  "Pas encore envoyée : les dates d’échéance des forfaits à l’année, des cours à l’unité et des carnets ne sont pas encore paramétrées dans le logiciel. Elle pourra partir une fois ces échéances en place.";
+  "Pas encore envoyée, rien à faire pour l’instant : les dates d’échéance des forfaits à l’année, des cours à l’unité et des carnets ne sont pas encore paramétrées dans le logiciel. Elle pourra partir une fois ces échéances en place.";
 
 /** What the record says of one invoice of the payer. */
 export function invoiceProgress(i: ProgressInput): InvoiceProgress {
@@ -102,6 +102,49 @@ export function invoiceProgress(i: ProgressInput): InvoiceProgress {
         kind: "sending",
         label: "Envoi en cours",
         detail: "Elle part d’elle-même vers l’outil de facturation, qui lui donnera son numéro.",
+      };
+  }
+}
+
+/** An unsent draft: never attempted by the outbox, so drafting again replaces it (`UNSENT_DRAFT`). */
+export const isUnsentDraft = (i: { status: InvoiceStatus; attempts: number }) =>
+  i.status === "to_send" && i.attempts === 0;
+
+/**
+ * What the tool answered about its document of a rejected invoice, before « Abandonner » gives
+ * the invoice's lines back (#352): `unreachable` when it could not be asked.
+ */
+export type ToolAnswer = "draft" | "issued" | "cancelled" | "rejected" | "not_found" | "unreachable";
+
+/**
+ * Whether a rejected invoice the tool holds a document of may be abandoned: only once the tool
+ * says it never issued it (`billsItsLines`: management's word alone is not enough, the tool may
+ * have issued it after a lost answer). A document the tool cancelled, refused or no longer knows
+ * was never issued.
+ */
+export function abandonVerdict(answer: ToolAnswer): { ok: true } | { ok: false; message: string } {
+  switch (answer) {
+    case "cancelled":
+    case "rejected":
+    case "not_found":
+      return { ok: true };
+    case "draft":
+      return {
+        ok: false,
+        message:
+          "Son brouillon existe encore dans l’outil de facturation : supprimez-le d’abord dans l’outil, puis « Abandonner ».",
+      };
+    case "issued":
+      return {
+        ok: false,
+        message:
+          "L’outil de facturation l’a émise : « Envoyer à nouveau » l’enregistre comme émise. Si elle est fausse, un avoir la corrigera.",
+      };
+    case "unreachable":
+      return {
+        ok: false,
+        message:
+          "L’outil de facturation n’a pas pu être consulté : impossible de vérifier que cette facture n’a pas été émise. Réessayez plus tard.",
       };
   }
 }

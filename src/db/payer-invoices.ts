@@ -1,7 +1,9 @@
 import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { rowsOf } from "./columns-of";
-import { CURRENT_SCHOOL } from "./invoice-draft-discard";
+import { BILLS_ITS_LINES, CURRENT_SCHOOL } from "./invoice-draft-discard";
+import { connectorConfigOf } from "./invoice-outbox";
+import type { EntityConnectorConfig } from "../connectors/invoicing/connector";
 import { draftPayerInvoices } from "./invoice-drafts";
 import type { Tx } from "./index";
 import {
@@ -42,12 +44,23 @@ export type PayerInvoice = {
   /** The business's active connector's tool, null when it has none. */
   connectorTool: InvoicingToolName | null;
   createdAt: Date;
-  lines: { label: string; inclTaxCents: number }[];
+  lines: { id: string; label: string; inclTaxCents: number }[];
   installments: { dueDate: string; amountCents: number }[];
 };
 
 /**
- * The payer's invoices of the season, its credit notes and cancelled invoices left out (a
+ * A rejected invoice the tool never held gives its lines back (`billsItsLines`): once another
+ * invoice bills one of them again, it is replaced, and the record would show the amount twice.
+ * Management still finds it in « Factures à reprendre ».
+ */
+const REPLACED = sql`(${invoice.status} = 'rejected' AND ${invoice.toolRef} IS NULL AND EXISTS (
+  SELECT 1 FROM invoice_line o
+  JOIN invoice_line l ON l.enrollment_id = o.enrollment_id OR l.lesson_pack_id = o.lesson_pack_id
+  JOIN invoice i ON i.id = l.invoice_id
+  WHERE o.invoice_id = ${invoice.id} AND i.id <> ${invoice.id} AND ${BILLS_ITS_LINES}))`;
+
+/**
+ * The payer's invoices of the season, its credit notes, cancelled and replaced invoices left out (a
  * cancelled one was set aside, its lines drafted again), newest first per business.
  */
 export async function payerInvoices(tx: Tx, payerId: string, seasonId: string): Promise<PayerInvoice[]> {
@@ -82,13 +95,19 @@ export async function payerInvoices(tx: Tx, payerId: string, seasonId: string): 
         eq(invoice.seasonId, seasonId),
         isNull(invoice.creditNoteOf),
         ne(invoice.status, "cancelled"),
+        sql`NOT ${REPLACED}`,
       ),
     )
     .orderBy(desc(billingEntity.isDefault), asc(billingEntity.name), desc(invoice.createdAt), asc(invoice.id));
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
   const lines = await tx
-    .select({ invoiceId: invoiceLine.invoiceId, label: invoiceLine.label, inclTaxCents: invoiceLine.inclTaxCents })
+    .select({
+      id: invoiceLine.id,
+      invoiceId: invoiceLine.invoiceId,
+      label: invoiceLine.label,
+      inclTaxCents: invoiceLine.inclTaxCents,
+    })
     .from(invoiceLine)
     .where(inArray(invoiceLine.invoiceId, ids))
     // As the tool receives them: charges first, then discounts.
@@ -110,7 +129,7 @@ export type RejectedOutcome =
   | { ok: true; mode: "redraft"; drafted: number }
   | { ok: false; message: string };
 
-const GONE = "Cette facture n’est plus à reprendre : rechargez la page.";
+export const GONE = "Cette facture n’est plus à reprendre : rechargez la page.";
 const PAID =
   "Un paiement est affecté à une échéance de cette facture : elle ne peut pas être abandonnée ni refaite ici.";
 
@@ -192,11 +211,16 @@ export async function sendRejectedAgain(tx: Tx, userId: string, invoiceId: strin
         sendErrorKind: null,
         sendErrorCode: null,
       })
-      .where(eq(invoice.id, invoiceId));
+      .where(and(eq(invoice.id, invoiceId), eq(invoice.status, "rejected")));
     await audit(tx, actor, invoiceId, { status: "tool_draft", reason: "sent_again" });
     return { ok: true, mode };
   }
-  if (!row.seasonId) return { ok: false, message: GONE };
+  // Drafts are per season: an invoice of no season cannot be drafted again, only abandoned.
+  if (!row.seasonId)
+    return {
+      ok: false,
+      message: "Cette facture n’est d’aucune saison : elle ne peut pas être refaite, abandonnez-la.",
+    };
   if (await hasAllocation(tx, invoiceId)) return { ok: false, message: PAID };
   await setAside(tx, actor, invoiceId, "redrafted");
   const drafted = await draftPayerInvoices(tx, actor, row.payerId, row.seasonId);
@@ -208,15 +232,42 @@ export async function sendRejectedAgain(tx: Tx, userId: string, invoiceId: strin
 export class RedraftRefused extends Error {}
 
 /**
- * « Abandonner » a rejected invoice: it is set aside (`cancelled`) and gives its lines back, so
- * the next drafting of the payer bills them again. For one the tool holds, management has first
- * deleted its draft in the tool (the screen asks).
+ * What « Abandonner » must check first: the tool's document of a rejected invoice, with the
+ * business's connector row read under RLS. Null when the invoice is not rejected (any more).
  */
-export async function abandonRejected(tx: Tx, userId: string, invoiceId: string): Promise<RejectedOutcome> {
+export async function rejectedInTool(
+  tx: Tx,
+  invoiceId: string,
+): Promise<{ toolRef: string | null; connector: EntityConnectorConfig | null } | null> {
+  if (!isUuid(invoiceId)) return null;
+  const [row] = await tx
+    .select({ toolRef: invoice.toolRef, billingEntityId: invoice.billingEntityId })
+    .from(invoice)
+    .where(and(eq(invoice.id, invoiceId), eq(invoice.status, "rejected"), isNull(invoice.creditNoteOf)));
+  if (!row) return null;
+  return {
+    toolRef: row.toolRef,
+    connector: row.toolRef ? await connectorConfigOf(tx, row.billingEntityId) : null,
+  };
+}
+
+/**
+ * « Abandonner » a rejected invoice: it is set aside (`cancelled`) and gives its lines back, so
+ * the next drafting of the payer bills them again. One the tool holds a document of is abandoned
+ * only once the tool said it never issued it (`abandonVerdict`, checked by the caller with
+ * `rejectedInTool` before this transaction): `checkedToolRef` is the reference it checked, and
+ * the invoice must still carry it.
+ */
+export async function abandonRejected(
+  tx: Tx,
+  userId: string,
+  invoiceId: string,
+  checkedToolRef: string | null,
+): Promise<RejectedOutcome> {
   if (!isUuid(invoiceId)) return { ok: false, message: "Saisie invalide." };
   const actor = await memberOf(tx, userId);
   const row = await lockRejected(tx, invoiceId);
-  if (!row) return { ok: false, message: GONE };
+  if (!row || row.toolRef !== checkedToolRef) return { ok: false, message: GONE };
   if (await hasAllocation(tx, invoiceId)) return { ok: false, message: PAID };
   await setAside(tx, actor, invoiceId, "abandoned");
   return { ok: true, mode: "abandoned" };

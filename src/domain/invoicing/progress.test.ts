@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { invoiceProgress, mayDraft, type ProgressInput, REJECTED_ROLES, sendAgainMode } from "./progress";
+import {
+  abandonVerdict,
+  invoiceProgress,
+  isUnsentDraft,
+  mayDraft,
+  type ProgressInput,
+  REJECTED_ROLES,
+  sendAgainMode,
+} from "./progress";
 
 describe("roles", () => {
   it("lets the front desk and management draft, management alone take up a rejected invoice", () => {
@@ -90,6 +98,26 @@ describe("invoiceProgress", () => {
       kind: "cancelled",
       label: "Abandonnée",
     });
+  });
+});
+
+describe("abandonVerdict", () => {
+  it("abandons only what the tool says it never issued", () => {
+    for (const a of ["cancelled", "rejected", "not_found"] as const) expect(abandonVerdict(a)).toEqual({ ok: true });
+    expect(abandonVerdict("draft")).toMatchObject({ ok: false, message: expect.stringMatching(/supprimez-le/) });
+    expect(abandonVerdict("issued")).toMatchObject({ ok: false, message: expect.stringMatching(/émise/) });
+    expect(abandonVerdict("unreachable")).toMatchObject({
+      ok: false,
+      message: expect.stringMatching(/consultée|consulté/),
+    });
+  });
+});
+
+describe("isUnsentDraft", () => {
+  it("is a draft the outbox never attempted", () => {
+    expect(isUnsentDraft({ status: "to_send", attempts: 0 })).toBe(true);
+    expect(isUnsentDraft({ status: "to_send", attempts: 1 })).toBe(false);
+    expect(isUnsentDraft({ status: "tool_draft", attempts: 0 })).toBe(false);
   });
 });
 
