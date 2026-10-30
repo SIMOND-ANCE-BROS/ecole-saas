@@ -56,9 +56,10 @@ export default async function CollectPaymentPage({ searchParams }: PageProps<"/p
     : balance.severalEntities && onlyActive
       ? (owed[onlyActive]?.remaining ?? 0)
       : balance.total.remaining;
-  // The family's debt over every entity, never netted (#300): shown next to the chosen entity's.
+  // The family's debt over the entities offered, never netted (#300): shown next to the chosen
+  // entity's. A deactivated one is left out: it cannot be chosen here (#319).
   const familyRemaining =
-    balance && entities.length > 0 ? familyOwed(balance.byEntity.map((e) => e.balance)).owed : null;
+    balance && entities.length > 0 ? familyOwed(entities.flatMap((e) => (owed[e.id] ? [owed[e.id]] : []))).owed : null;
 
   return (
     <FormPage className="flex flex-col gap-4">
