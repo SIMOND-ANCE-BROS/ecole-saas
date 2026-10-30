@@ -11,7 +11,7 @@ import {
 } from "../domain/payroll/statement";
 import { DAY_NAMES } from "../domain/schedule/days";
 import type { Tx } from "./index";
-import { effectiveDuration } from "./lessons";
+import { effectiveDuration, regularInstructor } from "./lessons";
 import { auditLog, closure, course, discipline, instructor, lesson } from "./schema";
 
 /**
@@ -28,7 +28,7 @@ export type StatementData = {
   closures: SchoolClosure[];
 };
 
-/** The course's own (regular) instructor, beside the one teaching the lesson. */
+/** The lesson's regular teacher (#310: the course's when it was given), beside the one teaching it. */
 const regular = alias(instructor, "regular");
 
 const lessonTime = sql<string>`to_char(coalesce(${lesson.startTime}, ${course.startTime}), 'HH24:MI')`;
@@ -76,6 +76,7 @@ export async function statementData(tx: Tx, month: string, instructorId?: string
       payMode: instructor.payMode,
       rateCents: instructor.rateCents,
       isOwner: instructor.isOwner,
+      active: instructor.active,
     })
     .from(instructor)
     .where(one ? eq(instructor.id, instructorId) : undefined)
@@ -99,6 +100,7 @@ export async function statementData(tx: Tx, month: string, instructorId?: string
       courseInstructorId: course.instructorId,
       instructorRateCents: course.instructorRateCents,
       instructorRatePayMode: course.instructorRatePayMode,
+      regularId: regular.id,
       regularPayMode: regular.payMode,
       regularRateCents: regular.rateCents,
       regularIsOwner: regular.isOwner,
@@ -108,7 +110,7 @@ export async function statementData(tx: Tx, month: string, instructorId?: string
     .from(lesson)
     .innerJoin(course, eq(course.id, lesson.courseId))
     .innerJoin(discipline, eq(discipline.id, course.disciplineId))
-    .innerJoin(regular, eq(regular.id, course.instructorId))
+    .innerJoin(regular, eq(regular.id, regularInstructor))
     .where(
       and(gte(lesson.date, first), lte(lesson.date, last), one ? eq(lesson.instructorId, instructorId) : undefined),
     );
@@ -137,6 +139,7 @@ export async function statementData(tx: Tx, month: string, instructorId?: string
       payMode: i.payMode,
       rateCents: i.rateCents,
       isOwner: i.isOwner,
+      active: i.active,
     })),
     lessons: lessonRows.map((l) => ({
       id: l.id,
@@ -153,7 +156,7 @@ export async function statementData(tx: Tx, month: string, instructorId?: string
         instructorRatePayMode: l.instructorRatePayMode,
       },
       regular: {
-        id: l.courseInstructorId,
+        id: l.regularId,
         payMode: l.regularPayMode,
         rateCents: l.regularRateCents,
         isOwner: l.regularIsOwner,

@@ -116,8 +116,10 @@ export async function createInstructor(tx: Tx, entry: InstructorInput): Promise<
  * (#192 Q5, recommended rule pending the school's validation). `today` is a
  * `YYYY-MM-DD` date in Paris (`todayInParis()`).
  *
- * A change of pay mode or rate is kept in the audit log, by `userId` when
- * given: the monthly statement flags a month whose rates changed (#285).
+ * A change of pay mode, rate or owner status is kept in the audit log, by
+ * `userId` when given: the monthly statement flags a month whose rates
+ * changed (#285). Owner status counts (#310): it turns a replacement of that
+ * instructor from priced into « à chiffrer » and back.
  */
 export async function updateInstructor(
   tx: Tx,
@@ -130,7 +132,7 @@ export async function updateInstructor(
   if (!z.uuid().safeParse(id).success) return gone;
   // Locked: a course rate saved meanwhile (FOR SHARE in courses.ts) waits, or makes this check see it.
   const [current] = await tx
-    .select({ payMode: instructor.payMode, rateCents: instructor.rateCents })
+    .select({ payMode: instructor.payMode, rateCents: instructor.rateCents, isOwner: instructor.isOwner })
     .from(instructor)
     .where(eq(instructor.id, id))
     .for("update");
@@ -165,7 +167,7 @@ export async function updateInstructor(
     .returning({ id: instructor.id });
   if (rows.length !== 1) return gone;
   if (!entry.active) await deleteConnection(tx, id);
-  if (current.payMode !== entry.payMode || current.rateCents !== entry.rateCents) {
+  if (current.payMode !== entry.payMode || current.rateCents !== entry.rateCents || current.isOwner !== entry.isOwner) {
     const [who] = userId ? await tx.select({ id: member.id }).from(member).where(eq(member.userId, userId)) : [];
     await tx.insert(auditLog).values({
       schoolId: CURRENT_SCHOOL,
@@ -173,8 +175,8 @@ export async function updateInstructor(
       targetTable: "instructor",
       rowId: id,
       action: "update",
-      before: { payMode: current.payMode, rateCents: current.rateCents },
-      after: { payMode: entry.payMode, rateCents: entry.rateCents },
+      before: { payMode: current.payMode, rateCents: current.rateCents, isOwner: current.isOwner },
+      after: { payMode: entry.payMode, rateCents: entry.rateCents, isOwner: entry.isOwner },
     });
   }
   return { ok: true };

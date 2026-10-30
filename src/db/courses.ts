@@ -28,6 +28,7 @@ import {
   type PayMode,
 } from "../domain/payroll/rate";
 import { courseRateEditable } from "../domain/payroll/course-rates";
+import { type CourseSlotAndInstructor, givenLessonsKeep } from "../domain/schedule/given-lessons";
 import { entityChangeRefusal } from "../domain/enrollment/entities";
 import { issuePath } from "../lib/form-errors";
 import { has } from "../lib/has";
@@ -473,6 +474,7 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
   });
   if (!unit) return STALE_UNIT;
   const instructorRatePayMode = unit.unit;
+  await keepGivenLessons(tx, id, existing, r.values);
   await tx
     .update(course)
     .set(columnsOf(course, { ...r.values, billingEntityId: entity.id, instructorRateCents, instructorRatePayMode }))
@@ -488,11 +490,45 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
           eq(lesson.courseId, id),
           eq(lesson.instructorId, existing.instructorId),
           eq(lesson.status, "planned"),
-          sql`${lesson.date} >= (now() AT TIME ZONE 'Europe/Paris')::date`,
+          sql`NOT ${given(existing.startTime)}`,
         ),
       );
   }
   return { ok: true, id, instructorRateCents };
+}
+
+/**
+ * Lessons given (#310): started before now in Paris, at their own time or the
+ * course's `courseTime` (its time before the change). A lesson given earlier
+ * today counts, as in statements, and stays with the instructor who gave it.
+ */
+const given = (courseTime: string) =>
+  sql`(${lesson.date} + coalesce(${lesson.startTime}, ${courseTime}::time)) < (now() AT TIME ZONE 'Europe/Paris')`;
+
+/** Lessons that keep what they were given with: given, or with attendance taken (`done`), even ahead of time. */
+const kept = (courseTime: string) => or(given(courseTime), eq(lesson.status, "done"));
+
+/**
+ * Before the course takes `after` (#310): its lessons already given keep the
+ * main instructor (`regular_instructor_id`), time and length they were given
+ * with, unless they have their own (a moved lesson, an earlier change).
+ * Statements then pay them as given, not on the course's current data.
+ */
+async function keepGivenLessons(tx: Tx, id: string, before: CourseSlotAndInstructor, after: CourseSlotAndInstructor) {
+  const keep = givenLessonsKeep(before, after);
+  if (keep.instructor)
+    await tx
+      .update(lesson)
+      .set({ regularInstructorId: sql`coalesce(${lesson.regularInstructorId}, ${before.instructorId}::uuid)` })
+      .where(and(eq(lesson.courseId, id), kept(before.startTime)));
+  if (keep.slot)
+    await tx
+      .update(lesson)
+      .set({
+        startTime: sql`coalesce(${lesson.startTime}, ${before.startTime}::time)`,
+        durationMinutes: sql`coalesce(${lesson.durationMinutes}, ${before.durationMinutes}::int)`,
+      })
+      .where(and(eq(lesson.courseId, id), kept(before.startTime)));
 }
 
 /** A course's own instructor rate with its unit: the pay mode it was typed in (#268). */
@@ -779,6 +815,7 @@ export async function moveCourse(
       .where(eq(enrollmentCourse.courseId, id));
     if (n > 0) return { status: "confirm", enrolled: n };
   }
+  await keepGivenLessons(tx, id, existing, { ...existing, ...c.data });
   await tx
     .update(course)
     .set({ weekday: c.data.weekday, startTime: c.data.startTime, durationMinutes: c.data.durationMinutes, roomId })

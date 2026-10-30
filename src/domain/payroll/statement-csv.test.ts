@@ -3,7 +3,14 @@ import { statementCsv } from "./statement-csv";
 import { IN_FLAT, instructorStatement, type StatementInstructor, type StatementLesson } from "./statement";
 import type { RatedInstructor } from "./rate";
 
-const hourly: StatementInstructor = { id: "i1", name: "Alix Test", payMode: "hourly", rateCents: 2500, isOwner: false };
+const hourly: StatementInstructor = {
+  id: "i1",
+  name: "Alix Test",
+  payMode: "hourly",
+  rateCents: 2500,
+  isOwner: false,
+  active: true,
+};
 const perLesson: RatedInstructor = { id: "i2", payMode: "per_lesson", rateCents: 3000 };
 
 const lesson = (
@@ -78,13 +85,14 @@ describe("statementCsv", () => {
       payMode: "monthly_flat",
       rateCents: 80000,
       isOwner: false,
+      active: true,
     };
     const s = statementOf(flat, [lesson("a", flat, "2027-10-04")], ["2027-10-10"]);
     const rows = rowsOf(statementCsv([s]));
     expect(rows[1]).toBe(`Marin Test;04/10/2027;18:00;Jazz Débutant, lundi 18:00;90;;;;${IN_FLAT}`);
     expect(rows[2]).toBe("Marin Test;;;Forfait mensuel;;800,00;mois;800,00;");
     expect(rows[3]).toMatch(
-      /^Marin Test;;;À vérifier;;;;;Un tarif, le mode de rémunération ou l’intervenant d’un cours a changé/,
+      /^Marin Test;;;À vérifier;;;;;Un tarif, le mode de rémunération, le statut de dirigeant ou l’intervenant d’un cours a changé/,
     );
     const amounts = rows.slice(1).map((r) => r.split(";")[7]);
     expect(amounts.filter(Boolean)).toEqual(["800,00"]);

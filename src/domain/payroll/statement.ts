@@ -37,9 +37,13 @@ export type StatementLesson = {
   courseId: string;
   /** « Jazz Débutant, lundi 18:00 ». */
   courseLabel: string;
-  /** The course's own instructor and rate. */
+  /** The course's current instructor and own rate (that instructor's). */
   course: RatedCourse;
-  /** The course's own (regular) instructor's pay: what a substitute is paid at. */
+  /**
+   * The lesson's regular teacher and their pay: what a substitute is paid at.
+   * The course's current instructor, or the one it had when the lesson was
+   * given, stamped on the lesson when the course changed hands (#310).
+   */
   regular: RatedInstructor & { isOwner: boolean };
   /** `taken` once attendance was taken (`attendanceTaken`); `present`: students marked present. */
   attendance: { taken: boolean; present: number };
@@ -49,6 +53,8 @@ export type StatementInstructor = RatedInstructor & {
   name: string;
   /** Runs the school (`instructor.is_owner`): no statement. */
   isOwner: boolean;
+  /** Still working for the school: a monthly flat instructor without lessons is listed only then. */
+  active: boolean;
 };
 
 /** A change of an instructor's pay mode or default rate, or of the own rate of one of their courses: its day in Paris. */
@@ -78,7 +84,7 @@ export const FLAG_TEXTS: Record<StatementFlag, string> = {
   no_attendance:
     "Appel non fait pour certaines séances : elles sont comptées, mais une séance sans élève présent n’est pas payée. Faites l’appel, ou annulez la séance si personne n’est venu.",
   rate_changed:
-    "Un tarif, le mode de rémunération ou l’intervenant d’un cours a changé depuis le début du mois : le relevé est calculé avec les données d’aujourd’hui. Vérifiez les séances d’avant le changement.",
+    "Un tarif, le mode de rémunération, le statut de dirigeant ou l’intervenant d’un cours a changé depuis le début du mois : le relevé est calculé avec les tarifs d’aujourd’hui. Vérifiez les séances d’avant le changement.",
   flat_holidays:
     "Forfait mensuel compté en entier alors que l’école ferme pendant ce mois (vacances, jours fériés) : à vérifier avant de payer.",
   flat_no_lesson: "Aucune séance ce mois-ci : forfait mensuel non compté, à vérifier avant de payer.",
@@ -87,9 +93,9 @@ export const FLAG_TEXTS: Record<StatementFlag, string> = {
 /** The same, in a few words for the month's list. */
 export const FLAG_SHORT: Record<StatementFlag, string> = {
   no_attendance: NO_ATTENDANCE,
-  rate_changed: "tarif ou cours modifié depuis le début du mois",
+  rate_changed: "tarif, statut ou cours modifié depuis le début du mois",
   flat_holidays: "forfait d’un mois avec vacances",
-  flat_no_lesson: "forfait non compté",
+  flat_no_lesson: "forfait non compté : aucune séance",
 };
 
 export type StatementLine = {
@@ -152,7 +158,7 @@ export type MonthStatement = {
   inProgress: boolean;
   /** The month is after today: no lesson counts yet. */
   notStarted: boolean;
-  /** Instructors with at least one lesson counted, by name. */
+  /** Instructors with at least one lesson counted, or a monthly flat to check (`listed`), by name. */
   statements: InstructorStatement[];
   lessonCount: number;
   minutes: number;
@@ -200,6 +206,18 @@ export const hasStatement = (i: Pick<StatementInstructor, "isOwner">) => !i.isOw
 export const hourlyAmount = (rateCents: number, minutes: number) => prorate(rateCents, minutes, 60);
 
 /**
+ * The course rate a lesson is priced on (#310): the course's own rate
+ * belongs to its current instructor, so it applies only to a lesson whose
+ * regular teacher is still that instructor. A lesson given before the course
+ * changed hands is priced at its own regular teacher's default rate (the
+ * statement is flagged `rate_changed` for the month of the handover).
+ */
+export const lessonCourseRate = (l: Pick<StatementLesson, "course" | "regular">): RatedCourse =>
+  l.regular.id === l.course.instructorId
+    ? l.course
+    : { instructorId: l.regular.id, instructorRateCents: null, instructorRatePayMode: null };
+
+/**
  * Price of a lesson for the instructor who taught it (#191, #268).
  * A substitute is paid the regular teacher's rate for the course (#192 Q1,
  * settled): the course's own rate, else the regular teacher's default rate,
@@ -210,17 +228,19 @@ export const hourlyAmount = (rateCents: number, minutes: number) => prorate(rate
  * school, #192). A course rate typed in another unit than
  * the current pay mode is not read in the new one (#268). A monthly flat
  * instructor's own lessons are shown for information (the flat pays them).
+ * The regular teacher is the lesson's (`lessonCourseRate`), not the course's
+ * current one (#310).
  */
 export function priceLesson(
   l: StatementLesson,
   i: RatedInstructor,
 ): Pick<StatementLine, "substitute" | "rateCents" | "unit" | "amountCents" | "toPrice"> {
-  const substitute = l.instructorId !== l.course.instructorId;
+  const substitute = l.instructorId !== l.regular.id;
   const payer = substitute ? l.regular : i;
   const none = { substitute, rateCents: null, unit: null, amountCents: null };
   if (substitute && l.regular.isOwner) return { ...none, toPrice: "owner_course" };
   if (!courseRateAllowed(payer.payMode)) return { ...none, toPrice: substitute ? "flat_course" : null };
-  const rate = effectiveRate(l.course, payer);
+  const rate = effectiveRate(lessonCourseRate(l), payer);
   if (rate === null) return { ...none, toPrice: "old_unit" };
   const amountCents = payer.payMode === "hourly" ? hourlyAmount(rate, l.durationMinutes) : rate;
   return { substitute, rateCents: rate, unit: payer.payMode, amountCents, toPrice: null };
@@ -279,7 +299,7 @@ export function instructorStatement(input: {
       noAttendance: !l.attendance.taken,
       ...priceLesson(l, i),
     };
-    whose.add(l.course.instructorId);
+    whose.add(l.regular.id);
     const g = groups.get(l.courseId) ?? {
       courseId: l.courseId,
       courseLabel: l.courseLabel,
@@ -331,7 +351,15 @@ export function monthState(month: string, today: string): { inProgress: boolean;
   return { inProgress: first <= today && today <= last, notStarted: today < first };
 }
 
-/** Statements of every instructor who taught in the month (owners aside), and the month's totals. */
+/**
+ * Whether a statement is listed in the month's list and export: an
+ * instructor who taught in the month, or an active monthly flat instructor
+ * whose flat is flagged as not counted (#310), to check before paying.
+ */
+export const listed = (s: Pick<InstructorStatement, "lessonCount" | "flags">, i: Pick<StatementInstructor, "active">) =>
+  s.lessonCount > 0 || (i.active && s.flags.includes("flat_no_lesson"));
+
+/** Statements of every instructor listed for the month (owners aside: `hasStatement`, `listed`), and the month's totals. */
 export function monthStatement(input: {
   month: string;
   today: string;
@@ -344,17 +372,10 @@ export function monthStatement(input: {
   const { first, last } = monthBounds(month);
   const statements = instructors
     .filter(hasStatement)
-    .map((i) =>
-      instructorStatement({
-        month,
-        today,
-        instructor: i,
-        lessons,
-        rateChanges,
-        closures,
-      }),
-    )
-    .filter((s) => s.lessonCount > 0)
+    .flatMap((i) => {
+      const s = instructorStatement({ month, today, instructor: i, lessons, rateChanges, closures });
+      return listed(s, i) ? [s] : [];
+    })
     .sort((a, b) => a.name.localeCompare(b.name, "fr") || a.instructorId.localeCompare(b.instructorId));
   const sum = (f: (s: InstructorStatement) => number) => statements.reduce((t, s) => t + f(s), 0);
   return {
