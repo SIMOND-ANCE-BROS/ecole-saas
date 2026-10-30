@@ -68,6 +68,8 @@ export const PAYMENT_COLUMNS = [
   { id: "reference", label: "Référence", type: "text" },
   { id: "encaissement", label: "Encaissement prévu", type: "date" },
   { id: "remise", label: "Remise", type: "date", ifEmpty: "—" },
+  // Checkboxes of the entity names (#300); the page removes it for a school with a single entity.
+  { id: "entreprise", label: "Entreprise", type: "text" },
 ] as const satisfies readonly ColumnDef[];
 
 /** Ids of a column list, to key its cells and SQL expressions. */

@@ -33,10 +33,13 @@ const day = frenchDate;
  */
 export function ToDeposit({
   method: method,
+  entity,
   payments: payments,
   today: today,
 }: {
   method: DepositMethod;
+  /** The entity whose account receives the deposit (#300); its name only shown when the school has several. */
+  entity: { id: string; name: string | null };
   payments: AuditLogRow[];
   today: string;
 }) {
@@ -53,18 +56,22 @@ export function ToDeposit({
     setChosen(s);
   };
   const title = PAYMENT_METHODS[method];
+  // Unique per slip: the same method shows once per entity (#300).
+  const slot = `${entity.id}-${method}`;
 
   return (
-    <section aria-labelledby={`remettre-${method}`} className="flex flex-col gap-2">
-      <Title order={2} size="h5" id={`remettre-${method}`}>
-        {title}{" "}
+    <section aria-labelledby={`remettre-${slot}`} className="flex flex-col gap-2">
+      <Title order={2} size="h5" id={`remettre-${slot}`}>
+        {entity.name ? `${title} · ${entity.name}` : title}{" "}
         <Text span size="sm" c="dimmed">
           — {payments.length} à remettre
         </Text>
       </Title>
       <Paper withBorder className="overflow-x-auto">
         <Table highlightOnHover>
-          <TableCaption className="sr-only">{title} à remettre</TableCaption>
+          <TableCaption className="sr-only">
+            {title} à remettre{entity.name ? ` (${entity.name})` : ""}
+          </TableCaption>
           <TableThead>
             <TableTr>
               <TableTh w={40}>
@@ -127,7 +134,7 @@ export function ToDeposit({
             setMessage(
               (
                 await orConnectionLost(
-                  () => deposit({ date, method: method, paymentIds: selection.map((p) => p.id) }),
+                  () => deposit({ date, method, paymentIds: selection.map((p) => p.id), billingEntityId: entity.id }),
                   (message) => ({ message }),
                 )
               ).message,
@@ -140,15 +147,15 @@ export function ToDeposit({
           type="submit"
           loading={sending}
           disabled={selection.length === 0}
-          aria-describedby={selection.length === 0 ? `${method}-nothing-ticked` : undefined}
+          aria-describedby={selection.length === 0 ? `${slot}-nothing-ticked` : undefined}
         >
           {selection.length === 0
             ? "Créer la remise"
-            : `Créer la remise : ${selection.length} × ${title.toLowerCase()}, ${formatEuros(total)}`}
+            : `Créer la remise${entity.name ? ` ${entity.name}` : ""} : ${selection.length} × ${title.toLowerCase()}, ${formatEuros(total)}`}
         </Button>
         {/* Said in plain text: a disabled button's label is too faint to carry the instruction. */}
         {selection.length === 0 && (
-          <Text id={`${method}-nothing-ticked`} size="sm" className="self-center">
+          <Text id={`${slot}-nothing-ticked`} size="sm" className="self-center">
             Cochez les paiements à remettre.
           </Text>
         )}

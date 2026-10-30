@@ -23,6 +23,8 @@ export type PaymentLogRow = {
   issuer: string | null;
   plannedPayment: string | null;
   dateDeposit: string | null;
+  /** Name of the billing entity that cashed it (#300). */
+  entity: string;
 };
 
 type PaymentColumn = ColumnId<typeof PAYMENT_COLUMNS>;
@@ -49,6 +51,7 @@ export const exportRowOf = (row: PaymentLogRow): ExportRow => ({
   issuer: row.issuer,
   plannedPayment: row.plannedPayment,
   deposit: row.dateDeposit,
+  entity: row.entity,
 });
 
 /** « 0012345, Banque Populaire »: the cheque number and its bank, after the kind of a reverse entry; or null. */
@@ -72,6 +75,8 @@ export function paymentLogValue(row: PaymentLogRow, column: PaymentColumn, today
       return futureCashing(row, today);
     case "remise":
       return row.dateDeposit;
+    case "entreprise":
+      return row.entity;
   }
 }
 

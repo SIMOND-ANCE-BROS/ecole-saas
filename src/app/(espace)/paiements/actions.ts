@@ -18,18 +18,24 @@ const safeReturnPath = (r: unknown) =>
 /**
  * Records one or more payments (front desk and management), then returns to
  * the payer's record. `key` is generated once by the form: a retry after a lost
- * response records nothing new (#260).
+ * response records nothing new (#260). `billingEntityId`: the entity chosen to
+ * cash them, sent only when the school has several (#300).
  */
 export async function collectPayments(
   payerId: string,
   entry: unknown,
   back: unknown,
   key: string,
+  billingEntityId?: unknown,
 ): Promise<{ message: string }> {
   const { schoolId: schoolId, userId } = await requireRole("director", "front_desk");
   if (!z.uuid().safeParse(key).success) return { message: "Saisie invalide." };
+  const entity = z.uuid().optional().safeParse(billingEntityId);
+  if (!entity.success) return { message: "Choisissez l’entreprise qui encaisse ce paiement." };
   const r = await withSchool(schoolId, (tx) =>
-    once(tx, "payment", key, { payerId, entry }, storedPayments, () => collect(tx, userId, payerId, entry as never)),
+    once(tx, "payment", key, { payerId, entry, billingEntityId: entity.data }, storedPayments, () =>
+      collect(tx, userId, payerId, entry as never, entity.data),
+    ),
   );
   if (!r.ok) return { message: r.message };
   revalidatePath("/encaissements");

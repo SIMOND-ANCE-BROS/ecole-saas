@@ -2,7 +2,7 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
 import { createEntity, defaultEntityId, listEntities, makeDefaultEntity, updateEntity } from "./billing-entities";
-import { collect, correctPayment } from "./payments";
+import { collect, correctPayment, ENTITY_REQUIRED } from "./payments";
 import { createDeposit } from "./deposits";
 import { defaultEntityFor } from "./billing-entity.integration-helpers";
 
@@ -256,12 +256,15 @@ describe("composite keys carrying the entity", () => {
     await expect(invoiceOf(entityA, "A-1")).rejects.toThrow(/invoice_billing_entity_id_number_unique/);
   });
 
-  it("collect records the payments for the default entity", async () => {
-    const r = await withSchool(school, (tx) =>
-      collect(tx, director, payer, [
-        { method: "cash", amountCents: 700, date: TODAY, reference: null, issuer: null, plannedPayment: null },
-      ]),
-    );
+  it("collect records the payments for the entity chosen, which several active entities require (#300)", async () => {
+    const cash = [
+      { method: "cash" as const, amountCents: 700, date: TODAY, reference: null, issuer: null, plannedPayment: null },
+    ];
+    expect(await withSchool(school, (tx) => collect(tx, director, payer, cash))).toEqual({
+      ok: false,
+      message: ENTITY_REQUIRED,
+    });
+    const r = await withSchool(school, (tx) => collect(tx, director, payer, cash, entityA));
     if (!r.ok) throw new Error(r.message);
     const [p] = await admin`SELECT billing_entity_id AS entity FROM payment WHERE id = ${r.ids[0]}`;
     expect(p.entity).toBe(entityA);

@@ -15,17 +15,52 @@ type Row = { id: number; method: Method; amount: string; reference: string; issu
 const EMPTY_ROW: Omit<Row, "id"> = { method: "cheque", amount: "", reference: "", issuer: "", payment: "" };
 const METHOD_OPTIONS = Object.entries(PAYMENT_METHODS).map(([value, label]) => ({ value, label }));
 
-type Props = { payerId: string; payer: string; remaining: number | null; today: string; back: string };
+/** An entity the payment can be cashed by, with what the payer still owes it (#300). */
+export type EntityOption = { id: string; name: string; remaining: number };
+
+type Props = {
+  payerId: string;
+  payer: string;
+  /**
+   * What the payer still owes where the payment goes without a choice (the single active
+   * entity); null if they never owed nor paid anything. With a choice, the chosen entity's is used.
+   */
+  remaining: number | null;
+  /** With a choice of entities: what the family owes over all of them, never netted (#300). */
+  familyRemaining: number | null;
+  /** Empty with a single active entity: no choice shown, the school's default cashes. */
+  entities: EntityOption[];
+  /** The entity preselected: the one the payer owes the most. */
+  initialEntity: string | null;
+  today: string;
+  back: string;
+};
+
+const prefill = (owed: number | null) => (owed && owed > 0 ? typedEuros(owed) : "");
 
 /**
  * Payment from a payer (#97): one row per payment (three dated cheques,
  * a cheque and some cash…), a shared date received, total compared with
- * the amount still due.
+ * the amount still due. With several entities, the one that cashes is chosen
+ * first and the amount due is that entity's (#300).
  */
-export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaining, today: today, back: back }: Props) {
-  const [rows, setRows] = useState<Row[]>([
-    { ...EMPTY_ROW, id: 0, amount: remaining && remaining > 0 ? typedEuros(remaining) : "" },
-  ]);
+export function PaymentForm({
+  payerId: payerId,
+  payer: payer,
+  remaining: withoutChoice,
+  familyRemaining,
+  entities,
+  initialEntity,
+  today: today,
+  back: back,
+}: Props) {
+  const [entity, setEntity] = useState(initialEntity ?? "");
+  const chosen = entities.find((e) => e.id === entity);
+  // What is left to pay where this payment goes: the chosen entity's, or the single active one's.
+  const remaining = entities.length > 0 && withoutChoice !== null ? (chosen?.remaining ?? null) : withoutChoice;
+  // Owed to the other entities: a payment above the chosen one's remaining should go to them (#300).
+  const owedElsewhere = familyRemaining !== null ? familyRemaining - Math.max(remaining ?? 0, 0) : 0;
+  const [rows, setRows] = useState<Row[]>([{ ...EMPTY_ROW, id: 0, amount: prefill(remaining) }]);
   const nextId = useRef(1);
   // Row added with « Ajouter un règlement »: its amount gets the focus once rendered.
   const added = useRef<number | null>(null);
@@ -89,7 +124,7 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
           setMessage(
             (
               await orConnectionLost(
-                () => collectPayments(payerId, entry, back, key),
+                () => collectPayments(payerId, entry, back, key, entities.length > 0 ? entity : undefined),
                 (message) => ({ message }),
               )
             ).message,
@@ -99,18 +134,49 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
     >
       <Text size="sm">
         Payeur : <strong>{payer}</strong>
-        {remaining !== null && (
+        {familyRemaining !== null && chosen ? (
           <Text span size="sm" c="dimmed">
             {" "}
             —{" "}
-            {remaining > 0
-              ? `reste à payer ${formatEuros(remaining)}`
-              : remaining < 0
-                ? `trop-perçu ${formatEuros(-remaining)}`
-                : "à jour"}
+            {familyRemaining > 0
+              ? `reste à payer ${formatEuros(familyRemaining)}, dont ${formatEuros(Math.max(chosen.remaining, 0))} à ${chosen.name}`
+              : "à jour"}
           </Text>
+        ) : (
+          remaining !== null && (
+            <Text span size="sm" c="dimmed">
+              {" "}
+              —{" "}
+              {remaining > 0
+                ? `reste à payer ${formatEuros(remaining)}`
+                : remaining < 0
+                  ? `trop-perçu ${formatEuros(-remaining)}`
+                  : "à jour"}
+            </Text>
+          )
         )}
       </Text>
+      {entities.length > 0 && (
+        <NativeSelect
+          label="Entreprise"
+          description="Celle qui encaisse : le paiement ira sur son compte bancaire."
+          required
+          w={{ base: "100%", sm: 360 }}
+          data={entities.map((e) => ({
+            value: e.id,
+            label: e.remaining > 0 ? `${e.name} — reste ${formatEuros(e.remaining)}` : e.name,
+          }))}
+          value={entity}
+          onChange={(e) => {
+            const next = e.currentTarget.value;
+            const owedNext = entities.find((x) => x.id === next)?.remaining ?? null;
+            // The amount still the one proposed for the previous entity follows the new one.
+            if (rows.length === 1 && rows[0].amount === prefill(remaining))
+              setRows([{ ...rows[0], amount: prefill(owedNext) }]);
+            setEntity(next);
+          }}
+        />
+      )}
       <DateField label="Reçu le" required w={160} value={date} onChange={setDate} />
 
       <Fieldset
@@ -207,10 +273,17 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
         {remaining !== null && remaining > 0 && total !== remaining && (
           <Text span size="sm" c="dimmed">
             {" "}
-            (reste à payer : {formatEuros(remaining)})
+            (reste à payer{chosen ? ` à ${chosen.name}` : ""} : {formatEuros(remaining)})
           </Text>
         )}
       </Text>
+      {/* Each business has its own account (#300): what goes beyond this one's debt belongs to another. */}
+      {chosen && owedElsewhere > 0 && total > Math.max(remaining ?? 0, 0) && (
+        <Text size="sm" c="orange">
+          Reste dû à une autre entreprise : {formatEuros(owedElsewhere)}. Encaissez-le séparément en la choisissant
+          ci-dessus.
+        </Text>
+      )}
       {message && (
         <Text role="alert" size="sm" c="red">
           {message}
@@ -220,7 +293,7 @@ export function PaymentForm({ payerId: payerId, payer: payer, remaining: remaini
       <div className="flex flex-wrap gap-2 border-t border-bordure pt-4">
         {/* An unreadable amount is left out of the total: no « Encaisser » for a wrong sum. */}
         <Button type="submit" loading={sending} disabled={total === 0 || invalides.some(Boolean)}>
-          {`Encaisser ${formatEuros(total)}`}
+          {chosen ? `Encaisser ${formatEuros(total)} pour ${chosen.name}` : `Encaisser ${formatEuros(total)}`}
         </Button>
         <Cancel href={back} />
       </div>

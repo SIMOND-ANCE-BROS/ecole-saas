@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toDeposit, totals, toCsv } from "./deposits";
+import { depositGroups, toDeposit, totals, toCsv } from "./deposits";
 
 const p = (
   id: string,
@@ -48,6 +48,44 @@ describe("toDeposit", () => {
   });
 });
 
+describe("depositGroups", () => {
+  const of = (entity: string, x: ReturnType<typeof p>) => ({ ...x, billingEntityId: entity });
+  const ids = (groups: ReturnType<typeof depositGroups>) =>
+    groups.map((g) => `${g.billingEntityId}/${g.method}:${g.payments.map((x) => x.id).join(",")}`);
+
+  it("one slip per entity and method: each business deposits into its own account (#300)", () => {
+    const groups = depositGroups(
+      [
+        of("b", p("1", "cheque", 1000)),
+        of("a", p("2", "cash", 2000)),
+        of("a", p("3", "cheque", 3000)),
+        of("b", p("4", "cheque", 4000)),
+        of("a", p("5", "card", 5000)),
+      ],
+      "2026-10-21",
+      ["a", "b"],
+    );
+    expect(ids(groups)).toEqual(["a/cheque:3", "a/cash:2", "b/cheque:1,4"]);
+  });
+
+  it("entities in the order given (the default first), an unknown one after them; empty groups left out", () => {
+    const groups = depositGroups(
+      [
+        of("z", p("1", "holiday_voucher", 1000)),
+        of("b", p("2", "cheque", 1000, { plannedPayment: "2027-01-05" })),
+        of("b", p("3", "cash", 1000)),
+      ],
+      "2026-10-21",
+      ["a", "b"],
+    );
+    expect(ids(groups)).toEqual(["b/cash:3", "z/holiday_voucher:1"]);
+  });
+
+  it("nothing to deposit: no group", () => {
+    expect(depositGroups([], "2026-10-21", ["a"])).toEqual([]);
+  });
+});
+
 it("totals per payment method, corrections included", () => {
   expect(totals([p("a", "cheque", 10000), p("b", "cheque", -4000), p("c", "cash", 2050)])).toEqual({
     total: 8050,
@@ -67,6 +105,7 @@ describe("toCsv", () => {
         issuer: "Crédit Mutuel",
         plannedPayment: "2027-01-05",
         deposit: null,
+        entity: "Zz Danse",
       },
       {
         date: "2026-10-21",
@@ -77,12 +116,29 @@ describe("toCsv", () => {
         issuer: null,
         plannedPayment: null,
         deposit: "2026-10-22",
+        entity: "Zz Studio",
       },
     ]);
     expect(csv.startsWith("﻿Date;Payeur;Moyen;Montant")).toBe(true);
     const rows = csv.slice(1).split("\r\n");
-    expect(rows[1]).toBe("21/10/2026;Martin, Sophie;Chèque;100,50;1234567;Crédit Mutuel;05/01/2027;");
-    expect(rows[2]).toBe('21/10/2026;"Petit; Anne";Chèque;-40,00;Correction;;;22/10/2026');
+    expect(rows[1]).toBe("21/10/2026;Martin, Sophie;Chèque;100,50;1234567;Crédit Mutuel;05/01/2027;;Zz Danse");
+    expect(rows[2]).toBe('21/10/2026;"Petit; Anne";Chèque;-40,00;Correction;;;22/10/2026;Zz Studio');
+  });
+
+  it("« Entreprise » is always the last column, even for a school with a single one (#300)", () => {
+    const header = toCsv([]).slice(1).split("\r\n")[0].split(";");
+    expect(header.at(-1)).toBe("Entreprise");
+    expect(header).toEqual([
+      "Date",
+      "Payeur",
+      "Moyen",
+      "Montant",
+      "Référence",
+      "Émetteur",
+      "Encaissement prévu",
+      "Remise",
+      "Entreprise",
+    ]);
   });
 
   it("a text cell is never read as a formula", () => {
@@ -96,8 +152,9 @@ describe("toCsv", () => {
         issuer: "@x",
         plannedPayment: null,
         deposit: null,
+        entity: "=Zz",
       },
     ]);
-    expect(csv.split("\r\n")[1]).toBe(`21/10/2026;"'=HYPERLINK(""x"")";Chèque;1,00;'+33;'@x;;`);
+    expect(csv.split("\r\n")[1]).toBe(`21/10/2026;"'=HYPERLINK(""x"")";Chèque;1,00;'+33;'@x;;;'=Zz`);
   });
 });

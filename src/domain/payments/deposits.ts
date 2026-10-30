@@ -36,6 +36,34 @@ export function toDeposit<T extends DepositablePayment>(payments: T[], today: st
   return r;
 }
 
+/** Payments of one bank deposit to make: one billing entity, one method (#300). */
+export type DepositGroup<T> = { billingEntityId: string; method: DepositMethod; payments: T[] };
+
+/**
+ * Payments to deposit grouped by billing entity, then method (#300): each business
+ * deposits into its own bank account (#288 Q4), so a slip never mixes two of them.
+ * Entities in the order of `entityOrder` (the default first), any other after them;
+ * methods in `DEPOSIT_METHODS` order; empty groups left out.
+ */
+export function depositGroups<T extends DepositablePayment & { billingEntityId: string }>(
+  payments: T[],
+  today: string,
+  entityOrder: readonly string[],
+): DepositGroup<T>[] {
+  const entities = [...new Set([...entityOrder, ...payments.map((p) => p.billingEntityId)])];
+  return entities.flatMap((id) => {
+    const byMethod = toDeposit(
+      payments.filter((p) => p.billingEntityId === id),
+      today,
+    );
+    return DEPOSIT_METHODS.filter((m) => byMethod[m].length > 0).map((m) => ({
+      billingEntityId: id,
+      method: m,
+      payments: byMethod[m],
+    }));
+  });
+}
+
 /** Grand total and total per method. */
 export function totals<T extends { method: string; amountCents: number }>(
   rows: T[],
@@ -58,13 +86,29 @@ export type ExportRow = {
   issuer: string | null;
   plannedPayment: string | null;
   deposit: string | null;
+  /** Name of the billing entity that cashed it (#300). */
+  entity: string;
 };
 
 const dateFr = (iso: string | null) => (iso ? frenchDate(iso) : "");
 
-/** CSV export for accounting: separator « ; », amounts « 123,45 », dates DD/MM/YYYY, BOM for Excel. */
+/**
+ * CSV export for accounting: separator « ; », amounts « 123,45 », dates DD/MM/YYYY, BOM for Excel.
+ * « Entreprise » always comes last, even with a single entity (#300): the accountant's
+ * import keeps the same columns whatever the school.
+ */
 export function toCsv(rows: ExportRow[]): string {
-  const header = ["Date", "Payeur", "Moyen", "Montant", "Référence", "Émetteur", "Encaissement prévu", "Remise"];
+  const header = [
+    "Date",
+    "Payeur",
+    "Moyen",
+    "Montant",
+    "Référence",
+    "Émetteur",
+    "Encaissement prévu",
+    "Remise",
+    "Entreprise",
+  ];
   return csvDocument(
     header,
     rows.map((l) => [
@@ -76,6 +120,7 @@ export function toCsv(rows: ExportRow[]): string {
       csvText(l.issuer),
       dateFr(l.plannedPayment),
       dateFr(l.deposit),
+      csvText(l.entity),
     ]),
   );
 }

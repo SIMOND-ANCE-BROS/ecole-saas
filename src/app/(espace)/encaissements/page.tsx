@@ -21,7 +21,8 @@ import { toParams } from "@/domain/filters/filters";
 import { offsetOf, PAGE_SIZE, readPage } from "@/domain/filters/pagination";
 import { futureCashing, paymentLogQuery, referenceOf, shownPaymentLog } from "@/domain/payments/payment-log";
 import { paymentLog, listDeposits, paymentsToDeposit } from "@/db/deposits";
-import { DEPOSIT_METHODS, totals } from "@/domain/payments/deposits";
+import { listEntities } from "@/db/billing-entities";
+import { totals } from "@/domain/payments/deposits";
 import { validDate } from "@/domain/schedule/week";
 import { todayInParis } from "@/domain/people/age";
 import { frenchDate } from "@/lib/dates";
@@ -67,7 +68,11 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
     layout: view === "journal" ? await readPreference(tx, userId, "encaissements") : null,
     toDeposit: view === "remettre" ? await paymentsToDeposit(tx, today) : null,
     remises: view === "remises" ? await listDeposits(tx) : [],
+    entities: await listEntities(tx),
   }));
+  // A school with a single entity never sees it named (#300): no column, no filter, no heading.
+  const several = parsed.entities.length > 1;
+  const columns = several ? PAYMENT_COLUMNS : PAYMENT_COLUMNS.filter((c) => c.id !== "entreprise");
   // The column filters and sort (#107), the same rules as the CSV export.
   const shown = shownPaymentLog(
     parsed.journal.map((l) => ({ ...l, methodLabel: PAYMENT_METHODS[l.method] })),
@@ -157,7 +162,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
               list="encaissements"
               what="des encaissements"
               caption={`Encaissements du ${day(from)} au ${day(to)}`}
-              columns={PAYMENT_COLUMNS}
+              columns={columns}
               layout={parsed.layout}
               linkColumn="payeur"
               empty={
@@ -165,7 +170,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
                   ? "Aucun encaissement sur cette période."
                   : "Aucun encaissement ne correspond à ces filtres."
               }
-              choice={{ moyen: Object.values(PAYMENT_METHODS) }}
+              choice={{ moyen: Object.values(PAYMENT_METHODS), entreprise: parsed.entities.map((e) => e.name) }}
               pagination={{ page, total: shown.length, noun: "Encaissements" }}
               rows={shown.slice(offsetOf(page), offsetOf(page) + PAGE_SIZE).map((l) => ({
                 id: l.id,
@@ -180,6 +185,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
                   montant: formatEuros(l.amountCents),
                   encaissement: futureCashing(l, today),
                   remise: l.dateDeposit,
+                  entreprise: l.entity,
                 },
                 links:
                   l.depositId && l.dateDeposit
@@ -201,11 +207,16 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
           <Text size="sm" c="dimmed">
             Chèques dont la date d’encaissement est arrivée, espèces et chèques vacances pas encore déposés.
           </Text>
-          {DEPOSIT_METHODS.every((m) => parsed.toDeposit![m].length === 0) && (
-            <Text size="sm">Rien à remettre pour l’instant.</Text>
-          )}
-          {DEPOSIT_METHODS.filter((m) => parsed.toDeposit![m].length > 0).map((m) => (
-            <ToDeposit key={m} method={m} payments={parsed.toDeposit![m]} today={today} />
+          {parsed.toDeposit.length === 0 && <Text size="sm">Rien à remettre pour l’instant.</Text>}
+          {/* One slip per entity and method: each business deposits into its own account (#300). */}
+          {parsed.toDeposit.map((g) => (
+            <ToDeposit
+              key={`${g.billingEntityId}-${g.method}`}
+              method={g.method}
+              entity={{ id: g.billingEntityId, name: several ? g.payments[0].entity : null }}
+              payments={g.payments}
+              today={today}
+            />
           ))}
         </>
       )}
@@ -223,6 +234,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
                 <TableTr>
                   <TableTh>Date</TableTh>
                   <TableTh>Moyen</TableTh>
+                  {several && <TableTh>Entreprise</TableTh>}
                   <TableTh ta="right">Paiements</TableTh>
                   <TableTh ta="right">Total</TableTh>
                 </TableTr>
@@ -231,11 +243,16 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
                 {parsed.remises.map((r) => (
                   <TableTr key={r.id}>
                     <TableTd>
-                      <TextLink href={`/encaissements/remises/${r.id}`} size="sm">
+                      <TextLink
+                        href={`/encaissements/remises/${r.id}`}
+                        size="sm"
+                        aria-label={`Remise du ${day(r.date)}, ${PAYMENT_METHODS[r.method].toLowerCase()}${several ? `, ${r.entity}` : ""}, ${formatEuros(r.totalCents)}`}
+                      >
                         {day(r.date)}
                       </TextLink>
                     </TableTd>
                     <TableTd>{PAYMENT_METHODS[r.method]}</TableTd>
+                    {several && <TableTd>{r.entity}</TableTd>}
                     <TableTd ta="right" className="tabular-nums">
                       {r.count}
                     </TableTd>
