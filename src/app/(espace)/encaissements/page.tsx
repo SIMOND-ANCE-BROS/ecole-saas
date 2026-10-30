@@ -243,7 +243,11 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
                 {parsed.remises.map((r) => (
                   <TableTr key={r.id}>
                     <TableTd>
-                      <TextLink href={`/encaissements/remises/${r.id}`} size="sm">
+                      <TextLink
+                        href={`/encaissements/remises/${r.id}`}
+                        size="sm"
+                        aria-label={`Remise du ${day(r.date)}, ${PAYMENT_METHODS[r.method].toLowerCase()}${several ? `, ${r.entity}` : ""}, ${formatEuros(r.totalCents)}`}
+                      >
                         {day(r.date)}
                       </TextLink>
                     </TableTd>

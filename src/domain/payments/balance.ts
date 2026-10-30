@@ -76,6 +76,21 @@ export function balancesByEntity(
 }
 
 /**
+ * What a family owes over several entities (#300), never netted: `owed` adds up what is
+ * left to pay to each entity, `overpaid` what each entity received in excess. An
+ * overpayment to one business never settles a debt to another (separate accounts, #288 Q4).
+ */
+export function familyOwed(byEntity: readonly Balance[]): { owed: number; overpaid: number } {
+  let owed = 0;
+  let overpaid = 0;
+  for (const b of byEntity) {
+    if (b.remaining > 0) owed += b.remaining;
+    else overpaid -= b.remaining;
+  }
+  return { owed, overpaid };
+}
+
+/**
  * The entity a new payment is preselected on (#300): among `offered` (the school's
  * default first), the one the payer owes the most; a tie keeps the order offered, and
  * with nothing owed anywhere it is the first one. Null when nothing is offered.

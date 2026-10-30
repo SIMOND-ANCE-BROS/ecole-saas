@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { amountDue, balancesByEntity, entityOwingMost, payerBalance } from "./balance";
+import { amountDue, balancesByEntity, entityOwingMost, familyOwed, payerBalance } from "./balance";
 
 const TODAY = "2026-10-21";
 
@@ -171,6 +171,20 @@ describe("balancesByEntity", () => {
   });
 });
 
+describe("familyOwed", () => {
+  const balance = (remaining: number) => ({ due: 0, paid: 0, remaining, toCollect: 0, outsideCalculation: {} });
+
+  it("an overpayment to one entity never hides a debt to the other", () => {
+    expect(familyOwed([balance(-10_000), balance(10_000)])).toEqual({ owed: 10_000, overpaid: 10_000 });
+  });
+
+  it("adds up what is owed to each entity", () => {
+    expect(familyOwed([balance(2_500), balance(0), balance(7_501)])).toEqual({ owed: 10_001, overpaid: 0 });
+  });
+
+  it("nothing: zero both ways", () => expect(familyOwed([])).toEqual({ owed: 0, overpaid: 0 }));
+});
+
 describe("entityOwingMost", () => {
   const balance = (remaining: number) => ({ due: 0, paid: 0, remaining, toCollect: 0, outsideCalculation: {} });
 
@@ -181,6 +195,10 @@ describe("entityOwingMost", () => {
   it("nothing owed (or an overpayment): the first offered, the school's default", () => {
     expect(entityOwingMost(["a", "b"], { a: balance(0), b: balance(-3_000) })).toBe("a");
     expect(entityOwingMost(["a", "b"], {})).toBe("a");
+  });
+
+  it("one cent more owed is enough", () => {
+    expect(entityOwingMost(["a", "b"], { a: balance(1_000), b: balance(1_001) })).toBe("b");
   });
 
   it("a tie keeps the order offered", () => {

@@ -104,7 +104,7 @@ async function log(tx: Tx, who: string, id: string, after: Record<string, unknow
 }
 
 /** Shown when a school with several entities gets a payment without the entity that cashes it. */
-export const ENTITY_REQUIRED = "Choisissez l’entreprise qui encaisse ce paiement.";
+export const ENTITY_REQUIRED = "Choisissez l’entreprise qui encaisse ce paiement : rechargez la page.";
 
 /**
  * Records one or more payments from a payer (three dated cheques, cheque + cash…), all
@@ -128,6 +128,7 @@ export async function collect(
   if (!p) return { ok: false, message: "Payeur introuvable." };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
+  // No entity sent while several are active: the form was opened before a second one was added.
   if (billingEntityId === undefined && (await entityChoices(tx)).length > 1)
     return { ok: false, message: ENTITY_REQUIRED };
   const resolved = await resolveEntity(tx, billingEntityId);
@@ -316,6 +317,8 @@ export type EntityBalance = { id: string; name: string; balance: Balance };
  * A payer's balances (#300): the family total, and, for a school with several billing
  * entities, one balance per entity the payer owes or paid, in the school's order (the
  * default first). With a single entity `byEntity` is empty: the screens show the total only.
+ * « Several » counts every entity, active or not (as `severalEntities`, #299): a debt to a
+ * deactivated business stays visible. Only the payment form's choice is limited to active ones.
  */
 export type PayerBalances = { total: Balance; byEntity: EntityBalance[]; severalEntities: boolean };
 

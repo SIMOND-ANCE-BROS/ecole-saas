@@ -21,8 +21,13 @@ export type EntityOption = { id: string; name: string; remaining: number };
 type Props = {
   payerId: string;
   payer: string;
-  /** What the payer still owes, all entities together; null if they never owed nor paid anything. */
+  /**
+   * What the payer still owes where the payment goes without a choice (the single active
+   * entity); null if they never owed nor paid anything. With a choice, the chosen entity's is used.
+   */
   remaining: number | null;
+  /** With a choice of entities: what the family owes over all of them, never netted (#300). */
+  familyRemaining: number | null;
   /** Empty with a single active entity: no choice shown, the school's default cashes. */
   entities: EntityOption[];
   /** The entity preselected: the one the payer owes the most. */
@@ -42,7 +47,8 @@ const prefill = (owed: number | null) => (owed && owed > 0 ? typedEuros(owed) : 
 export function PaymentForm({
   payerId: payerId,
   payer: payer,
-  remaining: familyRemaining,
+  remaining: withoutChoice,
+  familyRemaining,
   entities,
   initialEntity,
   today: today,
@@ -50,8 +56,10 @@ export function PaymentForm({
 }: Props) {
   const [entity, setEntity] = useState(initialEntity ?? "");
   const chosen = entities.find((e) => e.id === entity);
-  // What is left to pay where this payment goes: the chosen entity's, or the total with one entity.
-  const remaining = entities.length > 0 && familyRemaining !== null ? (chosen?.remaining ?? null) : familyRemaining;
+  // What is left to pay where this payment goes: the chosen entity's, or the single active one's.
+  const remaining = entities.length > 0 && withoutChoice !== null ? (chosen?.remaining ?? null) : withoutChoice;
+  // Owed to the other entities: a payment above the chosen one's remaining should go to them (#300).
+  const owedElsewhere = familyRemaining !== null ? familyRemaining - Math.max(remaining ?? 0, 0) : 0;
   const [rows, setRows] = useState<Row[]>([{ ...EMPTY_ROW, id: 0, amount: prefill(remaining) }]);
   const nextId = useRef(1);
   // Row added with « Ajouter un règlement »: its amount gets the focus once rendered.
@@ -126,17 +134,26 @@ export function PaymentForm({
     >
       <Text size="sm">
         Payeur : <strong>{payer}</strong>
-        {remaining !== null && (
+        {familyRemaining !== null && chosen ? (
           <Text span size="sm" c="dimmed">
             {" "}
             —{" "}
-            {remaining > 0
-              ? `reste à payer ${formatEuros(remaining)}`
-              : remaining < 0
-                ? `trop-perçu ${formatEuros(-remaining)}`
-                : "à jour"}
-            {chosen && ` auprès de ${chosen.name}`}
+            {familyRemaining > 0
+              ? `reste à payer ${formatEuros(familyRemaining)}, dont ${formatEuros(Math.max(chosen.remaining, 0))} à ${chosen.name}`
+              : "à jour"}
           </Text>
+        ) : (
+          remaining !== null && (
+            <Text span size="sm" c="dimmed">
+              {" "}
+              —{" "}
+              {remaining > 0
+                ? `reste à payer ${formatEuros(remaining)}`
+                : remaining < 0
+                  ? `trop-perçu ${formatEuros(-remaining)}`
+                  : "à jour"}
+            </Text>
+          )
         )}
       </Text>
       {entities.length > 0 && (
@@ -256,10 +273,17 @@ export function PaymentForm({
         {remaining !== null && remaining > 0 && total !== remaining && (
           <Text span size="sm" c="dimmed">
             {" "}
-            (reste à payer : {formatEuros(remaining)})
+            (reste à payer{chosen ? ` à ${chosen.name}` : ""} : {formatEuros(remaining)})
           </Text>
         )}
       </Text>
+      {/* Each business has its own account (#300): what goes beyond this one's debt belongs to another. */}
+      {chosen && owedElsewhere > 0 && total > Math.max(remaining ?? 0, 0) && (
+        <Text size="sm" c="orange">
+          Reste dû à une autre entreprise : {formatEuros(owedElsewhere)}. Encaissez-le séparément en la choisissant
+          ci-dessus.
+        </Text>
+      )}
       {message && (
         <Text role="alert" size="sm" c="red">
           {message}
@@ -269,7 +293,7 @@ export function PaymentForm({
       <div className="flex flex-wrap gap-2 border-t border-bordure pt-4">
         {/* An unreadable amount is left out of the total: no « Encaisser » for a wrong sum. */}
         <Button type="submit" loading={sending} disabled={total === 0 || invalides.some(Boolean)}>
-          {`Encaisser ${formatEuros(total)}`}
+          {chosen ? `Encaisser ${formatEuros(total)} pour ${chosen.name}` : `Encaisser ${formatEuros(total)}`}
         </Button>
         <Cancel href={back} />
       </div>

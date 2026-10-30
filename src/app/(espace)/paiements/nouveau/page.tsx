@@ -5,7 +5,7 @@ import { withSchool } from "@/db";
 import { isStudent } from "@/db/students";
 import { balanceOf } from "@/db/payments";
 import { entityChoices } from "@/db/billing-entities";
-import { entityOwingMost } from "@/domain/payments/balance";
+import { entityOwingMost, familyOwed } from "@/domain/payments/balance";
 import { readPerson, displayedName } from "@/db/people";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
@@ -48,6 +48,17 @@ export default async function CollectPaymentPage({ searchParams }: PageProps<"/p
     entities.map((e) => e.id),
     owed,
   );
+  // What is left to pay where the payment goes. Several entities of which only one is active:
+  // that one's own balance, never the total (a debt to another business is not cashed here).
+  const onlyActive = parsed.entities.length === 1 ? parsed.entities[0].id : null;
+  const remaining = !balance
+    ? null
+    : balance.severalEntities && onlyActive
+      ? (owed[onlyActive]?.remaining ?? 0)
+      : balance.total.remaining;
+  // The family's debt over every entity, never netted (#300): shown next to the chosen entity's.
+  const familyRemaining =
+    balance && entities.length > 0 ? familyOwed(balance.byEntity.map((e) => e.balance)).owed : null;
 
   return (
     <FormPage className="flex flex-col gap-4">
@@ -66,7 +77,8 @@ export default async function CollectPaymentPage({ searchParams }: PageProps<"/p
       <PaymentForm
         payerId={p.id}
         payer={displayedName(p)}
-        remaining={balance?.total.remaining ?? null}
+        remaining={remaining}
+        familyRemaining={familyRemaining}
         entities={entities}
         initialEntity={initialEntity}
         today={today}

@@ -151,7 +151,7 @@ export function ToDeposit({
         >
           {selection.length === 0
             ? "Créer la remise"
-            : `Créer la remise : ${selection.length} × ${title.toLowerCase()}, ${formatEuros(total)}`}
+            : `Créer la remise${entity.name ? ` ${entity.name}` : ""} : ${selection.length} × ${title.toLowerCase()}, ${formatEuros(total)}`}
         </Button>
         {/* Said in plain text: a disabled button's label is too faint to carry the instruction. */}
         {selection.length === 0 && (
