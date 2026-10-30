@@ -28,7 +28,9 @@ import {
   refundableCents,
   refundRefusal,
   uncollectedCents,
+  isRefund,
 } from "../domain/payments/refund";
+import { mayCancelRefund, refundCancellationRefusal, refundLeftCents } from "../domain/payments/refund-cancellation";
 import { quarterCountSql } from "./enrollments";
 
 /**
@@ -76,11 +78,12 @@ export const validPayments = z.array(validPayment).min(1, "Aucun règlement").ma
 export type Result = { ok: true; ids: string[] } | { ok: false; message: string };
 
 /**
- * Amount already cancelled by corrections. Identifier written with the table
- * name: in a `select`, Drizzle would write it alone, and it would then refer to
- * the subquery's row.
+ * Amount already cancelled by reverse entries, as a positive amount: the corrections and
+ * rejection of a payment (negative), or the cancellations of a refund (positive, #346).
+ * Identifier written with the table name: in a `select`, Drizzle would write it alone, and
+ * it would then refer to the subquery's row.
  */
-export const alreadyCorrected = sql<number>`coalesce((SELECT -sum(c.amount_cents) FROM payment c WHERE c.corrects_id = ${payment}.${sql.identifier("id")}), 0)::int`;
+export const alreadyCorrected = sql<number>`coalesce((SELECT abs(sum(c.amount_cents)) FROM payment c WHERE c.corrects_id = ${payment}.${sql.identifier("id")}), 0)::int`;
 
 /** Member of the current school who enters the data (for `entered_by` and the audit log). */
 async function memberOf(tx: Tx, userId: string): Promise<string | null> {
@@ -393,6 +396,7 @@ async function balancesOf(tx: Tx, payerId: string, today: string) {
       method: payment.method,
       deposited: sql<boolean>`${bankDepositPayment.bankDepositId} IS NOT NULL`,
       correctedCents: alreadyCorrected,
+      reversalKind: payment.reversalKind,
     })
     .from(payment)
     .leftJoin(bankDepositPayment, eq(bankDepositPayment.paymentId, payment.id))
@@ -512,6 +516,83 @@ export async function refundPayer(
     date: r.data.date,
     reversal_kind: "refund",
     billing_entity_id: entity,
+  });
+  return { ok: true, ids: [id] };
+}
+
+/**
+ * Cancels all or part of a refund entered by mistake (#346): wrong amount, method, date,
+ * payer or business. The refund stays, immutable; a positive reverse entry of kind
+ * `refund_cancellation` cancels it, `corrects_id` = the refund, same business (key
+ * payment_corrects_same_entity_fk), method, reference and issuer, dated today, at most what
+ * is not cancelled yet. It is never on a deposit slip (`toDeposit`) and the payment log
+ * totals it with the refunds (`totals`). Management only (`mayCancelRefund`, default of #346
+ * question 1). The payer is locked first, as `refundPayer` does: two cancellations of one
+ * refund, or a cancellation and a refund for the same payer, wait for each other.
+ */
+export async function cancelRefundPayment(
+  tx: Tx,
+  userId: string,
+  refundId: string,
+  amountCents: number,
+  today: string,
+): Promise<Result> {
+  if (!isUuid(refundId)) return { ok: false, message: "Ce remboursement n’existe plus." };
+  if (!z.iso.date().safeParse(today).success) return { ok: false, message: "Date invalide." };
+  const who = await memberAndRole(tx, userId);
+  if (!who) return { ok: false, message: "Accès refusé." };
+  if (!mayCancelRefund(who.role)) return { ok: false, message: "Seule la direction peut annuler un remboursement." };
+  // The payer and the business of a payment never change: read before taking the locks.
+  const [r] = await tx
+    .select({ payerId: payment.payerId, billingEntityId: payment.billingEntityId })
+    .from(payment)
+    .where(eq(payment.id, refundId));
+  if (!r) return { ok: false, message: "Ce remboursement n’existe plus." };
+  await tx.select({ id: person.id }).from(person).where(eq(person.id, r.payerId)).for("update");
+  // Only the refund's row: a correction or a deposit locks the payments it handles, then
+  // waits for the payer when it inserts, so locking them all here could deadlock with it.
+  await tx.select({ id: payment.id }).from(payment).where(eq(payment.id, refundId)).for("no key update");
+  // A statement of its own, after the locks: it sees a cancellation committed meanwhile.
+  const [o] = await tx
+    .select({
+      amount: payment.amountCents,
+      method: payment.method,
+      reference: payment.reference,
+      issuer: payment.issuer,
+      reversalKind: payment.reversalKind,
+      cancelled: alreadyCorrected,
+    })
+    .from(payment)
+    .where(eq(payment.id, refundId));
+  if (!o || !isRefund(o)) return { ok: false, message: "Ce paiement n’est pas un remboursement." };
+  const refusal = refundCancellationRefusal({
+    amountCents,
+    leftCents: refundLeftCents({ amountCents: o.amount, cancelledCents: o.cancelled }),
+  });
+  if (refusal) return { ok: false, message: refusal };
+  const [{ id }] = await tx
+    .insert(payment)
+    .values({
+      schoolId: CURRENT_SCHOOL,
+      billingEntityId: r.billingEntityId,
+      payerId: r.payerId,
+      date: today,
+      amountCents: amountCents,
+      method: o.method,
+      reference: o.reference,
+      issuer: o.issuer,
+      correctsId: refundId,
+      reversalKind: "refund_cancellation",
+      enteredBy: who.id,
+    })
+    .returning({ id: payment.id });
+  await log(tx, who.id, id, {
+    montant_centimes: amountCents,
+    method: o.method,
+    date: today,
+    corrige_id: refundId,
+    reversal_kind: "refund_cancellation",
+    billing_entity_id: r.billingEntityId,
   });
   return { ok: true, ids: [id] };
 }

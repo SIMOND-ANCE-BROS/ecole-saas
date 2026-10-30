@@ -186,8 +186,8 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
               rows={shown.slice(offsetOf(page), offsetOf(page) + PAGE_SIZE).map((l) => ({
                 id: l.id,
                 href: `/personnes/${l.payerId}`,
-                // A correction (negative amount) reads as such.
-                dimmed: l.amountCents < 0,
+                // A reverse entry (correction, rejection, refund or its cancellation, #346) reads as such.
+                dimmed: l.reversalKind !== null,
                 cells: {
                   recu: l.date,
                   payeur: l.payer,

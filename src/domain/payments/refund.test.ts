@@ -47,6 +47,7 @@ describe("money not collected yet", () => {
     plannedPayment: null,
     deposited: true,
     correctedCents: 0,
+    reversalKind: null,
     ...p,
   });
 

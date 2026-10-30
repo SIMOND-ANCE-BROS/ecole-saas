@@ -7,7 +7,7 @@ import { rejectionDateRefusal } from "@/domain/payments/rejection";
 import { NOT_SAVED } from "@/lib/action-result";
 import { frenchDate } from "@/lib/dates";
 import { formatEuros, parseEuros, typedEuros } from "@/lib/money";
-import { correct } from "../paiements/actions";
+import { cancelRefund, correct } from "../paiements/actions";
 import { DateField, refusedDateField } from "../_ui/date-field";
 import { EscapeCancelsForm } from "../_ui/escape-asks";
 
@@ -37,19 +37,24 @@ export type Rejection = {
  * payment is entered instead, at most the amount not yet corrected. A payment
  * already deposited is recorded as rejected, for all that is left, on the day
  * the bank returned it; its deposit slip stays as printed and the amount is
- * due again (#253). Each opening of the form sends with its own key: a retry
- * after a lost response records nothing twice (#260).
+ * due again (#253). A refund entered by mistake is cancelled the same way, with
+ * a positive entry instead (`cancelsRefund`, #346). Each opening of the form sends
+ * with its own key: a retry after a lost response records nothing twice (#260).
  */
 export function CorrectPayment({
   paymentId,
   remaining,
   back,
   rejection,
+  cancelsRefund = false,
 }: {
   paymentId: string;
+  /** What is left to correct, or of a refund what is not cancelled yet, as a positive amount. */
   remaining: number;
   back: string;
   rejection: Rejection | null;
+  /** The payment is a refund: the form cancels it (management, #346). */
+  cancelsRefund?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -87,7 +92,7 @@ export function CorrectPayment({
           setOpen(true);
         }}
       >
-        {rejection ? rejection.label : "Corriger"}
+        {rejection ? rejection.label : cancelsRefund ? "Annuler le remboursement" : "Corriger"}
       </Button>
     );
   }
@@ -124,7 +129,9 @@ export function CorrectPayment({
         startTransition(async () => {
           let r;
           try {
-            r = await correct({ key, paymentId, amountCents: cents, back, rejectedOn: rejection ? rejectedOn : null });
+            r = cancelsRefund
+              ? await cancelRefund({ key, refundId: paymentId, amountCents: cents, back })
+              : await correct({ key, paymentId, amountCents: cents, back, rejectedOn: rejection ? rejectedOn : null });
           } catch (e) {
             unstable_rethrow(e);
             setMessage(NOT_SAVED);
@@ -179,7 +186,7 @@ export function CorrectPayment({
       ) : (
         <Input.Wrapper
           id={id}
-          label="Montant de la correction (€)"
+          label={cancelsRefund ? "Montant du remboursement à annuler (€)" : "Montant de la correction (€)"}
           description={`Au plus ${formatEuros(remaining)}`}
           error={shown ? refusal : null}
           size="xs"
@@ -204,7 +211,7 @@ export function CorrectPayment({
               error={shown && refusal !== null}
               autoFocus
             />
-            {buttons("Enregistrer la correction")}
+            {buttons(cancelsRefund ? "Enregistrer l’annulation" : "Enregistrer la correction")}
           </Group>
         </Input.Wrapper>
       )}

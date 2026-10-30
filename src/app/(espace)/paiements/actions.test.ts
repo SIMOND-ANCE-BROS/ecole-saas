@@ -13,19 +13,22 @@ vi.mock("next/navigation", () => ({ redirect: (...args: unknown[]) => redirect(.
 const collect = vi.fn();
 const correctPayment = vi.fn();
 const refundPayer = vi.fn();
+const cancelRefundPayment = vi.fn();
 vi.mock("@/db/payments", () => ({
+  cancelRefundPayment: (...args: unknown[]) => cancelRefundPayment(...args),
   correctPayment: (...args: unknown[]) => correctPayment(...args),
   collect: (...args: unknown[]) => collect(...args),
   refundPayer: (...args: unknown[]) => refundPayer(...args),
 }));
 vi.mock("@/domain/payments/refund", () => import("../../../domain/payments/refund"));
+vi.mock("@/domain/payments/refund-cancellation", () => import("../../../domain/payments/refund-cancellation"));
 // `once` runs the creation it is given: the key handling itself is tested against the database.
 const once = vi.fn();
 vi.mock("@/db/submissions", () => ({ once: (...args: unknown[]) => once(...args), storedPayments: {} }));
 vi.mock("@/domain/people/age", () => import("../../../domain/people/age"));
 vi.mock("@/lib/action-result", () => import("../../../lib/action-result"));
 
-const { correct, collectPayments, refund } = await import("./actions");
+const { cancelRefund, correct, collectPayments, refund } = await import("./actions");
 
 const PAYMENT = "8d2c6c1e-3f4a-4b5c-9d6e-7f8091a2b3c4";
 const OPENING = "4d5e6f70-8192-4a3b-8c4d-5e6f70819203";
@@ -44,6 +47,7 @@ beforeEach(() => {
   collect.mockReset();
   correctPayment.mockReset();
   refundPayer.mockReset();
+  cancelRefundPayment.mockReset();
   once.mockReset();
   once.mockImplementation((_tx, _kind, _key, _request, _stored, create: () => unknown) => create());
 });
@@ -257,6 +261,54 @@ describe("refund (#294)", () => {
   it("passes on the database refusal without refreshing anything", async () => {
     withSchool.mockResolvedValueOnce({ ok: false, message: "Rien à rembourser : ce payeur n’a pas de trop-perçu." });
     expect(await refund(sent)).toEqual({ ok: false, message: "Rien à rembourser : ce payeur n’a pas de trop-perçu." });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+describe("cancelRefund (#346)", () => {
+  const sent = { key: OPENING, refundId: PAYMENT, amountCents: 10000, back: RECORD };
+  const request = (v: unknown) => v as Parameters<typeof cancelRefund>[0];
+
+  it("checks the role before reading anything: management only", async () => {
+    requireRole.mockRejectedValueOnce(new Error("redirect /"));
+    await expect(cancelRefund(sent)).rejects.toThrow("redirect /");
+    expect(requireRole).toHaveBeenCalledWith("director");
+    expect(withSchool).not.toHaveBeenCalled();
+  });
+
+  it("refuses what the form cannot send, in the words of the field", async () => {
+    for (const [change, message] of [
+      [{ amountCents: 0 }, "Montant de l’annulation invalide."],
+      [{ amountCents: -500 }, "Montant de l’annulation invalide."],
+      [{ amountCents: 12.5 }, "Montant de l’annulation invalide."],
+      [{ refundId: "not-a-uuid" }, "Annulation impossible : rechargez la fiche."],
+      [{ back: 42 }, "Annulation impossible : rechargez la fiche."],
+      [{ key: undefined }, "Annulation impossible : rechargez la fiche."],
+    ] as const)
+      expect(await cancelRefund(request({ ...sent, ...change }))).toEqual({ ok: false, message });
+    expect(withSchool).not.toHaveBeenCalled();
+  });
+
+  it("records through once(), keyed by the form's key, with what was sent (#260)", async () => {
+    withSchool.mockImplementation((_school, run: (tx: string) => unknown) => run("tx"));
+    cancelRefundPayment.mockResolvedValue({ ok: true, ids: [OPENING] });
+    expect(await cancelRefund(sent)).toEqual({ ok: true });
+    expect(once).toHaveBeenCalledWith(
+      "tx",
+      "payment",
+      OPENING,
+      { cancelRefund: { refundId: PAYMENT, amountCents: 10000 } },
+      expect.anything(),
+      expect.any(Function),
+    );
+    expect(cancelRefundPayment).toHaveBeenCalledWith("tx", "user-a", PAYMENT, 10000, expect.any(String));
+    expect(revalidatePath).toHaveBeenCalledWith(RECORD);
+    expect(revalidatePath).toHaveBeenCalledWith("/encaissements");
+  });
+
+  it("passes on the database refusal without refreshing anything", async () => {
+    withSchool.mockResolvedValueOnce({ ok: false, message: "Ce remboursement est déjà annulé." });
+    expect(await cancelRefund(sent)).toEqual({ ok: false, message: "Ce remboursement est déjà annulé." });
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
