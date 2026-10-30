@@ -4,6 +4,7 @@ import { sendFailureReason } from "@/domain/invoicing/outbox";
 import { displayedName } from "@/domain/people/name";
 import { formatEuros } from "@/lib/money";
 import { TextLink } from "../../_ui/text-link";
+import { ProblemActions } from "./problem-actions";
 
 const dateFr = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", dateStyle: "short" });
 
@@ -16,9 +17,19 @@ function nextStep(p: SendingProblem): string {
       ? "Un avoir est à faire dans l’outil de facturation pour la corriger."
       : `Émise par l’outil pour ${formatEuros(p.toolTotalInclTaxCents)} au lieu de ${formatEuros(p.totalInclTaxCents)} : un avoir est à faire dans l’outil de facturation pour la corriger.`;
   if (p.linesGivenBack)
-    return `Abandonnée après ${tries(p.attempts)} : rien à faire, ses lignes reviendront dans la prochaine facture préparée.`;
-  return `Abandonnée après ${tries(p.attempts)} : ouvrir son brouillon dans l’outil de facturation, l’émettre s’il est juste, sinon le supprimer. Ses lignes ne seront pas refacturées d’ici là.`;
+    return `Arrêtée après ${tries(p.attempts)}. Une fois la cause réglée, « Envoyer à nouveau » la prépare de nouveau et l’envoie ; « Abandonner » la retire de la liste.`;
+  return `Arrêtée après ${tries(p.attempts)}, alors que l’outil de facturation en garde un brouillon. Une fois la cause réglée, « Envoyer à nouveau » reprend ce brouillon ; sinon supprimez-le dans l’outil, puis « Abandonner ». Ses lignes ne seront pas refacturées d’ici là.`;
 }
+
+/** The actions on a rejected invoice; none on one issued with another total (a credit note is due). */
+const Actions = ({ p }: { p: SendingProblem }) =>
+  p.status === "rejected" ? (
+    <ProblemActions
+      invoiceId={p.id}
+      inTool={!p.linesGivenBack}
+      payer={displayedName({ name: p.payer, firstName: p.payerFirstName, companyName: p.payerCompanyName })}
+    />
+  ) : null;
 
 function State({ p }: { p: SendingProblem }) {
   if (p.status === "issued")
@@ -82,6 +93,7 @@ export function SendingProblems({ problems, showEntity }: { problems: SendingPro
             <Text size="xs" c="dimmed">
               {nextStep(p)}
             </Text>
+            <Actions p={p} />
           </li>
         ))}
       </ul>
@@ -110,7 +122,8 @@ export function SendingProblems({ problems, showEntity }: { problems: SendingPro
                 <TableTd ta="right" className="whitespace-nowrap tabular-nums">
                   {formatEuros(p.totalInclTaxCents)}
                 </TableTd>
-                <TableTd>
+                {/* Wide enough for « Non émise »: the reason's column would squeeze the badge to « Non… ». */}
+                <TableTd className="min-w-28">
                   <State p={p} />
                 </TableTd>
                 <TableTd>
@@ -118,6 +131,9 @@ export function SendingProblems({ problems, showEntity }: { problems: SendingPro
                   <Text size="xs" c="dimmed">
                     {nextStep(p)}
                   </Text>
+                  <div className="mt-1">
+                    <Actions p={p} />
+                  </div>
                 </TableTd>
               </TableTr>
             ))}

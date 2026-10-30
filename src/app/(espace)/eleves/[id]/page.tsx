@@ -6,6 +6,10 @@ import { readStudent } from "@/db/students";
 import { seasonEnrollments } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
 import { packsOf } from "@/db/lesson-packs";
+import { severalEntities } from "@/db/billing-entities";
+import { payerInvoices } from "@/db/payer-invoices";
+import { mayDraft } from "@/domain/invoicing/progress";
+import { InvoicesSection } from "../../_people/invoices-section";
 import { displayedName } from "@/db/people";
 import { currentSeason } from "@/db/schedule";
 import { enrolledCourses, firstEnrollmentDate, readRequirements, studentDocuments } from "@/db/student-documents";
@@ -63,6 +67,9 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
       enrolledOn: season ? await firstEnrollmentDate(tx, student.id, season.id) : null,
       courses: season ? await enrolledCourses(tx, student.id, season.id) : [],
       packs: await packsOf(tx, { personId: student.id }),
+      // A student paying for themselves: their own invoices (#352).
+      invoices: season && paysForThemselves ? await payerInvoices(tx, student.id, season.id) : [],
+      severalEntities: await severalEntities(tx),
     };
   });
   if (!parsed) notFound();
@@ -229,16 +236,28 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
               , qui paie pour {firstName}.
             </Text>
           ) : (
-            <PaymentsSection
-              payerId={e.id}
-              balance={balance}
-              payments={payments}
-              back={`/eleves/${e.id}`}
-              isDirector={role === "director"}
-              canRefund={mayRefund(role)}
-              canCancelRefund={mayCancelRefund(role)}
-              today={today}
-            />
+            <>
+              {season && (enrollments.length > 0 || packs.length > 0 || parsed.invoices.length > 0) && (
+                <InvoicesSection
+                  payerId={e.id}
+                  season={season}
+                  invoices={parsed.invoices}
+                  showEntity={parsed.severalEntities}
+                  canDraft={mayDraft(role)}
+                  isDirector={role === "director"}
+                />
+              )}
+              <PaymentsSection
+                payerId={e.id}
+                balance={balance}
+                payments={payments}
+                back={`/eleves/${e.id}`}
+                isDirector={role === "director"}
+                canRefund={mayRefund(role)}
+                canCancelRefund={mayCancelRefund(role)}
+                today={today}
+              />
+            </>
           )}
           <Documents
             studentId={e.id}

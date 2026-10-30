@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { type ConnectorOptions, connectorFor } from "../../connectors/invoicing/connector";
+import { type ConnectorOptions, connectorFor, type EntityConnectorConfig } from "../../connectors/invoicing/connector";
 import { type InvoicingConnector, InvoicingError, type ToolDocument } from "../../connectors/invoicing/contract";
 import { invoicePayload } from "../../connectors/invoicing/payload";
 import { withSchool } from "../../db";
@@ -17,6 +17,7 @@ import {
 } from "../../db/invoice-outbox";
 import { numberFitsTool } from "../../domain/billing/invoicing";
 import { afterFailure, BATCH_SIZE, type SendFailure } from "../../domain/invoicing/outbox";
+import type { ToolAnswer } from "../../domain/invoicing/progress";
 import { displayedName } from "../../domain/people/name";
 
 /**
@@ -150,6 +151,29 @@ async function sendOne(schoolId: string, connector: InvoicingConnector, c: Claim
       }
     }
     return failed(schoolId, connector, c, known, e);
+  }
+}
+
+/**
+ * What a business's tool says of one of its documents (#352, before « Abandonner »): its status,
+ * `not_found`, or `unreachable` when its connector cannot be built here or the call fails (with
+ * the guard's timeout and retries). Called outside any transaction; logs technical facts only.
+ */
+export async function toolAnswerOf(
+  config: EntityConnectorConfig | null,
+  toolRef: string,
+  options: ConnectorOptions = {},
+): Promise<ToolAnswer> {
+  if (!config) return "unreachable";
+  try {
+    const doc = await readOrForget(connectorFor(config, options), toolRef);
+    return doc ? doc.status : "not_found";
+  } catch (e) {
+    console.error(
+      `Business ${config.billingEntityId}: tool status not read`,
+      e instanceof InvoicingError ? `${e.kind}${e.code ? `: ${e.code}` : ""}` : e instanceof Error ? e.name : "",
+    );
+    return "unreachable";
   }
 }
 
