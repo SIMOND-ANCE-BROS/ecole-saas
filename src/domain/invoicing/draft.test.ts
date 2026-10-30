@@ -317,17 +317,58 @@ describe("draftInvoices", () => {
     expect(d.totalInclTaxCents).toBe(45000);
   });
 
-  it("yearly packages and lesson packs are due at once on the day they were sold; same-day amounts make one installment", () => {
+  it("yearly packages and lesson packs are billed but get no installment until the school's plans are decided (#176)", () => {
     const [d] = draft(
       [enrollment(), enrollment({ id: "e2", enrolledOn: "2027-09-20", grossPriceCents: 30000 })],
       [pack(), pack({ id: "p2", billingEntityId: "B" })],
     );
     expect(d.lines.at(-1)).toMatchObject({ lessonPackId: "p1", enrollmentId: null, inclTaxCents: 20000 });
+    expect(sumLines(d)).toBe(90000);
+    expect(d.installments).toEqual([]);
+  });
+
+  it("quarters of several enrollments due the same day make one installment; the yearly part has none", () => {
+    const quarterly = (id: string) =>
+      enrollment({ id, period: "quarter", enrolledOn: "2027-09-10", grossPriceCents: 10000, quarters: QUARTERS });
+    const [d] = draft([quarterly("e1"), quarterly("e2"), enrollment({ id: "y" })]);
     expect(d.installments).toEqual([
-      { rank: 1, dueOn: "2027-09-10", amountCents: 40000 },
-      { rank: 2, dueOn: "2027-09-20", amountCents: 50000 },
+      { rank: 1, dueOn: "2027-10-01", amountCents: 20000 },
+      { rank: 2, dueOn: "2028-01-01", amountCents: 20000 },
+      { rank: 3, dueOn: "2028-04-01", amountCents: 20000 },
     ]);
-    expect(sumLines(d)).toBe(sumInstallments(d));
+    expect(d.totalInclTaxCents - sumInstallments(d)).toBe(40000);
+  });
+
+  it("a mixed quarterly package: each quarter's split cents times the quarters add up to the installments", () => {
+    const [d] = draft([
+      enrollment({
+        period: "quarter",
+        enrolledOn: "2027-09-10",
+        grossPriceCents: 10001,
+        discountCents: 1000,
+        discountCodes: ["fratrie"],
+        courses: [course("c1", "exempt"), course("c2", "vat20"), course("c3", "vat20", 45)],
+        quarters: QUARTERS,
+      }),
+    ]);
+    expect(d.lines.every((l) => l.inclTaxCents === l.unitPriceCents * 3)).toBe(true);
+    expect(d.totalInclTaxCents).toBe(9001 * 3);
+    expect(sumInstallments(d)).toBe(d.totalInclTaxCents);
+  });
+
+  it("a 1-cent line at 20 % carries no VAT", () => {
+    const [d] = draft([enrollment({ courses: [course("c1", "vat20")], grossPriceCents: 1 })]);
+    expect(d.lines[0]).toMatchObject({ inclTaxCents: 1, vatCents: 0, exclTaxCents: 1 });
+  });
+
+  it("refuses a discount larger than the price, in French", () => {
+    const r = draftInvoices({
+      enrollments: [enrollment({ discountCents: 50000 })],
+      packs: [],
+      entities: [A],
+      treatments: TREATMENTS,
+    });
+    expect(r).toEqual({ ok: false, message: expect.stringContaining("remise plus grande") });
   });
 
   it("VAT of an invoice is computed per treatment on the whole invoice", () => {
@@ -355,6 +396,17 @@ describe("draftInvoices", () => {
         treatments: TREATMENTS,
       }),
     ).toThrow(RangeError);
+  });
+
+  it("refuses an enrollment that owes something but has no course", () => {
+    const r = draftInvoices({
+      enrollments: [enrollment({ courses: [] })],
+      packs: [],
+      entities: [A],
+      treatments: TREATMENTS,
+    });
+    expect(r.ok).toBe(false);
+    expect(draft([enrollment({ status: "trial", courses: [] })])).toEqual([]);
   });
 
   it("a free typed price (0 €) gives a line but no installment", () => {

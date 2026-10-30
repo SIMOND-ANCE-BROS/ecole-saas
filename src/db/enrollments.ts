@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { rowsOf } from "./columns-of";
+import { discardDrafts, draftsBillingEnrollment } from "./invoice-draft-discard";
 import { z } from "zod";
 import { discountImpacts } from "../domain/enrollment/impacts";
 import {
@@ -536,7 +537,7 @@ export type SeasonEnrollment = {
   droppedOn: string | null;
   enrolledOn: string;
   payerId: string;
-  /** An invoice line refers to it: only a credit note can undo it. */
+  /** A line of an invoice handed to the tool refers to it: only a credit note can undo it. */
   invoiced: boolean;
   /** What the front desk can do with it (#284). */
   actions: EnrollmentActions;
@@ -551,8 +552,12 @@ const enrollmentId = sql`${enrollment}.${sql.identifier("id")}`;
 /** Number of quarters the enrollment of the row covers (#291): what `seasonDueCents` multiplies a quarterly price by. */
 export const quarterCountSql = sql<number>`(SELECT count(*) FROM enrollment_quarter q WHERE q.enrollment_id = ${enrollmentId})::int`;
 
-/** An invoice line refers to the enrollment of the row. */
-const invoicedSql = sql<boolean>`EXISTS (SELECT 1 FROM invoice_line l WHERE l.enrollment_id = ${enrollmentId})`;
+/**
+ * A line of an invoice other than an unsent draft refers to the enrollment of the row. An
+ * unsent draft (#302) never reached the tool: cancelling the enrollment throws the draft away.
+ */
+const invoicedSql = sql<boolean>`EXISTS (SELECT 1 FROM invoice_line l JOIN invoice i ON i.id = l.invoice_id
+  WHERE l.enrollment_id = ${enrollmentId} AND i.status <> 'to_send')`;
 
 /**
  * Attendance was taken for a student of the enrollment of the row in one of its courses,
@@ -941,7 +946,8 @@ export async function dropEnrollment(tx: Tx, userId: string, id: string, dropped
  * Cancels an enrollment entered by mistake: removed with its courses, the audit log keeps
  * its ids and amounts; the payer's payments are untouched and stay on the balance.
  * Refused once invoiced (a credit note is the way back) or once attendance was taken
- * for it (a drop-out is then what happened).
+ * for it (a drop-out is then what happened). The unsent invoice drafts billing it are thrown
+ * away (#302): the payer's invoices are drafted again without it.
  */
 export async function cancelEnrollment(tx: Tx, userId: string, id: string): Promise<ChangeResult> {
   const e = await readSaved(tx, id, true);
@@ -954,6 +960,8 @@ export async function cancelEnrollment(tx: Tx, userId: string, id: string): Prom
     .where(eq(enrollmentCourse.enrollmentId, id));
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
+  const discarded = await discardDrafts(tx, who.id, await draftsBillingEnrollment(tx, id));
+  if (!discarded.ok) return discarded;
   await tx.delete(enrollmentCourse).where(eq(enrollmentCourse.enrollmentId, id));
   await tx.delete(enrollment).where(eq(enrollment.id, id));
   await tx.insert(auditLog).values({

@@ -89,6 +89,7 @@ afterAll(async () => {
   });
   for (const t of [
     "invoice_line",
+    "installment",
     "invoice",
     "attendance",
     "enrollment_course",
@@ -379,8 +380,9 @@ describe("cancelling a mistaken enrollment", () => {
   it("is refused once invoiced, and not offered", async () => {
     const f = await family(school, ["active"]);
     const [e] = f.enrollments;
-    const [inv] =
-      await admin`INSERT INTO invoice (school_id, billing_entity_id, payer_id) VALUES (${school}, ${entity}, ${f.payer}) RETURNING id`;
+    // Handed to the invoicing tool: no longer a draft that can be thrown away (#302).
+    const [inv] = await admin`INSERT INTO invoice (school_id, billing_entity_id, payer_id, status, number)
+      VALUES (${school}, ${entity}, ${f.payer}, 'tool_draft', ${`Zz-${e}`}) RETURNING id`;
     await admin`INSERT INTO invoice_line (school_id, billing_entity_id, invoice_id, label, unit_price_cents, enrollment_id,
         incl_tax_cents, excl_tax_cents, vat_cents, vat_treatment_id, vat_category, vat_mention)
       VALUES (${school}, ${entity}, ${inv.id}, 'Forfait', 11000, ${e}, 11000, 11000, 0,
@@ -393,6 +395,25 @@ describe("cancelling a mistaken enrollment", () => {
       await inSchool((tx) => seasonEnrollments(tx, { payerId: f.payer }, ids[`season-${school}`]))
     ).filter((i) => i.id === e);
     expect(listed).toMatchObject({ invoiced: true, actions: { cancel: false, drop: true } });
+  });
+
+  it("an unsent invoice draft does not block it: the draft is thrown away with it (#302)", async () => {
+    const f = await family(school, ["active"]);
+    const [e] = f.enrollments;
+    const [inv] =
+      await admin`INSERT INTO invoice (school_id, billing_entity_id, payer_id) VALUES (${school}, ${entity}, ${f.payer}) RETURNING id`;
+    await admin`INSERT INTO invoice_line (school_id, billing_entity_id, invoice_id, label, unit_price_cents, enrollment_id,
+        incl_tax_cents, excl_tax_cents, vat_cents, vat_treatment_id, vat_category, vat_mention)
+      VALUES (${school}, ${entity}, ${inv.id}, 'Forfait', 11000, ${e}, 11000, 11000, 0,
+        (SELECT default_vat_treatment_id FROM billing_entity WHERE id = ${entity}), 'exempt', 'Zz mention')`;
+    await admin`INSERT INTO installment (school_id, billing_entity_id, invoice_id, rank, due_date, amount_cents)
+      VALUES (${school}, ${entity}, ${inv.id}, 1, '2027-10-01', 11000)`;
+    const [listed] = (
+      await inSchool((tx) => seasonEnrollments(tx, { payerId: f.payer }, ids[`season-${school}`]))
+    ).filter((i) => i.id === e);
+    expect(listed).toMatchObject({ invoiced: false, actions: { cancel: true } });
+    expect(await inSchool((tx) => cancelEnrollment(tx, desk, e))).toEqual({ ok: true, id: e });
+    expect(await admin`SELECT id FROM invoice WHERE id = ${inv.id}`).toHaveLength(0);
   });
 
   it("a duplicate entered by mistake stays cancellable when the other enrollment has the attendance", async () => {

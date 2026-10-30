@@ -21,8 +21,10 @@ import type { Audience, Period, TariffRow } from "../tariff/types";
  * - Q3 (what a dropped or trial enrollment owes, #99): as the balance counts it,
  *   `DUE_STATUSES` (a drop-out owes all it covers, a trial or waitlist nothing yet).
  *
- * Until the school's installment plans exist (#176), what is not quarterly (a yearly or
- * drop-in package, a lesson pack) is due at once, on the day it was sold (`installmentsOf`).
+ * Not decided here: when what is not quarterly (a yearly or drop-in package, a lesson pack) is
+ * due. That is the school's installment plans, an open question with no default yet (#176 Q1):
+ * such amounts get no installment on the draft (`installmentsOf`), and a draft must not be
+ * issued before #176 is answered, since an issued invoice's installments are frozen.
  */
 
 /** Label of the negative line taking a discount off a package, one per VAT treatment (#289). */
@@ -241,23 +243,19 @@ function enrollmentLines(e: BillableEnrollment): RawLine[] {
 }
 
 /**
- * Q2 default (#291): an invoice's installments. Each quarter of a quarterly enrollment is due
- * on its own cashing day (`quarterlyDues`); the rest, until installment plans exist (#176),
- * at once on the day it was sold. Amounts due the same day make one installment; ranks in date
- * order; a day owing nothing has none. They add up to the invoice's total.
+ * Q2 default (#291): an invoice's installments, one per quarter: each quarter of a quarterly
+ * enrollment is due on its own cashing day (`quarterlyDues`), the quarters of several
+ * enrollments due the same day making one installment. Ranks in date order; a day owing
+ * nothing has none. A yearly or drop-in package and a lesson pack get none until the school's
+ * installment plans are decided (#176 Q1, no default): the installments then add up to the
+ * quarterly part of the invoice only.
  */
-function installmentsOf(
-  enrollments: readonly BillableEnrollment[],
-  packs: readonly BillablePack[],
-): DraftInstallment[] {
+function installmentsOf(enrollments: readonly BillableEnrollment[]): DraftInstallment[] {
   const byDay = new Map<string, number>();
-  const add = (day: string, cents: number) => byDay.set(day, (byDay.get(day) ?? 0) + cents);
-  for (const e of enrollments) {
+  for (const e of enrollments)
     if (e.period === "quarter")
-      for (const d of quarterlyDues(e.quarters, netOf(e), e.enrolledOn)) add(d.dueOn, d.amountCents);
-    else add(e.enrolledOn, netOf(e));
-  }
-  for (const p of packs) add(p.purchasedOn, p.priceCents);
+      for (const d of quarterlyDues(e.quarters, netOf(e), e.enrolledOn))
+        byDay.set(d.dueOn, (byDay.get(d.dueOn) ?? 0) + d.amountCents);
   return [...byDay]
     .filter(([, cents]) => cents !== 0)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -270,7 +268,8 @@ function installmentsOf(
  * each enrollment's package and « Remise » lines per VAT treatment, then each pack; VAT taken
  * out of the VAT-inclusive prices per treatment over the whole invoice (`vatBreakdown`), the
  * treatment's category, rate and mention copied onto each line. A business with nothing to bill
- * gets no draft. Refused, in French, when a line carries VAT for a business that charges none.
+ * gets no draft. Refused, in French, when a line carries VAT for a business that charges none,
+ * or when an enrollment has no course or a negative price.
  */
 export function draftInvoices(input: {
   enrollments: readonly BillableEnrollment[];
@@ -283,6 +282,10 @@ export function draftInvoices(input: {
   for (const x of [...input.enrollments, ...input.packs])
     if (!known.has(x.billingEntityId)) throw new RangeError(`Entreprise inconnue : ${x.billingEntityId}`);
   const due = input.enrollments.filter((e) => DUE_STATUSES.includes(e.status));
+  if (due.some((e) => e.courses.length === 0))
+    return { ok: false, message: "Une inscription sans cours ne peut pas être facturée : ajoutez-lui ses cours." };
+  if (due.some((e) => netOf(e) < 0))
+    return { ok: false, message: "Une inscription a une remise plus grande que son prix : corrigez son prix." };
   const drafts: InvoiceDraft[] = [];
   for (const entity of input.entities) {
     const enrollments = due.filter((e) => e.billingEntityId === entity.id);
@@ -326,7 +329,7 @@ export function draftInvoices(input: {
       totalInclTaxCents: sum("inclTaxCents"),
       totalExclTaxCents: sum("exclTaxCents"),
       totalVatCents: sum("vatCents"),
-      installments: installmentsOf(enrollments, packs),
+      installments: installmentsOf(enrollments),
     });
   }
   return { ok: true, drafts };
