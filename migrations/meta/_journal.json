@@ -330,6 +330,13 @@
       "when": 1793320700496,
       "tag": "0046_discipline_adult_certificate",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793322686503,
+      "tag": "0047_lesson_regular_instructor",
+      "breakpoints": true
     }
   ]
 }
