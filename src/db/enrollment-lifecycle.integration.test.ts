@@ -8,8 +8,11 @@ import {
   confirmationPreview,
   dropEnrollment,
   leavingImpacts,
+  saveEnrollment,
   seasonEnrollments,
+  takenCourses,
 } from "./enrollments";
+import { readPerson } from "./people";
 import { readAttendance } from "./lessons";
 import { enrolledInCourse } from "./schedule";
 import { balanceOf } from "./payments";
@@ -497,5 +500,52 @@ describe("seasonEnrollments", () => {
     expect(byStudent.map((i) => i.id)).toEqual([f.enrollments[1]]);
     // Waitlist: confirmed or cancelled, never dropped (it was never attended).
     expect(byStudent[0].actions).toEqual({ confirm: true, drop: false, cancel: true });
+  });
+});
+
+describe("enrolling a student again in a course they take (#333)", () => {
+  const TODAY = "2027-10-01";
+  const again = (f: { payer: string; students: string[] }, duplicatesConfirmed?: boolean) =>
+    inSchool((tx) =>
+      saveEnrollment(
+        tx,
+        desk,
+        f.payer,
+        ids[`season-${school}`],
+        {
+          studentIds: [f.students[0]],
+          audience: "child",
+          period: "quarter",
+          courseIds: [ids[`course-${school}`]],
+          duplicatesConfirmed,
+        },
+        TODAY,
+      ),
+    );
+
+  it("lists the season's courses a student takes, not through a dropped enrollment", async () => {
+    const f = await family(school, ["waitlist", "dropped"]);
+    const taken = await inSchool((tx) => takenCourses(tx, f.students, ids[`season-${school}`]));
+    expect(taken).toEqual([{ studentId: f.students[0], courseId: ids[`course-${school}`], status: "waitlist" }]);
+  });
+
+  it("holds the enrollment back until the front desk confirms it, then lists the course once on the record", async () => {
+    const f = await family(school, ["active"]);
+    expect(await again(f)).toEqual({ ok: false, message: expect.stringMatching(/confirmez/) });
+    const [{ count }] = await admin`SELECT count(*)::int FROM enrollment_course WHERE student_id = ${f.students[0]}`;
+    expect(count).toBe(1);
+
+    expect((await again(f, true)).ok).toBe(true);
+    const [{ total }] =
+      await admin`SELECT count(*)::int AS total FROM enrollment_course WHERE student_id = ${f.students[0]}`;
+    expect(total).toBe(2);
+    const record = await inSchool((tx) => readPerson(tx, f.students[0]));
+    const rows = (record?.courses ?? []).filter((c) => c.id === ids[`course-${school}`]);
+    expect(rows.map((c) => c.status)).toEqual(["active"]);
+  });
+
+  it("re-enrolls a student who dropped the course without asking", async () => {
+    const f = await family(school, ["dropped"]);
+    expect((await again(f)).ok).toBe(true);
   });
 });

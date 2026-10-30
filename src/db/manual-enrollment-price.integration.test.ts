@@ -126,6 +126,8 @@ const child = (studentId: string, courseIds: string[], extra: Partial<Enrollment
   audience: "child",
   period: "quarter",
   courseIds,
+  // The tests enroll the same students in the same courses again: not a duplicate check (#333).
+  duplicatesConfirmed: true,
   ...extra,
 });
 // Enrolled before the season's first quarter: a quarterly enrollment covers its three quarters (#291).

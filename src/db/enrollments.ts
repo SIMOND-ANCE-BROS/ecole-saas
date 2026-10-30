@@ -3,6 +3,7 @@ import { rowsOf } from "./columns-of";
 import { discardDrafts, draftsBillingEnrollment } from "./invoice-draft-discard";
 import { z } from "zod";
 import { discountImpacts } from "../domain/enrollment/impacts";
+import { alreadyTaken, duplicateRefusal, TAKEN_STATUSES, type TakenCourse } from "../domain/enrollment/duplicates";
 import {
   cancelRefusal,
   confirmationPrice,
@@ -79,6 +80,11 @@ export type EnrollmentInput = {
    * (#299): it replaces the computed price of that business's enrollment, with a reason.
    */
   manualPrices?: ManualPriceEntry[];
+  /**
+   * The front desk confirmed enrolling a student again in a course they already take this
+   * season (#333): without it, such an enrollment is held back (`duplicateRefusal`).
+   */
+  duplicatesConfirmed?: boolean;
 };
 
 /** A typed price for the new enrollment of one business (#292). */
@@ -243,6 +249,27 @@ async function validate(
   return courseIds.flatMap((id) => chosen.filter((c) => c.courseId === id));
 }
 
+/**
+ * Courses of the season the students take (#333), through any enrollment whose status
+ * means they take it (`TAKEN_STATUSES`: not a dropped or ended one), whoever pays for it.
+ */
+export async function takenCourses(tx: Tx, studentIds: string[], seasonId: string): Promise<TakenCourse[]> {
+  const students = studentIds.filter((id) => uuid.safeParse(id).success);
+  if (students.length === 0 || !uuid.safeParse(seasonId).success) return [];
+  return tx
+    .select({ studentId: enrollmentCourse.studentId, courseId: enrollmentCourse.courseId, status: enrollment.status })
+    .from(enrollmentCourse)
+    .innerJoin(enrollment, eq(enrollment.id, enrollmentCourse.enrollmentId))
+    .where(
+      and(
+        inArray(enrollmentCourse.studentId, students),
+        eq(enrollment.seasonId, seasonId),
+        inArray(enrollment.status, [...TAKEN_STATUSES]),
+      ),
+    )
+    .orderBy(asc(enrollment.enrolledOn));
+}
+
 /** An already saved enrollment whose discount would change with the new one (e.g. siblings). */
 export type ExistingImpact = {
   reference: string;
@@ -387,7 +414,9 @@ async function impactsOn(
  * A price typed by the front desk (#292) replaces the computed one of its business's
  * enrollment, with a reason, or prices a combination the grid has no package for. Each
  * enrollment is dated `today` and, when quarterly, covers the season's remaining quarters
- * (#291). Each is written to the audit log (technical ids, amounts and the typed reason).
+ * (#291). A student enrolled again in a course they already take this season is held back
+ * until the front desk confirms it (#333, `duplicateRefusal`). Each is written to the audit
+ * log (technical ids, amounts and the typed reason).
  */
 export async function saveEnrollment(
   tx: Tx,
@@ -427,7 +456,16 @@ export async function saveEnrollment(
     priced.push({ n, manual: keptManualPrice(computedNetCents, manual) });
   }
 
+  // Once the entry is otherwise valid: a course a student already takes is confirmed last (#333).
   const studentIds = [...new Set(entry.studentIds)];
+  const duplicates = alreadyTaken(
+    studentIds,
+    preview.newEnrollments.flatMap((n) => n.courseIds),
+    await takenCourses(tx, studentIds, seasonId),
+  );
+  const duplicate = duplicateRefusal(duplicates.length, entry.duplicatesConfirmed === true);
+  if (duplicate) return { ok: false, message: duplicate };
+
   const status = entry.status ?? "active";
   const ids: string[] = [];
   for (const { n, manual } of priced) {
