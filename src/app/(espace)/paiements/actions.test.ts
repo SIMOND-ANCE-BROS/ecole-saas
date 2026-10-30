@@ -12,17 +12,20 @@ const redirect = vi.fn();
 vi.mock("next/navigation", () => ({ redirect: (...args: unknown[]) => redirect(...args) }));
 const collect = vi.fn();
 const correctPayment = vi.fn();
+const refundPayer = vi.fn();
 vi.mock("@/db/payments", () => ({
   correctPayment: (...args: unknown[]) => correctPayment(...args),
   collect: (...args: unknown[]) => collect(...args),
+  refundPayer: (...args: unknown[]) => refundPayer(...args),
 }));
+vi.mock("@/domain/payments/refund", () => import("../../../domain/payments/refund"));
 // `once` runs the creation it is given: the key handling itself is tested against the database.
 const once = vi.fn();
 vi.mock("@/db/submissions", () => ({ once: (...args: unknown[]) => once(...args), storedPayments: {} }));
 vi.mock("@/domain/people/age", () => import("../../../domain/people/age"));
 vi.mock("@/lib/action-result", () => import("../../../lib/action-result"));
 
-const { correct, collectPayments } = await import("./actions");
+const { correct, collectPayments, refund } = await import("./actions");
 
 const PAYMENT = "8d2c6c1e-3f4a-4b5c-9d6e-7f8091a2b3c4";
 const OPENING = "4d5e6f70-8192-4a3b-8c4d-5e6f70819203";
@@ -40,6 +43,7 @@ beforeEach(() => {
   redirect.mockReset();
   collect.mockReset();
   correctPayment.mockReset();
+  refundPayer.mockReset();
   once.mockReset();
   once.mockImplementation((_tx, _kind, _key, _request, _stored, create: () => unknown) => create());
 });
@@ -193,5 +197,66 @@ describe("collectPayments", () => {
     collect.mockResolvedValue({ ok: false, message: "Payeur introuvable." });
     expect(await collectPayments(PAYER, PAID, RECORD, SUBMISSION)).toEqual({ message: "Payeur introuvable." });
     expect(redirect).not.toHaveBeenCalled();
+  });
+});
+
+describe("refund (#294)", () => {
+  const PAYER = "2b3c4d5e-6f70-4a81-9b2c-3d4e5f607182";
+  const ENTITY = "5e6f7081-92a3-4b4c-9d5e-6f708192a3b4";
+  const sent = {
+    key: OPENING,
+    payerId: PAYER,
+    method: "transfer" as const,
+    amountCents: 10000,
+    date: "2026-11-02",
+    reference: null,
+    back: RECORD,
+  };
+  const request = (v: unknown) => v as Parameters<typeof refund>[0];
+
+  it("checks the role before reading anything: management only", async () => {
+    requireRole.mockRejectedValueOnce(new Error("redirect /"));
+    await expect(refund(sent)).rejects.toThrow("redirect /");
+    expect(requireRole).toHaveBeenCalledWith("director");
+    expect(withSchool).not.toHaveBeenCalled();
+  });
+
+  it("refuses what the form cannot send, in the words of the field", async () => {
+    for (const [change, message] of [
+      [{ amountCents: 0 }, "Montant du remboursement invalide."],
+      [{ amountCents: 12.5 }, "Montant du remboursement invalide."],
+      [{ date: "02/11/2026" }, "Date du remboursement invalide."],
+      [{ method: "card" }, "Choisissez comment vous remboursez."],
+      [{ method: "holiday_voucher" }, "Choisissez comment vous remboursez."],
+      [{ payerId: "not-a-uuid" }, "Remboursement impossible : rechargez la fiche."],
+      [{ billingEntityId: "not-a-uuid" }, "Remboursement impossible : rechargez la fiche."],
+      [{ key: undefined }, "Remboursement impossible : rechargez la fiche."],
+    ] as const)
+      expect(await refund(request({ ...sent, ...change }))).toEqual({ ok: false, message });
+    expect(withSchool).not.toHaveBeenCalled();
+  });
+
+  it("records through once(), keyed by the form's key, with the entity chosen (#260, #300)", async () => {
+    withSchool.mockImplementation((_school, run: (tx: string) => unknown) => run("tx"));
+    refundPayer.mockResolvedValue({ ok: true, ids: [PAYMENT] });
+    expect(await refund({ ...sent, billingEntityId: ENTITY })).toEqual({ ok: true });
+    const entry = { method: "transfer", amountCents: 10000, date: "2026-11-02", reference: null };
+    expect(once).toHaveBeenCalledWith(
+      "tx",
+      "payment",
+      OPENING,
+      { refund: { payerId: PAYER, billingEntityId: ENTITY, entry } },
+      expect.anything(),
+      expect.any(Function),
+    );
+    expect(refundPayer).toHaveBeenCalledWith("tx", "user-a", PAYER, entry, expect.any(String), ENTITY);
+    expect(revalidatePath).toHaveBeenCalledWith(RECORD);
+    expect(revalidatePath).toHaveBeenCalledWith("/encaissements");
+  });
+
+  it("passes on the database refusal without refreshing anything", async () => {
+    withSchool.mockResolvedValueOnce({ ok: false, message: "Rien à rembourser : ce payeur n’a pas de trop-perçu." });
+    expect(await refund(sent)).toEqual({ ok: false, message: "Rien à rembourser : ce payeur n’a pas de trop-perçu." });
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });

@@ -19,6 +19,8 @@ import { ButtonLink } from "../_ui/button-link";
 import { CorrectPayment } from "./correct-payment";
 import { isRejection, rejectionLabel, rejectionNotYet } from "@/domain/payments/rejection";
 import { referenceOf } from "@/domain/payments/payment-log";
+import { isRefund } from "@/domain/payments/refund";
+import { RefundPayer } from "./refund-payer";
 
 // Tables show days as « 21/10/2026 », like the payment log and the lists (#201).
 const day = frenchDate;
@@ -26,12 +28,14 @@ const day = frenchDate;
 /** Cheque number and bank, or the reference given; a reverse entry says what it is first (#272). */
 const reference = (p: PaymentRow) => referenceOf(p) ?? "";
 
-/** When the money is in: a correction or a rejection, a cheque to cash later, deposited, or cashed. */
+/** When the money is in: a refund, a correction or a rejection, a cheque to cash later, deposited, or cashed. */
 const cashing = (p: PaymentRow, today: string) =>
   p.amountCents < 0
-    ? isRejection(p)
-      ? "rejet"
-      : "correction"
+    ? isRefund(p)
+      ? "remboursé"
+      : isRejection(p)
+        ? "rejet"
+        : "correction"
     : p.depositedOn
       ? `remis le ${day(p.depositedOn)}`
       : p.plannedPayment && p.plannedPayment > today
@@ -82,6 +86,8 @@ type Props = {
   back: string;
   /** Management: may correct a payment. */
   isDirector: boolean;
+  /** May pay an overpayment back (#294, `mayRefund`). */
+  canRefund: boolean;
   today: string;
 };
 
@@ -92,6 +98,7 @@ export function PaymentsSection({
   payments: payments,
   back: back,
   isDirector,
+  canRefund,
   today: today,
 }: Props) {
   const total = balance?.total ?? null;
@@ -235,6 +242,38 @@ export function PaymentsSection({
           </div>
         </Paper>
       )}
+      {/* An overpayment is paid back by the business that received it (#294): one form each. */}
+      {canRefund &&
+        (balance?.refunds ?? []).map((e) => (
+          <div key={e.id} className="flex flex-col gap-1">
+            {e.refundable > 0 && (
+              <RefundPayer
+                payerId={payerId}
+                entity={several ? { id: e.id, name: e.name } : null}
+                refundable={e.refundable}
+                back={back}
+                today={today}
+              />
+            )}
+            {/* Never paid back out of a cheque that may bounce or is to be cashed later, nor
+                out of an advance on an enrollment on trial or on the waitlist. */}
+            {e.refundable < e.overpaid && (
+              <Text size="xs" c="dimmed">
+                {e.refundable > 0
+                  ? `Remboursable : ${formatEuros(e.refundable)} sur un trop-perçu de ${formatEuros(e.overpaid)}`
+                  : `Trop-perçu de ${formatEuros(e.overpaid)}`}
+                {several ? ` (${e.name})` : ""} : {e.refundable > 0 ? "le reste attend" : "il attend"}{" "}
+                {[
+                  e.uncollected > 0 ? "la remise en banque des chèques reçus (ou leur date d’encaissement)" : null,
+                  e.held > 0 ? "la confirmation ou l’annulation des inscriptions à l’essai ou en attente" : null,
+                ]
+                  .filter(Boolean)
+                  .join(", et ")}
+                .
+              </Text>
+            )}
+          </div>
+        ))}
       {payments.length === 0 ? (
         <Text size="sm" c="dimmed">
           Aucun paiement enregistré.

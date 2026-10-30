@@ -14,6 +14,7 @@ import { documentsToBring, documentState, expectedDocuments, recordableDocuments
 import { ofName } from "@/lib/french";
 import { requireRole } from "@/lib/session";
 import { PaymentsSection } from "../../_people/payments-section";
+import { mayRefund } from "@/domain/payments/refund";
 import { LessonPacks } from "../../_people/lesson-packs";
 import { Banner, FollowedCourses, Enrollments, dayOf, Notes, Telephone } from "../../_people/sections";
 import { Billing } from "./billing";
@@ -233,6 +234,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
               payments={payments}
               back={`/eleves/${e.id}`}
               isDirector={role === "director"}
+              canRefund={mayRefund(role)}
               today={today}
             />
           )}

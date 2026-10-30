@@ -90,7 +90,20 @@ it("totals per payment method, corrections included", () => {
   expect(totals([p("a", "cheque", 10000), p("b", "cheque", -4000), p("c", "cash", 2050)])).toEqual({
     total: 8050,
     byMethod: { cheque: 6000, cash: 2050 },
+    refunded: 0,
   });
+});
+
+it("totals refunds apart, out of their method's total (#294)", () => {
+  expect(
+    totals([
+      p("a", "cheque", 28000),
+      { ...p("b", "cheque", 10000), reversalKind: null },
+      { ...p("c", "cheque", -4000), reversalKind: "correction" as const },
+      { ...p("d", "cheque", -6000), reversalKind: "refund" as const },
+      { ...p("e", "transfer", -1500), reversalKind: "refund" as const },
+    ]),
+  ).toEqual({ total: 26500, byMethod: { cheque: 34000 }, refunded: -7500 });
 });
 
 describe("toCsv", () => {
