@@ -7,13 +7,13 @@ import { defaultQuarters } from "../domain/enrollment/quarters";
 import { migrationsBefore } from "./migration.integration-helpers";
 
 /**
- * Migration 0048 (#291) replayed on a throwaway database: migrated up to the migration
+ * Migration 0049 (#291) replayed on a throwaway database: migrated up to the migration
  * before it, filled with seasons and quarterly enrollments as they were (no quarters), then
  * migrated to the end. Checks the default quarters it gives each season (the same as
  * `defaultQuarters`) and the quarters it gives each quarterly enrollment.
  */
 
-const MIGRATION = "0048_season_quarters";
+const MIGRATION = "0049_season_quarters";
 
 const url = process.env.DATABASE_ADMIN_URL;
 if (!url) throw new Error("DATABASE_ADMIN_URL manquante : copier .env.example en .env");

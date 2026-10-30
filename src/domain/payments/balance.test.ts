@@ -121,8 +121,8 @@ describe("balancesByEntity", () => {
   it("two entities: each balance holds its own enrollments, packs and payments; the total adds them up", () => {
     const s = balancesByEntity(
       [
-        { status: "active", netPriceCents: 30_000, billingEntityId: A },
-        { status: "active", netPriceCents: 20_000, billingEntityId: B },
+        { status: "active", period: "year", quarterCount: 0, netPriceCents: 30_000, billingEntityId: A },
+        { status: "active", period: "year", quarterCount: 0, netPriceCents: 20_000, billingEntityId: B },
       ],
       [{ priceCents: 12_000, billingEntityId: B }],
       [
@@ -151,8 +151,8 @@ describe("balancesByEntity", () => {
   it("an overpayment to one business is not netted against the other: each keeps its own balance", () => {
     const s = balancesByEntity(
       [
-        { status: "active", netPriceCents: 10_000, billingEntityId: A },
-        { status: "active", netPriceCents: 10_000, billingEntityId: B },
+        { status: "active", period: "year", quarterCount: 0, netPriceCents: 10_000, billingEntityId: A },
+        { status: "active", period: "year", quarterCount: 0, netPriceCents: 10_000, billingEntityId: B },
       ],
       [],
       [{ amountCents: 20_000, plannedPayment: null, billingEntityId: A }],
@@ -165,7 +165,7 @@ describe("balancesByEntity", () => {
 
   it("a correction and a rejected cheque count against the entity of the payment they reverse", () => {
     const s = balancesByEntity(
-      [{ status: "active", netPriceCents: 15_000, billingEntityId: B }],
+      [{ status: "active", period: "year", quarterCount: 0, netPriceCents: 15_000, billingEntityId: B }],
       [],
       [
         { amountCents: 15_000, plannedPayment: null, billingEntityId: B },
@@ -185,8 +185,8 @@ describe("balancesByEntity", () => {
   it("trial and waitlist enrollments stay visible, apart, on their entity and in the total", () => {
     const s = balancesByEntity(
       [
-        { status: "trial", netPriceCents: 1_500, billingEntityId: A },
-        { status: "waitlist", netPriceCents: 9_000, billingEntityId: B },
+        { status: "trial", period: "year", quarterCount: 0, netPriceCents: 1_500, billingEntityId: A },
+        { status: "waitlist", period: "year", quarterCount: 0, netPriceCents: 9_000, billingEntityId: B },
       ],
       [],
       [],

@@ -174,7 +174,7 @@ describe("quarterly enrollments (#291)", () => {
     expect((await admin`SELECT to_char(enrolled_on, 'YYYY-MM-DD') AS d FROM enrollment WHERE id = ${r.id}`)[0].d).toBe(
       "2027-09-15",
     );
-    expect(await withSchool(ids.school, (tx) => balanceOf(tx, ids.payer, "2027-09-15"))).toMatchObject({
+    expect((await withSchool(ids.school, (tx) => balanceOf(tx, ids.payer, "2027-09-15")))?.total).toMatchObject({
       due: 33000,
     });
   });
@@ -196,7 +196,7 @@ describe("quarterly enrollments (#291)", () => {
       quarterCount: 2,
       seasonDueCents: 19800,
     });
-    expect(await withSchool(ids.school, (tx) => balanceOf(tx, ids.payer, "2028-01-10"))).toMatchObject({
+    expect((await withSchool(ids.school, (tx) => balanceOf(tx, ids.payer, "2028-01-10")))?.total).toMatchObject({
       due: 33000 + 19800,
     });
   });
