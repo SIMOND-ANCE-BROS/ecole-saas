@@ -32,6 +32,14 @@ const reference = (p: PaymentRow) => referenceOf(p) ?? "";
 /** A reverse entry: a correction, a rejection, a refund or a refund's cancellation (#346), not money received. */
 const isReverse = (p: PaymentRow) => p.reversalKind !== null;
 
+/** A refund at a glance (#346): paid back, cancelled in part (how much), or cancelled. */
+const refundState = (p: PaymentRow) =>
+  refundLeftCents({ amountCents: p.amountCents, cancelledCents: p.correctedCents }) === 0
+    ? "annulé"
+    : p.correctedCents > 0
+      ? `remboursé, ${formatEuros(p.correctedCents)} annulés`
+      : "remboursé";
+
 /**
  * When the money is in: a refund, its cancellation, a correction or a rejection, a cheque
  * to cash later, deposited, or cashed.
@@ -39,7 +47,7 @@ const isReverse = (p: PaymentRow) => p.reversalKind !== null;
 const cashing = (p: PaymentRow, today: string) =>
   isReverse(p)
     ? isRefund(p)
-      ? "remboursé"
+      ? refundState(p)
       : isRefundCancellation(p)
         ? "annulation"
         : isRejection(p)
