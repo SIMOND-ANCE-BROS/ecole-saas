@@ -1053,6 +1053,11 @@ export const invoice = pgTable(
     schoolId: schoolIdColumn(),
     billingEntityId: uuid("billing_entity_id").notNull(), // the issuer (ADR 0006)
     payerId: uuid("payer_id").notNull(),
+    // Season it bills (#302): one draft per payer, entity and season. NULL: an invoice of no
+    // season (a credit note may carry its invoice's).
+    seasonId: uuid("season_id"),
+    // A draft (`to_send`) has no number; an issued invoice is frozen (trigger
+    // `invoice_issued_immutable`): only a credit note corrects it.
     status: invoiceStatus("status").notNull().default("to_send"),
     tool: invoicingTool("tool"),
     toolRef: text("tool_ref"),
@@ -1068,11 +1073,22 @@ export const invoice = pgTable(
   (t) => [
     // Each entity has its own numbering in its own tool: « A-1 » may exist once per entity.
     unique("invoice_billing_entity_id_number_unique").on(t.billingEntityId, t.number),
+    // The number comes from the tool when it issues the invoice: never on a draft, always once issued.
+    check(
+      "invoice_number_status",
+      sql`(${t.status} <> 'to_send' OR ${t.number} IS NULL) AND (${t.status} <> 'issued' OR (${t.number} IS NOT NULL AND ${t.issuedOn} IS NOT NULL))`,
+    ),
+    // At most one draft per payer, entity and season (#302): drafting again replaces it.
+    uniqueIndex("invoice_one_draft")
+      .on(t.schoolId, t.payerId, t.billingEntityId, t.seasonId)
+      .where(sql`${t.status} = 'to_send' AND ${t.creditNoteOf} IS NULL AND ${t.seasonId} IS NOT NULL`),
     index().on(t.payerId),
+    index().on(t.seasonId),
     sameSchoolTarget(t),
     sameEntityTarget(t),
     sameSchool(t, t.billingEntityId, billingEntity),
     sameSchool(t, t.payerId, person),
+    sameSchool(t, t.seasonId, season),
     // A credit note cancels an invoice of the same entity.
     sameEntity(t, t.creditNoteOf, t),
   ],
