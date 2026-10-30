@@ -288,7 +288,12 @@ export function PaymentsSection({
                     </TableTd>
                     <TableTd className="whitespace-nowrap">
                       {cashing(p, today)}
-                      {several && ` · ${p.entity}`}
+                      {/* Under the date, not a column of its own: the table keeps its width (#300). */}
+                      {several && (
+                        <Text span size="xs" c="dimmed" className="block">
+                          {p.entity}
+                        </Text>
+                      )}
                     </TableTd>
                     {isDirector && (
                       <TableTd>
