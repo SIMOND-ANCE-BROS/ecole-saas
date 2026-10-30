@@ -490,15 +490,23 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
           eq(lesson.courseId, id),
           eq(lesson.instructorId, existing.instructorId),
           eq(lesson.status, "planned"),
-          sql`${lesson.date} >= (now() AT TIME ZONE 'Europe/Paris')::date`,
+          sql`NOT ${given(existing.startTime)}`,
         ),
       );
   }
   return { ok: true, id, instructorRateCents };
 }
 
-/** Lessons given: dated before today in Paris, the same boundary as the handover of upcoming lessons. */
-const given = sql`${lesson.date} < (now() AT TIME ZONE 'Europe/Paris')::date`;
+/**
+ * Lessons given (#310): started before now in Paris, at their own time or the
+ * course's `courseTime` (its time before the change). A lesson given earlier
+ * today counts, as in statements, and stays with the instructor who gave it.
+ */
+const given = (courseTime: string) =>
+  sql`(${lesson.date} + coalesce(${lesson.startTime}, ${courseTime}::time)) < (now() AT TIME ZONE 'Europe/Paris')`;
+
+/** Lessons that keep what they were given with: given, or with attendance taken (`done`), even ahead of time. */
+const kept = (courseTime: string) => or(given(courseTime), eq(lesson.status, "done"));
 
 /**
  * Before the course takes `after` (#310): its lessons already given keep the
@@ -512,7 +520,7 @@ async function keepGivenLessons(tx: Tx, id: string, before: CourseSlotAndInstruc
     await tx
       .update(lesson)
       .set({ regularInstructorId: sql`coalesce(${lesson.regularInstructorId}, ${before.instructorId}::uuid)` })
-      .where(and(eq(lesson.courseId, id), given));
+      .where(and(eq(lesson.courseId, id), kept(before.startTime)));
   if (keep.slot)
     await tx
       .update(lesson)
@@ -520,7 +528,7 @@ async function keepGivenLessons(tx: Tx, id: string, before: CourseSlotAndInstruc
         startTime: sql`coalesce(${lesson.startTime}, ${before.startTime}::time)`,
         durationMinutes: sql`coalesce(${lesson.durationMinutes}, ${before.durationMinutes}::int)`,
       })
-      .where(and(eq(lesson.courseId, id), given));
+      .where(and(eq(lesson.courseId, id), kept(before.startTime)));
 }
 
 /** A course's own instructor rate with its unit: the pay mode it was typed in (#268). */

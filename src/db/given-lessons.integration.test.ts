@@ -201,6 +201,54 @@ describe("a course handed to another instructor (#310)", () => {
   });
 });
 
+describe("a lesson given earlier today (#310)", () => {
+  it("keeps its length and its teacher when the course changes the same day", async () => {
+    // At midnight: started by the time the test runs, today in Paris.
+    const id = await create({ ...base, instructorId: perLesson, weekday: 6, startTime: "00:00" });
+    const today = await lessonOf(id, perLesson, TODAY, "planned");
+    const r = await withSchool(school, (tx) =>
+      updateCourse(tx, id, {
+        ...base,
+        instructorId: hourly,
+        weekday: 6,
+        startTime: "00:00",
+        durationMinutes: 90,
+        instructorRate: undefined,
+      }),
+    );
+    expect(r.ok).toBe(true);
+    expect(await lessonRow(today)).toMatchObject({
+      instructor_id: perLesson,
+      regular_instructor_id: perLesson,
+      duration_minutes: 60,
+    });
+  });
+});
+
+describe("a lesson whose attendance is taken ahead of its time (#310)", () => {
+  it("keeps its length and its teacher too", async () => {
+    // At 23:59, not started yet but attendance taken (`done`): it does not follow the course either.
+    const id = await create({ ...base, instructorId: perLesson, weekday: 7, startTime: "23:59" });
+    const taken = await lessonOf(id, perLesson, TODAY, "done");
+    const r = await withSchool(school, (tx) =>
+      updateCourse(tx, id, {
+        ...base,
+        instructorId: owner,
+        weekday: 7,
+        startTime: "23:59",
+        durationMinutes: 90,
+        instructorRate: undefined,
+      }),
+    );
+    expect(r.ok).toBe(true);
+    expect(await lessonRow(taken)).toMatchObject({
+      instructor_id: perLesson,
+      regular_instructor_id: perLesson,
+      duration_minutes: 60,
+    });
+  });
+});
+
 describe("monthly flat instructors and owners (#310)", () => {
   it("lists an active monthly flat instructor without lessons, flagged, but not an inactive one", async () => {
     const s = await statementOf(flat);

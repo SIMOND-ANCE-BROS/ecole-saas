@@ -84,7 +84,7 @@ export const FLAG_TEXTS: Record<StatementFlag, string> = {
   no_attendance:
     "Appel non fait pour certaines séances : elles sont comptées, mais une séance sans élève présent n’est pas payée. Faites l’appel, ou annulez la séance si personne n’est venu.",
   rate_changed:
-    "Un tarif, le mode de rémunération, le statut de dirigeant ou l’intervenant d’un cours a changé depuis le début du mois : le relevé est calculé avec les données d’aujourd’hui. Vérifiez les séances d’avant le changement.",
+    "Un tarif, le mode de rémunération, le statut de dirigeant ou l’intervenant d’un cours a changé depuis le début du mois : le relevé est calculé avec les tarifs d’aujourd’hui. Vérifiez les séances d’avant le changement.",
   flat_holidays:
     "Forfait mensuel compté en entier alors que l’école ferme pendant ce mois (vacances, jours fériés) : à vérifier avant de payer.",
   flat_no_lesson: "Aucune séance ce mois-ci : forfait mensuel non compté, à vérifier avant de payer.",
@@ -93,9 +93,9 @@ export const FLAG_TEXTS: Record<StatementFlag, string> = {
 /** The same, in a few words for the month's list. */
 export const FLAG_SHORT: Record<StatementFlag, string> = {
   no_attendance: NO_ATTENDANCE,
-  rate_changed: "tarif ou cours modifié depuis le début du mois",
+  rate_changed: "tarif, statut ou cours modifié depuis le début du mois",
   flat_holidays: "forfait d’un mois avec vacances",
-  flat_no_lesson: "forfait non compté",
+  flat_no_lesson: "forfait non compté : aucune séance",
 };
 
 export type StatementLine = {
