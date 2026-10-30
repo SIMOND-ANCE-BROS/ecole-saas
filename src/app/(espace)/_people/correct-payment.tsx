@@ -9,6 +9,7 @@ import { frenchDate } from "@/lib/dates";
 import { formatEuros, parseEuros, typedEuros } from "@/lib/money";
 import { correct } from "../paiements/actions";
 import { DateField, refusedDateField } from "../_ui/date-field";
+import { EscapeCancelsForm } from "../_ui/escape-asks";
 
 /** Heading of the payments section (`payments-section.tsx`), focused when a fully corrected payment loses its button. */
 const PAYMENTS_HEADING = "paiements";
@@ -108,13 +109,10 @@ export function CorrectPayment({
     </>
   );
   return (
-    <form
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !e.defaultPrevented) {
-          e.preventDefault();
-          close();
-        }
-      }}
+    // Escape with the calendar open closes only the calendar; then it closes the form, asking
+    // first once the amount or the date was changed (#343). Mounted with each opening.
+    <EscapeCancelsForm
+      close={close}
       onSubmit={(e) => {
         e.preventDefault();
         setShown(true);
@@ -212,6 +210,6 @@ export function CorrectPayment({
           {message}
         </Text>
       )}
-    </form>
+    </EscapeCancelsForm>
   );
 }

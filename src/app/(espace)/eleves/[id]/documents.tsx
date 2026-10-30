@@ -2,7 +2,7 @@
 
 import { Alert, Button, Checkbox, Group, Paper, Text, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useRef, useState, useTransition } from "react";
+import { type Dispatch, type SetStateAction, useRef, useState, useTransition } from "react";
 import type { StudentDocumentRow } from "@/db/student-documents";
 import {
   DOCUMENT_LABELS,
@@ -15,6 +15,7 @@ import { settle, type ActionResult } from "@/lib/action-result";
 import { frenchList } from "@/lib/french-list";
 import { ConfirmRemoval, type Removal } from "../../_ui/confirm-removal";
 import { DateField, refusedDateField } from "../../_ui/date-field";
+import { useEscapeCancels } from "../../_ui/escape-asks";
 import { TextLink } from "../../_ui/text-link";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { useUnloadGuard, useUnsavedInput } from "../../_ui/unsaved-input";
@@ -106,10 +107,6 @@ export function Documents({ studentId, firstName, lines, enrolled, today, isDire
   const [removal, setRemoval] = useState<Removal | null>(null);
   const [inProgress, startTransition] = useTransition();
   const focusAfter = useFocusAfter();
-  const form = useRef<HTMLFormElement>(null);
-  // A correction being typed is not lost to a reload or a closed tab (#258).
-  const holdsInput = useUnsavedInput(form, { enabled: edition !== null });
-  useUnloadGuard(holdsInput, { enabled: edition !== null });
 
   // A refusal or a lost connection keeps what was typed, with its message (#243).
   const act = (action: () => Promise<ActionResult>, after?: () => void, failed?: () => void) =>
@@ -270,14 +267,19 @@ export function Documents({ studentId, firstName, lines, enrolled, today, isDire
                 )}
               </div>
               {editing && edition && (
-                <form
-                  ref={form}
-                  aria-label={`${line.doc ? "Modifier" : "Saisir"} : ${label}`}
-                  className="flex flex-col gap-2"
-                  onKeyDown={(e) => e.key === "Escape" && closeEdit(line.type)}
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (refusedDateField(e.currentTarget)) return;
+                <DocumentForm
+                  key={line.type}
+                  label={label}
+                  recorded={line.doc !== null}
+                  datedType={datedType}
+                  edition={edition}
+                  setEdition={setEdition}
+                  today={today}
+                  validityOf={validityOf}
+                  inProgress={inProgress}
+                  message={message}
+                  close={() => closeEdit(line.type)}
+                  save={() =>
                     act(
                       () =>
                         editDocument(studentId, {
@@ -291,83 +293,9 @@ export function Documents({ studentId, firstName, lines, enrolled, today, isDire
                         done(`${label} : document enregistré.`);
                         closeEdit(line.type);
                       },
-                    );
-                  }}
-                >
-                  <div className="flex flex-wrap items-end gap-3">
-                    <DateField
-                      label="Reçu le"
-                      required
-                      autoFocus={!datedType}
-                      maxDate={today}
-                      value={edition.receivedOn}
-                      onChange={(receivedOn) => setEdition((x) => x && { ...x, receivedOn })}
-                      className="w-40"
-                    />
-                    {(datedType || edition.datedOn) && (
-                      <DateField
-                        label="Daté du"
-                        required={datedType}
-                        autoFocus={datedType}
-                        maxDate={edition.receivedOn || today}
-                        value={edition.datedOn}
-                        onChange={(datedOn) =>
-                          setEdition(
-                            (x) =>
-                              x && {
-                                ...x,
-                                datedOn,
-                                // The end date follows the document's date until it is typed by hand.
-                                validUntil:
-                                  x.validTouched || !datedOn
-                                    ? x.validUntil
-                                    : (validUntilFor(datedOn, validityOf(x.type)) ?? ""),
-                              },
-                          )
-                        }
-                        className="w-40"
-                      />
-                    )}
-                    <DateField
-                      label="Valable jusqu’au"
-                      description="Vide : sans limite"
-                      minDate={edition.datedOn || edition.receivedOn || undefined}
-                      value={edition.validUntil}
-                      onChange={(validUntil) => setEdition((x) => x && { ...x, validUntil, validTouched: true })}
-                      className="w-40"
-                    />
-                    {line.type !== "medical_certificate" && (
-                      <Checkbox
-                        label="Accordé par la famille"
-                        checked={edition.granted}
-                        onChange={(e) => {
-                          const granted = e.currentTarget.checked;
-                          setEdition((x) => x && { ...x, granted });
-                        }}
-                        className="pb-2"
-                      />
-                    )}
-                    <Group gap="xs">
-                      <Button type="submit" size="compact-sm" variant="default" loading={inProgress}>
-                        Enregistrer
-                      </Button>
-                      <Button
-                        type="button"
-                        size="compact-sm"
-                        variant="subtle"
-                        color="gray"
-                        onClick={() => closeEdit(line.type)}
-                      >
-                        Annuler
-                      </Button>
-                    </Group>
-                  </div>
-                  {message && (
-                    <Text role="alert" size="sm" c="red">
-                      {message}
-                    </Text>
-                  )}
-                </form>
+                    )
+                  }
+                />
               )}
             </li>
           );
@@ -379,5 +307,124 @@ export function Documents({ studentId, firstName, lines, enrolled, today, isDire
         </Text>
       )}
     </section>
+  );
+}
+
+/**
+ * The form of one document, mounted with its edit: what was typed is checked from a fresh
+ * start each time. Escape with the calendar open closes only the calendar; untouched, it
+ * closes the form at once (focus back on the row's « Saisir » / « Modifier »); with input,
+ * it asks « Abandonner la saisie ? » first (#343, as in settings since #339). A reload or a
+ * closed tab asks too (#258).
+ */
+function DocumentForm({
+  label,
+  recorded,
+  datedType,
+  edition,
+  setEdition,
+  today,
+  validityOf,
+  inProgress,
+  message,
+  close,
+  save,
+}: {
+  label: string;
+  /** A document is already recorded: « Modifier », else « Saisir ». */
+  recorded: boolean;
+  /** Its validity runs from its own date, asked first. */
+  datedType: boolean;
+  edition: Edition;
+  setEdition: Dispatch<SetStateAction<Edition | null>>;
+  today: string;
+  validityOf: (type: RequirableType) => number | null;
+  inProgress: boolean;
+  message: string | null;
+  close: () => void;
+  save: () => void;
+}) {
+  const form = useRef<HTMLFormElement>(null);
+  useUnloadGuard(useUnsavedInput(form));
+  const escape = useEscapeCancels(form, close);
+  return (
+    <form
+      ref={form}
+      aria-label={`${recorded ? "Modifier" : "Saisir"} : ${label}`}
+      className="flex flex-col gap-2"
+      onKeyDown={escape.onKeyDown}
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (refusedDateField(e.currentTarget)) return;
+        save();
+      }}
+    >
+      <div className="flex flex-wrap items-end gap-3">
+        <DateField
+          label="Reçu le"
+          required
+          autoFocus={!datedType}
+          maxDate={today}
+          value={edition.receivedOn}
+          onChange={(receivedOn) => setEdition((x) => x && { ...x, receivedOn })}
+          className="w-40"
+        />
+        {(datedType || edition.datedOn) && (
+          <DateField
+            label="Daté du"
+            required={datedType}
+            autoFocus={datedType}
+            maxDate={edition.receivedOn || today}
+            value={edition.datedOn}
+            onChange={(datedOn) =>
+              setEdition(
+                (x) =>
+                  x && {
+                    ...x,
+                    datedOn,
+                    // The end date follows the document's date until it is typed by hand.
+                    validUntil:
+                      x.validTouched || !datedOn ? x.validUntil : (validUntilFor(datedOn, validityOf(x.type)) ?? ""),
+                  },
+              )
+            }
+            className="w-40"
+          />
+        )}
+        <DateField
+          label="Valable jusqu’au"
+          description="Vide : sans limite"
+          minDate={edition.datedOn || edition.receivedOn || undefined}
+          value={edition.validUntil}
+          onChange={(validUntil) => setEdition((x) => x && { ...x, validUntil, validTouched: true })}
+          className="w-40"
+        />
+        {edition.type !== "medical_certificate" && (
+          <Checkbox
+            label="Accordé par la famille"
+            checked={edition.granted}
+            onChange={(e) => {
+              const granted = e.currentTarget.checked;
+              setEdition((x) => x && { ...x, granted });
+            }}
+            className="pb-2"
+          />
+        )}
+        <Group gap="xs">
+          <Button type="submit" size="compact-sm" variant="default" loading={inProgress}>
+            Enregistrer
+          </Button>
+          <Button type="button" size="compact-sm" variant="subtle" color="gray" onClick={close}>
+            Annuler
+          </Button>
+        </Group>
+      </div>
+      {message && (
+        <Text role="alert" size="sm" c="red">
+          {message}
+        </Text>
+      )}
+      {escape.confirm}
+    </form>
   );
 }
