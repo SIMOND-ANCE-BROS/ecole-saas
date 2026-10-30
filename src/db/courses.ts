@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Tx } from "./index";
 import { hoursBySite } from "./settings";
 import { resolveEntity } from "./billing-entities";
+import { resolveTreatment } from "./vat-treatments";
 import {
   auditLog,
   course,
@@ -106,6 +107,11 @@ const courseFields = z.object({
    * choice): the default entity for a new course, unchanged for an existing one.
    */
   billingEntityId: z.uuid().optional(),
+  /**
+   * How VAT applies to it (#301). Absent: the course's own, or its business's default for a
+   * new one. Kept when the instructor changes (#289 Q2 default).
+   */
+  vatTreatmentId: z.uuid().optional(),
   type: z.enum(["group", "private", "competition", "workshop"]),
   recurrence: z.enum(["weekly", "biweekly", "dates"]),
   weekday: integerOrNull(1, 7),
@@ -162,6 +168,7 @@ export type EditedCourse = {
   roomId: string;
   instructorId: string;
   billingEntityId: string;
+  vatTreatmentId: string;
   type: keyof typeof COURSE_TYPES;
   recurrence: keyof typeof RECURRENCES;
   weekday: number | null;
@@ -192,6 +199,7 @@ export async function readCourse(tx: Tx, id: string): Promise<EditedCourse | nul
       roomId: course.roomId,
       instructorId: course.instructorId,
       billingEntityId: course.billingEntityId,
+      vatTreatmentId: course.vatTreatmentId,
       type: course.type,
       recurrence: course.recurrence,
       weekday: course.weekday,
@@ -390,6 +398,8 @@ export async function createCourse(tx: Tx, seasonId: string, entry: CourseInput)
   if (!r.ok) return r;
   const entity = await resolveEntity(tx, entry.billingEntityId);
   if (!entity.ok) return entity;
+  const treatment = await resolveTreatment(tx, { wanted: entry.vatTreatmentId, entityId: entity.id });
+  if (!treatment.ok) return treatment;
   const instructorRateCents = entry.instructorRate ?? null;
   // A rate is typed in the instructor's current pay mode (#268).
   const unit = rateUnitAfterSave({
@@ -408,6 +418,7 @@ export async function createCourse(tx: Tx, seasonId: string, entry: CourseInput)
       columnsOf(course, {
         ...r.values,
         billingEntityId: entity.id,
+        vatTreatmentId: treatment.id,
         instructorRateCents,
         instructorRatePayMode,
         schoolId: CURRENT_SCHOOL,
@@ -455,6 +466,13 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
   // enrolled course's change too). The course row is locked: no enrollment slips in meanwhile.
   const entityRefusal = entity.id === existing.billingEntityId ? null : await entityLock(tx, id);
   if (entityRefusal) return { ok: false, message: entityRefusal };
+  // Checked against the (possibly new) business's regime: a VAT rate under the franchise is refused.
+  const treatment = await resolveTreatment(tx, {
+    wanted: entry.vatTreatmentId,
+    entityId: entity.id,
+    current: existing.vatTreatmentId,
+  });
+  if (!treatment.ok) return treatment;
   const stored = (await courseRate(tx, id)) ?? null;
   const instructorRateCents = rateAfterUpdate({
     sent: entry.instructorRate,
@@ -477,7 +495,15 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
   await keepGivenLessons(tx, id, existing, r.values);
   await tx
     .update(course)
-    .set(columnsOf(course, { ...r.values, billingEntityId: entity.id, instructorRateCents, instructorRatePayMode }))
+    .set(
+      columnsOf(course, {
+        ...r.values,
+        billingEntityId: entity.id,
+        vatTreatmentId: treatment.id,
+        instructorRateCents,
+        instructorRatePayMode,
+      }),
+    )
     .where(eq(course.id, id));
   await replaceDates(tx, id, r.dates);
   // New main instructor: takes over the old one's upcoming lessons, not those of a substitute.

@@ -15,6 +15,7 @@ import {
   siretMatchesSiren,
 } from "../domain/billing/entity";
 import { issuePath } from "../lib/form-errors";
+import { regimeRefusal } from "./vat-treatments";
 
 /**
  * Billing entities of a school (#298, ADR 0006): the businesses that invoice,
@@ -72,6 +73,12 @@ const entityFields = z.object(
     vatRegime: z.enum(REGIMES, { error: "Régime de TVA à choisir" }),
     vatMention: optional(300, "Mention : 300 caractères au plus"),
     bankAccountLabel: optional(100, "Compte bancaire : 100 caractères au plus"),
+    /** Treatment of its new lesson packs and courses (#301); empty: none yet. */
+    defaultVatTreatmentId: z
+      .union([z.uuid({ error: "Traitement de TVA introuvable." }), z.literal("")], {
+        error: "Traitement de TVA introuvable.",
+      })
+      .transform((v) => v || null),
   },
   { error: "Saisie invalide." },
 );
@@ -100,6 +107,7 @@ const entityRow = (e: z.output<typeof validEntityInput>) => ({
   vatRegime: e.vatRegime,
   vatMention: e.vatMention,
   bankAccountLabel: e.bankAccountLabel,
+  defaultVatTreatmentId: e.defaultVatTreatmentId,
 });
 
 export type EntityRow = {
@@ -115,6 +123,7 @@ export type EntityRow = {
   vatRegime: Regime;
   vatMention: string | null;
   bankAccountLabel: string | null;
+  defaultVatTreatmentId: string | null;
   isDefault: boolean;
 };
 
@@ -134,6 +143,7 @@ export function listEntities(tx: Tx): Promise<EntityRow[]> {
       vatRegime: billingEntity.vatRegime,
       vatMention: billingEntity.vatMention,
       bankAccountLabel: billingEntity.bankAccountLabel,
+      defaultVatTreatmentId: billingEntity.defaultVatTreatmentId,
       isDefault: billingEntity.isDefault,
     })
     .from(billingEntity)
@@ -249,6 +259,12 @@ export async function createEntity(tx: Tx, userId: string, entry: EntityInput): 
   // moment wait for each other, so the second sees the first's name and default.
   await tx.select({ id: billingEntity.id }).from(billingEntity).orderBy(asc(billingEntity.id)).for("update");
   if (await nameTaken(tx, e.data.name)) return { ok: false, message: TAKEN };
+  const vat = await regimeRefusal(tx, {
+    entityId: null,
+    regime: e.data.vatRegime,
+    defaultTreatment: e.data.defaultVatTreatmentId,
+  });
+  if (vat) return { ok: false, message: vat };
   const first = (await defaultEntityId(tx)) === null;
   const row = entityRow(e.data);
   const [{ id }] = await tx
@@ -280,11 +296,19 @@ export async function updateEntity(tx: Tx, userId: string, id: string, entry: En
       vatRegime: billingEntity.vatRegime,
       vatMention: billingEntity.vatMention,
       bankAccountLabel: billingEntity.bankAccountLabel,
+      defaultVatTreatmentId: billingEntity.defaultVatTreatmentId,
     })
     .from(billingEntity)
     .where(eq(billingEntity.id, id))
     .for("update");
   if (!before) return { ok: false, message: GONE };
+  // Its default treatment, courses and lesson packs must suit its (new) regime (#301).
+  const vat = await regimeRefusal(tx, {
+    entityId: id,
+    regime: e.data.vatRegime,
+    defaultTreatment: e.data.defaultVatTreatmentId,
+  });
+  if (vat) return { ok: false, message: vat };
   const row = entityRow(e.data);
   const fields = changedFields(before, row);
   if (fields.length === 0) return { ok: true, id };

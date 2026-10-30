@@ -41,6 +41,7 @@ const entry = {
   vatRegime: "not_applicable" as const,
   vatMention: "",
   bankAccountLabel: "Compte Zz Banque B",
+  defaultVatTreatmentId: "",
 };
 
 beforeAll(async () => {
@@ -48,6 +49,9 @@ beforeAll(async () => {
   [{ id: otherSchool }] =
     await admin`INSERT INTO school (name, slug) VALUES ('Zz École F', ${`eb-${suffix}`}) RETURNING id`;
   entityA = await defaultEntityFor(admin, school, "Zz Danse A");
+  // A business needs a default VAT treatment once the school has one (#301).
+  [{ id: entry.defaultVatTreatmentId }] =
+    await admin`SELECT default_vat_treatment_id AS id FROM billing_entity WHERE id = ${entityA}`;
   foreignEntity = await defaultEntityFor(admin, otherSchool, "Zz Danse ailleurs");
   await admin`INSERT INTO "user" (id, name, email) VALUES (${director}, 'Zz Direction', ${`${director}@exemple.test`})`;
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${school}, ${director}, 'director'), (${otherSchool}, ${director}, 'director')`;
@@ -141,7 +145,10 @@ describe("billing entities", () => {
         entityB,
         "insert",
         null,
-        { fields: ["name", "legalName", "siren", "vatRegime", "bankAccountLabel"], is_default: false },
+        {
+          fields: ["name", "legalName", "siren", "vatRegime", "bankAccountLabel", "defaultVatTreatmentId"],
+          is_default: false,
+        },
         true,
       ],
       [entityB, "update", null, { fields: ["siret", "postalCode"] }, true],

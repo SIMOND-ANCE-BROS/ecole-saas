@@ -3,6 +3,8 @@
 import { Badge, Button, Group, Modal, Paper, Select, Text, Textarea, TextInput, Title } from "@mantine/core";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { EntityInput, EntityRow } from "@/db/billing-entities";
+import type { TreatmentChoice } from "@/db/vat-treatments";
+import { treatmentRefusal } from "@/domain/billing/vat";
 import { VAT_REGIMES } from "@/db/instructors";
 import { type ActionResult, settle } from "@/lib/action-result";
 import { isKeyOf } from "@/lib/has";
@@ -26,6 +28,7 @@ const EMPTY: Values = {
   vatRegime: "not_applicable",
   vatMention: "",
   bankAccountLabel: "",
+  defaultVatTreatmentId: "",
 };
 
 const valuesOf = (e: EntityRow): Values => ({
@@ -41,6 +44,7 @@ const valuesOf = (e: EntityRow): Values => ({
   vatRegime: e.vatRegime,
   vatMention: e.vatMention ?? "",
   bankAccountLabel: e.bankAccountLabel ?? "",
+  defaultVatTreatmentId: e.defaultVatTreatmentId ?? "",
 });
 
 /** « 000 000 001 », « 000 000 001 00012 »: easier to compare with a paper document. */
@@ -53,6 +57,7 @@ const REGIME_OPTIONS = Object.entries(VAT_REGIMES).map(([value, label]) => ({ va
 function EntityForm({
   title,
   initial,
+  treatments,
   submit,
   submitLabel,
   close,
@@ -61,6 +66,8 @@ function EntityForm({
 }: {
   title: string;
   initial: Values;
+  /** VAT treatments of the school (#301), for the default one. */
+  treatments: TreatmentChoice[];
   submit: (v: Values) => void;
   submitLabel: string;
   close: () => void;
@@ -135,6 +142,27 @@ function EntityForm({
           onChange={(x) => x !== null && isKeyOf(VAT_REGIMES, x) && setV({ ...v, vatRegime: x })}
         />
         {field("vatNumber", "N° de TVA intracommunautaire (facultatif)")}
+        <Select
+          id="entity-defaultVatTreatmentId"
+          className="sm:col-span-2"
+          label="Traitement de TVA par défaut"
+          description={
+            treatments.length === 0
+              ? "Aucun traitement de TVA : ajoutez-en dans Paramètres › TVA."
+              : treatmentRefusal(v.vatRegime, "standard")
+                ? "Appliqué aux carnets vendus par cette entreprise et proposé pour ses nouveaux cours. Sans TVA, les traitements avec un taux ne sont pas proposés."
+                : "Appliqué aux carnets vendus par cette entreprise et proposé pour ses nouveaux cours."
+          }
+          inputWrapperOrder={["label", "input", "description", "error"]}
+          placeholder="À choisir"
+          allowDeselect={false}
+          // A business without VAT is offered no treatment with a rate (#301).
+          data={treatments
+            .filter((t) => t.id === v.defaultVatTreatmentId || treatmentRefusal(v.vatRegime, t.category) === null)
+            .map((t) => ({ value: t.id, label: t.label }))}
+          value={v.defaultVatTreatmentId || null}
+          onChange={(x) => setV({ ...v, defaultVatTreatmentId: x ?? "" })}
+        />
         <Textarea
           id="entity-vatMention"
           className="sm:col-span-2"
@@ -176,7 +204,7 @@ function EntityForm({
 }
 
 /** One entity, as read: identity, VAT and bank account. */
-function Summary({ e }: { e: EntityRow }) {
+function Summary({ e, treatments }: { e: EntityRow; treatments: TreatmentChoice[] }) {
   const address = [e.addressLine, [e.postalCode, e.city].filter(Boolean).join(" ")].filter(Boolean).join(", ");
   const rows: [string, string | null][] = [
     ["Raison sociale", e.legalName],
@@ -185,6 +213,7 @@ function Summary({ e }: { e: EntityRow }) {
     ["Adresse", address || null],
     ["TVA", VAT_REGIMES[e.vatRegime] + (e.vatNumber ? ` · ${e.vatNumber}` : "")],
     ["Mention sur les factures", e.vatMention],
+    ["Traitement de TVA par défaut", treatments.find((t) => t.id === e.defaultVatTreatmentId)?.label ?? null],
     ["Compte bancaire", e.bankAccountLabel],
   ];
   return (
@@ -203,7 +232,7 @@ function Summary({ e }: { e: EntityRow }) {
   );
 }
 
-export function Entities({ entities }: { entities: EntityRow[] }) {
+export function Entities({ entities, treatments }: { entities: EntityRow[]; treatments: TreatmentChoice[] }) {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
   const [editing, setEditing] = useState<string | null>(null);
@@ -286,6 +315,7 @@ export function Entities({ entities }: { entities: EntityRow[] }) {
             <EntityForm
               title={`Modifier ${e.name}`}
               initial={valuesOf(e)}
+              treatments={treatments}
               submitLabel="Enregistrer"
               busy={busy}
               message={message}
@@ -331,7 +361,7 @@ export function Entities({ entities }: { entities: EntityRow[] }) {
                   )}
                 </Group>
               </div>
-              <Summary e={e} />
+              <Summary e={e} treatments={treatments} />
             </>
           )}
         </Paper>
@@ -342,6 +372,7 @@ export function Entities({ entities }: { entities: EntityRow[] }) {
           <EntityForm
             title="Nouvelle entreprise"
             initial={EMPTY}
+            treatments={treatments}
             submitLabel="Ajouter l’entreprise"
             busy={busy}
             message={message}

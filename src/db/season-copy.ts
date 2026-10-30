@@ -16,8 +16,11 @@ import type { CourseRate } from "./courses";
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 
-/** Course columns a copy does not take from its source: its own id, school and season, and the old season's period. */
-type NotCopied = "id" | "schoolId" | "seasonId" | "startDate" | "endDate";
+/**
+ * Course columns a copy does not take from its source: its own id, school and season, the old
+ * season's period, and its creation time (the copy is a new course, #301).
+ */
+type NotCopied = "id" | "schoolId" | "seasonId" | "startDate" | "endDate" | "createdAt";
 type MustCopy = Exclude<keyof typeof course.$inferInsert, NotCopied>;
 
 /**
@@ -42,6 +45,8 @@ const COPIED = {
   instructorRatePayMode: course.instructorRatePayMode,
   // The business that sells it (#299) sells it again next season.
   billingEntityId: course.billingEntityId,
+  // So does its VAT treatment (#301).
+  vatTreatmentId: course.vatTreatmentId,
 } satisfies { [K in MustCopy]: (typeof course)[K] };
 
 async function coursesOf(tx: Tx, seasonId: string) {

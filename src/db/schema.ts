@@ -36,6 +36,7 @@ import {
 import { ROLE_VALUES } from "../domain/team/rules";
 import { REVERSAL_KINDS } from "../domain/payments/rejection";
 import { DOCUMENT_TYPES } from "../domain/people/documents";
+import { VAT_CATEGORIES } from "../domain/billing/vat";
 
 // ---------------------------------------------------------------------------
 // Enumerated types
@@ -45,6 +46,8 @@ export const relationshipType = pgEnum("relationship_type", ["legal_guardian", "
 export const documentType = pgEnum("document_type", DOCUMENT_TYPES);
 export const instructorStatus = pgEnum("instructor_status", ["sole_trader", "company", "employee"]);
 export const vatRegime = pgEnum("vat_regime", ["franchise_293b", "vat_registered", "not_applicable"]);
+// How VAT applies to an operation (#301): EN 16931 S, E, O. Not a regime: a business may mix them.
+export const vatCategory = pgEnum("vat_category", VAT_CATEGORIES);
 export const payMode = pgEnum("pay_mode", ["hourly", "per_lesson", "monthly_flat"]);
 export const courseType = pgEnum("course_type", ["group", "private", "competition", "workshop"]);
 export const lessonStatus = pgEnum("lesson_status", ["planned", "done", "cancelled"]);
@@ -145,6 +148,34 @@ function sameEntityTarget(t: { schoolId: AnyPgColumn; id: AnyPgColumn; billingEn
 }
 
 /**
+ * How VAT applies to a course or a lesson pack (#301, ADR 0006): a rate, an
+ * exemption or out of scope, with the mention printed on its invoice lines.
+ * Per school; copied onto each invoice line when drafted, never read back.
+ * Wording of labels and mentions: school data (its accountant), never code.
+ */
+export const vatTreatment = pgTable(
+  "vat_treatment",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    schoolId: schoolIdColumn(),
+    label: text("label").notNull(), // « Exonéré (art. 261-4-4° b) », « TVA 20 % »
+    category: vatCategory("category").notNull(),
+    rateBps: integer("rate_bps").notNull().default(0), // 2000 = 20 %; 0 unless standard
+    mention: text("mention"), // printed on lines without VAT; required for them
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    sameSchoolTarget(t),
+    unique("vat_treatment_label_unique").on(t.schoolId, t.label),
+    check(
+      "vat_treatment_rate",
+      sql`${t.rateBps} BETWEEN 0 AND 10000 AND (${t.category} = 'standard') = (${t.rateBps} > 0)`,
+    ),
+    check("vat_treatment_mention", sql`${t.category} = 'standard' OR coalesce(btrim(${t.mention}), '') <> ''`),
+  ],
+);
+
+/**
  * A business that sells, invoices and cashes inside a school (UI « Entreprise »,
  * ADR 0006): its own SIREN, VAT regime, invoice mention and bank account. A school
  * has at least one, exactly one by default; it is not a tenant (RLS stays per school).
@@ -165,6 +196,8 @@ export const billingEntity = pgTable(
     vatRegime: vatRegime("vat_regime").notNull(),
     vatMention: text("vat_mention"), // printed once per invoice; wording set by the school (its accountant)
     bankAccountLabel: text("bank_account_label"), // printed on deposit slips; never an IBAN
+    // Treatment given to its new lesson packs and proposed for its new courses (#301).
+    defaultVatTreatmentId: uuid("default_vat_treatment_id"),
     isDefault: boolean("is_default").notNull().default(false),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -178,6 +211,7 @@ export const billingEntity = pgTable(
     check("billing_entity_siren", sql`${t.siren} ~ '^[0-9]{9}$'`),
     check("billing_entity_siret", sql`${t.siret} ~ '^[0-9]{14}$' AND left(${t.siret}, 9) = ${t.siren}`),
     check("billing_entity_default_active", sql`${t.active} OR NOT ${t.isDefault}`),
+    sameSchool(t, t.defaultVatTreatmentId, vatTreatment),
   ],
 );
 
@@ -556,6 +590,8 @@ export const course = pgTable(
     seasonId: uuid("season_id").notNull(),
     // Business that sells the course (#299, ADR 0006): its enrollments belong to it.
     billingEntityId: uuid("billing_entity_id").notNull(),
+    // How VAT applies to it (#301): kept when its instructor is replaced (#289 Q2 default).
+    vatTreatmentId: uuid("vat_treatment_id").notNull(),
     disciplineId: uuid("discipline_id").notNull(),
     roomId: uuid("room_id").notNull(),
     instructorId: uuid("instructor_id").notNull(),
@@ -576,6 +612,8 @@ export const course = pgTable(
     // Unit of that rate: the instructor's pay mode when it was typed (#268). A later
     // change of pay mode leaves past seasons' rates in their old unit (#192 Q5).
     instructorRatePayMode: payMode("instructor_rate_pay_mode"),
+    // Orders an instructor's courses: the form proposes the treatment of their last one (#301).
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     check("course_weekday", sql`${t.weekday} BETWEEN 1 AND 7`),
@@ -591,6 +629,7 @@ export const course = pgTable(
     sameSchoolTarget(t),
     sameEntityTarget(t),
     sameSchool(t, t.billingEntityId, billingEntity),
+    sameSchool(t, t.vatTreatmentId, vatTreatment),
     sameSchool(t, t.seasonId, season),
     sameSchool(t, t.disciplineId, discipline),
     sameSchool(t, t.roomId, room),
@@ -895,6 +934,8 @@ export const lessonPack = pgTable(
     payerId: uuid("payer_id").notNull(),
     // Business that sells the pack (#299); the school's default entity until the sale form offers a choice.
     billingEntityId: uuid("billing_entity_id").notNull(),
+    // How VAT applies to it (#301): its entity's default treatment when sold.
+    vatTreatmentId: uuid("vat_treatment_id").notNull(),
     peopleCount: smallint("people_count").notNull(),
     lessonCount: smallint("lesson_count").notNull(),
     priceCents: integer("price_cents").notNull(),
@@ -906,6 +947,7 @@ export const lessonPack = pgTable(
     sameSchoolTarget(t),
     sameEntityTarget(t),
     sameSchool(t, t.billingEntityId, billingEntity),
+    sameSchool(t, t.vatTreatmentId, vatTreatment),
     sameSchool(t, t.payerId, person),
   ],
 );
@@ -990,8 +1032,18 @@ export const invoiceLine = pgTable(
     invoiceId: uuid("invoice_id").notNull(),
     label: text("label").notNull(),
     quantityThousandths: integer("quantity_thousandths").notNull().default(1000), // 1000 = 1
-    unitPriceCents: integer("unit_price_cents").notNull(),
+    unitPriceCents: integer("unit_price_cents").notNull(), // VAT-inclusive unit price (#301)
+    // VAT-inclusive amount of the line: the source of truth; excl. and VAT derive from it
+    // (`vatBreakdown`, #301): excl + VAT = incl.
+    inclTaxCents: integer("incl_tax_cents").notNull(),
+    exclTaxCents: integer("excl_tax_cents").notNull(),
+    vatCents: integer("vat_cents").notNull(),
+    // The course's or pack's treatment, copied when the line is drafted, never read back:
+    // a later change of the treatment leaves the line as invoiced.
+    vatTreatmentId: uuid("vat_treatment_id").notNull(),
+    vatCategory: vatCategory("vat_category").notNull(),
     vatRateBps: integer("vat_rate_bps").notNull().default(0), // 2000 = 20 %
+    vatMention: text("vat_mention"), // printed on a line without VAT
     enrollmentId: uuid("enrollment_id"),
     lessonPackId: uuid("lesson_pack_id"), // NULL: workshop, rental, ticket…
   },
@@ -1000,9 +1052,20 @@ export const invoiceLine = pgTable(
     index().on(t.invoiceId),
     index().on(t.enrollmentId),
     index().on(t.lessonPackId),
+    index().on(t.vatTreatmentId),
     sameEntity(t, t.invoiceId, invoice),
     sameEntity(t, t.enrollmentId, enrollment),
     sameEntity(t, t.lessonPackId, lessonPack),
+    sameSchool(t, t.vatTreatmentId, vatTreatment),
+    check("invoice_line_vat_sum", sql`${t.exclTaxCents} + ${t.vatCents} = ${t.inclTaxCents}`),
+    check(
+      "invoice_line_vat_rate",
+      sql`${t.vatRateBps} BETWEEN 0 AND 10000 AND (${t.vatCategory} = 'standard') = (${t.vatRateBps} > 0)`,
+    ),
+    check(
+      "invoice_line_vat_mention",
+      sql`${t.vatCategory} = 'standard' OR (${t.vatCents} = 0 AND coalesce(btrim(${t.vatMention}), '') <> '')`,
+    ),
   ],
 );
 
