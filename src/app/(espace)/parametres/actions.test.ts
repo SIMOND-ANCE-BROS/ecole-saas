@@ -120,6 +120,7 @@ describe("settings actions", () => {
       vatRegime: "not_applicable" as const,
       vatMention: "",
       bankAccountLabel: "Compte courant Zz Banque",
+      defaultVatTreatmentId: "",
     };
 
     it("are management only", async () => {

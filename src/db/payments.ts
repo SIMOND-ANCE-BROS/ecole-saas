@@ -20,6 +20,7 @@ import { METHOD_LABELS, PAYMENT_METHOD_VALUES, refusedMethod, type Method } from
 import { readMethodSettings } from "./payment-methods";
 import { formatEuros } from "../lib/money";
 import { entityChoices, listEntities, resolveEntity } from "./billing-entities";
+import { quarterCountSql } from "./enrollments";
 
 /**
  * Payments (#97): payments recorded against the payer, immutable
@@ -332,8 +333,11 @@ export async function balanceOf(tx: Tx, payerId: string, today: string): Promise
   const enrollments = await tx
     .select({
       status: enrollment.status,
-      netPriceCents: sql<number>`${enrollment.netPriceCents}::int`,
+      period: enrollment.period,
+      netPriceCents: sql<number>`coalesce(${enrollment.netPriceCents}, 0)::int`,
       billingEntityId: enrollment.billingEntityId,
+      // A quarterly enrollment owes its price once per covered quarter (#291).
+      quarterCount: quarterCountSql,
     })
     .from(enrollment)
     .where(eq(enrollment.payerId, payerId))

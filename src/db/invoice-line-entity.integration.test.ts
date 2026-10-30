@@ -21,8 +21,8 @@ beforeAll(async () => {
   const s = ids.school;
   [{ id: ids.a }] = await admin`SELECT id FROM billing_entity WHERE school_id = ${s} AND is_default`;
   [{ id: ids.b }] = await admin`
-    INSERT INTO billing_entity (school_id, name, legal_name, vat_regime)
-    VALUES (${s}, 'Zz Entreprise B', 'Zz Entreprise B', 'not_applicable') RETURNING id`;
+    INSERT INTO billing_entity (school_id, name, legal_name, vat_regime, default_vat_treatment_id)
+    VALUES (${s}, 'Zz Entreprise B', 'Zz Entreprise B', 'not_applicable', (SELECT default_vat_treatment_id FROM billing_entity WHERE school_id = ${s} AND is_default)) RETURNING id`;
   [{ id: ids.season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${s}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   [{ id: ids.payer }] =
@@ -49,9 +49,11 @@ afterAll(async () => {
 
 /** Inserts a line of `invoice` carrying `entity`, billing `enrollment` or `pack` (or neither). */
 const line = (entity: string, invoice: string, refs: { enrollment?: string; pack?: string } = {}) => admin`
-  INSERT INTO invoice_line (school_id, billing_entity_id, invoice_id, label, unit_price_cents, enrollment_id, lesson_pack_id)
+  INSERT INTO invoice_line (school_id, billing_entity_id, invoice_id, label, unit_price_cents, enrollment_id, lesson_pack_id,
+    incl_tax_cents, excl_tax_cents, vat_cents, vat_treatment_id, vat_category, vat_mention)
   VALUES (${ids.school}, ${ids[entity]}, ${ids[invoice]}, 'Zz ligne', 11000,
-    ${refs.enrollment ? ids[refs.enrollment] : null}, ${refs.pack ? ids[refs.pack] : null})
+    ${refs.enrollment ? ids[refs.enrollment] : null}, ${refs.pack ? ids[refs.pack] : null},
+    11000, 11000, 0, (SELECT id FROM vat_treatment WHERE school_id = ${ids.school}), 'exempt', 'Zz mention')
   RETURNING id`;
 
 describe("invoice lines and billing entities (#318)", () => {

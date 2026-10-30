@@ -7,8 +7,8 @@ describe("payerBalance", () => {
   it("due = active and ended enrollments + lesson packs; remaining = due − paid", () => {
     const s = payerBalance(
       [
-        { status: "active", netPriceCents: 32_000 },
-        { status: "ended", netPriceCents: 10_050 },
+        { status: "active", period: "year", quarterCount: 0, netPriceCents: 32_000 },
+        { status: "ended", period: "year", quarterCount: 0, netPriceCents: 10_050 },
       ],
       [{ priceCents: 12_000 }],
       [{ amountCents: 20_000, plannedPayment: null }],
@@ -19,7 +19,7 @@ describe("payerBalance", () => {
 
   it("three dated cheques: all counted as paid, future ones flagged as to cash", () => {
     const s = payerBalance(
-      [{ status: "active", netPriceCents: 30_000 }],
+      [{ status: "active", period: "year", quarterCount: 0, netPriceCents: 30_000 }],
       [],
       [
         { amountCents: 10_000, plannedPayment: null },
@@ -33,7 +33,7 @@ describe("payerBalance", () => {
 
   it("a correction (negative payment) reduces the paid amount; a cheque past its date is no longer « à encaisser »", () => {
     const s = payerBalance(
-      [{ status: "active", netPriceCents: 15_000 }],
+      [{ status: "active", period: "year", quarterCount: 0, netPriceCents: 15_000 }],
       [],
       [
         { amountCents: 15_000, plannedPayment: "2026-10-21" },
@@ -48,9 +48,9 @@ describe("payerBalance", () => {
   it("a drop-out stays due; trial and waitlist stay out of the computation, but visible (#99, #284)", () => {
     const s = payerBalance(
       [
-        { status: "dropped", netPriceCents: 20_000 },
-        { status: "trial", netPriceCents: 1_500 },
-        { status: "waitlist", netPriceCents: 9_000 },
+        { status: "dropped", period: "year", quarterCount: 0, netPriceCents: 20_000 },
+        { status: "trial", period: "year", quarterCount: 0, netPriceCents: 1_500 },
+        { status: "waitlist", period: "year", quarterCount: 0, netPriceCents: 9_000 },
       ],
       [],
       [{ amountCents: 1_000, plannedPayment: null }],
@@ -66,15 +66,59 @@ describe("payerBalance", () => {
   });
 });
 
+describe("quarterly enrollments (#291)", () => {
+  it("a 110,00 € quarterly package over the whole season owes 330,00 €, not 110,00 €", () => {
+    const s = payerBalance(
+      [{ status: "active", period: "quarter", quarterCount: 3, netPriceCents: 11_000 }],
+      [],
+      [{ amountCents: 11_000, plannedPayment: null }],
+      TODAY,
+    );
+    expect(s).toMatchObject({ due: 33_000, paid: 11_000, remaining: 22_000 });
+  });
+
+  it("enrolled in January: two quarters due; a waitlisted one shows its season amount apart", () => {
+    const s = payerBalance(
+      [
+        { status: "active", period: "quarter", quarterCount: 2, netPriceCents: 11_000 },
+        { status: "waitlist", period: "quarter", quarterCount: 2, netPriceCents: 9_000 },
+      ],
+      [],
+      [],
+      TODAY,
+    );
+    expect(s).toMatchObject({ due: 22_000, outsideCalculation: { waitlist: 18_000 } });
+  });
+
+  it("a quarterly drop-out still owes every covered quarter (#291 Q2 default with #284 Q1)", () => {
+    const s = payerBalance(
+      [{ status: "dropped", period: "quarter", quarterCount: 3, netPriceCents: 11_000 }],
+      [],
+      [],
+      TODAY,
+    );
+    expect(s).toMatchObject({ due: 33_000, outsideCalculation: {} });
+  });
+
+  it("amountDue counts each quarter covered", () => {
+    expect(
+      amountDue([
+        { status: "dropped", period: "quarter", quarterCount: 3, netPriceCents: 9_900 },
+        { status: "active", period: "year", quarterCount: 0, netPriceCents: 30_000 },
+      ]),
+    ).toBe(59_700);
+  });
+});
+
 describe("amountDue", () => {
   it("counts active, ended and dropped enrollments, not trial nor waitlist", () => {
     expect(
       amountDue([
-        { status: "active", netPriceCents: 11_000 },
-        { status: "dropped", netPriceCents: 9_900 },
-        { status: "ended", netPriceCents: 100 },
-        { status: "trial", netPriceCents: 5_000 },
-        { status: "waitlist", netPriceCents: 7_000 },
+        { status: "active", period: "year", quarterCount: 0, netPriceCents: 11_000 },
+        { status: "dropped", period: "year", quarterCount: 0, netPriceCents: 9_900 },
+        { status: "ended", period: "year", quarterCount: 0, netPriceCents: 100 },
+        { status: "trial", period: "year", quarterCount: 0, netPriceCents: 5_000 },
+        { status: "waitlist", period: "year", quarterCount: 0, netPriceCents: 7_000 },
       ]),
     ).toBe(21_000);
   });
@@ -87,8 +131,8 @@ describe("balancesByEntity", () => {
   it("two entities: each balance holds its own enrollments, packs and payments; the total adds them up", () => {
     const s = balancesByEntity(
       [
-        { status: "active", netPriceCents: 30_000, billingEntityId: A },
-        { status: "active", netPriceCents: 20_000, billingEntityId: B },
+        { status: "active", period: "year", quarterCount: 0, netPriceCents: 30_000, billingEntityId: A },
+        { status: "active", period: "year", quarterCount: 0, netPriceCents: 20_000, billingEntityId: B },
       ],
       [{ priceCents: 12_000, billingEntityId: B }],
       [
@@ -117,8 +161,8 @@ describe("balancesByEntity", () => {
   it("an overpayment to one business is not netted against the other: each keeps its own balance", () => {
     const s = balancesByEntity(
       [
-        { status: "active", netPriceCents: 10_000, billingEntityId: A },
-        { status: "active", netPriceCents: 10_000, billingEntityId: B },
+        { status: "active", period: "year", quarterCount: 0, netPriceCents: 10_000, billingEntityId: A },
+        { status: "active", period: "year", quarterCount: 0, netPriceCents: 10_000, billingEntityId: B },
       ],
       [],
       [{ amountCents: 20_000, plannedPayment: null, billingEntityId: A }],
@@ -131,7 +175,7 @@ describe("balancesByEntity", () => {
 
   it("a correction and a rejected cheque count against the entity of the payment they reverse", () => {
     const s = balancesByEntity(
-      [{ status: "active", netPriceCents: 15_000, billingEntityId: B }],
+      [{ status: "active", period: "year", quarterCount: 0, netPriceCents: 15_000, billingEntityId: B }],
       [],
       [
         { amountCents: 15_000, plannedPayment: null, billingEntityId: B },
@@ -151,8 +195,8 @@ describe("balancesByEntity", () => {
   it("trial and waitlist enrollments stay visible, apart, on their entity and in the total", () => {
     const s = balancesByEntity(
       [
-        { status: "trial", netPriceCents: 1_500, billingEntityId: A },
-        { status: "waitlist", netPriceCents: 9_000, billingEntityId: B },
+        { status: "trial", period: "year", quarterCount: 0, netPriceCents: 1_500, billingEntityId: A },
+        { status: "waitlist", period: "year", quarterCount: 0, netPriceCents: 9_000, billingEntityId: B },
       ],
       [],
       [],

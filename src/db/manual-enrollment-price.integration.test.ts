@@ -1,4 +1,5 @@
 import postgres from "postgres";
+import { withDefaultQuarters } from "./season-quarters.integration-helpers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { REASON_REQUIRED } from "../domain/enrollment/manual-price";
 import {
@@ -33,8 +34,9 @@ beforeAll(async () => {
   const s = ids.school;
   [{ id: ids.a }] = await admin`SELECT id FROM billing_entity WHERE school_id = ${s} AND is_default`;
   [{ id: ids.b }] = await admin`
-    INSERT INTO billing_entity (school_id, name, legal_name, vat_regime)
-    VALUES (${s}, 'Zz Entreprise B', 'Zz Entreprise B', 'not_applicable') RETURNING id`;
+    INSERT INTO billing_entity (school_id, name, legal_name, vat_regime, default_vat_treatment_id)
+    VALUES (${s}, 'Zz Entreprise B', 'Zz Entreprise B', 'not_applicable',
+      (SELECT default_vat_treatment_id FROM billing_entity WHERE school_id = ${s} AND is_default)) RETURNING id`;
   for (const [user, role] of [
     [frontDesk, "front_desk"],
     [teacher, "teacher"],
@@ -44,6 +46,7 @@ beforeAll(async () => {
   }
   [{ id: ids.season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${s}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
+  await withDefaultQuarters(admin, ids.season);
   for (const [combination, price] of [
     ["{45}", 8500],
     ["{60}", 11000],
@@ -125,8 +128,10 @@ const child = (studentId: string, courseIds: string[], extra: Partial<Enrollment
   courseIds,
   ...extra,
 });
+// Enrolled before the season's first quarter: a quarterly enrollment covers its three quarters (#291).
+const ENROLLED_ON = "2026-09-15";
 const save = (entry: EnrollmentInput, user = frontDesk) =>
-  withSchool(ids.school, (tx) => saveEnrollment(tx, user, ids.payer, ids.season, entry));
+  withSchool(ids.school, (tx) => saveEnrollment(tx, user, ids.payer, ids.season, entry, ENROLLED_ON));
 const row = async (id: string) =>
   (
     await admin`SELECT tariff_id, gross_price_cents, discount_cents, manual_price_cents, price_reason, net_price_cents, discounts
@@ -238,11 +243,12 @@ describe("price typed by the front desk (#292)", () => {
         child(ids.tom, [ids.jazz60], {
           manualPrices: [{ billingEntityId: ids.a, priceCents: 5000, reason: "Inscription en cours de trimestre" }],
         }),
+        ENROLLED_ON,
       ),
     );
     if (!tom.ok) throw new Error(tom.message);
     const p = await withSchool(ids.school, (tx) =>
-      enrollmentPreview(tx, ids.otherPayer, ids.season, child(ids.eve, [ids.jazz60])),
+      enrollmentPreview(tx, ids.otherPayer, ids.season, child(ids.eve, [ids.jazz60]), ENROLLED_ON),
     );
     if (p.status !== "ok") throw new Error(p.message);
     expect(p.newEnrollments[0].price).toMatchObject({ status: "ok", discountCents: 1100 });
@@ -335,6 +341,7 @@ describe("price typed by the front desk (#292)", () => {
           status: "trial",
           manualPrices: [{ billingEntityId: ids.a, priceCents: 6000, reason: "Arrivée en cours de trimestre" }],
         }),
+        ENROLLED_ON,
       ),
     );
     if (!trial.ok) throw new Error(trial.message);

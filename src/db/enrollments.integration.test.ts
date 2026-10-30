@@ -1,4 +1,5 @@
 import postgres from "postgres";
+import { withDefaultQuarters } from "./season-quarters.integration-helpers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
 import { enrollmentPreview, saveEnrollment, seasonEnrollments } from "./enrollments";
@@ -25,6 +26,8 @@ beforeAll(async () => {
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${e}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   [{ id: ids.otherSeason }] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${e}, '2027-2028', '2027-09-01', '2028-06-30') RETURNING id`;
+  await withDefaultQuarters(admin, ids.season);
+  await withDefaultQuarters(admin, ids.otherSeason);
   for (const [combination, price] of [
     ["{60}", 11000],
     ["{45,60}", 16500],
@@ -107,9 +110,11 @@ const childEntry = (studentIds: string[], courseIds: string[]) => ({
   courseIds: courseIds,
 });
 const preview = (entry: ReturnType<typeof childEntry>) =>
-  withSchool(ids.school, (tx) => enrollmentPreview(tx, ids.payer, ids.season, entry));
+  withSchool(ids.school, (tx) => enrollmentPreview(tx, ids.payer, ids.season, entry, ENROLLED_ON));
+// Enrolled before the season's first quarter: quarterly enrollments cover its three quarters (#291).
+const ENROLLED_ON = "2026-09-15";
 const save = (entry: ReturnType<typeof childEntry>) =>
-  withSchool(ids.school, (tx) => saveEnrollment(tx, frontDesk, ids.payer, ids.season, entry));
+  withSchool(ids.school, (tx) => saveEnrollment(tx, frontDesk, ids.payer, ids.season, entry, ENROLLED_ON));
 
 describe("Enrollment", () => {
   it("previews the price for a first child, without siblings discount", async () => {
@@ -194,7 +199,8 @@ describe("Rejections", () => {
 describe("Dashboard and headcounts", () => {
   it("counts the season's enrollments, students and total amount", async () => {
     const digits = await withSchool(ids.school, (tx) => seasonFigures(tx, ids.season));
-    expect(digits).toEqual({ enrollments: 2, students: 2, netTotalCents: 11000 + 14850 });
+    // Quarterly prices, three quarters each (#291).
+    expect(digits).toEqual({ enrollments: 2, students: 2, netTotalCents: (11000 + 14850) * 3 });
   });
 
   it("lists the latest enrollments, most recent first", async () => {
@@ -215,12 +221,14 @@ describe("Dashboard and headcounts", () => {
 describe("Status at creation (#284)", () => {
   it("saves a trial enrollment priced like any other, without flagging the siblings' discounts", async () => {
     const entry = { ...childEntry([ids.zoe], [ids.classical60]), status: "trial" as const };
-    const p = await withSchool(ids.school, (tx) => enrollmentPreview(tx, ids.payer, ids.season, entry));
+    const p = await withSchool(ids.school, (tx) => enrollmentPreview(tx, ids.payer, ids.season, entry, ENROLLED_ON));
     if (p.status !== "ok") throw new Error(p.message);
     // Priced with the active siblings (Noé), but a trial does not count as a sibling: nothing to flag.
     expect(p.newEnrollments[0].price).toMatchObject({ status: "ok", discountCents: 1100 });
     expect(p.existingImpacts).toEqual([]);
-    const r = await withSchool(ids.school, (tx) => saveEnrollment(tx, frontDesk, ids.payer, ids.season, entry));
+    const r = await withSchool(ids.school, (tx) =>
+      saveEnrollment(tx, frontDesk, ids.payer, ids.season, entry, ENROLLED_ON),
+    );
     if (!r.ok) throw new Error(r.message);
     const [row] = await admin`SELECT status, discount_cents FROM enrollment WHERE id = ${r.id}`;
     expect(row).toEqual({ status: "trial", discount_cents: 1100 });
@@ -232,15 +240,29 @@ describe("Status at creation (#284)", () => {
 
   it("saves a waitlist enrollment, the default being « Inscrit »", async () => {
     const r = await withSchool(ids.school, (tx) =>
-      saveEnrollment(tx, frontDesk, ids.otherPayer, ids.season, {
-        ...childEntry([ids.foreign], [ids.jazz60]),
-        status: "waitlist",
-      }),
+      saveEnrollment(
+        tx,
+        frontDesk,
+        ids.otherPayer,
+        ids.season,
+        {
+          ...childEntry([ids.foreign], [ids.jazz60]),
+          status: "waitlist",
+        },
+        ENROLLED_ON,
+      ),
     );
     if (!r.ok) throw new Error(r.message);
     expect((await admin`SELECT status FROM enrollment WHERE id = ${r.id}`)[0].status).toBe("waitlist");
     const d = await withSchool(ids.school, (tx) =>
-      saveEnrollment(tx, frontDesk, ids.otherPayer, ids.season, childEntry([ids.foreign], [ids.classical60])),
+      saveEnrollment(
+        tx,
+        frontDesk,
+        ids.otherPayer,
+        ids.season,
+        childEntry([ids.foreign], [ids.classical60]),
+        ENROLLED_ON,
+      ),
     );
     if (!d.ok) throw new Error(d.message);
     expect((await admin`SELECT status FROM enrollment WHERE id = ${d.id}`)[0].status).toBe("active");

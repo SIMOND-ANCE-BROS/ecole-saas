@@ -65,6 +65,7 @@ export default async function SettingsPage() {
       title: "Moyens de paiement",
       detail: `${accepted} moyen${accepted > 1 ? "s" : ""} accepté${accepted > 1 ? "s" : ""}, consignes pour l’accueil`,
     },
+    { href: "/parametres/tva", title: "TVA", detail: "Exonération ou taux de TVA des cours et des carnets" },
     { href: "/intervenants", title: "Intervenants", detail: "Professeurs, statut et rémunération" },
     { href: "/parametres/equipe", title: "Équipe", detail: "Accès de la direction et de l’accueil, invitations" },
   ];

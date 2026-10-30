@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState, useTransition } from "react";
 import type { ConfirmationPreview, ExistingImpact } from "@/db/enrollments";
 import { dropDateBounds, type EnrollmentActions } from "@/domain/enrollment/lifecycle";
+import { seasonDueCents } from "@/domain/enrollment/quarters";
+import type { Period } from "@/domain/tariff/types";
 import { NOT_SAVED, settle } from "@/lib/action-result";
 import { ofName } from "@/lib/french";
 import { formatEuros } from "@/lib/money";
@@ -27,7 +29,11 @@ export type ChangeableEnrollment = {
   /** « Zoé », « Léa et Hugo ». */
   students: string;
   courses: string[];
-  netPriceCents: number;
+  /** What it costs over the season: a quarterly price once per covered quarter (#291). */
+  seasonDueCents: number;
+  period: Period;
+  /** Quarters a quarterly enrollment covers (#291); its price is one quarter's. */
+  quarterCount: number;
   /** Why it cannot be cancelled (invoiced, attended), shown instead of « Annuler… »; null when it can. */
   cancelRefusal: string | null;
   /** Day it was entered: a drop-out cannot be dated before. */
@@ -178,7 +184,7 @@ function ChangeDialog({
     });
 
   const who = enrollment.students;
-  const summary = `${enrollment.courses.join(", ") || "sans cours"}, ${formatEuros(enrollment.netPriceCents)}`;
+  const summary = `${enrollment.courses.join(", ") || "sans cours"}, ${formatEuros(enrollment.seasonDueCents)}`;
   let body: ReactNode;
   if (preview === null) {
     body = (
@@ -202,6 +208,15 @@ function ChangeDialog({
     );
   } else if (preview.kind === "confirm") {
     const r = preview.result;
+    // Quarterly (#291): the price below is one quarter's, owed for each covered quarter.
+    const n = enrollment.quarterCount;
+    const quarterly =
+      enrollment.period === "quarter" && confirmedNet !== null ? (
+        <Text size="sm" fw={500}>
+          Sur la saison : {n} trimestre{n > 1 ? "s" : ""} × {formatEuros(confirmedNet)} ={" "}
+          {formatEuros(seasonDueCents({ period: "quarter", netPriceCents: confirmedNet, quarterCount: n }))}.
+        </Text>
+      ) : null;
     body =
       r.status === "invalid" ? (
         <Text role="alert" size="sm">
@@ -218,6 +233,7 @@ function ChangeDialog({
               Prix calculé aujourd’hui avec la grille : {formatEuros(r.price.netPriceCents)}.
             </Text>
           )}
+          {quarterly}
           <DiscountImpacts impacts={r.existingImpacts} />
         </>
       ) : r.price.status === "error" ? (
@@ -233,6 +249,7 @@ function ChangeDialog({
               Prix enregistré à l’inscription : {formatEuros(r.savedNetPriceCents)}.
             </Text>
           )}
+          {quarterly}
           <DiscountImpacts impacts={r.existingImpacts} />
         </>
       );
@@ -250,7 +267,7 @@ function ChangeDialog({
         />
         <Text size="sm">
           {who} n’apparaîtra plus sur les appels des séances après cette date. Le prix de l’inscription (
-          {formatEuros(enrollment.netPriceCents)}) reste dû ; un avoir éventuel se décide à part.
+          {formatEuros(enrollment.seasonDueCents)}) reste dû ; un avoir éventuel se décide à part.
         </Text>
         <DiscountImpacts impacts={preview.impacts} />
       </>

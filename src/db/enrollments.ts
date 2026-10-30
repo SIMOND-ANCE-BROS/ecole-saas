@@ -23,6 +23,13 @@ import {
   type ManualPrice,
 } from "../domain/enrollment/manual-price";
 import { STATUS_PRIORITY, type EnrollmentStatus } from "../domain/enrollment/statuses";
+import {
+  coveredQuarters,
+  quarterEnrollmentRefusal,
+  seasonDueCents,
+  type SeasonQuarter,
+} from "../domain/enrollment/quarters";
+import { todayInParis } from "../domain/people/age";
 import { has } from "../lib/has";
 import { computeTariff } from "../domain/tariff/compute";
 import { requestsByEntity, type EntityCourse } from "../domain/enrollment/entities";
@@ -47,7 +54,9 @@ import {
   member,
   person,
   discount,
+  enrollmentQuarter,
   season,
+  seasonQuarter,
   tariff,
 } from "./schema";
 
@@ -258,7 +267,31 @@ export type Preview =
       /** One per entity, the default first; a single one when every course is sold by the same business. */
       newEnrollments: NewEnrollment[];
       existingImpacts: ExistingImpact[];
+      /**
+       * Quarters a quarterly enrollment made today covers (#291), in date order: each new
+       * enrollment owes its net price once per quarter. Empty for any other period.
+       */
+      quarters: SeasonQuarter[];
     };
+
+/**
+ * Quarters of the season (#291), in date order. The season row is read FOR KEY SHARE, which
+ * waits for a quarters save (`saveSeasonQuarters`, FOR UPDATE) to commit: the quarters an
+ * enrollment covers are never ones being removed.
+ */
+async function quartersOf(tx: Tx, seasonId: string): Promise<SeasonQuarter[]> {
+  await tx.select({ id: season.id }).from(season).where(eq(season.id, seasonId)).for("key share");
+  return tx
+    .select({
+      id: seasonQuarter.id,
+      label: seasonQuarter.label,
+      startDate: seasonQuarter.startDate,
+      endDate: seasonQuarter.endDate,
+    })
+    .from(seasonQuarter)
+    .where(eq(seasonQuarter.seasonId, seasonId))
+    .orderBy(asc(seasonQuarter.startDate));
+}
 
 /** The school's entities, the default first then by name: the order enrollments are split in. */
 async function entitiesInOrder(tx: Tx): Promise<{ id: string; name: string }[]> {
@@ -272,16 +305,26 @@ async function entitiesInOrder(tx: Tx): Promise<{ id: string; name: string }[]> 
  * Price of the new enrollments, computed with the grid, the discounts and the payer's
  * other enrollments. The chosen courses are split by the business that sells them, one
  * enrollment each, priced on its own combination (#288 Q3 default); siblings are counted
- * over every enrollment of the payer, whatever its business (#288 Q2 default).
+ * over every enrollment of the payer, whatever its business (#288 Q2 default). A quarterly
+ * enrollment made on `today` covers the season's remaining quarters (#291), and is refused
+ * when none is left.
  */
 export async function enrollmentPreview(
   tx: Tx,
   payerId: string,
   seasonId: string,
   entry: EnrollmentInput,
+  today: string = todayInParis(),
 ): Promise<Preview> {
   const chosenCourses = await validate(tx, payerId, seasonId, entry);
   if (typeof chosenCourses === "string") return { status: "invalid", message: chosenCourses };
+  let quarters: SeasonQuarter[] = [];
+  if (entry.period === "quarter") {
+    const all = await quartersOf(tx, seasonId);
+    const refusal = quarterEnrollmentRefusal(all, today);
+    if (refusal) return { status: "invalid", message: refusal };
+    quarters = coveredQuarters(all, today);
+  }
 
   const entities = await entitiesInOrder(tx);
   // References of the new requests are entity ids, never an enrollment id of `existing`.
@@ -308,6 +351,7 @@ export async function enrollmentPreview(
     existingImpacts: countsAsSibling(entry.status ?? "active")
       ? await impactsOn(tx, payerId, existing, result.enrollments)
       : [],
+    quarters,
   };
 }
 
@@ -341,7 +385,8 @@ async function impactsOn(
  * the first (the default entity's when it sells one of the courses), `ids` all of them.
  * A price typed by the front desk (#292) replaces the computed one of its business's
  * enrollment, with a reason, or prices a combination the grid has no package for. Each
- * enrollment is written to the audit log (technical ids, amounts and the typed reason).
+ * enrollment is dated `today` and, when quarterly, covers the season's remaining quarters
+ * (#291). Each is written to the audit log (technical ids, amounts and the typed reason).
  */
 export async function saveEnrollment(
   tx: Tx,
@@ -349,13 +394,14 @@ export async function saveEnrollment(
   payerId: string,
   seasonId: string,
   entry: EnrollmentInput,
+  today: string = todayInParis(),
 ): Promise<{ ok: true; id: string; ids: string[] } | { ok: false; message: string }> {
   const typed = validManualPrices.safeParse(entry.manualPrices ?? []);
   if (!uuid.safeParse(payerId).success || !typed.success) return { ok: false, message: "Saisie invalide." };
   if (new Set(typed.data.map((m) => m.billingEntityId)).size !== typed.data.length)
     return { ok: false, message: "Saisie invalide." };
   await lockPayer(tx, payerId);
-  const preview = await enrollmentPreview(tx, payerId, seasonId, entry);
+  const preview = await enrollmentPreview(tx, payerId, seasonId, entry, today);
   if (preview.status === "invalid") return { ok: false, message: preview.message };
   if (!typed.data.every((m) => preview.newEnrollments.some((n) => n.billingEntityId === m.billingEntityId)))
     return { ok: false, message: STALE_MANUAL_PRICE };
@@ -406,6 +452,7 @@ export async function saveEnrollment(
         tariffId: price.tariffId,
         audience: entry.audience,
         period: entry.period,
+        enrolledOn: today,
         grossPriceCents: price.grossPriceCents,
         discountCents: price.discountCents,
         discounts: price.discounts,
@@ -414,6 +461,13 @@ export async function saveEnrollment(
       })
       .returning({ id: enrollment.id });
     ids.push(id);
+    if (preview.quarters.length > 0)
+      await tx.insert(enrollmentQuarter).values(
+        rowsOf(
+          enrollmentQuarter,
+          preview.quarters.map((q) => ({ schoolId: CURRENT_SCHOOL, enrollmentId: id, quarterId: q.id })),
+        ),
+      );
     await tx.insert(auditLog).values({
       schoolId: CURRENT_SCHOOL,
       actor: who.id,
@@ -428,6 +482,7 @@ export async function saveEnrollment(
         status,
         studentIds,
         courseIds: n.courseIds,
+        ...(preview.quarters.length > 0 ? { quarterIds: preview.quarters.map((q) => q.id) } : {}),
         grossPriceCents: price.grossPriceCents,
         discountCents: price.discountCents,
         ...(manual
@@ -467,7 +522,14 @@ export type SeasonEnrollment = {
   audience: Audience;
   period: Period;
   courses: string[];
+  /** Its price: one quarter's for a quarterly package. */
   netPriceCents: number;
+  /** Quarters a quarterly enrollment covers (#291), in date order; empty for any other period. */
+  quarters: string[];
+  /** Number of covered quarters, as the balance counts them (`seasonDueCents`). */
+  quarterCount: number;
+  /** What it costs over the season: its price once per covered quarter when quarterly (#291). */
+  seasonDueCents: number;
   /** Reason of a price typed by hand (#292); null when the price is the grid's. */
   priceReason: string | null;
   status: EnrollmentStatus;
@@ -485,6 +547,9 @@ export type SeasonEnrollment = {
 };
 
 const enrollmentId = sql`${enrollment}.${sql.identifier("id")}`;
+
+/** Number of quarters the enrollment of the row covers (#291): what `seasonDueCents` multiplies a quarterly price by. */
+export const quarterCountSql = sql<number>`(SELECT count(*) FROM enrollment_quarter q WHERE q.enrollment_id = ${enrollmentId})::int`;
 
 /** An invoice line refers to the enrollment of the row. */
 const invoicedSql = sql<boolean>`EXISTS (SELECT 1 FROM invoice_line l WHERE l.enrollment_id = ${enrollmentId})`;
@@ -543,6 +608,17 @@ export async function seasonEnrollments(
     .where(and(mine, eq(enrollment.seasonId, seasonId)));
   if (rows.length === 0) return [];
   const namedEntity = await severalEntities(tx);
+  const covered = await tx
+    .select({ enrollmentId: enrollmentQuarter.enrollmentId, label: seasonQuarter.label })
+    .from(enrollmentQuarter)
+    .innerJoin(seasonQuarter, eq(seasonQuarter.id, enrollmentQuarter.quarterId))
+    .where(
+      inArray(
+        enrollmentQuarter.enrollmentId,
+        rows.map((l) => l.id),
+      ),
+    )
+    .orderBy(asc(seasonQuarter.startDate));
 
   const relationships = await tx
     .select({
@@ -569,11 +645,16 @@ export async function seasonEnrollments(
   return rows
     .map((l) => {
       const own = relationships.filter((x) => x.enrollmentId === l.id);
+      const quarters = covered.filter((q) => q.enrollmentId === l.id).map((q) => q.label);
+      const netPriceCents = l.netPriceCents ?? 0;
       return {
         id: l.id,
         audience: l.audience,
         period: l.period,
-        netPriceCents: l.netPriceCents ?? 0,
+        netPriceCents,
+        quarters,
+        quarterCount: quarters.length,
+        seasonDueCents: seasonDueCents({ period: l.period, netPriceCents, quarterCount: quarters.length }),
         priceReason: l.priceReason,
         status: l.status,
         droppedOn: l.droppedOn,

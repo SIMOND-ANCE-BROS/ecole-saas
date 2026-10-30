@@ -8,6 +8,7 @@ import postgres from "postgres";
 import { withSchool } from "../src/db";
 import { syncLessons } from "../src/db/lessons";
 import { todayInParis } from "../src/domain/people/age";
+import { defaultQuarters } from "../src/domain/enrollment/quarters";
 import { createAccount } from "../src/lib/accounts";
 
 const PASSWORD = process.env.SEED_MOT_DE_PASSE ?? "demo-ecole-de-danse";
@@ -85,10 +86,27 @@ async function main() {
     INSERT INTO billing_entity (school_id, name, legal_name, vat_regime, bank_account_label, is_default)
     SELECT ${school.id}, 'Danse Démo', 'Danse Démo EI', 'not_applicable', 'Compte courant Banque Démo', true
     WHERE NOT EXISTS (SELECT 1 FROM billing_entity WHERE school_id = ${school.id})`;
+  // Its VAT treatments (#301), demo wording; its business proposes the exemption by default.
+  await admin`
+    INSERT INTO vat_treatment (school_id, label, category, rate_bps, mention)
+    VALUES (${school.id}, 'Exonéré (démo)', 'exempt', 0, 'Mention d’exonération de démonstration'),
+      (${school.id}, 'TVA 20 % (démo)', 'standard', 2000, NULL)
+    ON CONFLICT (school_id, label) DO NOTHING`;
+  await admin`
+    UPDATE billing_entity SET default_vat_treatment_id =
+      (SELECT id FROM vat_treatment WHERE school_id = ${school.id} AND label = 'Exonéré (démo)')
+    WHERE school_id = ${school.id} AND default_vat_treatment_id IS NULL`;
   await admin`
     INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${school.id}, '2026-2027', '2026-09-01', '2027-06-30')
     ON CONFLICT DO NOTHING`;
+  // Its default quarters (#291), as `createSeason` gives a new season, once.
+  const [demoSeason] = await admin`SELECT id FROM season WHERE school_id = ${school.id} AND label = '2026-2027'`;
+  for (const q of defaultQuarters({ startDate: "2026-09-01", endDate: "2027-06-30" }))
+    await admin`
+      INSERT INTO season_quarter (school_id, season_id, label, start_date, end_date)
+      SELECT ${school.id}, ${demoSeason.id}, ${q.label}, ${q.startDate}, ${q.endDate}
+      WHERE NOT EXISTS (SELECT 1 FROM season_quarter WHERE season_id = ${demoSeason.id} AND label = ${q.label})`;
 
   for (const account of ACCOUNTS) {
     const [existing] = await admin`SELECT id FROM "user" WHERE email = ${account.email}`;

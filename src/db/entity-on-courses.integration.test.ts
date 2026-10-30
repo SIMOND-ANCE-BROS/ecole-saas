@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
+import { withDefaultQuarters } from "./season-quarters.integration-helpers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { OTHER_ENTITY } from "../domain/lesson-pack/pack";
 import { createCourse, entityLock, readCourse, updateCourse, type CourseInput } from "./courses";
@@ -33,16 +34,19 @@ const child = (studentId: string, courseIds: string[]): EnrollmentInput => ({
   courseIds,
 });
 
+// Enrolled before the season's first quarter: a quarterly enrollment covers its three quarters (#291).
+const ENROLLED_ON = "2026-09-15";
+
 beforeAll(async () => {
   [{ id: ids.school }] = await schoolWithDefaultEntity(admin, "Zz École deux entreprises", `zz2e-${suffix}`);
   const s = ids.school;
   [{ id: ids.a }] = await admin`SELECT id FROM billing_entity WHERE school_id = ${s} AND is_default`;
   [{ id: ids.b }] = await admin`
-    INSERT INTO billing_entity (school_id, name, legal_name, vat_regime)
-    VALUES (${s}, 'Zz Entreprise B', 'Zz Entreprise B', 'not_applicable') RETURNING id`;
+    INSERT INTO billing_entity (school_id, name, legal_name, vat_regime, default_vat_treatment_id)
+    VALUES (${s}, 'Zz Entreprise B', 'Zz Entreprise B', 'not_applicable', (SELECT default_vat_treatment_id FROM billing_entity WHERE school_id = ${s} AND is_default)) RETURNING id`;
   [{ id: ids.closed }] = await admin`
-    INSERT INTO billing_entity (school_id, name, legal_name, vat_regime, active)
-    VALUES (${s}, 'Zz Entreprise fermée', 'Zz Entreprise fermée', 'not_applicable', false) RETURNING id`;
+    INSERT INTO billing_entity (school_id, name, legal_name, vat_regime, active, default_vat_treatment_id)
+    VALUES (${s}, 'Zz Entreprise fermée', 'Zz Entreprise fermée', 'not_applicable', false, (SELECT default_vat_treatment_id FROM billing_entity WHERE school_id = ${s} AND is_default)) RETURNING id`;
   [{ id: ids.otherSchool }] =
     await admin`INSERT INTO school (name, slug) VALUES ('Zz Autre', ${`zz2o-${suffix}`}) RETURNING id`;
   ids.otherEntity = await defaultEntityFor(admin, ids.otherSchool, "Zz Autre entreprise");
@@ -50,6 +54,7 @@ beforeAll(async () => {
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${s}, ${frontDesk}, 'front_desk')`;
   [{ id: ids.season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
     VALUES (${s}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
+  await withDefaultQuarters(admin, ids.season);
   for (const [combination, price] of [
     ["{45}", 8500],
     ["{60}", 11000],
@@ -144,8 +149,10 @@ describe("composite foreign keys carrying the entity", () => {
 
   it("refuses a course of another school's entity", async () => {
     await expect(
-      admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
-        VALUES (${ids.school}, ${ids.otherEntity}, ${ids.season}, ${ids.jazz}, ${ids.room}, ${ids.teacher}, 5, '10:00', 60)`,
+      // Its own school's treatment named: the entity's key is what refuses it.
+      admin`INSERT INTO course (school_id, billing_entity_id, vat_treatment_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+        VALUES (${ids.school}, ${ids.otherEntity}, (SELECT default_vat_treatment_id FROM billing_entity WHERE id = ${ids.a}),
+          ${ids.season}, ${ids.jazz}, ${ids.room}, ${ids.teacher}, 5, '10:00', 60)`,
     ).rejects.toThrow(/course_billing_entity_same_school_fk/);
   });
 });
@@ -153,7 +160,7 @@ describe("composite foreign keys carrying the entity", () => {
 describe("enrolling in courses of two entities (#299)", () => {
   it("previews one enrollment per entity, each priced on its own courses", async () => {
     const p = await withSchool(ids.school, (tx) =>
-      enrollmentPreview(tx, ids.payer, ids.season, child(ids.zoe, [ids.rockB, ids.jazzA])),
+      enrollmentPreview(tx, ids.payer, ids.season, child(ids.zoe, [ids.rockB, ids.jazzA]), ENROLLED_ON),
     );
     if (p.status !== "ok") throw new Error(p.message);
     // The default entity first; not the « 45 min + 1 h » package of both (165 €).
@@ -169,7 +176,7 @@ describe("enrolling in courses of two entities (#299)", () => {
     const run = () =>
       withSchool(ids.school, (tx) =>
         once(tx, "enrollment", key, { payerId: ids.payer, ...entry }, storedEnrollment, () =>
-          saveEnrollment(tx, frontDesk, ids.payer, ids.season, entry),
+          saveEnrollment(tx, frontDesk, ids.payer, ids.season, entry, ENROLLED_ON),
         ),
       );
     const first = await run();
@@ -190,7 +197,7 @@ describe("enrolling in courses of two entities (#299)", () => {
   it("counts the siblings across entities, each discount on its own enrollment", async () => {
     // Zoé is enrolled with both entities (previous test); Noé takes a course of B only.
     const p = await withSchool(ids.school, (tx) =>
-      enrollmentPreview(tx, ids.payer, ids.season, child(ids.noe, [ids.rockB])),
+      enrollmentPreview(tx, ids.payer, ids.season, child(ids.noe, [ids.rockB]), ENROLLED_ON),
     );
     if (p.status !== "ok") throw new Error(p.message);
     expect(p.newEnrollments).toMatchObject([
