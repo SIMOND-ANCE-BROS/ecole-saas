@@ -34,7 +34,7 @@ export default async function WorkspaceLayout({ children, modal }: LayoutProps<"
         // server. Nothing it numbers is a real invoice.
         simulation && (
           <Alert role="status" color="yellow" radius={0} p="xs" className="print:hidden" title="Mode simulation">
-            Les factures créées ici sont des essais : leurs numéros commencent par « TEST- » et ce ne sont pas de vraies
+            Les factures créées ici sont des essais : leurs numéros commencent par « TEST- » et ce ne sont pas de vraies
             factures.
           </Alert>
         )

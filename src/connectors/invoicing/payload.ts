@@ -1,5 +1,6 @@
 import type { VatCategory } from "../../domain/billing/vat";
 import {
+  type CreditNotePayload,
   type InvoicePayload,
   InvoicingError,
   type InvoicingOperation,
@@ -109,4 +110,27 @@ export function invoicePayload(
     totals: { ...input.totals },
     installments: input.installments.map((i) => ({ dueDate: i.dueDate, amountCents: i.amountCents })),
   };
+}
+
+/**
+ * A credit note as sent to the tool: the same checks as an invoice (whole
+ * cents, mentions, stored totals equal to the lines), every line negative, and
+ * no installment. `creditNoteId` (our credit note invoice row) is its idempotency key.
+ */
+export function creditNotePayload(input: {
+  creditNoteId: string;
+  customerRef: string;
+  vatMention: string | null;
+  totals: Totals;
+  lines: readonly StoredLine[];
+  creditedToolRef: string;
+}): CreditNotePayload {
+  if (input.lines.length === 0 || input.lines.some((l) => l.inclTaxCents >= 0)) {
+    throw new InvoicingError("format", "createCreditNote", "credit_note_not_negative");
+  }
+  const { installments: _none, ...payload } = invoicePayload(
+    { ...input, invoiceId: input.creditNoteId, installments: [] },
+    "createCreditNote",
+  );
+  return { ...payload, creditedToolRef: input.creditedToolRef };
 }

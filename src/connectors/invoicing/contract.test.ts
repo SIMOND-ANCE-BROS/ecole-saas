@@ -5,7 +5,7 @@ import { FAKE_NUMBER_PREFIX, PAYMENT_E_REPORTING } from "../../domain/billing/in
 import { type CustomerPayload, type InvoicePayload, type InvoicingConnector, InvoicingError } from "./contract";
 import { connectorFor } from "./connector";
 import { FAKE_REFUSED_TOKEN, type FakeFault, fakeStoreOf } from "./fake";
-import { invoicePayload, type StoredLine, totalsOf } from "./payload";
+import { creditNotePayload, invoicePayload, type StoredLine, totalsOf } from "./payload";
 import { guarded } from "./guard";
 
 /**
@@ -150,6 +150,24 @@ describe("invoice payload", () => {
     expect(build({ installments: split.slice(1) })).toThrow(
       expect.objectContaining({ code: "installments_differ_from_total" }) as Error,
     );
+  });
+
+  it("builds a credit note of negative lines only", () => {
+    const negative = { ...LINES[3], unitPriceCents: -4150, inclTaxCents: -4150, exclTaxCents: -4150 };
+    const of = (lines: StoredLine[]) => () =>
+      creditNotePayload({
+        creditNoteId: "a",
+        customerRef: "c",
+        vatMention: null,
+        totals: totalsOf(lines),
+        lines,
+        creditedToolRef: "t",
+      });
+    expect(of([negative])()).toMatchObject({ externalRef: "a", creditedToolRef: "t", totals: { inclTaxCents: -4150 } });
+    expect(of([negative])()).not.toHaveProperty("installments");
+    for (const lines of [[], [LINES[3]], [negative, LINES[3]]]) {
+      expect(of(lines)).toThrow(expect.objectContaining({ code: "credit_note_not_negative" }) as Error);
+    }
   });
 
   it("refuses an amount that is not whole cents", () => {
