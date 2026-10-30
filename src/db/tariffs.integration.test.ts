@@ -51,9 +51,9 @@ beforeAll(async () => {
   [{ id: zumbaCourse }] =
     await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
     VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${zumba}, ${room.id}, ${p.id}, 1, '19:00', 60) RETURNING id`;
-  // Paid for by a third party (relationship « paie pour »): independent of how the student herself is flagged.
+  // A student paid for by a third party (relationship « paie pour »); only students are enrolled (#314).
   [{ id: ines }] =
-    await admin`INSERT INTO person (school_id, last_name, first_name, birth_date) VALUES (${school}, 'Moreau', 'Inès', '1992-07-14') RETURNING id`;
+    await admin`INSERT INTO person (school_id, last_name, first_name, birth_date, is_student) VALUES (${school}, 'Moreau', 'Inès', '1992-07-14', true) RETURNING id`;
   [{ id: payer }] =
     await admin`INSERT INTO person (school_id, last_name, company_name, type, siren) VALUES (${school}, 'CSE', 'CSE Ateliers', 'organisation', '123456789') RETURNING id`;
   await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for) VALUES (${school}, ${payer}, ${ines}, 'other', true)`;

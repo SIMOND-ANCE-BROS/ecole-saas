@@ -48,7 +48,7 @@ beforeAll(async () => {
   [{ id: ids.otherPayer }] =
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${ids.otherSchool}, 'Zzailleurs', 'Paul') RETURNING id`;
   [{ id: ids.student }] =
-    await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${e}, 'Zzpayeur', 'Zoé') RETURNING id`;
+    await admin`INSERT INTO person (school_id, last_name, first_name, is_student) VALUES (${e}, 'Zzpayeur', 'Zoé', true) RETURNING id`;
   await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for)
     VALUES (${e}, ${ids.payer}, ${ids.student}, 'legal_guardian', true)`;
   [{ id: ids.season }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)

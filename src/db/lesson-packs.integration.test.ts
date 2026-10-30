@@ -170,6 +170,18 @@ describe("selling a lesson pack", () => {
     }
   });
 
+  it("refuses a contact the payer pays for who is not a student yet, and the payer who is not one (#314)", async () => {
+    const contact = await insertPerson(school, "Zzcontact", false);
+    await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for)
+      VALUES (${school}, ${parent}, ${contact}, 'other', true)`;
+    for (const id of [contact, parent])
+      expect(await sell({ participantIds: [id] })).toEqual({
+        ok: false,
+        message: "Cette personne n’est pas encore élève : « Ajouter aux élèves » sur sa fiche de contact.",
+      });
+    expect(await admin`SELECT 1 FROM lesson_pack_person WHERE person_id = ${contact}`).toHaveLength(0);
+  });
+
   it("lets an adult student buy a pack for themselves", async () => {
     const r = await sell({ participantIds: [stranger] }, stranger);
     expect(r.ok).toBe(true);

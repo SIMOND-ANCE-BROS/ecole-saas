@@ -65,6 +65,7 @@ beforeAll(async () => {
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${e}, 'Famille', 'Noé') RETURNING id`;
   [{ id: ids.foreign }] =
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${e}, 'Autre', 'Max') RETURNING id`;
+  await admin`UPDATE person SET is_student = true WHERE id IN (${ids.zoe}, ${ids.noe}, ${ids.foreign})`;
   for (const [payer, student] of [
     [ids.payer, ids.zoe],
     [ids.payer, ids.noe],
@@ -174,6 +175,18 @@ describe("Enrollment", () => {
 describe("Rejections", () => {
   it("rejects a student of another payer", async () => {
     expect(await save(childEntry([ids.foreign], [ids.jazz60]))).toMatchObject({ ok: false });
+  });
+
+  it("rejects a contact the payer pays for who is not a student yet, without saving anything (#314)", async () => {
+    const [{ id: contact }] =
+      await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${ids.school}, 'Famille', 'Zzcontact') RETURNING id`;
+    await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for)
+      VALUES (${ids.school}, ${ids.payer}, ${contact}, 'other', true)`;
+    expect(await save(childEntry([contact], [ids.jazz60]))).toEqual({
+      ok: false,
+      message: "Cette personne n’est pas encore élève : « Ajouter aux élèves » sur sa fiche de contact.",
+    });
+    expect(await admin`SELECT 1 FROM enrollment_course WHERE student_id = ${contact}`).toHaveLength(0);
   });
 
   it("rejects a course from another season", async () => {

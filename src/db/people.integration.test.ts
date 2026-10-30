@@ -73,6 +73,7 @@ beforeAll(async () => {
   });
   zoe = await insert(school, { last_name: "Lefèvre", first_name: "Zoé", birth_date: "2015-03-10", notes: "Asthme" });
   noe = await insert(school, { last_name: "Lefèvre", first_name: "Noé", birth_date: "2017-11-02" });
+  await admin`UPDATE person SET is_student = true WHERE id IN (${zoe}, ${noe})`;
   alex = await insert(school, {
     last_name: "Rivière",
     first_name: "Alex",
@@ -214,6 +215,19 @@ describe("payableStudents and payersOf", () => {
     expect((await withSchool(school, (tx) => payableStudents(tx, alex))).map((d) => d.id)).toEqual([alex]);
   });
 
+  it("offers a contact they pay for only once they are a student (#314)", async () => {
+    // Hélène pays for a contact who is not a student: offered only once added to the students.
+    const contact = await insert(school, { last_name: "Zzcontact", first_name: "Zzpasélève" });
+    await link(helene, contact, "other", true);
+    const offered = async () => (await withSchool(school, (tx) => payableStudents(tx, helene))).map((d) => d.id);
+    expect(await offered()).not.toContain(contact);
+    await admin`UPDATE person SET is_student = true WHERE id = ${contact}`;
+    expect(await offered()).toContain(contact);
+    // Removed so the other tests see Hélène's family unchanged.
+    await admin`DELETE FROM relationship WHERE related_person_id = ${contact}`;
+    await admin`DELETE FROM person WHERE id = ${contact}`;
+  });
+
   it("returns a student's payers", async () => {
     expect(await withSchool(school, (tx) => payersOf(tx, alex))).toEqual([{ id: cse, name: "CSE Ateliers" }]);
     expect(await withSchool(school, (tx) => payersOf(tx, helene))).toEqual([]);
@@ -265,7 +279,11 @@ describe("createPerson and updatePerson", () => {
       }),
     );
     const id = r.status === "ok" ? r.id : "";
-    expect((await withSchool(school, (tx) => payableStudents(tx, helene))).map((d) => d.firstName)).toContain("Lou");
+    // A contact until marked as a student (#314): only then offered for enrollment.
+    const offered = async () => (await withSchool(school, (tx) => payableStudents(tx, helene))).map((d) => d.firstName);
+    expect(await offered()).not.toContain("Lou");
+    await admin`UPDATE person SET is_student = true WHERE id = ${id}`;
+    expect(await offered()).toContain("Lou");
     expect((await withSchool(school, (tx) => readPerson(tx, id)))?.relationships[0]).toMatchObject({
       direction: "incoming",
       emergencyContact: true,

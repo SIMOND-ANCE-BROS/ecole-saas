@@ -45,7 +45,7 @@ import type {
 } from "../domain/tariff/types";
 import { severalEntities } from "./billing-entities";
 import type { Tx } from "./index";
-import { payableStudents } from "./people";
+import { hasNonStudent, NOT_A_STUDENT_YET, payableStudents } from "./people";
 import {
   auditLog,
   billingEntity,
@@ -228,7 +228,9 @@ async function validate(
 
   const payables = new Set((await payableStudents(tx, payerId)).map((d) => d.id));
   if (!studentIds.every((id) => payables.has(id)))
-    return "Cette personne ne paie pas pour ce danseur : ajoutez le lien « paie pour » sur sa fiche.";
+    return (await hasNonStudent(tx, studentIds))
+      ? NOT_A_STUDENT_YET
+      : "Cette personne ne paie pas pour ce danseur : ajoutez le lien « paie pour » sur sa fiche.";
 
   if (courseIds.length === 0) return [];
   const chosen = await tx
