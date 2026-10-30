@@ -216,6 +216,24 @@ describe("allocating a payment FIFO (#305)", () => {
     ]);
   });
 
+  it("a cheque the bank returns gives back everything it settled", async () => {
+    const payer = await person("Zzrejet");
+    const q = await issue(payer, await enroll(payer, 30_000), QUARTERS);
+    await run((tx) => collect(tx, director, payer, [cheque(15_000, "0002")], undefined, TODAY));
+    const [p] = await paymentIdsOf(payer);
+    const deposit = await run((tx) =>
+      createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [p] }, TODAY),
+    );
+    if (!deposit.ok) throw new Error(deposit.message);
+    expect((await installments(q)).map((i) => i.allocated)).toEqual([10_000, 5_000, 0]);
+    expect(await run((tx) => correctPayment(tx, director, p, 15_000, TODAY, TODAY))).toMatchObject({ ok: true });
+    expect(await installments(q)).toEqual([
+      { status: "overdue", allocated: 0 },
+      { status: "upcoming", allocated: 0 },
+      { status: "upcoming", allocated: 0 },
+    ]);
+  });
+
   it("a correction takes back from the latest due installment first", async () => {
     const payer = await person("Zzcorrige");
     const q = await issue(payer, await enroll(payer, 30_000), QUARTERS);

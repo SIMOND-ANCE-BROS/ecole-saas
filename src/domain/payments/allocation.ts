@@ -70,6 +70,8 @@ export function availableCents(p: AllocatablePayment, today: string): number {
  * (#346: a refund's `correctedCents` is what its cancellations gave back). A refund cancels no
  * payment in particular, so it is taken from the pool, never from one payment; a refund
  * cancellation, positive, offers nothing by itself (`availableCents`), it only shrinks its refund.
+ * Taking refunds from what is not allocated yet holds because a refund is only ever paid out of
+ * an overpayment (`refundRefusal`), money no installment needs.
  */
 export function entityPoolCents(payments: readonly AllocatablePayment[], today: string): number {
   const refunded = payments
