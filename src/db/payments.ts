@@ -16,6 +16,8 @@ import {
   user,
 } from "./schema";
 import { issuePath } from "../lib/form-errors";
+import { METHOD_LABELS, PAYMENT_METHOD_VALUES, refusedMethod, type Method } from "../domain/payments/methods";
+import { readMethodSettings } from "./payment-methods";
 import { formatEuros } from "../lib/money";
 import { entityChoices, listEntities, resolveEntity } from "./billing-entities";
 
@@ -29,17 +31,9 @@ import { entityChoices, listEntities, resolveEntity } from "./billing-entities";
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const isUuid = (v: string) => z.uuid().safeParse(v).success;
 
-export const PAYMENT_METHODS = {
-  cheque: "Chèque",
-  cash: "Espèces",
-  card: "Carte",
-  transfer: "Virement",
-  direct_debit: "Prélèvement",
-  holiday_voucher: "Chèques vacances",
-  pass_sport: "Pass’Sport",
-  other: "Autre",
-} as const;
-export type Method = keyof typeof PAYMENT_METHODS;
+/** Labels of every method, accepted or not: a payment keeps its method's label (#293). */
+export const PAYMENT_METHODS = METHOD_LABELS;
+export type { Method };
 
 const shortText = (max: number) =>
   z
@@ -50,7 +44,7 @@ const shortText = (max: number) =>
     .transform((v) => v || null);
 
 const paymentFields = z.object({
-  method: z.enum(Object.keys(PAYMENT_METHODS) as [Method, ...Method[]]),
+  method: z.enum(PAYMENT_METHOD_VALUES),
   amountCents: z.int("Montant invalide").min(1, "Montant invalide").max(10_000_00, "Montant trop élevé"),
   date: z.iso.date("Date invalide"),
   reference: shortText(60),
@@ -110,7 +104,7 @@ export const ENTITY_REQUIRED = "Choisissez l’entreprise qui encaisse ce paieme
  * Records one or more payments from a payer (three dated cheques, cheque + cash…), all
  * cashed by one billing entity (#300): the one chosen, which must be active. With several
  * active entities (the form then offers the choice) it is always chosen; with one, it is
- * the school's default.
+ * the school's default. Only by a method the school accepts (#293).
  */
 export async function collect(
   tx: Tx,
@@ -128,6 +122,16 @@ export async function collect(
   if (!p) return { ok: false, message: "Payeur introuvable." };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
+  // The form offers the accepted methods only; one switched off since it was opened is refused (#293).
+  const refused = refusedMethod(
+    r.data.map((x) => x.method),
+    await readMethodSettings(tx),
+  );
+  if (refused)
+    return {
+      ok: false,
+      message: `L’école n’accepte plus ce moyen de paiement « ${METHOD_LABELS[refused]} » : rechargez la page.`,
+    };
   // No entity sent while several are active: the form was opened before a second one was added.
   if (billingEntityId === undefined && (await entityChoices(tx)).length > 1)
     return { ok: false, message: ENTITY_REQUIRED };

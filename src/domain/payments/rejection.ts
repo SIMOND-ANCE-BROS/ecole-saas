@@ -1,4 +1,4 @@
-import type { Method } from "../../db/payments";
+import type { Method } from "./methods";
 import { frenchDate } from "../../lib/dates";
 
 /**
