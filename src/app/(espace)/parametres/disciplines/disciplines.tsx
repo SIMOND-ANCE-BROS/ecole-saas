@@ -1,12 +1,12 @@
 "use client";
 
-import { Button, Group, Paper, Text, TextInput } from "@mantine/core";
-import { useState, useTransition } from "react";
+import { Button, Checkbox, Group, Paper, Text, TextInput } from "@mantine/core";
+import { useOptimistic, useState, useTransition } from "react";
 import type { DisciplineRow } from "@/db/settings";
 import { type ActionResult, settle } from "@/lib/action-result";
 import { ConfirmRemoval, type Removal } from "../../_ui/confirm-removal";
 import { useFocusAfter } from "../../_ui/use-focus-after";
-import { newDiscipline, rename, removeDiscipline } from "../actions";
+import { adultCertificate, newDiscipline, rename, removeDiscipline } from "../actions";
 
 export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
   const [name, setName] = useState("");
@@ -14,6 +14,11 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
   const [message, setMessage] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
   const [removal, setRemoval] = useState<Removal | null>(null);
+  // The box follows the click at once; a refusal brings it back with its message.
+  const [certificates, setCertificate] = useOptimistic(
+    new Map(disciplines.map((d) => [d.id, d.adultsNeedCertificate])),
+    (map, [id, value]: [string, boolean]) => new Map(map).set(id, value),
+  );
   const focusAfter = useFocusAfter();
   // Leaving the edit (saved, « Annuler », Escape): focus goes back to the row's « Renommer ».
   const closeEdit = (id: string) => {
@@ -101,6 +106,19 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
               ) : (
                 <span className="font-medium">{d.name}</span>
               )}
+              <Checkbox
+                size="xs"
+                label="Certificat médical exigé des adultes"
+                aria-label={`Certificat médical exigé des adultes en ${d.name}`}
+                checked={certificates.get(d.id) ?? d.adultsNeedCertificate}
+                onChange={(e) => {
+                  const value = e.currentTarget.checked;
+                  act(() => {
+                    setCertificate([d.id, value]);
+                    return adultCertificate(d.id, value);
+                  });
+                }}
+              />
               <Text span size="sm" c="dimmed">
                 {d.course} cours
                 {d.tariffs > 0 && `, ${d.tariffs} tarif${d.tariffs > 1 ? "s" : ""} dédié${d.tariffs > 1 ? "s" : ""}`}

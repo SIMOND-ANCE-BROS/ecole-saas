@@ -8,7 +8,7 @@ import { paymentsOf, balanceOf } from "@/db/payments";
 import { packsOf } from "@/db/lesson-packs";
 import { displayedName } from "@/db/people";
 import { currentSeason } from "@/db/schedule";
-import { firstEnrollmentDate, readRequirements, studentDocuments } from "@/db/student-documents";
+import { enrolledCourses, firstEnrollmentDate, readRequirements, studentDocuments } from "@/db/student-documents";
 import { ageAt, isMinor, todayInParis } from "@/domain/people/age";
 import { documentsToBring, documentState, expectedDocuments } from "@/domain/people/documents";
 import { ofName } from "@/lib/french";
@@ -59,14 +59,15 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
       requirements: await readRequirements(tx),
       documents: await studentDocuments(tx, student.id),
       enrolledOn: season ? await firstEnrollmentDate(tx, student.id, season.id) : null,
+      courses: season ? await enrolledCourses(tx, student.id, season.id) : [],
       packs: await packsOf(tx, { personId: student.id }),
     };
   });
   if (!parsed) notFound();
   const { student: e, season: season, enrollments, balance: balance, payments: payments } = parsed;
-  const { requirements, documents, enrolledOn, packs } = parsed;
-  const toBring = documentsToBring({ requirements, documents, birthDate: e.birthDate, enrolledOn, today });
-  const expected = expectedDocuments(requirements, e.birthDate, today);
+  const { requirements, documents, enrolledOn, courses, packs } = parsed;
+  const toBring = documentsToBring({ requirements, documents, birthDate: e.birthDate, enrolledOn, today, courses });
+  const expected = expectedDocuments(requirements, e.birthDate, today, courses);
   // Documents the school asks of this student, and any other already recorded.
   const documentLines: DocumentLine[] = requirements.flatMap((r) => {
     const doc = documents.find((d) => d.type === r.type) ?? null;

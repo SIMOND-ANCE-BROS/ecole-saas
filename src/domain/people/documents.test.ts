@@ -3,6 +3,7 @@ import {
   DEFAULT_REQUIREMENTS,
   documentsToBring,
   documentState,
+  type EnrolledCourse,
   effectiveRequirements,
   expectedDocuments,
   missingDocuments,
@@ -17,6 +18,11 @@ const ADULT = "1996-04-05";
 const defaults = effectiveRequirements([]);
 /** Every type asked, as a school may set it: consent for minors only. */
 const all = defaults.map((r) => ({ ...r, required: true }));
+
+/** Courses a student is enrolled in this season (#306). */
+const JAZZ: EnrolledCourse = { competition: false, adultsNeedCertificate: true };
+const COUPLE: EnrolledCourse = { competition: false, adultsNeedCertificate: false };
+const COUPLE_COMPETITION: EnrolledCourse = { competition: true, adultsNeedCertificate: false };
 
 const doc = (type: ReceivedDocument["type"], fields: Partial<ReceivedDocument> = {}): ReceivedDocument => ({
   type,
@@ -83,29 +89,56 @@ describe("documentState", () => {
 
 describe("expectedDocuments", () => {
   it("asks only the medical certificate by default, of children and adults alike", () => {
-    expect(expectedDocuments(defaults, CHILD, TODAY)).toEqual(["medical_certificate"]);
-    expect(expectedDocuments(defaults, ADULT, TODAY)).toEqual(["medical_certificate"]);
+    expect(expectedDocuments(defaults, CHILD, TODAY, [JAZZ])).toEqual(["medical_certificate"]);
+    expect(expectedDocuments(defaults, ADULT, TODAY, [JAZZ])).toEqual(["medical_certificate"]);
   });
 
   it("asks a document set for minors only of students under 18 on the day", () => {
-    expect(expectedDocuments(all, CHILD, TODAY)).toEqual(["medical_certificate", "parental_consent", "image_rights"]);
-    expect(expectedDocuments(all, ADULT, TODAY)).toEqual(["medical_certificate", "image_rights"]);
-    expect(expectedDocuments(all, "2008-10-29", TODAY)).not.toContain("parental_consent");
-    expect(expectedDocuments(all, "2008-10-30", TODAY)).toContain("parental_consent");
+    expect(expectedDocuments(all, CHILD, TODAY, [JAZZ])).toEqual([
+      "medical_certificate",
+      "parental_consent",
+      "image_rights",
+    ]);
+    expect(expectedDocuments(all, ADULT, TODAY, [JAZZ])).toEqual(["medical_certificate", "image_rights"]);
+    expect(expectedDocuments(all, "2008-10-29", TODAY, [JAZZ])).not.toContain("parental_consent");
+    expect(expectedDocuments(all, "2008-10-30", TODAY, [JAZZ])).toContain("parental_consent");
   });
 
   it("treats an unknown birth date as an adult, like the rest of the record", () => {
-    expect(expectedDocuments(all, null, TODAY)).toEqual(["medical_certificate", "image_rights"]);
+    expect(expectedDocuments(all, null, TODAY, [JAZZ])).toEqual(["medical_certificate", "image_rights"]);
+  });
+
+  it("asks the certificate of an adult only through a discipline that requires it, or competing (#306)", () => {
+    expect(expectedDocuments(defaults, ADULT, TODAY, [COUPLE])).toEqual([]);
+    expect(expectedDocuments(defaults, ADULT, TODAY, [COUPLE, JAZZ])).toEqual(["medical_certificate"]);
+    expect(expectedDocuments(defaults, ADULT, TODAY, [COUPLE_COMPETITION])).toEqual(["medical_certificate"]);
+    expect(expectedDocuments(defaults, ADULT, TODAY, [])).toEqual([]);
+    expect(expectedDocuments(defaults, null, TODAY, [COUPLE])).toEqual([]);
+  });
+
+  it("asks the certificate of every minor, whatever the discipline", () => {
+    expect(expectedDocuments(defaults, CHILD, TODAY, [COUPLE])).toEqual(["medical_certificate"]);
+    expect(expectedDocuments(defaults, CHILD, TODAY, [])).toEqual(["medical_certificate"]);
+  });
+
+  it("keeps the courses out of every other document", () => {
+    expect(expectedDocuments(all, ADULT, TODAY, [COUPLE])).toEqual(["image_rights"]);
+  });
+
+  it("asks a certificate set for minors only of no adult, competing or not", () => {
+    const minors = defaults.map((r) => ({ ...r, minorsOnly: true }));
+    expect(expectedDocuments(minors, ADULT, TODAY, [JAZZ, COUPLE_COMPETITION])).toEqual([]);
+    expect(expectedDocuments(minors, CHILD, TODAY, [COUPLE])).toEqual(["medical_certificate"]);
   });
 
   it("drops what the school does not ask for", () => {
     const none = defaults.map((r) => ({ ...r, required: false }));
-    expect(expectedDocuments(none, CHILD, TODAY)).toEqual([]);
+    expect(expectedDocuments(none, CHILD, TODAY, [JAZZ])).toEqual([]);
   });
 });
 
 describe("documentsToBring", () => {
-  const base = { requirements: defaults, birthDate: CHILD, today: TODAY };
+  const base = { requirements: defaults, birthDate: CHILD, today: TODAY, courses: [COUPLE] };
 
   it("gives the certificate 15 days from the enrollment (the school's example)", () => {
     const r = documentsToBring({ ...base, documents: [], enrolledOn: "2027-06-20", today: "2027-06-21" });
@@ -153,6 +186,14 @@ describe("documentsToBring", () => {
     ]);
   });
 
+  it("asks no certificate of an adult in couple dances only, one of an adult in jazz or competing (#306)", () => {
+    const adult = { ...base, birthDate: ADULT, documents: [], enrolledOn: "2026-09-05" };
+    expect(documentsToBring({ ...adult, courses: [COUPLE] })).toEqual([]);
+    const overdue = [{ type: "medical_certificate", dueOn: "2026-09-20", overdue: true }];
+    expect(documentsToBring({ ...adult, courses: [COUPLE, JAZZ] })).toEqual(overdue);
+    expect(documentsToBring({ ...adult, courses: [COUPLE_COMPETITION] })).toEqual(overdue);
+  });
+
   it("accepts a document recorded before #287, without a reception date", () => {
     const documents = [doc("medical_certificate", { receivedOn: null })];
     expect(documentsToBring({ ...base, documents, enrolledOn: "2026-09-05" })).toEqual([]);
@@ -163,7 +204,14 @@ describe("missingDocuments", () => {
   it("keeps only the overdue documents, for the students list", () => {
     const requirements = all.map((r) => (r.type === "parental_consent" ? { ...r, dueWithinDays: 60 } : r));
     expect(
-      missingDocuments({ requirements, documents: [], birthDate: CHILD, enrolledOn: "2026-09-05", today: TODAY }),
+      missingDocuments({
+        requirements,
+        documents: [],
+        birthDate: CHILD,
+        enrolledOn: "2026-09-05",
+        today: TODAY,
+        courses: [COUPLE],
+      }),
     ).toEqual(["medical_certificate", "image_rights"]);
   });
 });

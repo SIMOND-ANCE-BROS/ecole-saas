@@ -3,7 +3,13 @@
 import { Button, Checkbox, Fieldset, NumberInput, Paper, Radio, Group, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useState, useTransition } from "react";
-import { DOCUMENT_LABELS, DUE_WITHIN_DAYS_MAX, type Requirement, VALIDITY_MONTHS_MAX } from "@/domain/people/documents";
+import {
+  COURSE_DEPENDENT_TYPE,
+  DOCUMENT_LABELS,
+  DUE_WITHIN_DAYS_MAX,
+  type Requirement,
+  VALIDITY_MONTHS_MAX,
+} from "@/domain/people/documents";
 import { settle } from "@/lib/action-result";
 import { saveDocumentRequirements } from "./actions";
 
@@ -64,6 +70,11 @@ export function Requirements({ requirements }: { requirements: Requirement[] }) 
                 />
                 <Radio.Group
                   label="À qui"
+                  description={
+                    r.type === COURSE_DEPENDENT_TYPE && !r.minorsOnly
+                      ? "Aux adultes, seulement dans les disciplines qui l’exigent (Paramètres › Disciplines) ou en compétition."
+                      : undefined
+                  }
                   value={r.minorsOnly ? "minors" : "all"}
                   onChange={(v) => change(r.type, { minorsOnly: v === "minors" })}
                 >

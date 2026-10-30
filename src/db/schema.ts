@@ -541,6 +541,9 @@ export const discipline = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     schoolId: schoolIdColumn(),
     name: text("name").notNull(),
+    // Adults enrolled in it bring a medical certificate (#306); minors always do. On by default:
+    // a school unticks the disciplines where adults need none (couple dances).
+    adultsNeedCertificate: boolean("adults_need_certificate").notNull().default(true),
   },
   (t) => [unique().on(t.schoolId, t.name), sameSchoolTarget(t)],
 );

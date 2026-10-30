@@ -1,8 +1,10 @@
 import { and, asc, eq, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
+  COURSE_DEPENDENT_TYPE,
   DOCUMENT_LABELS,
   DUE_WITHIN_DAYS_MAX,
+  type EnrolledCourse,
   effectiveRequirements,
   REQUIRABLE_TYPES,
   type RequirableType,
@@ -11,7 +13,17 @@ import {
 } from "../domain/people/documents";
 import { issuePath } from "../lib/form-errors";
 import type { Tx } from "./index";
-import { auditLog, documentRequirement, enrollment, enrollmentCourse, member, person, studentDocument } from "./schema";
+import {
+  auditLog,
+  course,
+  discipline,
+  documentRequirement,
+  enrollment,
+  enrollmentCourse,
+  member,
+  person,
+  studentDocument,
+} from "./schema";
 
 /**
  * Documents received for each student and those the school asks for (#287).
@@ -174,6 +186,31 @@ export async function firstEnrollmentDate(tx: Tx, studentId: string, seasonId: s
       ),
     );
   return row?.on ?? null;
+}
+
+/**
+ * The student's courses of the season (active or trial enrollments), as the
+ * documents see them (#306): a competition course, a discipline asking adults
+ * for a medical certificate.
+ */
+export async function enrolledCourses(tx: Tx, studentId: string, seasonId: string): Promise<EnrolledCourse[]> {
+  if (!z.uuid().safeParse(studentId).success || !z.uuid().safeParse(seasonId).success) return [];
+  return tx
+    .select({
+      competition: sql<boolean>`${course.type} = 'competition'`,
+      adultsNeedCertificate: discipline.adultsNeedCertificate,
+    })
+    .from(enrollmentCourse)
+    .innerJoin(enrollment, eq(enrollment.id, enrollmentCourse.enrollmentId))
+    .innerJoin(course, eq(course.id, enrollmentCourse.courseId))
+    .innerJoin(discipline, eq(discipline.id, course.disciplineId))
+    .where(
+      and(
+        eq(enrollmentCourse.studentId, studentId),
+        eq(enrollment.seasonId, seasonId),
+        sql`${enrollment.status} IN ('active', 'trial')`,
+      ),
+    );
 }
 
 const documentFields = z.object(
@@ -348,8 +385,11 @@ export async function removeDocument(tx: Tx, userId: string, studentId: string, 
  * the SQL twin of `missingDocuments` (src/domain/people/documents.ts): only for
  * a student enrolled in the season (active or trial), once the delay after
  * their first enrollment date of the season is over; an expired document is
- * to bring again, a refused one is not. Requirements come resolved from the
- * domain (defaults included), so the rule is decided in one place.
+ * to bring again, a refused one is not; the medical certificate is asked of
+ * an adult only through a course of the season in a discipline that requires
+ * it, or a competition course (#306, `certificateAskedOfAdult`). Requirements
+ * come resolved from the domain (defaults included), so the rule is decided
+ * in one place.
  */
 export function missingDocumentsSql(
   requirements: readonly Requirement[],
@@ -363,11 +403,19 @@ export function missingDocumentsSql(
     SELECT min(i.enrolled_on) FROM enrollment_course ic JOIN enrollment i ON i.id = ic.enrollment_id
     WHERE ic.student_id = ${id} AND i.season_id = ${seasonId} AND i.status IN ('active', 'trial'))`;
   const minor = sql`(${person.birthDate} IS NOT NULL AND date_part('year', age(${today}::date, ${person.birthDate})) < 18)`;
+  const certificateAskedOfAdult = sql`EXISTS (
+    SELECT 1 FROM enrollment_course ic JOIN enrollment i ON i.id = ic.enrollment_id
+      JOIN course c ON c.id = ic.course_id JOIN discipline d ON d.id = c.discipline_id
+    WHERE ic.student_id = ${id} AND i.season_id = ${seasonId} AND i.status IN ('active', 'trial')
+      AND (c.type = 'competition' OR d.adults_need_certificate))`;
+  // Who is asked: the twin of `expectedDocuments`.
+  const asked = (r: Requirement) =>
+    r.minorsOnly ? minor : r.type === COURSE_DEPENDENT_TYPE ? sql`(${minor} OR ${certificateAskedOfAdult})` : sql`true`;
   // A document that expired after the enrollment gets the same delay from the day after its end.
   const from = (type: string) => sql`greatest(${enrolledOn}, (
     SELECT sd.valid_until + 1 FROM student_document sd WHERE sd.student_id = ${id} AND sd.type = ${type}::document_type))`;
   const items = required.map(
-    (r) => sql`CASE WHEN ${r.minorsOnly ? minor : sql`true`}
+    (r) => sql`CASE WHEN ${asked(r)}
       AND ${enrolledOn} IS NOT NULL
       AND ${from(r.type)} + ${r.dueWithinDays}::int < ${today}::date
       AND NOT EXISTS (

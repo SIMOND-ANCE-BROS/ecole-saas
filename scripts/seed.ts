@@ -150,7 +150,9 @@ async function main() {
     }
     const disciplines: Record<string, string> = {};
     for (const name of ["Éveil", "Classique", "Jazz", "Contemporain", "Zumba", "Salsa"]) {
-      const [d] = await admin`INSERT INTO discipline (school_id, name) VALUES (${school.id}, ${name})
+      // A couple dance asks adults for no medical certificate (#306).
+      const [d] =
+        await admin`INSERT INTO discipline (school_id, name, adults_need_certificate) VALUES (${school.id}, ${name}, ${name !== "Salsa"})
         ON CONFLICT (school_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id`;
       disciplines[name] = d.id;
     }
