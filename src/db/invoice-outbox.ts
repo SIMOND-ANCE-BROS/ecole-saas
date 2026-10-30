@@ -2,6 +2,8 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { columnsOf, rowsOf } from "./columns-of";
 import { CURRENT_SCHOOL } from "./invoice-draft-discard";
 import { db, type Tx } from "./index";
+import { allocatePayer } from "./allocations";
+import { todayInParis } from "../domain/people/age";
 import { auditLog, billingEntity, installment, invoice, invoiceLine, invoicingConnector, person } from "./schema";
 import type { EntityConnectorConfig } from "../connectors/invoicing/connector";
 import type { StoredLine } from "../connectors/invoicing/payload";
@@ -219,7 +221,7 @@ export async function recordIssued(
       sendErrorCode: mismatch ? "total_mismatch" : null,
     })
     .where(ours(c.id, c.claim))
-    .returning({ id: invoice.id });
+    .returning({ id: invoice.id, payerId: invoice.payerId, billingEntityId: invoice.billingEntityId });
   if (rows.length === 0) return false;
   await audit(tx, c.id, {
     status: "issued",
@@ -228,6 +230,11 @@ export async function recordIssued(
     issued_on: doc.issuedOn,
     ...(mismatch ? { send_error_code: "total_mismatch", tool_total_incl_tax_cents: doc.totalInclTaxCents } : {}),
   });
+  // Issued, its installments can be settled (#305): what the payer already paid this business
+  // and no other installment holds goes to them, oldest due date first, in the same transaction.
+  const allocated = await allocatePayer(tx, null, rows[0].payerId, rows[0].billingEntityId, todayInParis());
+  // Never refused: the allocation is computed under its own locks; a refusal is a bug, rolled back.
+  if (!allocated.ok) throw new Error(`allocation refused after issuing invoice ${c.id}`);
   return true;
 }
 

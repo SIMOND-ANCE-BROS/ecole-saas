@@ -31,12 +31,13 @@ const TRIGGERS = [
   ["invoice_line", "invoice_line_immutable"],
   ["installment", "installment_immutable"],
   ["audit_log", "audit_log_append_only"],
+  ["payment", "payment_immutable"],
 ];
 
 async function clearInvoices() {
   await admin.begin(async (t) => {
     for (const [table, trigger] of TRIGGERS) await t.unsafe(`ALTER TABLE ${table} DISABLE TRIGGER ${trigger}`);
-    for (const table of ["invoice_line", "installment", "invoice", "audit_log"])
+    for (const table of ["payment_allocation", "invoice_line", "installment", "invoice", "audit_log", "payment"])
       await t.unsafe(`DELETE FROM ${table} WHERE school_id IN ($1, $2)`, [ids.school, ids.other]);
     for (const [table, trigger] of TRIGGERS) await t.unsafe(`ALTER TABLE ${table} ENABLE TRIGGER ${trigger}`);
   });
@@ -191,6 +192,24 @@ describe("sending through the fake tool", () => {
     expect(r.issued_on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     const [log] = await admin`SELECT actor, after FROM audit_log WHERE row_id = ${id}`;
     expect(log).toMatchObject({ actor: null, after: { status: "issued", number: r.number } });
+  });
+
+  it("once issued, what the payer already paid this business settles its installments (#305)", async () => {
+    const id = await newInvoice(ids.a);
+    await admin`INSERT INTO payment (school_id, billing_entity_id, payer_id, amount_cents, method)
+      VALUES (${ids.school}, ${ids.a}, ${ids.payer}, 9000, 'cash')`;
+    // Paid to the other business: never settles this one's installments.
+    await admin`INSERT INTO payment (school_id, billing_entity_id, payer_id, amount_cents, method)
+      VALUES (${ids.school}, ${ids.b}, ${ids.payer}, 5000, 'cash')`;
+    expect(await sendEntityInvoices(ids.school, ids.a, RUN)).toMatchObject({ issued: 1 });
+    const settled = await admin`
+      SELECT i.rank, i.status, coalesce(sum(a.amount_cents), 0)::int AS allocated
+      FROM installment i LEFT JOIN payment_allocation a ON a.installment_id = i.id
+      WHERE i.invoice_id = ${id} GROUP BY i.id ORDER BY i.rank`;
+    expect(settled.map((r) => [r.status, r.allocated])).toEqual([
+      ["paid", 6000],
+      ["partial", 3000],
+    ]);
   });
 
   it("two concurrent runs never send the same invoice twice", async () => {
