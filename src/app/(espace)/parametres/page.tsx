@@ -4,6 +4,8 @@ import Link from "next/link";
 import { withSchool } from "@/db";
 import { listDisciplines, listPlaces, listSeasons } from "@/db/settings";
 import { listEntities } from "@/db/billing-entities";
+import { readMethodSettings } from "@/db/payment-methods";
+import { offeredMethods } from "@/domain/payments/methods";
 import { requireRole } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Paramètres" };
@@ -16,12 +18,15 @@ export default async function SettingsPage() {
     disciplines,
     seats: seats,
     entities,
+    methods,
   } = await withSchool(schoolId, async (tx) => ({
     seasons: await listSeasons(tx),
     disciplines: await listDisciplines(tx),
     seats: await listPlaces(tx),
     entities: await listEntities(tx),
+    methods: await readMethodSettings(tx),
   }));
+  const accepted = offeredMethods(methods).length;
   const rooms = seats.reduce((n, s) => n + s.rooms.length, 0);
   const sections = [
     {
@@ -54,6 +59,11 @@ export default async function SettingsPage() {
       href: "/parametres/entreprises",
       title: "Entreprises",
       detail: `${entities.length} entreprise${entities.length > 1 ? "s" : ""} : SIREN, TVA et compte bancaire`,
+    },
+    {
+      href: "/parametres/moyens-de-paiement",
+      title: "Moyens de paiement",
+      detail: `${accepted} moyen${accepted > 1 ? "s" : ""} accepté${accepted > 1 ? "s" : ""}, consignes pour l’accueil`,
     },
     { href: "/parametres/tva", title: "TVA", detail: "Exonération ou taux de TVA des cours et des carnets" },
     { href: "/intervenants", title: "Intervenants", detail: "Professeurs, statut et rémunération" },

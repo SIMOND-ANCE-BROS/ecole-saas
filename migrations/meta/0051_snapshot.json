@@ -1,5 +1,5 @@
 {
-  "id": "7c1eddb7-898b-4a13-91a8-df627d4ad04c",
+  "id": "4b21937d-c068-485e-9e39-eb3bf214ddf3",
   "prevId": "4e6b239d-8f2b-49ef-8795-35a17154c893",
   "version": "7",
   "dialect": "postgresql",
@@ -4612,6 +4612,78 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.payment_method_setting": {
+      "name": "payment_method_setting",
+      "schema": "",
+      "columns": {
+        "school_id": {
+          "name": "school_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "method": {
+          "name": "method",
+          "type": "payment_method",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "accepted": {
+          "name": "accepted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "desk_hint": {
+          "name": "desk_hint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "payment_method_setting_school_id_school_id_fk": {
+          "name": "payment_method_setting_school_id_school_id_fk",
+          "tableFrom": "payment_method_setting",
+          "tableTo": "school",
+          "columnsFrom": [
+            "school_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "payment_method_setting_school_id_method_pk": {
+          "name": "payment_method_setting_school_id_method_pk",
+          "columns": [
+            "school_id",
+            "method"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "payment_method_setting_hint": {
+          "name": "payment_method_setting_hint",
+          "value": "char_length(\"payment_method_setting\".\"desk_hint\") BETWEEN 1 AND 120"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.person": {
       "name": "person",
       "schema": "",
@@ -5665,29 +5737,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "submission_school_id_created_at_index": {
-          "name": "submission_school_id_created_at_index",
-          "columns": [
-            {
-              "expression": "school_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "submission_school_id_school_id_fk": {
           "name": "submission_school_id_school_id_fk",
@@ -6478,6 +6528,7 @@
         "transfer",
         "direct_debit",
         "holiday_voucher",
+        "holiday_voucher_online",
         "pass_sport",
         "other"
       ]

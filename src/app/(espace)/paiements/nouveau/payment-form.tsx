@@ -3,7 +3,7 @@
 import { ActionIcon, Button, Fieldset, NativeSelect, Paper, Text, TextInput } from "@mantine/core";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Cancel } from "@/app/(espace)/_panel/panel";
-import { PAYMENT_METHODS, type Method } from "@/db/payments";
+import { METHOD_LABELS, type Method, type MethodSetting } from "@/domain/payments/methods";
 import { formatEuros, parseEuros, typedEuros } from "@/lib/money";
 import { DateField, refusedDateField } from "../../_ui/date-field";
 import { collectPayments } from "../actions";
@@ -12,8 +12,7 @@ import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
 
 /** `id`: stable key of the row, so removing one keeps the others' fields in place. */
 type Row = { id: number; method: Method; amount: string; reference: string; issuer: string; payment: string };
-const EMPTY_ROW: Omit<Row, "id"> = { method: "cheque", amount: "", reference: "", issuer: "", payment: "" };
-const METHOD_OPTIONS = Object.entries(PAYMENT_METHODS).map(([value, label]) => ({ value, label }));
+const EMPTY_ROW: Omit<Row, "id" | "method"> = { amount: "", reference: "", issuer: "", payment: "" };
 
 /** An entity the payment can be cashed by, with what the payer still owes it (#300). */
 export type EntityOption = { id: string; name: string; remaining: number };
@@ -30,6 +29,8 @@ type Props = {
   familyRemaining: number | null;
   /** Empty with a single active entity: no choice shown, the school's default cashes. */
   entities: EntityOption[];
+  /** Methods the school accepts, in order, never empty (#293): the first one is preselected. */
+  methods: MethodSetting[];
   /** The entity preselected: the one the payer owes the most. */
   initialEntity: string | null;
   today: string;
@@ -50,6 +51,7 @@ export function PaymentForm({
   remaining: withoutChoice,
   familyRemaining,
   entities,
+  methods,
   initialEntity,
   today: today,
   back: back,
@@ -60,7 +62,10 @@ export function PaymentForm({
   const remaining = entities.length > 0 && withoutChoice !== null ? (chosen?.remaining ?? null) : withoutChoice;
   // Owed to the other entities: a payment above the chosen one's remaining should go to them (#300).
   const owedElsewhere = familyRemaining !== null ? familyRemaining - Math.max(remaining ?? 0, 0) : 0;
-  const [rows, setRows] = useState<Row[]>([{ ...EMPTY_ROW, id: 0, amount: prefill(remaining) }]);
+  const methodOptions = methods.map((m) => ({ value: m.method, label: METHOD_LABELS[m.method] }));
+  const hintOf = (method: Method) => methods.find((m) => m.method === method)?.deskHint ?? null;
+  const firstMethod = methods[0]?.method ?? "cheque";
+  const [rows, setRows] = useState<Row[]>([{ ...EMPTY_ROW, id: 0, method: firstMethod, amount: prefill(remaining) }]);
   const nextId = useRef(1);
   // Row added with « Ajouter un règlement »: its amount gets the focus once rendered.
   const added = useRef<number | null>(null);
@@ -190,10 +195,11 @@ export function PaymentForm({
       >
         {rows.map((l, i) => (
           // Aligned on the top of the fields: a message under one field does not shift the others.
-          <Paper key={l.id} withBorder p="sm" className="grid gap-2 sm:grid-cols-[10rem_8rem_1fr_auto] sm:items-start">
+          <Paper key={l.id} withBorder p="sm" className="grid gap-2 sm:grid-cols-[14rem_8rem_1fr_auto] sm:items-start">
             <NativeSelect
               label="Moyen"
-              data={METHOD_OPTIONS}
+              data={methodOptions}
+              aria-describedby={hintOf(l.method) ? `method-hint-${l.id}` : undefined}
               value={l.method}
               onChange={(e) => updated(l.id, { method: e.currentTarget.value as Method })}
             />
@@ -229,6 +235,11 @@ export function PaymentForm({
             ) : (
               <span />
             )}
+            {hintOf(l.method) && (
+              <Text id={`method-hint-${l.id}`} size="sm" c="dimmed" className="sm:col-span-4">
+                {hintOf(l.method)}
+              </Text>
+            )}
             {l.method === "cheque" && (
               <>
                 <TextInput
@@ -259,7 +270,7 @@ export function PaymentForm({
             const id = nextId.current++;
             setRows([
               ...rows,
-              { ...EMPTY_ROW, id, method: rows.at(-1)?.method ?? "cheque", issuer: rows.at(-1)?.issuer ?? "" },
+              { ...EMPTY_ROW, id, method: rows.at(-1)?.method ?? firstMethod, issuer: rows.at(-1)?.issuer ?? "" },
             ]);
             added.current = id;
           }}

@@ -35,6 +35,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { ROLE_VALUES } from "../domain/team/rules";
 import { REVERSAL_KINDS } from "../domain/payments/rejection";
+import { PAYMENT_METHOD_VALUES } from "../domain/payments/methods";
 import { DOCUMENT_TYPES } from "../domain/people/documents";
 import { VAT_CATEGORIES } from "../domain/billing/vat";
 
@@ -62,16 +63,7 @@ export const period = pgEnum("period", ["quarter", "year", "single"]);
 export const enrollmentStatus = pgEnum("enrollment_status", ["trial", "waitlist", "active", "dropped", "ended"]);
 export const invoiceStatus = pgEnum("invoice_status", ["to_send", "tool_draft", "issued", "rejected", "cancelled"]);
 export const invoicingTool = pgEnum("invoicing_tool", ["pennylane", "abby", "shine"]);
-export const paymentMethod = pgEnum("payment_method", [
-  "cheque",
-  "cash",
-  "card",
-  "transfer",
-  "direct_debit",
-  "holiday_voucher",
-  "pass_sport",
-  "other",
-]);
+export const paymentMethod = pgEnum("payment_method", PAYMENT_METHOD_VALUES);
 /** Kind of a reverse entry (#272): a correction, or the rejection of a deposited payment. */
 export const reversalKind = pgEnum("reversal_kind", REVERSAL_KINDS);
 export const installmentStatus = pgEnum("installment_status", ["upcoming", "paid", "partial", "overdue", "cancelled"]);
@@ -519,6 +511,26 @@ export const documentRequirement = pgTable(
     check("document_requirement_type", sql`${t.type} <> 'other'`),
     check("document_requirement_validity", sql`${t.validityMonths} BETWEEN 1 AND 120`),
     check("document_requirement_due", sql`${t.dueWithinDays} BETWEEN 0 AND 365`),
+  ],
+);
+
+/**
+ * Payment methods the school accepts (#293), one row per method it set; a method
+ * without a row follows `DEFAULT_METHOD_SETTING` (src/domain/payments/methods.ts).
+ * `desk_hint`: guidance shown at the desk next to the method (« règlement de la totalité »).
+ */
+export const paymentMethodSetting = pgTable(
+  "payment_method_setting",
+  {
+    schoolId: schoolIdColumn(),
+    method: paymentMethod("method").notNull(),
+    accepted: boolean("accepted").notNull(),
+    deskHint: text("desk_hint"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.schoolId, t.method] }),
+    check("payment_method_setting_hint", sql`char_length(${t.deskHint}) BETWEEN 1 AND 120`),
   ],
 );
 
@@ -1044,6 +1056,11 @@ export const invoice = pgTable(
     schoolId: schoolIdColumn(),
     billingEntityId: uuid("billing_entity_id").notNull(), // the issuer (ADR 0006)
     payerId: uuid("payer_id").notNull(),
+    // Season it bills (#302): one draft per payer, entity and season. NULL: an invoice of no
+    // season (a credit note may carry its invoice's).
+    seasonId: uuid("season_id"),
+    // A draft (`to_send`) has no number; an issued invoice is frozen (trigger
+    // `invoice_issued_immutable`): only a credit note corrects it.
     status: invoiceStatus("status").notNull().default("to_send"),
     tool: invoicingTool("tool"),
     toolRef: text("tool_ref"),
@@ -1059,11 +1076,22 @@ export const invoice = pgTable(
   (t) => [
     // Each entity has its own numbering in its own tool: « A-1 » may exist once per entity.
     unique("invoice_billing_entity_id_number_unique").on(t.billingEntityId, t.number),
+    // The number comes from the tool when it issues the invoice: never on a draft, always once issued.
+    check(
+      "invoice_number_status",
+      sql`(${t.status} <> 'to_send' OR ${t.number} IS NULL) AND (${t.status} <> 'issued' OR (${t.number} IS NOT NULL AND ${t.issuedOn} IS NOT NULL))`,
+    ),
+    // At most one draft per payer, entity and season (#302): drafting again replaces it.
+    uniqueIndex("invoice_one_draft")
+      .on(t.schoolId, t.payerId, t.billingEntityId, t.seasonId)
+      .where(sql`${t.status} = 'to_send' AND ${t.creditNoteOf} IS NULL AND ${t.seasonId} IS NOT NULL`),
     index().on(t.payerId),
+    index().on(t.seasonId),
     sameSchoolTarget(t),
     sameEntityTarget(t),
     sameSchool(t, t.billingEntityId, billingEntity),
     sameSchool(t, t.payerId, person),
+    sameSchool(t, t.seasonId, season),
     // A credit note cancels an invoice of the same entity.
     sameEntity(t, t.creditNoteOf, t),
   ],

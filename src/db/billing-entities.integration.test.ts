@@ -89,10 +89,11 @@ async function paymentOf(entity: string, amountCents = 5000, method = "cash") {
   return id as string;
 }
 
+/** An invoice of `entity`; a numbered one as handed back by the tool (a draft has no number, #302). */
 async function invoiceOf(entity: string, number: string | null = null) {
   const [{ id }] = await admin`
-    INSERT INTO invoice (school_id, billing_entity_id, payer_id, number)
-    VALUES (${school}, ${entity}, ${payer}, ${number}) RETURNING id`;
+    INSERT INTO invoice (school_id, billing_entity_id, payer_id, number, status)
+    VALUES (${school}, ${entity}, ${payer}, ${number}, ${number === null ? "to_send" : "tool_draft"}) RETURNING id`;
   return id as string;
 }
 
