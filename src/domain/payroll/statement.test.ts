@@ -23,14 +23,23 @@ const perLesson: StatementInstructor = {
   payMode: "per_lesson",
   rateCents: 3000,
   isOwner: false,
+  active: true,
 };
-const hourly: StatementInstructor = { id: "i2", name: "Alix Test", payMode: "hourly", rateCents: 2500, isOwner: false };
+const hourly: StatementInstructor = {
+  id: "i2",
+  name: "Alix Test",
+  payMode: "hourly",
+  rateCents: 2500,
+  isOwner: false,
+  active: true,
+};
 const flat: StatementInstructor = {
   id: "i3",
   name: "Marin Test",
   payMode: "monthly_flat",
   rateCents: 80000,
   isOwner: false,
+  active: true,
 };
 const owner: StatementInstructor = {
   id: "i4",
@@ -38,6 +47,7 @@ const owner: StatementInstructor = {
   payMode: "per_lesson",
   rateCents: 5000,
   isOwner: true,
+  active: true,
 };
 const BY_ID = new Map([perLesson, hourly, flat, owner].map((i) => [i.id, i]));
 
@@ -45,7 +55,11 @@ const TAKEN = { taken: true, present: 5 };
 const NOT_TAKEN = { taken: false, present: 0 };
 
 let n = 0;
-/** A lesson of a course of `courseOf`, taught by them unless `instructorId` says otherwise; attendance taken with students by default. */
+/**
+ * A lesson of a course of `courseOf` (its regular teacher), taught by them unless `instructorId` says
+ * otherwise; attendance taken with students by default. `handedTo`: the course was handed to that
+ * instructor after the lesson, and `rate` is the course's own rate, theirs.
+ */
 function lesson(
   courseOf: string,
   date: string,
@@ -53,12 +67,14 @@ function lesson(
     rate?: number;
     unit?: PayMode;
     courseId?: string;
+    handedTo?: string;
   } = {},
 ): StatementLesson {
-  const { rate, unit, courseId, ...rest } = more;
+  const { rate, unit, courseId, handedTo, ...rest } = more;
   n += 1;
   const regular = BY_ID.get(courseOf);
-  if (!regular) throw new Error(`unknown instructor ${courseOf}`);
+  const now = BY_ID.get(handedTo ?? courseOf);
+  if (!regular || !now) throw new Error(`unknown instructor ${courseOf} or ${handedTo}`);
   return {
     id: `l${n}`,
     date,
@@ -69,9 +85,9 @@ function lesson(
     courseId: courseId ?? `c-${courseOf}`,
     courseLabel: `Cours ${courseId ?? courseOf}`,
     course: {
-      instructorId: courseOf,
+      instructorId: now.id,
       instructorRateCents: rate ?? null,
-      instructorRatePayMode: rate === undefined ? null : (unit ?? regular.payMode),
+      instructorRatePayMode: rate === undefined ? null : (unit ?? now.payMode),
     },
     regular: { id: regular.id, payMode: regular.payMode, rateCents: regular.rateCents, isOwner: regular.isOwner },
     attendance: TAKEN,
@@ -254,6 +270,40 @@ describe("priceLesson", () => {
   it("leaves to price a replacement of a monthly flat teacher", () => {
     const l = lesson("i3", "2027-10-05", { instructorId: "i1" });
     expect(priceLesson(l, perLesson)).toMatchObject({ substitute: true, amountCents: null, toPrice: "flat_course" });
+  });
+
+  it("prices a lesson given before a handover on the teacher who gave it, not the new one (#310)", () => {
+    // The course is now i2's, with i2's own rate: i1's earlier lesson stays i1's, at i1's default rate.
+    const l = lesson("i1", "2027-10-05", { handedTo: "i2", rate: 4000 });
+    expect(priceLesson(l, perLesson)).toEqual({
+      substitute: false,
+      rateCents: 3000,
+      unit: "per_lesson",
+      amountCents: 3000,
+      toPrice: null,
+    });
+  });
+
+  it("does not read the new instructor's course rate as the old one's, even in the same unit (#310)", () => {
+    const l = lesson("i1", "2027-10-05", { handedTo: "i4", rate: 9900, unit: "per_lesson" });
+    expect(priceLesson(l, perLesson)).toMatchObject({ rateCents: 3000, amountCents: 3000 });
+  });
+
+  it("still prices a lesson given before a handover to an owner (#310)", () => {
+    const l = lesson("i1", "2027-10-05", { handedTo: "i4" });
+    expect(priceLesson(l, perLesson)).toMatchObject({ substitute: false, amountCents: 3000, toPrice: null });
+  });
+
+  it("pays a replacement made before a handover at the then regular teacher's rate (#310)", () => {
+    // i2 replaced i1, then the course went to the owner i4: still a replacement of i1, at i1's rate.
+    const l = lesson("i1", "2027-10-05", { instructorId: "i2", handedTo: "i4", durationMinutes: 90 });
+    expect(priceLesson(l, hourly)).toEqual({
+      substitute: true,
+      rateCents: 3000,
+      unit: "per_lesson",
+      amountCents: 3000,
+      toPrice: null,
+    });
   });
 
   it("shows a monthly flat instructor's own lesson for information, without an amount", () => {
@@ -449,23 +499,39 @@ describe("instructorStatement", () => {
     expect(of([lesson("i2", "2027-10-05")]).flags).toEqual([]);
   });
 
-  it("flags lessons given before a course was handed to another instructor mid-month", () => {
-    // The course now belongs to i2: i1's earlier lessons read as replacements at i2's rate. The change of
-    // instructor is in the audit log for both (courses.ts `logCourseRate`), so the statement is flagged.
-    const before = { ...lesson("i2", "2027-10-05", { instructorId: "i1" }) };
+  it("keeps lessons given before a course was handed to another instructor as their own, flagged (#310)", () => {
+    // The course now belongs to i2, but i1's earlier lesson keeps i1 as its regular teacher (stamped at the
+    // handover): not a replacement, at i1's rate. The change of instructor is in the audit log for both
+    // (courses.ts `logCourseRate`), so the statement is still flagged: i1's own course rate is gone.
     const s = instructorStatement({
       month: MONTH,
       today: AFTER,
       instructor: perLesson,
-      lessons: [before],
+      lessons: [lesson("i1", "2027-10-05", { handedTo: "i2" })],
       rateChanges: [
         { instructorId: "i1", date: "2027-10-15" },
         { instructorId: "i2", date: "2027-10-15" },
       ],
       closures: [],
     });
-    expect(s.courses[0].lines[0].substitute).toBe(true);
+    expect(s.courses[0].lines[0]).toMatchObject({ substitute: false, amountCents: 3000, toPrice: null });
+    expect(s.totalCents).toBe(3000);
     expect(s.flags).toEqual(["rate_changed"]);
+  });
+
+  it("flags a replacement on the rate changes of the lesson's regular teacher, not the course's new one (#310)", () => {
+    const replaced = lesson("i1", "2027-10-05", { instructorId: "i2", handedTo: "i4" });
+    const of = (changed: string) =>
+      instructorStatement({
+        month: MONTH,
+        today: AFTER,
+        instructor: hourly,
+        lessons: [replaced],
+        rateChanges: [{ instructorId: changed, date: "2027-10-20" }],
+        closures: [],
+      }).flags;
+    expect(of("i1")).toEqual(["rate_changed"]);
+    expect(of("i4")).toEqual([]);
   });
 
   it("counts nothing for a month not started yet", () => {
@@ -514,7 +580,8 @@ describe("monthStatement", () => {
 
   it("lists the instructors who taught, owners aside, by name, with the month's totals", () => {
     const m = monthStatement({ ...input, today: AFTER });
-    expect(m.statements.map((s) => s.name)).toEqual(["Alix Test", "Zoé Test"]);
+    // Marin Test, paid a monthly flat, taught nothing: listed for the flag (#310).
+    expect(m.statements.map((s) => s.name)).toEqual(["Alix Test", "Marin Test", "Zoé Test"]);
     expect(m.lessonCount).toBe(4);
     expect(m.minutes).toBe(270);
     expect(m.totalCents).toBe(6000 + 3750 + 3000);
@@ -533,7 +600,19 @@ describe("monthStatement", () => {
     const m = monthStatement({ ...input, today: "2027-10-06" });
     expect(m.inProgress).toBe(true);
     expect(m.lessonCount).toBe(2);
-    expect(m.statements.map((s) => s.name)).toEqual(["Alix Test", "Zoé Test"]);
+    expect(m.statements.map((s) => s.name)).toEqual(["Alix Test", "Marin Test", "Zoé Test"]);
+  });
+
+  it("keeps an active monthly flat instructor without lessons in the month, flagged (#310)", () => {
+    const m = monthStatement({ ...input, today: AFTER });
+    const s = m.statements.find((x) => x.instructorId === "i3");
+    expect(s).toMatchObject({ lessonCount: 0, flatCents: null, totalCents: 0, flags: ["flat_no_lesson"] });
+  });
+
+  it("leaves out an inactive monthly flat instructor without lessons, and other instructors without lessons", () => {
+    const gone = { ...flat, active: false };
+    const m = monthStatement({ ...input, instructors: [perLesson, gone], lessons: [], today: AFTER });
+    expect(m.statements).toEqual([]);
   });
 
   it("is empty for a month not started yet", () => {

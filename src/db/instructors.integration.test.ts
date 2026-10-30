@@ -88,8 +88,8 @@ describe("updateInstructor", () => {
     expect(await admin`SELECT action, before, after FROM audit_log WHERE row_id = ${id}`).toEqual([
       {
         action: "update",
-        before: { payMode: "hourly", rateCents: 4000 },
-        after: { payMode: "hourly", rateCents: 4500 },
+        before: { payMode: "hourly", rateCents: 4000, isOwner: false },
+        after: { payMode: "hourly", rateCents: 4500, isOwner: false },
       },
     ]);
   });

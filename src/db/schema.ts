@@ -639,14 +639,19 @@ export const lesson = pgTable(
     durationMinutes: integer("duration_minutes"),
     status: lessonStatus("status").notNull().default("planned"),
     instructorId: uuid("instructor_id").notNull(), // possible substitute
+    // The course's main instructor when the lesson was given, stamped on past lessons when the course
+    // changes hands (#310); NULL: the course's. Statements pay a lesson on it, not on the current course.
+    regularInstructorId: uuid("regular_instructor_id"),
   },
   (t) => [
     unique().on(t.courseId, t.date),
     index().on(t.schoolId, t.date),
     index().on(t.instructorId, t.date),
+    index().on(t.regularInstructorId),
     sameSchoolTarget(t),
     sameSchool(t, t.courseId, course),
     sameSchool(t, t.instructorId, instructor),
+    sameSchool(t, t.regularInstructorId, instructor),
   ],
 );
 

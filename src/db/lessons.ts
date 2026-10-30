@@ -242,6 +242,8 @@ export async function deleteClosure(
 /** Effective time (text `HH:MM:SS`) and duration of a lesson: its own if it was moved (#90), otherwise the course's. */
 export const effectiveTime = sql<string>`coalesce(${lesson.startTime}, ${course.startTime})::text`;
 export const effectiveDuration = sql<number>`coalesce(${lesson.durationMinutes}, ${course.durationMinutes})`;
+/** A lesson's regular teacher: the course's main instructor when it was given (#310), otherwise the current one. */
+export const regularInstructor = sql<string>`coalesce(${lesson.regularInstructorId}, ${course.instructorId})`;
 
 const withAttendance = sql`EXISTS (SELECT 1 FROM attendance p WHERE p.lesson_id = ${lesson}.${sql.identifier("id")})`;
 const withPackUsage = sql`EXISTS (SELECT 1 FROM lesson_pack_usage u WHERE u.lesson_id = ${lesson}.${sql.identifier("id")})`;
@@ -553,7 +555,7 @@ export async function readAttendance(tx: Tx, lessonId: string): Promise<Attendan
       durationMinutes: effectiveDuration,
       room: room.name,
       instructorId: lesson.instructorId,
-      regularInstructorId: course.instructorId,
+      regularInstructorId: regularInstructor,
       courseType: course.type,
     })
     .from(lesson)
@@ -738,7 +740,7 @@ export async function weekLessons(tx: Tx, monday: string): Promise<ScheduleLesso
       instructorId: lesson.instructorId,
       firstName: instructor.firstName,
       name: instructor.lastName,
-      substitution: sql<boolean>`${lesson.instructorId} <> ${course.instructorId}`,
+      substitution: sql<boolean>`${lesson.instructorId} <> ${regularInstructor}`,
       enrolled: sql<number>`(
         SELECT count(DISTINCT ic.student_id)::int FROM enrollment_course ic
         JOIN enrollment i ON i.id = ic.enrollment_id AND i.status = 'active'
