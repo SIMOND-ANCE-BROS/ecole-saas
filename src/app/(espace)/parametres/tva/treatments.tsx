@@ -6,7 +6,7 @@ import type { TreatmentInput, TreatmentRow } from "@/db/vat-treatments";
 import { formatRate, typedRate, VAT_CATEGORIES, VAT_CATEGORY_LABELS, type VatCategory } from "@/domain/billing/vat";
 import { type ActionResult, settle } from "@/lib/action-result";
 import { isKeyOf } from "@/lib/has";
-import { cancelOnEscape } from "../../_ui/escape-cancels";
+import { useEscapeCancels } from "../../_ui/escape-asks";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { changeTreatment, newTreatment, removeTreatment } from "./actions";
 
@@ -46,6 +46,8 @@ function TreatmentForm({
   message: string | null;
 }) {
   const [v, setV] = useState(initial);
+  const form = useRef<HTMLFormElement>(null);
+  const escape = useEscapeCancels(form, close);
   const alert = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
     if (message) alert.current?.focus();
@@ -53,10 +55,11 @@ function TreatmentForm({
   const withRate = v.category === "standard";
   return (
     <form
+      ref={form}
       aria-label={title}
       className="flex flex-col gap-3"
-      // Escape first closes an open list (the category), then cancels.
-      onKeyDown={cancelOnEscape(close)}
+      // Escape first closes an open list (the category), then cancels, asking first if anything was typed.
+      onKeyDown={escape.onKeyDown}
       onSubmit={(e) => {
         e.preventDefault();
         submit(v);
@@ -130,6 +133,7 @@ function TreatmentForm({
           Annuler
         </Button>
       </Group>
+      {escape.confirm}
     </form>
   );
 }

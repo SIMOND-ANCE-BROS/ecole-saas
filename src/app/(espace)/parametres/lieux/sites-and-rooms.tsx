@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import type { SiteRow } from "@/db/settings";
 import { type ActionResult, settle } from "@/lib/action-result";
 import { ConfirmRemoval, type Removal } from "../../_ui/confirm-removal";
-import { cancelOnEscape } from "../../_ui/escape-cancels";
+import { EscapeCancelsForm } from "../../_ui/escape-asks";
 import { useFocusAfter } from "../../_ui/use-focus-after";
 import { changeRoom, changeSite, newSite, newRoom, removeRoom, removeSite } from "../actions";
 import { SiteHours } from "./site-hours";
@@ -69,8 +69,9 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
             className="flex flex-col gap-3 text-sm"
           >
             {editionSite?.id === s.id ? (
-              <form
-                onKeyDown={(e) => e.key === "Escape" && closeSite(s.id)}
+              // Escape cancels, asking first if anything was changed (#339).
+              <EscapeCancelsForm
+                close={() => closeSite(s.id)}
                 className="grid gap-2 sm:grid-cols-[1fr_2fr_auto_auto] sm:items-end"
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -110,7 +111,7 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                     Annuler
                   </Button>
                 </Group>
-              </form>
+              </EscapeCancelsForm>
             ) : (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <Title order={2} size="h5" id={`site-${s.id}`} tabIndex={-1}>
@@ -166,9 +167,10 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
               {s.rooms.map((x) =>
                 roomEditing?.id === x.id ? (
                   <li key={x.id} className="px-3 py-2">
-                    <form
-                      // Escape first closes an open list (the site choice), then cancels.
-                      onKeyDown={cancelOnEscape(() => closeRoom(x.id))}
+                    <EscapeCancelsForm
+                      // Escape first closes an open list (the site choice), then cancels, asking first
+                      // if anything was changed (#339).
+                      close={() => closeRoom(x.id)}
                       className="flex flex-wrap items-end gap-2"
                       onSubmit={(e) => {
                         e.preventDefault();
@@ -218,7 +220,7 @@ export function Places({ seats: seats }: { seats: SiteRow[] }) {
                       >
                         Annuler
                       </Button>
-                    </form>
+                    </EscapeCancelsForm>
                   </li>
                 ) : (
                   <li key={x.id} className="flex flex-wrap items-center gap-x-3 px-3 py-2">

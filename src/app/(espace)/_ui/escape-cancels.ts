@@ -1,40 +1,109 @@
-import type { KeyboardEvent } from "react";
-
 /** What the check reads of the element the key was pressed on. */
-export type AttributeReader = { getAttribute(name: string): string | null };
+export type EscapeTarget = {
+  getAttribute(name: string): string | null;
+  closest(selectors: string): unknown;
+};
 
 /**
- * Whether the element the key was pressed on has a drop-down list open
- * (#332). Mantine 8 `Select` and `Autocomplete` set no `aria-expanded` on
- * their input: they mark an open list with `data-expanded` and
- * `data-mantine-stop-propagation`, the attribute Mantine's own modals read
- * to leave such an Escape to the list. `aria-expanded` still covers the
- * other controls (menus, disclosure buttons).
+ * Where a page's drop-down lists, calendars, menus and dialogs are rendered: each Mantine
+ * `Portal` is a `[data-portal]` node. A side panel passes its own portal instead. A key pressed
+ * in there never cancels the form: an inline form rendered inside a Mantine Modal or Drawer
+ * would need its own portal selector.
  */
-export function listOpenOn(target: AttributeReader): boolean {
+export const PAGE_PORTALS = "[data-portal]";
+
+/** Whether the element with this id is on screen (outside a browser: never). */
+const shownOnPage = (id: string) =>
+  typeof document !== "undefined" && (document.getElementById(id)?.checkVisibility() ?? false);
+
+/**
+ * Whether Escape pressed on `target` belongs to a list, calendar, menu or dialog that closes
+ * first (#332, #339), the one check shared by the side panel and the inline settings forms:
+ *
+ * - on the field itself: Mantine 8 `Select`, `Autocomplete` and `Menu` set no `aria-expanded`
+ *   there; they mark an open list with `data-expanded` (with `data-mantine-stop-propagation`,
+ *   the attribute Mantine's own modals read to leave such an Escape to the list). `DateField`
+ *   marks its open calendar the same way. `aria-expanded` covers the other controls
+ *   (popovers, disclosure buttons). An `Autocomplete` without any match stays marked while it
+ *   shows nothing: when the field names its list (`aria-controls`), that list must be `shown`,
+ *   or Escape would seem to do nothing;
+ * - inside the dropdown or dialog itself (a menu item, a button of « Abandonner la saisie ? »),
+ *   rendered in `portal`.
+ */
+export function listOpenOn(
+  target: EscapeTarget,
+  portal: string = PAGE_PORTALS,
+  shown: (id: string) => boolean = shownOnPage,
+): boolean {
+  const marked =
+    target.getAttribute("data-mantine-stop-propagation") !== null || target.getAttribute("data-expanded") !== null;
+  const list = target.getAttribute("aria-controls");
   return (
-    target.getAttribute("data-mantine-stop-propagation") !== null ||
-    target.getAttribute("data-expanded") !== null ||
-    target.getAttribute("aria-expanded") === "true"
+    (marked && (list === null || shown(list))) ||
+    target.getAttribute("aria-expanded") === "true" ||
+    target.closest(portal) !== null
   );
 }
 
 /**
- * Whether an Escape key press cancels the form around it: not when a list
- * open on the target closes first (a second Escape cancels), nor when a
- * control already handled it and prevented its default.
+ * Whether an Escape key press leaves the form around it: not when a list open on the target
+ * closes first (a second Escape leaves), nor when a control already handled it and prevented
+ * its default.
  */
-export function escapeCancels(key: string, defaultPrevented: boolean, target: AttributeReader | null): boolean {
-  return key === "Escape" && !defaultPrevented && !(target && listOpenOn(target));
+export function escapeCancels(
+  key: string,
+  defaultPrevented: boolean,
+  target: EscapeTarget | null,
+  portal: string = PAGE_PORTALS,
+): boolean {
+  return key === "Escape" && !defaultPrevented && !(target && listOpenOn(target, portal));
 }
 
+/** What Escape does to a form: nothing, leave at once, or ask « Abandonner la saisie ? » first. */
+export type EscapeOutcome = "none" | "leave" | "ask";
+
 /**
- * `onKeyDown` of an inline form that Escape cancels (settings forms): Escape
- * with a drop-down list open only closes the list, a second Escape calls
- * `close`. Side panels handle this themselves (`_panel/panel.tsx`).
+ * Escape leaves a form at once when nothing typed or chosen would be lost, and asks first
+ * when it holds unsaved input (#251, #339). `holdsInput` is only read for an Escape that
+ * leaves.
  */
-export function cancelOnEscape(close: () => void) {
-  return (e: KeyboardEvent<HTMLElement>) => {
-    if (escapeCancels(e.key, e.defaultPrevented, e.target instanceof Element ? e.target : null)) close();
+export function escapeOutcome(
+  key: string,
+  defaultPrevented: boolean,
+  target: EscapeTarget | null,
+  holdsInput: () => boolean,
+  portal: string = PAGE_PORTALS,
+): EscapeOutcome {
+  if (!escapeCancels(key, defaultPrevented, target, portal)) return "none";
+  return holdsInput() ? "ask" : "leave";
+}
+
+/** The element a key was pressed on, if any (`Element` is undefined outside a browser). */
+export const elementOf = (target: EventTarget | null): Element | null =>
+  typeof Element !== "undefined" && target instanceof Element ? target : null;
+
+/** What `cancelOnEscape` reads of a key press. */
+export type EscapeKeyEvent = {
+  key: string;
+  defaultPrevented: boolean;
+  target: EventTarget | null;
+  preventDefault(): void;
+};
+
+/**
+ * `onKeyDown` of an inline form that Escape cancels (settings forms, #339): Escape with a
+ * list open only closes the list; then, with unsaved input, `ask` (« Abandonner la saisie ? »),
+ * else `close` at once. Use it through `useEscapeCancels` (`escape-asks.tsx`), which keeps the
+ * input state and the question; side panels handle Escape themselves (`_panel/panel.tsx`)
+ * with the same `escapeCancels`.
+ */
+export function cancelOnEscape(close: () => void, { holdsInput, ask }: { holdsInput: () => boolean; ask: () => void }) {
+  return (e: EscapeKeyEvent) => {
+    const outcome = escapeOutcome(e.key, e.defaultPrevented, elementOf(e.target), holdsInput);
+    if (outcome === "none") return;
+    // Handled: an enclosing handler that reads `defaultPrevented` leaves it alone.
+    e.preventDefault();
+    if (outcome === "ask") ask();
+    else close();
   };
 }
