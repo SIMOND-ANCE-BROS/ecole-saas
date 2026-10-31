@@ -9,6 +9,8 @@ import { SHORT_DAYS } from "../domain/schedule/days";
 import { todayInParis } from "../domain/people/age";
 import type { Requirement } from "../domain/people/documents";
 import { missingDocumentsSql } from "./student-documents";
+import { missingRulesSql } from "./internal-rules";
+import { PHOTOS_REFUSED } from "../domain/people/internal-rules";
 import {
   canBeLegalGuardian,
   guardianRefusal,
@@ -68,8 +70,12 @@ export type StudentRow = {
   enrollmentStatus: string | null;
   /** Emergency contacts: « Sophie Martin, 06 12 34 56 78 ». */
   toNotify: string[];
-  /** Required documents missing for the season (#287): « Certificat médical »… */
+  /** Required documents missing for the season (#287), and the rules not signed (#296): « Certificat médical »… */
   missingDocuments: string[];
+  /** « refusées » when the family refuses photos (#296), else null. */
+  photos: string | null;
+  /** Answer to « Comment nous avez-vous connus ? » (#296), null without one. */
+  referral: string | null;
 };
 
 /**
@@ -109,6 +115,10 @@ const studentEmail = sql<string | null>`coalesce(${person.email}, (
 const studentToNotify = sql<string[]>`coalesce((
   SELECT array_agg(concat_ws(', ', ${sqlName("r")}, r.phone) ORDER BY r.last_name) FROM relationship l JOIN person r ON r.id = l.person_id
   WHERE l.related_person_id = ${currentId} AND l.emergency_contact), '{}')`;
+
+const studentPhotos = sql<string | null>`CASE WHEN ${person.refusesPhotos} THEN ${PHOTOS_REFUSED}::text END`;
+const studentReferral = sql<string | null>`(
+  SELECT rs.label FROM referral_source rs WHERE rs.id = ${person.referralSourceId})`;
 
 /** SQL CASE from a label table (labels go through parameters). */
 const labels = (value: SQL, table: Record<string | number, string>) =>
@@ -180,7 +190,9 @@ function studentScope(
   const validSeasonId = seasonId && isUuid(seasonId) ? seasonId : null;
   const seasonCourses = studentCourses(validSeasonId);
   const seasonStatus = studentEnrollment(validSeasonId);
-  const missing = missingDocumentsSql(requirements, validSeasonId, today);
+  const missing = sql<
+    string[]
+  >`(${missingDocumentsSql(requirements, validSeasonId, today)} || ${missingRulesSql(validSeasonId)})`;
   const expressions = {
     nom: { sql: sqlName("person") },
     age: { sql: sql`date_part('year', age(${today}::date, ${person.birthDate}))` },
@@ -193,6 +205,8 @@ function studentScope(
     inscription: { sql: seasonStatus },
     documents: { sql: missing, list: true },
     prevenir: { sql: studentToNotify, list: true },
+    photos: { sql: studentPhotos },
+    connu: { sql: studentReferral },
   };
   const where = and(
     eq(person.isStudent, true),
@@ -231,6 +245,8 @@ export async function listStudents(tx: Tx, entry = "", options: ListOptions = {}
       enrollmentStatus: scope.seasonStatus,
       toNotify: studentToNotify,
       missingDocuments: scope.missing,
+      photos: studentPhotos,
+      referral: studentReferral,
     })
     .from(person)
     .where(scope.where)

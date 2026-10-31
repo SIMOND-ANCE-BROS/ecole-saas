@@ -5,6 +5,7 @@ import { z } from "zod";
 import { withSchool } from "@/db";
 import { type Preview, enrollmentPreview, saveEnrollment, validManualPrices } from "@/db/enrollments";
 import { currentSeason } from "@/db/schedule";
+import { acceptRules, payersRules, setReferralIfNone } from "@/db/internal-rules";
 import { once, storedEnrollment } from "@/db/submissions";
 import { INITIAL_STATUSES } from "@/domain/enrollment/lifecycle";
 import { todayInParis } from "@/domain/people/age";
@@ -25,7 +26,14 @@ export type FormInput = z.infer<typeof validInput>;
  * What is saved: the form's input, the prices typed by the front desk, one per business at
  * most (#292), and whether enrolling a student again in a course they take was confirmed (#333).
  */
-const validEnrollment = validInput.extend({ manualPrices: validManualPrices, duplicatesConfirmed: z.boolean() });
+const validEnrollment = validInput.extend({
+  manualPrices: validManualPrices,
+  duplicatesConfirmed: z.boolean(),
+  // #296: the box « Règlement intérieur signé » ticked at the desk, and the answer to
+  // « Comment nous avez-vous connus ? » for the students who have none yet.
+  rulesSigned: z.boolean(),
+  referralId: z.uuid().nullable(),
+});
 export type EnrollInput = z.infer<typeof validEnrollment>;
 
 const NO_SEASON_MESSAGE = "Aucune saison n’est paramétrée.";
@@ -51,13 +59,28 @@ export async function enroll(entry: EnrollInput, key: string): Promise<{ message
   const { schoolId: schoolId, userId } = await requireRole("director", "front_desk");
   const parsed = validEnrollment.safeParse(entry);
   if (!parsed.success || !z.uuid().safeParse(key).success) return { message: "Saisie invalide." };
-  const { payerId: payerId, ...rest } = parsed.data;
+  const { payerId: payerId, rulesSigned, referralId, ...rest } = parsed.data;
+  const today = todayInParis();
   const result = await withSchool(schoolId, async (tx) => {
-    const season = await currentSeason(tx, todayInParis());
+    const season = await currentSeason(tx, today);
     if (!season) return { ok: false as const, message: NO_SEASON_MESSAGE };
-    return once(tx, "enrollment", key, parsed.data, storedEnrollment, () =>
-      saveEnrollment(tx, userId, payerId, season.id, rest),
-    );
+    return once(tx, "enrollment", key, parsed.data, storedEnrollment, async () => {
+      const saved = await saveEnrollment(tx, userId, payerId, season.id, rest, today);
+      if (!saved.ok) return saved;
+      // Signed with this enrollment: on its date (#296 default). One already recorded keeps its own.
+      if (rulesSigned) {
+        const [rules] = await payersRules(tx, [payerId], season.id);
+        if (rules && rules.acceptedOn === null) {
+          const r = await acceptRules(tx, userId, payerId, season.id, today, today);
+          if (!r.ok) return r;
+        }
+      }
+      if (referralId) {
+        const r = await setReferralIfNone(tx, userId, rest.studentIds, referralId);
+        if (!r.ok) return r;
+      }
+      return saved;
+    });
   });
   if (!result.ok) return { message: result.message };
   // Courses of two businesses: one enrollment each (#299), said in the banner.

@@ -30,6 +30,7 @@ import { readTypedPrice, type TypedPrice } from "@/domain/enrollment/manual-pric
 import { orConnectionLost } from "@/lib/action-result";
 import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
 import { DiscountImpacts, PriceDetail } from "@/app/(espace)/_people/price-detail";
+import { dayOf } from "@/app/(espace)/_people/sections";
 
 const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const AUDIENCES = [
@@ -57,9 +58,25 @@ type Props = {
   initialStudent?: string;
   /** The school has several businesses (#299): each course and each enrollment names its own. */
   severalEntities?: boolean;
+  /** Day the payer signed the season's internal rules (#296); null: the box is offered. */
+  rulesAcceptedOn?: string | null;
+  /** Answers to « Comment nous avez-vous connus ? » the school offers (#296). */
+  referrals?: { id: string; label: string }[];
+  /** Students who already answered it: not asked again. */
+  answered?: string[];
 };
 
-export function EnrollmentForm({ payerId, students, courses, taken, initialStudent, severalEntities = false }: Props) {
+export function EnrollmentForm({
+  payerId,
+  students,
+  courses,
+  taken,
+  initialStudent,
+  severalEntities = false,
+  rulesAcceptedOn = null,
+  referrals = [],
+  answered = [],
+}: Props) {
   const initial = students.find((d) => d.id === initialStudent) ?? (students.length === 1 ? students[0] : undefined);
   const [studentIds, setStudentIds] = useState<string[]>(initial ? [initial.id] : []);
   const [chosenAudience, setAudience] = useState<FormInput["audience"]>(
@@ -83,6 +100,9 @@ export function EnrollmentForm({ payerId, students, courses, taken, initialStude
   // Which duplicates the front desk confirmed (#333): another choice asks again.
   const [confirmedDuplicates, setConfirmedDuplicates] = useState<string | null>(null);
   const [duplicateTried, setDuplicateTried] = useState(false);
+  // #296: ticked at the desk once the family signed the form (« lu et approuvé »).
+  const [rulesSigned, setRulesSigned] = useState(false);
+  const [referralId, setReferralId] = useState("");
   const [sending, startSend] = useTransition();
   const router = useRouter();
   // Same key for every attempt of this enrollment: a retry after a lost response enrolls nothing twice (#260).
@@ -156,6 +176,9 @@ export function EnrollmentForm({ payerId, students, courses, taken, initialStude
   const totalLabel =
     quarters.length > 0 ? "Prix par trimestre" : status === "active" ? "Total" : "Total à la confirmation";
 
+  // « Comment nous avez-vous connus ? » (#296): asked while a chosen student has no answer yet.
+  const askReferral = referrals.length > 0 && studentIds.some((id) => !answered.includes(id));
+
   // Courses suited to the chosen student(s)' age first; the others remain selectable.
   const chosenAges = students.filter((d) => studentIds.includes(d.id) && d.age !== null).map((d) => d.age as number);
   const adapted = (c: ScheduleCourse) =>
@@ -210,7 +233,17 @@ export function EnrollmentForm({ payerId, students, courses, taken, initialStude
         }
         startSend(async () => {
           const { message } = await orConnectionLost(
-            () => enroll({ ...entry, manualPrices, duplicatesConfirmed }, key),
+            () =>
+              enroll(
+                {
+                  ...entry,
+                  manualPrices,
+                  duplicatesConfirmed,
+                  rulesSigned: rulesAcceptedOn === null && rulesSigned,
+                  referralId: askReferral && referralId ? referralId : null,
+                },
+                key,
+              ),
             (message) => ({ message }),
           );
           setRefusal(message);
@@ -673,6 +706,29 @@ export function EnrollmentForm({ payerId, students, courses, taken, initialStude
             </Button>
           </Alert>
         )}
+        <div className="flex flex-col gap-2 border-t border-bordure pt-3">
+          {rulesAcceptedOn ? (
+            <Text size="sm">Règlement intérieur signé le {dayOf(rulesAcceptedOn)}.</Text>
+          ) : (
+            <Checkbox
+              id="reglement-signe"
+              label="Règlement intérieur signé"
+              description="« Lu et approuvé » sur la fiche d’inscription, droit à l’image compris."
+              checked={rulesSigned}
+              onChange={(e) => setRulesSigned(e.currentTarget.checked)}
+            />
+          )}
+          {askReferral && (
+            <NativeSelect
+              id="connu-par"
+              label="Comment nous avez-vous connus ?"
+              description="Facultatif"
+              value={referralId}
+              data={[{ value: "", label: "Non renseigné" }, ...referrals.map((r) => ({ value: r.id, label: r.label }))]}
+              onChange={(e) => setReferralId(e.currentTarget.value)}
+            />
+          )}
+        </div>
         <Button id={SAVE_BUTTON} type="submit" disabled={!canSave} loading={sending}>
           {news.length > 1
             ? `Enregistrer les ${news.length} inscriptions${status === "active" ? "" : ` (${ENROLLMENT_STATUS_LABELS[status].toLowerCase()})`}`

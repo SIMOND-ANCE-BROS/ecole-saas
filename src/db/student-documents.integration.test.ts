@@ -81,6 +81,8 @@ beforeAll(async () => {
       await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents, status, enrolled_on)
       VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${who}, 'child', 'quarter', 10000, ${status}, ${enrolledOn}) RETURNING id`;
     await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id) VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${i.id}), ${i.id}, ${who}, ${jazz.id})`;
+    // The rules signed (#296): « Documents manquants » here only shows the documents of #287.
+    await admin`INSERT INTO rules_acceptance (school_id, payer_id, season_id, accepted_on) VALUES (${school}, ${who}, ${season}, ${enrolledOn})`;
   }
 });
 
@@ -91,6 +93,7 @@ afterAll(async () => {
     await t`ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only`;
   });
   for (const t of [
+    "rules_acceptance",
     "student_document",
     "document_requirement",
     "enrollment_course",
@@ -358,6 +361,9 @@ describe("medical certificate of adults, by discipline and competition (#306)", 
       VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${who}, 'adult', 'year', 10000, ${status}, ${ENROLLED_ON}) RETURNING id`;
     for (const c of courses)
       await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id) VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${i.id}), ${i.id}, ${who}, ${c})`;
+    // The rules signed (#296), as above: only the documents of #287 and #306 are looked at here.
+    await admin`INSERT INTO rules_acceptance (school_id, payer_id, season_id, accepted_on)
+      VALUES (${school}, ${who}, ${season}, ${ENROLLED_ON}) ON CONFLICT DO NOTHING`;
   }
 
   // Each student's birth date and enrollments (status, courses), created before the tests.

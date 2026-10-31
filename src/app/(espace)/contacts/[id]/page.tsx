@@ -20,6 +20,9 @@ import { mayRefund } from "@/domain/payments/refund";
 import { mayCancelRefund } from "@/domain/payments/refund-cancellation";
 import { LessonPacks } from "../../_people/lesson-packs";
 import { BecomeStudent } from "./become-student";
+import { RulesSection } from "../../_people/rules-section";
+import { payersRules } from "@/db/internal-rules";
+import { defaultAcceptedOn } from "@/domain/people/internal-rules";
 import { ButtonLink } from "../../_ui/button-link";
 import { BackToList } from "../../_ui/list-return";
 import { TextLink } from "../../_ui/text-link";
@@ -55,6 +58,8 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
       packs: await packsOf(tx, { personId: contact.id }),
       invoices: season ? await payerInvoices(tx, contact.id, season.id) : [],
       severalEntities: await severalEntities(tx),
+      // The season's internal rules, signed by this payer (#296).
+      rules: season ? ((await payersRules(tx, [contact.id], season.id))[0] ?? null) : null,
     };
   });
   if (!parsed) notFound();
@@ -168,6 +173,24 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
             )}
           </section>
           {season && <Enrollments enrollments={billed} season={season} today={today} payerId={c.id} />}
+          {season && parsed.rules && (billed.length > 0 || parsed.rules.acceptedOn !== null) && (
+            <RulesSection
+              seasonLabel={season.label}
+              ownRecord
+              lines={[
+                {
+                  payerId: c.id,
+                  payerName: name,
+                  enrolled: parsed.rules.firstEnrolledOn !== null,
+                  acceptedOn: parsed.rules.acceptedOn,
+                  defaultOn: defaultAcceptedOn(parsed.rules.firstEnrolledOn, today),
+                  olderVersion: parsed.rules.olderVersion,
+                },
+              ]}
+              today={today}
+              isDirector={role === "director"}
+            />
+          )}
           {(sells || packs.length > 0) && (
             <LessonPacks packs={packs} personId={c.id} sellHref={sells ? `/carnets/nouveau?payeur=${c.id}` : null} />
           )}

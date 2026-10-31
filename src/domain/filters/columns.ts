@@ -1,5 +1,6 @@
 import { ENROLLMENT_STATUS_LABELS } from "../enrollment/statuses";
 import { DOCUMENT_LABELS, REQUIRABLE_TYPES } from "../people/documents";
+import { PHOTOS_REFUSED, RULES_LABEL } from "../people/internal-rules";
 import type { ColumnDef } from "./filters";
 
 /**
@@ -28,13 +29,18 @@ export const STUDENT_COLUMNS = [
     label: "Documents manquants",
     type: "text",
     ifEmpty: "aucun",
-    choice: REQUIRABLE_TYPES.map((t) => DOCUMENT_LABELS[t]),
+    // The internal rules not signed by a payer of the season (#296) count as a missing document.
+    choice: [...REQUIRABLE_TYPES.map((t) => DOCUMENT_LABELS[t]), RULES_LABEL],
   },
   { id: "telephone", label: "Téléphone", type: "phone" },
   // Offered in « Colonnes », hidden by default (#89).
   { id: "naissance", label: "Naissance", type: "date", byDefault: false, yearsBack: true },
   { id: "email", label: "E-mail", type: "text", email: true, byDefault: false },
   { id: "prevenir", label: "À prévenir", type: "text", byDefault: false },
+  // « Refuse les photos » (#296 Q1): the students to keep out of photos, at the gala for one.
+  { id: "photos", label: "Photos", type: "text", ifEmpty: "accordées", choice: [PHOTOS_REFUSED], byDefault: false },
+  // « Comment nous avez-vous connus ? » (#296): the page supplies the school's answers.
+  { id: "connu", label: "Nous a connus par", type: "text", ifEmpty: "non renseigné", byDefault: false },
 ] as const satisfies readonly ColumnDef[];
 
 export const CONTACT_COLUMNS = [

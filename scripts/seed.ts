@@ -174,6 +174,10 @@ async function main() {
         ON CONFLICT (school_id, name) DO UPDATE SET adults_need_certificate = EXCLUDED.adults_need_certificate RETURNING id`;
       disciplines[name] = d.id;
     }
+    // Answers to « Comment nous avez-vous connus ? » (#296): demo data, each school sets its own.
+    for (const [position, label] of ["Bouche à oreille", "Réseaux sociaux", "Moteur de recherche", "Autre"].entries())
+      await admin`INSERT INTO referral_source (school_id, label, position) VALUES (${school.id}, ${label}, ${position + 1})
+        ON CONFLICT DO NOTHING`;
     const profs: Record<string, string> = {};
     for (const [firstName, name, status, mode, tariff] of [
       ["Camille", "Durand", "sole_trader", "hourly", 4000],
