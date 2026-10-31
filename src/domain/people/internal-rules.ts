@@ -12,9 +12,11 @@
  *  2. A family may sign the rules and still refuse photos: a « Refuse les
  *     photos » flag on the student, off by default (`REFUSES_PHOTOS_DEFAULT`,
  *     also the database default of `person.refuses_photos`).
- *  3. The rules not signed by a payer of an enrolled student (active or trial)
- *     show among the student's « Documents manquants », right away: they are
- *     signed at the desk with the enrollment form.
+ *  3. Once the school recorded the season's rules, the rules not signed by a
+ *     payer of an enrolled student (active or trial) show among the student's
+ *     « Documents manquants », right away: they are signed at the desk with the
+ *     enrollment form. A school that recorded no rules is asked for no signature.
+ *     (Trial enrollments and a delay are open questions on #296.)
  * The answers to « Comment nous avez-vous connus ? » are school data
  * (`referral_source`), never code.
  */
@@ -33,6 +35,9 @@ export const RULES_TEXT_MAX = 50_000;
 
 /** Longest answer to « Comment nous avez-vous connus ? ». */
 export const REFERRAL_LABEL_MAX = 60;
+
+/** The « no answer » row of the statistics and the list filter: never an answer of its own. */
+export const REFERRAL_UNANSWERED = "Non renseigné";
 
 /** Most answers a school can offer: a choice list, not a database. */
 export const REFERRAL_SOURCES_MAX = 30;
@@ -70,6 +75,8 @@ export function referralRefusal(label: string, others: readonly string[]): strin
   const clean = label.trim().replace(/\s+/g, " ");
   if (clean === "") return "Indiquez la réponse.";
   if (clean.length > REFERRAL_LABEL_MAX) return `La réponse tient en ${REFERRAL_LABEL_MAX} caractères au plus.`;
+  if (referralKey(clean) === referralKey(REFERRAL_UNANSWERED))
+    return `« ${REFERRAL_UNANSWERED} » désigne déjà les élèves sans réponse.`;
   if (others.some((o) => referralKey(o) === referralKey(clean))) return `« ${clean} » est déjà proposée.`;
   return null;
 }
@@ -84,10 +91,11 @@ export type RulesPayer = {
 };
 
 /**
- * Whether the student misses the rules: a payer of one of their active or
- * trial enrollments of the season has not signed them (default 3). The SQL
- * twin is `missingRulesSql` (src/db/internal-rules.ts).
+ * Whether the student misses the rules: the school recorded the season's
+ * rules (`rulesRecorded`) and a payer of one of their active or trial
+ * enrollments has not signed them (default 3). The SQL twin is
+ * `missingRulesSql` (src/db/internal-rules.ts).
  */
-export function rulesMissing(payers: readonly RulesPayer[]): boolean {
-  return payers.some((p) => p.enrolled && p.acceptedOn === null);
+export function rulesMissing(rulesRecorded: boolean, payers: readonly RulesPayer[]): boolean {
+  return rulesRecorded && payers.some((p) => p.enrolled && p.acceptedOn === null);
 }

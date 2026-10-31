@@ -181,7 +181,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
                 {
                   payerId: c.id,
                   payerName: name,
-                  enrolled: parsed.rules.firstEnrolledOn !== null,
+                  enrolled: parsed.rules.firstEnrolledOn !== null && parsed.rules.rulesRecorded,
                   acceptedOn: parsed.rules.acceptedOn,
                   defaultOn: defaultAcceptedOn(parsed.rules.firstEnrolledOn, today),
                   olderVersion: parsed.rules.olderVersion,

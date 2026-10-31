@@ -85,6 +85,16 @@ beforeAll(async () => {
       VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${parent}, 'child', 'quarter', 10000, ${status}, ${enrolledOn}) RETURNING id`;
     await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id) VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${i.id}), ${i.id}, ${who}, ${jazz.id})`;
   }
+  // Léo already danced last season: not a new student of this one.
+  const [past] =
+    await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${school}, '2025-2026', '2025-09-01', '2026-06-30') RETURNING id`;
+  const [oldJazz] =
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+    VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${past.id}, ${d.id}, ${room.id}, ${teacher.id}, 3, '17:00', 60) RETURNING id`;
+  const [old] =
+    await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents, status, enrolled_on)
+    VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${past.id}, ${parent}, 'child', 'quarter', 10000, 'ended', '2025-09-08') RETURNING id`;
+  await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id) VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${old.id}), ${old.id}, ${leo}, ${oldJazz.id})`;
 });
 
 afterAll(async () => {
@@ -124,6 +134,12 @@ const missing = async () => {
 };
 
 describe("rules of a season", () => {
+  it("asks no signature while the school recorded no rules for the season", async () => {
+    expect(await missing()).toEqual({ Zoé: [], Léo: [] });
+    const [line] = await as((tx) => studentRulesLines(tx, zoe, parent, season));
+    expect(line).toMatchObject({ enrolled: true, rulesRecorded: false });
+  });
+
   it("keeps every text as a version, saves nothing for the same text, and never rewrites one", async () => {
     expect(await as((tx) => saveRulesText(tx, desk, season, "  "))).toEqual({
       ok: false,
@@ -245,7 +261,7 @@ describe("photos and « Comment nous avez-vous connus ? »", () => {
     const counts = await as((tx) => referralCounts(tx, season));
     expect(counts).toEqual([
       { label: "Bouche-à-oreille", students: 1, newThisSeason: 1 },
-      { label: "Réseaux", students: 1, newThisSeason: 1 },
+      { label: "Réseaux", students: 1, newThisSeason: 0 },
       { label: "Non renseigné", students: 0, newThisSeason: 0 },
     ]);
     expect(await withSchool(otherSchool, (tx) => listReferralSources(tx))).toEqual([]);

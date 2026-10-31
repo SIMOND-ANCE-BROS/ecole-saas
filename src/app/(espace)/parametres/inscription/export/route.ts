@@ -19,7 +19,8 @@ export async function GET() {
   });
   const header = ["Réponse", ...(season ? [`Nouveaux élèves ${season.label}`] : []), "Tous les élèves"];
   const csv = csvDocument(
-    header,
+    // The season's label is typed by the school: escaped like any cell.
+    header.map(csvText),
     counts.map((c) => [csvText(c.label), ...(season ? [String(c.newThisSeason)] : []), String(c.students)]),
   );
   return new Response(csv, {

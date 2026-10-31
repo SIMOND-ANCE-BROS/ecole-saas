@@ -31,6 +31,7 @@ import { orConnectionLost } from "@/lib/action-result";
 import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
 import { DiscountImpacts, PriceDetail } from "@/app/(espace)/_people/price-detail";
 import { dayOf } from "@/app/(espace)/_people/sections";
+import { REFERRAL_UNANSWERED } from "@/domain/people/internal-rules";
 
 const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const AUDIENCES = [
@@ -724,7 +725,10 @@ export function EnrollmentForm({
               label="Comment nous avez-vous connus ?"
               description="Facultatif"
               value={referralId}
-              data={[{ value: "", label: "Non renseigné" }, ...referrals.map((r) => ({ value: r.id, label: r.label }))]}
+              data={[
+                { value: "", label: REFERRAL_UNANSWERED },
+                ...referrals.map((r) => ({ value: r.id, label: r.label })),
+              ]}
               onChange={(e) => setReferralId(e.currentTarget.value)}
             />
           )}

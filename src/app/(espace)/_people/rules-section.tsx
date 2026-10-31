@@ -12,12 +12,13 @@ import { useFocusAfter } from "../_ui/use-focus-after";
 import { useUnloadGuard } from "../_ui/unsaved-input";
 import { chooseReferral, markPhotos, signRules, unsignRules } from "./rules-actions";
 import { dayOf, WARNING } from "./sections";
+import { REFERRAL_UNANSWERED } from "@/domain/people/internal-rules";
 
 /** One payer of the season and the internal rules. */
 export type RulesLine = {
   payerId: string;
   payerName: string;
-  /** Pays an active or trial enrollment: the rules are then missing until signed. */
+  /** Pays an active or trial enrollment and the school recorded the season's rules: missing until signed. */
   enrolled: boolean;
   acceptedOn: string | null;
   /** The date offered: the payer's enrollment date, else today (`defaultAcceptedOn`). */
@@ -29,7 +30,6 @@ export type RulesLine = {
 /** What only the student record shows: photos and « Comment nous avez-vous connus ? ». */
 export type StudentChoices = {
   studentId: string;
-  firstName: string;
   refusesPhotos: boolean;
   referralId: string | null;
   referrals: { id: string; label: string }[];
@@ -59,9 +59,11 @@ export function RulesSection({ seasonLabel, lines, today, ownRecord = false, stu
   const [message, setMessage] = useState<string | null>(null);
   const [removal, setRemoval] = useState<Removal | null>(null);
   const [inProgress, startTransition] = useTransition();
+  // The answer chosen here, until the page reloads with it; null: the recorded one.
+  const [referral, setReferral] = useState<string | null>(null);
   const focusAfter = useFocusAfter();
 
-  // A refusal or a lost connection keeps what was chosen, with its message (#243).
+  // A refusal or a lost connection shows its message; a date being typed stays in its form (#243).
   const act = (action: () => Promise<ActionResult>, after?: () => void) =>
     startTransition(async () => {
       const r = await settle(action);
@@ -238,15 +240,17 @@ export function RulesSection({ seasonLabel, lines, today, ownRecord = false, stu
                 size="sm"
                 className="max-w-xs"
                 disabled={inProgress}
-                value={student.referralId ?? ""}
+                value={referral ?? student.referralId ?? ""}
                 data={[
-                  { value: "", label: "Non renseigné" },
+                  { value: "", label: REFERRAL_UNANSWERED },
                   ...student.referrals.map((r) => ({ value: r.id, label: r.label })),
                 ]}
                 onChange={(e) => {
-                  const value = e.currentTarget.value || null;
+                  const value = e.currentTarget.value;
+                  // Kept on screen whatever the outcome; a refusal says so below (#243).
+                  setReferral(value);
                   act(
-                    () => chooseReferral(student.studentId, value),
+                    () => chooseReferral(student.studentId, value || null),
                     () => done("Réponse enregistrée."),
                   );
                 }}

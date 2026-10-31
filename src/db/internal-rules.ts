@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   normalisedRules,
   REFERRAL_SOURCES_MAX,
+  REFERRAL_UNANSWERED,
   referralRefusal,
   RULES_LABEL,
   RULES_TEXT_MAX,
@@ -37,6 +38,12 @@ const STUDENT_GONE = "Cet élève n’existe plus.";
 const PAYER_GONE = "Ce payeur n’existe plus.";
 const SEASON_GONE = "Cette saison n’existe plus.";
 const ANSWER_GONE = "Cette réponse n’existe plus.";
+/**
+ * Outer rows named in full inside a correlated subquery: Drizzle writes a column of a
+ * single-table select without its table, which the subquery would read as its own.
+ */
+const PERSON_ID = sql`${person}.${sql.identifier("id")}`;
+const SOURCE_ID = sql`${referralSource}.${sql.identifier("id")}`;
 /** Enrollments that ask for the rules: the student dances this season (as for the documents, #287). */
 const ENROLLED = sql`IN ('active', 'trial')`;
 
@@ -160,6 +167,8 @@ export type PayerRules = {
   acceptedOn: string | null;
   /** The text accepted is no longer the season's current one (rules changed since). */
   olderVersion: boolean;
+  /** The school recorded rules for the season: only then is a signature asked (default 3). */
+  rulesRecorded: boolean;
 };
 
 /** The season's rules for these payers, in their order. */
@@ -177,7 +186,7 @@ export async function payersRules(tx: Tx, payerIds: readonly string[], seasonId:
       versionId: rulesAcceptance.rulesVersionId,
       firstEnrolledOn: sql<string | null>`(
         SELECT min(i.enrolled_on)::text FROM enrollment i
-        WHERE i.payer_id = ${person.id} AND i.season_id = ${seasonId} AND i.status ${ENROLLED})`,
+        WHERE i.payer_id = ${PERSON_ID} AND i.season_id = ${seasonId} AND i.status ${ENROLLED})`,
     })
     .from(person)
     .leftJoin(rulesAcceptance, and(eq(rulesAcceptance.payerId, person.id), eq(rulesAcceptance.seasonId, seasonId)))
@@ -191,7 +200,9 @@ export async function payersRules(tx: Tx, payerIds: readonly string[], seasonId:
         payerName: displayedName(r),
         firstEnrolledOn: r.firstEnrolledOn,
         acceptedOn: r.acceptedOn,
-        olderVersion: r.acceptedOn !== null && current !== null && r.versionId !== current.id,
+        // Signed before any text was recorded: no earlier version to speak of.
+        olderVersion: r.versionId !== null && current !== null && r.versionId !== current.id,
+        rulesRecorded: current !== null,
       },
     ];
   });
@@ -342,14 +353,15 @@ export async function removeRulesAcceptance(
  * « Règlement intérieur » among the row's student's (`person`) missing
  * documents, the SQL twin of `rulesMissing` (src/domain/people/internal-rules.ts):
  * a payer of one of their active or trial enrollments of the season has not
- * signed the season's rules.
+ * signed the season's rules, once the school recorded them for the season (a
+ * school without rules is asked for no signature).
  */
 export function missingRulesSql(seasonId: string | null): SQL<string[]> {
   if (!seasonId) return sql<string[]>`'{}'::text[]`;
-  const id = sql`${person}.${sql.identifier("id")}`;
-  return sql<string[]>`CASE WHEN EXISTS (
+  return sql<string[]>`CASE WHEN EXISTS (SELECT 1 FROM internal_rules_version v WHERE v.season_id = ${seasonId})
+    AND EXISTS (
     SELECT 1 FROM enrollment_course ic JOIN enrollment i ON i.id = ic.enrollment_id
-    WHERE ic.student_id = ${id} AND i.season_id = ${seasonId} AND i.status IN ('active', 'trial')
+    WHERE ic.student_id = ${PERSON_ID} AND i.season_id = ${seasonId} AND i.status IN ('active', 'trial')
       AND NOT EXISTS (SELECT 1 FROM rules_acceptance ra WHERE ra.payer_id = i.payer_id AND ra.season_id = i.season_id)
   ) THEN ARRAY[${RULES_LABEL}::text] ELSE '{}'::text[] END`;
 }
@@ -393,7 +405,7 @@ export async function listReferralSources(tx: Tx): Promise<ReferralSourceRow[]> 
     .select({
       id: referralSource.id,
       label: referralSource.label,
-      students: sql<number>`(SELECT count(*)::int FROM person p WHERE p.referral_source_id = ${referralSource.id})`,
+      students: sql<number>`(SELECT count(*)::int FROM person p WHERE p.referral_source_id = ${SOURCE_ID})`,
     })
     .from(referralSource)
     .orderBy(asc(referralSource.position), asc(referralSource.label));
@@ -525,7 +537,9 @@ export async function setReferral(tx: Tx, userId: string, studentId: string, sou
 
 /**
  * Sets the answer of the students who have none (first enrollment, #296); a
- * student who already answered keeps their answer.
+ * student who already answered keeps their answer, even one given meanwhile
+ * (the update only touches a row still without one). The question is optional:
+ * an answer removed since the form opened is skipped, the enrollment goes on.
  */
 export async function setReferralIfNone(
   tx: Tx,
@@ -533,13 +547,27 @@ export async function setReferralIfNone(
   studentIds: readonly string[],
   sourceId: string,
 ): Promise<Result> {
-  for (const studentId of studentIds) {
-    const [p] = await tx.select({ sourceId: person.referralSourceId }).from(person).where(eq(person.id, studentId));
-    if (p && p.sourceId === null) {
-      const r = await setReferral(tx, userId, studentId, sourceId);
-      if (!r.ok) return r;
-    }
-  }
+  if (!isUuid(sourceId)) return { ok: true };
+  const [s] = await tx.select({ id: referralSource.id }).from(referralSource).where(eq(referralSource.id, sourceId));
+  if (!s) return { ok: true };
+  const ids = studentIds.filter(isUuid);
+  if (ids.length === 0) return { ok: true };
+  const set = await tx
+    .update(person)
+    .set({ referralSourceId: sourceId })
+    .where(and(inArray(person.id, ids), eq(person.isStudent, true), sql`${person.referralSourceId} IS NULL`))
+    .returning({ id: person.id });
+  const actor = await actorOf(tx, userId);
+  for (const { id } of set)
+    await tx.insert(auditLog).values({
+      schoolId: CURRENT_SCHOOL,
+      actor,
+      targetTable: "person",
+      rowId: id,
+      action: "update",
+      before: { referralSourceId: null },
+      after: { referralSourceId: sourceId },
+    });
   return { ok: true };
 }
 
@@ -612,5 +640,5 @@ export async function referralCounts(tx: Tx, seasonId: string | null): Promise<R
   const rank = (label: string | null) => (label === null ? order.length : order.findIndex((o) => o.label === label));
   return [...rows]
     .sort((a, b) => rank(a.label) - rank(b.label))
-    .map((r) => ({ label: r.label ?? "Non renseigné", students: r.students, newThisSeason: r.new_this_season }));
+    .map((r) => ({ label: r.label ?? REFERRAL_UNANSWERED, students: r.students, newThisSeason: r.new_this_season }));
 }

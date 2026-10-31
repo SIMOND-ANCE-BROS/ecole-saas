@@ -297,7 +297,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
               lines={parsed.rules.map((r) => ({
                 payerId: r.payerId,
                 payerName: r.payerName,
-                enrolled: r.enrolled,
+                enrolled: r.enrolled && r.rulesRecorded,
                 acceptedOn: r.acceptedOn,
                 defaultOn: defaultAcceptedOn(r.firstEnrolledOn, today),
                 olderVersion: r.olderVersion,
@@ -305,7 +305,6 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
               today={today}
               student={{
                 studentId: e.id,
-                firstName,
                 refusesPhotos: parsed.choices?.refusesPhotos ?? false,
                 referralId: parsed.choices?.referralId ?? null,
                 referrals: parsed.referrals.map((r) => ({ id: r.id, label: r.label })),

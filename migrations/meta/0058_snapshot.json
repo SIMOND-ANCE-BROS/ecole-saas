@@ -1,5 +1,5 @@
 {
-  "id": "097efea1-0e9b-434d-9788-81ef0784fe19",
+  "id": "11c5883e-6800-4cf1-bc62-c524e0f06437",
   "prevId": "fd26195c-0e46-44a7-a241-b8e6dade1874",
   "version": "7",
   "dialect": "postgresql",
@@ -2735,7 +2735,7 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "default": "clock_timestamp()"
         }
       },
       "indexes": {
@@ -5518,6 +5518,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "rules_acceptance_rules_version_id_index": {
+          "name": "rules_acceptance_rules_version_id_index",
+          "columns": [
+            {
+              "expression": "rules_version_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -5584,10 +5599,11 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "rules_acceptance_payer_id_season_id_unique": {
-          "name": "rules_acceptance_payer_id_season_id_unique",
+        "rules_acceptance_school_id_payer_id_season_id_unique": {
+          "name": "rules_acceptance_school_id_payer_id_season_id_unique",
           "nullsNotDistinct": false,
           "columns": [
+            "school_id",
             "payer_id",
             "season_id"
           ]

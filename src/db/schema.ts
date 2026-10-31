@@ -424,7 +424,10 @@ export const internalRulesVersion = pgTable(
     schoolId: schoolIdColumn(),
     seasonId: uuid("season_id").notNull(),
     text: text("text").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // The insert's own time, not the transaction's start: the latest saved is always the current one.
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`clock_timestamp()`),
   },
   (t) => [
     check("internal_rules_version_text", sql`char_length(btrim(${t.text})) BETWEEN 1 AND 50000`),
@@ -516,8 +519,9 @@ export const rulesAcceptance = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    unique().on(t.payerId, t.seasonId),
+    unique().on(t.schoolId, t.payerId, t.seasonId),
     index().on(t.seasonId),
+    index().on(t.rulesVersionId),
     sameSchool(t, t.payerId, person),
     sameSchool(t, t.seasonId, season),
     // The version accepted is one of the same school and season (MATCH SIMPLE: none is accepted).

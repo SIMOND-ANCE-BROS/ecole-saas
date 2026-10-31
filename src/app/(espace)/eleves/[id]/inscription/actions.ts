@@ -6,6 +6,7 @@ import { withSchool } from "@/db";
 import { type Preview, enrollmentPreview, saveEnrollment, validManualPrices } from "@/db/enrollments";
 import { currentSeason } from "@/db/schedule";
 import { acceptRules, payersRules, setReferralIfNone } from "@/db/internal-rules";
+import { defaultAcceptedOn } from "@/domain/people/internal-rules";
 import { once, storedEnrollment } from "@/db/submissions";
 import { INITIAL_STATUSES } from "@/domain/enrollment/lifecycle";
 import { todayInParis } from "@/domain/people/age";
@@ -71,7 +72,9 @@ export async function enroll(entry: EnrollInput, key: string): Promise<{ message
       if (rulesSigned) {
         const [rules] = await payersRules(tx, [payerId], season.id);
         if (rules && rules.acceptedOn === null) {
-          const r = await acceptRules(tx, userId, payerId, season.id, today, today);
+          // The payer's first enrollment day of the season, this one included: as the record offers it.
+          const on = defaultAcceptedOn(rules.firstEnrolledOn, today);
+          const r = await acceptRules(tx, userId, payerId, season.id, on, today);
           if (!r.ok) return r;
         }
       }

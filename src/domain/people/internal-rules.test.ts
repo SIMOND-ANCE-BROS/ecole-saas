@@ -68,6 +68,10 @@ describe("referralRefusal", () => {
     expect(referralRefusal("x".repeat(REFERRAL_LABEL_MAX), offered)).toBeNull();
   });
 
+  it("refuses the label of the students without an answer", () => {
+    expect(referralRefusal(" non  RENSEIGNÉ", offered)).toBe("« Non renseigné » désigne déjà les élèves sans réponse.");
+  });
+
   it("compares answers by their words", () => {
     expect(referralKey(" Moteurs  de recherche ")).toBe(referralKey("moteurs de recherche"));
   });
@@ -75,12 +79,16 @@ describe("referralRefusal", () => {
 
 describe("rulesMissing", () => {
   it("is missing while a payer of an enrollment has not signed", () => {
-    expect(rulesMissing([{ payerId: "a", enrolled: true, acceptedOn: null }])).toBe(true);
+    expect(rulesMissing(true, [{ payerId: "a", enrolled: true, acceptedOn: null }])).toBe(true);
+  });
+
+  it("asks no signature of a school that recorded no rules for the season", () => {
+    expect(rulesMissing(false, [{ payerId: "a", enrolled: true, acceptedOn: null }])).toBe(false);
   });
 
   it("is not missing once every enrolled payer signed", () => {
     expect(
-      rulesMissing([
+      rulesMissing(true, [
         { payerId: "a", enrolled: true, acceptedOn: "2026-09-07" },
         { payerId: "b", enrolled: false, acceptedOn: null },
       ]),
@@ -89,7 +97,7 @@ describe("rulesMissing", () => {
 
   it("asks one signature per payer: a second business's enrollment by another payer counts too", () => {
     expect(
-      rulesMissing([
+      rulesMissing(true, [
         { payerId: "a", enrolled: true, acceptedOn: "2026-09-07" },
         { payerId: "b", enrolled: true, acceptedOn: null },
       ]),
@@ -97,7 +105,7 @@ describe("rulesMissing", () => {
   });
 
   it("asks nothing of a student without enrollment", () => {
-    expect(rulesMissing([])).toBe(false);
+    expect(rulesMissing(true, [])).toBe(false);
   });
 });
 
