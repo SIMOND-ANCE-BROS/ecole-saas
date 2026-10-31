@@ -88,6 +88,29 @@ describe("syncCalendar", () => {
     expect(attendances).toHaveLength(2);
   });
 
+  it("keeps a renewed token when the read that follows fails (#368)", async () => {
+    const fakeFetch: typeof fetch = async (u, init) => {
+      if (String(u).includes("/token")) {
+        expect(String(init?.body)).toContain("refresh_token=fake-r2");
+        return response(200, { access_token: "acces", refresh_token: "fake-r3" });
+      }
+      return response(503, {});
+    };
+    expect(await syncCalendar(school, camille, fakeFetch, NOW)).toEqual({
+      ok: false,
+      message: "Synchronisation impossible pour le moment ; elle sera retentée.",
+    });
+    const [{ encrypted_token: encryptedToken }] =
+      await admin`SELECT encrypted_token FROM calendar_connection WHERE instructor_id = ${camille}`;
+    expect(encryptedToken).not.toContain("fake-r3");
+    expect(decrypt(encryptedToken)).toBe("fake-r3");
+    expect((await withSchool(school, (tx) => connectionState(tx, camille)))?.error).toBe(
+      "Synchronisation impossible pour le moment ; elle sera retentée.",
+    );
+    // Ranges read by the previous sync stay in place.
+    expect(await rangesOf()).toHaveLength(2);
+  });
+
   it("records revoked access without losing ranges already read", async () => {
     const r = await syncCalendar(school, camille, async () => response(400, { error: "invalid_grant" }), NOW);
     expect(r).toEqual({ ok: false, message: "Accès à l’agenda retiré ou expiré : reconnecter l’agenda." });
