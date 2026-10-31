@@ -5,7 +5,7 @@ import { z } from "zod";
 import { withSchool } from "@/db";
 import { type Preview, enrollmentPreview, saveEnrollment, validManualPrices } from "@/db/enrollments";
 import { currentSeason } from "@/db/schedule";
-import { acceptRules, payersRules, setReferralIfNone } from "@/db/internal-rules";
+import { acceptRules, payersRules, setReferralIfNone, setRefusesPhotos } from "@/db/internal-rules";
 import { defaultAcceptedOn } from "@/domain/people/internal-rules";
 import { once, storedEnrollment } from "@/db/submissions";
 import { INITIAL_STATUSES } from "@/domain/enrollment/lifecycle";
@@ -34,6 +34,8 @@ const validEnrollment = validInput.extend({
   // « Comment nous avez-vous connus ? » for the students who have none yet.
   rulesSigned: z.boolean(),
   referralId: z.uuid().nullable(),
+  // #296 Q1: the family refuses photos of the student(s) enrolled.
+  refusesPhotos: z.boolean(),
 });
 export type EnrollInput = z.infer<typeof validEnrollment>;
 
@@ -60,7 +62,7 @@ export async function enroll(entry: EnrollInput, key: string): Promise<{ message
   const { schoolId: schoolId, userId } = await requireRole("director", "front_desk");
   const parsed = validEnrollment.safeParse(entry);
   if (!parsed.success || !z.uuid().safeParse(key).success) return { message: "Saisie invalide." };
-  const { payerId: payerId, rulesSigned, referralId, ...rest } = parsed.data;
+  const { payerId: payerId, rulesSigned, referralId, refusesPhotos, ...rest } = parsed.data;
   const today = todayInParis();
   const result = await withSchool(schoolId, async (tx) => {
     const season = await currentSeason(tx, today);
@@ -71,7 +73,7 @@ export async function enroll(entry: EnrollInput, key: string): Promise<{ message
       // Signed with this enrollment: on its date (#296 default). One already recorded keeps its own.
       if (rulesSigned) {
         const [rules] = await payersRules(tx, [payerId], season.id);
-        if (rules && rules.acceptedOn === null) {
+        if (rules && rules.rulesRecorded && rules.acceptedOn === null) {
           // The payer's first enrollment day of the season, this one included: as the record offers it.
           const on = defaultAcceptedOn(rules.firstEnrolledOn, today);
           const r = await acceptRules(tx, userId, payerId, season.id, on, today);
@@ -82,6 +84,11 @@ export async function enroll(entry: EnrollInput, key: string): Promise<{ message
         const r = await setReferralIfNone(tx, userId, rest.studentIds, referralId);
         if (!r.ok) return r;
       }
+      if (refusesPhotos)
+        for (const studentId of rest.studentIds) {
+          const r = await setRefusesPhotos(tx, userId, studentId, true);
+          if (!r.ok) return r;
+        }
       return saved;
     });
   });

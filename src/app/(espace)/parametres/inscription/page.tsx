@@ -45,7 +45,8 @@ export default async function EnrollmentSettingsPage() {
           Comment nous avez-vous connus ?
         </Title>
         <Text size="sm" c="dimmed">
-          Question facultative, posée à la première inscription d’un élève. Les réponses se suivent dans cet ordre.
+          Question facultative, posée à la première inscription d’un élève. Elles sont proposées dans l’ordre où vous
+          les avez ajoutées.
         </Text>
         <Referrals sources={sources} />
       </section>

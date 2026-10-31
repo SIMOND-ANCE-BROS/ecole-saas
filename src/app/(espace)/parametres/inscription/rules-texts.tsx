@@ -8,6 +8,7 @@ import { RULES_TEXT_MAX } from "@/domain/people/internal-rules";
 import { type ActionResult, settle } from "@/lib/action-result";
 import { EscapeCancelsForm } from "../../_ui/escape-asks";
 import { useFocusAfter } from "../../_ui/use-focus-after";
+import { TextLink } from "../../_ui/text-link";
 import { dayOf } from "../../_people/sections";
 import { saveSeasonRules } from "./actions";
 
@@ -42,7 +43,11 @@ export function RulesTexts({ seasons }: { seasons: SeasonRules[] }) {
   if (seasons.length === 0)
     return (
       <Text size="sm" c="dimmed">
-        Aucune saison pour l’instant : créez-la dans « Saisons ».
+        Aucune saison pour l’instant :{" "}
+        <TextLink href="/parametres/saisons" size="sm" inherit>
+          créer la saison
+        </TextLink>
+        .
       </Text>
     );
   return (

@@ -48,8 +48,7 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
         : [],
       severalEntities: await severalEntities(tx),
       // #296: whether the payer already signed the season's rules, and who still has to say how they heard of us.
-      rulesAcceptedOn:
-        season && payerId ? ((await payersRules(tx, [payerId], season.id))[0]?.acceptedOn ?? null) : null,
+      rules: season && payerId ? ((await payersRules(tx, [payerId], season.id))[0] ?? null) : null,
       referrals: await listReferralSources(tx),
       answered: await answeredReferral(
         tx,
@@ -111,7 +110,8 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
           taken={parsed.taken}
           initialStudent={student.id}
           severalEntities={parsed.severalEntities}
-          rulesAcceptedOn={parsed.rulesAcceptedOn}
+          rulesAcceptedOn={parsed.rules?.acceptedOn ?? null}
+          rulesRecorded={parsed.rules?.rulesRecorded ?? false}
           referrals={parsed.referrals.map((r) => ({ id: r.id, label: r.label }))}
           answered={parsed.answered}
         />

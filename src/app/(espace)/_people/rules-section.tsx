@@ -38,6 +38,8 @@ export type StudentChoices = {
 type Props = {
   seasonLabel: string;
   lines: RulesLine[];
+  /** The school recorded the season's rules: only then are signatures collected. */
+  rulesRecorded: boolean;
   today: string;
   /** Payer record: lines say « Signé » without naming the payer, who is the record. */
   ownRecord?: boolean;
@@ -54,7 +56,15 @@ const done = (message: string) => notifications.show({ color: "green", message }
  * of photos and the answer to « Comment nous avez-vous connus ? ». Signing on
  * the enrollment day is one click; another day opens a date field.
  */
-export function RulesSection({ seasonLabel, lines, today, ownRecord = false, student, isDirector }: Props) {
+export function RulesSection({
+  seasonLabel,
+  lines,
+  rulesRecorded,
+  today,
+  ownRecord = false,
+  student,
+  isDirector,
+}: Props) {
   const [editing, setEditing] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [removal, setRemoval] = useState<Removal | null>(null);
@@ -101,6 +111,15 @@ export function RulesSection({ seasonLabel, lines, today, ownRecord = false, stu
         {lines.map((l) => {
           const signed = l.acceptedOn !== null;
           const warn = !signed && l.enrolled;
+          // No rules recorded for the season: nothing to sign (a signature already recorded stays).
+          if (!signed && !rulesRecorded)
+            return (
+              <li key={l.payerId} className="px-3 py-2.5">
+                <Text span size="sm" c="dimmed">
+                  Aucun règlement enregistré pour la saison : pas de signature à recueillir.
+                </Text>
+              </li>
+            );
           return (
             <li key={l.payerId} className="flex flex-col gap-2 px-3 py-2.5">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -131,7 +150,7 @@ export function RulesSection({ seasonLabel, lines, today, ownRecord = false, stu
                           )
                         }
                       >
-                        Signé le {dayOf(l.defaultOn)}
+                        {l.defaultOn === today ? "Marquer signé aujourd’hui" : `Marquer signé le ${dayOf(l.defaultOn)}`}
                       </Button>
                     )}
                     <Button
@@ -206,7 +225,11 @@ export function RulesSection({ seasonLabel, lines, today, ownRecord = false, stu
               c={student.refusesPhotos ? WARNING : "dimmed"}
               fw={student.refusesPhotos ? 500 : undefined}
             >
-              {student.refusesPhotos ? "Refusées par la famille" : "Accordées avec le règlement"}
+              {student.refusesPhotos
+                ? "Refusées par la famille"
+                : lines.some((l) => l.acceptedOn !== null)
+                  ? "Accordées avec le règlement signé"
+                  : "Pas de refus noté (règlement non signé)"}
             </Text>
             <Button
               size="compact-sm"
@@ -235,26 +258,39 @@ export function RulesSection({ seasonLabel, lines, today, ownRecord = false, stu
                 « Comment nous avez-vous connus ? » : aucune réponse proposée par l’école.
               </Text>
             ) : (
-              <NativeSelect
-                label="Comment nous avez-vous connus ?"
-                size="sm"
-                className="max-w-xs"
-                disabled={inProgress}
-                value={referral ?? student.referralId ?? ""}
-                data={[
-                  { value: "", label: REFERRAL_UNANSWERED },
-                  ...student.referrals.map((r) => ({ value: r.id, label: r.label })),
-                ]}
-                onChange={(e) => {
-                  const value = e.currentTarget.value;
-                  // Kept on screen whatever the outcome; a refusal says so below (#243).
-                  setReferral(value);
+              // Chosen, then saved with its button: arrows in a closed select change the value at
+              // each key on Windows, so saving on change would record every answer passed by.
+              <form
+                className="flex flex-wrap items-end gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const value = referral ?? student.referralId ?? "";
                   act(
                     () => chooseReferral(student.studentId, value || null),
-                    () => done("Réponse enregistrée."),
+                    () => {
+                      done("Réponse enregistrée.");
+                      setReferral(null);
+                    },
                   );
                 }}
-              />
+              >
+                <NativeSelect
+                  label="Comment nous avez-vous connus ?"
+                  size="sm"
+                  className="max-w-xs"
+                  value={referral ?? student.referralId ?? ""}
+                  data={[
+                    { value: "", label: REFERRAL_UNANSWERED },
+                    ...student.referrals.map((r) => ({ value: r.id, label: r.label })),
+                  ]}
+                  onChange={(e) => setReferral(e.currentTarget.value)}
+                />
+                {referral !== null && referral !== (student.referralId ?? "") && (
+                  <Button type="submit" size="compact-sm" variant="default" loading={inProgress}>
+                    Enregistrer la réponse
+                  </Button>
+                )}
+              </form>
             )}
           </li>
         )}

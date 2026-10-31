@@ -26,7 +26,7 @@ import { Billing } from "./billing";
 import { type DocumentLine, Documents } from "./documents";
 import { Relatives } from "./relatives";
 import { RulesSection } from "../../_people/rules-section";
-import { listReferralSources, studentChoices, studentRulesLines } from "@/db/internal-rules";
+import { currentRulesVersion, listReferralSources, studentChoices, studentRulesLines } from "@/db/internal-rules";
 import { defaultAcceptedOn } from "@/domain/people/internal-rules";
 import { ButtonLink } from "../../_ui/button-link";
 import { BackToList } from "../../_ui/list-return";
@@ -86,6 +86,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             season.id,
           )
         : [],
+      rulesRecorded: season ? (await currentRulesVersion(tx, season.id)) !== null : false,
       choices: await studentChoices(tx, student.id),
       referrals: await listReferralSources(tx),
     };
@@ -294,6 +295,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           {season && e.isStudent && (
             <RulesSection
               seasonLabel={season.label}
+              rulesRecorded={parsed.rulesRecorded}
               lines={parsed.rules.map((r) => ({
                 payerId: r.payerId,
                 payerName: r.payerName,

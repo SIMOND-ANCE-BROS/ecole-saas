@@ -61,6 +61,8 @@ type Props = {
   severalEntities?: boolean;
   /** Day the payer signed the season's internal rules (#296); null: the box is offered. */
   rulesAcceptedOn?: string | null;
+  /** The school recorded the season's rules: only then is the box offered. */
+  rulesRecorded?: boolean;
   /** Answers to « Comment nous avez-vous connus ? » the school offers (#296). */
   referrals?: { id: string; label: string }[];
   /** Students who already answered it: not asked again. */
@@ -75,6 +77,7 @@ export function EnrollmentForm({
   initialStudent,
   severalEntities = false,
   rulesAcceptedOn = null,
+  rulesRecorded = false,
   referrals = [],
   answered = [],
 }: Props) {
@@ -104,6 +107,8 @@ export function EnrollmentForm({
   // #296: ticked at the desk once the family signed the form (« lu et approuvé »).
   const [rulesSigned, setRulesSigned] = useState(false);
   const [referralId, setReferralId] = useState("");
+  // The family signs the rules but refuses photos (#296 Q1), noted at the desk.
+  const [refusesPhotos, setRefusesPhotos] = useState(false);
   const [sending, startSend] = useTransition();
   const router = useRouter();
   // Same key for every attempt of this enrollment: a retry after a lost response enrolls nothing twice (#260).
@@ -240,7 +245,8 @@ export function EnrollmentForm({
                   ...entry,
                   manualPrices,
                   duplicatesConfirmed,
-                  rulesSigned: rulesAcceptedOn === null && rulesSigned,
+                  rulesSigned: rulesRecorded && rulesAcceptedOn === null && rulesSigned,
+                  refusesPhotos,
                   referralId: askReferral && referralId ? referralId : null,
                 },
                 key,
@@ -711,14 +717,22 @@ export function EnrollmentForm({
           {rulesAcceptedOn ? (
             <Text size="sm">Règlement intérieur signé le {dayOf(rulesAcceptedOn)}.</Text>
           ) : (
-            <Checkbox
-              id="reglement-signe"
-              label="Règlement intérieur signé"
-              description="« Lu et approuvé » sur la fiche d’inscription, droit à l’image compris."
-              checked={rulesSigned}
-              onChange={(e) => setRulesSigned(e.currentTarget.checked)}
-            />
+            rulesRecorded && (
+              <Checkbox
+                id="reglement-signe"
+                label="Règlement intérieur signé"
+                description="« Lu et approuvé » sur la fiche d’inscription, droit à l’image compris."
+                checked={rulesSigned}
+                onChange={(e) => setRulesSigned(e.currentTarget.checked)}
+              />
+            )
           )}
+          <Checkbox
+            id="refuse-photos"
+            label="La famille refuse les photos et vidéos"
+            checked={refusesPhotos}
+            onChange={(e) => setRefusesPhotos(e.currentTarget.checked)}
+          />
           {askReferral && (
             <NativeSelect
               id="connu-par"

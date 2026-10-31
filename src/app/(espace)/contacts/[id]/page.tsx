@@ -176,6 +176,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
           {season && parsed.rules && (billed.length > 0 || parsed.rules.acceptedOn !== null) && (
             <RulesSection
               seasonLabel={season.label}
+              rulesRecorded={parsed.rules.rulesRecorded}
               ownRecord
               lines={[
                 {

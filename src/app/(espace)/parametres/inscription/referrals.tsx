@@ -25,6 +25,7 @@ export function Referrals({ sources }: { sources: ReferralSourceRow[] }) {
   const closeEdit = (id: string) => {
     focusAfter(`[data-referral-edit="${id}"]`);
     setEdition(null);
+    setMessage(null);
   };
   // A refusal or a lost connection keeps what was typed, with its message (#243).
   const act = (action: () => Promise<ActionResult>, after?: () => void, failed?: () => void) =>
@@ -51,7 +52,7 @@ export function Referrals({ sources }: { sources: ReferralSourceRow[] }) {
         <TextInput
           id="new-referral"
           label="Nouvelle réponse"
-          placeholder="Bouche à oreille"
+          placeholder="Bouche-à-oreille"
           maxLength={REFERRAL_LABEL_MAX}
           value={label}
           onChange={(e) => setLabel(e.currentTarget.value)}
@@ -60,7 +61,8 @@ export function Referrals({ sources }: { sources: ReferralSourceRow[] }) {
           Ajouter
         </Button>
       </form>
-      {message && (
+      {/* A refused rename says so in its own row. */}
+      {message && !edition && (
         <Text role="alert" size="sm" c="red">
           {message}
         </Text>
@@ -107,6 +109,11 @@ export function Referrals({ sources }: { sources: ReferralSourceRow[] }) {
                   <Button type="button" size="compact-sm" variant="subtle" color="gray" onClick={() => closeEdit(s.id)}>
                     Annuler
                   </Button>
+                  {message && (
+                    <Text role="alert" size="sm" c="red" className="basis-full">
+                      {message}
+                    </Text>
+                  )}
                 </EscapeCancelsForm>
               ) : (
                 <span className="font-medium">{s.label}</span>
