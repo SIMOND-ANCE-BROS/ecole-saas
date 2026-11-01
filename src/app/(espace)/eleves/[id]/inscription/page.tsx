@@ -6,6 +6,7 @@ import { severalEntities } from "@/db/billing-entities";
 import { readStudent } from "@/db/students";
 import { payableStudents, displayedName } from "@/db/people";
 import { takenCourses } from "@/db/enrollments";
+import { answeredReferral, listReferralSources, payersRules } from "@/db/internal-rules";
 import { seasonCourses, currentSeason } from "@/db/schedule";
 import { ageAt, todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
@@ -46,6 +47,13 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
           )
         : [],
       severalEntities: await severalEntities(tx),
+      // #296: whether the payer already signed the season's rules, and who still has to say how they heard of us.
+      rules: season && payerId ? ((await payersRules(tx, [payerId], season.id))[0] ?? null) : null,
+      referrals: await listReferralSources(tx),
+      answered: await answeredReferral(
+        tx,
+        students.map((d) => d.id),
+      ),
     };
   });
   if (!parsed) notFound();
@@ -102,6 +110,10 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
           taken={parsed.taken}
           initialStudent={student.id}
           severalEntities={parsed.severalEntities}
+          rulesAcceptedOn={parsed.rules?.acceptedOn ?? null}
+          rulesRecorded={parsed.rules?.rulesRecorded ?? false}
+          referrals={parsed.referrals.map((r) => ({ id: r.id, label: r.label }))}
+          answered={parsed.answered}
         />
       )}
     </FormPage>

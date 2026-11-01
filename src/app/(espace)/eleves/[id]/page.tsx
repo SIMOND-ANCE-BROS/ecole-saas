@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Anchor, Paper, Text, Title } from "@mantine/core";
+import { Anchor, Badge, Paper, Text, Title } from "@mantine/core";
 import { notFound } from "next/navigation";
 import { withSchool } from "@/db";
 import { readStudent } from "@/db/students";
@@ -25,6 +25,9 @@ import { Banner, FollowedCourses, Enrollments, dayOf, Notes, Telephone } from ".
 import { Billing } from "./billing";
 import { type DocumentLine, Documents } from "./documents";
 import { Relatives } from "./relatives";
+import { RulesSection } from "../../_people/rules-section";
+import { currentRulesVersion, listReferralSources, studentChoices, studentRulesLines } from "@/db/internal-rules";
+import { defaultAcceptedOn } from "@/domain/people/internal-rules";
 import { ButtonLink } from "../../_ui/button-link";
 import { BackToList } from "../../_ui/list-return";
 import { TextLink } from "../../_ui/text-link";
@@ -70,6 +73,22 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
       // A student paying for themselves: their own invoices (#352).
       invoices: season && paysForThemselves ? await payerInvoices(tx, student.id, season.id) : [],
       severalEntities: await severalEntities(tx),
+      // Internal rules, photos and « Comment nous avez-vous connus ? » (#296).
+      rules: season
+        ? await studentRulesLines(
+            tx,
+            student.id,
+            student.billedTo.type === "person"
+              ? student.billedTo.id
+              : student.billedTo.type === "self"
+                ? student.id
+                : null,
+            season.id,
+          )
+        : [],
+      rulesRecorded: season ? (await currentRulesVersion(tx, season.id)) !== null : false,
+      choices: await studentChoices(tx, student.id),
+      referrals: await listReferralSources(tx),
     };
   });
   if (!parsed) notFound();
@@ -127,6 +146,12 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             {e.birthDate ? `${age} ans, né(e) le ${dayOf(e.birthDate)}` : "Date de naissance non renseignée"}
             {!e.isStudent && " (contact : pas encore élève)"}
           </Text>
+          {parsed.choices?.refusesPhotos && (
+            // Seen at once by whoever opens the record before a photo or the gala (#296).
+            <Badge color="yellow" variant="light" radius="sm" tt="none" mt={4}>
+              Refuse les photos
+            </Badge>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <ButtonLink href={`/eleves/${e.id}/modifier`} variant="default">
@@ -267,6 +292,28 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             today={today}
             isDirector={role === "director"}
           />
+          {season && e.isStudent && (
+            <RulesSection
+              seasonLabel={season.label}
+              rulesRecorded={parsed.rulesRecorded}
+              lines={parsed.rules.map((r) => ({
+                payerId: r.payerId,
+                payerName: r.payerName,
+                enrolled: r.enrolled && r.rulesRecorded,
+                acceptedOn: r.acceptedOn,
+                defaultOn: defaultAcceptedOn(r.firstEnrolledOn, today),
+                olderVersion: r.olderVersion,
+              }))}
+              today={today}
+              student={{
+                studentId: e.id,
+                refusesPhotos: parsed.choices?.refusesPhotos ?? false,
+                referralId: parsed.choices?.referralId ?? null,
+                referrals: parsed.referrals.map((r) => ({ id: r.id, label: r.label })),
+              }}
+              isDirector={role === "director"}
+            />
+          )}
         </div>
       </div>
     </article>

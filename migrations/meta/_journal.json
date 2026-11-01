@@ -407,6 +407,13 @@
       "when": 1793369529921,
       "tag": "0057_invoice_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1793476509326,
+      "tag": "0058_rules_and_referral",
+      "breakpoints": true
     }
   ]
 }

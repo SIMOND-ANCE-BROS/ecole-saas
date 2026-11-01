@@ -58,6 +58,11 @@ export default async function SettingsPage() {
       title: "Documents demandés",
       detail: "Certificat médical, validité et délai pour le fournir",
     },
+    {
+      href: "/parametres/inscription",
+      title: "Règlement et questionnaire",
+      detail: "Règlement intérieur de chaque saison, « Comment nous avez-vous connus ? »",
+    },
     { href: "/planning/fermetures", title: "Fermetures", detail: "Vacances, jours fériés, gala" },
     {
       href: "/parametres/entreprises",

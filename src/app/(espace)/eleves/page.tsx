@@ -6,6 +6,7 @@ import { countContacts, countStudents, seasonCourseLabels, listContacts, listStu
 import { currentSeason } from "@/db/schedule";
 import { readPreference } from "@/db/preferences";
 import { readRequirements } from "@/db/student-documents";
+import { listReferralSources } from "@/db/internal-rules";
 import { displayedName } from "@/db/people";
 import { STUDENT_COLUMNS } from "@/domain/filters/columns";
 import { readFilter, readSort } from "@/domain/filters/filters";
@@ -42,6 +43,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
     contactCount,
     layout: layout,
     courses,
+    referrals,
   } = await withSchool(schoolId, async (tx) => {
     const season = await currentSeason(tx, today);
     const options = { filter, currentSort, today, seasonId: season?.id, requirements: await readRequirements(tx) };
@@ -53,6 +55,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
       total,
       page,
       courses: season ? await seasonCourseLabels(tx, season.id) : [],
+      referrals: (await listReferralSources(tx)).map((r) => r.label),
       contacts: entry ? await listContacts(tx, entry, { pageSize: CONTACTS_IN_SEARCH }) : [],
       contactCount: entry ? await countContacts(tx, entry) : 0,
       layout: await readPreference(tx, userId, "eleves"),
@@ -99,7 +102,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
             layout={layout}
             linkColumn="nom"
             empty={emptyMessage}
-            choice={{ cours: courses }}
+            choice={{ cours: courses, connu: referrals }}
             emptyAction={!entry && <ButtonLink href="/eleves/nouveau">Nouvel élève</ButtonLink>}
             pagination={{ page, total }}
             rows={students.map((e) => ({
@@ -117,6 +120,8 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
                 inscription: e.enrollmentStatus,
                 documents: e.missingDocuments,
                 prevenir: e.toNotify,
+                photos: e.photos,
+                connu: e.referral,
               },
             }))}
             mobile={

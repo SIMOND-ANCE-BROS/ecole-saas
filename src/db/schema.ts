@@ -411,6 +411,54 @@ export const closureSite = pgTable(
   ],
 );
 
+/**
+ * The internal rules of a season (#296), as the school recorded them: their
+ * text, or the name of their version. Saving another text adds a version and
+ * never rewrites one: a payer's acceptance keeps the version they signed.
+ * Never updated (trigger `internal_rules_version_frozen`, migration 0058).
+ */
+export const internalRulesVersion = pgTable(
+  "internal_rules_version",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    schoolId: schoolIdColumn(),
+    seasonId: uuid("season_id").notNull(),
+    text: text("text").notNull(),
+    // The insert's own time, not the transaction's start: the latest saved is always the current one.
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`clock_timestamp()`),
+  },
+  (t) => [
+    check("internal_rules_version_text", sql`char_length(btrim(${t.text})) BETWEEN 1 AND 50000`),
+    index().on(t.seasonId, t.createdAt),
+    sameSchoolTarget(t),
+    // Target of the acceptance's key: a payer accepts a version of the same season.
+    unique("internal_rules_version_school_id_id_season_id_unique").on(t.schoolId, t.id, t.seasonId),
+    sameSchool(t, t.seasonId, season),
+  ],
+);
+
+/**
+ * Answers a school offers to « Comment nous avez-vous connus ? » (#296), in
+ * its order (`position`): school data, never code.
+ */
+export const referralSource = pgTable(
+  "referral_source",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    schoolId: schoolIdColumn(),
+    label: text("label").notNull(),
+    position: smallint("position").notNull(),
+  },
+  (t) => [
+    check("referral_source_label", sql`char_length(btrim(${t.label})) BETWEEN 1 AND 60`),
+    // Backstop of `referralRefusal` (src/domain/people/internal-rules.ts): never the same answer twice.
+    uniqueIndex("referral_source_label_unique").on(t.schoolId, sql`lower(${t.label})`),
+    sameSchoolTarget(t),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // People and relationships (no more « famille »: see #67)
 // ---------------------------------------------------------------------------
@@ -437,12 +485,51 @@ export const person = pgTable(
     // Student of the school (dancer); otherwise contact: parent, payer, organisation.
     isStudent: boolean("is_student").notNull().default(false),
     toolRef: text("tool_ref"), // customer id in the invoicing tool
+    // The family signed the internal rules but refuses photos and videos of the student (#296 Q1).
+    // Off by default: `REFUSES_PHOTOS_DEFAULT` (src/domain/people/internal-rules.ts).
+    refusesPhotos: boolean("refuses_photos").notNull().default(false),
+    // Answer to « Comment nous avez-vous connus ? » (#296), asked at the first enrollment; optional.
+    referralSourceId: uuid("referral_source_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     check("person_company_siren", sql`${t.type} = 'individual' OR ${t.siren} IS NOT NULL`),
     index().on(t.schoolId, t.lastName),
+    index().on(t.referralSourceId),
     sameSchoolTarget(t),
+    sameSchool(t, t.referralSourceId, referralSource),
+  ],
+);
+
+/**
+ * A payer accepted the internal rules of a season (#296): one row per payer
+ * and season, on the day the form was signed (the enrollment date by
+ * default), with the version they accepted (none when the school recorded no
+ * text for the season yet). Its earlier states are in the audit log.
+ */
+export const rulesAcceptance = pgTable(
+  "rules_acceptance",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    schoolId: schoolIdColumn(),
+    payerId: uuid("payer_id").notNull(),
+    seasonId: uuid("season_id").notNull(),
+    rulesVersionId: uuid("rules_version_id"),
+    acceptedOn: date("accepted_on").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique().on(t.schoolId, t.payerId, t.seasonId),
+    index().on(t.seasonId),
+    index().on(t.rulesVersionId),
+    sameSchool(t, t.payerId, person),
+    sameSchool(t, t.seasonId, season),
+    // The version accepted is one of the same school and season (MATCH SIMPLE: none is accepted).
+    foreignKey({
+      name: "rules_acceptance_rules_version_same_season_fk",
+      columns: [t.schoolId, t.rulesVersionId, t.seasonId],
+      foreignColumns: [internalRulesVersion.schoolId, internalRulesVersion.id, internalRulesVersion.seasonId],
+    }),
   ],
 );
 
