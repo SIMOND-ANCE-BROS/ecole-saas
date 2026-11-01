@@ -135,8 +135,12 @@ export async function removeUnavailability(instructorId: string, id: string): Pr
  * Button « Synchroniser maintenant ». A sync that throws (its connection unreadable, or its own
  * error not recorded) answers the usual French message instead of an error page (#377).
  */
-export async function syncNow(instructorId: string): Promise<{ ok: boolean; message: string }> {
+export async function syncNow(
+  instructorId: string,
+): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
   const { schoolId: schoolId } = await requireRole("director");
+  // The id comes from the browser: checked before it reaches the database or the logs.
+  if (!z.uuid().safeParse(instructorId).success) return { ok: false, message: "Intervenant introuvable." };
   let r: Awaited<ReturnType<typeof syncCalendar>>;
   try {
     r = await syncCalendar(schoolId, instructorId);

@@ -67,6 +67,12 @@ describe("syncNow", () => {
     expect(logged).not.toHaveBeenCalled();
   });
 
+  it("refuses a malformed id before syncing or logging", async () => {
+    expect(await syncNow("zz-pas-un-id")).toEqual({ ok: false, message: "Intervenant introuvable." });
+    expect(syncCalendar).not.toHaveBeenCalled();
+    expect(logged).not.toHaveBeenCalled();
+  });
+
   it("counts the busy ranges read", async () => {
     syncCalendar.mockResolvedValueOnce({ ok: true, ranges: 2 });
     expect(await syncNow(INSTRUCTOR)).toEqual({ ok: true, message: "Agenda mis à jour : 2 plages occupées." });

@@ -16,7 +16,7 @@ export const SYNC_UNAVAILABLE = "Synchronisation impossible pour le moment ; ell
 /**
  * Logs a sync that threw instead of returning (its connection could not be read, or its own
  * error could not be recorded): ids and the error kind only, never a token, a name nor the
- * error message (#373, #377). Nothing was saved, so the next hourly run tries again.
+ * error message (#373, #377). The sync's result was not recorded: the next hourly run tries again.
  */
 export function logSyncException(schoolId: string, instructorId: string, e: unknown): void {
   console.error(
