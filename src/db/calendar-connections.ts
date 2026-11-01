@@ -97,10 +97,18 @@ export async function recordSync(
 
 /**
  * Saves a token the provider renewed, without touching the sync's result: used when that result
- * could not be recorded (#381). The token arrives already encrypted.
+ * could not be recorded (#381). Both tokens arrive already encrypted; only the token the sync read
+ * is replaced, so a calendar reconnected meanwhile keeps its own.
  */
-export async function saveRenewedToken(tx: Tx, instructorId: string, encryptedToken: string): Promise<void> {
-  await tx.update(calendarConnection).set({ encryptedToken }).where(eq(calendarConnection.instructorId, instructorId));
+export async function saveRenewedToken(
+  tx: Tx,
+  instructorId: string,
+  token: { read: string; renewed: string },
+): Promise<void> {
+  await tx
+    .update(calendarConnection)
+    .set({ encryptedToken: token.renewed })
+    .where(and(eq(calendarConnection.instructorId, instructorId), eq(calendarConnection.encryptedToken, token.read)));
 }
 
 /** Disconnects the calendar and removes the upcoming slots that came from it (manual entries remain). */

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import postgres from "postgres";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { withSchool } from "../db";
 import { saveConnection } from "../db/calendar-connections";
 import { decrypt, encrypt } from "./encryption";
@@ -40,16 +40,21 @@ const NOW = new Date("2026-11-01T08:00:00Z");
 const response = (status: number, json: unknown) =>
   new Response(JSON.stringify(json), { status, headers: { "Content-Type": "application/json" } });
 
-/** The provider rotates `from` into `to`, then the calendar read fails. */
+/** The provider rotates the token into `to`, then the calendar read fails; `sent` keeps the requests to the token endpoint. */
 const rotatingThenDown =
-  (from: string, to: string): typeof fetch =>
+  (to: string, sent: string[] = []): typeof fetch =>
   async (u, init) => {
     if (String(u).includes("/token")) {
-      expect(String(init?.body)).toContain(`refresh_token=${from}`);
+      sent.push(String(init?.body));
       return response(200, { access_token: "acces", refresh_token: to });
     }
     return response(503, {});
   };
+
+const connect = (token: string) =>
+  withSchool(school, (tx) =>
+    saveConnection(tx, instructorId, { provider: "microsoft", account: null, encryptedToken: encrypt(token) }),
+  );
 
 const storedToken = async () => {
   const [{ encrypted_token: encryptedToken }] =
@@ -65,10 +70,9 @@ beforeAll(async () => {
   [{ id: instructorId }] =
     await admin`INSERT INTO instructor (school_id, last_name, first_name, status, vat_regime, pay_mode, rate_cents)
     VALUES (${school}, 'Zzdurand', 'Zzcamille', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
-  await withSchool(school, (tx) =>
-    saveConnection(tx, instructorId, { provider: "microsoft", account: null, encryptedToken: encrypt("fake-r1") }),
-  );
 });
+
+beforeEach(() => connect("fake-r1"));
 
 afterEach(() => {
   control.failRecord = false;
@@ -86,15 +90,17 @@ afterAll(async () => {
 describe("syncCalendar when its error cannot be recorded (#381)", () => {
   it("still saves the token the provider rotated, encrypted, and rethrows", async () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const sent: string[] = [];
     control.failRecord = true;
     try {
-      await expect(syncCalendar(school, instructorId, rotatingThenDown("fake-r1", "fake-r2"), NOW)).rejects.toThrow(
+      await expect(syncCalendar(school, instructorId, rotatingThenDown("fake-r2", sent), NOW)).rejects.toThrow(
         "write failed",
       );
       expect(logged).not.toHaveBeenCalled();
     } finally {
       logged.mockRestore();
     }
+    expect(sent).toEqual([expect.stringContaining("refresh_token=fake-r1")]);
     const encryptedToken = await storedToken();
     expect(encryptedToken).not.toContain("fake-r2");
     expect(decrypt(encryptedToken)).toBe("fake-r2");
@@ -106,14 +112,14 @@ describe("syncCalendar when its error cannot be recorded (#381)", () => {
     control.failRecord = true;
     control.failToken = true;
     try {
-      await expect(syncCalendar(school, instructorId, rotatingThenDown("fake-r2", "fake-r3"), NOW)).rejects.toThrow(
+      await expect(syncCalendar(school, instructorId, rotatingThenDown("fake-r2"), NOW)).rejects.toThrow(
         "write failed",
       );
     } finally {
       calls = [...logged.mock.calls];
       logged.mockRestore();
     }
-    expect(decrypt(await storedToken())).toBe("fake-r2");
+    expect(decrypt(await storedToken())).toBe("fake-r1");
 
     expect(calls).toHaveLength(1);
     const line = String(calls[0]?.[0]);
@@ -121,7 +127,7 @@ describe("syncCalendar when its error cannot be recorded (#381)", () => {
     expect(line).toContain(instructorId);
     expect(line).toContain("jeton d’agenda renouvelé perdu");
     expect(line).toContain("Error");
-    for (const secret of ["fake-r2", "fake-r3", "acces", "write failed", "Zzdurand", "Zzcamille"]) {
+    for (const secret of ["fake-r1", "fake-r2", "acces", "write failed", "Zzdurand", "Zzcamille"]) {
       expect(line).not.toContain(secret);
     }
   });
@@ -138,6 +144,17 @@ describe("syncCalendar when its error cannot be recorded (#381)", () => {
     } finally {
       logged.mockRestore();
     }
-    expect(decrypt(await storedToken())).toBe("fake-r2");
+    expect(decrypt(await storedToken())).toBe("fake-r1");
+  });
+
+  it("does not overwrite a calendar reconnected during the sync", async () => {
+    control.failRecord = true;
+    const rotating = rotatingThenDown("fake-r2");
+    const reconnectedMeanwhile: typeof fetch = async (u, init) => {
+      if (String(u).includes("/token")) await connect("fake-new");
+      return rotating(u, init);
+    };
+    await expect(syncCalendar(school, instructorId, reconnectedMeanwhile, NOW)).rejects.toThrow("write failed");
+    expect(decrypt(await storedToken())).toBe("fake-new");
   });
 });

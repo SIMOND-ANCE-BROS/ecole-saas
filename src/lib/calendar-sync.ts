@@ -29,9 +29,15 @@ export function logSyncException(schoolId: string, instructorId: string, e: unkn
  * with it (#381). If even that write fails, the loss is logged with ids and the error kind only,
  * never the token: the calendar must be reconnected (runbook in `docs/guides/deployment.md`).
  */
-async function keepRenewedToken(schoolId: string, instructorId: string, token: string): Promise<void> {
+async function keepRenewedToken(
+  schoolId: string,
+  instructorId: string,
+  token: { read: string; renewed: string },
+): Promise<void> {
   try {
-    await withSchool(schoolId, (tx) => saveRenewedToken(tx, instructorId, encrypt(token)));
+    await withSchool(schoolId, (tx) =>
+      saveRenewedToken(tx, instructorId, { read: token.read, renewed: encrypt(token.renewed) }),
+    );
   } catch (e: unknown) {
     console.error(
       `École ${schoolId}, intervenant ${instructorId} : jeton d’agenda renouvelé perdu, agenda à reconnecter (${errorLabel(e)}).`,
@@ -65,7 +71,9 @@ export async function syncCalendar(
     } catch (e) {
       // The error could not be recorded: the renewed token is still saved on its own, or its
       // loss logged, since the provider may have revoked the old one (#381). Then rethrown.
-      if (renewedToken) await keepRenewedToken(schoolId, instructorId, renewedToken);
+      if (renewedToken) {
+        await keepRenewedToken(schoolId, instructorId, { read: connection.encryptedToken, renewed: renewedToken });
+      }
       throw e;
     }
     return { ok: false as const, message };
