@@ -36,7 +36,8 @@ export type StudentChoices = {
 };
 
 type Props = {
-  seasonLabel: string;
+  /** The season the record shows (#362): its rules are signed or withdrawn. */
+  season: { id: string; label: string };
   lines: RulesLine[];
   /** The school recorded the season's rules: only then are signatures collected. */
   rulesRecorded: boolean;
@@ -56,15 +57,7 @@ const done = (message: string) => notifications.show({ color: "green", message }
  * of photos and the answer to « Comment nous avez-vous connus ? ». Signing on
  * the enrollment day is one click; another day opens a date field.
  */
-export function RulesSection({
-  seasonLabel,
-  lines,
-  rulesRecorded,
-  today,
-  ownRecord = false,
-  student,
-  isDirector,
-}: Props) {
+export function RulesSection({ season, lines, rulesRecorded, today, ownRecord = false, student, isDirector }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [removal, setRemoval] = useState<Removal | null>(null);
@@ -92,7 +85,7 @@ export function RulesSection({
       <ConfirmRemoval removal={removal} onClose={() => setRemoval(null)} />
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
         <Title order={2} size="h5" id="reglement" tabIndex={-1}>
-          Règlement intérieur {seasonLabel}
+          Règlement intérieur {season.label}
         </Title>
         {isDirector && (
           <TextLink href="/parametres/inscription" size="sm">
@@ -142,7 +135,7 @@ export function RulesSection({
                         aria-label={`Règlement signé${who(l)} le ${dayOf(l.defaultOn)}`}
                         onClick={() =>
                           act(
-                            () => signRules(l.payerId, l.defaultOn),
+                            () => signRules(l.payerId, season.id, l.defaultOn),
                             () => {
                               done("Règlement intérieur : signature enregistrée.");
                               focusAfter(`[data-rules-edit="${l.payerId}"]`);
@@ -180,7 +173,7 @@ export function RulesSection({
                             body: `Le règlement repasse à « non signé »${who(l)}. Le journal garde ce qui était enregistré.`,
                             run: () =>
                               act(
-                                () => unsignRules(l.payerId),
+                                () => unsignRules(l.payerId, season.id),
                                 () => {
                                   done("Règlement intérieur : signature retirée.");
                                   focusAfter(`[data-rules-sign="${l.payerId}"]`);
@@ -204,7 +197,7 @@ export function RulesSection({
                   close={() => closeEdit(l.payerId)}
                   save={(on) =>
                     act(
-                      () => signRules(l.payerId, on),
+                      () => signRules(l.payerId, season.id, on),
                       () => {
                         done("Règlement intérieur : date de signature enregistrée.");
                         closeEdit(l.payerId);

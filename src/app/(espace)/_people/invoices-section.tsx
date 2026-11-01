@@ -100,6 +100,7 @@ export function InvoicesSection({
   invoices,
   showEntity,
   canDraft,
+  endedNote,
   isDirector,
 }: {
   payerId: string;
@@ -107,6 +108,8 @@ export function InvoicesSection({
   invoices: PayerInvoice[];
   showEntity: boolean;
   canDraft: boolean;
+  /** An ended season shown on the record (#362): said instead of « Préparer les factures » (#380 open). */
+  endedNote?: string;
   /** Management: a link to « Factures à reprendre » on a rejected invoice. */
   isDirector: boolean;
 }) {
@@ -117,12 +120,18 @@ export function InvoicesSection({
         <Title order={2} size="h5" id="factures" tabIndex={-1}>
           Factures {season.label}
         </Title>
-        {canDraft && <DraftInvoices payerId={payerId} seasonId={season.id} again={unsent} />}
+        {canDraft && !endedNote && <DraftInvoices payerId={payerId} seasonId={season.id} again={unsent} />}
       </div>
+      {canDraft && endedNote && (
+        <Text size="sm" c="dimmed">
+          {endedNote}
+        </Text>
+      )}
       {invoices.length === 0 ? (
         <Text size="sm" c="dimmed">
-          Aucune facture pour cette saison. « Préparer les factures » en fait une par entreprise, à partir des
-          inscriptions et des carnets pas encore facturés.
+          Aucune facture pour cette saison.
+          {!endedNote &&
+            " « Préparer les factures » en fait une par entreprise, à partir des inscriptions et des carnets pas encore facturés."}
         </Text>
       ) : (
         <Paper withBorder component="ul" className="divide-y divide-bordure">

@@ -7,11 +7,12 @@ import { seasonEnrollments } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
 import { packsOf } from "@/db/lesson-packs";
 import { severalEntities } from "@/db/billing-entities";
-import { payerInvoices } from "@/db/payer-invoices";
-import { mayDraft } from "@/domain/invoicing/progress";
+import { payerInvoices, paysSomeSeason } from "@/db/payer-invoices";
+import { ENDED_SEASON, mayDraft, seasonDraftable } from "@/domain/invoicing/progress";
 import { InvoicesSection } from "../../_people/invoices-section";
+import { RecordSeason } from "../../_people/record-season";
 import { displayedName } from "@/db/people";
-import { currentSeason } from "@/db/schedule";
+import { recordSeasons } from "@/db/schedule";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { Banner, Enrollments, Telephone } from "../../_people/sections";
@@ -43,15 +44,20 @@ const collected = (n: unknown) => {
 
 export default async function PageContact({ params, searchParams }: PageProps<"/contacts/[id]">) {
   const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
-  const [{ id }, { enregistre, encaisse, carnet }] = await Promise.all([params, searchParams]);
+  const [{ id }, { enregistre, encaisse, carnet, saison }] = await Promise.all([params, searchParams]);
   const today = todayInParis();
   const parsed = await withSchool(schoolId, async (tx) => {
     const contact = await readContact(tx, id);
     if (!contact) return null;
-    const season = await currentSeason(tx, today);
+    // The season shown (`?saison=`, #362): enrollments, invoices and rules.
+    const seasons = await recordSeasons(tx, saison, today);
+    const season = seasons?.shown ?? null;
     return {
       contact,
       season: season,
+      seasons,
+      // A payer of any season: the record offers the season picker, even on a season without them.
+      paysSomeSeason: seasons && seasons.seasons.length > 1 ? await paysSomeSeason(tx, contact.id) : false,
       billed: season ? await seasonEnrollments(tx, { payerId: contact.id }, season.id) : [],
       balance: await balanceOf(tx, contact.id, today),
       payments: await paymentsOf(tx, contact.id),
@@ -172,10 +178,20 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
               </Paper>
             )}
           </section>
+          {parsed.seasons && (sells || parsed.paysSomeSeason) && (
+            <RecordSeason
+              seasons={parsed.seasons.seasons}
+              shown={parsed.seasons.shown}
+              current={parsed.seasons.current}
+              empty={billed.length === 0}
+            />
+          )}
           {season && <Enrollments enrollments={billed} season={season} today={today} payerId={c.id} />}
           {season && parsed.rules && (billed.length > 0 || parsed.rules.acceptedOn !== null) && (
             <RulesSection
-              seasonLabel={season.label}
+              // A new season, a new section: nothing typed for another season survives the switch.
+              key={season.id}
+              season={season}
               rulesRecorded={parsed.rules.rulesRecorded}
               ownRecord
               lines={[
@@ -197,11 +213,15 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
           )}
           {season && (billed.length > 0 || packs.length > 0 || invoices.length > 0) && (
             <InvoicesSection
+              key={season.id}
               payerId={c.id}
               season={season}
               invoices={invoices}
               showEntity={parsed.severalEntities}
               canDraft={mayDraft(role)}
+              endedNote={
+                seasonDraftable(season, parsed.seasons?.current.id, today) ? undefined : ENDED_SEASON(season.label)
+              }
               isDirector={role === "director"}
             />
           )}
@@ -210,6 +230,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
             balance={balance}
             payments={payments}
             back={`/contacts/${c.id}`}
+            allSeasons={(parsed.seasons?.seasons.length ?? 0) > 1}
             isDirector={role === "director"}
             canRefund={mayRefund(role)}
             canCancelRefund={mayCancelRefund(role)}

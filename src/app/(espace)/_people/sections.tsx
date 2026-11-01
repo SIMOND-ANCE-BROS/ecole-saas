@@ -18,6 +18,7 @@ import type { PersonRecord } from "@/db/people";
 import type { Season } from "@/db/schedule";
 import { ENROLLMENT_STATUS_LABELS as STATUT } from "@/domain/enrollment/statuses";
 import { amountDue, dueCents, isCounted } from "@/domain/payments/balance";
+import { coursesBySeason } from "@/domain/people/followed-courses";
 import { formatEuros } from "@/lib/money";
 import { DAYS } from "../planning/format";
 import { TextLink } from "../_ui/text-link";
@@ -61,10 +62,18 @@ export function Notes({ notes }: { notes: string | null }) {
   );
 }
 
-export function FollowedCourses({ courses }: { courses: PersonRecord["courses"] }) {
-  const season = courses[0]?.season;
-  const current = courses.filter((c) => c.season === season);
-  const history = courses.filter((c) => c.season !== season);
+/**
+ * Courses of the student: those of the season the record shows on top (#362), else of the most
+ * recent season; the others below, older or later (a re-enrollment for the next season, in June).
+ */
+export function FollowedCourses({
+  courses,
+  shown,
+}: {
+  courses: PersonRecord["courses"];
+  shown: { id: string; label: string } | null;
+}) {
+  const { label: season, shown: current, others: history } = coursesBySeason(courses, shown);
   return (
     <>
       <section aria-labelledby="cours" className="flex flex-col gap-2">
@@ -109,7 +118,7 @@ export function FollowedCourses({ courses }: { courses: PersonRecord["courses"] 
       {history.length > 0 && (
         <section aria-labelledby="historique" className="flex flex-col gap-2">
           <Title order={2} size="h5" id="historique">
-            Saisons précédentes
+            Autres saisons
           </Title>
           <Text component="ul" size="sm" c="dimmed" className="flex flex-col gap-1">
             {history.map((c) => (

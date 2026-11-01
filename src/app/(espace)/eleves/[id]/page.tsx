@@ -8,10 +8,11 @@ import { paymentsOf, balanceOf } from "@/db/payments";
 import { packsOf } from "@/db/lesson-packs";
 import { severalEntities } from "@/db/billing-entities";
 import { payerInvoices } from "@/db/payer-invoices";
-import { mayDraft } from "@/domain/invoicing/progress";
+import { ENDED_SEASON, mayDraft, seasonDraftable } from "@/domain/invoicing/progress";
 import { InvoicesSection } from "../../_people/invoices-section";
+import { RecordSeason } from "../../_people/record-season";
 import { displayedName } from "@/db/people";
-import { currentSeason } from "@/db/schedule";
+import { recordSeasons } from "@/db/schedule";
 import { enrolledCourses, firstEnrollmentDate, readRequirements, studentDocuments } from "@/db/student-documents";
 import { ageAt, isMinor, todayInParis } from "@/domain/people/age";
 import { documentsToBring, documentState, expectedDocuments, recordableDocuments } from "@/domain/people/documents";
@@ -51,24 +52,28 @@ const collected = (n: unknown) => {
 
 export default async function StudentPage({ params, searchParams }: PageProps<"/eleves/[id]">) {
   const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
-  const [{ id }, { enregistre, inscription, encaisse, carnet }] = await Promise.all([params, searchParams]);
+  const [{ id }, { enregistre, inscription, encaisse, carnet, saison }] = await Promise.all([params, searchParams]);
   const today = todayInParis();
   const parsed = await withSchool(schoolId, async (tx) => {
     const student = await readStudent(tx, id, today);
     if (!student) return null;
-    const season = await currentSeason(tx, today);
+    // The season shown (`?saison=`, #362): enrollments, invoices and rules. Documents stay on the current one.
+    const seasons = await recordSeasons(tx, saison, today);
+    const season = seasons?.shown ?? null;
+    const current = seasons?.current ?? null;
     const paysForThemselves = student.billedTo.type !== "person";
     return {
       student: student,
       season: season,
+      seasons,
       // The student's enrollments, and the ones they pay for (an adult paying for their child).
       enrollments: season ? await seasonEnrollments(tx, { personId: student.id }, season.id) : [],
       balance: paysForThemselves ? await balanceOf(tx, student.id, today) : null,
       payments: paysForThemselves ? await paymentsOf(tx, student.id) : [],
       requirements: await readRequirements(tx),
       documents: await studentDocuments(tx, student.id),
-      enrolledOn: season ? await firstEnrollmentDate(tx, student.id, season.id) : null,
-      courses: season ? await enrolledCourses(tx, student.id, season.id) : [],
+      enrolledOn: current ? await firstEnrollmentDate(tx, student.id, current.id) : null,
+      courses: current ? await enrolledCourses(tx, student.id, current.id) : [],
       packs: await packsOf(tx, { personId: student.id }),
       // A student paying for themselves: their own invoices (#352).
       invoices: season && paysForThemselves ? await payerInvoices(tx, student.id, season.id) : [],
@@ -157,7 +162,11 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           <ButtonLink href={`/eleves/${e.id}/modifier`} variant="default">
             Modifier l’identité
           </ButtonLink>
-          <ButtonLink href={`/eleves/${e.id}/inscription`}>Inscrire {firstName}</ButtonLink>
+          {/* Enrolling is in the current season only, said when another one is shown (#362). */}
+          <ButtonLink href={`/eleves/${e.id}/inscription`}>
+            Inscrire {firstName}
+            {parsed.seasons && season?.id !== parsed.seasons.current.id && ` en ${parsed.seasons.current.label}`}
+          </ButtonLink>
         </div>
       </header>
 
@@ -237,7 +246,15 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
 
         <div className="flex min-w-0 flex-col gap-5">
           <Relatives studentId={e.id} firstName={firstName} guardians={e.guardians} other={e.otherRelationships} />
-          <FollowedCourses courses={e.courses} />
+          {/* A contact not yet a student, never enrolled: nothing of theirs depends on the season. */}
+          {parsed.seasons && (e.isStudent || e.courses.length > 0) && (
+            <RecordSeason
+              seasons={parsed.seasons.seasons}
+              shown={parsed.seasons.shown}
+              current={parsed.seasons.current}
+            />
+          )}
+          <FollowedCourses courses={e.courses} shown={season} />
           {season && (
             <Enrollments
               enrollments={enrollments}
@@ -264,11 +281,16 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             <>
               {season && (enrollments.length > 0 || packs.length > 0 || parsed.invoices.length > 0) && (
                 <InvoicesSection
+                  // A new season, a new section: nothing left over from another season.
+                  key={season.id}
                   payerId={e.id}
                   season={season}
                   invoices={parsed.invoices}
                   showEntity={parsed.severalEntities}
                   canDraft={mayDraft(role)}
+                  endedNote={
+                    seasonDraftable(season, parsed.seasons?.current.id, today) ? undefined : ENDED_SEASON(season.label)
+                  }
                   isDirector={role === "director"}
                 />
               )}
@@ -277,6 +299,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
                 balance={balance}
                 payments={payments}
                 back={`/eleves/${e.id}`}
+                allSeasons={(parsed.seasons?.seasons.length ?? 0) > 1}
                 isDirector={role === "director"}
                 canRefund={mayRefund(role)}
                 canCancelRefund={mayCancelRefund(role)}
@@ -294,7 +317,9 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           />
           {season && e.isStudent && (
             <RulesSection
-              seasonLabel={season.label}
+              // A date being typed for one season is never saved on another.
+              key={season.id}
+              season={season}
               rulesRecorded={parsed.rulesRecorded}
               lines={parsed.rules.map((r) => ({
                 payerId: r.payerId,

@@ -9,6 +9,7 @@ import type { Tx } from "./index";
 import {
   auditLog,
   billingEntity,
+  enrollment,
   installment,
   invoice,
   invoiceLine,
@@ -271,6 +272,18 @@ export async function abandonRejected(
   if (await hasAllocation(tx, invoiceId)) return { ok: false, message: PAID };
   await setAside(tx, actor, invoiceId, "abandoned");
   return { ok: true, mode: "abandoned" };
+}
+
+/**
+ * Whether the person pays an enrollment or holds an invoice, in any season (#362): their record
+ * then offers the season picker, even when the season shown has nothing of theirs.
+ */
+export async function paysSomeSeason(tx: Tx, payerId: string): Promise<boolean> {
+  const [row] = await tx.execute<{ pays: boolean }>(
+    sql`SELECT EXISTS (SELECT 1 FROM ${enrollment} WHERE ${enrollment.payerId} = ${payerId})
+      OR EXISTS (SELECT 1 FROM ${invoice} WHERE ${invoice.payerId} = ${payerId}) AS pays`,
+  );
+  return row?.pays === true;
 }
 
 /** The payer's invoices of the season drafted again (`draftPayerInvoices`), signed by the member. */

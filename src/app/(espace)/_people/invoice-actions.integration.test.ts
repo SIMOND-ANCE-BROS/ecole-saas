@@ -27,6 +27,8 @@ vi.mock("@/db", () => import("../../../db/index"));
 vi.mock("@/db/payer-invoices", () => import("../../../db/payer-invoices"));
 vi.mock("@/domain/invoicing/progress", () => import("../../../domain/invoicing/progress"));
 vi.mock("@/jobs/invoicing/send", () => import("../../../jobs/invoicing/send"));
+vi.mock("@/db/schedule", () => import("../../../db/schedule"));
+vi.mock("@/domain/people/age", () => import("../../../domain/people/age"));
 
 process.env.INVOICING_FAKE_ALLOWED = "1";
 // CI has no encryption key: a throwaway one encrypts the fake tool's test token.
@@ -36,7 +38,7 @@ if (Buffer.from(process.env.CLE_CHIFFREMENT ?? "", "base64").length !== 32)
 const { draftInvoices } = await import("./invoice-actions");
 const { abandon, sendAgain } = await import("../parametres/entreprises/actions");
 const { withSchool } = await import("../../../db/index");
-const { payerInvoices } = await import("../../../db/payer-invoices");
+const { payerInvoices, paysSomeSeason } = await import("../../../db/payer-invoices");
 const { encrypt } = await import("../../../lib/encryption");
 const { fakeStoreOf } = await import("../../../connectors/invoicing/fake");
 
@@ -421,6 +423,63 @@ describe("a rejected invoice (#352)", () => {
     expect(await abandon(paid)).toEqual(paidRefusal);
     expect(await sendAgain(paid)).toEqual(paidRefusal);
     expect((await admin`SELECT status FROM invoice WHERE id = ${paid}`)[0].status).toBe("rejected");
+  });
+});
+
+describe("drafting the season shown on the record (#362)", () => {
+  it("drafts the next season's enrollments on its own invoice, leaving the other season's alone", async () => {
+    const s = ids.school;
+    const [{ id: next }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
+      VALUES (${s}, '2028-2029', '2028-09-01', '2029-06-30') RETURNING id`;
+    const [{ id: course }] = await admin`
+      INSERT INTO course (school_id, season_id, billing_entity_id, vat_treatment_id, discipline_id, room_id, instructor_id,
+        weekday, start_time, duration_minutes)
+      VALUES (${s}, ${next}, ${ids.a}, ${ids.exempt}, ${ids.jazz}, ${ids.room}, ${ids.teacher}, 4, '18:00', 60)
+      RETURNING id`;
+    // Re-enrolled in June for the next season, before it starts.
+    const [{ id: enrollment }] = await admin`
+      INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, enrolled_on, gross_price_cents)
+      VALUES (${s}, ${ids.a}, ${next}, ${ids.payer}, 'child', 'year', '2028-06-20', 41000) RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id)
+      VALUES (${s}, ${ids.a}, ${enrollment}, ${ids.student}, ${course})`;
+    const ofSeason = async (seasonId: string) =>
+      (await invoices()).filter((i) => i.season_id === seasonId).map((i) => [i.id, i.status]);
+    const before = await ofSeason(ids.season);
+
+    expect(await draftInvoices({ payerId: ids.payer, seasonId: next })).toEqual({ ok: true, drafted: 1 });
+    const drafted = (await invoices()).filter((i) => i.season_id === next);
+    expect(drafted.map((i) => [i.billing_entity_id, i.status])).toEqual([[ids.a, "to_send"]]);
+    const shown = await withSchool(s, (tx) => payerInvoices(tx, ids.payer, next));
+    expect(shown.map((i) => i.totalInclTaxCents)).toEqual([41000]);
+    expect(await billing(enrollment)).toBe(1);
+    // The other season's invoices are untouched.
+    expect(await ofSeason(ids.season)).toEqual(before);
+    // Another school's season, as a tampered record would send it: refused, nothing drafted (RLS).
+    const [{ id: theirs }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
+      VALUES (${ids.other}, '2028-2029', '2028-09-01', '2029-06-30') RETURNING id`;
+    const count = (await invoices()).length;
+    expect(await draftInvoices({ payerId: ids.payer, seasonId: theirs })).toEqual({
+      ok: false,
+      message: "Cette saison n’existe plus.",
+    });
+    expect(await invoices()).toHaveLength(count);
+    // A season already ended, not the current one: shown, never drafted from the record (#380 open).
+    const [{ id: ended }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
+      VALUES (${s}, '2020-2021', '2020-09-01', '2021-06-30') RETURNING id`;
+    const [{ id: old }] = await admin`
+      INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, enrolled_on, gross_price_cents)
+      VALUES (${s}, ${ids.a}, ${ended}, ${ids.payer}, 'child', 'year', '2020-09-10', 30000) RETURNING id`;
+    expect(await draftInvoices({ payerId: ids.payer, seasonId: ended })).toEqual({
+      ok: false,
+      message: "La saison 2020-2021 est terminée : ses factures ne se préparent pas depuis la fiche.",
+    });
+    expect(await billing(old)).toBe(0);
+    expect(await invoices()).toHaveLength(count);
+    // The picker's condition on a contact record: a payer of some season, not a mere relative.
+    expect(await withSchool(s, (tx) => paysSomeSeason(tx, ids.payer))).toBe(true);
+    expect(await withSchool(s, (tx) => paysSomeSeason(tx, ids.student))).toBe(false);
+    expect(await withSchool(s, (tx) => paysSomeSeason(tx, ids.otherPayer))).toBe(false);
+    await runAfter();
   });
 });
 

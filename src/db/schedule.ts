@@ -55,6 +55,25 @@ export async function chosenSeason(tx: Tx, asked: unknown, day: string): Promise
   return (await seasonById(tx, asked)) ?? currentSeason(tx, day);
 }
 
+/**
+ * Seasons of a person's record (#362): the one shown (`?saison=` when it is one of the
+ * school's, otherwise the current one), the current one, and all of them for the picker.
+ * Null without any season.
+ */
+export async function recordSeasons(
+  tx: Tx,
+  asked: unknown,
+  day: string,
+): Promise<{ shown: Season; current: Season; seasons: Season[] } | null> {
+  const current = await currentSeason(tx, day);
+  if (!current) return null;
+  return {
+    shown: (await seasonById(tx, asked)) ?? current,
+    current,
+    seasons: await schoolSeasons(tx),
+  };
+}
+
 /** Season of a course; null for an unknown course. */
 export async function seasonOfCourse(tx: Tx, courseId: string): Promise<Season | null> {
   const [s] = await tx

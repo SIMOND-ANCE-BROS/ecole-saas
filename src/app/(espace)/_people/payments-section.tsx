@@ -130,6 +130,8 @@ type Props = {
   /** May cancel a refund entered by mistake (#346, `mayCancelRefund`). */
   canCancelRefund: boolean;
   today: string;
+  /** The school has several seasons (#362): the balance covers them all, said in the heading. */
+  allSeasons?: boolean;
 };
 
 /** A payer's payments (#97): balance, cheques to cash, payments received, corrections. */
@@ -142,6 +144,7 @@ export function PaymentsSection({
   canRefund,
   canCancelRefund,
   today: today,
+  allSeasons = false,
 }: Props) {
   // The « Correction » column: correcting a payment, or cancelling a refund.
   const corrects = isDirector || canCancelRefund;
@@ -155,7 +158,7 @@ export function PaymentsSection({
       <div className="flex items-baseline justify-between gap-2">
         {/* Focusable: it keeps the focus when a fully corrected payment loses « Corriger ». */}
         <Title order={2} size="h5" id="paiements" tabIndex={-1}>
-          Paiements
+          Paiements{allSeasons && " (toutes saisons)"}
         </Title>
         <ButtonLink href={`/paiements/nouveau?payeur=${payerId}`} size="sm">
           Encaisser

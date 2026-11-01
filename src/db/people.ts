@@ -186,6 +186,7 @@ export type PersonRecord = {
   /** Courses attended as a student, most recent season first, once per course and status (#333). */
   courses: {
     id: string;
+    seasonId: string;
     season: string;
     discipline: string;
     level: string | null;
@@ -253,6 +254,7 @@ export async function readPerson(tx: Tx, id: string): Promise<PersonRecord | nul
   const followed = await tx
     .select({
       id: course.id,
+      seasonId: season.id,
       season: season.label,
       discipline: discipline.name,
       level: course.level,
