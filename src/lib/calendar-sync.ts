@@ -64,6 +64,7 @@ export async function syncCalendar(
     try {
       await withSchool(schoolId, (tx) =>
         recordSync(tx, instructorId, {
+          readToken: connection.encryptedToken,
           error: message,
           encryptedToken: renewedToken ? encrypt(renewedToken) : undefined,
         }),
@@ -97,6 +98,7 @@ export async function syncCalendar(
     const count = await withSchool(schoolId, async (tx) => {
       const n = await replaceCalendarUnavailabilities(tx, instructorId, connection.provider, window, ranges);
       await recordSync(tx, instructorId, {
+        readToken: connection.encryptedToken,
         error: null,
         encryptedToken: newRefreshToken ? encrypt(newRefreshToken) : undefined,
       });

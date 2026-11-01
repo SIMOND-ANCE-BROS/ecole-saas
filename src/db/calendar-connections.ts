@@ -77,11 +77,16 @@ export async function connectedInstructors(tx: Tx): Promise<string[]> {
   return rows.map((c) => c.id);
 }
 
-/** Result of a synchronisation; a token renewed by the provider replaces the old one. */
+/**
+ * Result of a synchronisation; a token renewed by the provider replaces the old one. Tokens arrive
+ * already encrypted. Recorded only on the connection the sync read (`readToken`, compared like
+ * `saveRenewedToken`): a calendar reconnected meanwhile keeps its own token and stays « not yet
+ * synced » rather than showing the old connection's result (#383).
+ */
 export async function recordSync(
   tx: Tx,
   instructorId: string,
-  r: { error: string | null; encryptedToken?: string },
+  r: { readToken: string; error: string | null; encryptedToken?: string },
 ): Promise<void> {
   await tx
     .update(calendarConnection)
@@ -92,7 +97,7 @@ export async function recordSync(
         ...(r.encryptedToken ? { encryptedToken: r.encryptedToken } : {}),
       }),
     )
-    .where(eq(calendarConnection.instructorId, instructorId));
+    .where(and(eq(calendarConnection.instructorId, instructorId), eq(calendarConnection.encryptedToken, r.readToken)));
 }
 
 /**

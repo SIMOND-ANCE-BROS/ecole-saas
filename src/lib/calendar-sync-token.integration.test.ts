@@ -158,3 +158,62 @@ describe("syncCalendar when its error cannot be recorded (#381)", () => {
     expect(decrypt(await storedToken())).toBe("fake-new");
   });
 });
+
+describe("syncCalendar when the calendar is reconnected during the sync (#383)", () => {
+  /** The calendar is reconnected, then the provider rotates the old token into `fake-r2`; the read answers `read`. */
+  const reconnectedDuring =
+    (read: () => Response): typeof fetch =>
+    async (u) => {
+      if (String(u).includes("/token")) {
+        await connect("fake-new");
+        return response(200, { access_token: "acces", refresh_token: "fake-r2" });
+      }
+      return read();
+    };
+
+  const connectionRow = async () => {
+    const [row] =
+      await admin`SELECT encrypted_token, error, last_synced_at FROM calendar_connection WHERE instructor_id = ${instructorId}`;
+    return row as { encrypted_token: string; error: string | null; last_synced_at: Date | null };
+  };
+
+  it("keeps the new token and leaves the new connection unsynced when the sync succeeds", async () => {
+    const result = await syncCalendar(
+      school,
+      instructorId,
+      reconnectedDuring(() => response(200, { value: [] })),
+      NOW,
+    );
+    expect(result.ok).toBe(true);
+    const row = await connectionRow();
+    expect(decrypt(row.encrypted_token)).toBe("fake-new");
+    expect(row.last_synced_at).toBeNull();
+    expect(row.error).toBeNull();
+  });
+
+  it("keeps the new token and shows no error of the old connection when the sync fails", async () => {
+    const result = await syncCalendar(
+      school,
+      instructorId,
+      reconnectedDuring(() => response(503, {})),
+      NOW,
+    );
+    expect(result.ok).toBe(false);
+    const row = await connectionRow();
+    expect(decrypt(row.encrypted_token)).toBe("fake-new");
+    expect(row.error).toBeNull();
+  });
+
+  it("still records the sync and the rotated token when the calendar was not reconnected", async () => {
+    const rotatingThenEmpty: typeof fetch = async (u) =>
+      String(u).includes("/token")
+        ? response(200, { access_token: "acces", refresh_token: "fake-r2" })
+        : response(200, { value: [] });
+    expect((await syncCalendar(school, instructorId, rotatingThenEmpty, NOW)).ok).toBe(true);
+    const row = await connectionRow();
+    expect(row.encrypted_token).not.toContain("fake-r2");
+    expect(decrypt(row.encrypted_token)).toBe("fake-r2");
+    expect(row.last_synced_at).not.toBeNull();
+    expect(row.error).toBeNull();
+  });
+});
