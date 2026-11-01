@@ -10,6 +10,20 @@ const BEFORE = 1;
 const AFTER = 120;
 const DAY = 86_400_000;
 
+/** Shown to the school when a sync fails for a reason other than a revoked access. */
+export const SYNC_UNAVAILABLE = "Synchronisation impossible pour le moment ; elle sera retentée.";
+
+/**
+ * Logs a sync that threw instead of returning (its connection could not be read, or its own
+ * error could not be recorded): ids and the error kind only, never a token, a name nor the
+ * error message (#373, #377). Nothing was saved, so the next hourly run tries again.
+ */
+export function logSyncException(schoolId: string, instructorId: string, e: unknown): void {
+  console.error(
+    `École ${schoolId}, intervenant ${instructorId} : synchronisation en échec, erreur non enregistrée (${errorLabel(e)}).`,
+  );
+}
+
 /**
  * Reads the busy ranges of an instructor's connected calendar and replaces
  * their unavailabilities that came from this calendar. Network calls happen
@@ -60,9 +74,7 @@ export async function syncCalendar(
     });
     return { ok: true, ranges: count };
   } catch (e) {
-    return failure(
-      e instanceof AccessRemoved ? e.message : "Synchronisation impossible pour le moment ; elle sera retentée.",
-    );
+    return failure(e instanceof AccessRemoved ? e.message : SYNC_UNAVAILABLE);
   }
 }
 
@@ -84,9 +96,7 @@ export async function syncSchool(
       if ((await syncCalendar(schoolId, instructorId, query)).ok) succeeded++;
     } catch (e: unknown) {
       unrecorded++;
-      console.error(
-        `École ${schoolId}, intervenant ${instructorId} : synchronisation en échec, erreur non enregistrée (${errorLabel(e)}).`,
-      );
+      logSyncException(schoolId, instructorId, e);
     }
   }
   return { succeeded, failed: ids.length - succeeded, unrecorded };
