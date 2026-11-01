@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Anchor, Paper, Table, Text, Title } from "@mantine/core";
+// A server component: the Table parts by name, `Table.Thead` is not available here.
+import { Anchor, Paper, Table, TableTbody, TableTd, TableTh, TableThead, TableTr, Text, Title } from "@mantine/core";
 import { withSchool } from "@/db";
 import { listReferralSources, referralCounts, seasonsRules } from "@/db/internal-rules";
 import { currentSeason } from "@/db/schedule";
@@ -63,22 +64,22 @@ export default async function EnrollmentSettingsPage() {
           </div>
           <Paper withBorder className="overflow-x-auto">
             <Table verticalSpacing="xs" fz="sm">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Réponse</Table.Th>
-                  {season && <Table.Th className="text-right">Nouveaux élèves {season.label}</Table.Th>}
-                  <Table.Th className="text-right">Tous les élèves</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
+              <TableThead>
+                <TableTr>
+                  <TableTh>Réponse</TableTh>
+                  {season && <TableTh className="text-right">Nouveaux élèves {season.label}</TableTh>}
+                  <TableTh className="text-right">Tous les élèves</TableTh>
+                </TableTr>
+              </TableThead>
+              <TableTbody>
                 {counts.map((c) => (
-                  <Table.Tr key={c.label}>
-                    <Table.Td>{c.label}</Table.Td>
-                    {season && <Table.Td className="text-right tabular-nums">{c.newThisSeason}</Table.Td>}
-                    <Table.Td className="text-right tabular-nums">{c.students}</Table.Td>
-                  </Table.Tr>
+                  <TableTr key={c.label}>
+                    <TableTd>{c.label}</TableTd>
+                    {season && <TableTd className="text-right tabular-nums">{c.newThisSeason}</TableTd>}
+                    <TableTd className="text-right tabular-nums">{c.students}</TableTd>
+                  </TableTr>
                 ))}
-              </Table.Tbody>
+              </TableTbody>
             </Table>
           </Paper>
         </section>
