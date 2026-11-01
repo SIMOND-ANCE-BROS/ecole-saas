@@ -14,7 +14,7 @@ import {
   Text,
 } from "@mantine/core";
 import { withSchool } from "@/db";
-import { PAYMENT_METHODS, type Method } from "@/db/payments";
+import { PAYMENT_METHODS } from "@/db/payments";
 import { readPreference } from "@/db/preferences";
 import { PAYMENT_COLUMNS } from "@/domain/filters/columns";
 import { toParams } from "@/domain/filters/filters";
@@ -22,7 +22,7 @@ import { offsetOf, PAGE_SIZE, readPage } from "@/domain/filters/pagination";
 import { futureCashing, paymentLogQuery, referenceOf, shownPaymentLog } from "@/domain/payments/payment-log";
 import { paymentLog, listDeposits, paymentsToDeposit } from "@/db/deposits";
 import { listEntities } from "@/db/billing-entities";
-import { totals } from "@/domain/payments/deposits";
+import { totals, totalsByEntity } from "@/domain/payments/deposits";
 import { validDate } from "@/domain/schedule/week";
 import { todayInParis } from "@/domain/people/age";
 import { frenchDate } from "@/lib/dates";
@@ -34,6 +34,7 @@ import { ButtonLink } from "../_ui/button-link";
 import { PageHeader } from "../_ui/page-header";
 import { TextLink } from "../_ui/text-link";
 import { JournalFilters } from "./journal-filters";
+import { JournalTotals } from "./journal-totals";
 import { ToDeposit } from "./to-deposit";
 
 export const metadata: Metadata = { title: "Encaissements" };
@@ -83,6 +84,13 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
   const page = readPage(p.page, shown.length);
   // Totals of every row shown, all pages together: what the filters select.
   const t = totals(shown);
+  const byEntity = several
+    ? totalsByEntity(
+        shown,
+        parsed.entities.map((e) => e.id),
+      )
+    : [];
+  const entityNames = new Map(shown.map((l) => [l.billingEntityId, l.entity]));
   const filtering = filter.conditions.length > 0;
   const listState: [string, string][] = [
     ...toParams(filter),
@@ -133,41 +141,25 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
             // Nothing to export: no link to an empty file.
             exportUrl={shown.length > 0 ? exportUrl : null}
           />
-          <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-            <div>
-              <Text component="dt" size="sm" className="inline" c="dimmed">
-                {filtering ? "Total (filtres appliqués)" : "Total"} :{" "}
+          <JournalTotals label={filtering ? "Total (filtres appliqués)" : "Total"} totals={t} />
+          {/* Each business deposits into its own account (#329): its own totals once the rows
+              shown hold two of them. Never for a single business, nor when a filter keeps one. */}
+          {byEntity.length > 1 && (
+            <section aria-labelledby="totaux-par-entreprise" className="flex flex-col gap-3">
+              <Text id="totaux-par-entreprise" component="h2" size="sm" fw={600}>
+                Par entreprise
               </Text>
-              <Text component="dd" size="sm" fw={600} className="inline tabular-nums">
-                {formatEuros(t.total)}
-              </Text>
-            </div>
-            {/* Always in the same order; a method netting to zero (a payment and its correction) is left out. */}
-            {(Object.keys(PAYMENT_METHODS) as Method[])
-              .filter((m) => (t.byMethod[m] ?? 0) !== 0)
-              .map((m) => (
-                <div key={m}>
-                  <Text component="dt" size="sm" className="inline" c="dimmed">
-                    {PAYMENT_METHODS[m]} :{" "}
+              {byEntity.map((e) => (
+                <div key={e.billingEntityId} className="flex flex-col gap-1">
+                  {/* Every entity totalled has a row shown, hence a name. */}
+                  <Text component="h3" size="sm" fw={500}>
+                    {entityNames.get(e.billingEntityId)}
                   </Text>
-                  <Text component="dd" size="sm" className="inline tabular-nums">
-                    {formatEuros(t.byMethod[m] ?? 0)}
-                  </Text>
+                  <JournalTotals label="Total" totals={e.totals} />
                 </div>
               ))}
-            {/* Money paid back to payers (#294), apart from what came in by each method. Positive
-                when the period holds the cancellation of a refund made before it (#346). */}
-            {t.refunded !== 0 && (
-              <div>
-                <Text component="dt" size="sm" className="inline" c="dimmed">
-                  {t.refunded > 0 ? "Remboursements annulés" : "Remboursements"} :{" "}
-                </Text>
-                <Text component="dd" size="sm" className="inline tabular-nums">
-                  {formatEuros(t.refunded)}
-                </Text>
-              </div>
-            )}
-          </dl>
+            </section>
+          )}
           {/* useSearchParams requires a Suspense boundary. */}
           <Suspense>
             <ListTable
