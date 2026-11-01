@@ -5,7 +5,7 @@ import { withSchool } from "@/db";
 import { saveConnection } from "@/db/calendar-connections";
 import { encrypt } from "@/lib/encryption";
 import { publicAddress, COOKIE_OAUTH, oauthRedirect } from "@/lib/public-calendar";
-import { syncCalendar } from "@/lib/calendar-sync";
+import { logSyncException, syncCalendar } from "@/lib/calendar-sync";
 
 /**
  * Return from Google or Microsoft: checks the signed state and the departure
@@ -58,6 +58,11 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/agenda/retou
   } catch {
     return back("erreur");
   }
-  await syncCalendar(state.schoolId, state.instructorId);
+  // The connection is saved: a first sync that throws is logged and left to the hourly job (#377).
+  try {
+    await syncCalendar(state.schoolId, state.instructorId);
+  } catch (e: unknown) {
+    logSyncException(state.schoolId, state.instructorId, e);
+  }
   return back("connecte");
 }

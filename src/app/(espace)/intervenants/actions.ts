@@ -14,7 +14,7 @@ import { instantParis } from "@/domain/schedule/availability";
 import { personalPage } from "@/lib/public-calendar";
 import { parseEuros } from "@/lib/money";
 import { requireRole } from "@/lib/session";
-import { syncCalendar } from "@/lib/calendar-sync";
+import { logSyncException, syncCalendar, SYNC_UNAVAILABLE } from "@/lib/calendar-sync";
 import { topErrorsOf } from "@/lib/form-errors";
 import { INSTRUCTOR, type InstructorField } from "./fields";
 
@@ -131,14 +131,28 @@ export async function removeUnavailability(instructorId: string, id: string): Pr
   return { message: r.ok ? null : r.message };
 }
 
-export async function syncNow(instructorId: string): Promise<{ message: string }> {
+/**
+ * Button « Synchroniser maintenant ». A sync that throws (its connection unreadable, or its own
+ * error not recorded) answers the usual French message instead of an error page (#377).
+ */
+export async function syncNow(
+  instructorId: string,
+): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
   const { schoolId: schoolId } = await requireRole("director");
-  const r = await syncCalendar(schoolId, instructorId);
+  // The id comes from the browser: checked before it reaches the database or the logs.
+  if (!z.uuid().safeParse(instructorId).success) return { ok: false, message: "Intervenant introuvable." };
+  let r: Awaited<ReturnType<typeof syncCalendar>>;
+  try {
+    r = await syncCalendar(schoolId, instructorId);
+  } catch (e: unknown) {
+    logSyncException(schoolId, instructorId, e);
+    r = { ok: false, message: SYNC_UNAVAILABLE };
+  }
   revalidatePath(`/intervenants/${instructorId}`);
+  if (!r.ok) return { ok: false, message: r.message };
   return {
-    message: r.ok
-      ? `Agenda mis à jour : ${r.ranges} plage${r.ranges > 1 ? "s" : ""} occupée${r.ranges > 1 ? "s" : ""}.`
-      : r.message,
+    ok: true,
+    message: `Agenda mis à jour : ${r.ranges} plage${r.ranges > 1 ? "s" : ""} occupée${r.ranges > 1 ? "s" : ""}.`,
   };
 }
 
