@@ -53,15 +53,17 @@ missing: on a host whose variables come from the environment only, run
 
 ## Telling that a run failed
 
-| Task         | Success              | Failure                                                                                         |
-| ------------ | -------------------- | ----------------------------------------------------------------------------------------------- |
-| Scripts      | exit code 0          | 1: a school failed, the database is unreachable or a variable is missing; 2: time limit reached |
-| Outbox sweep | HTTP 200 with counts | 401: wrong or missing `JOBS_SECRET`; 500: a business's run failed (its invoices wait)           |
+| Task         | Success              | Failure                                                                                                                                     |
+| ------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scripts      | exit code 0          | 1: a school failed or a calendar failure could not be recorded, the database is unreachable or a variable is missing; 2: time limit reached |
+| Outbox sweep | HTTP 200 with counts | 401: wrong or missing `JOBS_SECRET`; 500: a business's run failed (its invoices wait)                                                       |
 
 The scheduler must alert the developer on a non-zero exit code or a non-2xx answer. A single
 calendar failing (revoked access, provider down) does not fail the run: it is recorded on the
-connection, shown to the school, and retried next hour. An invoice the tool rejects does not fail
-the sweep either: management sees it with the rejected invoices.
+connection, shown to the school, and retried next hour. A calendar whose failure could not even be
+recorded (database error while saving it) is shown to no one: it fails the run (exit 1), is logged
+with the school and instructor ids, and the other calendars are still synced (#373). An invoice
+the tool rejects does not fail the sweep either: management sees it with the rejected invoices.
 
 The run does not fail either when **every** calendar fails, for example `GOOGLE_*` missing on the
 host or the OAuth client secret revoked: the summary line then shows `agendas synchronisés : 0`
