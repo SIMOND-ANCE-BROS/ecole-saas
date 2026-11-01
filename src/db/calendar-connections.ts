@@ -95,6 +95,14 @@ export async function recordSync(
     .where(eq(calendarConnection.instructorId, instructorId));
 }
 
+/**
+ * Saves a token the provider renewed, without touching the sync's result: used when that result
+ * could not be recorded (#381). The token arrives already encrypted.
+ */
+export async function saveRenewedToken(tx: Tx, instructorId: string, encryptedToken: string): Promise<void> {
+  await tx.update(calendarConnection).set({ encryptedToken }).where(eq(calendarConnection.instructorId, instructorId));
+}
+
 /** Disconnects the calendar and removes the upcoming slots that came from it (manual entries remain). */
 export async function deleteConnection(tx: Tx, instructorId: string): Promise<boolean> {
   if (!isUuid(instructorId)) return false;
