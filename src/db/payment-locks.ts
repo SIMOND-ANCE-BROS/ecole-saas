@@ -53,7 +53,8 @@ import { installment, invoice, payment, person } from "./schema";
  * - Inserting a reverse entry fires `payment_reverse_target` (migration 0059, #356), which
  *   locks the payer, then the payment reversed, both `FOR NO KEY UPDATE`, before checking what
  *   is left to cancel: ranks 1 and 2 in this order, already held by `correctPayment` and
- *   `cancelRefundPayment`, so the trigger waits for nothing they do not hold.
+ *   `cancelRefundPayment`, so the trigger waits for nothing they do not hold. Any other writer of
+ *   a reverse entry locks the payer before any payment of its own, as they do.
  * - The installment `FOR NO KEY UPDATE`: an allocation's key to it takes KEY SHARE, which only
  *   `discardDrafts` (FOR UPDATE, drafts only) waits for. Only its status is ever updated, as the
  *   frozen invoice allows (`0052_invoice_drafts.sql`).

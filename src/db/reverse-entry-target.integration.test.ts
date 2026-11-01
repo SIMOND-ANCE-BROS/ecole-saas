@@ -26,7 +26,7 @@ const TODAY = "2026-11-02";
 let school: string;
 let other: string;
 let entity: string;
-let danse: string;
+let dance: string;
 let studio: string;
 let payer: string;
 let sibling: string;
@@ -65,7 +65,7 @@ async function refusal(row: Parameters<typeof insert>[0]): Promise<string> {
     await admin.begin(async (t) => {
       await t`
         INSERT INTO payment (school_id, billing_entity_id, payer_id, amount_cents, method, corrects_id, reversal_kind)
-        VALUES (${row.schoolId ?? school}, ${row.entityId ?? entity}, ${row.payerId ?? payer}, ${row.cents}, 'cheque',
+        VALUES (${row.schoolId ?? school}, ${row.entityId ?? entity}, ${row.payerId ?? payer}, ${row.cents}, ${row.method ?? "cheque"},
                 ${row.corrects ?? null}, ${row.kind ?? null})`;
       throw new Error("inserted");
     });
@@ -87,7 +87,7 @@ beforeAll(async () => {
     await admin`INSERT INTO school (name, slug) VALUES ('École Zy', ${`rv-${suffix}`}) RETURNING id`;
   entity = await defaultEntityFor(admin, school);
   const otherEntity = await defaultEntityFor(admin, other);
-  danse = await defaultEntityFor(admin, twoBusinesses, "Zy Danse");
+  dance = await defaultEntityFor(admin, twoBusinesses, "Zy Danse");
   [{ id: studio }] = await admin`
     INSERT INTO billing_entity (school_id, name, legal_name, vat_regime)
     VALUES (${twoBusinesses}, 'Zy Studio', 'Zy Studio EI', 'not_applicable') RETURNING id`;
@@ -156,6 +156,15 @@ describe("what a reverse entry may target (#356)", () => {
     );
   });
 
+  it("refuses a reverse entry by another method than its target's", async () => {
+    expect(await refusal({ cents: -100, kind: "correction", corrects: paid, method: "cash" })).toBe(
+      "payment_reverse_target",
+    );
+    expect(await refusal({ cents: 100, kind: "refund_cancellation", corrects: refund, method: "cash" })).toBe(
+      "payment_reverse_target",
+    );
+  });
+
   it("refuses to cancel beyond what remains, and accepts exactly what remains", async () => {
     // 100,00 € paid, 20,00 € corrected: 80,00 € remain.
     expect(await refusal({ cents: -8001, kind: "correction", corrects: paid })).toBe("payment_reverse_cap");
@@ -184,7 +193,7 @@ describe("what a reverse entry may target (#356)", () => {
   it("refuses a target of another business of the school", async () => {
     const p = await insert({
       schoolId: twoBusinesses,
-      entityId: danse,
+      entityId: dance,
       payerId: await person(twoBusinesses, "Zy"),
       cents: 1000,
     });

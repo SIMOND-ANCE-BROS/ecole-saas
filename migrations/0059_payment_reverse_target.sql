@@ -6,35 +6,49 @@
 -- For a row whose corrects_id is set:
 --   * a 'correction' or a 'rejection' targets an ordinary payment (no kind), a
 --     'refund_cancellation' targets a 'refund' (constraint name "payment_reverse_target");
---   * the reverse entry has the target's payer (same name);
+--   * the reverse entry has the target's payer and method (same name): the per-method
+--     totals and the deposit slips stay right;
 --   * the reverse entries of a target never cancel more than its amount
 --     ("payment_reverse_cap").
+-- It fires on insert only: rows written before it are not checked again (nothing is live
+-- yet, and the code has always refused these cases).
 -- The kinds are compared as text, as in the checks of 0056: a new database applies every
 -- migration in one transaction, where an enum value added in it cannot be used. A row the
 -- checks refuse (no kind, a 'refund' with corrects_id, the wrong sign) is left to them:
--- "payment_reversal_kind" and "payment_sign" name the fault. A target of another school or business is not found here and is
--- left to the composite key "payment_corrects_same_entity_fk", which refuses it.
+-- "payment_reversal_kind" and "payment_sign" name the fault. A target of another school or
+-- business is not found here and is left to the composite key
+-- "payment_corrects_same_entity_fk", which refuses it.
 --
 -- Locks (src/db/payment-locks.ts, #360): the payer first, then the target payment, both
 -- FOR NO KEY UPDATE, in that order. Every writer of a reverse entry already holds both
 -- (`lockPayerAndPaymentsOf`, `lockPayers` + `lockPaymentsOfPayer`): asking again returns at
 -- once. A writer outside that code still takes them in the documented order, and two reverse
 -- entries of one payment then wait for each other, so the total read below, a statement of
--- its own after the locks, includes the other one once committed. The function runs as the
--- caller (no SECURITY DEFINER): under app_user, RLS keeps it within the current school.
+-- its own after the locks, includes the other one once committed (READ COMMITTED, the level
+-- the application uses: each statement takes a new snapshot). The function runs as the
+-- caller (no SECURITY DEFINER): under app_user, RLS keeps it within the current school; its
+-- search_path is fixed so that a temporary table never stands in for "payment" or "person".
 CREATE INDEX "payment_school_id_corrects_id_index" ON "payment" USING btree ("school_id","corrects_id");--> statement-breakpoint
-CREATE FUNCTION "payment_reverse_target"() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION "payment_reverse_target"() RETURNS trigger LANGUAGE plpgsql
+  SET search_path = public, pg_temp AS $$
 DECLARE
   target record;
   cancelled bigint;
 BEGIN
   -- A row the checks refuse anyway (no kind, a refund, the wrong sign) is left to them.
-  IF NEW.reversal_kind IS NULL OR NEW.reversal_kind::text NOT IN ('correction', 'rejection', 'refund_cancellation')
+  IF NEW.reversal_kind IS NULL OR NEW.reversal_kind::text = 'refund'
      OR (NEW.reversal_kind::text = 'refund_cancellation') <> (NEW.amount_cents > 0) THEN
     RETURN NEW;
   END IF;
+  -- A kind added later is refused here until this function says what it may target.
+  IF NEW.reversal_kind::text NOT IN ('correction', 'rejection', 'refund_cancellation') THEN
+    RAISE EXCEPTION 'a reverse entry of kind % has no known target', NEW.reversal_kind
+      USING ERRCODE = 'check_violation', TABLE = 'payment', CONSTRAINT = 'payment_reverse_target';
+  END IF;
+  -- The row's payer, not the target's: reading the target first would take rank 2 before
+  -- rank 1. They are the same for every row accepted; another one is refused just below.
   PERFORM 1 FROM person WHERE school_id = NEW.school_id AND id = NEW.payer_id FOR NO KEY UPDATE;
-  SELECT p.payer_id, p.amount_cents, p.reversal_kind::text AS kind INTO target
+  SELECT p.payer_id, p.method, p.amount_cents, p.reversal_kind::text AS kind INTO target
   FROM payment p
   WHERE p.school_id = NEW.school_id AND p.id = NEW.corrects_id AND p.billing_entity_id = NEW.billing_entity_id
   FOR NO KEY UPDATE;
@@ -47,8 +61,8 @@ BEGIN
       NEW.reversal_kind, coalesce(target.kind, 'none')
       USING ERRCODE = 'check_violation', TABLE = 'payment', CONSTRAINT = 'payment_reverse_target';
   END IF;
-  IF NEW.payer_id <> target.payer_id THEN
-    RAISE EXCEPTION 'a reverse entry has the payer of the payment it targets'
+  IF NEW.payer_id <> target.payer_id OR NEW.method <> target.method THEN
+    RAISE EXCEPTION 'a reverse entry has the payer and the method of the payment it targets'
       USING ERRCODE = 'check_violation', TABLE = 'payment', CONSTRAINT = 'payment_reverse_target';
   END IF;
   SELECT coalesce(sum(c.amount_cents), 0) INTO cancelled
