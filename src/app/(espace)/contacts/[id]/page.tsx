@@ -7,8 +7,8 @@ import { seasonEnrollments } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
 import { packsOf } from "@/db/lesson-packs";
 import { severalEntities } from "@/db/billing-entities";
-import { payerInvoices } from "@/db/payer-invoices";
-import { mayDraft } from "@/domain/invoicing/progress";
+import { payerInvoices, paysSomeSeason } from "@/db/payer-invoices";
+import { ENDED_SEASON, mayDraft, seasonDraftable } from "@/domain/invoicing/progress";
 import { InvoicesSection } from "../../_people/invoices-section";
 import { RecordSeason } from "../../_people/record-season";
 import { displayedName } from "@/db/people";
@@ -56,6 +56,8 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
       contact,
       season: season,
       seasons,
+      // A payer of any season: the record offers the season picker, even on a season without them.
+      paysSomeSeason: seasons && seasons.seasons.length > 1 ? await paysSomeSeason(tx, contact.id) : false,
       billed: season ? await seasonEnrollments(tx, { payerId: contact.id }, season.id) : [],
       balance: await balanceOf(tx, contact.id, today),
       payments: await paymentsOf(tx, contact.id),
@@ -176,7 +178,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
               </Paper>
             )}
           </section>
-          {parsed.seasons && (sells || billed.length > 0 || invoices.length > 0) && (
+          {parsed.seasons && (sells || parsed.paysSomeSeason) && (
             <RecordSeason
               seasons={parsed.seasons.seasons}
               shown={parsed.seasons.shown}
@@ -187,6 +189,8 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
           {season && <Enrollments enrollments={billed} season={season} today={today} payerId={c.id} />}
           {season && parsed.rules && (billed.length > 0 || parsed.rules.acceptedOn !== null) && (
             <RulesSection
+              // A new season, a new section: nothing typed for another season survives the switch.
+              key={season.id}
               season={season}
               rulesRecorded={parsed.rules.rulesRecorded}
               ownRecord
@@ -209,11 +213,15 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
           )}
           {season && (billed.length > 0 || packs.length > 0 || invoices.length > 0) && (
             <InvoicesSection
+              key={season.id}
               payerId={c.id}
               season={season}
               invoices={invoices}
               showEntity={parsed.severalEntities}
               canDraft={mayDraft(role)}
+              endedNote={
+                seasonDraftable(season, parsed.seasons?.current.id, today) ? undefined : ENDED_SEASON(season.label)
+              }
               isDirector={role === "director"}
             />
           )}
@@ -222,6 +230,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
             balance={balance}
             payments={payments}
             back={`/contacts/${c.id}`}
+            allSeasons={(parsed.seasons?.seasons.length ?? 0) > 1}
             isDirector={role === "director"}
             canRefund={mayRefund(role)}
             canCancelRefund={mayCancelRefund(role)}

@@ -6,8 +6,31 @@ import {
   mayDraft,
   type ProgressInput,
   REJECTED_ROLES,
+  seasonDraftable,
   sendAgainMode,
 } from "./progress";
+
+describe("seasonDraftable (#362, #380 default)", () => {
+  const current = { id: "c", endDate: "2027-06-30" };
+  const next = { id: "n", endDate: "2028-06-30" };
+  const past = { id: "p", endDate: "2026-06-30" };
+
+  it("drafts the current season, even once it has ended (summer, before the next one)", () => {
+    expect(seasonDraftable(current, "c", "2027-06-20")).toBe(true);
+    expect(seasonDraftable(current, "c", "2027-07-15")).toBe(true);
+  });
+
+  it("drafts the next season in June, before it starts", () => {
+    expect(seasonDraftable(next, "c", "2027-06-20")).toBe(true);
+  });
+
+  it("does not draft a season already ended that is not the current one", () => {
+    expect(seasonDraftable(past, "c", "2027-06-20")).toBe(false);
+    // Its last day still counts as not ended.
+    expect(seasonDraftable(past, "c", "2026-06-30")).toBe(true);
+    expect(seasonDraftable(past, undefined, "2026-07-01")).toBe(false);
+  });
+});
 
 describe("roles", () => {
   it("lets the front desk and management draft, management alone take up a rejected invoice", () => {

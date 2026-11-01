@@ -18,6 +18,7 @@ import type { PersonRecord } from "@/db/people";
 import type { Season } from "@/db/schedule";
 import { ENROLLMENT_STATUS_LABELS as STATUT } from "@/domain/enrollment/statuses";
 import { amountDue, dueCents, isCounted } from "@/domain/payments/balance";
+import { coursesBySeason } from "@/domain/people/followed-courses";
 import { formatEuros } from "@/lib/money";
 import { DAYS } from "../planning/format";
 import { TextLink } from "../_ui/text-link";
@@ -72,10 +73,7 @@ export function FollowedCourses({
   courses: PersonRecord["courses"];
   shown: { id: string; label: string } | null;
 }) {
-  const seasonId = shown?.id ?? courses[0]?.seasonId;
-  const season = shown?.label ?? courses[0]?.season;
-  const current = courses.filter((c) => c.seasonId === seasonId);
-  const history = courses.filter((c) => c.seasonId !== seasonId);
+  const { label: season, shown: current, others: history } = coursesBySeason(courses, shown);
   return (
     <>
       <section aria-labelledby="cours" className="flex flex-col gap-2">

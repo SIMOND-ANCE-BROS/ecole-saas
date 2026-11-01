@@ -8,7 +8,7 @@ import { paymentsOf, balanceOf } from "@/db/payments";
 import { packsOf } from "@/db/lesson-packs";
 import { severalEntities } from "@/db/billing-entities";
 import { payerInvoices } from "@/db/payer-invoices";
-import { mayDraft } from "@/domain/invoicing/progress";
+import { ENDED_SEASON, mayDraft, seasonDraftable } from "@/domain/invoicing/progress";
 import { InvoicesSection } from "../../_people/invoices-section";
 import { RecordSeason } from "../../_people/record-season";
 import { displayedName } from "@/db/people";
@@ -246,7 +246,8 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
 
         <div className="flex min-w-0 flex-col gap-5">
           <Relatives studentId={e.id} firstName={firstName} guardians={e.guardians} other={e.otherRelationships} />
-          {parsed.seasons && (
+          {/* A contact not yet a student, never enrolled: nothing of theirs depends on the season. */}
+          {parsed.seasons && (e.isStudent || e.courses.length > 0) && (
             <RecordSeason
               seasons={parsed.seasons.seasons}
               shown={parsed.seasons.shown}
@@ -280,11 +281,16 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             <>
               {season && (enrollments.length > 0 || packs.length > 0 || parsed.invoices.length > 0) && (
                 <InvoicesSection
+                  // A new season, a new section: nothing left over from another season.
+                  key={season.id}
                   payerId={e.id}
                   season={season}
                   invoices={parsed.invoices}
                   showEntity={parsed.severalEntities}
                   canDraft={mayDraft(role)}
+                  endedNote={
+                    seasonDraftable(season, parsed.seasons?.current.id, today) ? undefined : ENDED_SEASON(season.label)
+                  }
                   isDirector={role === "director"}
                 />
               )}
@@ -293,6 +299,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
                 balance={balance}
                 payments={payments}
                 back={`/eleves/${e.id}`}
+                allSeasons={(parsed.seasons?.seasons.length ?? 0) > 1}
                 isDirector={role === "director"}
                 canRefund={mayRefund(role)}
                 canCancelRefund={mayCancelRefund(role)}
@@ -310,6 +317,8 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           />
           {season && e.isStudent && (
             <RulesSection
+              // A date being typed for one season is never saved on another.
+              key={season.id}
               season={season}
               rulesRecorded={parsed.rulesRecorded}
               lines={parsed.rules.map((r) => ({

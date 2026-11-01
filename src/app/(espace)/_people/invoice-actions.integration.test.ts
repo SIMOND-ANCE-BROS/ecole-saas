@@ -27,6 +27,8 @@ vi.mock("@/db", () => import("../../../db/index"));
 vi.mock("@/db/payer-invoices", () => import("../../../db/payer-invoices"));
 vi.mock("@/domain/invoicing/progress", () => import("../../../domain/invoicing/progress"));
 vi.mock("@/jobs/invoicing/send", () => import("../../../jobs/invoicing/send"));
+vi.mock("@/db/schedule", () => import("../../../db/schedule"));
+vi.mock("@/domain/people/age", () => import("../../../domain/people/age"));
 
 process.env.INVOICING_FAKE_ALLOWED = "1";
 // CI has no encryption key: a throwaway one encrypts the fake tool's test token.
@@ -36,7 +38,7 @@ if (Buffer.from(process.env.CLE_CHIFFREMENT ?? "", "base64").length !== 32)
 const { draftInvoices } = await import("./invoice-actions");
 const { abandon, sendAgain } = await import("../parametres/entreprises/actions");
 const { withSchool } = await import("../../../db/index");
-const { payerInvoices } = await import("../../../db/payer-invoices");
+const { payerInvoices, paysSomeSeason } = await import("../../../db/payer-invoices");
 const { encrypt } = await import("../../../lib/encryption");
 const { fakeStoreOf } = await import("../../../connectors/invoicing/fake");
 
@@ -461,6 +463,22 @@ describe("drafting the season shown on the record (#362)", () => {
       message: "Cette saison n’existe plus.",
     });
     expect(await invoices()).toHaveLength(count);
+    // A season already ended, not the current one: shown, never drafted from the record (#380 open).
+    const [{ id: ended }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
+      VALUES (${s}, '2020-2021', '2020-09-01', '2021-06-30') RETURNING id`;
+    const [{ id: old }] = await admin`
+      INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, enrolled_on, gross_price_cents)
+      VALUES (${s}, ${ids.a}, ${ended}, ${ids.payer}, 'child', 'year', '2020-09-10', 30000) RETURNING id`;
+    expect(await draftInvoices({ payerId: ids.payer, seasonId: ended })).toEqual({
+      ok: false,
+      message: "La saison 2020-2021 est terminée : ses factures ne se préparent pas depuis la fiche.",
+    });
+    expect(await billing(old)).toBe(0);
+    expect(await invoices()).toHaveLength(count);
+    // The picker's condition on a contact record: a payer of some season, not a mere relative.
+    expect(await withSchool(s, (tx) => paysSomeSeason(tx, ids.payer))).toBe(true);
+    expect(await withSchool(s, (tx) => paysSomeSeason(tx, ids.student))).toBe(false);
+    expect(await withSchool(s, (tx) => paysSomeSeason(tx, ids.otherPayer))).toBe(false);
     await runAfter();
   });
 });

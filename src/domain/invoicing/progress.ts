@@ -17,6 +17,24 @@ export const DRAFT_ROLES = ["director", "front_desk"] as const satisfies readonl
 export const mayDraft = (role: Role) => (DRAFT_ROLES as readonly Role[]).includes(role);
 
 /**
+ * Whether a record may draft the invoices of the season it shows (#362): the current season
+ * (always, as before #362), or one not ended yet (the next season, in June). Invoicing a season
+ * already ended is an open question (#380): an import of past seasons could bill again what the
+ * previous software billed. Until it is answered, the record only shows those invoices.
+ */
+export function seasonDraftable(
+  season: { id: string; endDate: string },
+  currentSeasonId: string | undefined,
+  today: string,
+): boolean {
+  return season.id === currentSeasonId || season.endDate >= today;
+}
+
+/** Why « Préparer les factures » is not offered on an ended season, in French. */
+export const ENDED_SEASON = (label: string) =>
+  `La saison ${label} est terminée : ses factures ne se préparent pas depuis la fiche.`;
+
+/**
  * Who sends again or abandons a rejected invoice: management, who sees them (#304 open
  * question 1, default director only). The only place it lives.
  */
