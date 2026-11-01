@@ -50,6 +50,10 @@ import { installment, invoice, payment, person } from "./schema";
  * - The payment `FOR NO KEY UPDATE`, not UPDATE: a reverse entry's or an allocation's foreign
  *   key to it takes KEY SHARE, which UPDATE would block. A row lock fires no trigger
  *   (`payment_immutable` is on UPDATE and DELETE).
+ * - Inserting a reverse entry fires `payment_reverse_target` (migration 0059, #356), which
+ *   locks the payer, then the payment reversed, both `FOR NO KEY UPDATE`, before checking what
+ *   is left to cancel: ranks 1 and 2 in this order, already held by `correctPayment` and
+ *   `cancelRefundPayment`, so the trigger waits for nothing they do not hold.
  * - The installment `FOR NO KEY UPDATE`: an allocation's key to it takes KEY SHARE, which only
  *   `discardDrafts` (FOR UPDATE, drafts only) waits for. Only its status is ever updated, as the
  *   frozen invoice allows (`0052_invoice_drafts.sql`).

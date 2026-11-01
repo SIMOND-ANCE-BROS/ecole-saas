@@ -1334,6 +1334,9 @@ export const payment = pgTable(
     sameSchool(t, t.enteredBy, member),
     // A reverse entry belongs to the entity of the payment it corrects.
     sameEntity(t, t.correctsId, t),
+    // The reverse entries of a payment, read by `alreadyCorrected` and by the trigger
+    // `payment_reverse_target` (#356), which checks what a reverse entry targets.
+    index().on(t.schoolId, t.correctsId),
   ],
 );
 
