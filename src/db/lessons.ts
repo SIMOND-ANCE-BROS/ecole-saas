@@ -394,6 +394,10 @@ export async function syncLessons(
           instructorId: sql`excluded.instructor_id`,
         },
       });
+  // A lesson carries its course's entity (#322), read in the insert itself rather than from the
+  // courses read above: a change of the course's entity committed meanwhile is then the one seen.
+  const entityOf = (courseId: string) =>
+    sql<string>`(SELECT c.billing_entity_id FROM course c WHERE c.id = ${courseId}::uuid)`;
   const added =
     plan.insert.length === 0
       ? []
@@ -404,6 +408,7 @@ export async function syncLessons(
               lesson,
               plan.insert.map((a) => ({
                 courseId: a.courseId,
+                billingEntityId: entityOf(a.courseId),
                 date: a.date,
                 plannedDate: a.plannedDate,
                 startTime: a.startTime,

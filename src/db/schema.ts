@@ -795,6 +795,11 @@ export const lesson = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     schoolId: schoolIdColumn(),
     courseId: uuid("course_id").notNull(),
+    // Its course's entity (#322), kept equal by the key below (it follows a change of the course's
+    // entity, past lessons included: it is not the entity when the lesson was given): a lesson pack
+    // only counts lessons of its own entity. Filled from the course when an
+    // insert leaves it out (trigger lesson_billing_entity_default).
+    billingEntityId: uuid("billing_entity_id").notNull(),
     date: date("date").notNull(),
     // Moved lesson (#90): its original date, which serves as the reference for lesson generation.
     plannedDate: date("planned_date"),
@@ -813,7 +818,10 @@ export const lesson = pgTable(
     index().on(t.instructorId, t.date),
     index().on(t.regularInstructorId),
     sameSchoolTarget(t),
-    sameSchool(t, t.courseId, course),
+    sameEntityTarget(t),
+    // ON UPDATE CASCADE: a course whose lessons are not counted on a pack may change entity (#299),
+    // its lessons follow; one with a counted lesson is refused by lesson_pack_usage's key (#322).
+    sameEntity(t, t.courseId, course).onUpdate("cascade"),
     sameSchool(t, t.instructorId, instructor),
     sameSchool(t, t.regularInstructorId, instructor),
   ],
@@ -1121,17 +1129,24 @@ export const lessonPackPerson = pgTable(
   ],
 );
 
+/**
+ * A lesson counted on a lesson pack (#286). It carries the pack's entity, which must be the
+ * lesson's (#322, ADR 0006): a pack only counts lessons of a course sold by its own business.
+ */
 export const lessonPackUsage = pgTable(
   "lesson_pack_usage",
   {
     schoolId: schoolIdColumn(),
+    billingEntityId: uuid("billing_entity_id").notNull(),
     lessonPackId: uuid("lesson_pack_id").notNull(),
     lessonId: uuid("lesson_id").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.lessonPackId, t.lessonId] }),
-    sameSchool(t, t.lessonPackId, lessonPack),
-    sameSchool(t, t.lessonId, lesson),
+    // The keys' checks when a lesson changes entity or is deleted.
+    index().on(t.lessonId),
+    sameEntity(t, t.lessonPackId, lessonPack),
+    sameEntity(t, t.lessonId, lesson),
   ],
 );
 
