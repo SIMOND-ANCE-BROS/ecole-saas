@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { Tx } from "./index";
 import { installment, invoice, payment, person } from "./schema";
 
@@ -10,9 +10,19 @@ import { installment, invoice, payment, person } from "./schema";
  * statement of its own, ordered by id within a rank:
  *
  *   1. the payer (`person`): `lockPayers`, by a write that inserts a payment row only;
- *   2. the payments, `FOR NO KEY UPDATE`: `lockPayments`, `lockPaymentsOfPayer`;
+ *   2. the payments, `FOR NO KEY UPDATE`: `lockPayments`, `lockPaymentsOfPayer`,
+ *      `lockPaymentsOfDepositPayers`;
  *   3. the installments of the issued invoices they may settle, `FOR NO KEY UPDATE`:
  *      `lockInstallments`.
+ *
+ * Within rank 2, a write takes all the payments it will ever need in one statement. One that
+ * releases money and spends it again (a correction, a rejection, a cancelled deposit, a refund
+ * cancelled, #358) reads every payment of the payer with that business: it locks them all
+ * first (`lockPayerAndPaymentsOf`, `lockPaymentsOfDepositPayers`, `lockPaymentsOfPayer`), never
+ * the one it reverses alone and the others after, which could take a lower id after a higher one.
+ *
+ * Outside any payment write, the overdue sweep (`markOverdue`, #358) starts at rank 3: it
+ * locks the installments it may mark, ordered by id, and nothing else.
  *
  * A write may start at a later rank, never go back: once a rank is held, no lock of an earlier
  * rank is requested, except one the transaction already holds (asking again returns at once).
@@ -79,24 +89,25 @@ export async function lockPayers(
 }
 
 /**
- * The payers of these payments, read without a lock: a payment's payer never changes (the
- * payment is immutable), so the ids read before rank 1 stay right under it.
+ * Ranks 1 and 2 for a write that reverses one payment and then spends its payer's money
+ * again (`correctPayment`, #358): its payer, then every payment of that payer with the
+ * payment's business, ordered by id, the reversed one among them. All of them in one
+ * statement: taking the reversed one alone first and the others later could take a lower id
+ * after a higher one. Returns the payer and business, or null (another school, gone).
  */
-export async function payersOfPayments(tx: Tx, paymentIds: readonly string[]): Promise<string[]> {
-  const ids = [...new Set(paymentIds)];
-  if (ids.length === 0) return [];
-  const rows = await tx
-    .selectDistinct({ id: payment.payerId })
+export async function lockPayerAndPaymentsOf(
+  tx: Tx,
+  paymentId: string,
+): Promise<{ payerId: string; billingEntityId: string } | null> {
+  // Immutable: read before rank 1, it stays right under it.
+  const [p] = await tx
+    .select({ payerId: payment.payerId, billingEntityId: payment.billingEntityId })
     .from(payment)
-    .where(inArray(payment.id, ids))
-    .orderBy(asc(payment.payerId));
-  return rows.map((r) => r.id);
-}
-
-/** Ranks 1 and 2 for a write that names the payment it reverses (`correctPayment`): its payer, then the payment. */
-export async function lockPayersAndPayments(tx: Tx, paymentIds: readonly string[]): Promise<void> {
-  await lockPayers(tx, await payersOfPayments(tx, paymentIds));
-  await lockPayments(tx, paymentIds);
+    .where(eq(payment.id, paymentId));
+  if (!p) return null;
+  await lockPayers(tx, [p.payerId]);
+  await lockPaymentsOfPayer(tx, p.payerId, p.billingEntityId);
+  return p;
 }
 
 /** Rank 2: these payments, ordered by id. Their payers are locked first (`lockPayers`). */
@@ -120,6 +131,27 @@ export async function lockPaymentsOfPayer(tx: Tx, payerId: string, billingEntity
     .orderBy(asc(payment.id))
     .for("no key update");
   return rows.map((r) => r.id);
+}
+
+/**
+ * Rank 2 for cancelling a deposit (#358): every payment of the payers on the slip with the
+ * slip's business, ordered by id, the slip's own among them, in one statement. Its cheques
+ * go back to the drawer and the money their payers have left is spent again
+ * (`releaseUncovered`), which reads all their payments. No payer lock: a deposit
+ * inserts no payment (see above).
+ */
+export async function lockPaymentsOfDepositPayers(tx: Tx, depositId: string): Promise<void> {
+  await tx
+    .select({ id: payment.id })
+    .from(payment)
+    .where(
+      sql`(${payment.payerId}, ${payment.billingEntityId}) IN (
+        SELECT p.payer_id, p.billing_entity_id FROM payment p
+        JOIN bank_deposit_payment d ON d.payment_id = p.id
+        WHERE d.bank_deposit_id = ${depositId})`,
+    )
+    .orderBy(asc(payment.id))
+    .for("no key update");
 }
 
 /** Rank 3: the installments matching `where` (joined to their invoice), ordered by id. */

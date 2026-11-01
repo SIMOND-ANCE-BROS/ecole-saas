@@ -8,11 +8,12 @@ What production must run on a schedule, and how to tell that a run failed (#337)
 
 ## Tasks
 
-| Task                 | How it runs                 | Frequency            | Time limit        | Environment                                                                                                  |
-| -------------------- | --------------------------- | -------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------ |
-| Invoice outbox sweep | `POST /api/taches/factures` | every minute         | 5 min (HTTP call) | on the web server: `JOBS_SECRET`, `DATABASE_URL`, `CLE_CHIFFREMENT`; scheduler: the same `JOBS_SECRET`       |
-| Calendar sync        | `npm run calendars:sync`    | every hour           | 15 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`, `CLE_CHIFFREMENT`, `GOOGLE_*` / `MICROSOFT_*` of the providers offered |
-| Submission purge     | `npm run submissions:purge` | once a day, at night | 10 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`                                                                         |
+| Task                 | How it runs                    | Frequency                  | Time limit        | Environment                                                                                                  |
+| -------------------- | ------------------------------ | -------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| Invoice outbox sweep | `POST /api/taches/factures`    | every minute               | 5 min (HTTP call) | on the web server: `JOBS_SECRET`, `DATABASE_URL`, `CLE_CHIFFREMENT`; scheduler: the same `JOBS_SECRET`       |
+| Calendar sync        | `npm run calendars:sync`       | every hour                 | 15 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`, `CLE_CHIFFREMENT`, `GOOGLE_*` / `MICROSOFT_*` of the providers offered |
+| Submission purge     | `npm run submissions:purge`    | once a day, at night       | 10 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`                                                                         |
+| Overdue installments | `npm run installments:overdue` | once a day, after midnight | 10 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`                                                                         |
 
 Times are `Europe/Paris`; the nightly purge can run at any quiet hour (03:00 for example).
 
@@ -24,16 +25,21 @@ Times are `Europe/Paris`; the nightly purge can run at any quiet hour (03:00 for
   (`CALENDAR_TIMEOUT_MS`).
 - **Submission purge** (#262): deletes form submission keys older than a week; without it the
   `submission` table grows without limit.
+- **Overdue installments** (#358): marks « en retard » the unpaid installments of issued invoices
+  the day after their due date (`Europe/Paris`). A payment or a release refreshes the statuses it
+  touches at once; this task catches the installments nobody paid. Run it after midnight (00:15
+  for example) so that the day's statuses are right from the morning.
 
-The two scripts use `DATABASE_ADMIN_URL` only to list which schools have work; each school is then
+The scripts use `DATABASE_ADMIN_URL` only to list which schools have work; each school is then
 handled with `DATABASE_URL` under its own row-level security (`withSchool`). The npm scripts load
 `.env` (`tsx --env-file=.env`) and fail at once, outside the exit codes below, when that file is
 missing: on a host whose variables come from the environment only, run
-`npx tsx scripts/sync-calendars.ts` and `npx tsx scripts/purge-submissions.ts` instead.
+`npx tsx scripts/sync-calendars.ts`, `npx tsx scripts/purge-submissions.ts` and
+`npx tsx scripts/mark-overdue-installments.ts` instead.
 
 ## Guarantees
 
-- **Safe to run twice, or concurrently.** Every task is idempotent. The two scripts take a
+- **Safe to run twice, or concurrently.** Every task is idempotent. The scripts take a
   PostgreSQL advisory lock per task (`exclusively` in `src/jobs/scheduled-task.ts`, runner in
   `scripts/lib/scheduled-task.ts`): a run started
   while another is still going prints « une autre exécution est en cours » and exits 0. The lock

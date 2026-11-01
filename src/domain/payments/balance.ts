@@ -42,9 +42,35 @@ export type Balance = {
   outsideCalculation: Partial<Record<EnrollmentStatus, number>>;
 };
 
-/** Amount due for these enrollments: the ones whose status is in `DUE_STATUSES`. */
-export const amountDue = (enrollments: readonly EnrollmentDue[]): number =>
-  enrollments.filter((i) => DUE_STATUSES.includes(i.status)).reduce((s, i) => s + seasonDueCents(i), 0);
+/**
+ * An enrollment with what issued invoices bill for it (#358): the sum of their lines for it,
+ * credit notes included (negative); null or absent when no issued invoice bills it.
+ */
+export type EnrollmentBilled = EnrollmentDue & { invoicedCents?: number | null };
+
+const invoicedOf = (i: EnrollmentBilled): number | null =>
+  typeof i.invoicedCents === "number" ? i.invoicedCents : null;
+
+/**
+ * Whether an enrollment counts in what its payer owes, as the balance counts it
+ * (`payerBalance`): billed by an issued invoice, whatever its status, or else of a status in
+ * `DUE_STATUSES`.
+ */
+export const isCounted = (i: EnrollmentBilled): boolean => invoicedOf(i) !== null || DUE_STATUSES.includes(i.status);
+
+/**
+ * What an enrollment comes to (#358): what issued invoices bill for it once one does (#305),
+ * else its price over the season (`seasonDueCents`). Counted or not: see `isCounted`.
+ */
+export const dueCents = (i: EnrollmentBilled): number => invoicedOf(i) ?? seasonDueCents(i);
+
+/**
+ * Amount due for these enrollments, as the balance counts it (#358): those `isCounted`, each
+ * at `dueCents`. The enrollments section's total, so that it agrees with the balance once
+ * invoices are issued.
+ */
+export const amountDue = (enrollments: readonly EnrollmentBilled[]): number =>
+  enrollments.filter(isCounted).reduce((s, i) => s + dueCents(i), 0);
 
 export function payerBalance(
   enrollments: readonly (EnrollmentDue & MaybeInvoiced)[],

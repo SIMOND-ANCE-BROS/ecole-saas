@@ -5,7 +5,9 @@ import { defaultEntityFor } from "./billing-entity.integration-helpers";
 import { overlapping } from "./overlap.integration-helpers";
 import { balanceOf, cancelRefundPayment, collect, correctPayment, refundPayer } from "./payments";
 import { cancelDeposit, createDeposit } from "./deposits";
-import { allocatePayer } from "./allocations";
+import { allocatePayer, markOverdue } from "./allocations";
+import { seasonEnrollments } from "./enrollments";
+import { amountDue } from "../domain/payments/balance";
 
 /**
  * Allocating payments to installments (#305) with the locks of #254, as the application runs
@@ -368,6 +370,137 @@ describe("money left unallocated", () => {
   });
 });
 
+describe("installment statuses kept up to date (#358)", () => {
+  it("an unpaid installment past its due date shows overdue without any payment", async () => {
+    const payer = await person("Zzretard");
+    const q = await issue(payer, await enroll(payer, 30_000), QUARTERS);
+    expect((await installments(q)).map((i) => i.status)).toEqual(["upcoming", "upcoming", "upcoming"]);
+    // On its due date it is not late yet; the day after it is.
+    await run((tx) => markOverdue(tx, "2026-10-01"));
+    expect((await installments(q)).map((i) => i.status)).toEqual(["upcoming", "upcoming", "upcoming"]);
+    expect(await run((tx) => markOverdue(tx, TODAY))).toBeGreaterThanOrEqual(1);
+    expect(await installments(q)).toEqual([
+      { status: "overdue", allocated: 0 },
+      { status: "upcoming", allocated: 0 },
+      { status: "upcoming", allocated: 0 },
+    ]);
+    // Again: nothing more to mark. Paid afterwards, it is paid.
+    expect(await run((tx) => markOverdue(tx, TODAY))).toBe(0);
+    await run((tx) => collect(tx, director, payer, [cash(10_000)], undefined, TODAY));
+    expect((await installments(q)).map((i) => i.status)).toEqual(["paid", "upcoming", "upcoming"]);
+  });
+
+  it("a draft's installment is left alone: only issued invoices fall due", async () => {
+    const payer = await person("Zzbrouillon");
+    const [{ id: inv }] = await admin`
+      INSERT INTO invoice (school_id, billing_entity_id, payer_id, season_id, total_incl_tax_cents, total_excl_tax_cents)
+      VALUES (${school}, ${entity}, ${payer}, ${season}, 5000, 5000) RETURNING id`;
+    const [{ id: draft }] = await admin`
+      INSERT INTO installment (school_id, billing_entity_id, invoice_id, rank, due_date, amount_cents)
+      VALUES (${school}, ${entity}, ${inv}, 1, '2026-09-01', 5000) RETURNING id`;
+    // One draft per payer, business and season (#302): the issued invoice is another payer's.
+    const other = await person("Zzemise");
+    const q = await issue(other, await enroll(other, 10_000), [["2026-09-01", 10_000]]);
+    await run((tx) => markOverdue(tx, TODAY));
+    expect(await installments([draft, ...q])).toEqual([
+      { status: "upcoming", allocated: 0 },
+      { status: "overdue", allocated: 0 },
+    ]);
+  });
+});
+
+describe("money freed is spent again at once (#358)", () => {
+  it("payment A corrected to 0 while payment B has money left: B settles the reopened installment", async () => {
+    const payer = await person("Zzlibere");
+    const q = await issue(payer, await enroll(payer, 20_000), [
+      ["2026-10-01", 10_000],
+      ["2027-01-05", 10_000],
+    ]);
+    // A settles the first installment, B the second and keeps 5 000 unallocated.
+    await run((tx) => collect(tx, director, payer, [cash(10_000)], undefined, TODAY));
+    await run((tx) => collect(tx, director, payer, [cash(15_000)], undefined, TODAY));
+    const [a, b] = await paymentIdsOf(payer);
+    expect((await installments(q)).map((i) => i.allocated)).toEqual([10_000, 10_000]);
+    expect(await run((tx) => correctPayment(tx, director, a, 10_000, TODAY))).toMatchObject({ ok: true });
+    // A's 10 000 go back; B's 5 000 left settle the oldest installment right away.
+    expect(await installments(q)).toEqual([
+      { status: "partial", allocated: 5_000 },
+      { status: "paid", allocated: 10_000 },
+    ]);
+    const [{ n }] = await admin`
+      SELECT coalesce(sum(amount_cents), 0)::int AS n FROM payment_allocation WHERE payment_id = ${b}`;
+    expect(n).toBe(15_000);
+  });
+
+  it("a cancelled deposit: the payer's cash left unallocated settles what the cheque gave back", async () => {
+    const payer = await person("Zzremise");
+    const q = await issue(payer, await enroll(payer, 10_000), [["2026-10-01", 10_000]]);
+    await run((tx) => collect(tx, director, payer, [cheque(10_000, "0010")], undefined, TODAY));
+    const [p] = await paymentIdsOf(payer);
+    const deposit = await run((tx) =>
+      createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [p] }, TODAY),
+    );
+    if (!deposit.ok) throw new Error(deposit.message);
+    // Paid twice: the cash stays unallocated while the cheque settles the installment.
+    await run((tx) => collect(tx, director, payer, [cash(4_000)], undefined, TODAY));
+    expect(await installments(q)).toEqual([{ status: "paid", allocated: 10_000 }]);
+    expect(await run((tx) => cancelDeposit(tx, director, deposit.id, TODAY))).toMatchObject({ ok: true });
+    expect(await installments(q)).toEqual([{ status: "partial", allocated: 4_000 }]);
+  });
+
+  it("a refund cancelled re-allocates its money", async () => {
+    const payer = await person("Zzannule");
+    const q = await issue(payer, await enroll(payer, 20_000), [
+      ["2026-10-01", 10_000],
+      ["2027-01-05", 10_000],
+    ]);
+    // 300,00 € for 200,00 €: 100,00 € refunded.
+    await run((tx) => collect(tx, director, payer, [cash(30_000)], undefined, TODAY));
+    const refunded = await run((tx) =>
+      refundPayer(
+        tx,
+        director,
+        payer,
+        { method: "cash", amountCents: 10_000, date: TODAY, reference: null },
+        TODAY,
+        entity,
+      ),
+    );
+    if (!refunded.ok) throw new Error(refunded.message);
+    // 50,00 € of the payment corrected: the refund leaves 150,00 €, the second installment reopens.
+    const [p] = await paymentIdsOf(payer);
+    expect(await run((tx) => correctPayment(tx, director, p, 5_000, TODAY))).toMatchObject({ ok: true });
+    expect(await installments(q)).toEqual([
+      { status: "paid", allocated: 10_000 },
+      { status: "partial", allocated: 5_000 },
+    ]);
+    // Half the refund was a mistake: its 50,00 € settle the second installment at once.
+    expect(await run((tx) => cancelRefundPayment(tx, director, refunded.ids[0], 5_000, TODAY))).toMatchObject({
+      ok: true,
+    });
+    expect(await installments(q)).toEqual([
+      { status: "paid", allocated: 10_000 },
+      { status: "paid", allocated: 10_000 },
+    ]);
+  });
+});
+
+describe("the enrollments section and the balance (#358)", () => {
+  it("agree for a payer with an issued invoice, even after its price changed", async () => {
+    const payer = await person("Zzaccord");
+    const billed = await enroll(payer, 30_000);
+    await issue(payer, billed, QUARTERS);
+    // The price changed after the invoice was issued: the invoice still bills 300,00 €.
+    await admin`UPDATE enrollment SET gross_price_cents = 32_000 WHERE id = ${billed}`;
+    await enroll(payer, 5_000);
+    const enrollments = await run((tx) => seasonEnrollments(tx, { payerId: payer }, season));
+    expect(enrollments.find((e) => e.id === billed)).toMatchObject({ invoicedCents: 30_000, seasonDueCents: 32_000 });
+    const balance = await run((tx) => balanceOf(tx, payer, TODAY));
+    expect(balance?.total.due).toBe(35_000);
+    expect(amountDue(enrollments)).toBe(balance?.total.due);
+  });
+});
+
 describe("balances without an invoice (#305)", () => {
   it("a payer without any invoice keeps the balance computed from prices", async () => {
     const payer = await person("Zzsans");
@@ -427,6 +560,52 @@ describe("allocations at the same moment (#254)", () => {
     expect(corrected.ok).toBe(true);
     expect(allocated).toMatchObject({ ok: true });
     expect((await installments(q)).map((i) => i.allocated)).toEqual([5_000, 0, 0]);
+  });
+
+  it("a deposit and a correction of the same payer's other payment, both orders: both finish (#358)", async () => {
+    for (const depositFirst of [true, false]) {
+      const payer = await person(depositFirst ? "Zzordre" : "Zzordrebis");
+      const q = await issue(payer, await enroll(payer, 20_000), [
+        ["2026-10-01", 10_000],
+        ["2027-01-05", 10_000],
+      ]);
+      await run((tx) => collect(tx, director, payer, [cash(10_000)], undefined, TODAY));
+      await run((tx) =>
+        collect(tx, director, payer, [cheque(10_000, depositFirst ? "0011" : "0012")], undefined, TODAY),
+      );
+      const [a, b] = await paymentIdsOf(payer);
+      const deposit = (hold?: () => Promise<void>) =>
+        run(async (tx) => {
+          const r = await createDeposit(tx, director, { date: TODAY, method: "cheque", paymentIds: [b] }, TODAY);
+          await hold?.();
+          return r;
+        });
+      const correct = (hold?: () => Promise<void>) =>
+        run(async (tx) => {
+          const r = await correctPayment(tx, director, a, 10_000, TODAY);
+          await hold?.();
+          return r;
+        });
+      const [first, second] = depositFirst
+        ? await overlapping(admin, deposit, () => correct())
+        : await overlapping(admin, correct, () => deposit());
+      expect(first.ok && second.ok).toBe(true);
+      // The cheque's 100,00 € settle one installment, never two, and the corrected cash none.
+      // Deposited first, it took the second (the cash held the first), and an allocation
+      // already written is never moved: the first reopens. Corrected first, the first
+      // reopens and the cheque settles it once deposited.
+      expect(await installments(q)).toEqual(
+        depositFirst
+          ? [
+              { status: "overdue", allocated: 0 },
+              { status: "paid", allocated: 10_000 },
+            ]
+          : [
+              { status: "paid", allocated: 10_000 },
+              { status: "upcoming", allocated: 0 },
+            ],
+      );
+    }
   });
 
   it("a correction waiting for an allocation takes back what the allocation wrote", async () => {
