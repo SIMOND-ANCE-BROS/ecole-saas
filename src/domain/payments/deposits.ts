@@ -70,15 +70,17 @@ export function depositGroups<T extends DepositablePayment & { billingEntityId: 
   });
 }
 
+/** A payment-log row as the totals read it. */
+export type TotalledRow = { method: string; amountCents: number; reversalKind?: ReversalKind | null };
+export type Totals = { total: number; byMethod: Record<string, number>; refunded: number };
+
 /**
  * Grand total, total per method of what came in, and refunds apart (#294): money paid
  * back to payers is never netted into a method's total (a cheque refund would hide the
  * cheques received), it shows as its own negative amount, net of refunds cancelled (#346).
  * `total` is the net of all of them.
  */
-export function totals<T extends { method: string; amountCents: number; reversalKind?: ReversalKind | null }>(
-  rows: T[],
-): { total: number; byMethod: Record<string, number>; refunded: number } {
+export function totals<T extends TotalledRow>(rows: T[]): Totals {
   const byMethod: Record<string, number> = {};
   let total = 0;
   let refunded = 0;
@@ -89,6 +91,28 @@ export function totals<T extends { method: string; amountCents: number; reversal
     else byMethod[l.method] = (byMethod[l.method] ?? 0) + l.amountCents;
   }
   return { total, byMethod, refunded };
+}
+
+/**
+ * The same totals for each billing entity (#329): each business deposits into its own
+ * bank account, so the log shows what came in for each. Entities in the order of
+ * `entityOrder` (the default first), any other after them; an entity with no row is
+ * left out. The entities' totals add up to `totals()` of the same rows.
+ */
+export function totalsByEntity<T extends TotalledRow & { billingEntityId: string }>(
+  rows: T[],
+  entityOrder: readonly string[],
+): { billingEntityId: string; totals: Totals }[] {
+  const byEntity = new Map<string, T[]>();
+  for (const r of rows) {
+    const own = byEntity.get(r.billingEntityId);
+    if (own) own.push(r);
+    else byEntity.set(r.billingEntityId, [r]);
+  }
+  return [...new Set([...entityOrder, ...byEntity.keys()])].flatMap((id) => {
+    const own = byEntity.get(id);
+    return own ? [{ billingEntityId: id, totals: totals(own) }] : [];
+  });
 }
 
 export type ExportRow = {
