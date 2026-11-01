@@ -274,7 +274,6 @@ export async function abandonRejected(
   return { ok: true, mode: "abandoned" };
 }
 
-/** The payer's invoices of the season drafted again (`draftPayerInvoices`), signed by the member. */
 /**
  * Whether the person pays an enrollment or holds an invoice, in any season (#362): their record
  * then offers the season picker, even when the season shown has nothing of theirs.
@@ -287,6 +286,7 @@ export async function paysSomeSeason(tx: Tx, payerId: string): Promise<boolean> 
   return row?.pays === true;
 }
 
+/** The payer's invoices of the season drafted again (`draftPayerInvoices`), signed by the member. */
 export async function draftForPayer(tx: Tx, userId: string, payerId: string, seasonId: string) {
   return draftPayerInvoices(tx, await memberOf(tx, userId), payerId, seasonId);
 }
