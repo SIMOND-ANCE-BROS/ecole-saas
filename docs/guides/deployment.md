@@ -62,9 +62,9 @@ The scheduler must alert the developer on a non-zero exit code or a non-2xx answ
 calendar failing (revoked access, provider down) does not fail the run: it is recorded on the
 connection, shown to the school, and retried next hour. A calendar whose failure could not even be
 recorded (database error while saving it) is shown to no one: it fails the run (exit 1), is logged
-with the school and instructor ids, and the other calendars are still synced (#373). If that
-calendar keeps failing on the next runs, ask the school to reconnect it: a refresh token the
-provider renewed during the failed run may have been lost. An invoice
+with the school and instructor ids, and the other calendars are still synced (#373). A refresh
+token the provider renewed during that run is still saved on its own (#381); only when that write
+fails too is the token lost, logged on a line of its own (see the runbook). An invoice
 the tool rejects does not fail the sweep either: management sees it with the rejected invoices.
 
 The run does not fail either when **every** calendar fails, for example `GOOGLE_*` missing on the
@@ -99,3 +99,8 @@ curl --fail --silent --show-error --max-time 300 -X POST \
   (« sending run failed »); the invoices of that business wait for the next sweep.
 - **A calendar stays in error**: the school sees the message on the instructor's page; access
   removed means the instructor reconnects the calendar.
+- **Line `École <id>, intervenant <id> : jeton d’agenda renouvelé perdu, agenda à reconnecter`**:
+  the provider renewed the calendar's refresh token during a failed run and neither the error nor
+  the token could be saved (#381). Once the database is back, ask the school to have that
+  instructor reconnect the calendar: providers that revoke the old token on rotation will refuse
+  it on the next run.

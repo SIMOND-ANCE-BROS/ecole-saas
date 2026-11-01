@@ -1,7 +1,7 @@
 import { AccessRemoved, credentials, readBusyRanges, refresh } from "../connectors/calendar/oauth";
 import { withSchool } from "../db";
 import { errorLabel } from "../jobs/scheduled-task";
-import { connectedInstructors, readConnection, recordSync } from "../db/calendar-connections";
+import { connectedInstructors, readConnection, recordSync, saveRenewedToken } from "../db/calendar-connections";
 import { replaceCalendarUnavailabilities } from "../db/unavailabilities";
 import { encrypt, decrypt } from "./encryption";
 
@@ -25,6 +25,27 @@ export function logSyncException(schoolId: string, instructorId: string, e: unkn
 }
 
 /**
+ * Saves a refresh token the provider renewed, alone, when the sync's error could not be recorded
+ * with it (#381). If even that write fails, the loss is logged with ids and the error kind only,
+ * never the token: the calendar must be reconnected (runbook in `docs/guides/deployment.md`).
+ */
+async function keepRenewedToken(
+  schoolId: string,
+  instructorId: string,
+  token: { read: string; renewed: string },
+): Promise<void> {
+  try {
+    await withSchool(schoolId, (tx) =>
+      saveRenewedToken(tx, instructorId, { read: token.read, renewed: encrypt(token.renewed) }),
+    );
+  } catch (e: unknown) {
+    console.error(
+      `École ${schoolId}, intervenant ${instructorId} : jeton d’agenda renouvelé perdu, agenda à reconnecter (${errorLabel(e)}).`,
+    );
+  }
+}
+
+/**
  * Reads the busy ranges of an instructor's connected calendar and replaces
  * their unavailabilities that came from this calendar. Network calls happen
  * outside the transaction; no personal data in error messages.
@@ -40,12 +61,21 @@ export async function syncCalendar(
   // A refresh token the provider rotated is saved even when the read that follows fails (#368).
   let renewedToken: string | null = null;
   const failure = async (message: string) => {
-    await withSchool(schoolId, (tx) =>
-      recordSync(tx, instructorId, {
-        error: message,
-        encryptedToken: renewedToken ? encrypt(renewedToken) : undefined,
-      }),
-    );
+    try {
+      await withSchool(schoolId, (tx) =>
+        recordSync(tx, instructorId, {
+          error: message,
+          encryptedToken: renewedToken ? encrypt(renewedToken) : undefined,
+        }),
+      );
+    } catch (e) {
+      // The error could not be recorded: the renewed token is still saved on its own, or its
+      // loss logged, since the provider may have revoked the old one (#381). Then rethrown.
+      if (renewedToken) {
+        await keepRenewedToken(schoolId, instructorId, { read: connection.encryptedToken, renewed: renewedToken });
+      }
+      throw e;
+    }
     return { ok: false as const, message };
   };
   const id = credentials(connection.provider);
