@@ -8,7 +8,8 @@ import { syncCalendar } from "./calendar-sync";
 
 /**
  * A refresh token the provider rotated during a failed sync is not lost when the sync's error
- * cannot be recorded (#381). Fake provider, no network call.
+ * cannot be recorded (#381), and a sync never overwrites a calendar reconnected meanwhile (#383).
+ * Fake provider, no network call.
  */
 
 // Writes fail while their flag is set (database down, lock timeout…).
