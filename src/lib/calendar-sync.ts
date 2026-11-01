@@ -1,5 +1,6 @@
 import { AccessRemoved, credentials, readBusyRanges, refresh } from "../connectors/calendar/oauth";
 import { withSchool } from "../db";
+import { errorLabel } from "../jobs/scheduled-task";
 import { connectedInstructors, readConnection, recordSync } from "../db/calendar-connections";
 import { replaceCalendarUnavailabilities } from "../db/unavailabilities";
 import { encrypt, decrypt } from "./encryption";
@@ -65,13 +66,28 @@ export async function syncCalendar(
   }
 }
 
-/** All connected calendars of a school (background job). */
+/**
+ * All connected calendars of a school (background job). One instructor never stops the others
+ * (#373): a sync that throws, even while recording its own error (database down, lock
+ * timeout), is counted in `failed` and in `unrecorded`, and logged with ids and the error kind
+ * only. `unrecorded` failures are not shown to the school: the caller fails the run on them.
+ */
 export async function syncSchool(
   schoolId: string,
   query: typeof fetch = fetch,
-): Promise<{ succeeded: number; failed: number }> {
+): Promise<{ succeeded: number; failed: number; unrecorded: number }> {
   const ids = await withSchool(schoolId, (tx) => connectedInstructors(tx));
   let succeeded = 0;
-  for (const instructorId of ids) if ((await syncCalendar(schoolId, instructorId, query)).ok) succeeded++;
-  return { succeeded, failed: ids.length - succeeded };
+  let unrecorded = 0;
+  for (const instructorId of ids) {
+    try {
+      if ((await syncCalendar(schoolId, instructorId, query)).ok) succeeded++;
+    } catch (e: unknown) {
+      unrecorded++;
+      console.error(
+        `École ${schoolId}, intervenant ${instructorId} : synchronisation en échec, erreur non enregistrée (${errorLabel(e)}).`,
+      );
+    }
+  }
+  return { succeeded, failed: ids.length - succeeded, unrecorded };
 }
