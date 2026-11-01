@@ -258,6 +258,13 @@ describe("installmentStatusOf", () => {
     expect(installmentStatusOf({ ...i, allocatedCents: 0 }, TODAY)).toBe("upcoming");
     expect(installmentStatusOf({ ...i, allocatedCents: 0 }, "2026-12-02")).toBe("overdue");
   });
+
+  it("overdue from the day after its due date, never on it (#358)", () => {
+    expect(installmentStatusOf({ ...i, allocatedCents: 0 }, "2026-12-01")).toBe("upcoming");
+    expect(installmentStatusOf({ ...i, allocatedCents: 0 }, "2026-12-02")).toBe("overdue");
+    // Partly paid stays partial past its due date.
+    expect(installmentStatusOf({ ...i, allocatedCents: 1 }, "2027-01-01")).toBe("partial");
+  });
 });
 
 describe("allocationRefusal", () => {

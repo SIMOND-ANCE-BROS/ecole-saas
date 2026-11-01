@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { amountDue, balancesByEntity, entityOwingMost, familyOwed, payerBalance } from "./balance";
+import { amountDue, balancesByEntity, dueCents, entityOwingMost, familyOwed, isCounted, payerBalance } from "./balance";
 
 const TODAY = "2026-10-21";
 
@@ -111,6 +111,37 @@ describe("quarterly enrollments (#291)", () => {
 });
 
 describe("amountDue", () => {
+  it("counts an enrollment an issued invoice bills at what the invoice bills, as the balance does (#358)", () => {
+    const enrollments = [
+      // Price changed after the invoice was issued: the invoice's 280,00 € counts, not 300,00 €.
+      { status: "active", period: "year", quarterCount: 0, netPriceCents: 30_000, invoicedCents: 28_000 },
+      // Not invoiced yet: its price.
+      { status: "active", period: "year", quarterCount: 0, netPriceCents: 5_000, invoicedCents: null },
+      // Fully credited by a credit note: nothing left.
+      { status: "dropped", period: "year", quarterCount: 0, netPriceCents: 9_000, invoicedCents: 0 },
+    ] as const;
+    expect(amountDue(enrollments)).toBe(33_000);
+    expect(
+      payerBalance(
+        enrollments.map((e) => ({ ...e, invoiced: e.invoicedCents !== null })),
+        [],
+        [],
+        TODAY,
+        [{ totalInclTaxCents: 28_000 }, { totalInclTaxCents: 9_000 }, { totalInclTaxCents: -9_000 }],
+      ).due,
+    ).toBe(33_000);
+  });
+
+  it("an invoiced enrollment counts whatever its status; one on trial and not invoiced does not", () => {
+    const trial = { status: "trial", period: "year", quarterCount: 0, netPriceCents: 5_000 } as const;
+    expect(amountDue([{ ...trial, invoicedCents: 5_000 }])).toBe(5_000);
+    expect(amountDue([{ ...trial, invoicedCents: null }])).toBe(0);
+    expect(isCounted({ ...trial, invoicedCents: 5_000 })).toBe(true);
+    expect(isCounted(trial)).toBe(false);
+    expect(dueCents({ ...trial, invoicedCents: 4_000 })).toBe(4_000);
+    expect(dueCents(trial)).toBe(5_000);
+  });
+
   it("counts active, ended and dropped enrollments, not trial nor waitlist", () => {
     expect(
       amountDue([

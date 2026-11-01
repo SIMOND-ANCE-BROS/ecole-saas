@@ -33,8 +33,8 @@ import {
 import { mayCancelRefund, refundCancellationRefusal, refundLeftCents } from "../domain/payments/refund-cancellation";
 import { quarterCountSql } from "./enrollments";
 import { alreadyCorrected } from "./payments-sql";
-import { allocatePayments, releaseUncovered } from "./allocations";
-import { lockPayers, lockPayersAndPayments, lockPayments, lockPaymentsOfPayer } from "./payment-locks";
+import { allocatePayer, allocatePayments, releaseUncovered } from "./allocations";
+import { lockPayerAndPaymentsOf, lockPayers, lockPaymentsOfPayer } from "./payment-locks";
 import { allOrNothing } from "./all-or-nothing";
 import { SETTLED_INVOICE_STATUS } from "../domain/payments/allocation";
 import { todayInParis } from "../domain/people/age";
@@ -226,10 +226,12 @@ export async function correctPayment(
   // below includes a correction saved at the same moment. The payer first, then the payment
   // (`src/db/payment-locks.ts`, #360): the reverse entry's key to the payer takes KEY SHARE,
   // so a refund holding the payer while waiting for this payment would otherwise deadlock.
+  // Every payment of the payer with that business, not this one alone: what the correction
+  // frees is spent again from the others (#358, `releaseUncovered`), which reads them all.
   // The locks are statements of their own: a query that waits on a lock keeps its first
   // snapshot for the subquery of the total, a new statement sees the other correction once
   // committed. createDeposit takes the same locks: whether the payment is deposited is read after them.
-  await lockPayersAndPayments(tx, [paymentId]);
+  await lockPayerAndPaymentsOf(tx, paymentId);
   const [o] = await tx
     .select({
       payerId: payment.payerId,
@@ -270,6 +272,28 @@ export async function correctPayment(
   const date = rejectedOn ?? today;
   const refusal = o.depositedOn !== null ? rejectionDateRefusal(date, o.depositedOn, today) : null;
   if (refusal) return { ok: false, message: refusal };
+  // The reverse entry and what it gives back to the installments go together, or not at all.
+  return allOrNothing(tx, (tx) => reverse(tx, who.id, paymentId, o, amountCents, date, deposited, today));
+}
+
+/** Writes the reverse entry of `correctPayment`, under its locks, then releases and allocates again. */
+async function reverse(
+  tx: Tx,
+  who: string,
+  paymentId: string,
+  o: {
+    payerId: string;
+    billingEntityId: string;
+    method: Method;
+    reference: string | null;
+    issuer: string | null;
+    depositId: string | null;
+  },
+  amountCents: number,
+  date: string,
+  deposited: boolean,
+  today: string,
+): Promise<Result> {
   const [{ id }] = await tx
     .insert(payment)
     .values({
@@ -284,10 +308,10 @@ export async function correctPayment(
       issuer: o.issuer,
       correctsId: paymentId,
       reversalKind: deposited ? "rejection" : "correction",
-      enteredBy: who.id,
+      enteredBy: who,
     })
     .returning({ id: payment.id });
-  await log(tx, who.id, id, {
+  await log(tx, who, id, {
     montant_centimes: -amountCents,
     method: o.method,
     date,
@@ -297,9 +321,10 @@ export async function correctPayment(
     ...(deposited ? { rejected: true, bank_deposit_id: o.depositId } : {}),
   });
   // What the payment settled beyond what the correction leaves goes back to its installments
-  // (#305), under the lock taken above: an allocation saved at the same moment waited for it.
-  await releaseUncovered(tx, who.id, [paymentId], today);
-  return { ok: true, ids: [id] };
+  // (#305), and the payer's other money settles them again (#358), under the locks taken
+  // above: an allocation saved at the same moment waited for them.
+  const released = await releaseUncovered(tx, who, [paymentId], today);
+  return released.ok ? { ok: true, ids: [id] } : released;
 }
 
 export type PaymentRow = {
@@ -562,8 +587,9 @@ export async function refundPayer(
  * payment_corrects_same_entity_fk), method, reference and issuer, dated today, at most what
  * is not cancelled yet. It is never on a deposit slip (`toDeposit`) and the payment log
  * totals it with the refunds (`totals`). Management only (`mayCancelRefund`, default of #346
- * question 1). The payer is locked first, then the refund (`src/db/payment-locks.ts`): two
+ * question 1). The payer is locked first, then its payments (`src/db/payment-locks.ts`): two
  * cancellations of one refund, or a cancellation and a refund for the same payer, wait for each other.
+ * The money it gives back is allocated at once (#358).
  */
 export async function cancelRefundPayment(
   tx: Tx,
@@ -584,8 +610,10 @@ export async function cancelRefundPayment(
     .where(eq(payment.id, refundId));
   if (!r) return { ok: false, message: "Ce remboursement n’existe plus." };
   await lockPayers(tx, [r.payerId]);
-  // Only the refund's row: nothing else of the payer is read to cancel it.
-  await lockPayments(tx, [refundId]);
+  // Every payment of the payer with that business, the refund among them, in one statement:
+  // the money the cancellation gives back is allocated right after (#358, `allocatePayer`),
+  // which reads them all.
+  await lockPaymentsOfPayer(tx, r.payerId, r.billingEntityId);
   // A statement of its own, after the locks: it sees a cancellation committed meanwhile.
   const [o] = await tx
     .select({
@@ -604,29 +632,35 @@ export async function cancelRefundPayment(
     leftCents: refundLeftCents({ amountCents: o.amount, cancelledCents: o.cancelled }),
   });
   if (refusal) return { ok: false, message: refusal };
-  const [{ id }] = await tx
-    .insert(payment)
-    .values({
-      schoolId: CURRENT_SCHOOL,
-      billingEntityId: r.billingEntityId,
-      payerId: r.payerId,
-      date: today,
-      amountCents: amountCents,
+  // The cancellation and the allocation of the money it gives back go together, or not at all.
+  return allOrNothing(tx, async (tx) => {
+    const [{ id }] = await tx
+      .insert(payment)
+      .values({
+        schoolId: CURRENT_SCHOOL,
+        billingEntityId: r.billingEntityId,
+        payerId: r.payerId,
+        date: today,
+        amountCents: amountCents,
+        method: o.method,
+        reference: o.reference,
+        issuer: o.issuer,
+        correctsId: refundId,
+        reversalKind: "refund_cancellation",
+        enteredBy: who.id,
+      })
+      .returning({ id: payment.id });
+    await log(tx, who.id, id, {
+      montant_centimes: amountCents,
       method: o.method,
-      reference: o.reference,
-      issuer: o.issuer,
-      correctsId: refundId,
-      reversalKind: "refund_cancellation",
-      enteredBy: who.id,
-    })
-    .returning({ id: payment.id });
-  await log(tx, who.id, id, {
-    montant_centimes: amountCents,
-    method: o.method,
-    date: today,
-    corrige_id: refundId,
-    reversal_kind: "refund_cancellation",
-    billing_entity_id: r.billingEntityId,
+      date: today,
+      corrige_id: refundId,
+      reversal_kind: "refund_cancellation",
+      billing_entity_id: r.billingEntityId,
+    });
+    // The money back in the pool settles the payer's open installments with that business
+    // right away (#358), under the locks above (payer, payments; installments next).
+    const allocated = await allocatePayer(tx, who.id, r.payerId, r.billingEntityId, today);
+    return allocated.ok ? { ok: true as const, ids: [id] } : allocated;
   });
-  return { ok: true, ids: [id] };
 }
