@@ -12,13 +12,16 @@ import { syncSchool } from "./calendar-sync";
  */
 
 // Recording an error fails while `failRecord` is set (database down, lock timeout…).
-const control = vi.hoisted(() => ({ failRecord: false }));
+const control = vi.hoisted(() => ({ failRecord: false, failedFor: [] as string[] }));
 vi.mock("../db/calendar-connections", async (importOriginal) => {
   const original = await importOriginal<typeof import("../db/calendar-connections")>();
   return {
     ...original,
     recordSync: async (...args: Parameters<typeof original.recordSync>) => {
-      if (control.failRecord && args[2].error !== null) throw new Error("write failed");
+      if (control.failRecord && args[2].error !== null) {
+        control.failedFor.push(args[1]);
+        throw new Error("write failed");
+      }
       return original.recordSync(...args);
     },
   };
@@ -93,7 +96,8 @@ describe("syncSchool", () => {
     expect(calls).toHaveLength(1);
     const line = String(calls[0]?.[0]);
     expect(line).toContain(school);
-    expect(instructors.some((id) => line.includes(id))).toBe(true);
+    expect(control.failedFor).toHaveLength(1);
+    expect(line).toContain(control.failedFor[0]);
     expect(line).toContain("Error");
     expect(line).not.toContain("write failed");
     for (const name of [...NAMES, "Camille"]) expect(line).not.toContain(name);

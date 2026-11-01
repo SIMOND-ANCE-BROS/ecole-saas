@@ -62,7 +62,9 @@ The scheduler must alert the developer on a non-zero exit code or a non-2xx answ
 calendar failing (revoked access, provider down) does not fail the run: it is recorded on the
 connection, shown to the school, and retried next hour. A calendar whose failure could not even be
 recorded (database error while saving it) is shown to no one: it fails the run (exit 1), is logged
-with the school and instructor ids, and the other calendars are still synced (#373). An invoice
+with the school and instructor ids, and the other calendars are still synced (#373). If that
+calendar keeps failing on the next runs, ask the school to reconnect it: a refresh token the
+provider renewed during the failed run may have been lost. An invoice
 the tool rejects does not fail the sweep either: management sees it with the rejected invoices.
 
 The run does not fail either when **every** calendar fails, for example `GOOGLE_*` missing on the
