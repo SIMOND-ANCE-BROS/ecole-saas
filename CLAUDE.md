@@ -185,7 +185,7 @@ DESIGN.md                    interface rules
 
 **Data**
 
-- Payments and the audit log are **immutable** (database triggers): an error is fixed by a reverse entry.
+- Payments and the audit log are **immutable** (database triggers): an error is fixed by a reverse entry. What a reverse entry targets is guarded by the trigger `payment_reverse_target` (0059, #356): a correction or rejection cancels an ordinary payment, a refund cancellation a refund, with the target's payer and method, never beyond its amount.
 - An issued invoice, its lines and its installments are **frozen** (triggers of `0052_invoice_drafts.sql`; only `pdf_url` and an installment's status still change): a credit note corrects them. A draft (`to_send`) has no number and may be drafted again.
 - Every payment write (collect, correct or reject, refund, cancel a refund, deposit, cancel a deposit, allocate) takes its row locks in one order: payer, then payments, then installments, each ordered by id, through `src/db/payment-locks.ts` (#360), where the order and its reasons are written down. A write may start at a later rank (a deposit locks no payer), never go back: never lock a payer after a payment.
 - Never edit an applied migration: create a new one. Renaming a table or column is a new migration too.
