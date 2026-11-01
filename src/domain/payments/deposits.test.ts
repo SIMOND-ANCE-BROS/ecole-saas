@@ -129,17 +129,28 @@ describe("totalsByEntity (#329)", () => {
     ]);
   });
 
-  it("adds up to the overall total, to the cent", () => {
+  it("adds up to the overall total, to the cent, reverse entries included", () => {
     const rows = [
       at("a", p("a1", "card", 1)),
       at("b", p("b1", "card", 2)),
+      at("b", p("b2", "cheque", 7001)),
+      at("b", { ...p("b3", "cheque", -7001), reversalKind: "rejection" }),
       at("c", { ...p("c1", "cash", -333), reversalKind: "refund" }),
+      at("c", { ...p("c2", "cash", 111), reversalKind: "refund_cancellation" }),
       at("a", p("a2", "cash", 9999)),
+      at("a", { ...p("a3", "cash", -99), reversalKind: "correction" }),
     ];
-    const parts = totalsByEntity(rows, ["a", "b", "c"]);
-    expect(parts.reduce((s, e) => s + e.totals.total, 0)).toBe(totals(rows).total);
-    expect(parts.reduce((s, e) => s + e.totals.refunded, 0)).toBe(totals(rows).refunded);
-    expect(parts.reduce((s, e) => s + (e.totals.byMethod.cash ?? 0), 0)).toBe(totals(rows).byMethod.cash);
+    const all = totals(rows);
+    const parts = totalsByEntity(rows, ["a", "b", "c"]).map((e) => e.totals);
+    const sum = (f: (t: (typeof parts)[number]) => number) => parts.reduce((s, t) => s + f(t), 0);
+    expect(sum((t) => t.total)).toBe(all.total);
+    expect(sum((t) => t.refunded)).toBe(all.refunded);
+    for (const [method, cents] of Object.entries(all.byMethod))
+      expect(
+        sum((t) => t.byMethod[method] ?? 0),
+        method,
+      ).toBe(cents);
+    expect(Object.keys(all.byMethod).sort()).toEqual(["card", "cash", "cheque"]);
   });
 
   it("follows the given order, then any other business in the order its rows come", () => {

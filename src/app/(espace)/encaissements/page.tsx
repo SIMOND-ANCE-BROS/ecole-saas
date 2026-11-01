@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import {
   Alert,
+  Divider,
   Paper,
   Table,
   TableCaption,
@@ -12,6 +13,7 @@ import {
   TableThead,
   TableTr,
   Text,
+  Title,
 } from "@mantine/core";
 import { withSchool } from "@/db";
 import { PAYMENT_METHODS } from "@/db/payments";
@@ -90,7 +92,11 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
         parsed.entities.map((e) => e.id),
       )
     : [];
-  const entityNames = new Map(shown.map((l) => [l.billingEntityId, l.entity]));
+  // The school's names first; a row's own name for any business not listed there.
+  const entityNames = new Map([
+    ...shown.map((l) => [l.billingEntityId, l.entity] as const),
+    ...parsed.entities.map((e) => [e.id, e.name] as const),
+  ]);
   const filtering = filter.conditions.length > 0;
   const listState: [string, string][] = [
     ...toParams(filter),
@@ -146,12 +152,12 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/encaiss
               shown hold two of them. Never for a single business, nor when a filter keeps one. */}
           {byEntity.length > 1 && (
             <section aria-labelledby="totaux-par-entreprise" className="flex flex-col gap-3">
-              <Text id="totaux-par-entreprise" component="h2" size="sm" fw={600}>
+              <Divider />
+              <Title id="totaux-par-entreprise" order={2} size="h5">
                 Par entreprise
-              </Text>
+              </Title>
               {byEntity.map((e) => (
                 <div key={e.billingEntityId} className="flex flex-col gap-1">
-                  {/* Every entity totalled has a row shown, hence a name. */}
                   <Text component="h3" size="sm" fw={500}>
                     {entityNames.get(e.billingEntityId)}
                   </Text>
