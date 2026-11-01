@@ -202,6 +202,20 @@ describe("acceptance by a payer", () => {
     });
   });
 
+  it("signs the rules of the season a record shows, never another school's (#362)", async () => {
+    // The next season has no rules text: a signature is still kept, apart from the current season's.
+    expect(await as((tx) => acceptRules(tx, desk, parent, nextSeason, TODAY, TODAY))).toEqual({ ok: true });
+    expect((await as((tx) => payersRules(tx, [parent], nextSeason)))[0]).toMatchObject({ acceptedOn: TODAY });
+    expect((await as((tx) => payersRules(tx, [parent], season)))[0]).toMatchObject({ acceptedOn: null });
+    expect(await as((tx) => removeRulesAcceptance(tx, desk, parent, nextSeason))).toEqual({ ok: true });
+    const [{ id: theirs }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
+      VALUES (${otherSchool}, '2027-2028', '2027-09-01', '2028-06-30') RETURNING id`;
+    expect(await as((tx) => acceptRules(tx, desk, parent, theirs, TODAY, TODAY))).toEqual({
+      ok: false,
+      message: "Cette saison n’existe plus.",
+    });
+  });
+
   it("refuses a payer of another school, and a version of another season", async () => {
     expect(await as((tx) => acceptRules(tx, desk, foreignPayer, season, TODAY, TODAY))).toEqual({
       ok: false,

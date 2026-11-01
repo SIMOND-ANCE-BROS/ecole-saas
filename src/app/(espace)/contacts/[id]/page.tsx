@@ -10,8 +10,9 @@ import { severalEntities } from "@/db/billing-entities";
 import { payerInvoices } from "@/db/payer-invoices";
 import { mayDraft } from "@/domain/invoicing/progress";
 import { InvoicesSection } from "../../_people/invoices-section";
+import { RecordSeason } from "../../_people/record-season";
 import { displayedName } from "@/db/people";
-import { currentSeason } from "@/db/schedule";
+import { recordSeasons } from "@/db/schedule";
 import { todayInParis } from "@/domain/people/age";
 import { requireRole } from "@/lib/session";
 import { Banner, Enrollments, Telephone } from "../../_people/sections";
@@ -43,15 +44,18 @@ const collected = (n: unknown) => {
 
 export default async function PageContact({ params, searchParams }: PageProps<"/contacts/[id]">) {
   const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
-  const [{ id }, { enregistre, encaisse, carnet }] = await Promise.all([params, searchParams]);
+  const [{ id }, { enregistre, encaisse, carnet, saison }] = await Promise.all([params, searchParams]);
   const today = todayInParis();
   const parsed = await withSchool(schoolId, async (tx) => {
     const contact = await readContact(tx, id);
     if (!contact) return null;
-    const season = await currentSeason(tx, today);
+    // The season shown (`?saison=`, #362): enrollments, invoices and rules.
+    const seasons = await recordSeasons(tx, saison, today);
+    const season = seasons?.shown ?? null;
     return {
       contact,
       season: season,
+      seasons,
       billed: season ? await seasonEnrollments(tx, { payerId: contact.id }, season.id) : [],
       balance: await balanceOf(tx, contact.id, today),
       payments: await paymentsOf(tx, contact.id),
@@ -172,10 +176,18 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
               </Paper>
             )}
           </section>
+          {parsed.seasons && (sells || billed.length > 0 || invoices.length > 0) && (
+            <RecordSeason
+              seasons={parsed.seasons.seasons}
+              shown={parsed.seasons.shown}
+              current={parsed.seasons.current}
+              empty={billed.length === 0}
+            />
+          )}
           {season && <Enrollments enrollments={billed} season={season} today={today} payerId={c.id} />}
           {season && parsed.rules && (billed.length > 0 || parsed.rules.acceptedOn !== null) && (
             <RulesSection
-              seasonLabel={season.label}
+              season={season}
               rulesRecorded={parsed.rules.rulesRecorded}
               ownRecord
               lines={[

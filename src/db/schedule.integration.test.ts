@@ -7,6 +7,7 @@ import {
   enrolledInCourse,
   currentSeason,
   chosenSeason,
+  recordSeasons,
   schoolSeasons,
   seasonById,
   seasonOfCourse,
@@ -140,6 +141,27 @@ describe("chosenSeason (#189)", () => {
       "2027-2028",
       "2026-2027",
     ]);
+  });
+});
+
+describe("recordSeasons (#362)", () => {
+  it("shows the season asked for, with the current one and every season for the picker", async () => {
+    const r = await withSchool(school, (tx) => recordSeasons(tx, season2027, "2027-06-20"));
+    expect(r?.shown.id).toBe(season2027);
+    expect(r?.current.id).toBe(season2026);
+    expect(r?.seasons.map((s) => s.id)).toEqual([season2027, season2026]);
+  });
+
+  it("shows the current season for a missing, malformed, unknown or other school's id", async () => {
+    for (const asked of [undefined, "abc", ["x"], "00000000-0000-4000-8000-000000000000", otherSeason]) {
+      expect((await withSchool(school, (tx) => recordSeasons(tx, asked, "2027-06-20")))?.shown.id).toBe(season2026);
+    }
+  });
+
+  it("returns null without a season", async () => {
+    const [{ id }] = await schoolWithDefaultEntity(admin, "Vide fiche", `pvf-${suffix}`);
+    expect(await withSchool(id, (tx) => recordSeasons(tx, season2027, "2026-10-19"))).toBeNull();
+    await admin`DELETE FROM school WHERE id = ${id}`;
   });
 });
 

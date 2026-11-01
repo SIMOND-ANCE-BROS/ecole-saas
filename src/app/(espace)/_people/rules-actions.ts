@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { withSchool } from "@/db";
 import { acceptRules, removeRulesAcceptance, setReferral, setRefusesPhotos } from "@/db/internal-rules";
-import { currentSeason } from "@/db/schedule";
 import { todayInParis } from "@/domain/people/age";
 import { actionResult, type ActionResult } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
@@ -13,11 +12,12 @@ import { requireRole } from "@/lib/session";
  * Internal rules, photos and « Comment nous avez-vous connus ? » on the
  * student and payer records (#296): front desk and management. Typed for the
  * call sites, still parsed: a server action receives whatever the browser sends.
- * The season is always the current one, read on the server.
+ * The season is the one the record shows (#362): an id from the browser, parsed here and
+ * checked against the school's seasons under RLS (`acceptRules`).
  */
 
 const validId = z.uuid();
-const NO_SEASON = "Aucune saison n’est paramétrée.";
+const INVALID = "Saisie invalide : rechargez la fiche.";
 
 /** Both records show the rules: a payer's change shows on their students' records too. */
 function refreshRecords() {
@@ -26,30 +26,26 @@ function refreshRecords() {
 }
 
 /** « Règlement signé le … »: a new acceptance, or its date corrected. */
-export async function signRules(payerId: string, acceptedOn: string): Promise<ActionResult> {
+export async function signRules(payerId: string, seasonId: string, acceptedOn: string): Promise<ActionResult> {
   const { schoolId, userId } = await requireRole("director", "front_desk");
   const id = validId.safeParse(payerId);
   if (!id.success) return { ok: false, message: "Ce payeur n’existe plus." };
+  const season = validId.safeParse(seasonId);
+  if (!season.success) return { ok: false, message: INVALID };
   const today = todayInParis();
-  const r = await withSchool(schoolId, async (tx) => {
-    const season = await currentSeason(tx, today);
-    if (!season) return { ok: false as const, message: NO_SEASON };
-    return acceptRules(tx, userId, id.data, season.id, acceptedOn, today);
-  });
+  const r = await withSchool(schoolId, (tx) => acceptRules(tx, userId, id.data, season.data, acceptedOn, today));
   refreshRecords();
   return actionResult(r);
 }
 
 /** Back to « non signé »; the audit log keeps what was recorded. */
-export async function unsignRules(payerId: string): Promise<ActionResult> {
+export async function unsignRules(payerId: string, seasonId: string): Promise<ActionResult> {
   const { schoolId, userId } = await requireRole("director", "front_desk");
   const id = validId.safeParse(payerId);
   if (!id.success) return { ok: false, message: "Ce payeur n’existe plus." };
-  const r = await withSchool(schoolId, async (tx) => {
-    const season = await currentSeason(tx, todayInParis());
-    if (!season) return { ok: false as const, message: NO_SEASON };
-    return removeRulesAcceptance(tx, userId, id.data, season.id);
-  });
+  const season = validId.safeParse(seasonId);
+  if (!season.success) return { ok: false, message: INVALID };
+  const r = await withSchool(schoolId, (tx) => removeRulesAcceptance(tx, userId, id.data, season.data));
   refreshRecords();
   return actionResult(r);
 }
