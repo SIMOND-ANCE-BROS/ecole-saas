@@ -166,9 +166,12 @@ describe("readPerson", () => {
         paysFor: true,
       },
     ]);
+    const [{ id: seasonId }] = await admin`SELECT id FROM season WHERE school_id = ${school}`;
     expect(z?.courses).toEqual([
       {
         id: jazz,
+        // The season's id: the record shows the courses of the season chosen (#362).
+        seasonId,
         season: "2026-2027",
         discipline: "Jazz",
         level: null,
