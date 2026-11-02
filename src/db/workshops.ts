@@ -351,15 +351,19 @@ export async function cancelWorkshopSignup(tx: Tx, userId: string, id: string): 
     .where(eq(workshopSignup.id, id))
     .for("update");
   if (!s) return { ok: false, message: "Cette inscription au stage a déjà été annulée." };
-  // Attendance taken for a participant (#398), unless an enrollment in the workshop also covers them:
-  // removing the sign-up would leave that attendance off every sheet, yet counted on statements.
+  // Attendance taken for a participant (#398), unless an enrollment in the workshop also puts them on
+  // that lesson's sheet (`onAttendanceSheet`): removing the sign-up would leave that attendance off
+  // every sheet, yet counted on statements.
   const [{ attended }] = await tx.execute<{ attended: boolean }>(sql`SELECT EXISTS (
       SELECT 1 FROM workshop_signup_person p
       JOIN lesson l ON l.course_id = ${s.courseId}
       JOIN attendance a ON a.lesson_id = l.id AND a.student_id = p.person_id
       WHERE p.workshop_signup_id = ${id}
         AND NOT EXISTS (
-          SELECT 1 FROM enrollment_course c WHERE c.course_id = ${s.courseId} AND c.student_id = p.person_id
+          SELECT 1 FROM enrollment_course c
+          JOIN enrollment e ON e.id = c.enrollment_id
+            AND (e.status IN ('active', 'trial') OR (e.status = 'dropped' AND e.dropped_on >= l.date))
+          WHERE c.course_id = ${s.courseId} AND c.student_id = p.person_id
         )
     ) AS attended`);
   if (attended) return { ok: false, message: ATTENDANCE_TAKEN };
