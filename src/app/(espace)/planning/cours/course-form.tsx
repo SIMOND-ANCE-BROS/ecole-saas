@@ -121,6 +121,7 @@ export function CourseForm({
     ageMax: course?.ageMax?.toString() ?? "",
     level: course?.level ?? "",
     maxCapacity: course?.maxCapacity?.toString() ?? "",
+    workshopPrice: course?.workshopPriceCents == null ? "" : typedEuros(course.workshopPriceCents),
     instructorRate: pay.rate === null ? "" : typedEuros(pay.rate.cents),
   });
   // Dates of a one-off course; one empty row to start with.
@@ -202,6 +203,8 @@ export function CourseForm({
     ageMax: whole(v.ageMax),
     level: v.level,
     maxCapacity: whole(v.maxCapacity),
+    // Price per participant, only for a workshop (#297).
+    workshopPrice: v.type === "workshop" ? v.workshopPrice : undefined,
     // Not offered for a monthly flat instructor: nothing is sent, so no rate is kept (#192).
     instructorRate: sentRate,
     // The instructor this rate was typed for: a rate left over from another one is not kept.
@@ -685,6 +688,23 @@ export function CourseForm({
           value={v.maxCapacity}
           onChange={set("maxCapacity")}
         />
+        {v.type === "workshop" && (
+          <TextInput
+            label="Prix par participant"
+            description="Proposé à l’inscription au stage. Vide : saisi à chaque inscription."
+            inputMode="decimal"
+            autoComplete="off"
+            rightSection={
+              <Text size="xs" c="dimmed" pr="xs">
+                €
+              </Text>
+            }
+            styles={{ input: { textAlign: "right", fontVariantNumeric: "tabular-nums" } }}
+            value={v.workshopPrice}
+            onChange={typed("workshopPrice")}
+            error={error("workshopPrice")}
+          />
+        )}
       </Fieldset>
 
       {displayedUnavailability.length > 0 && (

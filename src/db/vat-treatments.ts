@@ -2,7 +2,17 @@ import { and, asc, count, eq, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { columnsOf } from "./columns-of";
 import type { Tx } from "./index";
-import { auditLog, billingEntity, course, invoiceLine, lessonPack, member, season, vatTreatment } from "./schema";
+import {
+  auditLog,
+  billingEntity,
+  course,
+  invoiceLine,
+  lessonPack,
+  member,
+  season,
+  vatTreatment,
+  workshopSignup,
+} from "./schema";
 import {
   NO_VAT_CHARGED,
   parseRate,
@@ -94,6 +104,7 @@ export async function listTreatments(tx: Tx): Promise<TreatmentRow[]> {
       uses: sql<number>`(
         (SELECT count(*) FROM course c WHERE c.vat_treatment_id = "vat_treatment"."id")
         + (SELECT count(*) FROM lesson_pack p WHERE p.vat_treatment_id = "vat_treatment"."id")
+        + (SELECT count(*) FROM workshop_signup s WHERE s.vat_treatment_id = "vat_treatment"."id")
         + (SELECT count(*) FROM invoice_line l WHERE l.vat_treatment_id = "vat_treatment"."id"))::int`,
       defaultOf: sql<string[]>`coalesce((SELECT array_agg(e.name ORDER BY e.name) FROM billing_entity e
         WHERE e.default_vat_treatment_id = "vat_treatment"."id"), '{}')`,
@@ -230,9 +241,16 @@ export async function regimeRefusal(
     .select({ n: count() })
     .from(lessonPack)
     .where(and(eq(lessonPack.billingEntityId, p.entityId), inArray(lessonPack.vatTreatmentId, standard)));
+  // A workshop sign-up keeps the treatment it was sold with (#297).
+  const [signups] = await tx
+    .select({ n: count() })
+    .from(workshopSignup)
+    .where(and(eq(workshopSignup.billingEntityId, p.entityId), inArray(workshopSignup.vatTreatmentId, standard)));
   return courses.n + packs.n > 0
     ? "Des cours ou des carnets de cette entreprise ont un traitement avec TVA : changez-les avant de passer à un régime sans TVA."
-    : null;
+    : signups.n > 0
+      ? "Des inscriptions à un stage de cette entreprise ont été vendues avec TVA : elle ne peut pas passer à un régime sans TVA."
+      : null;
 }
 
 async function labelTaken(tx: Tx, label: string, except?: string): Promise<boolean> {
@@ -309,7 +327,8 @@ export async function updateTreatment(tx: Tx, userId: string, id: string, entry:
           inArray(billingEntity.vatRegime, [...NO_VAT_CHARGED]),
           sql`(${billingEntity.defaultVatTreatmentId} = ${id}
             OR EXISTS (SELECT 1 FROM course c WHERE c.billing_entity_id = "billing_entity"."id" AND c.vat_treatment_id = ${id})
-            OR EXISTS (SELECT 1 FROM lesson_pack p WHERE p.billing_entity_id = "billing_entity"."id" AND p.vat_treatment_id = ${id}))`,
+            OR EXISTS (SELECT 1 FROM lesson_pack p WHERE p.billing_entity_id = "billing_entity"."id" AND p.vat_treatment_id = ${id})
+            OR EXISTS (SELECT 1 FROM workshop_signup s WHERE s.billing_entity_id = "billing_entity"."id" AND s.vat_treatment_id = ${id}))`,
         ),
       )
       .limit(1);
@@ -327,7 +346,7 @@ export async function updateTreatment(tx: Tx, userId: string, id: string, entry:
   return { ok: true, id };
 }
 
-/** Removes a treatment nothing uses (no course, lesson pack, invoice line nor business default). */
+/** Removes a treatment nothing uses (no course, lesson pack, workshop sign-up, invoice line nor business default). */
 export async function deleteTreatment(tx: Tx, userId: string, id: string): Promise<Result> {
   if (!isUuid(id)) return { ok: false, message: GONE };
   const who = await memberOf(tx, userId);
@@ -342,6 +361,7 @@ export async function deleteTreatment(tx: Tx, userId: string, id: string): Promi
         eq(vatTreatment.id, id),
         sql`(EXISTS (SELECT 1 FROM course c WHERE c.vat_treatment_id = ${id})
           OR EXISTS (SELECT 1 FROM lesson_pack p WHERE p.vat_treatment_id = ${id})
+          OR EXISTS (SELECT 1 FROM workshop_signup s WHERE s.vat_treatment_id = ${id})
           OR EXISTS (SELECT 1 FROM ${invoiceLine} l WHERE l.vat_treatment_id = ${id})
           OR EXISTS (SELECT 1 FROM billing_entity e WHERE e.default_vat_treatment_id = ${id}))`,
       ),

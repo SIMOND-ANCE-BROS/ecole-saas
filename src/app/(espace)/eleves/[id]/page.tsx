@@ -6,6 +6,7 @@ import { readStudent } from "@/db/students";
 import { seasonEnrollments } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
 import { packsOf } from "@/db/lesson-packs";
+import { signupsOf } from "@/db/workshops";
 import { severalEntities } from "@/db/billing-entities";
 import { payerInvoices } from "@/db/payer-invoices";
 import { ENDED_SEASON, mayDraft, seasonDraftable } from "@/domain/invoicing/progress";
@@ -28,6 +29,7 @@ import { PaymentsSection } from "../../_people/payments-section";
 import { mayRefund } from "@/domain/payments/refund";
 import { mayCancelRefund } from "@/domain/payments/refund-cancellation";
 import { LessonPacks } from "../../_people/lesson-packs";
+import { WorkshopSignups } from "../../_people/workshop-signups";
 import { Banner, FollowedCourses, Enrollments, dayOf, Notes, Telephone } from "../../_people/sections";
 import { Billing } from "./billing";
 import { type DocumentLine, Documents } from "./documents";
@@ -48,6 +50,7 @@ const BANNERS: Record<string, string> = {
   // One submission over two businesses (#299): one enrollment each.
   enregistrees: "Inscriptions enregistrées, une par entreprise.",
   vendu: "Carnet vendu.",
+  inscrit: "Inscription au stage enregistrée.",
 };
 
 /** Banner after a payment (`?encaisse=3`). */
@@ -58,7 +61,10 @@ const collected = (n: unknown) => {
 
 export default async function StudentPage({ params, searchParams }: PageProps<"/eleves/[id]">) {
   const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
-  const [{ id }, { enregistre, inscription, encaisse, carnet, saison }] = await Promise.all([params, searchParams]);
+  const [{ id }, { enregistre, inscription, encaisse, carnet, stage, saison }] = await Promise.all([
+    params,
+    searchParams,
+  ]);
   const today = todayInParis();
   const parsed = await withSchool(schoolId, async (tx) => {
     const student = await readStudent(tx, id, today);
@@ -81,6 +87,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
       enrolledOn: current ? await firstEnrollmentDate(tx, student.id, current.id) : null,
       courses: current ? await enrolledCourses(tx, student.id, current.id) : [],
       packs: await packsOf(tx, { personId: student.id }),
+      workshops: await signupsOf(tx, student.id),
       // A student paying for themselves: their own invoices (#352).
       invoices: season && paysForThemselves ? await payerInvoices(tx, student.id, season.id) : [],
       severalEntities: await severalEntities(tx),
@@ -134,7 +141,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   const emergencyContacts = e.guardians
     .filter((r) => r.toNotify)
     .concat(e.otherRelationships.filter((a) => a.toNotify && a.direction === "incoming"));
-  const banner = BANNERS[String(inscription ?? carnet ?? enregistre)];
+  const banner = BANNERS[String(inscription ?? carnet ?? stage ?? enregistre)];
   // Who pays a pack sold from this record: the student's payer, or themselves.
   const packPayer = e.billedTo.type === "person" ? e.billedTo.id : e.billedTo.type === "self" ? e.id : null;
 
@@ -277,6 +284,11 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             personId={e.id}
             sellHref={packPayer ? `/carnets/nouveau?payeur=${packPayer}&eleve=${e.id}` : null}
             noPayer={!packPayer}
+          />
+          <WorkshopSignups
+            signups={parsed.workshops}
+            personId={e.id}
+            signUpHref={packPayer ? `/stages/nouveau?payeur=${packPayer}&eleve=${e.id}` : null}
           />
           {e.billedTo.type === "person" ? (
             <Text size="sm" c="dimmed">

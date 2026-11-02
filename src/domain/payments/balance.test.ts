@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { amountDue, balancesByEntity, dueCents, entityOwingMost, familyOwed, isCounted, payerBalance } from "./balance";
+import { signupDueCents } from "../workshop/signup";
 
 const TODAY = "2026-10-21";
 
@@ -158,6 +159,19 @@ describe("amountDue", () => {
 describe("balancesByEntity", () => {
   const A = "entity-a";
   const B = "entity-b";
+
+  it("counts a workshop sign-up for two children with the workshop's business, like a lesson pack (#297)", () => {
+    const workshop = { billingEntityId: B, priceCents: signupDueCents({ unitPriceCents: 4_000, participantCount: 2 }) };
+    const { byEntity, total } = balancesByEntity(
+      [{ status: "active", period: "year", quarterCount: 0, netPriceCents: 30_000, billingEntityId: A }],
+      [workshop],
+      [{ amountCents: 30_000, plannedPayment: null, billingEntityId: A }],
+      TODAY,
+    );
+    expect(byEntity[A].remaining).toBe(0);
+    expect(byEntity[B].remaining).toBe(8_000);
+    expect(total.due).toBe(38_000);
+  });
 
   it("two entities: each balance holds its own enrollments, packs and payments; the total adds them up", () => {
     const s = balancesByEntity(
