@@ -3,6 +3,7 @@ import { columnsOf, rowsOf } from "./columns-of";
 import { z } from "zod";
 import type { Tx } from "./index";
 import { hoursBySite } from "./settings";
+import { lockCourses } from "./attendance-locks";
 import { resolveEntity } from "./billing-entities";
 import { resolveTreatment } from "./vat-treatments";
 import {
@@ -794,6 +795,9 @@ export async function courseRateState(tx: Tx, id: string): Promise<CourseRateSta
 
 /** Refused as soon as an enrollment, whatever its status, concerns the course. */
 export async function deleteCourse(tx: Tx, id: string): Promise<Result> {
+  // The course before its lessons (`attendance-locks.ts`, #406): attendance saved meanwhile is seen.
+  // FOR NO KEY UPDATE, as in moveCourse: the lessons `syncLessons` inserts take KEY SHARE on it.
+  if (z.uuid().safeParse(id).success) await lockCourses(tx, [id]);
   if (!(await readCourse(tx, id))) return { ok: false, message: "Ce cours n’existe plus." };
   const n = (await enrollmentCount(tx, id)) + (await signupCount(tx, id));
   if (n > 0)
@@ -847,6 +851,10 @@ export async function moveCourse(
 ): Promise<MoveResult> {
   const c = validSlot.safeParse(slot);
   if (!c.success) return { status: "refused", message: c.error.issues[0].message };
+  // The course before its lessons, as everywhere (`attendance-locks.ts`, #406): its given lessons
+  // are stamped below before the course row is updated. FOR NO KEY UPDATE, not UPDATE: the
+  // lessons `syncLessons` inserts take KEY SHARE on their course.
+  if (z.uuid().safeParse(id).success) await lockCourses(tx, [id]);
   const existing = await readCourse(tx, id);
   if (!existing) return { status: "refused", message: "Ce cours n’existe plus." };
   if (existing.recurrence === "dates")

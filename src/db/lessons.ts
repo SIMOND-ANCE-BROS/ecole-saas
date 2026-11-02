@@ -8,6 +8,7 @@ import { closedCourseLabel, type ScopedClosure } from "../domain/schedule/closur
 import { recurrenceOf, type SeasonCalendar } from "../domain/schedule/lessons";
 import { planLessonSync, seasonLessons } from "../domain/schedule/lesson-sync";
 import type { Tx } from "./index";
+import { lockCourseOfLesson } from "./attendance-locks";
 import {
   course,
   courseDate,
@@ -639,6 +640,9 @@ export async function saveAttendance(
 ): Promise<Result> {
   const rows = validAttendance.safeParse(entry);
   if (!rows.success) return { ok: false, message: "Saisie invalide." };
+  // The lesson's course first (`attendance-locks.ts`, #406): an enrollment or a sign-up being
+  // cancelled meanwhile is gone from the sheet read below, or sees this attendance and stays.
+  if (isUuid(lessonId)) await lockCourseOfLesson(tx, lessonId);
   const attendanceSheet = await readAttendance(tx, lessonId);
   if (!attendanceSheet) return { ok: false, message: "Cette séance n’existe plus." };
   if (attendanceSheet.status === "cancelled") return { ok: false, message: "Cette séance est annulée." };

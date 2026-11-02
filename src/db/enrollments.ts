@@ -46,6 +46,7 @@ import type {
 } from "../domain/tariff/types";
 import { severalEntities } from "./billing-entities";
 import type { Tx } from "./index";
+import { lockCoursesOfEnrollment } from "./attendance-locks";
 import { paysForNonStudent, NOT_A_STUDENT_YET, payableStudents } from "./people";
 import {
   auditLog,
@@ -775,8 +776,8 @@ type Saved = {
  * two clicks or two desks wait for each other and the second sees the first's change.
  * The enrollment is locked `FOR UPDATE`: an invoice line referring to it (epic #6, which
  * takes `FOR KEY SHARE` through its foreign key) waits for the change, then sees it.
- * Attendance is not locked: one taken at the same instant as a cancellation can slip
- * through (the cancellation then removes an enrollment just attended; the audit log keeps it).
+ * Attendance is not locked here: `cancelEnrollment` locks the enrollment's courses next and
+ * reads it again (`attendance-locks.ts`, #406).
  */
 async function readSaved(tx: Tx, id: string, lock = false): Promise<Saved | null> {
   if (!uuid.safeParse(id).success) return null;
@@ -1014,7 +1015,12 @@ export async function dropEnrollment(tx: Tx, userId: string, id: string, dropped
  * at the next drafting (`draftPayerInvoices`), which nothing triggers yet.
  */
 export async function cancelEnrollment(tx: Tx, userId: string, id: string): Promise<ChangeResult> {
-  const e = await readSaved(tx, id, true);
+  const locked = await readSaved(tx, id, true);
+  if (!locked) return { ok: false, message: "Cette inscription a déjà été annulée." };
+  // Then its courses (`attendance-locks.ts`, #406), and the attendance check read again under
+  // them: attendance being saved or a sign-up being cancelled meanwhile is seen.
+  await lockCoursesOfEnrollment(tx, id);
+  const e = await readSaved(tx, id);
   if (!e) return { ok: false, message: "Cette inscription a déjà été annulée." };
   const refusal = cancelRefusal(e);
   if (refusal) return { ok: false, message: refusal };

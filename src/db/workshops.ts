@@ -13,6 +13,7 @@ import {
 import { displayedName } from "../domain/people/name";
 import { rowsOf } from "./columns-of";
 import type { Tx } from "./index";
+import { lockCourses } from "./attendance-locks";
 import { NOT_A_STUDENT_YET, payableStudents, paysForNonStudent } from "./people";
 import { courseDatesSql } from "./courses";
 import { headcountSql } from "./schedule";
@@ -337,6 +338,15 @@ export async function cancelWorkshopSignup(tx: Tx, userId: string, id: string): 
   if (!isUuid(id)) return { ok: false, message: "Saisie invalide." };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
+  // The workshop's course, then the sign-up (`attendance-locks.ts`, #406): attendance being saved
+  // or an enrollment being cancelled meanwhile is seen by the check below. A sign-up never
+  // changes course: read before the lock, it stays right under it.
+  const [target] = await tx
+    .select({ courseId: workshopSignup.courseId })
+    .from(workshopSignup)
+    .where(eq(workshopSignup.id, id));
+  if (!target) return { ok: false, message: "Cette inscription au stage a déjà été annulée." };
+  await lockCourses(tx, [target.courseId]);
   const [s] = await tx
     .select({
       courseId: workshopSignup.courseId,
