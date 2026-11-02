@@ -82,6 +82,17 @@ describe("keepSessionIfPasswordUnchanged", () => {
     expect(await sessionExists(token)).toBe(false);
   });
 
+  it("a hash read for another account, or an account without password, keeps nothing", async () => {
+    const before = await credentialBefore(stableEmail);
+    if (!before) throw new Error("compte introuvable");
+    const elsewhere = await sessionOf(director);
+    expect(await keepSessionIfPasswordUnchanged(elsewhere, director, before)).toBe(false);
+    expect(await sessionExists(elsewhere)).toBe(false);
+    const token = await sessionOf(before.userId);
+    expect(await keepSessionIfPasswordUnchanged(token, before.userId, { ...before, passwordHash: null })).toBe(false);
+    expect(await sessionExists(token)).toBe(false);
+  });
+
   it("a session written with the old password while the account is taken back no longer works", async () => {
     // The sign-in reads the hash, then checks the password: the old one, still valid.
     const before = await credentialBefore(ownerEmail);
