@@ -327,7 +327,9 @@ export async function countLesson(
   if (refusal) return { ok: false, message: refusal };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
-  await tx.insert(lessonPackUsage).values({ schoolId: CURRENT_SCHOOL, lessonPackId, lessonId });
+  await tx
+    .insert(lessonPackUsage)
+    .values({ schoolId: CURRENT_SCHOOL, billingEntityId: locked.billingEntityId, lessonPackId, lessonId });
   await tx.insert(auditLog).values({
     schoolId: CURRENT_SCHOOL,
     actor: who.id,

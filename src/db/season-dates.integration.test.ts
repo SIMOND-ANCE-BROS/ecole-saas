@@ -117,8 +117,8 @@ describe("season dates and lessons (#270)", () => {
   it("shortening removes the planned lessons after the new end, keeps those with attendance, a pack or moved inside", async () => {
     await admin`INSERT INTO attendance (school_id, lesson_id, student_id, present)
       VALUES (${school}, ${await lessonOn("2026-12-10")}, ${student}, true)`;
-    await admin`INSERT INTO lesson_pack_usage (school_id, lesson_pack_id, lesson_id)
-      VALUES (${school}, ${pack}, ${await lessonOn("2026-12-17")})`;
+    await admin`INSERT INTO lesson_pack_usage (school_id, billing_entity_id, lesson_pack_id, lesson_id)
+      SELECT ${school}, billing_entity_id, ${pack}, ${await lessonOn("2026-12-17")} FROM lesson_pack WHERE id = ${pack}`;
     // A substitute at another time on 3 December: removed all the same, nothing kept aside (pinned).
     await admin`UPDATE lesson SET instructor_id = ${substitute}, start_time = '19:00' WHERE id = ${await lessonOn("2026-12-03")}`;
     // The 24 December lesson moved to Friday 27 November, inside the new dates: the move stands.
@@ -131,8 +131,8 @@ describe("season dates and lessons (#270)", () => {
   });
 
   it("a later start removes the upcoming planned lessons before it, keeps a pack one and a moved one", async () => {
-    await admin`INSERT INTO lesson_pack_usage (school_id, lesson_pack_id, lesson_id)
-      VALUES (${school}, ${pack}, ${await lessonOn("2026-11-12")})`;
+    await admin`INSERT INTO lesson_pack_usage (school_id, billing_entity_id, lesson_pack_id, lesson_id)
+      SELECT ${school}, billing_entity_id, ${pack}, ${await lessonOn("2026-11-12")} FROM lesson_pack WHERE id = ${pack}`;
     // The 5 November lesson moved to Tuesday 24 November, inside the new dates: the move stands.
     await admin`UPDATE lesson SET date = '2026-11-24', planned_date = '2026-11-05' WHERE id = ${await lessonOn("2026-11-05")}`;
     // A stale planned lesson before the new start: removed.

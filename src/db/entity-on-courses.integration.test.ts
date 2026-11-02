@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
 import postgres from "postgres";
 import { withDefaultQuarters } from "./season-quarters.integration-helpers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -316,7 +317,7 @@ describe("lesson packs and entities", () => {
 
     expect(await withSchool(ids.school, (tx) => entityLock(tx, ids.privateB))).toBeNull();
     // Counted directly: countLesson would write to the audit log, which these tests leave untouched.
-    await admin`INSERT INTO lesson_pack_usage (school_id, lesson_pack_id, lesson_id) VALUES (${ids.school}, ${pack.id}, ${lesson.id})`;
+    await admin`INSERT INTO lesson_pack_usage (school_id, billing_entity_id, lesson_pack_id, lesson_id) VALUES (${ids.school}, ${ids.b}, ${pack.id}, ${lesson.id})`;
     const locked = "Ce cours a 1 séance décomptée d’un carnet : l’entreprise qui le vend ne peut plus changer.";
     expect(await withSchool(ids.school, (tx) => entityLock(tx, ids.privateB))).toBe(locked);
     const input = await privateCourseInput(ids.privateB, ids.a);
@@ -388,5 +389,117 @@ describe("lesson packs and entities", () => {
       ),
     );
     expect(r).toEqual({ ok: false, message: "Entreprise introuvable ou inactive." });
+  });
+});
+
+describe("the database refuses a pack counting a lesson of another entity (#322)", () => {
+  // A private course of B with its generated lessons, and a pack of each entity.
+  const setUp = async () => {
+    const [{ id: course }] = await admin`
+      INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, type, weekday, start_time, duration_minutes)
+      VALUES (${ids.school}, ${ids.b}, ${ids.season}, ${ids.rock}, ${ids.room}, ${ids.teacher}, 'private', 6, '10:00', 60) RETURNING id`;
+    await withSchool(ids.school, (tx) => syncLessons(tx, ids.season, TODAY));
+    const [lesson] =
+      await admin`SELECT id, billing_entity_id FROM lesson WHERE course_id = ${course} ORDER BY date LIMIT 1`;
+    const pack = async (entity: string) =>
+      (
+        await admin`INSERT INTO lesson_pack (school_id, billing_entity_id, payer_id, people_count, lesson_count, price_cents)
+          VALUES (${ids.school}, ${entity}, ${ids.payer}, 1, 5, 20000) RETURNING id`
+      )[0].id as string;
+    return {
+      course: course as string,
+      lesson: lesson.id as string,
+      lessonEntity: lesson.billing_entity_id as string,
+      packA: await pack(ids.a),
+      packB: await pack(ids.b),
+    };
+  };
+  const removeCourse = async (course: string) => {
+    await admin`DELETE FROM lesson_pack_usage WHERE lesson_id IN (SELECT id FROM lesson WHERE course_id = ${course})`;
+    await admin`DELETE FROM lesson WHERE course_id = ${course}`;
+    await admin`DELETE FROM course WHERE id = ${course}`;
+  };
+  const countDirectly = (entity: string, pack: string, lesson: string) =>
+    admin`INSERT INTO lesson_pack_usage (school_id, billing_entity_id, lesson_pack_id, lesson_id)
+      VALUES (${ids.school}, ${entity}, ${pack}, ${lesson})`;
+
+  it("refuses a direct usage linking a pack of A to a lesson of a course of B, whichever entity it names", async () => {
+    const s = await setUp();
+    try {
+      // syncLessons gave the lesson its course's entity.
+      expect(s.lessonEntity).toBe(ids.b);
+      await expect(countDirectly(ids.a, s.packA, s.lesson)).rejects.toThrow(
+        /"lesson_pack_usage_lesson_same_entity_fk"/,
+      );
+      await expect(countDirectly(ids.b, s.packA, s.lesson)).rejects.toThrow(
+        /"lesson_pack_usage_lesson_pack_same_entity_fk"/,
+      );
+      // As the application role too: Row Level Security changes nothing to the keys.
+      const asApp = await withSchool(ids.school, (tx) =>
+        tx.execute(
+          sql`INSERT INTO lesson_pack_usage (school_id, billing_entity_id, lesson_pack_id, lesson_id)
+            VALUES (${ids.school}, ${ids.a}, ${s.packA}, ${s.lesson})`,
+        ),
+      ).then(
+        () => "inserted",
+        (e: { cause?: { constraint_name?: string } }) => e.cause?.constraint_name ?? String(e),
+      );
+      expect(asApp).toBe("lesson_pack_usage_lesson_same_entity_fk");
+      // The pack of B counts it.
+      await countDirectly(ids.b, s.packB, s.lesson);
+      const [{ n }] = await admin`SELECT count(*)::int AS n FROM lesson_pack_usage WHERE lesson_id = ${s.lesson}`;
+      expect(n).toBe(1);
+    } finally {
+      await removeCourse(s.course);
+    }
+  });
+
+  it("refuses a lesson naming another entity than its course's, and fills a missing one", async () => {
+    const s = await setUp();
+    try {
+      // A Sunday: no generated lesson that day.
+      await expect(
+        admin`INSERT INTO lesson (school_id, billing_entity_id, course_id, date, instructor_id)
+          VALUES (${ids.school}, ${ids.a}, ${s.course}, '2026-11-08', ${ids.teacher})`,
+      ).rejects.toThrow(/"lesson_course_same_entity_fk"/);
+      const [added] = await admin`INSERT INTO lesson (school_id, course_id, date, instructor_id)
+        VALUES (${ids.school}, ${s.course}, '2026-11-08', ${ids.teacher}) RETURNING billing_entity_id`;
+      expect(added.billing_entity_id).toBe(ids.b);
+    } finally {
+      await removeCourse(s.course);
+    }
+  });
+
+  it("refuses a change of entity of a course or a pack once a lesson is counted", async () => {
+    const s = await setUp();
+    try {
+      await countDirectly(ids.b, s.packB, s.lesson);
+      await expect(admin`UPDATE course SET billing_entity_id = ${ids.a} WHERE id = ${s.course}`).rejects.toThrow(
+        /"lesson_pack_usage_lesson_same_entity_fk"/,
+      );
+      await expect(admin`UPDATE lesson_pack SET billing_entity_id = ${ids.a} WHERE id = ${s.packB}`).rejects.toThrow(
+        /"lesson_pack_usage_lesson_pack_same_entity_fk"/,
+      );
+      const [c] = await admin`SELECT billing_entity_id FROM course WHERE id = ${s.course}`;
+      expect(c.billing_entity_id).toBe(ids.b);
+    } finally {
+      await removeCourse(s.course);
+    }
+  });
+
+  it("moves the lessons with their course when none is counted", async () => {
+    const s = await setUp();
+    try {
+      await admin`UPDATE course SET billing_entity_id = ${ids.a} WHERE id = ${s.course}`;
+      const rows = await admin`SELECT DISTINCT billing_entity_id FROM lesson WHERE course_id = ${s.course}`;
+      expect(rows.map((r) => r.billing_entity_id)).toEqual([ids.a]);
+      // The pack of A now counts it, the pack of B no longer can.
+      await countDirectly(ids.a, s.packA, s.lesson);
+      await expect(countDirectly(ids.b, s.packB, s.lesson)).rejects.toThrow(
+        /"lesson_pack_usage_lesson_same_entity_fk"/,
+      );
+    } finally {
+      await removeCourse(s.course);
+    }
   });
 });
