@@ -144,6 +144,22 @@ describe("overlapping syncs of one calendar (#370)", () => {
     expect(await stored()).toEqual({ token: "fake-new-next", claimed: null });
   });
 
+  it("never claims another school's calendar", async () => {
+    const [{ id: other }] =
+      await admin`INSERT INTO school (name, slug) VALUES ('École Zz autre', ${`sc2-${suffix}`}) RETURNING id`;
+    try {
+      const sent: string[] = [];
+      expect(await syncCalendar(other, instructorId, provider(sent), NOW)).toEqual({
+        ok: false,
+        message: "Aucun agenda connecté.",
+      });
+      expect(sent).toEqual([]);
+      expect((await stored()).claimed).toBeNull();
+    } finally {
+      await admin`DELETE FROM school WHERE id = ${other}`;
+    }
+  });
+
   it("counts a calendar already being synced as skipped by the hourly job, not failed", async () => {
     await admin`UPDATE calendar_connection SET sync_claimed_until = now() + interval '4 minutes'
       WHERE instructor_id = ${instructorId}`;

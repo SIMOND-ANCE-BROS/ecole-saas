@@ -38,7 +38,8 @@ export async function saveConnection(
     .values(columnsOf(calendarConnection, { ...columns, instructorId: instructorId, schoolId: CURRENT_SCHOOL }))
     .onConflictDoUpdate({
       target: calendarConnection.instructorId,
-      // A sync still running on the replaced connection loses its claim (#370): its writes match nothing.
+      // A sync still running on the replaced connection loses its claim (#370): its token and result
+      // writes match nothing (its busy slots: #386).
       set: columnsOf(calendarConnection, {
         ...columns,
         lastSyncedAt: null,
