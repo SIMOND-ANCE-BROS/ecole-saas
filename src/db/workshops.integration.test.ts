@@ -9,6 +9,8 @@ import { deleteCourse, entityLock, moveCourse, readCourse, updateCourse, validCo
 import { deleteTreatment } from "./vat-treatments";
 import { enrolledInCourse, scheduleCourse } from "./schedule";
 import { readAttendance, saveAttendance, weekLessons } from "./lessons";
+import { statementData } from "./statements";
+import { instructorStatement } from "../domain/payroll/statement";
 import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 import { ALREADY_SIGNED_UP, ATTENDANCE_TAKEN, NO_WORKSHOP_PRICE, REASON_REQUIRED } from "../domain/workshop/signup";
 
@@ -91,6 +93,8 @@ afterAll(async () => {
   });
   for (const t of [
     "submission",
+    "enrollment_course",
+    "enrollment",
     "workshop_signup_person",
     "workshop_signup",
     "attendance",
@@ -366,6 +370,105 @@ describe("a workshop's participants (#398)", () => {
     ]);
     await admin`DELETE FROM attendance WHERE lesson_id = ${lessonId}`;
     expect(await cancel(r.id)).toEqual({ ok: true });
+  });
+
+  /** An enrollment of the child in the workshop, entered beside the sign-up. */
+  const enrollChild = async (status: "active" | "trial" | "dropped", droppedOn: string | null = null) => {
+    const [e] = await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period,
+        gross_price_cents, status, enrolled_on, dropped_on)
+      SELECT school_id, billing_entity_id, season_id, ${parent}, 'child', 'year', 10000, ${status}, '2026-10-01', ${droppedOn}
+      FROM course WHERE id = ${workshop} RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id)
+      SELECT school_id, billing_entity_id, ${e.id}, ${child}, id FROM course WHERE id = ${workshop}`;
+    return e.id as string;
+  };
+  const markChildAbsent = async (lessonId: string) => {
+    const saved = await withSchool(school, (tx) =>
+      saveAttendance(tx, lessonId, [{ studentId: child, present: false }]),
+    );
+    expect(saved).toMatchObject({ ok: true });
+  };
+
+  for (const status of ["active", "trial"] as const)
+    it(`cancels a sign-up with attendance when an ${status} enrollment keeps its participant on the sheet`, async () => {
+      const r = await signUp({ participantIds: [child] });
+      if (!r.ok) throw new Error(r.message);
+      const enrollmentId = await enrollChild(status);
+      const lessonId = await workshopLesson();
+      await markChildAbsent(lessonId);
+      expect(await cancel(r.id)).toEqual({ ok: true });
+      expect((await withSchool(school, (tx) => readAttendance(tx, lessonId)))?.students.map((d) => d.id)).toEqual([
+        child,
+      ]);
+      await admin`DELETE FROM attendance WHERE lesson_id = ${lessonId}`;
+      await admin`DELETE FROM enrollment_course WHERE enrollment_id = ${enrollmentId}`;
+      await admin`DELETE FROM enrollment WHERE id = ${enrollmentId}`;
+    });
+
+  it("refuses it when the enrollment was dropped before the lesson", async () => {
+    const r = await signUp({ participantIds: [child] });
+    if (!r.ok) throw new Error(r.message);
+    const enrollmentId = await enrollChild("dropped", "2027-01-15");
+    const lessonId = await workshopLesson();
+    await markChildAbsent(lessonId);
+    expect(await cancel(r.id)).toEqual({ ok: false, message: ATTENDANCE_TAKEN });
+    await admin`DELETE FROM attendance WHERE lesson_id = ${lessonId}`;
+    await admin`DELETE FROM enrollment_course WHERE enrollment_id = ${enrollmentId}`;
+    await admin`DELETE FROM enrollment WHERE id = ${enrollmentId}`;
+  });
+
+  describe("on the instructor's statement", () => {
+    const MONTH = "2027-02";
+    const AFTER = "2027-03-01";
+    const statement = async () => {
+      const [{ instructor_id: teacher }] = await admin`SELECT instructor_id FROM course WHERE id = ${workshop}`;
+      const data = await withSchool(school, (tx) => statementData(tx, MONTH, teacher));
+      return instructorStatement({
+        month: MONTH,
+        today: AFTER,
+        instructor: data.instructors[0],
+        lessons: data.lessons.filter((l) => l.courseId === workshop),
+        rateChanges: data.rateChanges,
+        closures: data.closures,
+      });
+    };
+    const take = async (present: [boolean, boolean]) => {
+      await twoSignups();
+      const lessonId = await workshopLesson();
+      const saved = await withSchool(school, (tx) =>
+        saveAttendance(tx, lessonId, [
+          { studentId: child, present: present[0] },
+          { studentId: sibling, present: present[1] },
+        ]),
+      );
+      expect(saved).toMatchObject({ ok: true });
+      return lessonId;
+    };
+
+    it("does not pay a workshop lesson whose two participants were marked absent", async () => {
+      const lessonId = await take([false, false]);
+      const s = await statement();
+      expect([s.nobodyCameCount, s.lessonCount, s.totalCents]).toEqual([1, 0, 0]);
+      expect(s.flags).not.toContain("no_attendance");
+      await admin`DELETE FROM attendance WHERE lesson_id = ${lessonId}`;
+    });
+
+    it("pays it at the course rate when one participant came", async () => {
+      const lessonId = await take([true, false]);
+      const s = await statement();
+      // Employee paid 30 € an hour, a lesson of two hours.
+      expect([s.nobodyCameCount, s.lessonCount, s.totalCents]).toEqual([0, 1, 6000]);
+      expect(s.flags).not.toContain("no_attendance");
+      await admin`DELETE FROM attendance WHERE lesson_id = ${lessonId}`;
+    });
+
+    it("pays it, flagged « appel non fait », when nobody was marked", async () => {
+      await twoSignups();
+      await workshopLesson();
+      const s = await statement();
+      expect([s.nobodyCameCount, s.lessonCount, s.totalCents, s.noAttendanceCount]).toEqual([0, 1, 6000, 1]);
+      expect(s.flags).toContain("no_attendance");
+    });
   });
 
   it("drops a cancelled sign-up from the list and the headcount", async () => {
