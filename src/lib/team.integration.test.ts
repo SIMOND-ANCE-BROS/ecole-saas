@@ -1,7 +1,15 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "../db";
-import { invite, pendingInvitations, listMembers, updateMember, revokeInvitation } from "../db/team";
+import {
+  consumeLink,
+  readRelationship,
+  invite,
+  pendingInvitations,
+  listMembers,
+  updateMember,
+  revokeInvitation,
+} from "../db/team";
 import { auth } from "./auth";
 import { createAccount } from "./accounts";
 import type { EmailMessage, EmailSender } from "../connectors/email/sender";
@@ -468,6 +476,16 @@ describe("proof of e-mail ownership for an invitation (#179)", () => {
     expect(await acceptEmailProof(school, token, code, { password: NEW, confirmation: NEW })).toMatchObject({
       ok: false,
     });
+    // Marking the link checks the code again, in its own transaction: expired or replaced in between, nothing is used.
+    const link = await withSchool(school, (tx) => readRelationship(tx, token, new Date()));
+    if (!link) throw new Error("lien introuvable");
+    expect(await withSchool(school, (tx) => consumeLink(tx, link, owner, { code, now: new Date() }))).toBe("expired");
+    await admin`UPDATE invitation SET email_code_sent_at = now() WHERE school_id = ${school} AND email_code_hash IS NOT NULL`;
+    expect(
+      await withSchool(school, (tx) => consumeLink(tx, link, owner, { code: "y".repeat(43), now: new Date() })),
+    ).toBe("expired");
+    const [{ used_at }] = await admin`SELECT used_at FROM invitation WHERE id = ${link.id}`;
+    expect(used_at).toBeNull();
     await admin`UPDATE invitation SET email_code_sent_at = now() WHERE school_id = ${school} AND email_code_hash IS NOT NULL`;
     expect(await openEmailProof(school, token, code)).toMatchObject({ email: ownerEmail, school: "École A" });
   });
