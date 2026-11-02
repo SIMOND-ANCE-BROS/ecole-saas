@@ -618,8 +618,8 @@ const invoicedCentsSql = sql<number | null>`(SELECT sum(l.incl_tax_cents) FROM i
 
 /**
  * Attendance was taken for a student of the enrollment of the row in one of its courses,
- * and no other enrollment of that student covers that course (a duplicate entered by
- * mistake stays cancellable when the right one has the attendance).
+ * and no other enrollment nor workshop sign-up (#398) of that student covers that course (a
+ * duplicate entered by mistake stays cancellable when the right one has the attendance).
  */
 const attendedSql = sql<boolean>`EXISTS (
   SELECT 1 FROM enrollment_course c
@@ -629,6 +629,10 @@ const attendedSql = sql<boolean>`EXISTS (
     AND NOT EXISTS (
       SELECT 1 FROM enrollment_course o
       WHERE o.student_id = c.student_id AND o.course_id = c.course_id AND o.enrollment_id <> c.enrollment_id
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM workshop_signup_person wp JOIN workshop_signup w ON w.id = wp.workshop_signup_id
+      WHERE wp.person_id = c.student_id AND w.course_id = c.course_id
     )
 )`;
 

@@ -2,6 +2,8 @@ import { and, asc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { rowsOf } from "./columns-of";
 import { z } from "zod";
 import { ATTENDANCE_CANDIDATES, onAttendanceSheet, oneRowPerStudent } from "../domain/enrollment/lifecycle";
+import { SIGNUP_LIST_STATUS, withSignups } from "../domain/workshop/participants";
+import { headcountSql } from "./schedule";
 import { closedCourseLabel, type ScopedClosure } from "../domain/schedule/closure-scope";
 import { recurrenceOf, type SeasonCalendar } from "../domain/schedule/lessons";
 import { planLessonSync, seasonLessons } from "../domain/schedule/lesson-sync";
@@ -24,6 +26,8 @@ import {
   lesson,
   suspendedLesson,
   lessonPackUsage,
+  workshopSignup,
+  workshopSignupPerson,
 } from "./schema";
 
 /**
@@ -588,8 +592,29 @@ export async function readAttendance(tx: Tx, lessonId: string): Promise<Attendan
     .leftJoin(attendance, and(eq(attendance.lessonId, lessonId), eq(attendance.studentId, person.id)))
     .where(and(eq(enrollmentCourse.courseId, s.courseId), inArray(enrollment.status, [...ATTENDANCE_CANDIDATES])))
     .orderBy(asc(person.lastName), asc(person.firstName), asc(person.id));
+  // A workshop's participants are signed up, not enrolled (#297): on every sheet of its lessons (#398).
+  const signedUp = await tx
+    .select({
+      id: person.id,
+      firstName: person.firstName,
+      name: person.lastName,
+      birthDate: person.birthDate,
+      notes: person.notes,
+      status: sql<Attendance["students"][number]["status"]>`${SIGNUP_LIST_STATUS}`,
+      droppedOn: sql<string | null>`NULL::date`,
+      present: attendance.present,
+    })
+    .from(workshopSignupPerson)
+    .innerJoin(workshopSignup, eq(workshopSignup.id, workshopSignupPerson.workshopSignupId))
+    .innerJoin(person, eq(person.id, workshopSignupPerson.personId))
+    .leftJoin(attendance, and(eq(attendance.lessonId, lessonId), eq(attendance.studentId, person.id)))
+    .where(eq(workshopSignup.courseId, s.courseId));
   const students = oneRowPerStudent(
-    rows.filter((d) => onAttendanceSheet(d.status, d.droppedOn, s.date)),
+    withSignups(
+      rows.filter((d) => onAttendanceSheet(d.status, d.droppedOn, s.date)),
+      signedUp,
+      (d) => d.id,
+    ),
     (d) => d.id,
   );
 
@@ -746,10 +771,7 @@ export async function weekLessons(tx: Tx, monday: string): Promise<ScheduleLesso
       firstName: instructor.firstName,
       name: instructor.lastName,
       substitution: sql<boolean>`${lesson.instructorId} <> ${regularInstructor}`,
-      enrolled: sql<number>`(
-        SELECT count(DISTINCT ic.student_id)::int FROM enrollment_course ic
-        JOIN enrollment i ON i.id = ic.enrollment_id AND i.status = 'active'
-        WHERE ic.course_id = ${lesson.courseId})`,
+      enrolled: headcountSql(sql`${lesson.courseId}`),
       maxCapacity: course.maxCapacity,
     })
     .from(lesson)

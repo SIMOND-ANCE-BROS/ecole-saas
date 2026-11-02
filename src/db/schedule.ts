@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, inArray, lte, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { COURSE_LIST_CANDIDATES, onCourseList, oneRowPerStudent } from "../domain/enrollment/lifecycle";
+import { SIGNUP_LIST_STATUS, withSignups } from "../domain/workshop/participants";
 import { courseDatesSql } from "./courses";
 import type { Tx } from "./index";
 import { alias } from "drizzle-orm/pg-core";
@@ -16,6 +17,8 @@ import {
   season,
   room,
   site,
+  workshopSignup,
+  workshopSignupPerson,
 } from "./schema";
 
 /** Schedule reads, always within the `withSchool()` transaction (RLS). */
@@ -130,15 +133,26 @@ export type ScheduleCourse = {
 };
 
 /**
- * Headcount of a course, written with the table names: in a `select`, Drizzle
- * does not write the table name before `course.id`, which would be ambiguous here.
+ * Headcount of a course: its students with an active enrollment or signed up for it (a
+ * workshop, #398), each once. `courseId` must be written with its table name (`course.id`,
+ * `lesson.course_id`): Drizzle leaves it out of a column in a one-table `select`, and a bare
+ * `course_id` would then read the subquery's own column and count every course.
  */
-const effective = sql<number>`(
-  SELECT count(DISTINCT ic.student_id)::int
-  FROM enrollment_course ic
-  JOIN enrollment i ON i.id = ic.enrollment_id AND i.status = 'active'
-  WHERE ic.course_id = ${course}.${sql.identifier("id")}
+export const headcountSql = (courseId: SQL) => sql<number>`(
+  SELECT count(DISTINCT x.student_id)::int FROM (
+    SELECT ic.student_id
+    FROM enrollment_course ic
+    JOIN enrollment i ON i.id = ic.enrollment_id AND i.status = 'active'
+    WHERE ic.course_id = ${courseId}
+    UNION ALL
+    SELECT wp.person_id
+    FROM workshop_signup_person wp
+    JOIN workshop_signup w ON w.id = wp.workshop_signup_id
+    WHERE w.course_id = ${courseId}
+  ) x
 )`;
+
+const effective = headcountSql(sql`${course}.${sql.identifier("id")}`);
 
 /** Courses of a season, by day then by time. */
 export function seasonCourses(tx: Tx, seasonId: string): Promise<ScheduleCourse[]> {
@@ -244,8 +258,34 @@ export async function enrolledInCourse(tx: Tx, courseId: string, today: string):
     .innerJoin(payer, eq(payer.id, enrollment.payerId))
     .where(and(eq(enrollmentCourse.courseId, courseId), inArray(enrollment.status, [...COURSE_LIST_CANDIDATES])))
     .orderBy(asc(student.lastName), asc(student.firstName), asc(student.id));
+  // A workshop's participants are signed up, not enrolled (#297): listed next to enrolled students (#398).
+  const signedUp = await tx
+    .select({
+      studentId: student.id,
+      firstName: student.firstName,
+      name: student.lastName,
+      birthDate: student.birthDate,
+      payerId: payer.id,
+      payerName: payer.lastName,
+      payerFirstName: payer.firstName,
+      companyName: payer.companyName,
+      telephone: sql<string | null>`coalesce(${student.phone}, ${payer.phone})`,
+      email: sql<string | null>`coalesce(${student.email}, ${payer.email})`,
+      status: sql<Enrolled["status"]>`${SIGNUP_LIST_STATUS}`,
+      droppedOn: sql<string | null>`NULL::date`,
+      enrollmentDate: workshopSignup.signedUpOn,
+    })
+    .from(workshopSignupPerson)
+    .innerJoin(workshopSignup, eq(workshopSignup.id, workshopSignupPerson.workshopSignupId))
+    .innerJoin(student, eq(student.id, workshopSignupPerson.personId))
+    .innerJoin(payer, eq(payer.id, workshopSignup.payerId))
+    .where(eq(workshopSignup.courseId, courseId));
   const rows = oneRowPerStudent(
-    all.filter((r) => onCourseList(r.status, r.droppedOn, today)),
+    withSignups(
+      all.filter((r) => onCourseList(r.status, r.droppedOn, today)),
+      signedUp,
+      (r) => r.studentId,
+    ),
     (r) => r.studentId,
   );
   return rows.map(
