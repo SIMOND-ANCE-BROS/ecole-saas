@@ -8,6 +8,7 @@ import {
   expectedDocuments,
   recordableDocuments,
   missingDocuments,
+  notAskedForCourses,
   type ReceivedDocument,
   type Requirement,
   validUntilFor,
@@ -148,6 +149,31 @@ describe("recordableDocuments", () => {
   it("leaves out what the school does not ask for", () => {
     const none = defaults.map((r) => ({ ...r, required: false }));
     expect(recordableDocuments(none, ADULT, TODAY)).toEqual([]);
+  });
+});
+
+describe("notAskedForCourses", () => {
+  it("names the certificate of an adult whose courses of the season do not ask for it (#325)", () => {
+    expect(notAskedForCourses(defaults, ADULT, TODAY, [COUPLE])).toEqual(["medical_certificate"]);
+    expect(notAskedForCourses(defaults, null, TODAY, [COUPLE])).toEqual(["medical_certificate"]);
+  });
+
+  it("names nothing once one course asks for it, or for a minor", () => {
+    expect(notAskedForCourses(defaults, ADULT, TODAY, [COUPLE, JAZZ])).toEqual([]);
+    expect(notAskedForCourses(defaults, ADULT, TODAY, [COUPLE_COMPETITION])).toEqual([]);
+    expect(notAskedForCourses(defaults, CHILD, TODAY, [COUPLE])).toEqual([]);
+  });
+
+  it("names nothing for an adult without a course this season: their courses are not known yet", () => {
+    expect(notAskedForCourses(defaults, ADULT, TODAY, [])).toEqual([]);
+  });
+
+  it("leaves out documents that do not follow the courses, and those the school does not ask", () => {
+    expect(notAskedForCourses(all, ADULT, TODAY, [COUPLE])).toEqual(["medical_certificate"]);
+    const none = defaults.map((r) => ({ ...r, required: false }));
+    expect(notAskedForCourses(none, ADULT, TODAY, [COUPLE])).toEqual([]);
+    const minors = defaults.map((r) => ({ ...r, minorsOnly: true }));
+    expect(notAskedForCourses(minors, ADULT, TODAY, [COUPLE])).toEqual([]);
   });
 });
 
