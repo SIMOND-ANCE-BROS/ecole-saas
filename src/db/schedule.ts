@@ -134,8 +134,9 @@ export type ScheduleCourse = {
 
 /**
  * Headcount of a course: its students with an active enrollment or signed up for it (a
- * workshop, #398), each once. `courseId` is written with its table name: in a `select`,
- * Drizzle does not write it before `course.id`, which would be ambiguous here.
+ * workshop, #398), each once. `courseId` must be written with its table name (`course.id`,
+ * `lesson.course_id`): Drizzle leaves it out of a column in a one-table `select`, and a bare
+ * `course_id` would then read the subquery's own column and count every course.
  */
 export const headcountSql = (courseId: SQL) => sql<number>`(
   SELECT count(DISTINCT x.student_id)::int FROM (

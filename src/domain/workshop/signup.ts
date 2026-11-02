@@ -32,6 +32,9 @@ export const MAX_PRICE_CENTS = 1_000_000;
 export const NO_WORKSHOP_PRICE = "Ce stage n’a pas de prix : saisissez le prix par participant.";
 export const REASON_REQUIRED = "Le prix diffère de celui du stage : indiquez le motif.";
 export const ALREADY_SIGNED_UP = "Un des élèves choisis est déjà inscrit à ce stage.";
+/** A sign-up whose participant is on an attendance sheet taken (#398) is no mistake: it stays, like an enrollment. */
+export const ATTENDANCE_TAKEN =
+  "L’appel a déjà été fait pour un participant de ce stage : l’inscription ne peut plus être annulée.";
 
 export type SignupPriceEntry = {
   /** Price per participant set on the workshop; null when it has none. */

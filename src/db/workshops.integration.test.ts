@@ -10,7 +10,7 @@ import { deleteTreatment } from "./vat-treatments";
 import { enrolledInCourse, scheduleCourse } from "./schedule";
 import { readAttendance, saveAttendance, weekLessons } from "./lessons";
 import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
-import { ALREADY_SIGNED_UP, NO_WORKSHOP_PRICE, REASON_REQUIRED } from "../domain/workshop/signup";
+import { ALREADY_SIGNED_UP, ATTENDANCE_TAKEN, NO_WORKSHOP_PRICE, REASON_REQUIRED } from "../domain/workshop/signup";
 
 /**
  * Signing a payer's students up for a workshop (#297), as the application runs it (app_user,
@@ -350,6 +350,22 @@ describe("a workshop's participants (#398)", () => {
       [sibling, false],
     ]);
     await admin`DELETE FROM attendance WHERE lesson_id = ${lessonId}`;
+  });
+
+  it("refuses to cancel a sign-up once attendance was taken for its participant", async () => {
+    const r = await signUp({ participantIds: [child] });
+    if (!r.ok) throw new Error(r.message);
+    const lessonId = await workshopLesson();
+    const saved = await withSchool(school, (tx) =>
+      saveAttendance(tx, lessonId, [{ studentId: child, present: false }]),
+    );
+    expect(saved).toMatchObject({ ok: true });
+    expect(await cancel(r.id)).toEqual({ ok: false, message: ATTENDANCE_TAKEN });
+    expect((await withSchool(school, (tx) => readAttendance(tx, lessonId)))?.students.map((d) => d.id)).toEqual([
+      child,
+    ]);
+    await admin`DELETE FROM attendance WHERE lesson_id = ${lessonId}`;
+    expect(await cancel(r.id)).toEqual({ ok: true });
   });
 
   it("drops a cancelled sign-up from the list and the headcount", async () => {

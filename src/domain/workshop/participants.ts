@@ -10,8 +10,11 @@ export const SIGNUP_LIST_STATUS = "active" as const satisfies EnrollmentStatus;
 
 type Named = { name: string; firstName: string | null };
 
-const byName = (a: Named, b: Named) =>
-  a.name.localeCompare(b.name, "fr") || (a.firstName ?? "").localeCompare(b.firstName ?? "", "fr");
+// A missing first name last, as PostgreSQL sorts NULL in ascending order.
+const byFirstName = (a: string | null, b: string | null) =>
+  a === null || b === null ? (a === null ? 1 : 0) - (b === null ? 1 : 0) : a.localeCompare(b, "fr");
+
+const byName = (a: Named, b: Named) => a.name.localeCompare(b.name, "fr") || byFirstName(a.firstName, b.firstName);
 
 /**
  * Enrolled students and signed-up ones in one list, by last then first name, then by student id

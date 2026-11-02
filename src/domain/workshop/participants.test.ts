@@ -30,9 +30,9 @@ describe("withSignups", () => {
     expect(ids(withSignups(enrolled, signedUp, byId))).toEqual(["s1", "e1", "s2", "e2"]);
   });
 
-  it("orders a student without a first name before the same last name with one, then by id", () => {
-    const signedUp = [row("b", "Zzsolo", "Léa"), row("c", "Zzsolo", null), row("a", "Zzsolo", null)];
-    expect(ids(withSignups([], signedUp, byId))).toEqual(["a", "c", "b"]);
+  it("orders a student without a first name after the same last name with one, as the database does, then by id", () => {
+    const signedUp = [row("c", "Zzsolo", null), row("b", "Zzsolo", "Léa"), row("a", "Zzsolo", null)];
+    expect(ids(withSignups([], signedUp, byId))).toEqual(["b", "a", "c"]);
   });
 
   it("shows a student both on the waitlist and signed up once, as attending", () => {
