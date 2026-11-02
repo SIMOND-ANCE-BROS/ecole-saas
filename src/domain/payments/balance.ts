@@ -74,6 +74,7 @@ export const amountDue = (enrollments: readonly EnrollmentBilled[]): number =>
 
 export function payerBalance(
   enrollments: readonly (EnrollmentDue & MaybeInvoiced)[],
+  /** Lesson packs and workshop sign-ups (#297), each at what it owes in all. */
   lessonPacks: readonly ({ priceCents: number } & MaybeInvoiced)[],
   payments: readonly BalancePayment[],
   today: string,

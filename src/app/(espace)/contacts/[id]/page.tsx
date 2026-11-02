@@ -6,6 +6,7 @@ import { readContact } from "@/db/students";
 import { seasonEnrollments } from "@/db/enrollments";
 import { paymentsOf, balanceOf } from "@/db/payments";
 import { packsOf } from "@/db/lesson-packs";
+import { signupsOf } from "@/db/workshops";
 import { severalEntities } from "@/db/billing-entities";
 import { payerInvoices, paysSomeSeason } from "@/db/payer-invoices";
 import { ENDED_SEASON, mayDraft, seasonDraftable } from "@/domain/invoicing/progress";
@@ -20,6 +21,7 @@ import { PaymentsSection } from "../../_people/payments-section";
 import { mayRefund } from "@/domain/payments/refund";
 import { mayCancelRefund } from "@/domain/payments/refund-cancellation";
 import { LessonPacks } from "../../_people/lesson-packs";
+import { WorkshopSignups } from "../../_people/workshop-signups";
 import { BecomeStudent } from "./become-student";
 import { RulesSection } from "../../_people/rules-section";
 import { payersRules } from "@/db/internal-rules";
@@ -34,6 +36,7 @@ const BANNERS: Record<string, string> = {
   cree: "Contact créé.",
   modifie: "Fiche enregistrée.",
   vendu: "Carnet vendu.",
+  inscrit: "Inscription au stage enregistrée.",
 };
 
 /** Banner after a payment (`?encaisse=3`). */
@@ -44,7 +47,7 @@ const collected = (n: unknown) => {
 
 export default async function PageContact({ params, searchParams }: PageProps<"/contacts/[id]">) {
   const { schoolId: schoolId, role } = await requireRole("director", "front_desk");
-  const [{ id }, { enregistre, encaisse, carnet, saison }] = await Promise.all([params, searchParams]);
+  const [{ id }, { enregistre, encaisse, carnet, stage, saison }] = await Promise.all([params, searchParams]);
   const today = todayInParis();
   const parsed = await withSchool(schoolId, async (tx) => {
     const contact = await readContact(tx, id);
@@ -62,6 +65,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
       balance: await balanceOf(tx, contact.id, today),
       payments: await paymentsOf(tx, contact.id),
       packs: await packsOf(tx, { personId: contact.id }),
+      workshops: await signupsOf(tx, contact.id),
       invoices: season ? await payerInvoices(tx, contact.id, season.id) : [],
       severalEntities: await severalEntities(tx),
       // The season's internal rules, signed by this payer (#296).
@@ -89,7 +93,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
           / {name}
         </Text>
       </nav>
-      <Banner text={collected(encaisse) ?? BANNERS[String(carnet ?? enregistre)]} />
+      <Banner text={collected(encaisse) ?? BANNERS[String(carnet ?? stage ?? enregistre)]} />
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -210,6 +214,13 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
           )}
           {(sells || packs.length > 0) && (
             <LessonPacks packs={packs} personId={c.id} sellHref={sells ? `/carnets/nouveau?payeur=${c.id}` : null} />
+          )}
+          {(sells || parsed.workshops.length > 0) && (
+            <WorkshopSignups
+              signups={parsed.workshops}
+              personId={c.id}
+              signUpHref={sells ? `/stages/nouveau?payeur=${c.id}` : null}
+            />
           )}
           {season && (billed.length > 0 || packs.length > 0 || invoices.length > 0) && (
             <InvoicesSection

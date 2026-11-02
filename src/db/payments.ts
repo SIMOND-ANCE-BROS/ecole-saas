@@ -15,6 +15,7 @@ import {
   payment,
   user,
 } from "./schema";
+import { signupDuesOf } from "./workshops";
 import { issuePath } from "../lib/form-errors";
 import { METHOD_LABELS, PAYMENT_METHOD_VALUES, refusedMethod, type Method } from "../domain/payments/methods";
 import { readMethodSettings } from "./payment-methods";
@@ -401,7 +402,7 @@ export type PayerBalances = {
 export type Refundable = { overpaid: number; uncollected: number; held: number; refundable: number };
 export type EntityRefund = Refundable & { id: string; name: string };
 
-/** Balance of a payer over all their enrollments and lesson packs; null if they never paid nor owed anything. */
+/** Balance of a payer over all their enrollments, lesson packs and workshop sign-ups; null if they never paid nor owed anything. */
 export async function balanceOf(tx: Tx, payerId: string, today: string): Promise<PayerBalances | null> {
   if (!isUuid(payerId)) return null;
   const balances = await balancesOf(tx, payerId, today);
@@ -446,6 +447,8 @@ async function balancesOf(tx: Tx, payerId: string, today: string) {
     })
     .from(lessonPack)
     .where(eq(lessonPack.payerId, payerId));
+  // Workshop sign-ups (#297): counted like a lesson pack, at their price; no invoice bills them yet.
+  const workshops = await signupDuesOf(tx, payerId);
   // Issued invoices and credit notes (#305): what they bill is due at their amount.
   const invoices = await tx
     .select({ billingEntityId: invoice.billingEntityId, totalInclTaxCents: invoice.totalInclTaxCents })
@@ -464,9 +467,15 @@ async function balancesOf(tx: Tx, payerId: string, today: string) {
     .from(payment)
     .leftJoin(bankDepositPayment, eq(bankDepositPayment.paymentId, payment.id))
     .where(eq(payment.payerId, payerId));
-  if (enrollments.length === 0 && lessonPacks.length === 0 && payments.length === 0 && invoices.length === 0)
+  if (
+    enrollments.length === 0 &&
+    lessonPacks.length === 0 &&
+    workshops.length === 0 &&
+    payments.length === 0 &&
+    invoices.length === 0
+  )
     return null;
-  const { byEntity, total } = balancesByEntity(enrollments, lessonPacks, payments, today, invoices);
+  const { byEntity, total } = balancesByEntity(enrollments, [...lessonPacks, ...workshops], payments, today, invoices);
   // What each entity may pay back (#294): its overpayment, less the cheques it has not
   // collected yet and what its enrollments on trial or on the waitlist would cost.
   const refunds: Record<string, Refundable> = {};
