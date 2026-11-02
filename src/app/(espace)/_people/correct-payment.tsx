@@ -47,6 +47,7 @@ export function CorrectPayment({
   back,
   rejection,
   cancelsRefund = false,
+  subject,
 }: {
   paymentId: string;
   /** What is left to correct, or of a refund what is not cancelled yet, as a positive amount. */
@@ -55,6 +56,8 @@ export function CorrectPayment({
   rejection: Rejection | null;
   /** The payment is a refund: the form cancels it (management, #346). */
   cancelsRefund?: boolean;
+  /** The payment as a screen reader tells it apart from the other rows: « du 01/10/2026 (Chèque, 120,00 €) » (#372). */
+  subject: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -81,6 +84,13 @@ export function CorrectPayment({
         ref={opener}
         variant="subtle"
         size="compact-xs"
+        aria-label={
+          rejection
+            ? `${rejection.label} : paiement ${subject}`
+            : cancelsRefund
+              ? `Annuler le remboursement ${subject}`
+              : `Corriger le paiement ${subject}`
+        }
         onClick={() => {
           setClosed(false);
           setShown(false);

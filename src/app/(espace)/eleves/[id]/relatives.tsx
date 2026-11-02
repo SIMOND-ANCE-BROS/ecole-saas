@@ -131,6 +131,7 @@ export function Relatives({ studentId: studentId, firstName: firstName, guardian
             variant="default"
             size="compact-sm"
             ml="auto"
+            aria-label={`Retirer ${p.name} de la fiche`}
             data-remove={p.relationshipId}
             onClick={() => {
               setToRemove(p.relationshipId);

@@ -60,6 +60,13 @@ const cashing = (p: PaymentRow, today: string) =>
         : "encaissé";
 
 /**
+ * A payment row as a screen reader tells it apart: « du 01/10/2026 (Chèque, 120,00 €, 0001234) » (#372).
+ * The reference parts the cheques of a same amount handed over the same day.
+ */
+const subjectOf = (p: PaymentRow) =>
+  `du ${day(p.date)} (${[PAYMENT_METHODS[p.method], formatEuros(Math.abs(p.amountCents)), reference(p)].filter(Boolean).join(", ")})`;
+
+/**
  * « Corriger » while something is left to correct, « corrigé » once it is all
  * corrected. A deposited payment is « Chèque rejeté » / « Paiement rejeté »
  * instead, dated the day the bank returned it (#253). A refund is « Annuler le
@@ -83,7 +90,14 @@ function Correction({
     const left = refundLeftCents({ amountCents: p.amountCents, cancelledCents: p.correctedCents });
     // Fully cancelled: « annulé » already shows in the « Encaissement » column (`refundState`).
     return left > 0 ? (
-      <CorrectPayment paymentId={p.id} remaining={left} back={back} rejection={null} cancelsRefund />
+      <CorrectPayment
+        paymentId={p.id}
+        remaining={left}
+        back={back}
+        rejection={null}
+        cancelsRefund
+        subject={subjectOf(p)}
+      />
     ) : null;
   }
   if (!isDirector || isReverse(p)) return null;
@@ -102,6 +116,7 @@ function Correction({
         remaining={remaining}
         back={back}
         rejection={p.depositedOn ? { label: rejectionLabel(p.method), depositedOn: p.depositedOn, today } : null}
+        subject={subjectOf(p)}
       />
     );
   if (p.correctedCents > 0)

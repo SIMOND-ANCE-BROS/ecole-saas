@@ -19,6 +19,8 @@ runScheduledTask({ name: "calendars:sync", timeoutMs: 15 * 60_000 }, async (admi
   let succeeded = 0;
   let failed = 0;
   let unrecorded = 0;
+  // Already being synced by another run (#370): neither synced nor failed, picked up next hour.
+  let skipped = 0;
   let failedSchools = 0;
   for (const { id } of schools) {
     // One school failing does not stop the others.
@@ -27,13 +29,14 @@ runScheduledTask({ name: "calendars:sync", timeoutMs: 15 * 60_000 }, async (admi
       succeeded += r.succeeded;
       failed += r.failed;
       unrecorded += r.unrecorded;
+      skipped += r.skipped;
     } catch (e: unknown) {
       failedSchools += 1;
       console.error(`École ${id} : synchronisation en échec (${errorLabel(e)}).`);
     }
   }
   return {
-    summary: `agendas synchronisés : ${succeeded} ; en échec : ${failed}, dont non enregistrés : ${unrecorded} (écoles : ${schools.length} ; en échec : ${failedSchools}).`,
+    summary: `agendas synchronisés : ${succeeded} ; en échec : ${failed}, dont non enregistrés : ${unrecorded} ; déjà en cours : ${skipped} (écoles : ${schools.length} ; en échec : ${failedSchools}).`,
     failures: failedSchools + unrecorded,
   };
 });

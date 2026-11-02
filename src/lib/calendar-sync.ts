@@ -1,7 +1,7 @@
 import { AccessRemoved, credentials, readBusyRanges, refresh } from "../connectors/calendar/oauth";
 import { withSchool } from "../db";
 import { errorLabel } from "../jobs/scheduled-task";
-import { connectedInstructors, readConnection, recordSync, saveRenewedToken } from "../db/calendar-connections";
+import { claimConnection, connectedInstructors, recordSync, saveRenewedToken } from "../db/calendar-connections";
 import { replaceCalendarUnavailabilities } from "../db/unavailabilities";
 import { encrypt, decrypt } from "./encryption";
 
@@ -15,6 +15,9 @@ export const SYNC_UNAVAILABLE = "Synchronisation impossible pour le moment ; ell
 
 /** Shown when the calendar was reconnected or disconnected during the sync (#386): nothing was written. */
 export const SYNC_RECONNECTED = "Agenda reconnecté ou déconnecté pendant la synchronisation : rien n’a été enregistré.";
+
+/** Shown when another sync of the same calendar is running (#370): this one was skipped. */
+export const SYNC_RUNNING = "Synchronisation déjà en cours pour cet agenda ; réessayez dans quelques minutes.";
 
 /**
  * Logs a sync that threw instead of returning (its connection could not be read, or its own
@@ -35,11 +38,11 @@ export function logSyncException(schoolId: string, instructorId: string, e: unkn
 async function keepRenewedToken(
   schoolId: string,
   instructorId: string,
-  token: { read: string; renewed: string },
+  token: { read: string; claim: string; renewed: string },
 ): Promise<void> {
   try {
     await withSchool(schoolId, (tx) =>
-      saveRenewedToken(tx, instructorId, { read: token.read, renewed: encrypt(token.renewed) }),
+      saveRenewedToken(tx, instructorId, { read: token.read, claim: token.claim, renewed: encrypt(token.renewed) }),
     );
   } catch (e: unknown) {
     console.error(
@@ -52,15 +55,21 @@ async function keepRenewedToken(
  * Reads the busy ranges of an instructor's connected calendar and replaces
  * their unavailabilities that came from this calendar. Network calls happen
  * outside the transaction; no personal data in error messages.
+ *
+ * One sync at a time per calendar (#370): it first claims the connection, so two overlapping
+ * syncs (hourly job, « Synchroniser », OAuth return) never refresh the same token; the second is
+ * skipped (`busy`), recording nothing. Recording the result releases the claim; a sync that dies
+ * first leaves it to run out (`SYNC_CLAIM_MINUTES`).
  */
 export async function syncCalendar(
   schoolId: string,
   instructorId: string,
   query: typeof fetch = fetch,
   now = new Date(),
-): Promise<{ ok: true; ranges: number } | { ok: false; message: string }> {
-  const connection = await withSchool(schoolId, (tx) => readConnection(tx, instructorId));
+): Promise<{ ok: true; ranges: number } | { ok: false; busy?: true; message: string }> {
+  const connection = await withSchool(schoolId, (tx) => claimConnection(tx, instructorId));
   if (!connection) return { ok: false, message: "Aucun agenda connecté." };
+  if (connection === "busy") return { ok: false, busy: true, message: SYNC_RUNNING };
   // A refresh token the provider rotated is saved even when the read that follows fails (#368).
   let renewedToken: string | null = null;
   const failure = async (message: string) => {
@@ -68,6 +77,7 @@ export async function syncCalendar(
       await withSchool(schoolId, (tx) =>
         recordSync(tx, instructorId, {
           readToken: connection.encryptedToken,
+          claim: connection.claim,
           error: message,
           encryptedToken: renewedToken ? encrypt(renewedToken) : undefined,
         }),
@@ -76,7 +86,11 @@ export async function syncCalendar(
       // The error could not be recorded: the renewed token is still saved on its own, or its
       // loss logged, since the provider may have revoked the old one (#381). Then rethrown.
       if (renewedToken) {
-        await keepRenewedToken(schoolId, instructorId, { read: connection.encryptedToken, renewed: renewedToken });
+        await keepRenewedToken(schoolId, instructorId, {
+          read: connection.encryptedToken,
+          claim: connection.claim,
+          renewed: renewedToken,
+        });
       }
       throw e;
     }
@@ -103,6 +117,7 @@ export async function syncCalendar(
     const count = await withSchool(schoolId, async (tx) => {
       const recorded = await recordSync(tx, instructorId, {
         readToken: connection.encryptedToken,
+        claim: connection.claim,
         error: null,
         encryptedToken: newRefreshToken ? encrypt(newRefreshToken) : undefined,
       });
@@ -121,21 +136,25 @@ export async function syncCalendar(
  * (#373): a sync that throws, even while recording its own error (database down, lock
  * timeout), is counted in `failed` and in `unrecorded`, and logged with ids and the error kind
  * only. `unrecorded` failures are not shown to the school: the caller fails the run on them.
+ * A calendar another sync is already running on is `skipped`, not failed (#370).
  */
 export async function syncSchool(
   schoolId: string,
   query: typeof fetch = fetch,
-): Promise<{ succeeded: number; failed: number; unrecorded: number }> {
+): Promise<{ succeeded: number; failed: number; unrecorded: number; skipped: number }> {
   const ids = await withSchool(schoolId, (tx) => connectedInstructors(tx));
   let succeeded = 0;
   let unrecorded = 0;
+  let skipped = 0;
   for (const instructorId of ids) {
     try {
-      if ((await syncCalendar(schoolId, instructorId, query)).ok) succeeded++;
+      const r = await syncCalendar(schoolId, instructorId, query);
+      if (r.ok) succeeded++;
+      else if (r.busy) skipped++;
     } catch (e: unknown) {
       unrecorded++;
       logSyncException(schoolId, instructorId, e);
     }
   }
-  return { succeeded, failed: ids.length - succeeded, unrecorded };
+  return { succeeded, failed: ids.length - succeeded - skipped, unrecorded, skipped };
 }

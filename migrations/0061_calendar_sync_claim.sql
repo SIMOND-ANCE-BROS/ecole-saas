@@ -1,0 +1,1 @@
+ALTER TABLE "calendar_connection" ADD COLUMN "sync_claimed_until" timestamp with time zone;

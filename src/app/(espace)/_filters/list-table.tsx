@@ -271,7 +271,13 @@ export function ListTable<Id extends string>({
                   className="flex items-center gap-1 rounded-full border border-accent bg-accent-doux py-0.5 pr-1 pl-2.5"
                 >
                   {p.text}
-                  <CloseButton size="sm" radius="xl" aria-label={`Retirer le filtre ${p.text}`} onClick={p.remove} />
+                  <CloseButton
+                    size="sm"
+                    iconSize={14}
+                    radius="xl"
+                    aria-label={`Retirer le filtre ${p.text}`}
+                    onClick={p.remove}
+                  />
                 </li>
               ))}
             </ul>
