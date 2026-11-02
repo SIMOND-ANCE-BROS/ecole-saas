@@ -33,10 +33,21 @@ is used somewhere in the SaaS, though not in which school.
   closed: whoever created the account with someone else's address loses it.
 - The e-mailed code is 256 random bits, stored as a SHA-256 hash on the
   invitation (`email_code_hash`, `email_code_sent_at`), valid one hour,
-  replaced by the next one, used once with the invitation, in the same
-  transaction. Another e-mail for the same invitation waits two minutes.
-  Opening the e-mailed link changes nothing (mail scanners open links): only
-  submitting the password does.
+  replaced by the next one. Opening the e-mailed link changes nothing (mail
+  scanners open links): only submitting the password does.
+- **One transaction** checks the code again, marks the invitation used, adds
+  the membership, and writes the account's new password, its verified e-mail
+  and the deletion of its sessions, after locking the account row
+  (`consumeLink` with `credentials`). A reset link takes the same lock and
+  writes its password in its own consume transaction, so a reset and an
+  e-mail proof of one account run one after the other. Whoever chose the old
+  password never reaches the new school with it, not even for an instant or
+  after a failed step.
+- **E-mails are spaced out per address**, all schools and invitations
+  together: two minutes apart, at most five in 24 hours (`addressWait`).
+  Re-inviting the same address does not reset the count. Each e-mail leaves a
+  row in Better Auth's global `verification` table for 24 hours, keyed by a
+  SHA-256 hash of the address, never the address itself.
 - **One interface for sending e-mail**, `EmailSender` in
   `src/connectors/email/`. No provider is chosen (#105, blocked): until one is,
   `emailSender()` returns null and an unverified account keeps confirming its
@@ -70,9 +81,17 @@ is used somewhere in the SaaS, though not in which school.
 - With a provider configured, an account created by invitation can no longer
   spread to another school without its owner's mailbox, and the owner can
   take it back.
-- Still open in #179: whether to verify the address at the first sign-in too,
-  or only when joining another school. This record does the latter, which
-  holds either way.
+- Still open in #179, and not decided here: whether to verify the address at
+  the first sign-in too, or only when joining another school. What this record
+  does (proof before joining another school) is needed in both cases; checking
+  at the first sign-in is not ruled out.
+- The owner who takes an account back keeps the memberships it already had,
+  including one created by whoever chose the old password (with the role that
+  director chose). The owner can no longer be impersonated there, but may not
+  know of it; showing the owner their schools after a take-back is follow-up
+  work.
+- Expired rows of the address count stay in `verification` until cleaned;
+  they hold no address, only its hash.
 - #105 brings the provider (timeout, bounded retries, structured error, no
   personal data in logs), then can e-mail invitations directly to the invited
   address, without showing the link to the director, and mark the address

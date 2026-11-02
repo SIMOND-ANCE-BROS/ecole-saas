@@ -10,7 +10,7 @@ import {
   dropEmailCode,
   emailCodeValid,
 } from "../db/team";
-import { type JoinProof, emailProofMessage, joinProof } from "../domain/team/email-proof";
+import { type JoinProof, emailProofMessage, joinProof, retryIn } from "../domain/team/email-proof";
 import { passwordRefusal } from "../domain/team/rules";
 import { auth } from "./auth";
 import { createAccount } from "./accounts";
@@ -54,7 +54,8 @@ export async function openLink(
   return { ...link, existingAccount: !!existing, proof };
 }
 
-export type SendProofResult = { ok: true } | { ok: false; message: string };
+/** `tooSoon`: an e-mail went recently, the person only has to wait (not an error). */
+export type SendProofResult = { ok: true } | { ok: false; message: string; tooSoon?: true };
 
 /**
  * E-mails the invited address a link proving it is theirs (#179), for an
@@ -75,10 +76,14 @@ export async function sendEmailProof(
   if (!code.ok)
     return {
       ok: false,
-      message: `Un e-mail vient déjà de partir : vérifiez votre boîte de réception (et les indésirables), ou réessayez dans ${code.wait} s.`,
+      tooSoon: true,
+      message: `Un e-mail est déjà parti récemment : vérifiez votre boîte de réception et les indésirables, ou réessayez ${retryIn(code.wait)}.`,
     };
   const url = `${linkAddress(schoolId, token)}/verification/${code.code}`;
-  const sent = await sender.send({ to: link.email, ...emailProofMessage({ school: link.school, url }) });
+  // A provider must not throw; if one does, its code is withdrawn all the same.
+  const sent = await sender
+    .send({ to: link.email, ...emailProofMessage({ school: link.school, url }) })
+    .catch(() => ({ ok: false }) as const);
   if (!sent.ok) {
     await withSchool(schoolId, (tx) => dropEmailCode(tx, link, code.code));
     return { ok: false, message: "L’e-mail n’a pas pu partir. Réessayez dans quelques minutes." };
@@ -117,22 +122,14 @@ export async function acceptEmailProof(
   const existing = await ctx.internalAdapter.findUserByEmail(link.email);
   if (!existing) return { ok: false, message: EXPIRED };
   const userId = existing.user.id;
-  // Check and mark in the same transaction, code included, just before changing the password.
-  const used = await withSchool(schoolId, (tx) => consumeLink(tx, link, userId, { code, now: new Date() }));
-  if (used !== "ok") return { ok: false, message: EXPIRED };
   const passwordHash = await ctx.password.hash(entry.password);
-  if (await ctx.internalAdapter.findCredentialAccount(userId))
-    await ctx.internalAdapter.updatePassword(userId, passwordHash);
-  else
-    await ctx.internalAdapter.linkAccount({
-      userId,
-      providerId: "credential",
-      accountId: userId,
-      password: passwordHash,
-    });
-  await ctx.internalAdapter.updateUser(userId, { emailVerified: true });
-  // Sessions opened with the old password (by whoever chose it) are closed.
-  await ctx.internalAdapter.deleteUserSessions(userId);
+  // One transaction: the code checked again, the link used, the school joined, and the account's
+  // new password, verified e-mail and closed sessions. Whoever chose the old password never
+  // reaches the school with it, even for an instant or if a step fails.
+  const used = await withSchool(schoolId, (tx) =>
+    consumeLink(tx, link, userId, { code, now: new Date() }, { passwordHash, verifiedEmail: true }),
+  );
+  if (used !== "ok") return { ok: false, message: EXPIRED };
   return { ok: true, type: "invitation", email: link.email };
 }
 
@@ -177,15 +174,13 @@ export async function acceptLink(
     }
   }
 
-  // Check and mark in the same transaction, just before changing the password.
-  const used = await withSchool(schoolId, (tx) => consumeLink(tx, link, userId));
+  // A reset changes the password and closes the sessions in the same transaction as the check
+  // that the account is in no other school (#179: serialised with an e-mail proof).
+  const credentials =
+    link.type === "reset" ? { passwordHash: await ctx.password.hash(entry.password), verifiedEmail: false } : undefined;
+  const used = await withSchool(schoolId, (tx) => consumeLink(tx, link, userId, undefined, credentials));
   if (used === "shared") return { ok: false, message: SHARED };
   if (used !== "ok") return { ok: false, message: EXPIRED };
-  if (link.type === "reset") {
-    await ctx.internalAdapter.updatePassword(userId, await ctx.password.hash(entry.password));
-    // Sessions opened with the old password are closed.
-    await ctx.internalAdapter.deleteUserSessions(userId);
-  }
   return { ok: true, type: link.type, email: link.email };
 }
 

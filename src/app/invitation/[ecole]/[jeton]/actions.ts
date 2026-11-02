@@ -22,7 +22,7 @@ export async function submitLink(schoolId: string, token: string, _s: LinkState,
   const link = await openLink(schoolId, token);
   if (!link) return { error: EXPIRED };
   // Joining with an existing account checks its password: same attempt limit as the sign-in page.
-  const confirming = link.type === "invitation" && link.existingAccount;
+  const confirming = link.proof === "password";
   const ip = trustedIp(await headers());
   if (confirming && !(await recordAttempt(link.email, ip))) {
     return { error: `Trop de tentatives. Réessayez dans ${LIMITS.windowMinutes} minutes.` };
@@ -39,21 +39,25 @@ export async function submitLink(schoolId: string, token: string, _s: LinkState,
   redirect(`/connexion?lien=${banner}`);
 }
 
-export type ProofRequestState = { error: string | null; sent: boolean };
+/** `notice`: not an error, the person only has to wait before another e-mail. */
+export type ProofRequestState = { error: string | null; notice: string | null; sent: boolean };
 
 /**
  * E-mails the invited address a link proving it is theirs (#179). Only the
  * address of the invitation receives it: whoever holds the invitation link
- * cannot pick another one. Resending is spaced out (`EMAIL_PROOF_RESEND_MS`).
+ * cannot pick another one. Resending is spaced out per address (`addressWait`):
+ * a refusal for that keeps what was already sent on screen, as a notice.
  */
 export async function requestEmailProof(
   schoolId: string,
   token: string,
-  _s: ProofRequestState,
+  previous: ProofRequestState,
 ): Promise<ProofRequestState> {
-  if (!z.uuid().safeParse(schoolId).success) return { error: EXPIRED, sent: false };
+  if (!z.uuid().safeParse(schoolId).success) return { error: EXPIRED, notice: null, sent: false };
   const r = await sendEmailProof(schoolId, token);
-  return r.ok ? { error: null, sent: true } : { error: r.message, sent: false };
+  if (r.ok) return { error: null, notice: null, sent: true };
+  if (r.tooSoon) return { error: null, notice: r.message, sent: previous.sent };
+  return { error: r.message, notice: null, sent: false };
 }
 
 /**

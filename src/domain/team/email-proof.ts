@@ -37,6 +37,40 @@ export function resendWait(lastSentAt: Date | null, now: Date): number {
   return left > 0 ? Math.ceil(left / 1000) : 0;
 }
 
+/**
+ * Most e-mails an address receives in 24 hours, all schools and invitations
+ * together: re-inviting the same address must not let anyone flood it.
+ */
+export const EMAIL_PROOF_DAILY_MAX = 5;
+const DAY_MS = 24 * 60 * 60_000;
+
+/**
+ * Seconds left before the address may receive another e-mail (0: now), from
+ * the times it received one: two minutes after the last, and no more than
+ * `EMAIL_PROOF_DAILY_MAX` in 24 hours.
+ */
+export function addressWait(sentAts: readonly Date[], now: Date): number {
+  const recent = sentAts.filter((d) => d.getTime() > now.getTime() - DAY_MS).sort((a, b) => a.getTime() - b.getTime());
+  const last = recent.at(-1) ?? null;
+  const spacing = resendWait(last, now);
+  if (recent.length < EMAIL_PROOF_DAILY_MAX) return spacing;
+  // Once the oldest counted e-mail is a day old, one more may go.
+  const oldest = recent[recent.length - EMAIL_PROOF_DAILY_MAX];
+  return Math.max(spacing, Math.ceil((oldest.getTime() + DAY_MS - now.getTime()) / 1000));
+}
+
+/** « dans 2 minutes », « dans 3 heures »: a wait said in words, rounded up. */
+export function retryIn(seconds: number): string {
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  if (minutes === 1) return "dans une minute";
+  if (minutes < 60) return `dans ${minutes} minutes`;
+  const hours = Math.ceil(minutes / 60);
+  return hours === 1 ? "dans une heure" : `dans ${hours} heures`;
+}
+
+/** « dans l’heure »: how long the e-mailed link works, as the e-mail and the page say it. */
+export const EMAIL_PROOF_DURATION_TEXT = "dans l’heure";
+
 /** The e-mail carrying the proof link (plain text: read by any mail client). */
 export function emailProofMessage(p: { school: string; url: string }): { subject: string; text: string } {
   return {
@@ -44,7 +78,7 @@ export function emailProofMessage(p: { school: string; url: string }): { subject
     text: [
       "Bonjour,",
       "",
-      `${p.school} vous invite à rejoindre son équipe. Pour confirmer que cette adresse e-mail est bien la vôtre et choisir votre mot de passe, ouvrez ce lien dans l’heure :`,
+      `${p.school} vous invite à rejoindre son équipe. Pour confirmer que cette adresse e-mail est bien la vôtre et choisir votre mot de passe, ouvrez ce lien ${EMAIL_PROOF_DURATION_TEXT} :`,
       "",
       p.url,
       "",

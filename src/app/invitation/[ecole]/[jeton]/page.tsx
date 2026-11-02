@@ -41,7 +41,7 @@ export default async function LinkPage({ params }: PageProps<"/invitation/[ecole
           {kind === "reset"
             ? "Nouveau mot de passe"
             : kind === "email"
-              ? "Confirmer votre adresse e-mail"
+              ? "Confirmer votre adresse e‑mail" /* non-breaking hyphen: never « e- / mail » */
               : "Créer votre accès"}
         </Title>
         <Text size="sm" c="dimmed">

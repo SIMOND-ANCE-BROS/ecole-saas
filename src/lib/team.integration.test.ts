@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "../db";
@@ -34,6 +35,9 @@ const teacherEmail = `prof-${suffix}@exemple.test`;
 const ownerEmail = `zz-proprietaire-${suffix}@exemple.test`;
 const verifiedEmail = `zz-verifiee-${suffix}@exemple.test`;
 const freshEmail = `zz-nouvelle-${suffix}@exemple.test`;
+const floodEmail = `zz-inondee-${suffix}@exemple.test`;
+/** Key of an address's e-mail proofs in `verification` (hash only, as `src/db/team.ts`). */
+const proofKey = (email: string) => `email-proof:${createHash("sha256").update(email).digest("hex")}`;
 let school: string;
 let otherSchool: string;
 let diana: string;
@@ -64,8 +68,9 @@ afterAll(async () => {
   });
   await admin`DELETE FROM invitation WHERE school_id IN (${school}, ${otherSchool})`;
   await admin`DELETE FROM member WHERE school_id IN (${school}, ${otherSchool})`;
+  await admin`DELETE FROM verification WHERE identifier IN (${proofKey(ownerEmail)}, ${proofKey(floodEmail)})`;
   // Sessions and accounts cascade.
-  await admin`DELETE FROM "user" WHERE email IN (${emailDiana}, ${teacherEmail}, ${newMemberEmail}, ${ownerEmail}, ${verifiedEmail})`;
+  await admin`DELETE FROM "user" WHERE email IN (${emailDiana}, ${teacherEmail}, ${newMemberEmail}, ${ownerEmail}, ${verifiedEmail}, ${floodEmail})`;
   await admin`DELETE FROM school WHERE id IN (${school}, ${otherSchool})`;
   await admin.end();
 });
@@ -447,9 +452,32 @@ describe("proof of e-mail ownership for an invitation (#179)", () => {
     expect(row.email_code_hash).not.toContain(code);
     expect(await sendEmailProof(school, token, sender)).toMatchObject({
       ok: false,
-      message: expect.stringMatching(/réessayez dans \d+ s/),
+      tooSoon: true,
+      message: expect.stringMatching(/réessayez dans 2 minutes\.$/),
     });
     expect(outbox).toHaveLength(1);
+  });
+
+  it("spaces the e-mails per address: re-inviting does not reset the count, at most five a day", async () => {
+    await createAccount({ email: floodEmail, name: "Zz Inondée", password: OLD, emailVerified: false });
+    const t0 = Date.now();
+    const at = (min: number) => new Date(t0 + min * 60_000);
+    const first = await invitationOf(floodEmail);
+    expect(await sendEmailProof(school, first.token, sender, at(0))).toEqual({ ok: true });
+    // A new invitation of the same address: a fresh row, but the address waits all the same.
+    const again = await invitationOf(floodEmail);
+    expect(await sendEmailProof(school, again.token, sender, at(1))).toMatchObject({ ok: false, tooSoon: true });
+    for (const min of [3, 6, 9, 12])
+      expect(await sendEmailProof(school, again.token, sender, at(min))).toEqual({ ok: true });
+    expect(await sendEmailProof(school, again.token, sender, at(15))).toMatchObject({
+      ok: false,
+      message: expect.stringMatching(/réessayez dans 24 heures\.$/),
+    });
+    // The count keeps only a hash of the address.
+    const rows = await admin`SELECT identifier FROM verification WHERE identifier LIKE 'email-proof:%'`;
+    expect(rows.some((r) => r.identifier.includes(floodEmail))).toBe(false);
+    expect(outbox.filter((m) => m.to === floodEmail)).toHaveLength(5);
+    outbox.splice(0, outbox.length, ...outbox.filter((m) => m.to !== floodEmail));
   });
 
   it("a failed send withdraws its code: another one may go right away", async () => {
@@ -479,13 +507,26 @@ describe("proof of e-mail ownership for an invitation (#179)", () => {
     // Marking the link checks the code again, in its own transaction: expired or replaced in between, nothing is used.
     const link = await withSchool(school, (tx) => readRelationship(tx, token, new Date()));
     if (!link) throw new Error("lien introuvable");
-    expect(await withSchool(school, (tx) => consumeLink(tx, link, owner, { code, now: new Date() }))).toBe("expired");
+    await connect(ownerEmail, OLD);
+    const credentials = { passwordHash: "pas-un-vrai-hachage", verifiedEmail: true };
+    expect(await withSchool(school, (tx) => consumeLink(tx, link, owner, { code, now: new Date() }, credentials))).toBe(
+      "expired",
+    );
     await admin`UPDATE invitation SET email_code_sent_at = now() WHERE school_id = ${school} AND email_code_hash IS NOT NULL`;
     expect(
-      await withSchool(school, (tx) => consumeLink(tx, link, owner, { code: "y".repeat(43), now: new Date() })),
+      await withSchool(school, (tx) =>
+        consumeLink(tx, link, owner, { code: "y".repeat(43), now: new Date() }, credentials),
+      ),
     ).toBe("expired");
+    // Refused: nothing written, neither the link, the membership, the password, the e-mail nor the sessions.
     const [{ used_at }] = await admin`SELECT used_at FROM invitation WHERE id = ${link.id}`;
     expect(used_at).toBeNull();
+    expect(await member(ownerEmail)).toBeUndefined();
+    const [{ email_verified }] = await admin`SELECT email_verified FROM "user" WHERE id = ${owner}`;
+    expect(email_verified).toBe(false);
+    const [{ n }] = await admin`SELECT count(*)::int AS n FROM session WHERE user_id = ${owner}`;
+    expect(n).toBeGreaterThan(0);
+    await expect(connect(ownerEmail, OLD)).resolves.toBeTruthy();
     await admin`UPDATE invitation SET email_code_sent_at = now() WHERE school_id = ${school} AND email_code_hash IS NOT NULL`;
     expect(await openEmailProof(school, token, code)).toMatchObject({ email: ownerEmail, school: "École A" });
   });
