@@ -99,6 +99,10 @@ curl --fail --silent --show-error --max-time 300 -X POST \
   (« sending run failed »); the invoices of that business wait for the next sweep.
 - **A calendar stays in error**: the school sees the message on the instructor's page; access
   removed means the instructor reconnects the calendar.
+- **`déjà en cours : N` in the calendar summary**: N calendars were being synced by another run
+  (« Synchroniser », a reconnection, an overlapping hourly run) and were skipped (#370); they are
+  synced next hour. A sync that died holds its calendar at most 5 minutes
+  (`calendar_connection.sync_claimed_until`), then the next one takes over.
 - **Line `École <id>, intervenant <id> : jeton d’agenda renouvelé perdu, agenda à reconnecter`**:
   the provider renewed the calendar's refresh token during a failed run and neither the error nor
   the token could be saved (#381). Once the database is back, ask the school to have that

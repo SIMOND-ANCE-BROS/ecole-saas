@@ -686,6 +686,9 @@ export const calendarConnection = pgTable(
     encryptedToken: text("encrypted_token").notNull(),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
     error: text("error"),
+    // Lease of the sync running on this calendar (#370): one sync at a time refreshes its token;
+    // cleared when its result is recorded or the calendar is reconnected, else it runs out.
+    syncClaimedUntil: timestamp("sync_claimed_until", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique().on(t.instructorId), sameSchool(t, t.instructorId, instructor)],
