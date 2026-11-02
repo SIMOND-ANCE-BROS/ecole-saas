@@ -63,11 +63,13 @@ function capWait(sentAts: readonly Date[], max: number, now: Date): number {
  * schools, no more than `EMAIL_PROOF_ADDRESS_DAILY_MAX`.
  */
 export function addressWait(sent: { school: readonly Date[]; all: readonly Date[] }, now: Date): number {
-  const last = [...sent.school].sort((a, b) => a.getTime() - b.getTime()).at(-1) ?? null;
+  const own = sent.school.filter((d) => d.getTime() > now.getTime() - DAY_MS);
+  const last = [...own].sort((a, b) => a.getTime() - b.getTime()).at(-1) ?? null;
   return Math.max(
     resendWait(last, now),
-    capWait(sent.school, EMAIL_PROOF_DAILY_MAX, now),
-    capWait(sent.all, EMAIL_PROOF_ADDRESS_DAILY_MAX, now),
+    capWait(own, EMAIL_PROOF_DAILY_MAX, now),
+    // A school's first e-mail of the day always goes: other schools filling the ceiling never block it.
+    own.length === 0 ? 0 : capWait(sent.all, EMAIL_PROOF_ADDRESS_DAILY_MAX, now),
   );
 }
 

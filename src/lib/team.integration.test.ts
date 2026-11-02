@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "../db";
@@ -14,6 +14,7 @@ import {
 import { auth } from "./auth";
 import { createAccount } from "./accounts";
 import type { EmailMessage, EmailSender } from "../connectors/email/sender";
+import { EMAIL_PROOF_ADDRESS_DAILY_MAX } from "../domain/team/email-proof";
 import { acceptEmailProof, acceptLink, createResetLink, openEmailProof, openLink, sendEmailProof } from "./invitations";
 
 /**
@@ -36,6 +37,7 @@ const ownerEmail = `zz-proprietaire-${suffix}@exemple.test`;
 const verifiedEmail = `zz-verifiee-${suffix}@exemple.test`;
 const freshEmail = `zz-nouvelle-${suffix}@exemple.test`;
 const floodEmail = `zz-inondee-${suffix}@exemple.test`;
+const crowdEmail = `zz-sollicitee-${suffix}@exemple.test`;
 /** Prefix of an address's e-mail proofs in `verification` (hash only, as `src/db/team.ts`). */
 const proofKey = (email: string) => `email-proof:${createHash("sha256").update(email).digest("hex")}`;
 let school: string;
@@ -68,9 +70,9 @@ afterAll(async () => {
   });
   await admin`DELETE FROM invitation WHERE school_id IN (${school}, ${otherSchool})`;
   await admin`DELETE FROM member WHERE school_id IN (${school}, ${otherSchool})`;
-  await admin`DELETE FROM verification WHERE identifier LIKE ${`${proofKey(ownerEmail)}:%`} OR identifier LIKE ${`${proofKey(floodEmail)}:%`}`;
+  await admin`DELETE FROM verification WHERE identifier LIKE ${`${proofKey(ownerEmail)}:%`} OR identifier LIKE ${`${proofKey(floodEmail)}:%`} OR identifier LIKE ${`${proofKey(crowdEmail)}:%`}`;
   // Sessions and accounts cascade.
-  await admin`DELETE FROM "user" WHERE email IN (${emailDiana}, ${teacherEmail}, ${newMemberEmail}, ${ownerEmail}, ${verifiedEmail}, ${floodEmail})`;
+  await admin`DELETE FROM "user" WHERE email IN (${emailDiana}, ${teacherEmail}, ${newMemberEmail}, ${ownerEmail}, ${verifiedEmail}, ${floodEmail}, ${crowdEmail})`;
   await admin`DELETE FROM school WHERE id IN (${school}, ${otherSchool})`;
   await admin.end();
 });
@@ -484,6 +486,27 @@ describe("proof of e-mail ownership for an invitation (#179)", () => {
     if (!elsewhere.ok) throw new Error(elsewhere.message);
     expect(await sendEmailProof(otherSchool, elsewhere.token, sender, at(16))).toEqual({ ok: true });
     outbox.splice(0, outbox.length, ...outbox.filter((m) => m.to !== floodEmail));
+  });
+
+  it("a school's first e-mail to an address goes even when other schools filled the shared ceiling", async () => {
+    await createAccount({ email: crowdEmail, name: "Zz Sollicitée", password: OLD, emailVerified: false });
+    // Twenty e-mails sent to this address within the day by other schools (the shared ceiling).
+    for (let i = 0; i < EMAIL_PROOF_ADDRESS_DAILY_MAX; i++) {
+      const otherKey = `${proofKey(crowdEmail)}:${randomUUID()}`;
+      await admin`INSERT INTO verification (id, identifier, value, expires_at, created_at, updated_at)
+        VALUES (${randomUUID()}, ${otherKey}, ${`v${i}`}, now() + interval '23 hours', now() - interval '1 hour', now())`;
+    }
+    const r = await withSchool(otherSchool, (tx) =>
+      invite(tx, teacher, { email: crowdEmail, name: "Zz Sollicitée", role: "front_desk" }, new Date()),
+    );
+    if (!r.ok) throw new Error(r.message);
+    expect(await sendEmailProof(otherSchool, r.token, sender)).toEqual({ ok: true });
+    // Its second one, once spaced out, meets the shared ceiling.
+    expect(await sendEmailProof(otherSchool, r.token, sender, new Date(Date.now() + 3 * 60_000))).toMatchObject({
+      ok: false,
+      tooSoon: true,
+    });
+    outbox.splice(0, outbox.length, ...outbox.filter((m) => m.to !== crowdEmail));
   });
 
   it("a failed send withdraws its code: another one may go right away", async () => {

@@ -79,8 +79,17 @@ describe("addressWait", () => {
   it("all schools together: a ceiling far above one school's share", () => {
     const many = Array.from({ length: EMAIL_PROOF_ADDRESS_DAILY_MAX }, (_, i) => ago(1000 - i * 10));
     expect(EMAIL_PROOF_ADDRESS_DAILY_MAX).toBeGreaterThanOrEqual(3 * EMAIL_PROOF_DAILY_MAX);
-    expect(addressWait({ school: [], all: many }, now)).toBe((24 * 60 - 1000) * 60);
-    expect(addressWait({ school: [], all: many.slice(1) }, now)).toBe(0);
+    const mine = [ago(30)];
+    // Twenty in all, this school's included: wait for the oldest (990 minutes ago) to be a day old.
+    expect(addressWait({ school: mine, all: [...many.slice(1), ...mine] }, now)).toBe((24 * 60 - 990) * 60);
+    expect(addressWait({ school: mine, all: [...many.slice(2), ...mine] }, now)).toBe(0);
+  });
+
+  it("a school's first e-mail of the day goes even when other schools filled the ceiling", () => {
+    const many = Array.from({ length: 2 * EMAIL_PROOF_ADDRESS_DAILY_MAX }, (_, i) => ago(1000 - i * 10));
+    expect(addressWait({ school: [], all: many }, now)).toBe(0);
+    // An e-mail of this school older than a day does not count as « already sent today ».
+    expect(addressWait({ school: [ago(25 * 60)], all: many }, now)).toBe(0);
   });
 });
 
