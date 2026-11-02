@@ -50,6 +50,8 @@ variables at the top of `src/app/globals.css`. Decision: ADR 0003.
   destructive actions only.
 - At most one accent colour in a view, plus semantic colours when needed.
 - Dark mode follows the system and must stay readable (contrast WCAG AA).
+- Controls stand out at 3:1 at least: an unticked checkbox or radio takes
+  `--control-border` (`theme.ts`, #325), never Mantine's paler default.
 
 ## Typography and density
 

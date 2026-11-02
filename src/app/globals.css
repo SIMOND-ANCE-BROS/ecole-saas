@@ -133,6 +133,11 @@ input[type="radio"] {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+/* Unticked, enabled checkboxes and radios: a border at 3:1 at least, light and dark (`--control-border`, theme.ts, #325). */
+.mantine-Checkbox-input:not(:checked, :disabled, [data-indeterminate], [data-error]),
+.mantine-Radio-radio:not(:checked, :disabled, [data-error]) {
+  border-color: var(--control-border);
+}
 /* Dark mode: the focused field's border keeps the bright accent, not the deep primary fill (#211). */
 [data-mantine-color-scheme="dark"] .mantine-Input-input {
   --input-bd-focus: var(--accent);
