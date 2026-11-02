@@ -402,7 +402,7 @@ describe("a workshop's participants (#398)", () => {
   });
 
   /** An enrollment of the child in the workshop, entered beside the sign-up. */
-  const enrollChild = async (status: "active" | "trial" | "dropped", droppedOn: string | null = null) => {
+  const enrollChild = async (status: "active" | "trial" | "dropped" | "waitlist", droppedOn: string | null = null) => {
     const [e] = await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period,
         gross_price_cents, status, enrolled_on, dropped_on)
       SELECT school_id, billing_entity_id, season_id, ${parent}, 'child', 'year', 10000, ${status}, '2026-10-01', ${droppedOn}
@@ -481,6 +481,19 @@ describe("a workshop's participants (#398)", () => {
         if (lessonId) await t`SELECT 1 FROM lesson WHERE id = ${lessonId} FOR UPDATE`;
       };
     };
+
+    for (const [status, droppedOn] of [
+      ["waitlist", null],
+      ["dropped", "2027-01-15"],
+    ] as const)
+      it(`refuses to cancel the enrollment carrying the attendance beside a ${status} duplicate, which keeps nobody on the sheet`, async () => {
+        const carrying = await enrollChild("active");
+        const lessonId = await workshopLesson();
+        await markChildAbsent(lessonId);
+        await enrollChild(status, droppedOn);
+        expect(await cancelEnrolled(carrying)).toEqual({ ok: false, message: ENROLLMENT_ATTENDED });
+        expect(await orphans(lessonId)).toEqual([]);
+      });
 
     it("cancels a duplicate enrollment when a sign-up carries the attendance, then refuses to cancel the sign-up", async () => {
       const r = await signUp({ participantIds: [child] });
