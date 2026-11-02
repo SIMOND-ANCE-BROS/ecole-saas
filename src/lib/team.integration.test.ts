@@ -566,10 +566,15 @@ describe("proof of e-mail ownership for an invitation (#179)", () => {
     expect(await acceptEmailProof(school, token, code, { password: "court", confirmation: "court" })).toMatchObject({
       ok: false,
     });
+    // The owner sees every school of the account, including the one whoever chose the old password
+    // joined, with its role (#404).
     expect(await acceptEmailProof(school, token, code, { password: NEW, confirmation: NEW })).toEqual({
       ok: true,
-      type: "invitation",
       email: ownerEmail,
+      schools: [
+        { name: "École A", role: "front_desk" },
+        { name: "École B", role: "front_desk" },
+      ],
     });
     const [{ n }] = await admin`SELECT count(*)::int AS n FROM session WHERE user_id = ${owner}`;
     expect(n).toBe(0);

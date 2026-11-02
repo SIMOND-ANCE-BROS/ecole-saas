@@ -42,7 +42,11 @@ is used somewhere in the SaaS, though not in which school.
   writes its password in its own consume transaction, so a reset and an
   e-mail proof of one account run one after the other. Whoever chose the old
   password never reaches the new school with it, not even for an instant or
-  after a failed step.
+  after a failed step. A sign-in in flight at that moment (password checked
+  against the old hash, session written after the sessions were closed) is
+  caught too (#404): the sign-in reads the hash first and, once the session is
+  written, keeps it only if the hash is unchanged, after waiting on the account
+  row (`keepSessionIfPasswordUnchanged` in `src/lib/sign-in-guard.ts`).
 - **E-mails are spaced out per address and school**, all invitations of the
   school together: two minutes apart, at most five in 24 hours. All schools
   together, a ceiling of twenty an address, against floods only, which never
@@ -52,13 +56,14 @@ is used somewhere in the SaaS, though not in which school.
   leaves a row in Better Auth's global `verification` table for 24 hours,
   keyed by a SHA-256 hash of the address and the school id, never the address
   itself; rows past their 24 hours are deleted on the next request for that
-  address. Schools are not self-service (created by the operator only), so
+  address, and by the nightly purge for every address (#404). Schools are not self-service (created by the operator only), so
   extra schools are not cheap to obtain.
 - **One interface for sending e-mail**, `EmailSender` in
   `src/connectors/email/`. No provider is chosen (#105, blocked): until one is,
   `emailSender()` returns null and an unverified account keeps confirming its
   password, as before. A fake sender keeps messages in memory for tests and
-  demonstration (`EMAIL_FAKE_ALLOWED=1`), never in production. Neither the
+  demonstration (`EMAIL_FAKE_ALLOWED=1`), refused when `NODE_ENV=production`
+  whatever that variable says (#404). Neither the
   address, the subject, the body nor the code is ever logged.
 - **The disclosure is accepted.** An invitation keeps telling whether an
   account exists for the invited address, and now whether it is verified.
@@ -99,8 +104,8 @@ is used somewhere in the SaaS, though not in which school.
 - Schools that filled the ceiling of an address delay at most the second and
   later e-mails of another school to it, never its first; nothing leaks.
 - An unsalted hash of an address is still personal data: expired rows go
-  when the address is next sent an e-mail; rows of an address never sent one
-  again stay until a global cleanup exists (follow-up).
+  when the address is next sent an e-mail, and at the latest with the nightly
+  purge (`npm run submissions:purge`, `purgeExpiredEmailProofs`, #404).
 - #105 brings the provider (timeout, bounded retries, structured error, no
   personal data in logs), then can e-mail invitations directly to the invited
   address, without showing the link to the director, and mark the address

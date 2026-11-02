@@ -3,7 +3,8 @@
  * the provider. No provider is chosen yet (#105, blocked): `emailSender()`
  * returns null and the screens offer nothing that needs an e-mail. The fake
  * sender keeps messages in memory and sends nothing: tests and demonstration
- * only, never in production (`EMAIL_FAKE_ALLOWED=1`).
+ * only (`EMAIL_FAKE_ALLOWED=1`), refused when `NODE_ENV=production` whatever
+ * the variable says (#404): a production server never pretends to send.
  *
  * A real provider must time out, retry a bounded number of times and fail
  * with `{ ok: false, reason }`; it never logs an address, a subject or a body.
@@ -34,6 +35,6 @@ export const fakeSender: EmailSender = {
 
 /** The sender configured on this server, or null when none is (no provider until #105). */
 export function emailSender(env: Env = process.env): EmailSender | null {
-  if (env.EMAIL_FAKE_ALLOWED === "1") return fakeSender;
+  if (env.EMAIL_FAKE_ALLOWED === "1" && env.NODE_ENV !== "production") return fakeSender;
   return null;
 }

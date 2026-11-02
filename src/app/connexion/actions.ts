@@ -8,7 +8,11 @@ import { z } from "zod";
 import { schoolsOf } from "@/db";
 import { chooseSchool, sessionIdOf } from "@/lib/school-access";
 import { auth } from "@/lib/auth";
+import { credentialBefore, keepSessionIfPasswordUnchanged } from "@/lib/sign-in-guard";
 import { clearAttempts, recordAttempt, trustedIp, LIMITS } from "@/lib/sign-in-limit";
+
+/** Same message for an unknown account, a wrong password, or one changed while being checked. */
+const WRONG = "Adresse e-mail ou mot de passe incorrect.";
 
 export type ConnectionState = { error: string | null; email: string };
 
@@ -34,6 +38,8 @@ export async function signIn(_state: ConnectionState, formData: FormData): Promi
     };
   }
 
+  // Read before the password check: a take-back committing meanwhile closes the session (#404).
+  const before = await credentialBefore(parsed.data.email);
   let connection;
   try {
     connection = await auth.api.signInEmail({
@@ -41,9 +47,12 @@ export async function signIn(_state: ConnectionState, formData: FormData): Promi
       headers: requestHeaders,
     });
   } catch (e) {
-    // Same message for an unknown account or a wrong password.
-    if (isAPIError(e)) return { error: "Adresse e-mail ou mot de passe incorrect.", email };
+    if (isAPIError(e)) return { error: WRONG, email };
     throw e;
+  }
+  // The password changed while it was being checked: the one typed is no longer the account's.
+  if (!(await keepSessionIfPasswordUnchanged(connection.token, connection.user.id, before))) {
+    return { error: WRONG, email };
   }
   await clearAttempts(parsed.data.email, ip);
 

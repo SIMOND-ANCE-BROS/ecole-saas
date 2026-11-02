@@ -12,6 +12,12 @@ describe("emailSender", () => {
     expect(emailSender({ EMAIL_FAKE_ALLOWED: "0" })).toBeNull();
   });
 
+  it("never the fake sender in production, even with EMAIL_FAKE_ALLOWED=1 (#404)", () => {
+    expect(emailSender({ EMAIL_FAKE_ALLOWED: "1", NODE_ENV: "production" })).toBeNull();
+    expect(emailSender({ EMAIL_FAKE_ALLOWED: "1", NODE_ENV: "development" })).toBe(fakeSender);
+    expect(emailSender({ EMAIL_FAKE_ALLOWED: "1", NODE_ENV: "test" })).toBe(fakeSender);
+  });
+
   it("the fake sender keeps the last 50 messages in memory", async () => {
     FAKE_OUTBOX.length = 0;
     for (let i = 0; i < 52; i++) {

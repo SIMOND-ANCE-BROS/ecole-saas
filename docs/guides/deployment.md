@@ -24,7 +24,11 @@ Times are `Europe/Paris`; the nightly purge can run at any quiet hour (03:00 for
   their unavailabilities. Each call to a provider times out after 10 s
   (`CALENDAR_TIMEOUT_MS`).
 - **Submission purge** (#262): deletes form submission keys older than a week; without it the
-  `submission` table grows without limit.
+  `submission` table grows without limit. The same run deletes the e-mail proofs of invitations
+  past their 24 hours (#404, ADR 0008): rows `email-proof:…` of Better Auth's global
+  `verification` table, keyed by a hash of an address, which is personal data. They are global
+  (no school), deleted in one statement with `DATABASE_URL`; a failure there is logged on its own
+  line (« Preuves d’adresse e-mail : purge en échec ») and fails the run, after the schools.
 - **Overdue installments** (#358): marks « en retard » the unpaid installments of issued invoices
   the day after their due date (`Europe/Paris`). A payment or a release refreshes the statuses it
   touches at once; this task catches the installments nobody paid. Run it after midnight (00:15

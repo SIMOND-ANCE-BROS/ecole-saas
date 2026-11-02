@@ -4,7 +4,7 @@ import { z } from "zod";
 import { EMAIL_PROOF_DURATION_MS, EMAIL_PROOF_RESEND_MS, addressWait, resendWait } from "../domain/team/email-proof";
 import { changeRefusal, INVITABLE_ROLES, ROLE_VALUES, type Role } from "../domain/team/rules";
 import { rowsOf } from "./columns-of";
-import type { Tx } from "./index";
+import { db, type Tx } from "./index";
 import { school, invitation, auditLog, member, user, account, session, verification } from "./schema";
 
 /**
@@ -407,8 +407,25 @@ export async function newEmailCode(
   return left > 0 ? { ok: false, wait: left } : null;
 }
 
+/** Prefix of every e-mail proof in `verification`. */
+const EMAIL_PROOF_PREFIX = "email-proof:";
 /** Prefix of an address's e-mail proofs in `verification`: a hash, never the address itself. */
-const emailProofAddress = (email: string) => `email-proof:${hash(email.trim().toLowerCase())}`;
+const emailProofAddress = (email: string) => `${EMAIL_PROOF_PREFIX}${hash(email.trim().toLowerCase())}`;
+
+/**
+ * Deletes the e-mail proofs past their 24 hours, of every address and school
+ * (#404): an unsalted hash of an address is personal data, and an address
+ * never e-mailed again would otherwise keep its rows forever. Global table, no
+ * RLS: run by the nightly purge (`scripts/purge-submissions.ts`). Leaves
+ * Better Auth's own rows alone. Returns the number of rows deleted.
+ */
+export async function purgeExpiredEmailProofs(): Promise<number> {
+  const deleted = await db
+    .delete(verification)
+    .where(and(like(verification.identifier, `${EMAIL_PROOF_PREFIX}%`), lte(verification.expiresAt, sql`now()`)))
+    .returning({ id: verification.id });
+  return deleted.length;
+}
 /** Key of the e-mail proofs one school sent to an address. */
 const emailProofKey = (email: string, schoolId: string) => `${emailProofAddress(email)}:${schoolId}`;
 
