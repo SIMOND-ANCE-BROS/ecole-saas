@@ -76,6 +76,16 @@ variables at the top of `src/app/globals.css`. Decision: ADR 0003.
   `size="compact-sm"` (or `compact-xs`, `xs`): `globals.css` raises these
   Mantine sizes to 32 px, and every button, icon button and close button to 44 px at phone
   width or on a touch screen (#372). Never set a smaller `h` on a button.
+- Text buttons keep their look: a link button (`Anchor component="button"`) or
+  an `UnstyledButton` given the `hit-target` class (list column headers, « + »)
+  takes the clicks over 32 px through an invisible box with a mouse, so the
+  list header stays dense, and grows to 44 px at phone width or on a touch
+  screen (`globals.css`, #396).
+- Exception: the « × » of a choice in a multiple select (`MultiSelect`, e.g.
+  « Sites fermés ») keeps Mantine's 24 × 22 px, about the WCAG minimum (24 px); a larger box
+  would make the field taller or catch clicks meant for the field. The same
+  choice is removed by clicking it again in the open list (34 px rows) or with
+  Backspace.
 - A button repeated on every row names its row in its `aria-label`, starting
   with the visible words: « Corriger le paiement du 01/10/2026 (Chèque,
   120,00 €) », « Retirer Zoé Exemple de la fiche ».

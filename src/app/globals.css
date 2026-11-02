@@ -114,6 +114,37 @@ body {
     --cb-size-lg: 2.75rem;
   }
 }
+/*
+ * Text buttons (#396): link buttons (`Anchor component="button"`) and the list header's buttons
+ * (`.hit-target`, list-table.tsx). With a mouse, an invisible box centred on the button takes the
+ * clicks over 32 px, so the dense list header and the lines of text keep their height. At phone
+ * width or on a touch screen, the button itself grows to 44 px.
+ */
+button.mantine-Anchor-root,
+.hit-target {
+  position: relative;
+}
+button.mantine-Anchor-root::after,
+.hit-target::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 2rem);
+  height: max(100%, 2rem);
+  translate: -50% -50%;
+}
+@media (pointer: coarse), (width < 40rem) {
+  button.mantine-Anchor-root,
+  .hit-target {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+  button.mantine-Anchor-root {
+    display: inline-flex;
+    align-items: center;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   * {
