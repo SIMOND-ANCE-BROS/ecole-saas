@@ -5,7 +5,7 @@ import { withSchool } from "./index";
 import { balanceOf } from "./payments";
 import { once, storedWorkshopSignup } from "./submissions";
 import { cancelWorkshopSignup, signUpForWorkshop, signupsOf, workshopChoices, type SignupInput } from "./workshops";
-import { deleteCourse, entityLock, readCourse, updateCourse, validCourseInput } from "./courses";
+import { deleteCourse, entityLock, moveCourse, readCourse, updateCourse, validCourseInput } from "./courses";
 import { deleteTreatment } from "./vat-treatments";
 import { enrolledInCourse, scheduleCourse } from "./schedule";
 import { readAttendance, saveAttendance, weekLessons } from "./lessons";
@@ -358,6 +358,22 @@ describe("a workshop's participants (#398)", () => {
     await cancel(r.id);
     expect(await withSchool(school, (tx) => enrolledInCourse(tx, workshop, TODAY))).toEqual([]);
     expect((await withSchool(school, (tx) => scheduleCourse(tx, workshop)))?.enrolled).toBe(0);
+  });
+
+  it("asks to confirm moving a weekly workshop in the calendar while someone is signed up", async () => {
+    const [{ id: weeklyWorkshop }] =
+      await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id,
+        type, weekday, start_time, duration_minutes, workshop_price_cents)
+      SELECT school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id,
+        'workshop', 3, '18:00', 60, 4000 FROM course WHERE id = ${weekly} RETURNING id`;
+    const r = await signUp({ courseId: weeklyWorkshop, participantIds: [child, sibling] });
+    if (!r.ok) throw new Error(r.message);
+    const move = await withSchool(school, (tx) =>
+      moveCourse(tx, weeklyWorkshop, { weekday: 4, startTime: "18:00", durationMinutes: 60 }, false),
+    );
+    expect(move).toEqual({ status: "confirm", enrolled: 2 });
+    await cancel(r.id);
+    await admin`DELETE FROM course WHERE id = ${weeklyWorkshop}`;
   });
 
   it("shows nothing of them to another school (RLS)", async () => {

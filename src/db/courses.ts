@@ -859,11 +859,17 @@ export async function moveCourse(
     if (!r) return { status: "refused", message: "Cette salle n’existe plus." };
   }
   if (!confirmed) {
-    const [{ n }] = await tx
-      .select({ n: sql<number>`count(DISTINCT ${enrollmentCourse.studentId})::int` })
-      .from(enrollmentCourse)
-      .innerJoin(sql`enrollment i`, sql`i.id = ${enrollmentCourse.enrollmentId} AND i.status IN ('active', 'trial')`)
-      .where(eq(enrollmentCourse.courseId, id));
+    // Students enrolled (active or on trial) or signed up for a weekly workshop (#398), each once.
+    const [{ n }] = await tx.execute<{ n: number }>(sql`
+      SELECT count(DISTINCT x.student_id)::int AS n FROM (
+        SELECT ic.student_id FROM enrollment_course ic
+        JOIN enrollment i ON i.id = ic.enrollment_id AND i.status IN ('active', 'trial')
+        WHERE ic.course_id = ${id}
+        UNION ALL
+        SELECT wp.person_id FROM workshop_signup_person wp
+        JOIN workshop_signup w ON w.id = wp.workshop_signup_id
+        WHERE w.course_id = ${id}
+      ) x`);
     if (n > 0) return { status: "confirm", enrolled: n };
   }
   await keepGivenLessons(tx, id, existing, { ...existing, ...c.data });
