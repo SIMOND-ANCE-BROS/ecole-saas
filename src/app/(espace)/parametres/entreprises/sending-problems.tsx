@@ -27,6 +27,7 @@ const Actions = ({ p }: { p: SendingProblem }) =>
     <ProblemActions
       invoiceId={p.id}
       inTool={!p.linesGivenBack}
+      totalCents={p.totalInclTaxCents}
       payer={displayedName({ name: p.payer, firstName: p.payerFirstName, companyName: p.payerCompanyName })}
     />
   ) : null;

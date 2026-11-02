@@ -50,6 +50,8 @@ variables at the top of `src/app/globals.css`. Decision: ADR 0003.
   destructive actions only.
 - At most one accent colour in a view, plus semantic colours when needed.
 - Dark mode follows the system and must stay readable (contrast WCAG AA).
+- Controls stand out at 3:1 at least: an unticked checkbox or radio takes
+  `--control-border` (`theme.ts`, #325), never Mantine's paler default.
 
 ## Typography and density
 
@@ -70,7 +72,13 @@ variables at the top of `src/app/globals.css`. Decision: ADR 0003.
 - Every field has a visible label; every icon button has an `aria-label`.
 - Every action works with the keyboard; focus is always visible.
 - Ctrl K focuses the search; arrow down moves into the results; Enter opens.
-- Click targets at least 32 px on desktop and 44 px on phones.
+- Click targets at least 32 px on desktop and 44 px on phones. Row actions keep
+  `size="compact-sm"` (or `compact-xs`, `xs`): `globals.css` raises these
+  Mantine sizes to 32 px, and every button, icon button and close button to 44 px at phone
+  width or on a touch screen (#372). Never set a smaller `h` on a button.
+- A button repeated on every row names its row in its `aria-label`, starting
+  with the visible words: « Corriger le paiement du 01/10/2026 (Chèque,
+  120,00 €) », « Retirer Zoé Exemple de la fiche ».
 - Never convey information by colour alone (add a word or an icon).
 
 ## Motion
