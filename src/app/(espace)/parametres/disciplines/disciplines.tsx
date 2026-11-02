@@ -70,110 +70,132 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
           Aucune discipline pour l’instant.
         </Text>
       ) : (
+        // One grid shared by the header and every row (subgrid): the certificate boxes line up in
+        // one column whatever the name's length (#325). At phone width the row's actions go under
+        // its name; from `sm`, in a third column.
         <Paper
           withBorder
-          component="ul"
-          aria-label="Disciplines"
-          tabIndex={-1}
-          data-after-removal
-          className="divide-y divide-bordure text-sm"
+          className="grid grid-cols-[minmax(0,1fr)_auto] text-sm sm:grid-cols-[minmax(0,1fr)_auto_auto]"
         >
-          {disciplines.map((d) => (
-            <li key={d.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2">
-              {edition?.id === d.id ? (
-                // Escape cancels, asking first if the name was changed (#339).
-                <EscapeCancelsForm
-                  close={() => closeEdit(d.id)}
-                  className="flex flex-wrap items-center gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
+          {/* The column's title, for the eye; each box carries its own label with the discipline. */}
+          <div aria-hidden className="col-span-full grid grid-cols-subgrid border-b border-bordure px-3 py-1.5">
+            <span />
+            <Text span size="xs" c="dimmed" fw={500} className="px-2 text-center">
+              Certificat adultes
+            </Text>
+          </div>
+          <ul
+            aria-label="Disciplines"
+            tabIndex={-1}
+            data-after-removal
+            className="col-span-full grid grid-cols-subgrid divide-y divide-bordure"
+          >
+            {disciplines.map((d) => (
+              <li key={d.id} className="col-span-full grid grid-cols-subgrid items-center gap-y-1 px-3 py-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+                  {edition?.id === d.id ? (
+                    // Escape cancels, asking first if the name was changed (#339).
+                    <EscapeCancelsForm
+                      close={() => closeEdit(d.id)}
+                      className="flex flex-wrap items-center gap-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        act(
+                          () => rename(d.id, edition.name),
+                          () => closeEdit(d.id),
+                        );
+                      }}
+                    >
+                      <TextInput
+                        aria-label="Nom"
+                        autoFocus
+                        value={edition.name}
+                        onChange={(e) => setEdition({ ...edition, name: e.currentTarget.value })}
+                      />
+                      <Button type="submit" size="compact-sm" loading={inProgress}>
+                        Enregistrer
+                      </Button>
+                      <Button
+                        type="button"
+                        size="compact-sm"
+                        variant="subtle"
+                        color="gray"
+                        onClick={() => closeEdit(d.id)}
+                      >
+                        Annuler
+                      </Button>
+                    </EscapeCancelsForm>
+                  ) : (
+                    <span className="font-medium">{d.name}</span>
+                  )}
+                  <Text span size="sm" c="dimmed">
+                    {d.course} cours
+                    {d.tariffs > 0 &&
+                      `, ${d.tariffs} tarif${d.tariffs > 1 ? "s" : ""} dédié${d.tariffs > 1 ? "s" : ""}`}
+                  </Text>
+                </div>
+                <Checkbox
+                  radius="xs"
+                  aria-label={`Certificat médical exigé des adultes en ${d.name}`}
+                  className="flex justify-center px-2"
+                  checked={certificates.get(d.id) ?? d.adultsNeedCertificate}
+                  onChange={(e) => {
+                    const value = e.currentTarget.checked;
                     act(
-                      () => rename(d.id, edition.name),
-                      () => closeEdit(d.id),
+                      () => {
+                        setCertificate([d.id, value]);
+                        return adultCertificate(d.id, value);
+                      },
+                      () =>
+                        notifications.show({
+                          color: "green",
+                          message: `${d.name} : certificat médical ${value ? "exigé" : "plus exigé"} des adultes.`,
+                        }),
                     );
                   }}
-                >
-                  <TextInput
-                    aria-label="Nom"
-                    autoFocus
-                    value={edition.name}
-                    onChange={(e) => setEdition({ ...edition, name: e.currentTarget.value })}
-                  />
-                  <Button type="submit" size="compact-sm" loading={inProgress}>
-                    Enregistrer
-                  </Button>
-                  <Button type="button" size="compact-sm" variant="subtle" color="gray" onClick={() => closeEdit(d.id)}>
-                    Annuler
-                  </Button>
-                </EscapeCancelsForm>
-              ) : (
-                <span className="font-medium">{d.name}</span>
-              )}
-              <Checkbox
-                radius="xs"
-                label="Certificat médical exigé des adultes"
-                aria-label={`Certificat médical exigé des adultes en ${d.name}`}
-                checked={certificates.get(d.id) ?? d.adultsNeedCertificate}
-                onChange={(e) => {
-                  const value = e.currentTarget.checked;
-                  act(
-                    () => {
-                      setCertificate([d.id, value]);
-                      return adultCertificate(d.id, value);
-                    },
-                    () =>
-                      notifications.show({
-                        color: "green",
-                        message: `${d.name} : certificat médical ${value ? "exigé" : "plus exigé"} des adultes.`,
-                      }),
-                  );
-                }}
-              />
-              <Text span size="sm" c="dimmed">
-                {d.course} cours
-                {d.tariffs > 0 && `, ${d.tariffs} tarif${d.tariffs > 1 ? "s" : ""} dédié${d.tariffs > 1 ? "s" : ""}`}
-              </Text>
-              {edition?.id !== d.id && (
-                <Group gap="xs" className="ml-auto">
-                  <Button
-                    size="compact-sm"
-                    variant="subtle"
-                    aria-label={`Renommer ${d.name}`}
-                    data-edit={d.id}
-                    onClick={() => setEdition({ id: d.id, name: d.name })}
-                  >
-                    Renommer
-                  </Button>
-                  {d.course === 0 && d.tariffs === 0 && (
+                />
+                {edition?.id !== d.id && (
+                  <Group gap="xs" className="sm:justify-end">
                     <Button
                       size="compact-sm"
                       variant="subtle"
-                      color="red"
-                      disabled={inProgress}
-                      aria-label={`Retirer ${d.name}`}
-                      data-remove={d.id}
-                      onClick={() =>
-                        setRemoval({
-                          title: `Retirer la discipline ${d.name} ?`,
-                          body: "Elle n’a ni cours ni tarif dédié. Vous pourrez la recréer plus tard.",
-                          // Its row goes away: focus moves to the list, or to the new-discipline field if empty;
-                          // refused, it stays on « Retirer » (or the list, if the row is already gone).
-                          run: () =>
-                            act(
-                              () => removeDiscipline(d.id),
-                              () => focusAfter("[data-after-removal]", "#new-discipline"),
-                              () => focusAfter(`[data-remove="${d.id}"]`, "[data-after-removal]", "#new-discipline"),
-                            ),
-                        })
-                      }
+                      aria-label={`Renommer ${d.name}`}
+                      data-edit={d.id}
+                      onClick={() => setEdition({ id: d.id, name: d.name })}
                     >
-                      Retirer
+                      Renommer
                     </Button>
-                  )}
-                </Group>
-              )}
-            </li>
-          ))}
+                    {d.course === 0 && d.tariffs === 0 && (
+                      <Button
+                        size="compact-sm"
+                        variant="subtle"
+                        color="red"
+                        disabled={inProgress}
+                        aria-label={`Retirer ${d.name}`}
+                        data-remove={d.id}
+                        onClick={() =>
+                          setRemoval({
+                            title: `Retirer la discipline ${d.name} ?`,
+                            body: "Elle n’a ni cours ni tarif dédié. Vous pourrez la recréer plus tard.",
+                            // Its row goes away: focus moves to the list, or to the new-discipline field if empty;
+                            // refused, it stays on « Retirer » (or the list, if the row is already gone).
+                            run: () =>
+                              act(
+                                () => removeDiscipline(d.id),
+                                () => focusAfter("[data-after-removal]", "#new-discipline"),
+                                () => focusAfter(`[data-remove="${d.id}"]`, "[data-after-removal]", "#new-discipline"),
+                              ),
+                          })
+                        }
+                      >
+                        Retirer
+                      </Button>
+                    )}
+                  </Group>
+                )}
+              </li>
+            ))}
+          </ul>
         </Paper>
       )}
     </div>

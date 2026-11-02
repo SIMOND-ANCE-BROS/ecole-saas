@@ -27,6 +27,8 @@ export type DocumentLine = {
   type: RequirableType;
   /** Asked of this student (school setting, age). */
   expected: boolean;
+  /** Shown, but the student's courses of the season do not ask for it (an adult in couple dances only, #325). */
+  notAskedForCourses: boolean;
   state: DocumentState;
   doc: StudentDocumentRow | null;
   /** Still to bring this season: due date, overdue or not. */
@@ -73,15 +75,20 @@ function status(line: DocumentLine, enrolled: boolean): { text: string; warn: bo
   const dated = d?.datedOn ? `, ${agreed(line.type, "daté")} du ${dayOf(d.datedOn)}` : "";
   const due = line.due ? `à fournir avant le ${dayOf(line.due.dueOn)}${line.due.overdue ? ", en retard" : ""}` : null;
   const notReceived = `Non ${agreed(line.type, "reçu")}`;
+  // Not « missing »: nothing is due, so the row says why (#325).
+  const notAsked = line.notAskedForCourses ? " (pas demandé pour ses cours)" : "";
   switch (line.state) {
     case "missing":
       if (due) return { text: `${notReceived} : ${due}`, warn: line.due?.overdue ?? false };
-      return { text: `${notReceived}${line.expected && !enrolled ? ", à demander à l’inscription" : ""}`, warn: false };
+      return {
+        text: `${notReceived}${line.expected && !enrolled ? ", à demander à l’inscription" : ""}${notAsked}`,
+        warn: false,
+      };
     case "expired":
       // `validUntil` is set: an expired document has an end date.
       return {
-        text: `${agreed(line.type, "Expiré")} le ${dayOf(d?.validUntil ?? "")}${due ? ` : ${due}` : `, ${received}`}`,
-        warn: line.due?.overdue ?? true,
+        text: `${agreed(line.type, "Expiré")} le ${dayOf(d?.validUntil ?? "")}${due ? ` : ${due}` : `, ${received}${notAsked}`}`,
+        warn: !line.notAskedForCourses && (line.due?.overdue ?? true),
       };
     case "refused":
       return { text: `Refus de la famille, réponse ${received.replace(/^reçue?/, "reçue")}`, warn: true };

@@ -15,7 +15,13 @@ import { displayedName } from "@/db/people";
 import { recordSeasons } from "@/db/schedule";
 import { enrolledCourses, firstEnrollmentDate, readRequirements, studentDocuments } from "@/db/student-documents";
 import { ageAt, isMinor, todayInParis } from "@/domain/people/age";
-import { documentsToBring, documentState, expectedDocuments, recordableDocuments } from "@/domain/people/documents";
+import {
+  documentsToBring,
+  documentState,
+  expectedDocuments,
+  notAskedForCourses,
+  recordableDocuments,
+} from "@/domain/people/documents";
 import { ofName } from "@/lib/french";
 import { requireRole } from "@/lib/session";
 import { PaymentsSection } from "../../_people/payments-section";
@@ -103,6 +109,8 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   const expected = expectedDocuments(requirements, e.birthDate, today, courses);
   // Documents the school may ask of this student (an adult hands in a certificate before enrolling), and any other recorded.
   const recordable = recordableDocuments(requirements, e.birthDate, today);
+  // Shown but not asked by this season's courses: the record says so (#325).
+  const notAsked = notAskedForCourses(requirements, e.birthDate, today, courses);
   const documentLines: DocumentLine[] = requirements.flatMap((r) => {
     const doc = documents.find((d) => d.type === r.type) ?? null;
     if (!recordable.includes(r.type) && !doc) return [];
@@ -110,6 +118,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
       {
         type: r.type,
         expected: expected.includes(r.type),
+        notAskedForCourses: notAsked.includes(r.type),
         state: documentState(doc ?? undefined, today),
         doc,
         due: toBring.find((d) => d.type === r.type) ?? null,

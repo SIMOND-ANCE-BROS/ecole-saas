@@ -153,6 +153,23 @@ export function recordableDocuments(
   return requirements.filter((r) => r.required && (minor || !r.minorsOnly)).map((r) => r.type);
 }
 
+/**
+ * Documents the record shows that this student's courses of the season do not
+ * ask (#325): the medical certificate of an adult enrolled only in couple
+ * dances. The record says so, so that « Non reçu » does not read as missing.
+ * None without a course: an adult not enrolled yet may still be asked for it.
+ */
+export function notAskedForCourses(
+  requirements: readonly Requirement[],
+  birthDate: string | null,
+  today: string,
+  courses: readonly EnrolledCourse[],
+): RequirableType[] {
+  if (courses.length === 0) return [];
+  const expected = expectedDocuments(requirements, birthDate, today, courses);
+  return recordableDocuments(requirements, birthDate, today).filter((type) => !expected.includes(type));
+}
+
 /** A required document still to bring: due on `dueOn` (included), overdue after it. */
 export type DocumentToBring = { type: RequirableType; dueOn: string; overdue: boolean };
 
