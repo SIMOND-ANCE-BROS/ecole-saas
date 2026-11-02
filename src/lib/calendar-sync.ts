@@ -14,7 +14,7 @@ const DAY = 86_400_000;
 export const SYNC_UNAVAILABLE = "Synchronisation impossible pour le moment ; elle sera retentée.";
 
 /** Shown when the calendar was reconnected or disconnected during the sync (#386): nothing was written. */
-export const SYNC_RECONNECTED = "Agenda reconnecté pendant la synchronisation : rien n’a été enregistré, réessayez.";
+export const SYNC_RECONNECTED = "Agenda reconnecté ou déconnecté pendant la synchronisation : rien n’a été enregistré.";
 
 /**
  * Logs a sync that threw instead of returning (its connection could not be read, or its own

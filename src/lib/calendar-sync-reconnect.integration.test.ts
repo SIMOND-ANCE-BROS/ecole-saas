@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { withSchool } from "../db";
-import { saveConnection } from "../db/calendar-connections";
+import { deleteConnection, saveConnection } from "../db/calendar-connections";
 import type { Provider } from "../connectors/calendar/oauth";
 import { decrypt, encrypt } from "./encryption";
 import { SYNC_RECONNECTED, syncCalendar } from "./calendar-sync";
@@ -95,6 +95,19 @@ describe("a sync whose calendar was reconnected meanwhile (#386)", () => {
     };
     expect((await syncCalendar(school, instructorId, reconnectingDuringRead, NOW)).ok).toBe(false);
     expect(await slots()).toEqual([{ source: "microsoft", startsAt: at(48).toISOString() }]);
+  });
+
+  it("writes no slot when the calendar was disconnected during the read", async () => {
+    const disconnectingDuringRead: typeof fetch = async (u) => {
+      if (String(u).includes("/token")) return response(200, { access_token: "acces" });
+      await withSchool(school, (tx) => deleteConnection(tx, instructorId));
+      return response(200, { value: [event] });
+    };
+    expect(await syncCalendar(school, instructorId, disconnectingDuringRead, NOW)).toEqual({
+      ok: false,
+      message: SYNC_RECONNECTED,
+    });
+    expect(await slots()).toEqual([]);
   });
 
   it("still writes the slots and the sync when nothing was reconnected", async () => {
