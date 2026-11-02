@@ -1,10 +1,11 @@
-import { createHash, randomBytes } from "node:crypto";
-import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { and, asc, eq, gt, isNull, like, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { EMAIL_PROOF_DURATION_MS, EMAIL_PROOF_RESEND_MS, addressWait, resendWait } from "../domain/team/email-proof";
 import { changeRefusal, INVITABLE_ROLES, ROLE_VALUES, type Role } from "../domain/team/rules";
 import { rowsOf } from "./columns-of";
 import type { Tx } from "./index";
-import { school, invitation, auditLog, member, user } from "./schema";
+import { school, invitation, auditLog, member, user, account, session, verification } from "./schema";
 
 /**
  * Team of a school (#104): members, invitations and reset
@@ -336,20 +337,147 @@ export async function readRelationship(tx: Tx, token: string, now: Date): Promis
 }
 
 /**
+ * A new code proving the invited e-mail (#179) for an invitation still open:
+ * returned once, in clear, to be e-mailed; only its hash is kept. It replaces
+ * the previous one. Refused while the last one is younger than
+ * `EMAIL_PROOF_RESEND_MS` (`wait`: seconds left).
+ */
+export async function newEmailCode(
+  tx: Tx,
+  link: OpenedLink,
+  now: Date,
+): Promise<{ ok: true; code: string } | { ok: false; wait: number } | null> {
+  if (link.type !== "invitation") return null;
+  // Spaced out per address and school (`addressWait`): re-inviting the same address does not
+  // reset the count, and one school cannot use up another's share; a far higher ceiling holds
+  // for all schools together. Global table, no RLS: only a hash of the address is kept, one row
+  // per e-mail for 24 hours. The lock (per address) serialises two requests.
+  const [own] = await tx.select({ schoolId: invitation.schoolId }).from(invitation).where(eq(invitation.id, link.id));
+  if (!own) return null;
+  const address = emailProofAddress(link.email);
+  const sentTo = emailProofKey(link.email, own.schoolId);
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${address}))`);
+  // A hash of an address is still personal data: rows past their 24 hours go.
+  await tx
+    .delete(verification)
+    .where(and(like(verification.identifier, `${address}:%`), lte(verification.expiresAt, now)));
+  const sent = await tx
+    .select({ identifier: verification.identifier, at: verification.createdAt })
+    .from(verification)
+    .where(and(like(verification.identifier, `${address}:%`), gt(verification.expiresAt, now)));
+  const wait = addressWait(
+    { school: sent.filter((s) => s.identifier === sentTo).map((s) => s.at), all: sent.map((s) => s.at) },
+    now,
+  );
+  if (wait > 0) return { ok: false, wait };
+  const code = newToken();
+  const recorded = await tx
+    .update(invitation)
+    .set({ emailCodeHash: hash(code), emailCodeSentAt: now })
+    .where(
+      and(
+        eq(invitation.id, link.id),
+        isNull(invitation.usedAt),
+        gt(invitation.expiresAt, now),
+        AUTHOR_STILL_DIRECTOR,
+        or(
+          isNull(invitation.emailCodeSentAt),
+          lte(invitation.emailCodeSentAt, new Date(now.getTime() - EMAIL_PROOF_RESEND_MS)),
+        ),
+      ),
+    )
+    .returning({ id: invitation.id });
+  if (recorded.length === 1) {
+    await tx.insert(verification).values({
+      id: randomUUID(),
+      identifier: sentTo,
+      value: hash(code),
+      expiresAt: new Date(now.getTime() + 24 * 60 * 60_000),
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { ok: true, code };
+  }
+  const [l] = await tx
+    .select({ sentAt: invitation.emailCodeSentAt })
+    .from(invitation)
+    .where(and(eq(invitation.id, link.id), isNull(invitation.usedAt)));
+  const left = l ? resendWait(l.sentAt, now) : 0;
+  // Nothing to wait for: the invitation is no longer usable (expired, used, author left management).
+  return left > 0 ? { ok: false, wait: left } : null;
+}
+
+/** Prefix of an address's e-mail proofs in `verification`: a hash, never the address itself. */
+const emailProofAddress = (email: string) => `email-proof:${hash(email.trim().toLowerCase())}`;
+/** Key of the e-mail proofs one school sent to an address. */
+const emailProofKey = (email: string, schoolId: string) => `${emailProofAddress(email)}:${schoolId}`;
+
+/** Withdraws a code that could not be e-mailed, so another one may be sent right away. */
+export async function dropEmailCode(tx: Tx, link: OpenedLink, code: string): Promise<void> {
+  await tx
+    .update(invitation)
+    .set({ emailCodeHash: null, emailCodeSentAt: null })
+    .where(and(eq(invitation.id, link.id), eq(invitation.emailCodeHash, hash(code))));
+  await tx
+    .delete(verification)
+    .where(
+      and(like(verification.identifier, `${emailProofAddress(link.email)}:%`), eq(verification.value, hash(code))),
+    );
+}
+
+/** Condition: `code` is the invitation's last e-mailed code, still valid at `now`. */
+const emailCodeMatches = (code: string, now: Date) =>
+  and(
+    eq(invitation.emailCodeHash, hash(code)),
+    gt(invitation.emailCodeSentAt, new Date(now.getTime() - EMAIL_PROOF_DURATION_MS)),
+  );
+
+/** Whether `code` is the open invitation's last e-mailed code, still valid. */
+export async function emailCodeValid(tx: Tx, link: OpenedLink, code: string, now: Date): Promise<boolean> {
+  if (link.type !== "invitation" || !TOKEN.test(code)) return false;
+  const [l] = await tx
+    .select({ id: invitation.id })
+    .from(invitation)
+    .where(and(eq(invitation.id, link.id), isNull(invitation.usedAt), emailCodeMatches(code, now)));
+  return !!l;
+}
+
+/**
  * Marks the link used (once only) and, for an invitation, brings
  * the account into the team with the planned role. A reset is
  * refused if the account has joined another school since the link was created.
+ * With `emailCode` (#179), only while that e-mailed code is still valid.
+ *
+ * With `credentials`, the account's new password (already hashed), its
+ * verified e-mail and the closing of its sessions are written in the same
+ * transaction, after locking the account (#179): a reset and an e-mail proof
+ * of one account run one after the other, and nobody keeps an old password
+ * or session in a school the account has just joined.
  */
 export async function consumeLink(
   tx: Tx,
   relationship: OpenedLink,
   userId: string,
+  emailCode?: { code: string; now: Date },
+  credentials?: { passwordHash: string; verifiedEmail: boolean },
 ): Promise<"ok" | "expired" | "shared"> {
+  if (emailCode && !TOKEN.test(emailCode.code)) return "expired";
+  if (credentials) {
+    const [locked] = await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
+    if (!locked) return "expired";
+  }
   if (relationship.type === "reset" && (await elsewhereAccount(tx, userId))) return "shared";
   const badge = await tx
     .update(invitation)
     .set({ usedAt: sql`now()` })
-    .where(and(eq(invitation.id, relationship.id), isNull(invitation.usedAt), AUTHOR_STILL_DIRECTOR))
+    .where(
+      and(
+        eq(invitation.id, relationship.id),
+        isNull(invitation.usedAt),
+        AUTHOR_STILL_DIRECTOR,
+        emailCode ? emailCodeMatches(emailCode.code, emailCode.now) : undefined,
+      ),
+    )
     .returning({ id: invitation.id });
   if (badge.length !== 1) return "expired";
   if (relationship.type === "invitation" && relationship.role) {
@@ -357,6 +485,28 @@ export async function consumeLink(
       .insert(member)
       .values({ schoolId: CURRENT_SCHOOL, userId, role: relationship.role })
       .onConflictDoUpdate({ target: [member.schoolId, member.userId], set: { role: relationship.role, active: true } });
+  }
+  if (credentials) {
+    const changed = await tx
+      .update(account)
+      .set({ password: credentials.passwordHash, updatedAt: sql`now()` })
+      .where(and(eq(account.userId, userId), eq(account.providerId, "credential")))
+      .returning({ id: account.id });
+    if (changed.length === 0)
+      await tx.insert(account).values({
+        id: randomUUID(),
+        userId,
+        providerId: "credential",
+        accountId: userId,
+        password: credentials.passwordHash,
+      });
+    if (credentials.verifiedEmail)
+      await tx
+        .update(user)
+        .set({ emailVerified: true, updatedAt: sql`now()` })
+        .where(eq(user.id, userId));
+    // Sessions opened with the old password are closed.
+    await tx.delete(session).where(eq(session.userId, userId));
   }
   return "ok";
 }

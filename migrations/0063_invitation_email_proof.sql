@@ -1,0 +1,3 @@
+ALTER TABLE "invitation" ADD COLUMN "email_code_hash" text;--> statement-breakpoint
+ALTER TABLE "invitation" ADD COLUMN "email_code_sent_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "invitation" ADD CONSTRAINT "invitation_email_code" CHECK (("invitation"."email_code_hash" IS NULL) = ("invitation"."email_code_sent_at" IS NULL) AND ("invitation"."email_code_hash" IS NULL OR "invitation"."type" = 'invitation'));

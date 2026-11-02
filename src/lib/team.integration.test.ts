@@ -1,10 +1,21 @@
+import { createHash, randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "../db";
-import { invite, pendingInvitations, listMembers, updateMember, revokeInvitation } from "../db/team";
+import {
+  consumeLink,
+  readRelationship,
+  invite,
+  pendingInvitations,
+  listMembers,
+  updateMember,
+  revokeInvitation,
+} from "../db/team";
 import { auth } from "./auth";
 import { createAccount } from "./accounts";
-import { acceptLink, createResetLink, openLink } from "./invitations";
+import type { EmailMessage, EmailSender } from "../connectors/email/sender";
+import { EMAIL_PROOF_ADDRESS_DAILY_MAX } from "../domain/team/email-proof";
+import { acceptEmailProof, acceptLink, createResetLink, openEmailProof, openLink, sendEmailProof } from "./invitations";
 
 /**
  * A school's team (#104): invitations, roles, reset, against the real
@@ -22,6 +33,13 @@ const PASSWORD = "une phrase de passe de test";
 const emailDiana = `diana-${suffix}@exemple.test`;
 const newMemberEmail = `accueil-${suffix}@exemple.test`;
 const teacherEmail = `prof-${suffix}@exemple.test`;
+const ownerEmail = `zz-proprietaire-${suffix}@exemple.test`;
+const verifiedEmail = `zz-verifiee-${suffix}@exemple.test`;
+const freshEmail = `zz-nouvelle-${suffix}@exemple.test`;
+const floodEmail = `zz-inondee-${suffix}@exemple.test`;
+const crowdEmail = `zz-sollicitee-${suffix}@exemple.test`;
+/** Prefix of an address's e-mail proofs in `verification` (hash only, as `src/db/team.ts`). */
+const proofKey = (email: string) => `email-proof:${createHash("sha256").update(email).digest("hex")}`;
 let school: string;
 let otherSchool: string;
 let diana: string;
@@ -52,7 +70,9 @@ afterAll(async () => {
   });
   await admin`DELETE FROM invitation WHERE school_id IN (${school}, ${otherSchool})`;
   await admin`DELETE FROM member WHERE school_id IN (${school}, ${otherSchool})`;
-  await admin`DELETE FROM "user" WHERE email IN (${emailDiana}, ${teacherEmail}, ${newMemberEmail})`; // sessions and accounts cascade
+  await admin`DELETE FROM verification WHERE identifier LIKE ${`${proofKey(ownerEmail)}:%`} OR identifier LIKE ${`${proofKey(floodEmail)}:%`} OR identifier LIKE ${`${proofKey(crowdEmail)}:%`}`;
+  // Sessions and accounts cascade.
+  await admin`DELETE FROM "user" WHERE email IN (${emailDiana}, ${teacherEmail}, ${newMemberEmail}, ${ownerEmail}, ${verifiedEmail}, ${floodEmail}, ${crowdEmail})`;
   await admin`DELETE FROM school WHERE id IN (${school}, ${otherSchool})`;
   await admin.end();
 });
@@ -359,5 +379,208 @@ describe("password reset", () => {
   it("another school sees neither the members nor the invitations of this one", async () => {
     expect((await withSchool(otherSchool, (tx) => listMembers(tx))).some((m) => m.email === emailDiana)).toBe(false);
     expect(await withSchool(otherSchool, (tx) => pendingInvitations(tx, new Date()))).toEqual([]);
+  });
+});
+
+describe("proof of e-mail ownership for an invitation (#179)", () => {
+  const outbox: EmailMessage[] = [];
+  const sender: EmailSender = {
+    async send(m) {
+      outbox.push(m);
+      return { ok: true };
+    },
+  };
+  const OLD = "le mot de passe choisi par un autre";
+  const NEW = "le mot de passe de la propriétaire";
+  let owner: string;
+  let token: string;
+
+  const invitationOf = async (email: string) => {
+    const r = await withSchool(school, (tx) =>
+      invite(tx, diana, { email, name: "Zz Propriétaire", role: "front_desk" }, new Date()),
+    );
+    if (!r.ok) throw new Error(r.message);
+    return r;
+  };
+  const codeOf = (m: EmailMessage) => {
+    const code = /\/verification\/([A-Za-z0-9_-]{43})$/m.exec(m.text)?.[1];
+    if (!code) throw new Error("pas de lien dans l’e-mail");
+    return code;
+  };
+
+  beforeAll(async () => {
+    // Created through an invitation of another school: whoever held that link chose the password.
+    owner = await createAccount({ email: ownerEmail, name: "Zz Créé Ailleurs", password: OLD, emailVerified: false });
+    await admin`INSERT INTO member (school_id, user_id, role) VALUES (${otherSchool}, ${owner}, 'front_desk')`;
+    await createAccount({ email: verifiedEmail, name: "Zz Vérifiée", password: PASSWORD });
+    ({ token } = await invitationOf(ownerEmail));
+  });
+
+  it("an unverified account proves its e-mail once e-mail can be sent; its password is no longer enough", async () => {
+    expect(await openLink(school, token, sender)).toMatchObject({ existingAccount: true, proof: "email" });
+    expect(await acceptLink(school, token, entry("", { currentPassword: OLD }), sender)).toMatchObject({
+      ok: false,
+      message: expect.stringMatching(/Confirmez d’abord votre adresse e-mail/),
+    });
+    expect(await member(ownerEmail)).toBeUndefined();
+  });
+
+  it("without an e-mail service, nothing changes: the password is asked (#105)", async () => {
+    expect(await openLink(school, token, null)).toMatchObject({ proof: "password" });
+    expect(await sendEmailProof(school, token, null)).toMatchObject({ ok: false });
+  });
+
+  it("a verified account and a new e-mail keep their proof, and get no e-mail", async () => {
+    const verified = await invitationOf(verifiedEmail);
+    expect(await openLink(school, verified.token, sender)).toMatchObject({ proof: "password" });
+    expect(await sendEmailProof(school, verified.token, sender)).toMatchObject({ ok: false });
+    const fresh = await invitationOf(freshEmail);
+    expect(await openLink(school, fresh.token, sender)).toMatchObject({ existingAccount: false, proof: "create" });
+    expect(await sendEmailProof(school, fresh.token, sender)).toMatchObject({ ok: false });
+    expect(outbox).toHaveLength(0);
+  });
+
+  it("e-mails the invited address only, spaced out, keeping only the code's hash", async () => {
+    expect(await sendEmailProof(school, token, sender)).toEqual({ ok: true });
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]).toMatchObject({
+      to: ownerEmail,
+      subject: "Confirmez votre adresse e-mail pour rejoindre École A",
+    });
+    expect(outbox[0].text).toContain(`/invitation/${school}/${token}/verification/`);
+    const code = codeOf(outbox[0]);
+    const [row] =
+      await admin`SELECT email_code_hash FROM invitation WHERE school_id = ${school} AND email_code_hash IS NOT NULL`;
+    expect(row.email_code_hash).not.toContain(code);
+    expect(await sendEmailProof(school, token, sender)).toMatchObject({
+      ok: false,
+      tooSoon: true,
+      message: expect.stringMatching(/réessayez dans 2 minutes\.$/),
+    });
+    expect(outbox).toHaveLength(1);
+  });
+
+  it("spaces the e-mails per address: re-inviting does not reset the count, at most five a day", async () => {
+    await createAccount({ email: floodEmail, name: "Zz Inondée", password: OLD, emailVerified: false });
+    const t0 = Date.now();
+    const at = (min: number) => new Date(t0 + min * 60_000);
+    const first = await invitationOf(floodEmail);
+    expect(await sendEmailProof(school, first.token, sender, at(0))).toEqual({ ok: true });
+    // A new invitation of the same address: a fresh row, but the address waits all the same.
+    const again = await invitationOf(floodEmail);
+    expect(await sendEmailProof(school, again.token, sender, at(1))).toMatchObject({ ok: false, tooSoon: true });
+    for (const min of [3, 6, 9, 12])
+      expect(await sendEmailProof(school, again.token, sender, at(min))).toEqual({ ok: true });
+    expect(await sendEmailProof(school, again.token, sender, at(15))).toMatchObject({
+      ok: false,
+      message: expect.stringMatching(/réessayez dans 24 heures\.$/),
+    });
+    // The count keeps only a hash of the address.
+    const rows = await admin`SELECT identifier FROM verification WHERE identifier LIKE 'email-proof:%'`;
+    expect(rows.some((r) => r.identifier.includes(floodEmail))).toBe(false);
+    expect(outbox.filter((m) => m.to === floodEmail)).toHaveLength(5);
+    // Another school's invitation of the same address is not held back by this school's e-mails.
+    const elsewhere = await withSchool(otherSchool, (tx) =>
+      invite(tx, teacher, { email: floodEmail, name: "Zz Inondée", role: "front_desk" }, at(16)),
+    );
+    if (!elsewhere.ok) throw new Error(elsewhere.message);
+    expect(await sendEmailProof(otherSchool, elsewhere.token, sender, at(16))).toEqual({ ok: true });
+    outbox.splice(0, outbox.length, ...outbox.filter((m) => m.to !== floodEmail));
+  });
+
+  it("a school's first e-mail to an address goes even when other schools filled the shared ceiling", async () => {
+    await createAccount({ email: crowdEmail, name: "Zz Sollicitée", password: OLD, emailVerified: false });
+    // Twenty e-mails sent to this address within the day by other schools (the shared ceiling).
+    for (let i = 0; i < EMAIL_PROOF_ADDRESS_DAILY_MAX; i++) {
+      const otherKey = `${proofKey(crowdEmail)}:${randomUUID()}`;
+      await admin`INSERT INTO verification (id, identifier, value, expires_at, created_at, updated_at)
+        VALUES (${randomUUID()}, ${otherKey}, ${`v${i}`}, now() + interval '23 hours', now() - interval '1 hour', now())`;
+    }
+    const r = await withSchool(otherSchool, (tx) =>
+      invite(tx, teacher, { email: crowdEmail, name: "Zz Sollicitée", role: "front_desk" }, new Date()),
+    );
+    if (!r.ok) throw new Error(r.message);
+    expect(await sendEmailProof(otherSchool, r.token, sender)).toEqual({ ok: true });
+    // Its second one, once spaced out, meets the shared ceiling.
+    expect(await sendEmailProof(otherSchool, r.token, sender, new Date(Date.now() + 3 * 60_000))).toMatchObject({
+      ok: false,
+      tooSoon: true,
+    });
+    outbox.splice(0, outbox.length, ...outbox.filter((m) => m.to !== crowdEmail));
+  });
+
+  it("a failed send withdraws its code: another one may go right away", async () => {
+    const failing: EmailSender = { send: async () => ({ ok: false, reason: "unavailable" }) };
+    const later = new Date(Date.now() + 3 * 60_000);
+    expect(await sendEmailProof(school, token, failing, later)).toEqual({
+      ok: false,
+      message: "L’e-mail n’a pas pu partir. Réessayez dans quelques minutes.",
+    });
+    // The previous code was replaced, and the failed one is gone.
+    expect(await openEmailProof(school, token, codeOf(outbox[0]))).toBeNull();
+    expect(await sendEmailProof(school, token, sender, later)).toEqual({ ok: true });
+    expect(outbox).toHaveLength(2);
+  });
+
+  it("a wrong, foreign or expired code opens nothing", async () => {
+    const code = codeOf(outbox[1]);
+    expect(await openEmailProof(school, token, "x".repeat(43))).toBeNull();
+    expect(await openEmailProof(school, token, "court")).toBeNull();
+    expect(await openEmailProof(otherSchool, token, code)).toBeNull();
+    // Sent more than an hour ago.
+    await admin`UPDATE invitation SET email_code_sent_at = now() - interval '61 minutes' WHERE school_id = ${school} AND email_code_hash IS NOT NULL`;
+    expect(await openEmailProof(school, token, code)).toBeNull();
+    expect(await acceptEmailProof(school, token, code, { password: NEW, confirmation: NEW })).toMatchObject({
+      ok: false,
+    });
+    // Marking the link checks the code again, in its own transaction: expired or replaced in between, nothing is used.
+    const link = await withSchool(school, (tx) => readRelationship(tx, token, new Date()));
+    if (!link) throw new Error("lien introuvable");
+    await connect(ownerEmail, OLD);
+    const credentials = { passwordHash: "pas-un-vrai-hachage", verifiedEmail: true };
+    expect(await withSchool(school, (tx) => consumeLink(tx, link, owner, { code, now: new Date() }, credentials))).toBe(
+      "expired",
+    );
+    await admin`UPDATE invitation SET email_code_sent_at = now() WHERE school_id = ${school} AND email_code_hash IS NOT NULL`;
+    expect(
+      await withSchool(school, (tx) =>
+        consumeLink(tx, link, owner, { code: "y".repeat(43), now: new Date() }, credentials),
+      ),
+    ).toBe("expired");
+    // Refused: nothing written, neither the link, the membership, the password, the e-mail nor the sessions.
+    const [{ used_at }] = await admin`SELECT used_at FROM invitation WHERE id = ${link.id}`;
+    expect(used_at).toBeNull();
+    expect(await member(ownerEmail)).toBeUndefined();
+    const [{ email_verified }] = await admin`SELECT email_verified FROM "user" WHERE id = ${owner}`;
+    expect(email_verified).toBe(false);
+    const [{ n }] = await admin`SELECT count(*)::int AS n FROM session WHERE user_id = ${owner}`;
+    expect(n).toBeGreaterThan(0);
+    await expect(connect(ownerEmail, OLD)).resolves.toBeTruthy();
+    await admin`UPDATE invitation SET email_code_sent_at = now() WHERE school_id = ${school} AND email_code_hash IS NOT NULL`;
+    expect(await openEmailProof(school, token, code)).toMatchObject({ email: ownerEmail, school: "École A" });
+  });
+
+  it("the owner takes the account back: new password, e-mail verified, sessions closed, school joined, code used once", async () => {
+    const code = codeOf(outbox[1]);
+    await connect(ownerEmail, OLD); // whoever chose the password is signed in
+    expect(await acceptEmailProof(school, token, code, { password: "court", confirmation: "court" })).toMatchObject({
+      ok: false,
+    });
+    expect(await acceptEmailProof(school, token, code, { password: NEW, confirmation: NEW })).toEqual({
+      ok: true,
+      type: "invitation",
+      email: ownerEmail,
+    });
+    const [{ n }] = await admin`SELECT count(*)::int AS n FROM session WHERE user_id = ${owner}`;
+    expect(n).toBe(0);
+    const [{ email_verified }] = await admin`SELECT email_verified FROM "user" WHERE id = ${owner}`;
+    expect(email_verified).toBe(true);
+    await expect(connect(ownerEmail, OLD)).rejects.toThrow();
+    await expect(connect(ownerEmail, NEW)).resolves.toBeTruthy();
+    expect(await member(ownerEmail)).toMatchObject({ role: "front_desk", active: true });
+    expect(await openEmailProof(school, token, code)).toBeNull();
+    expect(await acceptEmailProof(school, token, code, { password: NEW, confirmation: NEW })).toMatchObject({
+      ok: false,
+    });
   });
 });
