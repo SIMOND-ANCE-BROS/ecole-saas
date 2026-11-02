@@ -82,7 +82,7 @@ variables at the top of `src/app/globals.css`. Decision: ADR 0003.
   list header stays dense, and grows to 44 px at phone width or on a touch
   screen (`globals.css`, #396).
 - Exception: the « × » of a choice in a multiple select (`MultiSelect`, e.g.
-  « Sites fermés ») keeps Mantine's 24 × 22 px, about the WCAG minimum (24 px); a larger box
+  « Sites fermés ») keeps Mantine's 24 × 22 px, which passes WCAG 2.5.8 by its spacing exception; a larger box
   would make the field taller or catch clicks meant for the field. The same
   choice is removed by clicking it again in the open list (34 px rows) or with
   Backspace.

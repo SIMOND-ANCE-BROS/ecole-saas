@@ -118,7 +118,9 @@ body {
  * Text buttons (#396): link buttons (`Anchor component="button"`) and the list header's buttons
  * (`.hit-target`, list-table.tsx). With a mouse, an invisible box centred on the button takes the
  * clicks over 32 px, so the dense list header and the lines of text keep their height. At phone
- * width or on a touch screen, the button itself grows to 44 px.
+ * width or on a touch screen, the button itself grows to 44 px. Unlayered, like the rules above, so
+ * it beats Mantine and the Tailwind classes of these buttons (`min-w-0`, `min-w-8`). It needs Mantine's
+ * static class names (`mantine-Anchor-root`), on by default: never turn `withStaticClasses` off.
  */
 button.mantine-Anchor-root,
 .hit-target {
@@ -143,6 +145,7 @@ button.mantine-Anchor-root::after,
   button.mantine-Anchor-root {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
   }
 }
 

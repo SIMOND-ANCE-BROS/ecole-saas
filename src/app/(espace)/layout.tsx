@@ -61,7 +61,7 @@ export default async function WorkspaceLayout({ children, modal }: LayoutProps<"
             <TextLink href="/ecoles" size="xs" px={4} className="self-start">
               Changer d’école
             </TextLink>
-            <form action={signOut}>
+            <form action={signOut} className="mt-1">
               <Anchor component="button" type="submit" size="xs" px={4}>
                 Se déconnecter
               </Anchor>

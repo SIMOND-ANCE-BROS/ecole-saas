@@ -432,7 +432,7 @@ export function ListTable<Id extends string>({
                       Toutes les colonnes sont affichées.
                     </Text>
                   ) : (
-                    <ul className="flex flex-col gap-1">
+                    <ul className="flex flex-col gap-2">
                       {masquees.map((c) => (
                         <li key={c.id}>
                           <Anchor
