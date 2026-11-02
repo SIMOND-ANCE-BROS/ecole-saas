@@ -61,13 +61,44 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
-/* Touch screen: targets of at least 44 px, without changing the mouse density (DESIGN.md). */
-@media (pointer: coarse) {
-  .mantine-Button-root,
+/*
+ * Click targets (DESIGN.md, #372): at least 32 px with a mouse, 44 px on phones and touch screens.
+ * The small Mantine sizes of row actions (`compact-xs` 22 px, `compact-sm` 26 px, `xs` 30 px) are
+ * raised through their size variables, so a row action keeps its compact padding and font: only
+ * its height grows, and its label stays centred (a `min-height` would leave it at the top).
+ */
+.mantine-Button-root {
+  --button-height-xs: 2rem;
+  --button-height-compact-xs: 2rem;
+  --button-height-compact-sm: 2rem;
+  --button-height-compact-md: 2rem;
+}
+.mantine-ActionIcon-root {
+  --ai-size-xs: 2rem;
+  --ai-size-sm: 2rem;
+  --ai-size-md: 2rem;
+}
+/* Phone width (Tailwind `max-sm`) or a touch screen. */
+@media (pointer: coarse), (width < 40rem) {
+  .mantine-Button-root {
+    --button-height-xs: 2.75rem;
+    --button-height-sm: 2.75rem;
+    --button-height-compact-xs: 2.75rem;
+    --button-height-compact-sm: 2.75rem;
+    --button-height-compact-md: 2.75rem;
+    --button-height-compact-lg: 2.75rem;
+  }
+  .mantine-ActionIcon-root {
+    --ai-size-xs: 2.75rem;
+    --ai-size-sm: 2.75rem;
+    --ai-size-md: 2.75rem;
+    --ai-size-lg: 2.75rem;
+    --ai-size-input-xs: 2.75rem;
+    --ai-size-input-sm: 2.75rem;
+  }
   .mantine-Input-input {
     min-height: 2.75rem;
   }
-  .mantine-ActionIcon-root,
   .mantine-CloseButton-root {
     min-width: 2.75rem;
     min-height: 2.75rem;

@@ -169,6 +169,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
             size="compact-sm"
             variant="subtle"
             disabled={inProgress}
+            aria-label={`Créer un lien de mot de passe pour ${m.name}`}
             onClick={() => withLink("members", () => resetPassword(m.id), "reset", m.name)}
           >
             Créer un lien de mot de passe
@@ -179,6 +180,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
           variant="subtle"
           color={m.active ? "red" : undefined}
           disabled={inProgress}
+          aria-label={`${m.active ? "Désactiver" : "Réactiver"} ${m.name}…`}
           onClick={() => askActive(m)}
         >
           {m.active ? "Désactiver…" : "Réactiver…"}
@@ -344,6 +346,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
                   color="red"
                   className="ml-auto"
                   disabled={inProgress}
+                  aria-label={`Révoquer l’invitation de ${i.name ?? i.email}…`}
                   onClick={() => askRevoke(i)}
                 >
                   Révoquer…

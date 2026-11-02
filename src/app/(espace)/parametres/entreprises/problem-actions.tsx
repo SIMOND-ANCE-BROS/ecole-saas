@@ -75,6 +75,7 @@ export function ProblemActions({ invoiceId, inTool, payer }: { invoiceId: string
           variant="light"
           aria-disabled={busy || undefined}
           rightSection={busy ? <Loader size="xs" /> : null}
+          aria-label={`Envoyer à nouveau la facture de ${payer}`}
           onClick={() => !busy && run(() => sendAgain(invoiceId))}
         >
           Envoyer à nouveau
@@ -84,6 +85,7 @@ export function ProblemActions({ invoiceId, inTool, payer }: { invoiceId: string
           variant="subtle"
           color="red"
           aria-disabled={busy || undefined}
+          aria-label={`Abandonner la facture de ${payer}…`}
           onClick={() => !busy && setAsking(true)}
         >
           Abandonner
