@@ -44,7 +44,7 @@ export function RulesTexts({ seasons }: { seasons: SeasonRules[] }) {
     return (
       <Text size="sm" c="dimmed">
         Aucune saison pour l’instant :{" "}
-        <TextLink href="/parametres/saisons" size="sm" inherit>
+        <TextLink href="/parametres/saisons" size="sm" inherit className="inline-link">
           créer la saison
         </TextLink>
         .

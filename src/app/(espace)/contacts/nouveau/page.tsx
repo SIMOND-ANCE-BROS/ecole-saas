@@ -26,7 +26,7 @@ export default async function NewContactPage() {
       </Title>
       <Text size="sm" c="dimmed">
         Pour un élève et son parent, utilisez plutôt{" "}
-        <TextLink href="/eleves/nouveau" size="sm" inherit>
+        <TextLink href="/eleves/nouveau" size="sm" inherit className="inline-link">
           « Nouvel élève »
         </TextLink>{" "}
         : le parent y est créé dans la foulée.

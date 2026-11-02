@@ -365,7 +365,11 @@ export function CourseForm({
           description={
             r.instructors.length === 0 ? (
               <>
-                Aucun intervenant actif : <TextLink href="/intervenants/nouveau">en ajouter un</TextLink>.
+                Aucun intervenant actif :{" "}
+                <TextLink href="/intervenants/nouveau" className="inline-link">
+                  en ajouter un
+                </TextLink>
+                .
               </>
             ) : undefined
           }

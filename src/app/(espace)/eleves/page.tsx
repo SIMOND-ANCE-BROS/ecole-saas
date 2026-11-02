@@ -172,7 +172,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/eleves"
             {contactCount > contacts.length && (
               <Text size="sm" c="dimmed">
                 Les {contacts.length} premiers sur {contactCount} :{" "}
-                <TextLink href={`/contacts?q=${encodeURIComponent(entry)}`} size="sm" inherit>
+                <TextLink href={`/contacts?q=${encodeURIComponent(entry)}`} size="sm" inherit className="inline-link">
                   voir tous les contacts pour « {entry} »
                 </TextLink>
                 .

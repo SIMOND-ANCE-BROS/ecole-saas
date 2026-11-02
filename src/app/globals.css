@@ -115,18 +115,20 @@ body {
   }
 }
 /*
- * Text buttons (#396): link buttons (`Anchor component="button"`) and the list header's buttons
- * (`.hit-target`, list-table.tsx). With a mouse, an invisible box centred on the button takes the
- * clicks over 32 px, so the dense list header and the lines of text keep their height. At phone
- * width or on a touch screen, the button itself grows to 44 px. Unlayered, like the rules above, so
- * it beats Mantine and the Tailwind classes of these buttons (`min-w-0`, `min-w-8`). It needs Mantine's
- * static class names (`mantine-Anchor-root`), on by default: never turn `withStaticClasses` off.
+ * Text buttons and plain links (#396, #403): link buttons (`Anchor component="button"`), links
+ * (`Anchor href`, `TextLink`) and the list header's buttons (`.hit-target`, list-table.tsx). With a
+ * mouse, an invisible box centred on the target takes the clicks over 32 px, so dense list rows, the
+ * list header and the lines of text keep their height. At phone width or on a touch screen, the
+ * target itself grows to 44 px. A link inside a sentence carries `inline-link` and keeps its line
+ * (WCAG 2.5.8 inline exception, DESIGN.md). Unlayered, like the rules above, so it beats Mantine and
+ * the Tailwind classes of these targets (`min-w-0`, `min-w-8`). It needs Mantine's static class names
+ * (`mantine-Anchor-root`), on by default: never turn `withStaticClasses` off.
  */
-button.mantine-Anchor-root,
+.mantine-Anchor-root:not(.inline-link),
 .hit-target {
   position: relative;
 }
-button.mantine-Anchor-root::after,
+.mantine-Anchor-root:not(.inline-link)::after,
 .hit-target::after {
   content: "";
   position: absolute;
@@ -137,12 +139,12 @@ button.mantine-Anchor-root::after,
   translate: -50% -50%;
 }
 @media (pointer: coarse), (width < 40rem) {
-  button.mantine-Anchor-root,
+  .mantine-Anchor-root:not(.inline-link),
   .hit-target {
     min-width: 2.75rem;
     min-height: 2.75rem;
   }
-  button.mantine-Anchor-root {
+  .mantine-Anchor-root:not(.inline-link) {
     display: inline-flex;
     align-items: center;
     justify-content: center;

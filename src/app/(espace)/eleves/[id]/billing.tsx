@@ -160,7 +160,7 @@ export function Billing({
           {siblings.map((f, i) => (
             <span key={f.id}>
               {i > 0 && ", "}
-              <Anchor component={Link} href={`/eleves/${f.id}`} inherit>
+              <Anchor component={Link} href={`/eleves/${f.id}`} inherit className="inline-link">
                 {f.firstName}
               </Anchor>
             </span>

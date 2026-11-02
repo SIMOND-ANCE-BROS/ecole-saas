@@ -23,7 +23,7 @@ function SignupLine({ signup, personId }: { signup: SignupRow; personId: string 
           {signup.payerId !== personId && (
             <>
               {" · Facturé à "}
-              <TextLink href={`/personnes/${signup.payerId}`} size="xs" inherit>
+              <TextLink href={`/personnes/${signup.payerId}`} size="xs" inherit className="inline-link">
                 {signup.payer}
               </TextLink>
             </>

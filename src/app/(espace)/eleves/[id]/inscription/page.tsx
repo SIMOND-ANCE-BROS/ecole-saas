@@ -93,7 +93,7 @@ export default async function EnrollmentPage({ params }: PageProps<"/eleves/[id]
       ) : !payerId ? (
         <Text size="sm">
           {student.firstName ?? name} est mineur et n’a pas de payeur.{" "}
-          <TextLink href={`/eleves/${student.id}`} size="sm" inherit>
+          <TextLink href={`/eleves/${student.id}`} size="sm" inherit className="inline-link">
             Indiquez à qui facturer sur sa fiche
           </TextLink>
           .
