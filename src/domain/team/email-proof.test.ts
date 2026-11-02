@@ -3,6 +3,7 @@ import {
   EMAIL_PROOF_DURATION_MS,
   EMAIL_PROOF_RESEND_MS,
   EMAIL_PROOF_DAILY_MAX,
+  EMAIL_PROOF_ADDRESS_DAILY_MAX,
   EMAIL_PROOF_DURATION_TEXT,
   addressWait,
   retryIn,
@@ -53,19 +54,33 @@ describe("addressWait", () => {
   const now = new Date("2026-11-02T10:00:00Z");
   const ago = (min: number) => new Date(now.getTime() - min * 60_000);
 
-  it("spaces the e-mails of an address by two minutes, whatever the invitation", () => {
-    expect(addressWait([], now)).toBe(0);
-    expect(addressWait([ago(60), ago(1)], now)).toBe(60);
-    expect(addressWait([ago(3)], now)).toBe(0);
+  const own = (school: Date[]) => ({ school, all: school });
+
+  it("spaces a school's e-mails to an address by two minutes, whatever the invitation", () => {
+    expect(addressWait(own([]), now)).toBe(0);
+    expect(addressWait(own([ago(60), ago(1)]), now)).toBe(60);
+    expect(addressWait(own([ago(3)]), now)).toBe(0);
   });
 
-  it("no more than five in 24 hours, then waits for the oldest to be a day old", () => {
+  it("no more than five a day from one school, then waits for the oldest to be a day old", () => {
     const five = [ago(600), ago(500), ago(400), ago(300), ago(200)];
     expect(five).toHaveLength(EMAIL_PROOF_DAILY_MAX);
-    expect(addressWait(five, now)).toBe((24 * 60 - 600) * 60);
-    expect(addressWait(five.slice(1), now)).toBe(0);
+    expect(addressWait(own(five), now)).toBe((24 * 60 - 600) * 60);
+    expect(addressWait(own(five.slice(1)), now)).toBe(0);
     // Older than a day: not counted.
-    expect(addressWait([ago(25 * 60), ...five.slice(1)], now)).toBe(0);
+    expect(addressWait(own([ago(25 * 60), ...five.slice(1)]), now)).toBe(0);
+  });
+
+  it("another school's e-mails neither space out nor use up this school's share", () => {
+    const five = [ago(600), ago(500), ago(400), ago(300), ago(1)];
+    expect(addressWait({ school: [], all: five }, now)).toBe(0);
+  });
+
+  it("all schools together: a ceiling far above one school's share", () => {
+    const many = Array.from({ length: EMAIL_PROOF_ADDRESS_DAILY_MAX }, (_, i) => ago(1000 - i * 10));
+    expect(EMAIL_PROOF_ADDRESS_DAILY_MAX).toBeGreaterThanOrEqual(3 * EMAIL_PROOF_DAILY_MAX);
+    expect(addressWait({ school: [], all: many }, now)).toBe((24 * 60 - 1000) * 60);
+    expect(addressWait({ school: [], all: many.slice(1) }, now)).toBe(0);
   });
 });
 

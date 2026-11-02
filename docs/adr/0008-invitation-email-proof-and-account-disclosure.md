@@ -43,11 +43,15 @@ is used somewhere in the SaaS, though not in which school.
   e-mail proof of one account run one after the other. Whoever chose the old
   password never reaches the new school with it, not even for an instant or
   after a failed step.
-- **E-mails are spaced out per address**, all schools and invitations
-  together: two minutes apart, at most five in 24 hours (`addressWait`).
-  Re-inviting the same address does not reset the count. Each e-mail leaves a
-  row in Better Auth's global `verification` table for 24 hours, keyed by a
-  SHA-256 hash of the address, never the address itself.
+- **E-mails are spaced out per address and school**, all invitations of the
+  school together: two minutes apart, at most five in 24 hours; all schools
+  together, at most twenty, a ceiling against floods only (`addressWait`).
+  Re-inviting the same address does not reset the count, and one school
+  cannot use up the share of another school inviting the same person. Each
+  e-mail leaves a row in Better Auth's global `verification` table for 24
+  hours, keyed by a SHA-256 hash of the address and the school id, never the
+  address itself; rows past their 24 hours are deleted on the next request
+  for that address.
 - **One interface for sending e-mail**, `EmailSender` in
   `src/connectors/email/`. No provider is chosen (#105, blocked): until one is,
   `emailSender()` returns null and an unverified account keeps confirming its
@@ -90,8 +94,12 @@ is used somewhere in the SaaS, though not in which school.
   director chose). The owner can no longer be impersonated there, but may not
   know of it; showing the owner their schools after a take-back is follow-up
   work.
-- Expired rows of the address count stay in `verification` until cleaned;
-  they hold no address, only its hash.
+- Several schools under one person's control could still reach the
+  twenty-a-day ceiling of an address and delay its other invitations by up to
+  a day; nothing leaks.
+- An unsalted hash of an address is still personal data: expired rows go
+  when the address is next sent an e-mail; rows of an address never sent one
+  again stay until a global cleanup exists (follow-up).
 - #105 brings the provider (timeout, bounded retries, structured error, no
   personal data in logs), then can e-mail invitations directly to the invited
   address, without showing the link to the director, and mark the address

@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { and, asc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, like, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { EMAIL_PROOF_DURATION_MS, EMAIL_PROOF_RESEND_MS, addressWait, resendWait } from "../domain/team/email-proof";
 import { changeRefusal, INVITABLE_ROLES, ROLE_VALUES, type Role } from "../domain/team/rules";
@@ -348,17 +348,25 @@ export async function newEmailCode(
   now: Date,
 ): Promise<{ ok: true; code: string } | { ok: false; wait: number } | null> {
   if (link.type !== "invitation") return null;
-  // Spaced out per address, all schools and invitations together (`addressWait`): re-inviting
-  // the same address does not reset the count. Global table, no RLS: only a hash of the
-  // address is kept, one row per e-mail for 24 hours. The lock serialises two requests.
-  const sentTo = emailProofKey(link.email);
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${sentTo}))`);
+  // Spaced out per address and school (`addressWait`): re-inviting the same address does not
+  // reset the count, and one school cannot use up another's share; a far higher ceiling holds
+  // for all schools together. Global table, no RLS: only a hash of the address is kept, one row
+  // per e-mail for 24 hours. The lock (per address) serialises two requests.
+  const [own] = await tx.select({ schoolId: invitation.schoolId }).from(invitation).where(eq(invitation.id, link.id));
+  if (!own) return null;
+  const address = emailProofAddress(link.email);
+  const sentTo = emailProofKey(link.email, own.schoolId);
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${address}))`);
+  // A hash of an address is still personal data: rows past their 24 hours go.
+  await tx
+    .delete(verification)
+    .where(and(like(verification.identifier, `${address}:%`), lte(verification.expiresAt, now)));
   const sent = await tx
-    .select({ at: verification.createdAt })
+    .select({ identifier: verification.identifier, at: verification.createdAt })
     .from(verification)
-    .where(and(eq(verification.identifier, sentTo), gt(verification.expiresAt, now)));
+    .where(and(like(verification.identifier, `${address}:%`), gt(verification.expiresAt, now)));
   const wait = addressWait(
-    sent.map((s) => s.at),
+    { school: sent.filter((s) => s.identifier === sentTo).map((s) => s.at), all: sent.map((s) => s.at) },
     now,
   );
   if (wait > 0) return { ok: false, wait };
@@ -399,8 +407,10 @@ export async function newEmailCode(
   return left > 0 ? { ok: false, wait: left } : null;
 }
 
-/** Key of an address's e-mail proofs in `verification`: never the address itself. */
-const emailProofKey = (email: string) => `email-proof:${hash(email.trim().toLowerCase())}`;
+/** Prefix of an address's e-mail proofs in `verification`: a hash, never the address itself. */
+const emailProofAddress = (email: string) => `email-proof:${hash(email.trim().toLowerCase())}`;
+/** Key of the e-mail proofs one school sent to an address. */
+const emailProofKey = (email: string, schoolId: string) => `${emailProofAddress(email)}:${schoolId}`;
 
 /** Withdraws a code that could not be e-mailed, so another one may be sent right away. */
 export async function dropEmailCode(tx: Tx, link: OpenedLink, code: string): Promise<void> {
@@ -410,7 +420,9 @@ export async function dropEmailCode(tx: Tx, link: OpenedLink, code: string): Pro
     .where(and(eq(invitation.id, link.id), eq(invitation.emailCodeHash, hash(code))));
   await tx
     .delete(verification)
-    .where(and(eq(verification.identifier, emailProofKey(link.email)), eq(verification.value, hash(code))));
+    .where(
+      and(like(verification.identifier, `${emailProofAddress(link.email)}:%`), eq(verification.value, hash(code))),
+    );
 }
 
 /** Condition: `code` is the invitation's last e-mailed code, still valid at `now`. */

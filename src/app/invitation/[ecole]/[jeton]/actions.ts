@@ -45,7 +45,7 @@ export type ProofRequestState = { error: string | null; notice: string | null; s
 /**
  * E-mails the invited address a link proving it is theirs (#179). Only the
  * address of the invitation receives it: whoever holds the invitation link
- * cannot pick another one. Resending is spaced out per address (`addressWait`):
+ * cannot pick another one. Resending is spaced out per address and school (`addressWait`):
  * a refusal for that keeps what was already sent on screen, as a notice.
  */
 export async function requestEmailProof(

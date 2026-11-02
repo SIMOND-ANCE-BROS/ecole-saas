@@ -435,6 +435,13 @@
       "when": 1793596185828,
       "tag": "0061_calendar_sync_claim",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1793599900751,
+      "tag": "0062_invitation_email_proof",
+      "breakpoints": true
     }
   ]
 }

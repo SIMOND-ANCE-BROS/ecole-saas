@@ -36,7 +36,7 @@ const ownerEmail = `zz-proprietaire-${suffix}@exemple.test`;
 const verifiedEmail = `zz-verifiee-${suffix}@exemple.test`;
 const freshEmail = `zz-nouvelle-${suffix}@exemple.test`;
 const floodEmail = `zz-inondee-${suffix}@exemple.test`;
-/** Key of an address's e-mail proofs in `verification` (hash only, as `src/db/team.ts`). */
+/** Prefix of an address's e-mail proofs in `verification` (hash only, as `src/db/team.ts`). */
 const proofKey = (email: string) => `email-proof:${createHash("sha256").update(email).digest("hex")}`;
 let school: string;
 let otherSchool: string;
@@ -68,7 +68,7 @@ afterAll(async () => {
   });
   await admin`DELETE FROM invitation WHERE school_id IN (${school}, ${otherSchool})`;
   await admin`DELETE FROM member WHERE school_id IN (${school}, ${otherSchool})`;
-  await admin`DELETE FROM verification WHERE identifier IN (${proofKey(ownerEmail)}, ${proofKey(floodEmail)})`;
+  await admin`DELETE FROM verification WHERE identifier LIKE ${`${proofKey(ownerEmail)}:%`} OR identifier LIKE ${`${proofKey(floodEmail)}:%`}`;
   // Sessions and accounts cascade.
   await admin`DELETE FROM "user" WHERE email IN (${emailDiana}, ${teacherEmail}, ${newMemberEmail}, ${ownerEmail}, ${verifiedEmail}, ${floodEmail})`;
   await admin`DELETE FROM school WHERE id IN (${school}, ${otherSchool})`;
@@ -477,6 +477,12 @@ describe("proof of e-mail ownership for an invitation (#179)", () => {
     const rows = await admin`SELECT identifier FROM verification WHERE identifier LIKE 'email-proof:%'`;
     expect(rows.some((r) => r.identifier.includes(floodEmail))).toBe(false);
     expect(outbox.filter((m) => m.to === floodEmail)).toHaveLength(5);
+    // Another school's invitation of the same address is not held back by this school's e-mails.
+    const elsewhere = await withSchool(otherSchool, (tx) =>
+      invite(tx, teacher, { email: floodEmail, name: "Zz Inondée", role: "front_desk" }, at(16)),
+    );
+    if (!elsewhere.ok) throw new Error(elsewhere.message);
+    expect(await sendEmailProof(otherSchool, elsewhere.token, sender, at(16))).toEqual({ ok: true });
     outbox.splice(0, outbox.length, ...outbox.filter((m) => m.to !== floodEmail));
   });
 

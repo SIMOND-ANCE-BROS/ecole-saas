@@ -38,25 +38,37 @@ export function resendWait(lastSentAt: Date | null, now: Date): number {
 }
 
 /**
- * Most e-mails an address receives in 24 hours, all schools and invitations
- * together: re-inviting the same address must not let anyone flood it.
+ * Most e-mails an address receives in 24 hours from one school, all its
+ * invitations together: re-inviting the same address must not let a school
+ * flood it. Counted per school, so one school cannot use up another's.
  */
 export const EMAIL_PROOF_DAILY_MAX = 5;
+/** Ceiling for an address, all schools together: far above one school's share, against floods only. */
+export const EMAIL_PROOF_ADDRESS_DAILY_MAX = 20;
 const DAY_MS = 24 * 60 * 60_000;
 
-/**
- * Seconds left before the address may receive another e-mail (0: now), from
- * the times it received one: two minutes after the last, and no more than
- * `EMAIL_PROOF_DAILY_MAX` in 24 hours.
- */
-export function addressWait(sentAts: readonly Date[], now: Date): number {
+/** Seconds until fewer than `max` of `sentAts` fall in the last 24 hours (0: already). */
+function capWait(sentAts: readonly Date[], max: number, now: Date): number {
   const recent = sentAts.filter((d) => d.getTime() > now.getTime() - DAY_MS).sort((a, b) => a.getTime() - b.getTime());
-  const last = recent.at(-1) ?? null;
-  const spacing = resendWait(last, now);
-  if (recent.length < EMAIL_PROOF_DAILY_MAX) return spacing;
+  if (recent.length < max) return 0;
   // Once the oldest counted e-mail is a day old, one more may go.
-  const oldest = recent[recent.length - EMAIL_PROOF_DAILY_MAX];
-  return Math.max(spacing, Math.ceil((oldest.getTime() + DAY_MS - now.getTime()) / 1000));
+  const oldest = recent[recent.length - max];
+  return Math.ceil((oldest.getTime() + DAY_MS - now.getTime()) / 1000);
+}
+
+/**
+ * Seconds left before an address may receive another e-mail from a school (0:
+ * now), from the times it received one: from this school, two minutes after
+ * the last and no more than `EMAIL_PROOF_DAILY_MAX` in 24 hours; from all
+ * schools, no more than `EMAIL_PROOF_ADDRESS_DAILY_MAX`.
+ */
+export function addressWait(sent: { school: readonly Date[]; all: readonly Date[] }, now: Date): number {
+  const last = [...sent.school].sort((a, b) => a.getTime() - b.getTime()).at(-1) ?? null;
+  return Math.max(
+    resendWait(last, now),
+    capWait(sent.school, EMAIL_PROOF_DAILY_MAX, now),
+    capWait(sent.all, EMAIL_PROOF_ADDRESS_DAILY_MAX, now),
+  );
 }
 
 /** « dans 2 minutes », « dans 3 heures »: a wait said in words, rounded up. */
