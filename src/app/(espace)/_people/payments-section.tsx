@@ -60,7 +60,7 @@ const cashing = (p: PaymentRow, today: string) =>
         : "encaissé";
 
 /**
- * A payment row as a screen reader tells it apart: « du 01/10/2026 (Chèque, 120,00 €, n° 1234567) » (#372).
+ * A payment row as a screen reader tells it apart: « du 01/10/2026 (Chèque, 120,00 €, 0001234) » (#372).
  * The reference parts the cheques of a same amount handed over the same day.
  */
 const subjectOf = (p: PaymentRow) =>
