@@ -1,5 +1,5 @@
 import { type EmailSender, emailSender } from "../connectors/email/sender";
-import { withSchool } from "../db";
+import { schoolsOf, withSchool } from "../db";
 import {
   type OpenedLink,
   resetLink,
@@ -11,7 +11,7 @@ import {
   emailCodeValid,
 } from "../db/team";
 import { type JoinProof, emailProofMessage, joinProof, retryIn } from "../domain/team/email-proof";
-import { passwordRefusal } from "../domain/team/rules";
+import { type Role, passwordRefusal } from "../domain/team/rules";
 import { auth } from "./auth";
 import { createAccount } from "./accounts";
 import { publicAddress } from "./public-calendar";
@@ -25,6 +25,12 @@ import { publicAddress } from "./public-calendar";
 
 export type LinkInput = { name: string; password: string; confirmation: string; currentPassword: string };
 export type LinkResult = { ok: true; type: OpenedLink["type"]; email: string } | { ok: false; message: string };
+
+/** A school the account belongs to, as shown to its owner after a take-back (#404). */
+export type AccountSchool = { name: string; role: Role };
+/** `school`: the school just joined; `schools`: all of the account's (empty if they could not be read). */
+export type ProofResult =
+  { ok: true; email: string; school: string; schools: AccountSchool[] } | { ok: false; message: string };
 
 const EXPIRED =
   "Ce lien n’est plus valable (déjà utilisé, révoqué ou expiré). Demandez-en un nouveau à la direction de l’école.";
@@ -106,14 +112,16 @@ export type ProofInput = { password: string; confirmation: string };
  * The owner of the invited e-mail, proven by the e-mailed code (#179), joins
  * the school with their account: they choose its password, the e-mail is
  * marked verified and every open session closes (whoever created the account
- * with this e-mail loses it).
+ * with this e-mail loses it). Returns the account's schools (#404): it keeps
+ * the memberships it had, including any that whoever chose the old password
+ * joined, and the owner should be able to spot one they never joined.
  */
 export async function acceptEmailProof(
   schoolId: string,
   token: string,
   code: string,
   entry: ProofInput,
-): Promise<LinkResult> {
+): Promise<ProofResult> {
   const link = await openEmailProof(schoolId, token, code);
   if (!link) return { ok: false, message: EXPIRED };
   const refusal = passwordRefusal(entry.password, entry.confirmation);
@@ -130,7 +138,12 @@ export async function acceptEmailProof(
     consumeLink(tx, link, userId, { code, now: new Date() }, { passwordHash, verifiedEmail: true }),
   );
   if (used !== "ok") return { ok: false, message: EXPIRED };
-  return { ok: true, type: "invitation", email: link.email };
+  // Done and committed: failing to read the list only skips it (the action then goes to sign-in).
+  const schools = await schoolsOf(userId).then(
+    (rows) => rows.map((m) => ({ name: m.name, role: m.role })),
+    () => [],
+  );
+  return { ok: true, email: link.email, school: link.school, schools };
 }
 
 export async function acceptLink(

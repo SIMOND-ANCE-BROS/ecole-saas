@@ -44,19 +44,21 @@ export default async function EmailProofPage({ params }: PageProps<"/invitation/
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-sm flex-col justify-center gap-6 p-6">
-      <div className="flex flex-col gap-2">
-        <Title order={1} size="h2">
-          Rejoindre {link.school}
-        </Title>
-        <Text size="sm" c="dimmed">
-          {`C’est bien votre adresse (${link.email}). Choisissez le mot de passe de votre compte : il remplace l’ancien, et vous serez déconnecté(e) sur vos autres appareils.`}
-        </Text>
-      </div>
       <LinkForm
         action={submitEmailProof.bind(null, ecole, jeton, code)}
         kind="proof"
         email={link.email}
         name={link.name}
+        intro={
+          <div className="flex flex-col gap-2">
+            <Title order={1} size="h2">
+              Rejoindre {link.school}
+            </Title>
+            <Text size="sm" c="dimmed">
+              {`C’est bien votre adresse (${link.email}). Choisissez le mot de passe de votre compte : il remplace l’ancien, et vous serez déconnecté(e) sur vos autres appareils.`}
+            </Text>
+          </div>
+        }
       />
     </main>
   );

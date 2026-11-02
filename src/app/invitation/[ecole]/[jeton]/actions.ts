@@ -3,12 +3,13 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { acceptEmailProof, acceptLink, openLink, sendEmailProof } from "@/lib/invitations";
+import { type AccountSchool, acceptEmailProof, acceptLink, openLink, sendEmailProof } from "@/lib/invitations";
 import { clearAttempts, LIMITS, recordAttempt, trustedIp } from "@/lib/sign-in-limit";
 import type { BANNERS } from "@/app/connexion/banners";
 import { LINK } from "./fields";
 
-export type LinkState = { error: string | null };
+/** `taken`: the account was taken back (#404), its schools are shown before signing in. */
+export type LinkState = { error: string | null; taken?: { school: string; schools: AccountSchool[] } };
 
 const EXPIRED = "Ce lien n’est plus valable. Demandez-en un nouveau à la direction de l’école.";
 
@@ -62,7 +63,8 @@ export async function requestEmailProof(
 
 /**
  * Joins the school after opening the e-mailed link (#179): the code in the URL
- * proves the address, the person chooses the account's password.
+ * proves the address, the person chooses the account's password. Then shows
+ * the account's schools (#404), so the owner can spot one they never joined.
  */
 export async function submitEmailProof(
   schoolId: string,
@@ -77,5 +79,6 @@ export async function submitEmailProof(
     confirmation: LINK.read(f, "confirmation"),
   });
   if (!r.ok) return { error: r.message };
-  redirect(`/connexion?lien=${"acces" satisfies keyof typeof BANNERS}`);
+  if (r.schools.length === 0) redirect(`/connexion?lien=${"acces" satisfies keyof typeof BANNERS}`);
+  return { error: null, taken: { school: r.school, schools: r.schools } };
 }
