@@ -82,9 +82,10 @@ variables at the top of `src/app/globals.css`. Decision: ADR 0003.
   through an invisible box with a mouse, so list rows and the list header stay
   dense (32 px), and grows to 44 px at phone width or on a touch screen
   (`globals.css`, #396, #403). Links in list cells are covered too, although
-  the row itself opens the record. Keep 16 px between two links stacked on
-  desktop so their boxes do not take each other's clicks (« Changer d’école »,
-  « Se déconnecter »).
+  the row itself opens the record. Keep at least 8 px between two links stacked on
+  desktop, so neither box covers the other link's text (« Coordonnées »), and
+  16 px when the boxes must not touch at all (« Changer d’école », « Se
+  déconnecter »).
 - Exception: a link inside a sentence (« Créez d’abord une saison. », « Facturé
   à … ») carries `className="inline-link"` and keeps its line height: a 44 px
   link would break the line, and WCAG 2.5.8 exempts links in running text.

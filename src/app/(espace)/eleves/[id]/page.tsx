@@ -235,7 +235,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             p="md"
             component="section"
             aria-labelledby="coordonnees"
-            className="flex flex-col gap-1 text-sm"
+            className="flex flex-col gap-2 text-sm"
           >
             <Title order={2} size="h6" id="coordonnees">
               Coordonnées {ofName(firstName)}
