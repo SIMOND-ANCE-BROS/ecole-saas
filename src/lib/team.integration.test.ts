@@ -4,7 +4,8 @@ import { withSchool } from "../db";
 import { invite, pendingInvitations, listMembers, updateMember, revokeInvitation } from "../db/team";
 import { auth } from "./auth";
 import { createAccount } from "./accounts";
-import { acceptLink, createResetLink, openLink } from "./invitations";
+import type { EmailMessage, EmailSender } from "../connectors/email/sender";
+import { acceptEmailProof, acceptLink, createResetLink, openEmailProof, openLink, sendEmailProof } from "./invitations";
 
 /**
  * A school's team (#104): invitations, roles, reset, against the real
@@ -22,6 +23,9 @@ const PASSWORD = "une phrase de passe de test";
 const emailDiana = `diana-${suffix}@exemple.test`;
 const newMemberEmail = `accueil-${suffix}@exemple.test`;
 const teacherEmail = `prof-${suffix}@exemple.test`;
+const ownerEmail = `zz-proprietaire-${suffix}@exemple.test`;
+const verifiedEmail = `zz-verifiee-${suffix}@exemple.test`;
+const freshEmail = `zz-nouvelle-${suffix}@exemple.test`;
 let school: string;
 let otherSchool: string;
 let diana: string;
@@ -52,7 +56,8 @@ afterAll(async () => {
   });
   await admin`DELETE FROM invitation WHERE school_id IN (${school}, ${otherSchool})`;
   await admin`DELETE FROM member WHERE school_id IN (${school}, ${otherSchool})`;
-  await admin`DELETE FROM "user" WHERE email IN (${emailDiana}, ${teacherEmail}, ${newMemberEmail})`; // sessions and accounts cascade
+  // Sessions and accounts cascade.
+  await admin`DELETE FROM "user" WHERE email IN (${emailDiana}, ${teacherEmail}, ${newMemberEmail}, ${ownerEmail}, ${verifiedEmail})`;
   await admin`DELETE FROM school WHERE id IN (${school}, ${otherSchool})`;
   await admin.end();
 });
@@ -359,5 +364,135 @@ describe("password reset", () => {
   it("another school sees neither the members nor the invitations of this one", async () => {
     expect((await withSchool(otherSchool, (tx) => listMembers(tx))).some((m) => m.email === emailDiana)).toBe(false);
     expect(await withSchool(otherSchool, (tx) => pendingInvitations(tx, new Date()))).toEqual([]);
+  });
+});
+
+describe("proof of e-mail ownership for an invitation (#179)", () => {
+  const outbox: EmailMessage[] = [];
+  const sender: EmailSender = {
+    async send(m) {
+      outbox.push(m);
+      return { ok: true };
+    },
+  };
+  const OLD = "le mot de passe choisi par un autre";
+  const NEW = "le mot de passe de la propriétaire";
+  let owner: string;
+  let token: string;
+
+  const invitationOf = async (email: string) => {
+    const r = await withSchool(school, (tx) =>
+      invite(tx, diana, { email, name: "Zz Propriétaire", role: "front_desk" }, new Date()),
+    );
+    if (!r.ok) throw new Error(r.message);
+    return r;
+  };
+  const codeOf = (m: EmailMessage) => {
+    const code = /\/verification\/([A-Za-z0-9_-]{43})$/m.exec(m.text)?.[1];
+    if (!code) throw new Error("pas de lien dans l’e-mail");
+    return code;
+  };
+
+  beforeAll(async () => {
+    // Created through an invitation of another school: whoever held that link chose the password.
+    owner = await createAccount({ email: ownerEmail, name: "Zz Créé Ailleurs", password: OLD, emailVerified: false });
+    await admin`INSERT INTO member (school_id, user_id, role) VALUES (${otherSchool}, ${owner}, 'front_desk')`;
+    await createAccount({ email: verifiedEmail, name: "Zz Vérifiée", password: PASSWORD });
+    ({ token } = await invitationOf(ownerEmail));
+  });
+
+  it("an unverified account proves its e-mail once e-mail can be sent; its password is no longer enough", async () => {
+    expect(await openLink(school, token, sender)).toMatchObject({ existingAccount: true, proof: "email" });
+    expect(await acceptLink(school, token, entry("", { currentPassword: OLD }), sender)).toMatchObject({
+      ok: false,
+      message: expect.stringMatching(/Confirmez d’abord votre adresse e-mail/),
+    });
+    expect(await member(ownerEmail)).toBeUndefined();
+  });
+
+  it("without an e-mail service, nothing changes: the password is asked (#105)", async () => {
+    expect(await openLink(school, token, null)).toMatchObject({ proof: "password" });
+    expect(await sendEmailProof(school, token, null)).toMatchObject({ ok: false });
+  });
+
+  it("a verified account and a new e-mail keep their proof, and get no e-mail", async () => {
+    const verified = await invitationOf(verifiedEmail);
+    expect(await openLink(school, verified.token, sender)).toMatchObject({ proof: "password" });
+    expect(await sendEmailProof(school, verified.token, sender)).toMatchObject({ ok: false });
+    const fresh = await invitationOf(freshEmail);
+    expect(await openLink(school, fresh.token, sender)).toMatchObject({ existingAccount: false, proof: "create" });
+    expect(await sendEmailProof(school, fresh.token, sender)).toMatchObject({ ok: false });
+    expect(outbox).toHaveLength(0);
+  });
+
+  it("e-mails the invited address only, spaced out, keeping only the code's hash", async () => {
+    expect(await sendEmailProof(school, token, sender)).toEqual({ ok: true });
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]).toMatchObject({
+      to: ownerEmail,
+      subject: "Confirmez votre adresse e-mail pour rejoindre École A",
+    });
+    expect(outbox[0].text).toContain(`/invitation/${school}/${token}/verification/`);
+    const code = codeOf(outbox[0]);
+    const [row] =
+      await admin`SELECT email_code_hash FROM invitation WHERE school_id = ${school} AND email_code_hash IS NOT NULL`;
+    expect(row.email_code_hash).not.toContain(code);
+    expect(await sendEmailProof(school, token, sender)).toMatchObject({
+      ok: false,
+      message: expect.stringMatching(/réessayez dans \d+ s/),
+    });
+    expect(outbox).toHaveLength(1);
+  });
+
+  it("a failed send withdraws its code: another one may go right away", async () => {
+    const failing: EmailSender = { send: async () => ({ ok: false, reason: "unavailable" }) };
+    const later = new Date(Date.now() + 3 * 60_000);
+    expect(await sendEmailProof(school, token, failing, later)).toEqual({
+      ok: false,
+      message: "L’e-mail n’a pas pu partir. Réessayez dans quelques minutes.",
+    });
+    // The previous code was replaced, and the failed one is gone.
+    expect(await openEmailProof(school, token, codeOf(outbox[0]))).toBeNull();
+    expect(await sendEmailProof(school, token, sender, later)).toEqual({ ok: true });
+    expect(outbox).toHaveLength(2);
+  });
+
+  it("a wrong, foreign or expired code opens nothing", async () => {
+    const code = codeOf(outbox[1]);
+    expect(await openEmailProof(school, token, "x".repeat(43))).toBeNull();
+    expect(await openEmailProof(school, token, "court")).toBeNull();
+    expect(await openEmailProof(otherSchool, token, code)).toBeNull();
+    // Sent more than an hour ago.
+    await admin`UPDATE invitation SET email_code_sent_at = now() - interval '61 minutes' WHERE school_id = ${school} AND email_code_hash IS NOT NULL`;
+    expect(await openEmailProof(school, token, code)).toBeNull();
+    expect(await acceptEmailProof(school, token, code, { password: NEW, confirmation: NEW })).toMatchObject({
+      ok: false,
+    });
+    await admin`UPDATE invitation SET email_code_sent_at = now() WHERE school_id = ${school} AND email_code_hash IS NOT NULL`;
+    expect(await openEmailProof(school, token, code)).toMatchObject({ email: ownerEmail, school: "École A" });
+  });
+
+  it("the owner takes the account back: new password, e-mail verified, sessions closed, school joined, code used once", async () => {
+    const code = codeOf(outbox[1]);
+    await connect(ownerEmail, OLD); // whoever chose the password is signed in
+    expect(await acceptEmailProof(school, token, code, { password: "court", confirmation: "court" })).toMatchObject({
+      ok: false,
+    });
+    expect(await acceptEmailProof(school, token, code, { password: NEW, confirmation: NEW })).toEqual({
+      ok: true,
+      type: "invitation",
+      email: ownerEmail,
+    });
+    const [{ n }] = await admin`SELECT count(*)::int AS n FROM session WHERE user_id = ${owner}`;
+    expect(n).toBe(0);
+    const [{ email_verified }] = await admin`SELECT email_verified FROM "user" WHERE id = ${owner}`;
+    expect(email_verified).toBe(true);
+    await expect(connect(ownerEmail, OLD)).rejects.toThrow();
+    await expect(connect(ownerEmail, NEW)).resolves.toBeTruthy();
+    expect(await member(ownerEmail)).toMatchObject({ role: "front_desk", active: true });
+    expect(await openEmailProof(school, token, code)).toBeNull();
+    expect(await acceptEmailProof(school, token, code, { password: NEW, confirmation: NEW })).toMatchObject({
+      ok: false,
+    });
   });
 });

@@ -7,13 +7,21 @@ import { LINK } from "./fields";
 
 type Props = {
   action: (s: LinkState, f: FormData) => Promise<LinkState>;
-  /** new: create an access; existing: confirm an account already used elsewhere; reset: new password. */
-  kind: "new" | "existing" | "reset";
+  /**
+   * new: create an access; existing: confirm an account already used elsewhere; reset: new password;
+   * proof: the e-mail is proven (#179), choose the account's password to join.
+   */
+  kind: "new" | "existing" | "reset" | "proof";
   email: string;
   name: string | null;
 };
 
-const SUBMIT = { new: "Créer mon accès", existing: "Rejoindre l’école", reset: "Changer mon mot de passe" };
+const SUBMIT = {
+  new: "Créer mon accès",
+  existing: "Rejoindre l’école",
+  reset: "Changer mon mot de passe",
+  proof: "Rejoindre l’école",
+};
 
 export function LinkForm({ action, kind, email, name }: Props) {
   const [state, submit, inProgress] = useActionState(action, { error: null });
@@ -41,7 +49,7 @@ export function LinkForm({ action, kind, email, name }: Props) {
       ) : (
         <>
           <PasswordInput
-            label={kind === "reset" ? "Nouveau mot de passe" : "Mot de passe"}
+            label={kind === "new" ? "Mot de passe" : "Nouveau mot de passe"}
             description="Au moins 10 caractères : une phrase de passe convient très bien."
             autoComplete="new-password"
             required

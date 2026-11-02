@@ -266,8 +266,15 @@ export const invitation = pgTable(
     createdBy: uuid("created_by"),
     usedAt: timestamp("used_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // Proof of e-mail ownership (#179): hash of the code e-mailed to the address, and when it was sent.
+    emailCodeHash: text("email_code_hash"),
+    emailCodeSentAt: timestamp("email_code_sent_at", { withTimezone: true }),
   },
   (t) => [
+    check(
+      "invitation_email_code",
+      sql`(${t.emailCodeHash} IS NULL) = (${t.emailCodeSentAt} IS NULL) AND (${t.emailCodeHash} IS NULL OR ${t.type} = 'invitation')`,
+    ),
     check(
       "invitation_content",
       sql`(${t.type} = 'invitation' AND ${t.role} IS NOT NULL) OR (${t.type} = 'reset' AND ${t.userId} IS NOT NULL)`,

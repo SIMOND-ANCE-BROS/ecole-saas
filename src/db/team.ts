@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { EMAIL_PROOF_DURATION_MS, EMAIL_PROOF_RESEND_MS, resendWait } from "../domain/team/email-proof";
 import { changeRefusal, INVITABLE_ROLES, ROLE_VALUES, type Role } from "../domain/team/rules";
 import { rowsOf } from "./columns-of";
 import type { Tx } from "./index";
@@ -336,20 +337,93 @@ export async function readRelationship(tx: Tx, token: string, now: Date): Promis
 }
 
 /**
+ * A new code proving the invited e-mail (#179) for an invitation still open:
+ * returned once, in clear, to be e-mailed; only its hash is kept. It replaces
+ * the previous one. Refused while the last one is younger than
+ * `EMAIL_PROOF_RESEND_MS` (`wait`: seconds left).
+ */
+export async function newEmailCode(
+  tx: Tx,
+  link: OpenedLink,
+  now: Date,
+): Promise<{ ok: true; code: string } | { ok: false; wait: number } | null> {
+  if (link.type !== "invitation") return null;
+  const code = newToken();
+  const recorded = await tx
+    .update(invitation)
+    .set({ emailCodeHash: hash(code), emailCodeSentAt: now })
+    .where(
+      and(
+        eq(invitation.id, link.id),
+        isNull(invitation.usedAt),
+        gt(invitation.expiresAt, now),
+        AUTHOR_STILL_DIRECTOR,
+        or(
+          isNull(invitation.emailCodeSentAt),
+          lte(invitation.emailCodeSentAt, new Date(now.getTime() - EMAIL_PROOF_RESEND_MS)),
+        ),
+      ),
+    )
+    .returning({ id: invitation.id });
+  if (recorded.length === 1) return { ok: true, code };
+  const [l] = await tx
+    .select({ sentAt: invitation.emailCodeSentAt })
+    .from(invitation)
+    .where(and(eq(invitation.id, link.id), isNull(invitation.usedAt)));
+  if (!l) return null;
+  return { ok: false, wait: Math.max(1, resendWait(l.sentAt, now)) };
+}
+
+/** Withdraws a code that could not be e-mailed, so another one may be sent right away. */
+export async function dropEmailCode(tx: Tx, link: OpenedLink, code: string): Promise<void> {
+  await tx
+    .update(invitation)
+    .set({ emailCodeHash: null, emailCodeSentAt: null })
+    .where(and(eq(invitation.id, link.id), eq(invitation.emailCodeHash, hash(code))));
+}
+
+/** Condition: `code` is the invitation's last e-mailed code, still valid at `now`. */
+const emailCodeMatches = (code: string, now: Date) =>
+  and(
+    eq(invitation.emailCodeHash, hash(code)),
+    gt(invitation.emailCodeSentAt, new Date(now.getTime() - EMAIL_PROOF_DURATION_MS)),
+  );
+
+/** Whether `code` is the open invitation's last e-mailed code, still valid. */
+export async function emailCodeValid(tx: Tx, link: OpenedLink, code: string, now: Date): Promise<boolean> {
+  if (link.type !== "invitation" || !TOKEN.test(code)) return false;
+  const [l] = await tx
+    .select({ id: invitation.id })
+    .from(invitation)
+    .where(and(eq(invitation.id, link.id), isNull(invitation.usedAt), emailCodeMatches(code, now)));
+  return !!l;
+}
+
+/**
  * Marks the link used (once only) and, for an invitation, brings
  * the account into the team with the planned role. A reset is
  * refused if the account has joined another school since the link was created.
+ * With `emailCode` (#179), only while that e-mailed code is still valid.
  */
 export async function consumeLink(
   tx: Tx,
   relationship: OpenedLink,
   userId: string,
+  emailCode?: { code: string; now: Date },
 ): Promise<"ok" | "expired" | "shared"> {
   if (relationship.type === "reset" && (await elsewhereAccount(tx, userId))) return "shared";
+  if (emailCode && !TOKEN.test(emailCode.code)) return "expired";
   const badge = await tx
     .update(invitation)
     .set({ usedAt: sql`now()` })
-    .where(and(eq(invitation.id, relationship.id), isNull(invitation.usedAt), AUTHOR_STILL_DIRECTOR))
+    .where(
+      and(
+        eq(invitation.id, relationship.id),
+        isNull(invitation.usedAt),
+        AUTHOR_STILL_DIRECTOR,
+        emailCode ? emailCodeMatches(emailCode.code, emailCode.now) : undefined,
+      ),
+    )
     .returning({ id: invitation.id });
   if (badge.length !== 1) return "expired";
   if (relationship.type === "invitation" && relationship.role) {
