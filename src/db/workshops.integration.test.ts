@@ -7,6 +7,8 @@ import { once, storedWorkshopSignup } from "./submissions";
 import { cancelWorkshopSignup, signUpForWorkshop, signupsOf, workshopChoices, type SignupInput } from "./workshops";
 import { deleteCourse, entityLock, readCourse, updateCourse, validCourseInput } from "./courses";
 import { deleteTreatment } from "./vat-treatments";
+import { enrolledInCourse, scheduleCourse } from "./schedule";
+import { readAttendance, saveAttendance, weekLessons } from "./lessons";
 import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 import { ALREADY_SIGNED_UP, NO_WORKSHOP_PRICE, REASON_REQUIRED } from "../domain/workshop/signup";
 
@@ -91,6 +93,7 @@ afterAll(async () => {
     "submission",
     "workshop_signup_person",
     "workshop_signup",
+    "attendance",
     "lesson",
     "course_date",
     "course",
@@ -296,5 +299,71 @@ describe("a workshop with sign-ups", () => {
       ok: false,
     });
     await cancel(r.id);
+  });
+});
+
+describe("a workshop's participants (#398)", () => {
+  const workshopLesson = async () =>
+    (
+      await admin`INSERT INTO lesson (school_id, course_id, date, instructor_id, billing_entity_id)
+        SELECT school_id, id, '2027-02-13', instructor_id, billing_entity_id FROM course WHERE id = ${workshop}
+        ON CONFLICT (course_id, date) DO UPDATE SET status = 'planned' RETURNING id`
+    )[0].id as string;
+  const twoSignups = async () => {
+    for (const student of [sibling, child]) {
+      const r = await signUp({ participantIds: [student] });
+      if (!r.ok) throw new Error(r.message);
+    }
+  };
+
+  it("lists two signed-up students on the workshop's record with their payer, and counts them in its headcount", async () => {
+    await twoSignups();
+    const listed = await withSchool(school, (tx) => enrolledInCourse(tx, workshop, TODAY));
+    expect(listed.map((l) => [l.studentId, l.name, l.payerId, l.payer, l.status, l.enrollmentDate])).toEqual([
+      [child, "Zzenfant", parent, "Zzprénom Zzparent", "active", TODAY],
+      [sibling, "Zzsœur", parent, "Zzprénom Zzparent", "active", TODAY],
+    ]);
+    expect((await withSchool(school, (tx) => scheduleCourse(tx, workshop)))?.enrolled).toBe(2);
+    await workshopLesson();
+    const week = await withSchool(school, (tx) => weekLessons(tx, "2027-02-08"));
+    expect(week.find((l) => l.courseId === workshop)?.enrolled).toBe(2);
+  });
+
+  it("names them on the attendance sheet of its lesson, whose attendance can be taken for them", async () => {
+    await twoSignups();
+    const lessonId = await workshopLesson();
+    const sheet = await withSchool(school, (tx) => readAttendance(tx, lessonId));
+    expect(sheet?.students.map((d) => [d.id, d.present])).toEqual([
+      [child, null],
+      [sibling, null],
+    ]);
+    const saved = await withSchool(school, (tx) =>
+      saveAttendance(tx, lessonId, [
+        { studentId: child, present: true },
+        { studentId: sibling, present: false },
+      ]),
+    );
+    expect(saved).toMatchObject({ ok: true });
+    const after = await withSchool(school, (tx) => readAttendance(tx, lessonId));
+    expect(after?.students.map((d) => [d.id, d.present])).toEqual([
+      [child, true],
+      [sibling, false],
+    ]);
+    await admin`DELETE FROM attendance WHERE lesson_id = ${lessonId}`;
+  });
+
+  it("drops a cancelled sign-up from the list and the headcount", async () => {
+    const r = await signUp({ participantIds: [child, sibling] });
+    if (!r.ok) throw new Error(r.message);
+    await cancel(r.id);
+    expect(await withSchool(school, (tx) => enrolledInCourse(tx, workshop, TODAY))).toEqual([]);
+    expect((await withSchool(school, (tx) => scheduleCourse(tx, workshop)))?.enrolled).toBe(0);
+  });
+
+  it("shows nothing of them to another school (RLS)", async () => {
+    await twoSignups();
+    const lessonId = await workshopLesson();
+    expect(await withSchool(otherSchool, (tx) => enrolledInCourse(tx, workshop, TODAY))).toEqual([]);
+    expect(await withSchool(otherSchool, (tx) => readAttendance(tx, lessonId))).toBeNull();
   });
 });

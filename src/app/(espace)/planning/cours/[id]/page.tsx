@@ -229,8 +229,9 @@ export default async function CoursePage({ params, searchParams }: PageProps<"/p
         </Title>
         {enrolled.length === 0 ? (
           <Text size="sm" c="dimmed">
-            Personne n’est encore inscrit. Les inscriptions se font depuis la fiche du danseur ou de la personne qui
-            paie.
+            {course.type === "workshop"
+              ? "Personne n’est encore inscrit. « Inscrire à un stage » se trouve sur la fiche du danseur ou de la personne qui paie."
+              : "Personne n’est encore inscrit. Les inscriptions se font depuis la fiche du danseur ou de la personne qui paie."}
           </Text>
         ) : (
           <Paper withBorder className="overflow-x-auto">
