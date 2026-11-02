@@ -13,6 +13,9 @@ const DAY = 86_400_000;
 /** Shown to the school when a sync fails for a reason other than a revoked access. */
 export const SYNC_UNAVAILABLE = "Synchronisation impossible pour le moment ; elle sera retentée.";
 
+/** Shown when the calendar was reconnected or disconnected during the sync (#386): nothing was written. */
+export const SYNC_RECONNECTED = "Agenda reconnecté ou déconnecté pendant la synchronisation : rien n’a été enregistré.";
+
 /** Shown when another sync of the same calendar is running (#370): this one was skipped. */
 export const SYNC_RUNNING = "Synchronisation déjà en cours pour cet agenda ; réessayez dans quelques minutes.";
 
@@ -109,16 +112,19 @@ export async function syncCalendar(
       end: new Date(now.getTime() + AFTER * DAY),
     };
     const ranges = await readBusyRanges(connection.provider, access, window, query);
+    // The sync is recorded first, on the connection it read; its slots are written only then
+    // (#386): a calendar reconnected or disconnected meanwhile keeps the slots of its own syncs.
     const count = await withSchool(schoolId, async (tx) => {
-      const n = await replaceCalendarUnavailabilities(tx, instructorId, connection.provider, window, ranges);
-      await recordSync(tx, instructorId, {
+      const recorded = await recordSync(tx, instructorId, {
         readToken: connection.encryptedToken,
         claim: connection.claim,
         error: null,
         encryptedToken: newRefreshToken ? encrypt(newRefreshToken) : undefined,
       });
-      return n;
+      if (!recorded) return null;
+      return replaceCalendarUnavailabilities(tx, instructorId, connection.provider, window, ranges);
     });
+    if (count === null) return { ok: false, message: SYNC_RECONNECTED };
     return { ok: true, ranges: count };
   } catch (e) {
     return failure(e instanceof AccessRemoved ? e.message : SYNC_UNAVAILABLE);

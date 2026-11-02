@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { withSchool } from "../db";
 import { saveConnection } from "../db/calendar-connections";
 import { decrypt, encrypt } from "./encryption";
-import { SYNC_RUNNING, syncCalendar, syncSchool } from "./calendar-sync";
+import { SYNC_RECONNECTED, SYNC_RUNNING, syncCalendar, syncSchool } from "./calendar-sync";
 
 /**
  * One sync at a time per calendar (#370): overlapping syncs (hourly job, « Synchroniser », OAuth
@@ -20,15 +20,19 @@ const suffix = Math.random().toString(36).slice(2, 8);
 let school: string;
 let instructorId: string;
 const NOW = new Date("2026-11-01T08:00:00Z");
+/** Busy hours read through the old connection (or an outrun claim) and through the current one. */
+const OLD_BUSY = "2026-11-03T10:00:00.000Z";
+const NEW_BUSY = "2026-11-04T10:00:00.000Z";
 
 const response = (status: number, json: unknown) =>
   new Response(JSON.stringify(json), { status, headers: { "Content-Type": "application/json" } });
 
 /**
  * Fake provider: each renewal answers a new refresh token (`fake-rN`), after `gate` when given;
- * `sent` keeps the refresh tokens it received.
+ * `sent` keeps the refresh tokens it received. The calendar answers one busy hour starting at
+ * `busyAt` when given, else none.
  */
-function provider(sent: string[], gate?: Promise<void>): typeof fetch {
+function provider(sent: string[], gate?: Promise<void>, busyAt?: string): typeof fetch {
   return async (u, init) => {
     if (String(u).includes("/token")) {
       const token = new URLSearchParams(String(init?.body)).get("refresh_token") ?? "";
@@ -36,9 +40,16 @@ function provider(sent: string[], gate?: Promise<void>): typeof fetch {
       if (gate) await gate;
       return response(200, { access_token: "acces", refresh_token: `${token}-next` });
     }
-    return response(200, { value: [] });
+    if (!busyAt) return response(200, { value: [] });
+    const end = new Date(new Date(busyAt).getTime() + 3_600_000).toISOString();
+    return response(200, { value: [{ start: { dateTime: busyAt }, end: { dateTime: end }, showAs: "busy" }] });
   };
 }
+
+const slotStarts = async () =>
+  (await admin`SELECT starts_at FROM unavailability WHERE instructor_id = ${instructorId} ORDER BY starts_at`).map(
+    (r) => (r.starts_at as Date).toISOString(),
+  );
 
 /** A promise released by hand: the fake provider holds its renewal answer until then. */
 function barrier() {
@@ -74,7 +85,10 @@ beforeAll(async () => {
     VALUES (${school}, 'Zzmartin', 'Zzalex', 'employee', 'not_applicable', 'hourly', 3000) RETURNING id`;
 });
 
-beforeEach(() => connect("fake-r1"));
+beforeEach(async () => {
+  await admin`DELETE FROM unavailability WHERE school_id = ${school}`;
+  await connect("fake-r1");
+});
 
 afterAll(async () => {
   for (const t of ["unavailability", "calendar_connection", "instructor"]) {
@@ -132,16 +146,33 @@ describe("overlapping syncs of one calendar (#370)", () => {
   it("lets a reconnected calendar sync at once, and the old sync then writes nothing", async () => {
     const sent: string[] = [];
     const { gate, release } = barrier();
-    const old = syncCalendar(school, instructorId, provider(sent, gate), NOW);
+    const old = syncCalendar(school, instructorId, provider(sent, gate, OLD_BUSY), NOW);
     await untilSent(sent, 1);
 
     await connect("fake-new");
-    expect((await syncCalendar(school, instructorId, provider(sent), NOW)).ok).toBe(true);
+    expect((await syncCalendar(school, instructorId, provider(sent, undefined, NEW_BUSY), NOW)).ok).toBe(true);
     release();
-    await old;
+    expect(await old).toEqual({ ok: false, message: SYNC_RECONNECTED });
 
     expect(sent).toEqual(["fake-r1", "fake-new"]);
     expect(await stored()).toEqual({ token: "fake-new-next", claimed: null });
+    expect(await slotStarts()).toEqual([NEW_BUSY]);
+  });
+
+  it("writes nothing from a sync whose claim ran out and was taken over (#386)", async () => {
+    const sent: string[] = [];
+    const { gate, release } = barrier();
+    const slow = syncCalendar(school, instructorId, provider(sent, gate, OLD_BUSY), NOW);
+    await untilSent(sent, 1);
+
+    await admin`UPDATE calendar_connection SET sync_claimed_until = now() - interval '1 second'
+      WHERE instructor_id = ${instructorId}`;
+    expect((await syncCalendar(school, instructorId, provider(sent, undefined, NEW_BUSY), NOW)).ok).toBe(true);
+    release();
+    expect(await slow).toEqual({ ok: false, message: SYNC_RECONNECTED });
+
+    expect(await stored()).toEqual({ token: "fake-r1-next", claimed: null });
+    expect(await slotStarts()).toEqual([NEW_BUSY]);
   });
 
   it("never claims another school's calendar", async () => {
