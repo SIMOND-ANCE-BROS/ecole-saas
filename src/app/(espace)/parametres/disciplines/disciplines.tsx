@@ -75,7 +75,8 @@ export function Disciplines({ disciplines }: { disciplines: DisciplineRow[] }) {
         // its name; from `sm`, in a third column.
         <Paper
           withBorder
-          className="grid grid-cols-[minmax(0,1fr)_auto] text-sm sm:grid-cols-[minmax(0,1fr)_auto_auto]"
+          // Bounded width: on a wide screen the box stays near its discipline's name.
+          className="grid max-w-3xl grid-cols-[minmax(0,1fr)_auto] text-sm sm:grid-cols-[minmax(0,1fr)_auto_auto]"
         >
           {/* The column's title, for the eye; each box carries its own label with the discipline. */}
           <div aria-hidden className="col-span-full grid grid-cols-subgrid border-b border-bordure px-3 py-1.5">

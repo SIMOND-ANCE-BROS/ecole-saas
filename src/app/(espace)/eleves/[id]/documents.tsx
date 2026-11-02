@@ -76,7 +76,7 @@ function status(line: DocumentLine, enrolled: boolean): { text: string; warn: bo
   const due = line.due ? `à fournir avant le ${dayOf(line.due.dueOn)}${line.due.overdue ? ", en retard" : ""}` : null;
   const notReceived = `Non ${agreed(line.type, "reçu")}`;
   // Not « missing »: nothing is due, so the row says why (#325).
-  const notAsked = line.notAskedForCourses ? " (pas demandé pour ses cours)" : "";
+  const notAsked = line.notAskedForCourses ? ` (pas ${agreed(line.type, "demandé")} pour ses cours)` : "";
   switch (line.state) {
     case "missing":
       if (due) return { text: `${notReceived} : ${due}`, warn: line.due?.overdue ?? false };
