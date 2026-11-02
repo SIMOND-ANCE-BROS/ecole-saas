@@ -38,7 +38,14 @@ export async function saveConnection(
     .values(columnsOf(calendarConnection, { ...columns, instructorId: instructorId, schoolId: CURRENT_SCHOOL }))
     .onConflictDoUpdate({
       target: calendarConnection.instructorId,
-      set: columnsOf(calendarConnection, { ...columns, lastSyncedAt: null, error: null, createdAt: sql`now()` }),
+      // A sync still running on the replaced connection loses its claim (#370): its writes match nothing.
+      set: columnsOf(calendarConnection, {
+        ...columns,
+        lastSyncedAt: null,
+        error: null,
+        syncClaimedUntil: null,
+        createdAt: sql`now()`,
+      }),
     });
   return true;
 }
@@ -68,6 +75,46 @@ export async function readConnection(tx: Tx, instructorId: string) {
   return c ?? null;
 }
 
+/** How long a sync holds its calendar (#370): beyond the worst sync (refresh and 20 calendar pages, 10 s each). */
+export const SYNC_CLAIM_MINUTES = 5;
+
+/** The connection a sync claimed: what it read, and its claim, the key of every later write. */
+export type ClaimedConnection = {
+  provider: Provider;
+  encryptedToken: string;
+  /** The claim, as Postgres prints it (microseconds kept), like the invoice outbox (ADR 0007). */
+  claim: string;
+};
+
+/**
+ * Claims an active instructor's connected calendar for one sync (#370), in one statement: two
+ * syncs never both refresh the same token. `busy` when another sync holds a live claim; null when
+ * no calendar is connected. Waits at most 5 s for a row lock (`lock_timeout`, then throws); the
+ * claim itself is no lock: it runs out after `SYNC_CLAIM_MINUTES` if the sync never records.
+ */
+export async function claimConnection(tx: Tx, instructorId: string): Promise<ClaimedConnection | "busy" | null> {
+  if (!isUuid(instructorId)) return null;
+  await tx.execute(sql`SET LOCAL lock_timeout = '5s'`);
+  const [c] = await tx.execute<{ provider: Provider; encrypted_token: string; claim: string }>(sql`
+    UPDATE calendar_connection c
+    SET sync_claimed_until = now() + make_interval(mins => ${SYNC_CLAIM_MINUTES})
+    FROM instructor i
+    WHERE i.id = c.instructor_id AND i.active
+      AND c.instructor_id = ${instructorId}
+      AND (c.sync_claimed_until IS NULL OR c.sync_claimed_until <= now())
+    RETURNING c.provider, c.encrypted_token, c.sync_claimed_until::text AS claim`);
+  if (c) return { provider: c.provider, encryptedToken: c.encrypted_token, claim: c.claim };
+  return (await readConnection(tx, instructorId)) ? "busy" : null;
+}
+
+/** The connection a sync claimed and read, untouched since: the condition of its writes (#370, #383). */
+const claimed = (instructorId: string, c: { readToken: string; claim: string }) =>
+  and(
+    eq(calendarConnection.instructorId, instructorId),
+    eq(calendarConnection.encryptedToken, c.readToken),
+    sql`${calendarConnection.syncClaimedUntil} = ${c.claim}::timestamptz`,
+  );
+
 export async function connectedInstructors(tx: Tx): Promise<string[]> {
   const rows = await tx
     .select({ id: calendarConnection.instructorId })
@@ -81,39 +128,42 @@ export async function connectedInstructors(tx: Tx): Promise<string[]> {
  * Result of a synchronisation; a token renewed by the provider replaces the old one. Tokens arrive
  * already encrypted. Recorded only on the connection the sync read (`readToken`, compared like
  * `saveRenewedToken`): a calendar reconnected meanwhile keeps its own token and stays « not yet
- * synced » rather than showing the old connection's result (#383).
+ * synced » rather than showing the old connection's result (#383). Only while the sync's claim is
+ * still its own, which it releases (#370).
  */
 export async function recordSync(
   tx: Tx,
   instructorId: string,
-  r: { readToken: string; error: string | null; encryptedToken?: string },
+  r: { readToken: string; claim: string; error: string | null; encryptedToken?: string },
 ): Promise<void> {
   await tx
     .update(calendarConnection)
     .set(
       columnsOf(calendarConnection, {
         error: r.error,
+        syncClaimedUntil: null,
         ...(r.error ? {} : { lastSyncedAt: sql`now()` }),
         ...(r.encryptedToken ? { encryptedToken: r.encryptedToken } : {}),
       }),
     )
-    .where(and(eq(calendarConnection.instructorId, instructorId), eq(calendarConnection.encryptedToken, r.readToken)));
+    .where(claimed(instructorId, r));
 }
 
 /**
  * Saves a token the provider renewed, without touching the sync's result: used when that result
  * could not be recorded (#381). Both tokens arrive already encrypted; only the token the sync read
- * is replaced, so a calendar reconnected meanwhile keeps its own.
+ * is replaced, under the sync's claim, which it releases (#370): a calendar reconnected meanwhile
+ * keeps its own.
  */
 export async function saveRenewedToken(
   tx: Tx,
   instructorId: string,
-  token: { read: string; renewed: string },
+  token: { read: string; claim: string; renewed: string },
 ): Promise<void> {
   await tx
     .update(calendarConnection)
-    .set({ encryptedToken: token.renewed })
-    .where(and(eq(calendarConnection.instructorId, instructorId), eq(calendarConnection.encryptedToken, token.read)));
+    .set({ encryptedToken: token.renewed, syncClaimedUntil: null })
+    .where(claimed(instructorId, { readToken: token.read, claim: token.claim }));
 }
 
 /** Disconnects the calendar and removes the upcoming slots that came from it (manual entries remain). */

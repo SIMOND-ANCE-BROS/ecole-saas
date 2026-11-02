@@ -79,7 +79,7 @@ describe("syncSchool", () => {
     let calls: unknown[][] = [];
     control.failRecord = true;
     try {
-      expect(await syncSchool(school, fakeFetch)).toEqual({ succeeded: 2, failed: 1, unrecorded: 1 });
+      expect(await syncSchool(school, fakeFetch)).toEqual({ succeeded: 2, failed: 1, unrecorded: 1, skipped: 0 });
     } finally {
       control.failRecord = false;
       calls = [...logged.mock.calls];
@@ -104,8 +104,10 @@ describe("syncSchool", () => {
   });
 
   it("counts a recorded failure without calling it unrecorded", async () => {
+    // A sync whose failure was not recorded leaves its claim to run out (#370): cleared here.
+    await admin`UPDATE calendar_connection SET sync_claimed_until = NULL WHERE school_id = ${school}`;
     const fakeFetch: typeof fetch = async (u) =>
       String(u).includes("/token") ? response(503, {}) : response(200, { value: [] });
-    expect(await syncSchool(school, fakeFetch)).toEqual({ succeeded: 0, failed: 3, unrecorded: 0 });
+    expect(await syncSchool(school, fakeFetch)).toEqual({ succeeded: 0, failed: 3, unrecorded: 0, skipped: 0 });
   });
 });
