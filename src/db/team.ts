@@ -412,6 +412,9 @@ const EMAIL_PROOF_PREFIX = "email-proof:";
 /** Prefix of an address's e-mail proofs in `verification`: a hash, never the address itself. */
 const emailProofAddress = (email: string) => `${EMAIL_PROOF_PREFIX}${hash(email.trim().toLowerCase())}`;
 
+/** Key of the e-mail proofs one school sent to an address. */
+const emailProofKey = (email: string, schoolId: string) => `${emailProofAddress(email)}:${schoolId}`;
+
 /**
  * Deletes the e-mail proofs past their 24 hours, of every address and school
  * (#404): an unsalted hash of an address is personal data, and an address
@@ -426,8 +429,6 @@ export async function purgeExpiredEmailProofs(): Promise<number> {
     .returning({ id: verification.id });
   return deleted.length;
 }
-/** Key of the e-mail proofs one school sent to an address. */
-const emailProofKey = (email: string, schoolId: string) => `${emailProofAddress(email)}:${schoolId}`;
 
 /** Withdraws a code that could not be e-mailed, so another one may be sent right away. */
 export async function dropEmailCode(tx: Tx, link: OpenedLink, code: string): Promise<void> {

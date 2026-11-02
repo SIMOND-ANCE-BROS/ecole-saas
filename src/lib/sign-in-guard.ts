@@ -26,6 +26,11 @@ export async function credentialBefore(email: string): Promise<CredentialBefore 
   return row ?? null;
 }
 
+/** Closes the session carrying `token` (a sign-in whose guard failed). */
+export async function dropSession(token: string): Promise<void> {
+  await db.delete(session).where(eq(session.token, token));
+}
+
 /**
  * Keeps the session just opened (`token`) only if the account's password hash
  * is still the one read before the sign-in; otherwise deletes it and returns

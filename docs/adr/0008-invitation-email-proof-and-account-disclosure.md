@@ -56,14 +56,16 @@ is used somewhere in the SaaS, though not in which school.
   leaves a row in Better Auth's global `verification` table for 24 hours,
   keyed by a SHA-256 hash of the address and the school id, never the address
   itself; rows past their 24 hours are deleted on the next request for that
-  address, and by the nightly purge for every address (#404). Schools are not self-service (created by the operator only), so
-  extra schools are not cheap to obtain.
+  address, and by the nightly purge for every address (#404). Schools are
+  not self-service (created by the operator only), so extra schools are not
+  cheap to obtain.
 - **One interface for sending e-mail**, `EmailSender` in
   `src/connectors/email/`. No provider is chosen (#105, blocked): until one is,
   `emailSender()` returns null and an unverified account keeps confirming its
   password, as before. A fake sender keeps messages in memory for tests and
   demonstration (`EMAIL_FAKE_ALLOWED=1`), refused when `NODE_ENV=production`
-  whatever that variable says (#404). Neither the
+  whatever that variable says (#404): `next dev` and tests only, never a
+  server started with `next start`. Neither the
   address, the subject, the body nor the code is ever logged.
 - **The disclosure is accepted.** An invitation keeps telling whether an
   account exists for the invited address, and now whether it is verified.

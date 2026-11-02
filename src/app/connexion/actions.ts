@@ -8,7 +8,7 @@ import { z } from "zod";
 import { schoolsOf } from "@/db";
 import { chooseSchool, sessionIdOf } from "@/lib/school-access";
 import { auth } from "@/lib/auth";
-import { credentialBefore, keepSessionIfPasswordUnchanged } from "@/lib/sign-in-guard";
+import { credentialBefore, dropSession, keepSessionIfPasswordUnchanged } from "@/lib/sign-in-guard";
 import { clearAttempts, recordAttempt, trustedIp, LIMITS } from "@/lib/sign-in-limit";
 
 /** Same message for an unknown account, a wrong password, or one changed while being checked. */
@@ -51,9 +51,14 @@ export async function signIn(_state: ConnectionState, formData: FormData): Promi
     throw e;
   }
   // The password changed while it was being checked: the one typed is no longer the account's.
-  if (!(await keepSessionIfPasswordUnchanged(connection.token, connection.user.id, before))) {
-    return { error: WRONG, email };
-  }
+  // A guard that fails keeps nothing either: the session is closed, the person signs in again.
+  const kept = await keepSessionIfPasswordUnchanged(connection.token, connection.user.id, before).catch(
+    async (e: unknown) => {
+      await dropSession(connection.token).catch(() => {});
+      throw e;
+    },
+  );
+  if (!kept) return { error: WRONG, email };
   await clearAttempts(parsed.data.email, ip);
 
   // A single school: chosen automatically, without going through the list.

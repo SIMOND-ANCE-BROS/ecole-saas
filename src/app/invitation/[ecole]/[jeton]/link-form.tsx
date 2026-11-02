@@ -35,7 +35,7 @@ export function LinkForm({ action, kind, email, name, intro }: Props) {
     value: v[k],
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => setV({ ...v, [k]: e.currentTarget.value }),
   });
-  if (state.schools) return <AccountSchools schools={state.schools} />;
+  if (state.taken) return <AccountSchools {...state.taken} />;
   return (
     <>
       {intro}

@@ -8,8 +8,8 @@ import { clearAttempts, LIMITS, recordAttempt, trustedIp } from "@/lib/sign-in-l
 import type { BANNERS } from "@/app/connexion/banners";
 import { LINK } from "./fields";
 
-/** `schools`: the account was taken back (#404), its schools are shown before signing in. */
-export type LinkState = { error: string | null; schools?: AccountSchool[] };
+/** `taken`: the account was taken back (#404), its schools are shown before signing in. */
+export type LinkState = { error: string | null; taken?: { school: string; schools: AccountSchool[] } };
 
 const EXPIRED = "Ce lien n’est plus valable. Demandez-en un nouveau à la direction de l’école.";
 
@@ -79,5 +79,6 @@ export async function submitEmailProof(
     confirmation: LINK.read(f, "confirmation"),
   });
   if (!r.ok) return { error: r.message };
-  return { error: null, schools: r.schools };
+  if (r.schools.length === 0) redirect(`/connexion?lien=${"acces" satisfies keyof typeof BANNERS}`);
+  return { error: null, taken: { school: r.school, schools: r.schools } };
 }

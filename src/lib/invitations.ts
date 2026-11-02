@@ -28,7 +28,9 @@ export type LinkResult = { ok: true; type: OpenedLink["type"]; email: string } |
 
 /** A school the account belongs to, as shown to its owner after a take-back (#404). */
 export type AccountSchool = { name: string; role: Role };
-export type ProofResult = { ok: true; email: string; schools: AccountSchool[] } | { ok: false; message: string };
+/** `school`: the school just joined; `schools`: all of the account's (empty if they could not be read). */
+export type ProofResult =
+  { ok: true; email: string; school: string; schools: AccountSchool[] } | { ok: false; message: string };
 
 const EXPIRED =
   "Ce lien n’est plus valable (déjà utilisé, révoqué ou expiré). Demandez-en un nouveau à la direction de l’école.";
@@ -136,8 +138,12 @@ export async function acceptEmailProof(
     consumeLink(tx, link, userId, { code, now: new Date() }, { passwordHash, verifiedEmail: true }),
   );
   if (used !== "ok") return { ok: false, message: EXPIRED };
-  const schools = (await schoolsOf(userId)).map((m) => ({ name: m.name, role: m.role }));
-  return { ok: true, email: link.email, schools };
+  // Done and committed: failing to read the list only skips it (the action then goes to sign-in).
+  const schools = await schoolsOf(userId).then(
+    (rows) => rows.map((m) => ({ name: m.name, role: m.role })),
+    () => [],
+  );
+  return { ok: true, email: link.email, school: link.school, schools };
 }
 
 export async function acceptLink(

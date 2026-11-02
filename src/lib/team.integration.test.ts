@@ -571,6 +571,7 @@ describe("proof of e-mail ownership for an invitation (#179)", () => {
     expect(await acceptEmailProof(school, token, code, { password: NEW, confirmation: NEW })).toEqual({
       ok: true,
       email: ownerEmail,
+      school: "École A",
       schools: [
         { name: "École A", role: "front_desk" },
         { name: "École B", role: "front_desk" },
