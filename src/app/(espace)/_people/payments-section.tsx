@@ -59,9 +59,12 @@ const cashing = (p: PaymentRow, today: string) =>
         ? `le ${day(p.plannedPayment)}`
         : "encaissé";
 
-/** A payment row as a screen reader tells it apart: « du 01/10/2026 (Chèque, 120,00 €) » (#372). */
+/**
+ * A payment row as a screen reader tells it apart: « du 01/10/2026 (Chèque, 120,00 €, n° 1234567) » (#372).
+ * The reference parts the cheques of a same amount handed over the same day.
+ */
 const subjectOf = (p: PaymentRow) =>
-  `du ${day(p.date)} (${PAYMENT_METHODS[p.method]}, ${formatEuros(Math.abs(p.amountCents))})`;
+  `du ${day(p.date)} (${[PAYMENT_METHODS[p.method], formatEuros(Math.abs(p.amountCents)), reference(p)].filter(Boolean).join(", ")})`;
 
 /**
  * « Corriger » while something is left to correct, « corrigé » once it is all

@@ -72,7 +72,7 @@ variables at the top of `src/app/globals.css`. Decision: ADR 0003.
 - Ctrl K focuses the search; arrow down moves into the results; Enter opens.
 - Click targets at least 32 px on desktop and 44 px on phones. Row actions keep
   `size="compact-sm"` (or `compact-xs`, `xs`): `globals.css` raises these
-  Mantine sizes to 32 px, and every button and icon button to 44 px at phone
+  Mantine sizes to 32 px, and every button, icon button and close button to 44 px at phone
   width or on a touch screen (#372). Never set a smaller `h` on a button.
 - A button repeated on every row names its row in its `aria-label`, starting
   with the visible words: « Corriger le paiement du 01/10/2026 (Chèque,

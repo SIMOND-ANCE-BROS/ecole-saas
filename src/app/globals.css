@@ -78,15 +78,22 @@ body {
   --ai-size-sm: 2rem;
   --ai-size-md: 2rem;
 }
+.mantine-CloseButton-root {
+  --cb-size-xs: 2rem;
+  --cb-size-sm: 2rem;
+  --cb-size-md: 2rem;
+}
 /* Phone width (Tailwind `max-sm`) or a touch screen. */
 @media (pointer: coarse), (width < 40rem) {
   .mantine-Button-root {
     --button-height-xs: 2.75rem;
     --button-height-sm: 2.75rem;
+    --button-height-md: 2.75rem;
     --button-height-compact-xs: 2.75rem;
     --button-height-compact-sm: 2.75rem;
     --button-height-compact-md: 2.75rem;
     --button-height-compact-lg: 2.75rem;
+    --button-height-compact-xl: 2.75rem;
   }
   .mantine-ActionIcon-root {
     --ai-size-xs: 2.75rem;
@@ -95,13 +102,16 @@ body {
     --ai-size-lg: 2.75rem;
     --ai-size-input-xs: 2.75rem;
     --ai-size-input-sm: 2.75rem;
+    --ai-size-input-md: 2.75rem;
   }
   .mantine-Input-input {
     min-height: 2.75rem;
   }
   .mantine-CloseButton-root {
-    min-width: 2.75rem;
-    min-height: 2.75rem;
+    --cb-size-xs: 2.75rem;
+    --cb-size-sm: 2.75rem;
+    --cb-size-md: 2.75rem;
+    --cb-size-lg: 2.75rem;
   }
 }
 

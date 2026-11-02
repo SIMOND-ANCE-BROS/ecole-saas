@@ -4,6 +4,7 @@ import { Button, Group, Loader, Modal, Text } from "@mantine/core";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { notSent, settle } from "@/lib/action-result";
+import { formatEuros } from "@/lib/money";
 import { abandon, sendAgain } from "./actions";
 import type { TakenUp } from "./taken-up";
 
@@ -15,7 +16,19 @@ const FAILED = "Non enregistré : réessayez. Si le problème continue, vérifie
  * which gives its lines back to the payer's next drafting. Abandoning asks first; for an
  * invoice the tool holds a draft of, its draft must be deleted in the tool beforehand.
  */
-export function ProblemActions({ invoiceId, inTool, payer }: { invoiceId: string; inTool: boolean; payer: string }) {
+export function ProblemActions({
+  invoiceId,
+  inTool,
+  payer,
+  totalCents,
+}: {
+  invoiceId: string;
+  inTool: boolean;
+  payer: string;
+  /** The invoice total, which tells apart two invoices of one payer in the buttons' names (#372). */
+  totalCents: number;
+}) {
+  const invoice = `la facture de ${payer} (${formatEuros(totalCents)})`;
   const router = useRouter();
   const [asking, setAsking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -75,7 +88,7 @@ export function ProblemActions({ invoiceId, inTool, payer }: { invoiceId: string
           variant="light"
           aria-disabled={busy || undefined}
           rightSection={busy ? <Loader size="xs" /> : null}
-          aria-label={`Envoyer à nouveau la facture de ${payer}`}
+          aria-label={`Envoyer à nouveau ${invoice}`}
           onClick={() => !busy && run(() => sendAgain(invoiceId))}
         >
           Envoyer à nouveau
@@ -85,7 +98,7 @@ export function ProblemActions({ invoiceId, inTool, payer }: { invoiceId: string
           variant="subtle"
           color="red"
           aria-disabled={busy || undefined}
-          aria-label={`Abandonner la facture de ${payer}…`}
+          aria-label={`Abandonner ${invoice}`}
           onClick={() => !busy && setAsking(true)}
         >
           Abandonner
