@@ -110,8 +110,9 @@ export const theme = createTheme({
  *
  * Unticked checkboxes and radios: Mantine draws their border in gray 4 (2.6:1 on white) and
  * dark 4 (1.7:1 on the dark page), below WCAG's 3:1 for a control (#325). `--control-border`
- * takes gray 5 (4.8:1 on white, 4.4:1 on the light page) and dark 3 (3.6:1 on the dark box,
- * 3.9:1 on the dark page); globals.css applies it to unticked boxes only.
+ * takes gray 5 (4.8:1 on white, 4.4:1 on the light page) and dark 2 (6.7:1 on the dark box,
+ * 7.3:1 on the dark page, 5.5:1 on the `--accent-doux` of a hovered row, where dark 3 fell to
+ * 3:1, #396); globals.css applies it to unticked boxes only.
  */
 export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
   variables: {},
@@ -139,7 +140,7 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
     ),
     // Near-black on the light dark-mode fills, as the old `--sur-accent` (#11131a).
     "--filled-text": "var(--mantine-color-dark-8)",
-    "--control-border": "var(--mantine-color-dark-3)",
+    "--control-border": "var(--mantine-color-dark-2)",
     // Field errors take red 8 by default, 4.1:1 on the dark page (#188): the red of `c="red"` text instead.
     "--mantine-color-error": "var(--mantine-color-red-text)",
     // The primary fill takes the deep indigo, with white text (#211).

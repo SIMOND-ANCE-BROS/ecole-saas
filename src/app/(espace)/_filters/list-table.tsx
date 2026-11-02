@@ -422,7 +422,7 @@ export function ListTable<Id extends string>({
                   title="Ajouter une colonne"
                   buttonLabel="Ajouter une colonne"
                   button="+"
-                  plainClass="rounded px-2 py-0.5 text-base leading-none text-accent hover:bg-accent-doux"
+                  plainClass="inline-flex min-w-8 items-center justify-center rounded px-2 py-0.5 text-base leading-none text-accent hover:bg-accent-doux"
                 >
                   <Text size="sm" fw={500} mb="xs">
                     Ajouter une colonne
@@ -432,7 +432,7 @@ export function ListTable<Id extends string>({
                       Toutes les colonnes sont affichées.
                     </Text>
                   ) : (
-                    <ul className="flex flex-col gap-1">
+                    <ul className="flex flex-col gap-2">
                       {masquees.map((c) => (
                         <li key={c.id}>
                           <Anchor
@@ -635,7 +635,8 @@ function CellContent({ def, value, link }: { def: ColumnDef; value: CellValue; l
  * Native popover (`popover`): above everything, closed by Escape or a click
  * elsewhere, focus returns to the button. Placed under its button when opened.
  * The trigger is a Mantine button (`buttonProps`), or an unstyled one laid
- * out by `plainClass` (column headers, « + »). A calendar opened inside
+ * out by `plainClass` (column headers, « + »), whose clicks `.hit-target` takes
+ * over 32 px without making the header taller (globals.css, #396). A calendar opened inside
  * renders into `PopoverPortal`, inside the popover: rendered in `<body>`, it
  * would sit behind the popover (top layer) and a click on it would close it.
  */
@@ -675,7 +676,12 @@ function Popover({
   return (
     <>
       {plainClass !== undefined ? (
-        <UnstyledButton ref={trigger} popoverTarget={id} className={plainClass} aria-label={buttonLabel}>
+        <UnstyledButton
+          ref={trigger}
+          popoverTarget={id}
+          className={`hit-target ${plainClass}`}
+          aria-label={buttonLabel}
+        >
           {button}
         </UnstyledButton>
       ) : (
