@@ -64,7 +64,7 @@ export function CourseRates({
         (current.length === 0 ? (
           <Text size="sm" c="dimmed">
             Aucun cours cette saison ni les suivantes. Les cours se créent depuis le{" "}
-            <TextLink href="/planning" size="sm">
+            <TextLink href="/planning" size="sm" className="inline-link">
               planning
             </TextLink>
             .

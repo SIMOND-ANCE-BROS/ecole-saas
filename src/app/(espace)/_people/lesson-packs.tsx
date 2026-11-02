@@ -23,7 +23,7 @@ function PackLine({ pack, personId }: { pack: PackRow; personId: string }) {
           {pack.payerId !== personId && (
             <>
               {" · Facturé à "}
-              <TextLink href={`/personnes/${pack.payerId}`} size="xs" inherit>
+              <TextLink href={`/personnes/${pack.payerId}`} size="xs" inherit className="inline-link">
                 {pack.payer}
               </TextLink>
             </>
