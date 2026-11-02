@@ -20,6 +20,9 @@ export type ConnectionState = {
 /**
  * Saves (or replaces) an active instructor's connected calendar; the token
  * arrives already encrypted. false if the instructor does not exist or is no longer active.
+ * Replacing a calendar of another provider removes the upcoming slots read from the previous
+ * one, like a disconnection (#386): no sync replaces them any more. With the same provider, they
+ * stay until the next sync replaces them, so the instructor never looks free meanwhile.
  */
 export async function saveConnection(
   tx: Tx,
@@ -32,6 +35,11 @@ export async function saveConnection(
     .from(instructor)
     .where(and(eq(instructor.id, instructorId), eq(instructor.active, true)));
   if (!i) return false;
+  const [previous] = await tx
+    .select({ provider: calendarConnection.provider })
+    .from(calendarConnection)
+    .where(eq(calendarConnection.instructorId, instructorId))
+    .for("update");
   const columns = { provider: c.provider, account: c.account, encryptedToken: c.encryptedToken };
   await tx
     .insert(calendarConnection)
@@ -40,7 +48,21 @@ export async function saveConnection(
       target: calendarConnection.instructorId,
       set: columnsOf(calendarConnection, { ...columns, lastSyncedAt: null, error: null, createdAt: sql`now()` }),
     });
+  if (previous && previous.provider !== c.provider) await removeUpcomingSlots(tx, instructorId, previous.provider);
   return true;
+}
+
+/** Removes the upcoming slots read from a calendar (of one provider, or all); manual entries remain. */
+async function removeUpcomingSlots(tx: Tx, instructorId: string, provider?: Provider): Promise<void> {
+  await tx
+    .delete(unavailability)
+    .where(
+      and(
+        eq(unavailability.instructorId, instructorId),
+        provider ? eq(unavailability.source, provider) : ne(unavailability.source, "manual"),
+        gt(unavailability.endsAt, sql`now()`),
+      ),
+    );
 }
 
 export async function connectionState(tx: Tx, instructorId: string): Promise<ConnectionState | null> {
@@ -81,14 +103,15 @@ export async function connectedInstructors(tx: Tx): Promise<string[]> {
  * Result of a synchronisation; a token renewed by the provider replaces the old one. Tokens arrive
  * already encrypted. Recorded only on the connection the sync read (`readToken`, compared like
  * `saveRenewedToken`): a calendar reconnected meanwhile keeps its own token and stays « not yet
- * synced » rather than showing the old connection's result (#383).
+ * synced » rather than showing the old connection's result (#383). Tells whether it was recorded
+ * (#386): false when the calendar was reconnected or disconnected meanwhile.
  */
 export async function recordSync(
   tx: Tx,
   instructorId: string,
   r: { readToken: string; error: string | null; encryptedToken?: string },
-): Promise<void> {
-  await tx
+): Promise<boolean> {
+  const rows = await tx
     .update(calendarConnection)
     .set(
       columnsOf(calendarConnection, {
@@ -97,7 +120,9 @@ export async function recordSync(
         ...(r.encryptedToken ? { encryptedToken: r.encryptedToken } : {}),
       }),
     )
-    .where(and(eq(calendarConnection.instructorId, instructorId), eq(calendarConnection.encryptedToken, r.readToken)));
+    .where(and(eq(calendarConnection.instructorId, instructorId), eq(calendarConnection.encryptedToken, r.readToken)))
+    .returning({ id: calendarConnection.id });
+  return rows.length === 1;
 }
 
 /**
@@ -123,14 +148,6 @@ export async function deleteConnection(tx: Tx, instructorId: string): Promise<bo
     .delete(calendarConnection)
     .where(eq(calendarConnection.instructorId, instructorId))
     .returning({ id: calendarConnection.id });
-  await tx
-    .delete(unavailability)
-    .where(
-      and(
-        eq(unavailability.instructorId, instructorId),
-        ne(unavailability.source, "manual"),
-        gt(unavailability.endsAt, sql`now()`),
-      ),
-    );
+  await removeUpcomingSlots(tx, instructorId);
   return rows.length === 1;
 }

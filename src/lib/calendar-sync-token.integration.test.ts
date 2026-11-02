@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { withSchool } from "../db";
 import { saveConnection } from "../db/calendar-connections";
 import { decrypt, encrypt } from "./encryption";
-import { syncCalendar } from "./calendar-sync";
+import { SYNC_RECONNECTED, syncCalendar } from "./calendar-sync";
 
 /**
  * A refresh token the provider rotated during a failed sync is not lost when the sync's error
@@ -178,14 +178,15 @@ describe("syncCalendar when the calendar is reconnected during the sync (#383)",
     return row as { encrypted_token: string; error: string | null; last_synced_at: Date | null };
   };
 
-  it("keeps the new token and leaves the new connection unsynced when the sync succeeds", async () => {
+  it("keeps the new token and leaves the new connection unsynced when the read succeeds", async () => {
     const result = await syncCalendar(
       school,
       instructorId,
       reconnectedDuring(() => response(200, { value: [] })),
       NOW,
     );
-    expect(result.ok).toBe(true);
+    // Not reported as a success either (#386).
+    expect(result).toEqual({ ok: false, message: SYNC_RECONNECTED });
     const row = await connectionRow();
     expect(decrypt(row.encrypted_token)).toBe("fake-new");
     expect(row.last_synced_at).toBeNull();
