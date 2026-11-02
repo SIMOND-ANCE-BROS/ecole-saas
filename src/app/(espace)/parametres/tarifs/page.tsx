@@ -39,7 +39,11 @@ export default async function TariffsPage({ searchParams }: PageProps<"/parametr
       />
       {!parsed ? (
         <p className="text-sm">
-          Créez d’abord une <TextLink href="/parametres/saisons">saison</TextLink>.
+          Créez d’abord une{" "}
+          <TextLink href="/parametres/saisons" className="inline-link">
+            saison
+          </TextLink>
+          .
         </p>
       ) : (
         <>

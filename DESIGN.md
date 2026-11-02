@@ -76,11 +76,19 @@ variables at the top of `src/app/globals.css`. Decision: ADR 0003.
   `size="compact-sm"` (or `compact-xs`, `xs`): `globals.css` raises these
   Mantine sizes to 32 px, and every button, icon button and close button to 44 px at phone
   width or on a touch screen (#372). Never set a smaller `h` on a button.
-- Text buttons keep their look: a link button (`Anchor component="button"`) or
-  an `UnstyledButton` given the `hit-target` class (list column headers, « + »)
-  takes the clicks over 32 px through an invisible box with a mouse, so the
-  list header stays dense, and grows to 44 px at phone width or on a touch
-  screen (`globals.css`, #396).
+- Text buttons and links keep their look: a link button (`Anchor component="button"`),
+  a link (`Anchor href`, `TextLink`) or an `UnstyledButton` given the
+  `hit-target` class (list column headers, « + ») takes the clicks over 32 px
+  through an invisible box with a mouse, so list rows and the list header stay
+  dense (32 px), and grows to 44 px at phone width or on a touch screen
+  (`globals.css`, #396, #403). Links in list cells are covered too, although
+  the row itself opens the record. Keep at least 8 px between two links stacked on
+  desktop, so neither box covers the other link's text (« Coordonnées »), and
+  16 px when the boxes must not touch at all (« Changer d’école », « Se
+  déconnecter »).
+- Exception: a link inside a sentence (« Créez d’abord une saison. », « Facturé
+  à … ») carries `className="inline-link"` and keeps its line height: a 44 px
+  link would break the line, and WCAG 2.5.8 exempts links in running text.
 - Exception: the « × » of a choice in a multiple select (`MultiSelect`, e.g.
   « Sites fermés ») keeps Mantine's 24 × 22 px, which passes WCAG 2.5.8 by its spacing exception; a larger box
   would make the field taller or catch clicks meant for the field. The same

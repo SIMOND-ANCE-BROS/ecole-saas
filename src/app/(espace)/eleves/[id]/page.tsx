@@ -209,7 +209,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
               </Text>
             ) : (
               emergencyContacts.map((u) => (
-                <span key={u.relationshipId} className="flex flex-wrap gap-x-2">
+                <span key={u.relationshipId} className="flex flex-wrap items-baseline gap-x-2">
                   <span className="font-medium">{u.name}</span>
                   {u.telephone ? (
                     <Telephone number={u.telephone} />
@@ -235,7 +235,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
             p="md"
             component="section"
             aria-labelledby="coordonnees"
-            className="flex flex-col gap-1 text-sm"
+            className="flex flex-col gap-2 text-sm"
           >
             <Title order={2} size="h6" id="coordonnees">
               Coordonnées {ofName(firstName)}
@@ -293,7 +293,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           {e.billedTo.type === "person" ? (
             <Text size="sm" c="dimmed">
               Paiements : sur la fiche de{" "}
-              <TextLink href={`/contacts/${e.billedTo.id}`} size="sm" inherit>
+              <TextLink href={`/contacts/${e.billedTo.id}`} size="sm" inherit className="inline-link">
                 {e.billedTo.name}
               </TextLink>
               , qui paie pour {firstName}.

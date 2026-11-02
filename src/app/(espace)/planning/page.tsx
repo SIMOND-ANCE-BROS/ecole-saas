@@ -118,7 +118,7 @@ export default async function SchedulePage({ searchParams }: PageProps<"/plannin
               <>
                 {" "}
                 Créez le premier avec « Nouveau cours », ou{" "}
-                <TextLink href={copy.href} size="sm" inherit>
+                <TextLink href={copy.href} size="sm" inherit className="inline-link">
                   reprenez les cours d’une autre saison
                 </TextLink>
                 .
