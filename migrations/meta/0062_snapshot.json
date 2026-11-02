@@ -1,5 +1,5 @@
 {
-  "id": "b2cdc59e-e4e7-455d-946d-eb3cfc76e119",
+  "id": "fddd05dd-1075-4dd4-aa04-45ade2b48239",
   "prevId": "acedbfd5-127a-4ba2-a6b2-759d6e466795",
   "version": "7",
   "dialect": "postgresql",
@@ -1295,6 +1295,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "workshop_price_cents": {
+          "name": "workshop_price_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "instructor_rate_cents": {
           "name": "instructor_rate_cents",
           "type": "integer",
@@ -1489,6 +1495,10 @@
         "course_duration": {
           "name": "course_duration",
           "value": "\"course\".\"duration_minutes\" > 0"
+        },
+        "course_workshop_price": {
+          "name": "course_workshop_price",
+          "value": "\"course\".\"workshop_price_cents\" IS NULL OR (\"course\".\"type\" = 'workshop' AND \"course\".\"workshop_price_cents\" >= 0)"
         }
       },
       "isRLSEnabled": false
@@ -2905,18 +2915,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "email_code_hash": {
-          "name": "email_code_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "email_code_sent_at": {
-          "name": "email_code_sent_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},
@@ -2975,10 +2973,6 @@
       },
       "policies": {},
       "checkConstraints": {
-        "invitation_email_code": {
-          "name": "invitation_email_code",
-          "value": "(\"invitation\".\"email_code_hash\" IS NULL) = (\"invitation\".\"email_code_sent_at\" IS NULL) AND (\"invitation\".\"email_code_hash\" IS NULL OR \"invitation\".\"type\" = 'invitation')"
-        },
         "invitation_content": {
           "name": "invitation_content",
           "value": "(\"invitation\".\"type\" = 'invitation' AND \"invitation\".\"role\" IS NOT NULL) OR (\"invitation\".\"type\" = 'reset' AND \"invitation\".\"user_id\" IS NOT NULL)"
@@ -6432,7 +6426,7 @@
       "checkConstraints": {
         "submission_kind": {
           "name": "submission_kind",
-          "value": "\"submission\".\"kind\" IN ('payment', 'enrollment', 'course', 'lesson_pack')"
+          "value": "\"submission\".\"kind\" IN ('payment', 'enrollment', 'course', 'lesson_pack', 'workshop_signup')"
         },
         "submission_request_hash": {
           "name": "submission_request_hash",
@@ -7035,6 +7029,314 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.workshop_signup": {
+      "name": "workshop_signup",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "school_id": {
+          "name": "school_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "billing_entity_id": {
+          "name": "billing_entity_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "course_id": {
+          "name": "course_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payer_id": {
+          "name": "payer_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vat_treatment_id": {
+          "name": "vat_treatment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_price_cents": {
+          "name": "unit_price_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "price_reason": {
+          "name": "price_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signed_up_on": {
+          "name": "signed_up_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "workshop_signup_payer_id_index": {
+          "name": "workshop_signup_payer_id_index",
+          "columns": [
+            {
+              "expression": "payer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "workshop_signup_course_id_index": {
+          "name": "workshop_signup_course_id_index",
+          "columns": [
+            {
+              "expression": "course_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "workshop_signup_school_id_school_id_fk": {
+          "name": "workshop_signup_school_id_school_id_fk",
+          "tableFrom": "workshop_signup",
+          "tableTo": "school",
+          "columnsFrom": [
+            "school_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "workshop_signup_billing_entity_same_school_fk": {
+          "name": "workshop_signup_billing_entity_same_school_fk",
+          "tableFrom": "workshop_signup",
+          "tableTo": "billing_entity",
+          "columnsFrom": [
+            "school_id",
+            "billing_entity_id"
+          ],
+          "columnsTo": [
+            "school_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workshop_signup_course_same_entity_fk": {
+          "name": "workshop_signup_course_same_entity_fk",
+          "tableFrom": "workshop_signup",
+          "tableTo": "course",
+          "columnsFrom": [
+            "school_id",
+            "course_id",
+            "billing_entity_id"
+          ],
+          "columnsTo": [
+            "school_id",
+            "id",
+            "billing_entity_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workshop_signup_payer_same_school_fk": {
+          "name": "workshop_signup_payer_same_school_fk",
+          "tableFrom": "workshop_signup",
+          "tableTo": "person",
+          "columnsFrom": [
+            "school_id",
+            "payer_id"
+          ],
+          "columnsTo": [
+            "school_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workshop_signup_vat_treatment_same_school_fk": {
+          "name": "workshop_signup_vat_treatment_same_school_fk",
+          "tableFrom": "workshop_signup",
+          "tableTo": "vat_treatment",
+          "columnsFrom": [
+            "school_id",
+            "vat_treatment_id"
+          ],
+          "columnsTo": [
+            "school_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "workshop_signup_school_id_id_unique": {
+          "name": "workshop_signup_school_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "school_id",
+            "id"
+          ]
+        },
+        "workshop_signup_school_id_id_billing_entity_id_unique": {
+          "name": "workshop_signup_school_id_id_billing_entity_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "school_id",
+            "id",
+            "billing_entity_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "workshop_signup_price": {
+          "name": "workshop_signup_price",
+          "value": "\"workshop_signup\".\"unit_price_cents\" >= 0"
+        },
+        "workshop_signup_reason": {
+          "name": "workshop_signup_reason",
+          "value": "\"workshop_signup\".\"price_reason\" IS NULL OR btrim(\"workshop_signup\".\"price_reason\") <> ''"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.workshop_signup_person": {
+      "name": "workshop_signup_person",
+      "schema": "",
+      "columns": {
+        "school_id": {
+          "name": "school_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "workshop_signup_id": {
+          "name": "workshop_signup_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "workshop_signup_person_person_id_index": {
+          "name": "workshop_signup_person_person_id_index",
+          "columns": [
+            {
+              "expression": "person_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "workshop_signup_person_school_id_school_id_fk": {
+          "name": "workshop_signup_person_school_id_school_id_fk",
+          "tableFrom": "workshop_signup_person",
+          "tableTo": "school",
+          "columnsFrom": [
+            "school_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "workshop_signup_person_workshop_signup_same_school_fk": {
+          "name": "workshop_signup_person_workshop_signup_same_school_fk",
+          "tableFrom": "workshop_signup_person",
+          "tableTo": "workshop_signup",
+          "columnsFrom": [
+            "school_id",
+            "workshop_signup_id"
+          ],
+          "columnsTo": [
+            "school_id",
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "workshop_signup_person_person_same_school_fk": {
+          "name": "workshop_signup_person_person_same_school_fk",
+          "tableFrom": "workshop_signup_person",
+          "tableTo": "person",
+          "columnsFrom": [
+            "school_id",
+            "person_id"
+          ],
+          "columnsTo": [
+            "school_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "workshop_signup_person_workshop_signup_id_person_id_pk": {
+          "name": "workshop_signup_person_workshop_signup_id_person_id_pk",
+          "columns": [
+            "workshop_signup_id",
+            "person_id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

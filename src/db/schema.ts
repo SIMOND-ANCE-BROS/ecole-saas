@@ -742,6 +742,9 @@ export const course = pgTable(
     startTime: time("start_time").notNull(),
     durationMinutes: integer("duration_minutes").notNull(),
     maxCapacity: integer("max_capacity"),
+    // Price per participant of a workshop (#297 Q1 default), VAT-inclusive; NULL: none set, the
+    // front desk types it at sign-up. Only on a workshop.
+    workshopPriceCents: integer("workshop_price_cents"),
     // Instructor's pay for this course (#191); NULL: their default rate.
     instructorRateCents: integer("instructor_rate_cents"),
     // Unit of that rate: the instructor's pay mode when it was typed (#268). A later
@@ -760,6 +763,10 @@ export const course = pgTable(
     check("course_recurrence_weekday", sql`(${t.recurrence} = 'dates') = (${t.weekday} IS NULL)`),
     check("course_period", sql`${t.startDate} IS NULL OR ${t.endDate} IS NULL OR ${t.startDate} <= ${t.endDate}`),
     check("course_duration", sql`${t.durationMinutes} > 0`),
+    check(
+      "course_workshop_price",
+      sql`${t.workshopPriceCents} IS NULL OR (${t.type} = 'workshop' AND ${t.workshopPriceCents} >= 0)`,
+    ),
     index().on(t.seasonId, t.weekday),
     sameSchoolTarget(t),
     sameEntityTarget(t),
@@ -888,7 +895,7 @@ export const submission = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.schoolId, t.key] }),
-    check("submission_kind", sql`${t.kind} IN ('payment', 'enrollment', 'course', 'lesson_pack')`),
+    check("submission_kind", sql`${t.kind} IN ('payment', 'enrollment', 'course', 'lesson_pack', 'workshop_signup')`),
     check("submission_request_hash", sql`length(${t.requestHash}) = 64`),
     // The purge of old keys (#262) reads one school's oldest rows.
     index().on(t.schoolId, t.createdAt),
@@ -1157,6 +1164,61 @@ export const lessonPackUsage = pgTable(
     index().on(t.lessonId),
     sameEntity(t, t.lessonPackId, lessonPack),
     sameEntity(t, t.lessonId, lesson),
+  ],
+);
+
+/**
+ * A payer's sign-up of one or more of their students for a workshop (#297): sold by the
+ * workshop's business with its VAT treatment, at a price per participant frozen when signed
+ * up (the workshop's, or typed with a reason). Owes it once per participant
+ * (`domain/workshop/signup.ts`). Not on any invoice draft yet (open question, #297).
+ */
+export const workshopSignup = pgTable(
+  "workshop_signup",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    schoolId: schoolIdColumn(),
+    // The workshop's business (#299, ADR 0006): the key to the course carries it.
+    billingEntityId: uuid("billing_entity_id").notNull(),
+    courseId: uuid("course_id").notNull(),
+    payerId: uuid("payer_id").notNull(),
+    // The workshop's treatment when signed up (#301), copied: a later change leaves it.
+    vatTreatmentId: uuid("vat_treatment_id").notNull(),
+    // VAT-inclusive price per participant.
+    unitPriceCents: integer("unit_price_cents").notNull(),
+    // Why the price differs from the workshop's, or why it was typed; NULL: the workshop's.
+    priceReason: text("price_reason"),
+    // Always given by the app (`todayInParis`): no default in the server's time zone.
+    signedUpOn: date("signed_up_on").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("workshop_signup_price", sql`${t.unitPriceCents} >= 0`),
+    check("workshop_signup_reason", sql`${t.priceReason} IS NULL OR btrim(${t.priceReason}) <> ''`),
+    index().on(t.payerId),
+    index().on(t.courseId),
+    sameSchoolTarget(t),
+    sameEntityTarget(t),
+    sameSchool(t, t.billingEntityId, billingEntity),
+    sameEntity(t, t.courseId, course),
+    sameSchool(t, t.payerId, person),
+    sameSchool(t, t.vatTreatmentId, vatTreatment),
+  ],
+);
+
+/** Students signed up by a workshop sign-up (#297): one row each, the participants it owes for. */
+export const workshopSignupPerson = pgTable(
+  "workshop_signup_person",
+  {
+    schoolId: schoolIdColumn(),
+    workshopSignupId: uuid("workshop_signup_id").notNull(),
+    personId: uuid("person_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workshopSignupId, t.personId] }),
+    index().on(t.personId),
+    sameSchool(t, t.workshopSignupId, workshopSignup).onDelete("cascade"),
+    sameSchool(t, t.personId, person),
   ],
 );
 

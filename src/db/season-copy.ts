@@ -47,6 +47,8 @@ const COPIED = {
   billingEntityId: course.billingEntityId,
   // So does its VAT treatment (#301).
   vatTreatmentId: course.vatTreatmentId,
+  // A workshop's price per participant (#297); one-off courses are listed apart, never copied.
+  workshopPriceCents: course.workshopPriceCents,
 } satisfies { [K in MustCopy]: (typeof course)[K] };
 
 async function coursesOf(tx: Tx, seasonId: string) {

@@ -20,6 +20,7 @@ import {
   payMode,
   season,
   site,
+  workshopSignup,
 } from "./schema";
 import {
   courseRateAllowed,
@@ -33,7 +34,8 @@ import { type CourseSlotAndInstructor, givenLessonsKeep } from "../domain/schedu
 import { entityChangeRefusal } from "../domain/enrollment/entities";
 import { issuePath } from "../lib/form-errors";
 import { has } from "../lib/has";
-import { parseEuros } from "../lib/money";
+import { formatEuros, parseEuros } from "../lib/money";
+import { MAX_PRICE_CENTS as MAX_SIGNUP_PRICE_CENTS } from "../domain/workshop/signup";
 
 /** Schedule editing (courses, disciplines, rooms), always within the `withSchool()` transaction (RLS). */
 
@@ -129,6 +131,12 @@ const courseFields = z.object({
     .nullable()
     .transform((v) => v || null),
   maxCapacity: integerOrNull(1, 1000),
+  /** Price per participant of a workshop (#297 Q1 default), VAT-inclusive; empty or absent: none. Ignored for another type. */
+  workshopPrice: euroRate
+    .refine((c) => c === null || c <= MAX_SIGNUP_PRICE_CENTS, {
+      message: `Prix trop élevé (${formatEuros(MAX_SIGNUP_PRICE_CENTS)} au plus)`,
+    })
+    .optional(),
   /** Instructor's pay for this course (#191), director only; absent or empty: their default rate. */
   instructorRate: euroRateOrNull,
   /** Instructor the rate was typed for: a rate left over from another instructor is not kept (#191). */
@@ -182,6 +190,8 @@ export type EditedCourse = {
   ageMax: number | null;
   level: string | null;
   maxCapacity: number | null;
+  /** Price per participant of a workshop (#297); null when none. */
+  workshopPriceCents: number | null;
 };
 
 /** Dates of a one-off course, sorted (text `YYYY-MM-DD`). */
@@ -212,6 +222,7 @@ export async function readCourse(tx: Tx, id: string): Promise<EditedCourse | nul
       ageMax: course.ageMax,
       level: course.level,
       maxCapacity: course.maxCapacity,
+      workshopPriceCents: course.workshopPriceCents,
     })
     .from(course)
     .innerJoin(discipline, eq(discipline.id, course.disciplineId))
@@ -348,6 +359,8 @@ async function values(tx: Tx, entry: CourseInput, guard?: string) {
       ageMax,
       level: level,
       maxCapacity: maxCapacity,
+      // Only a workshop has a price per participant (#297).
+      workshopPriceCents: type === "workshop" ? (entry.workshopPrice ?? null) : null,
     },
     dates: oneOff ? [...new Set(entry.dates)].sort() : [],
   };
@@ -359,6 +372,15 @@ async function enrollmentCount(tx: Tx, id: string): Promise<number> {
     .select({ n: sql<number>`count(DISTINCT ${enrollmentCourse.enrollmentId})::int` })
     .from(enrollmentCourse)
     .where(eq(enrollmentCourse.courseId, id));
+  return n;
+}
+
+/** Number of sign-ups for a workshop (#297): it then keeps its type, its business and its existence. */
+async function signupCount(tx: Tx, id: string): Promise<number> {
+  const [{ n }] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(workshopSignup)
+    .where(eq(workshopSignup.courseId, id));
   return n;
 }
 
@@ -381,7 +403,8 @@ export async function entityLock(tx: Tx, id: string): Promise<string | null> {
   return entityChangeRefusal({
     from: "current",
     to: "other",
-    enrollments: await enrollmentCount(tx, id),
+    // A workshop's sign-ups belong to its business too (#297).
+    enrollments: (await enrollmentCount(tx, id)) + (await signupCount(tx, id)),
     countedLessons: await countedLessonCount(tx, id),
   });
 }
@@ -460,6 +483,8 @@ export async function updateCourse(tx: Tx, id: string, entry: CourseInput): Prom
   if (!existing) return { ok: false, message: "Ce cours n’existe plus." };
   const r = await values(tx, entry, existing.instructorId);
   if (!r.ok) return r;
+  if (existing.type === "workshop" && r.values.type !== "workshop" && (await signupCount(tx, id)) > 0)
+    return { ok: false, message: "Ce stage a des inscrits : il reste un stage." };
   const entity = await resolveEntity(tx, entry.billingEntityId, existing.billingEntityId);
   if (!entity.ok) return entity;
   // Its enrollments and counted lessons belong to its entity (the database refuses an
@@ -770,7 +795,7 @@ export async function courseRateState(tx: Tx, id: string): Promise<CourseRateSta
 /** Refused as soon as an enrollment, whatever its status, concerns the course. */
 export async function deleteCourse(tx: Tx, id: string): Promise<Result> {
   if (!(await readCourse(tx, id))) return { ok: false, message: "Ce cours n’existe plus." };
-  const n = await enrollmentCount(tx, id);
+  const n = (await enrollmentCount(tx, id)) + (await signupCount(tx, id));
   if (n > 0)
     return { ok: false, message: `Ce cours a ${n} inscription${n > 1 ? "s" : ""} : il ne peut pas être supprimé.` };
   const [attendanceRow] = await tx
