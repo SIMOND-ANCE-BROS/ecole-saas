@@ -495,6 +495,15 @@ describe("a workshop's participants (#398)", () => {
         expect(await orphans(lessonId)).toEqual([]);
       });
 
+    it("cancels the enrollment carrying the attendance beside a duplicate dropped on the lesson's day", async () => {
+      const carrying = await enrollChild("active");
+      const lessonId = await workshopLesson();
+      await markChildAbsent(lessonId);
+      await enrollChild("dropped", "2027-02-13");
+      expect(await cancelEnrolled(carrying)).toEqual({ ok: true, id: carrying });
+      expect(await orphans(lessonId)).toEqual([]);
+    });
+
     it("cancels a duplicate enrollment when a sign-up carries the attendance, then refuses to cancel the sign-up", async () => {
       const r = await signUp({ participantIds: [child] });
       if (!r.ok) throw new Error(r.message);
