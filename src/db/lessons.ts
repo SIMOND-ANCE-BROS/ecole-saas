@@ -8,7 +8,7 @@ import { closedCourseLabel, type ScopedClosure } from "../domain/schedule/closur
 import { recurrenceOf, type SeasonCalendar } from "../domain/schedule/lessons";
 import { planLessonSync, seasonLessons } from "../domain/schedule/lesson-sync";
 import type { Tx } from "./index";
-import { lockCourseOfLesson, lockCoursesOfSeason, lockSeasonOfLesson } from "./attendance-locks";
+import { lockCourseOfLesson, lockCoursesOfSeason, lockSeasonOfClosure, lockSeasonOfLesson } from "./attendance-locks";
 import {
   course,
   courseDate,
@@ -239,11 +239,7 @@ export async function deleteClosure(
   const refusal = { ok: false as const, message: "Cette fermeture n’existe plus." };
   if (!isUuid(id)) return refusal;
   // Its season first, the lock the sync that follows takes (`attendance-locks.ts`, #415).
-  await tx
-    .select({ id: season.id })
-    .from(season)
-    .where(sql`${season.id} = (SELECT f.season_id FROM closure f WHERE f.id = ${id})`)
-    .for("no key update");
+  await lockSeasonOfClosure(tx, id);
   const [row] = await tx.delete(closure).where(eq(closure.id, id)).returning({ seasonId: closure.seasonId });
   return row ? { ok: true, id, seasonId: row.seasonId } : refusal;
 }

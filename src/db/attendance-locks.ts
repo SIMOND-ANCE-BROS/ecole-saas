@@ -18,9 +18,12 @@ import { course, season } from "./schema";
  *      comes last, under the lock of step 2.
  *
  * A transaction may start at a later step (attendance locks no season), never go back: once it
- * holds a course, it never asks for a season, nor for a course of a lower id in a later
- * statement. `syncLessons` locks the season, then every course of it; so every transaction that
- * ends in a sync, or writes a course a sync reads, locks the season before its first course:
+ * holds a course, it never asks for a season. Only a transaction holding the season may lock
+ * further courses in a later statement (a course edit's sync locks the season's courses after
+ * its own): every transaction locking more than one course therefore holds the season first, so
+ * two of them never hold courses at once. `syncLessons` locks the season, then every course of
+ * it; so every transaction that ends in a sync, locks several courses, or deletes a course a
+ * closure may name, locks the season before its first course:
  *
  *   - the course form: `lockCourse` (the course's season, then the course `FOR UPDATE`), or
  *     `lockSeason` for a new course, then `updateCourse` or `createCourse`, then the sync;
@@ -28,7 +31,10 @@ import { course, season } from "./schema";
  *     lesson's season, then its course); then the sync after a move;
  *   - a closure: `addClosure` locks its season `FOR NO KEY UPDATE` before inserting its courses
  *     (`closure_course`, whose foreign key takes `KEY SHARE` on them), `deleteClosure` locks the
- *     closure's season before deleting it; then the sync;
+ *     closure's season before deleting it (`lockSeasonOfClosure`); then the sync;
+ *   - `cancelEnrollment`: its payer and the enrollment (`payment-locks.ts`), then its season, then
+ *     its courses by id (`lockCoursesOfEnrollment`). Without the season it could hold a course of
+ *     a lower id that a course edit's sync then asks for, while waiting for the edited course;
  *   - `updateSeason`, `copySeason`: the season `FOR UPDATE`, then the courses they create, then
  *     the sync.
  *
@@ -37,6 +43,11 @@ import { course, season } from "./schema";
  * `deleteCourse` against a closure of that course being added (its `KEY SHARE` on the course held
  * the course row's `DELETE`), and the sync's further statement for a course a lesson restored
  * meanwhile added, against `cancelEnrollment` locking the same courses by id.
+ *
+ * Writers of a single course that never sync nor ask for a season afterwards may skip step 1:
+ * attendance, counts, `cancelLesson`, workshop sign-ups and `setCourseRate` (the course
+ * `FOR UPDATE`, then its instructor `FOR SHARE`). A sync or a course edit holding the season waits
+ * for them, and they wait for nothing it holds.
  *
  * `changeRoom` updates its room row before the seasons it syncs (`syncRoomSeasons`, by season id):
  * course writers take only `KEY SHARE` on a room (foreign keys), which that update lets through.
@@ -139,6 +150,15 @@ export async function lockSeasonOfLesson(tx: Tx, lessonId: string): Promise<void
     .where(
       sql`${season.id} = (SELECT c.season_id FROM lesson l JOIN course c ON c.id = l.course_id WHERE l.id = ${lessonId})`,
     )
+    .for("no key update");
+}
+
+/** The season of a closure, `FOR NO KEY UPDATE`, before deleting it (`deleteClosure`). */
+export async function lockSeasonOfClosure(tx: Tx, closureId: string): Promise<void> {
+  await tx
+    .select({ id: season.id })
+    .from(season)
+    .where(sql`${season.id} = (SELECT f.season_id FROM closure f WHERE f.id = ${closureId})`)
     .for("no key update");
 }
 
