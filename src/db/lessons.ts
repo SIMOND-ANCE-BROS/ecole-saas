@@ -8,7 +8,7 @@ import { closedCourseLabel, type ScopedClosure } from "../domain/schedule/closur
 import { recurrenceOf, type SeasonCalendar } from "../domain/schedule/lessons";
 import { planLessonSync, seasonLessons } from "../domain/schedule/lesson-sync";
 import type { Tx } from "./index";
-import { lockCourseOfLesson } from "./attendance-locks";
+import { lockCourseOfLesson, lockCourses } from "./attendance-locks";
 import {
   course,
   courseDate,
@@ -315,24 +315,25 @@ export async function syncLessons(
     closures,
     start,
   );
-  const existing = await tx
-    .select({
-      id: lesson.id,
-      courseId: lesson.courseId,
-      reference: sql<string>`coalesce(${lesson.plannedDate}, ${lesson.date})::text`,
-      date: sql<string>`${lesson.date}::text`,
-      plannedDate: sql<string | null>`${lesson.plannedDate}::text`,
-      startTime: sql<string | null>`${lesson.startTime}::text`,
-      durationMinutes: lesson.durationMinutes,
-      instructorId: lesson.instructorId,
-      courseInstructorId: course.instructorId,
-      status: lesson.status,
-      attendanceSheet: sql<boolean>`${withAttendance}`,
-      packUsage: sql<boolean>`${withPackUsage}`,
-    })
-    .from(lesson)
-    .innerJoin(course, eq(course.id, lesson.courseId))
-    .where(eq(course.seasonId, seasonId));
+  const readExisting = () =>
+    tx
+      .select({
+        id: lesson.id,
+        courseId: lesson.courseId,
+        reference: sql<string>`coalesce(${lesson.plannedDate}, ${lesson.date})::text`,
+        date: sql<string>`${lesson.date}::text`,
+        plannedDate: sql<string | null>`${lesson.plannedDate}::text`,
+        startTime: sql<string | null>`${lesson.startTime}::text`,
+        durationMinutes: lesson.durationMinutes,
+        instructorId: lesson.instructorId,
+        courseInstructorId: course.instructorId,
+        status: lesson.status,
+        attendanceSheet: sql<boolean>`${withAttendance}`,
+        packUsage: sql<boolean>`${withPackUsage}`,
+      })
+      .from(lesson)
+      .innerJoin(course, eq(course.id, lesson.courseId))
+      .where(eq(course.seasonId, seasonId));
   const suspended = await tx
     .select({
       courseId: suspendedLesson.courseId,
@@ -348,19 +349,43 @@ export async function syncLessons(
     .where(eq(course.seasonId, seasonId));
   const active = await tx.select({ id: instructor.id }).from(instructor).where(eq(instructor.active, true));
 
-  const plan = planLessonSync({
-    start,
-    today,
-    season: { start: s.start, end: s.end },
-    expected,
-    meets,
-    existing,
-    suspended,
-    activeInstructors: new Set(active.map((i) => i.id)),
-    closed,
-    meetsBeyond,
-    report,
-  });
+  const activeInstructors = new Set(active.map((i) => i.id));
+  const planOf = (existing: Awaited<ReturnType<typeof readExisting>>) =>
+    planLessonSync({
+      start,
+      today,
+      season: { start: s.start, end: s.end },
+      expected,
+      meets,
+      existing,
+      suspended,
+      activeInstructors,
+      closed,
+      meetsBeyond,
+      report,
+    });
+
+  // The courses of the lessons it removes, before those lessons (`attendance-locks.ts`, #413):
+  // a count, an attendance or a cancellation of one of them in progress holds its course, and
+  // commits before the lessons are read again; one that starts later waits for this sync. Read
+  // again, a lesson counted or with attendance meanwhile is kept like any other (#225). Only the
+  // courses it removes lessons of, not the whole season: a caller editing a course holds that
+  // course and may wait for the season lock taken above. Again until no new course: a lesson
+  // restored meanwhile (`restoreLesson` locks only its row) may add one.
+  let existing = await readExisting();
+  let plan = planOf(existing);
+  const locked = new Set<string>();
+  for (;;) {
+    const courseOf = new Map(existing.map((e) => [e.id, e.courseId]));
+    const toLock = [...new Set(plan.remove.map((id) => courseOf.get(id)))].filter(
+      (c): c is string => c !== undefined && !locked.has(c),
+    );
+    if (toLock.length === 0) break;
+    await lockCourses(tx, toLock);
+    for (const c of toLock) locked.add(c);
+    existing = await readExisting();
+    plan = planOf(existing);
+  }
 
   // Removals first: a lesson given back may take the date a removed lesson leaves.
   if (plan.remove.length > 0) await tx.delete(lesson).where(inArray(lesson.id, plan.remove));

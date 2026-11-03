@@ -1,11 +1,11 @@
 import postgres from "postgres";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ALREADY_COUNTED_FOR_STUDENT, NOT_A_STUDENT_OF_LESSON, USED_UP } from "../domain/lesson-pack/pack";
 import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 import { deleteCourse } from "./courses";
 import { withSchool } from "./index";
 import { countLesson, lessonPacks, packsOf, uncountLesson } from "./lesson-packs";
-import { cancelLesson, syncLessons } from "./lessons";
+import { cancelLesson, saveAttendance, syncLessons } from "./lessons";
 
 /**
  * Counting private lessons on a lesson pack (#286), as the application runs it
@@ -95,6 +95,8 @@ afterAll(async () => {
     "lesson_pack",
     "enrollment_course",
     "enrollment",
+    "attendance",
+    "closure",
     "suspended_lesson",
     "lesson",
     "course",
@@ -393,5 +395,100 @@ describe("cancelling a lesson while it is counted on a pack (#411)", () => {
       value: { ok: false, message: "Cette séance est annulée : elle ne se décompte pas." },
     });
     expect(await usages(pack)).toBe(0);
+  });
+});
+
+describe("regenerating lessons while one of them is counted or has attendance (#413)", () => {
+  /** A course of its own on Mondays, with its lessons, and a closure of only that course on its first one. */
+  const newClosedCourse = async (type: "private" | "group", startTime: string) => {
+    const [{ id: courseId }] =
+      await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, type, weekday, start_time, duration_minutes)
+        VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${discipline}, ${room}, ${teacher}, ${type}, 1, ${startTime}, 60) RETURNING id`;
+    await withSchool(school, (tx) => syncLessons(tx, season, TODAY));
+    const [l] =
+      await admin`SELECT id, date::text AS date FROM lesson WHERE course_id = ${courseId} ORDER BY date LIMIT 1`;
+    if (!l) throw new Error("no lesson generated");
+    const [{ id: closureId }] =
+      await admin`INSERT INTO closure (school_id, season_id, label, start_date, end_date, scope)
+      VALUES (${school}, ${season}, 'Zz fermeture', ${l.date}, ${l.date}, 'courses') RETURNING id`;
+    await admin`INSERT INTO closure_course (school_id, closure_id, course_id) VALUES (${school}, ${closureId}, ${courseId})`;
+    return { courseId: courseId as string, lessonId: l.id as string, date: l.date as string };
+  };
+  /** The sync a closure just added runs, reporting the lessons kept on its date. */
+  const sync = (date: string) =>
+    withSchool(school, (tx) => syncLessons(tx, season, TODAY, undefined, { start: date, end: date }));
+  // Each test's closure removed: the next one reports only the lessons kept on its own.
+  afterEach(async () => {
+    await admin`DELETE FROM closure WHERE school_id = ${school}`;
+  });
+  const exists = async (lessonId: string) => (await admin`SELECT id FROM lesson WHERE id = ${lessonId}`).length === 1;
+
+  it("keeps a lesson counted while the sync was reading, instead of failing on its usage", async () => {
+    const { lessonId, date } = await newClosedCourse("private", "20:00");
+    const pack = await newPack(5, other);
+    let counting: Settled<Awaited<ReturnType<typeof count>>> | undefined;
+    let syncing: Settled<Awaited<ReturnType<typeof sync>>> | undefined;
+    await admin.begin(async (t) => {
+      // The lesson held: the count waits on it, holding its course. The sync then reads no usage.
+      // Before #413 it went on to delete the lesson, waited behind the count and failed on its
+      // usage (23503); it now waits for the course, then reads the lesson again.
+      await t`SELECT id FROM lesson WHERE id = ${lessonId} FOR NO KEY UPDATE`;
+      counting = settle(count(lessonId, pack));
+      await untilWaiting(t, 1);
+      syncing = settle(sync(date));
+      await untilWaiting(t, 2);
+    });
+    if (!counting || !syncing) throw new Error("not started");
+    expect(await counting).toEqual({ value: { ok: true } });
+    expect(await syncing).toEqual({ value: { added: 0, removed: 0, keptForPack: 1 } });
+    expect(await exists(lessonId)).toBe(true);
+    expect(await usages(pack)).toBe(1);
+  });
+
+  it("makes a count wait for a sync removing the lesson, then refuses it", async () => {
+    const { lessonId, date } = await newClosedCourse("private", "21:00");
+    const pack = await newPack(5, other);
+    let syncing: Settled<Awaited<ReturnType<typeof sync>>> | undefined;
+    let counting: Settled<Awaited<ReturnType<typeof count>>> | undefined;
+    await admin.begin(async (t) => {
+      // KEY SHARE on the lesson: the sync locks the course, then waits to delete the lesson.
+      // The count waits for the course behind it.
+      await t`SELECT id FROM lesson WHERE id = ${lessonId} FOR KEY SHARE`;
+      syncing = settle(sync(date));
+      await untilWaiting(t, 1);
+      counting = settle(count(lessonId, pack));
+      await untilWaiting(t, 2);
+    });
+    if (!counting || !syncing) throw new Error("not started");
+    expect(await syncing).toEqual({ value: { added: 0, removed: 1, keptForPack: 0 } });
+    expect(await counting).toEqual({ value: { ok: false, message: "Cette séance n’existe plus." } });
+    expect(await exists(lessonId)).toBe(false);
+    expect(await usages(pack)).toBe(0);
+  });
+
+  it("keeps a lesson whose attendance was taken while the sync was reading", async () => {
+    const { courseId, lessonId, date } = await newClosedCourse("group", "18:00");
+    const [{ id: enrollment }] =
+      await admin`INSERT INTO enrollment (school_id, billing_entity_id, payer_id, season_id, audience, period, gross_price_cents)
+        VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${payer}, ${season}, 'child', 'year', 0) RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id)
+      VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${enrollment}), ${enrollment}, ${student}, ${courseId})`;
+    const attend = () =>
+      withSchool(school, (tx) => saveAttendance(tx, lessonId, [{ studentId: student, present: true }]));
+    let attending: Settled<Awaited<ReturnType<typeof attend>>> | undefined;
+    let syncing: Settled<Awaited<ReturnType<typeof sync>>> | undefined;
+    await admin.begin(async (t) => {
+      // The lesson held: the attendance waits to mark it done, holding its course.
+      await t`SELECT id FROM lesson WHERE id = ${lessonId} FOR NO KEY UPDATE`;
+      attending = settle(attend());
+      await untilWaiting(t, 1);
+      syncing = settle(sync(date));
+      await untilWaiting(t, 2);
+    });
+    if (!attending || !syncing) throw new Error("not started");
+    expect(await attending).toEqual({ value: { ok: true, id: lessonId } });
+    // Kept like any lesson with attendance: never touched, not reported as kept for a pack.
+    expect(await syncing).toEqual({ value: { added: 0, removed: 0, keptForPack: 0 } });
+    expect(await exists(lessonId)).toBe(true);
   });
 });
