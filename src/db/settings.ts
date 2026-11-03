@@ -269,7 +269,7 @@ export async function updateSeason(
   const s = validSeasonInput.safeParse(entry);
   if (!s.success) return { ok: false, message: s.error.issues[0].message };
   if (!isUuid(id)) return { ok: false, message: "Cette saison n’existe plus." };
-  // FOR UPDATE conflicts with the KEY SHARE of addClosure(): a closure being added commits first and is
+  // FOR UPDATE conflicts with the lock of addClosure(): a closure being added commits first and is
   // checked below, or waits and reads the new dates (#194).
   const [current] = await tx
     .select({ start: season.startDate, end: season.endDate })

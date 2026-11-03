@@ -3,7 +3,7 @@ import { columnsOf, rowsOf } from "./columns-of";
 import { z } from "zod";
 import type { Tx } from "./index";
 import { hoursBySite } from "./settings";
-import { lockCourses } from "./attendance-locks";
+import { lockCourses, lockSeasonOfCourse } from "./attendance-locks";
 import { resolveEntity } from "./billing-entities";
 import { resolveTreatment } from "./vat-treatments";
 import {
@@ -470,10 +470,12 @@ async function replaceDates(tx: Tx, courseId: string, dates: string[]) {
  * keeps of it: the course form and the instructor page's rate (#276) then save
  * one after the other, each seeing the other's rate, instead of the later one
  * writing back a rate read before the other's commit. Lock order: the course,
- * then its instructor (FOR SHARE), on both paths.
+ * then its instructor (FOR SHARE), on both paths. Its season before it
+ * (`attendance-locks.ts`, #415): the course form then syncs the season's lessons.
  */
 export async function lockCourse(tx: Tx, id: string): Promise<void> {
   if (!z.uuid().safeParse(id).success) return;
+  await lockSeasonOfCourse(tx, id);
   await tx.select({ id: course.id }).from(course).where(eq(course.id, id)).for("update");
 }
 
@@ -795,9 +797,13 @@ export async function courseRateState(tx: Tx, id: string): Promise<CourseRateSta
 
 /** Refused as soon as an enrollment, whatever its status, concerns the course. */
 export async function deleteCourse(tx: Tx, id: string): Promise<Result> {
-  // The course before its lessons (`attendance-locks.ts`, #406): attendance saved meanwhile is seen.
-  // FOR NO KEY UPDATE, as in moveCourse: another transaction's `syncLessons` inserting lessons takes KEY SHARE on it.
-  if (z.uuid().safeParse(id).success) await lockCourses(tx, [id]);
+  // Its season, then the course before its lessons (`attendance-locks.ts`, #406, #415): attendance
+  // saved meanwhile is seen, and a closure of this course being added commits first. FOR NO KEY
+  // UPDATE, as in moveCourse: an enrollment being saved takes KEY SHARE on it.
+  if (z.uuid().safeParse(id).success) {
+    await lockSeasonOfCourse(tx, id);
+    await lockCourses(tx, [id]);
+  }
   if (!(await readCourse(tx, id))) return { ok: false, message: "Ce cours n’existe plus." };
   const n = (await enrollmentCount(tx, id)) + (await signupCount(tx, id));
   if (n > 0)
@@ -851,10 +857,13 @@ export async function moveCourse(
 ): Promise<MoveResult> {
   const c = validSlot.safeParse(slot);
   if (!c.success) return { status: "refused", message: c.error.issues[0].message };
-  // The course before its lessons, as everywhere (`attendance-locks.ts`, #406): its given lessons
-  // are stamped below before the course row is updated. FOR NO KEY UPDATE, not UPDATE: the
-  // lessons another transaction's `syncLessons` inserts take KEY SHARE on their course.
-  if (z.uuid().safeParse(id).success) await lockCourses(tx, [id]);
+  // Its season, then the course before its lessons, as everywhere (`attendance-locks.ts`, #406,
+  // #415): its given lessons are stamped below before the course row is updated, then the caller
+  // syncs the season. FOR NO KEY UPDATE, not UPDATE: an enrollment being saved takes KEY SHARE on it.
+  if (z.uuid().safeParse(id).success) {
+    await lockSeasonOfCourse(tx, id);
+    await lockCourses(tx, [id]);
+  }
   const existing = await readCourse(tx, id);
   if (!existing) return { status: "refused", message: "Ce cours n’existe plus." };
   if (existing.recurrence === "dates")

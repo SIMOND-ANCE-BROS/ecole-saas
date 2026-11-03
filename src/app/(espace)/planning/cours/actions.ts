@@ -18,6 +18,7 @@ import { slotConflicts } from "@/db/unavailabilities";
 import { hoursBySite } from "@/db/settings";
 import { chosenSeason, currentSeason, seasonById, seasonCourses } from "@/db/schedule";
 import { seasonCalendar, syncLessons } from "@/db/lessons";
+import { lockSeason } from "@/db/attendance-locks";
 import { lessonDatesOf } from "@/domain/schedule/lessons";
 import { conflicts } from "@/domain/schedule/overlap";
 import { outsideHours } from "@/domain/schedule/hours";
@@ -56,7 +57,7 @@ export async function saveCourse(
   const today = todayInParis();
   const result = await withSchool(schoolId, async (tx) => {
     // Locked before reading the rate kept and audited below: a rate saved meanwhile
-    // from the instructor page (#276) is seen, not overwritten.
+    // from the instructor page (#276) is seen, not overwritten. Its season first (#415).
     if (id !== null) await lockCourse(tx, id);
     const existing = id !== null ? await readCourse(tx, id) : null;
     const target =
@@ -75,6 +76,8 @@ export async function saveCourse(
               ? "Cette saison n’existe plus."
               : "Aucune saison n’est paramétrée.",
       };
+    // A new course: its season before anything, as `lockCourse` does for an edit (`attendance-locks.ts`, #415).
+    if (id === null) await lockSeason(tx, target);
     const before = existing ? await courseRateState(tx, existing.id) : null;
     const save = async () => {
       const r = id !== null ? await updateCourse(tx, id, parsed.data) : await createCourse(tx, target, parsed.data);

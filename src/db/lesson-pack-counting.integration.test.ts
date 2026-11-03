@@ -472,9 +472,10 @@ describe("regenerating lessons while one of them is counted or has attendance (#
     let deletion: Settled<Awaited<ReturnType<typeof remove>>> | undefined;
     let syncing: Settled<Awaited<ReturnType<typeof sync>>> | undefined;
     await admin.begin(async (t) => {
-      // KEY SHARE on the course: the deletion locks it and deletes its lessons, then waits at the
-      // course row's DELETE. The sync still reads those lessons and waits for the course. Without
-      // dropping the deleted course from its plan, it then tried to recreate its lessons (23502).
+      // KEY SHARE on the course: the deletion locks its season and the course, deletes its lessons,
+      // then waits at the course row's DELETE. Before #415 the sync still read those lessons and
+      // waited for the course, then tried to recreate its lessons (23502). It now waits for the
+      // season behind the deletion, and reads neither the course nor its lessons.
       await t`SELECT id FROM course WHERE id = ${courseId} FOR KEY SHARE`;
       deletion = settle(remove());
       await untilWaiting(t, 1);
