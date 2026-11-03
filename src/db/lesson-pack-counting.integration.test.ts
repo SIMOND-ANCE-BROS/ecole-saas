@@ -514,4 +514,31 @@ describe("regenerating lessons while one of them is counted or has attendance (#
     expect(await syncing).toEqual({ value: { added: 0, removed: 0, keptForPack: 0 } });
     expect(await exists(lessonId)).toBe(true);
   });
+
+  it("makes an attendance wait for a sync removing the lesson, then refuses it", async () => {
+    const { courseId, lessonId, date } = await newClosedCourse("group", "19:00");
+    const [{ id: enrollment }] =
+      await admin`INSERT INTO enrollment (school_id, billing_entity_id, payer_id, season_id, audience, period, gross_price_cents)
+        VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${payer}, ${season}, 'child', 'year', 0) RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id)
+      VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${enrollment}), ${enrollment}, ${student}, ${courseId})`;
+    const attend = () =>
+      withSchool(school, (tx) => saveAttendance(tx, lessonId, [{ studentId: student, present: true }]));
+    let syncing: Settled<Awaited<ReturnType<typeof sync>>> | undefined;
+    let attending: Settled<Awaited<ReturnType<typeof attend>>> | undefined;
+    await admin.begin(async (t) => {
+      // KEY SHARE on the lesson: the sync locks the course, then waits to delete the lesson.
+      // The attendance waits for the course behind it: no attendance on a lesson removed.
+      await t`SELECT id FROM lesson WHERE id = ${lessonId} FOR KEY SHARE`;
+      syncing = settle(sync(date));
+      await untilWaiting(t, 1);
+      attending = settle(attend());
+      await untilWaiting(t, 2);
+    });
+    if (!attending || !syncing) throw new Error("not started");
+    expect(await syncing).toEqual({ value: { added: 0, removed: 1, keptForPack: 0 } });
+    expect(await attending).toEqual({ value: { ok: false, message: "Cette séance n’existe plus." } });
+    expect(await exists(lessonId)).toBe(false);
+    expect(await admin`SELECT 1 FROM attendance WHERE lesson_id = ${lessonId}`).toHaveLength(0);
+  });
 });

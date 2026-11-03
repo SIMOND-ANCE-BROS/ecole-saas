@@ -181,7 +181,7 @@ describe("a closure's sync and a write of one of the season's courses (#415)", (
       });
     const [closing, editing] = await meet(season, () => closeAndSync(season, wholeSchool), edit);
     expect(closing).toEqual({ value: { ok: true, added: 0, removed: 1, keptForPack: 0 } });
-    expect(editing).toEqual({ value: { ok: true, id: course } });
+    expect(editing).toMatchObject({ value: { ok: true, id: course } });
     expect(await lessonOn(course, CLOSED.start)).toBeUndefined();
     expect((await admin`SELECT level FROM course WHERE id = ${course}`)[0].level).toBe("Zz avancé");
   });
@@ -202,12 +202,14 @@ describe("a closure's sync and a write of one of the season's courses (#415)", (
     expect(await lessonOn(course, CLOSED.start)).toBeUndefined();
   });
 
-  it("runs a lesson moved « et des suivantes » after the closure, instead of a deadlock", async () => {
+  it("runs a lesson moved « et des suivantes » after the closure", async () => {
     const { season, courses } = await newSeason();
     const [course] = courses;
     const later = await lessonOn(course, "2026-11-23");
     if (!later) throw new Error("no lesson generated");
     // The dated calendar (`moveOneLesson`): the lesson and the following ones moved, then the sync.
+    // A regression check: unlike the cases around it, this one did not deadlock on main every
+    // time (which side got the season first varied), so it does not prove `lockSeasonOfLesson`.
     const move = () =>
       withSchool(school, async (tx) => {
         const r = await moveLesson(
@@ -275,7 +277,7 @@ describe("a sync's courses and an enrollment cancelled at the same moment (#415)
       // A lesson of the lower course restored meanwhile, on the closed day: one more to remove.
       expect(await withSchool(school, (tx) => restoreLesson(tx, toRestore))).toEqual({ ok: true, id: toRestore });
       // The cancellation locks the lower course, then waits for the higher one (before #415), or
-      // waits for the lower one behind the sync (since #415).
+      // waits for the season behind the sync (since #415).
       cancelling = settle(withSchool(school, (tx) => cancelEnrollment(tx, desk, enrollment)));
       await untilWaiting(t, 2);
     });
@@ -285,5 +287,41 @@ describe("a sync's courses and an enrollment cancelled at the same moment (#415)
     expect(await syncing).toEqual({ value: { added: 0, removed: 2, keptForPack: 0 } });
     expect(await cancelling).toEqual({ value: { ok: true, id: enrollment } });
     expect(await admin`SELECT id FROM lesson WHERE id = ${toRestore}`).toHaveLength(0);
+  });
+
+  it("makes a cancellation wait for a course edit, whose sync locks the season's lower courses", async () => {
+    const { season, courses } = await newSeason([1, 2]);
+    const [low, high] = [...courses].sort();
+    const [{ id: enrollment }] =
+      await admin`INSERT INTO enrollment (school_id, billing_entity_id, payer_id, season_id, audience, period, gross_price_cents)
+        VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${payer}, ${season}, 'child', 'year', 0) RETURNING id`;
+    for (const c of [low, high])
+      await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id)
+        VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${enrollment}), ${enrollment}, ${student}, ${c})`;
+    const weekday = high === courses[0] ? 1 : 2;
+    // The course form on the higher course, held between its save and its sync until the
+    // cancellation waits. Before the fix the cancellation then held the lower course and waited
+    // for the edited one, while the edit's sync asked for the lower one (40P01). It now waits for
+    // the season the edit holds.
+    let open: () => void = () => {};
+    let saved: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    const atGate = new Promise<void>((resolve) => (saved = resolve));
+    const edit = settle(
+      withSchool(school, async (tx) => {
+        await lockCourse(tx, high);
+        const r = await updateCourse(tx, high, { ...base, weekday, level: "Zz avancé" });
+        saved();
+        await gate;
+        if (r.ok) await syncLessons(tx, season, TODAY);
+        return r.ok;
+      }),
+    );
+    await atGate;
+    const cancelling = settle(withSchool(school, (tx) => cancelEnrollment(tx, desk, enrollment)));
+    await admin.begin((t) => untilWaiting(t, 1));
+    open();
+    expect(await edit).toEqual({ value: true });
+    expect(await cancelling).toEqual({ value: { ok: true, id: enrollment } });
   });
 });
