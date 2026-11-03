@@ -33,11 +33,14 @@ import { course } from "./schema";
  *
  * Why no deadlock: once a course is held, none of them asks for a payer, an enrollment or a
  * sign-up lock it did not take before. The other writers of a course take it before its lessons
- * too: `updateCourse` and `updateCourseRate` (`FOR UPDATE`, then its instructor and lessons);
+ * too: `updateCourse` and `setCourseRate` (`FOR UPDATE`, then its instructor and lessons);
  * `moveCourse`, `moveLesson` and `deleteCourse` (`FOR NO KEY UPDATE`, then the lessons they stamp
  * or delete, then the course row's update or delete). These three never take the course
  * `FOR UPDATE` first: another transaction's `syncLessons` inserting lessons takes `KEY SHARE` on
- * it. Every `update(course)` comes after such a lock (grep before adding one).
+ * it. Every `update(course)` comes after such a lock (grep before adding one). Creating an
+ * enrollment takes `FOR KEY SHARE` on its courses (`saveEnrollment`), so it never waits for an
+ * attendance being saved. Attendance and an enrollment's courses take `KEY SHARE` on the
+ * students through their foreign keys, which a payer lock in `FOR NO KEY UPDATE` lets through.
  *
  * Lesson packs (#411) follow the same order:
  *
@@ -50,13 +53,14 @@ import { course } from "./schema";
  *     course asks for a pack afterwards, so the pack before the course is safe;
  *   - `cancelLesson`: the lesson's course (`lockCourseOfLesson`), then it reads the attendance
  *     sheet, locks the lesson and reads its usages;
- *   - `uncountLesson` only deletes a usage: it locks neither the lesson nor its course. Creating an
- * enrollment takes `FOR KEY SHARE` on its courses (`saveEnrollment`), so it never waits for an
- * attendance being saved. Attendance and an enrollment's courses take `KEY SHARE` on the
- * students through their foreign keys, which a payer lock in `FOR NO KEY UPDATE` lets through.
+ *   - `uncountLesson` only deletes a usage: it locks neither the lesson nor its course. A refusal of
+ *     `cancelLesson` or `entityLock` may then name a usage just undone: the user retries.
+ *
+ * Writes of a single lesson row that check nothing across the course (`restoreLesson`,
+ * `changeInstructor`) lock only that row, and never wait on a course afterwards.
  *
  * Not covered here: a drop-out dated before lessons with attendance (#406, N3), which waits for a
- * business rule.
+ * business rule; `syncLessons`, which deletes lessons without locking their courses (#413).
  *
  * Always within `withSchool()` (RLS): a row of another school is neither seen nor locked.
  */

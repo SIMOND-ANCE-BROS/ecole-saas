@@ -266,8 +266,9 @@ const NO_PACK = "Ce carnet n’existe plus.";
  * takes KEY SHARE, which UPDATE would block. The lesson's row is locked the same way:
  * two counts of the same lesson on two packs of one student, or a cancellation
  * (`cancelLesson`), run one after the other. Locks are always taken pack first, then
- * the lesson's course, then the lesson (`attendance-locks.ts`). The usages are read in statements of their own, after the locks, so that
- * they see a count committed meanwhile. The same count sent twice changes nothing.
+ * the lesson's course, then the lesson (`attendance-locks.ts`). The usages are read
+ * in statements of their own, after the locks, so that they see a count committed
+ * meanwhile. The same count sent twice changes nothing.
  */
 export async function countLesson(
   tx: Tx,
