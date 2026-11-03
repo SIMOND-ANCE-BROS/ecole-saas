@@ -1,10 +1,11 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ALREADY_COUNTED_FOR_STUDENT, NOT_A_STUDENT_OF_LESSON, USED_UP } from "../domain/lesson-pack/pack";
+import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
+import { deleteCourse } from "./courses";
 import { withSchool } from "./index";
 import { countLesson, lessonPacks, packsOf, uncountLesson } from "./lesson-packs";
 import { cancelLesson, syncLessons } from "./lessons";
-import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
 
 /**
  * Counting private lessons on a lesson pack (#286), as the application runs it
@@ -124,19 +125,35 @@ async function whileLocked<T>(
   await admin.begin(async (t) => {
     await lock(t);
     running = start();
-    for (let i = 0; i < 100; i++) {
-      // Statistics are a snapshot per transaction: cleared, each read sees the sessions now.
-      await t`SELECT pg_stat_clear_snapshot()`;
-      const [{ n }] = await t`SELECT count(*)::int AS n FROM pg_stat_activity
-        WHERE wait_event_type = 'Lock' AND datname = current_database() AND pid <> pg_backend_pid()`;
-      if (n >= waiters) return;
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    throw new Error("the calls never waited on the lock");
+    await untilWaiting(t, waiters);
   });
   if (!running) throw new Error("not started");
   return running;
 }
+
+/** Returns once `waiters` other sessions wait on a lock. */
+async function untilWaiting(t: postgres.TransactionSql, waiters: number) {
+  for (let i = 0; i < 100; i++) {
+    // Statistics are a snapshot per transaction: cleared, each read sees the sessions now.
+    await t`SELECT pg_stat_clear_snapshot()`;
+    const [{ n }] = await t`SELECT count(*)::int AS n FROM pg_stat_activity
+      WHERE wait_event_type = 'Lock' AND datname = current_database() AND pid <> pg_backend_pid()`;
+    if (n >= waiters) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("the calls never waited on the lock");
+}
+
+/** Postgres error code of a failed call, Drizzle wrapping the driver's error as its cause. */
+const codeOf = (error: unknown) => (error as { cause?: { code?: string } }).cause?.code ?? String(error);
+
+/** A call's outcome, its error kept by code: a deadlock rejects with 40P01. */
+type Settled<T> = Promise<{ value: T } | { error: unknown }>;
+const settle = <T>(p: Promise<T>): Settled<T> =>
+  p.then(
+    (value) => ({ value }),
+    (error: unknown) => ({ error: codeOf(error) }),
+  );
 
 describe("counting a private lesson on a pack", () => {
   it("counts the lesson once, shows the remaining lessons and logs it", async () => {
@@ -268,6 +285,113 @@ describe("counting a private lesson on a pack", () => {
   it("cannot count on a pack of another school", async () => {
     const pack = await newPack(5);
     expect(await count(lessons[17], pack, otherSchool)).toEqual({ ok: false, message: "Ce carnet n’existe plus." });
+    expect(await usages(pack)).toBe(0);
+  });
+});
+
+describe("deleting a course while one of its lessons is counted on a pack (#411)", () => {
+  /** A private course of its own (no enrollment, so it can be deleted), with its lessons. */
+  const newPrivateCourse = async (weekday: number) => {
+    const [{ id }] =
+      await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, type, weekday, start_time, duration_minutes)
+        VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${season}, ${discipline}, ${room}, ${teacher}, 'private', ${weekday}, '19:00', 60) RETURNING id`;
+    await withSchool(school, (tx) => syncLessons(tx, season, TODAY));
+    const [l] = await admin`SELECT id FROM lesson WHERE course_id = ${id} ORDER BY date LIMIT 1`;
+    if (!l) throw new Error("no lesson generated");
+    return { courseId: id as string, lessonId: l.id as string };
+  };
+  const remove = (courseId: string) => withSchool(school, (tx) => deleteCourse(tx, courseId));
+
+  it("counts after a deletion that already deleted the lessons, instead of a deadlock", async () => {
+    const { courseId, lessonId } = await newPrivateCourse(5);
+    const pack = await newPack(5, other);
+    let deletion: Settled<Awaited<ReturnType<typeof remove>>> | undefined;
+    let counting: Settled<Awaited<ReturnType<typeof count>>> | undefined;
+    await admin.begin(async (t) => {
+      // KEY SHARE lets the deletion lock the course and delete its lessons, then holds it at the
+      // course row's DELETE (FOR UPDATE). The count starts then: before #411 it took KEY SHARE on
+      // the course too, then waited for the deleted lesson while the deletion waited for that
+      // KEY SHARE (40P01). It now waits for the course, behind the deletion.
+      await t`SELECT id FROM course WHERE id = ${courseId} FOR KEY SHARE`;
+      deletion = settle(remove(courseId));
+      await untilWaiting(t, 1);
+      counting = settle(count(lessonId, pack));
+      await untilWaiting(t, 2);
+    });
+    if (!deletion || !counting) throw new Error("not started");
+    expect(await deletion).toEqual({ value: { ok: true, id: courseId } });
+    expect(await counting).toEqual({ value: { ok: false, message: "Cette séance n’existe plus." } });
+    expect(await usages(pack)).toBe(0);
+    expect(await admin`SELECT id FROM course WHERE id = ${courseId}`).toHaveLength(0);
+  });
+
+  it("makes a deletion wait for a count in progress, then refuses it", async () => {
+    const { courseId, lessonId } = await newPrivateCourse(6);
+    const pack = await newPack(5, other);
+    let counting: Settled<Awaited<ReturnType<typeof count>>> | undefined;
+    let deletion: Settled<Awaited<ReturnType<typeof remove>>> | undefined;
+    await admin.begin(async (t) => {
+      // The lesson held: the count waits on it, holding the course; the deletion waits behind.
+      await t`SELECT id FROM lesson WHERE id = ${lessonId} FOR NO KEY UPDATE`;
+      counting = settle(count(lessonId, pack));
+      await untilWaiting(t, 1);
+      deletion = settle(remove(courseId));
+      await untilWaiting(t, 2);
+    });
+    if (!deletion || !counting) throw new Error("not started");
+    expect(await counting).toEqual({ value: { ok: true } });
+    expect(await deletion).toEqual({
+      value: {
+        ok: false,
+        message: "Ce cours a des séances déjà décomptées d’un carnet : il ne peut pas être supprimé.",
+      },
+    });
+    expect(await usages(pack)).toBe(1);
+  });
+});
+
+describe("cancelling a lesson while it is counted on a pack (#411)", () => {
+  const cancel = (lessonId: string) => withSchool(school, (tx) => cancelLesson(tx, lessonId));
+  const statusOf = async (lessonId: string) =>
+    (await admin`SELECT status FROM lesson WHERE id = ${lessonId}`)[0].status as string;
+
+  it("refuses a cancellation that waited for a count in progress", async () => {
+    const pack = await newPack(5, other);
+    let counting: Settled<Awaited<ReturnType<typeof count>>> | undefined;
+    let cancelling: Settled<Awaited<ReturnType<typeof cancel>>> | undefined;
+    await admin.begin(async (t) => {
+      // The lesson held: the count waits on it, holding its course; the cancellation waits behind.
+      await t`SELECT id FROM lesson WHERE id = ${lessons[18]} FOR NO KEY UPDATE`;
+      counting = settle(count(lessons[18], pack));
+      await untilWaiting(t, 1);
+      cancelling = settle(cancel(lessons[18]));
+      await untilWaiting(t, 2);
+    });
+    if (!counting || !cancelling) throw new Error("not started");
+    expect(await counting).toEqual({ value: { ok: true } });
+    expect(await cancelling).toEqual({
+      value: { ok: false, message: "Cette séance est décomptée d’un carnet : annulez d’abord le décompte." },
+    });
+    expect(await statusOf(lessons[18])).toBe("planned");
+  });
+
+  it("refuses a count that waited for a cancellation in progress", async () => {
+    const pack = await newPack(5, other);
+    let cancelling: Settled<Awaited<ReturnType<typeof cancel>>> | undefined;
+    let counting: Settled<Awaited<ReturnType<typeof count>>> | undefined;
+    await admin.begin(async (t) => {
+      // The lesson held: the cancellation waits on it, holding its course; the count waits behind.
+      await t`SELECT id FROM lesson WHERE id = ${lessons[19]} FOR NO KEY UPDATE`;
+      cancelling = settle(cancel(lessons[19]));
+      await untilWaiting(t, 1);
+      counting = settle(count(lessons[19], pack));
+      await untilWaiting(t, 2);
+    });
+    if (!counting || !cancelling) throw new Error("not started");
+    expect(await cancelling).toEqual({ value: { ok: true, id: lessons[19] } });
+    expect(await counting).toEqual({
+      value: { ok: false, message: "Cette séance est annulée : elle ne se décompte pas." },
+    });
     expect(await usages(pack)).toBe(0);
   });
 });

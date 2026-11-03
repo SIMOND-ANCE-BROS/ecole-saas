@@ -691,6 +691,9 @@ export async function changeInstructor(tx: Tx, lessonId: string, instructorId: s
 
 /** Cancels a lesson whose attendance is not taken; it stays visible, struck through. */
 export async function cancelLesson(tx: Tx, lessonId: string): Promise<Result> {
+  // The lesson's course first, then the lesson (`attendance-locks.ts`, #411): a count, an attendance
+  // or a course deletion in progress commits first, and the reads below see it.
+  if (isUuid(lessonId)) await lockCourseOfLesson(tx, lessonId);
   const attendanceSheet = await readAttendance(tx, lessonId);
   if (!attendanceSheet) return { ok: false, message: "Cette séance n’existe plus." };
   if (attendanceSheet.students.some((d) => d.present !== null))
