@@ -374,6 +374,7 @@ export async function syncLessons(
   let existing = await readExisting();
   let plan = planOf(existing);
   const locked = new Set<string>();
+  const gone = new Set<string>();
   for (;;) {
     const courseOf = new Map(existing.map((e) => [e.id, e.courseId]));
     const toLock = [...new Set(plan.remove.map((id) => courseOf.get(id)))].filter(
@@ -383,8 +384,9 @@ export async function syncLessons(
     const kept = new Set(await lockCourses(tx, toLock));
     for (const c of toLock) locked.add(c);
     // A course deleted while this sync waited for it: none of its lessons is created again.
-    const gone = new Set(toLock.filter((c) => !kept.has(c)));
-    if (gone.size > 0) expectedLessons = lessonsOf(allCourses.filter((c) => !gone.has(c.id)));
+    const before = gone.size;
+    for (const c of toLock) if (!kept.has(c)) gone.add(c);
+    if (gone.size > before) expectedLessons = lessonsOf(allCourses.filter((c) => !gone.has(c.id)));
     existing = await readExisting();
     plan = planOf(existing);
   }
