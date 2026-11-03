@@ -306,15 +306,17 @@ export async function syncLessons(
     .innerJoin(course, eq(course.id, courseDate.courseId))
     .where(eq(course.seasonId, seasonId));
 
-  const { expected, meets, closed, meetsBeyond } = seasonLessons(
-    allCourses.map((c) => ({
-      ...c,
-      recurrence: recurrenceOf({ ...c, dates: oneOff.filter((p) => p.courseId === c.id).map((p) => p.date) }),
-    })),
-    { start: s.start, end: s.end },
-    closures,
-    start,
-  );
+  const lessonsOf = (courses: typeof allCourses) =>
+    seasonLessons(
+      courses.map((c) => ({
+        ...c,
+        recurrence: recurrenceOf({ ...c, dates: oneOff.filter((p) => p.courseId === c.id).map((p) => p.date) }),
+      })),
+      { start: s.start, end: s.end },
+      closures,
+      start,
+    );
+  let expectedLessons = lessonsOf(allCourses);
   const readExisting = () =>
     tx
       .select({
@@ -355,13 +357,10 @@ export async function syncLessons(
       start,
       today,
       season: { start: s.start, end: s.end },
-      expected,
-      meets,
+      ...expectedLessons,
       existing,
       suspended,
       activeInstructors,
-      closed,
-      meetsBeyond,
       report,
     });
 
@@ -381,8 +380,11 @@ export async function syncLessons(
       (c): c is string => c !== undefined && !locked.has(c),
     );
     if (toLock.length === 0) break;
-    await lockCourses(tx, toLock);
+    const kept = new Set(await lockCourses(tx, toLock));
     for (const c of toLock) locked.add(c);
+    // A course deleted while this sync waited for it: none of its lessons is created again.
+    const gone = new Set(toLock.filter((c) => !kept.has(c)));
+    if (gone.size > 0) expectedLessons = lessonsOf(allCourses.filter((c) => !gone.has(c.id)));
     existing = await readExisting();
     plan = planOf(existing);
   }

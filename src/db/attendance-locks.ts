@@ -62,7 +62,12 @@ import { course } from "./schema";
  * committed meanwhile is kept, as one committed before (#225), instead of the delete failing on
  * the usage's or the attendance's foreign key (23503). It locks no other course: callers editing a
  * course (`updateCourse`, `moveCourse`, `moveLesson`) hold it before the season. If a lesson
- * restored meanwhile (`restoreLesson`) adds a course, that one is locked in a further statement.
+ * restored meanwhile (`restoreLesson`) adds a course, that one is locked in a further statement,
+ * out of the id order: a writer locking several courses by id (`cancelEnrollment`) may then meet
+ * the sync crosswise (40P01, one of them rolled back, nothing lost). Accepted: it needs a lesson
+ * restored within the sync's few statements; the single order of #415 removes it too. A course
+ * deleted while the sync waited for it (`deleteCourse` holds it first) is not returned by
+ * `lockCourses`: the sync then plans as if it had never read it, with no lesson to create for it.
  * Writers of attendance, counts and cancellations never ask for a season, so they never deadlock
  * with a sync. Those callers do, after their course: a sync of another transaction (a closure
  * added) removing lessons of that very course then meets them crosswise (40P01). It did before
@@ -77,16 +82,17 @@ import { course } from "./schema";
  * Always within `withSchool()` (RLS): a row of another school is neither seen nor locked.
  */
 
-/** These courses, `FOR NO KEY UPDATE`, ordered by id, in one statement. */
-export async function lockCourses(tx: Tx, courseIds: readonly string[]): Promise<void> {
+/** These courses, `FOR NO KEY UPDATE`, ordered by id, in one statement; returns those that still exist. */
+export async function lockCourses(tx: Tx, courseIds: readonly string[]): Promise<string[]> {
   const ids = [...new Set(courseIds)];
-  if (ids.length === 0) return;
-  await tx
+  if (ids.length === 0) return [];
+  const rows = await tx
     .select({ id: course.id })
     .from(course)
     .where(inArray(course.id, ids))
     .orderBy(asc(course.id))
     .for("no key update");
+  return rows.map((r) => r.id);
 }
 
 /** The course of a lesson (`saveAttendance`). */

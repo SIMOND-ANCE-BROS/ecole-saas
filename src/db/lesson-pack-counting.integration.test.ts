@@ -466,6 +466,28 @@ describe("regenerating lessons while one of them is counted or has attendance (#
     expect(await usages(pack)).toBe(0);
   });
 
+  it("creates no lesson again for a course deleted while the sync waited for it", async () => {
+    const { courseId, lessonId, date } = await newClosedCourse("private", "22:00");
+    const remove = () => withSchool(school, (tx) => deleteCourse(tx, courseId));
+    let deletion: Settled<Awaited<ReturnType<typeof remove>>> | undefined;
+    let syncing: Settled<Awaited<ReturnType<typeof sync>>> | undefined;
+    await admin.begin(async (t) => {
+      // KEY SHARE on the course: the deletion locks it and deletes its lessons, then waits at the
+      // course row's DELETE. The sync still reads those lessons and waits for the course. Without
+      // dropping the deleted course from its plan, it then tried to recreate its lessons (23502).
+      await t`SELECT id FROM course WHERE id = ${courseId} FOR KEY SHARE`;
+      deletion = settle(remove());
+      await untilWaiting(t, 1);
+      syncing = settle(sync(date));
+      await untilWaiting(t, 2);
+    });
+    if (!deletion || !syncing) throw new Error("not started");
+    expect(await deletion).toEqual({ value: { ok: true, id: courseId } });
+    expect(await syncing).toEqual({ value: { added: 0, removed: 0, keptForPack: 0 } });
+    expect(await exists(lessonId)).toBe(false);
+    expect(await admin`SELECT id FROM lesson WHERE course_id = ${courseId}`).toHaveLength(0);
+  });
+
   it("keeps a lesson whose attendance was taken while the sync was reading", async () => {
     const { courseId, lessonId, date } = await newClosedCourse("group", "18:00");
     const [{ id: enrollment }] =
