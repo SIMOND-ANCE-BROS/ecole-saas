@@ -472,9 +472,10 @@ describe("regenerating lessons while one of them is counted or has attendance (#
     let deletion: Settled<Awaited<ReturnType<typeof remove>>> | undefined;
     let syncing: Settled<Awaited<ReturnType<typeof sync>>> | undefined;
     await admin.begin(async (t) => {
-      // KEY SHARE on the course: the deletion locks it and deletes its lessons, then waits at the
-      // course row's DELETE. The sync still reads those lessons and waits for the course. Without
-      // dropping the deleted course from its plan, it then tried to recreate its lessons (23502).
+      // KEY SHARE on the course: the deletion locks its season and the course, deletes its lessons,
+      // then waits at the course row's DELETE. Before #415 the sync still read those lessons and
+      // waited for the course, then tried to recreate its lessons (23502). It now waits for the
+      // season behind the deletion, and reads neither the course nor its lessons.
       await t`SELECT id FROM course WHERE id = ${courseId} FOR KEY SHARE`;
       deletion = settle(remove());
       await untilWaiting(t, 1);
@@ -512,5 +513,32 @@ describe("regenerating lessons while one of them is counted or has attendance (#
     // Kept like any lesson with attendance: never touched, not reported as kept for a pack.
     expect(await syncing).toEqual({ value: { added: 0, removed: 0, keptForPack: 0 } });
     expect(await exists(lessonId)).toBe(true);
+  });
+
+  it("makes an attendance wait for a sync removing the lesson, then refuses it", async () => {
+    const { courseId, lessonId, date } = await newClosedCourse("group", "19:00");
+    const [{ id: enrollment }] =
+      await admin`INSERT INTO enrollment (school_id, billing_entity_id, payer_id, season_id, audience, period, gross_price_cents)
+        VALUES (${school}, (SELECT id FROM billing_entity WHERE school_id = ${school} AND is_default), ${payer}, ${season}, 'child', 'year', 0) RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id)
+      VALUES (${school}, (SELECT billing_entity_id FROM enrollment WHERE id = ${enrollment}), ${enrollment}, ${student}, ${courseId})`;
+    const attend = () =>
+      withSchool(school, (tx) => saveAttendance(tx, lessonId, [{ studentId: student, present: true }]));
+    let syncing: Settled<Awaited<ReturnType<typeof sync>>> | undefined;
+    let attending: Settled<Awaited<ReturnType<typeof attend>>> | undefined;
+    await admin.begin(async (t) => {
+      // KEY SHARE on the lesson: the sync locks the course, then waits to delete the lesson.
+      // The attendance waits for the course behind it: no attendance on a lesson removed.
+      await t`SELECT id FROM lesson WHERE id = ${lessonId} FOR KEY SHARE`;
+      syncing = settle(sync(date));
+      await untilWaiting(t, 1);
+      attending = settle(attend());
+      await untilWaiting(t, 2);
+    });
+    if (!attending || !syncing) throw new Error("not started");
+    expect(await syncing).toEqual({ value: { added: 0, removed: 1, keptForPack: 0 } });
+    expect(await attending).toEqual({ value: { ok: false, message: "Cette séance n’existe plus." } });
+    expect(await exists(lessonId)).toBe(false);
+    expect(await admin`SELECT 1 FROM attendance WHERE lesson_id = ${lessonId}`).toHaveLength(0);
   });
 });

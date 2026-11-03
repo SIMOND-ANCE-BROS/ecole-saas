@@ -8,7 +8,7 @@ import { closedCourseLabel, type ScopedClosure } from "../domain/schedule/closur
 import { recurrenceOf, type SeasonCalendar } from "../domain/schedule/lessons";
 import { planLessonSync, seasonLessons } from "../domain/schedule/lesson-sync";
 import type { Tx } from "./index";
-import { lockCourseOfLesson, lockCourses } from "./attendance-locks";
+import { lockCourseOfLesson, lockCoursesOfSeason, lockSeasonOfClosure, lockSeasonOfLesson } from "./attendance-locks";
 import {
   course,
   courseDate,
@@ -175,13 +175,15 @@ export async function addClosure(tx: Tx, seasonId: string, entry: z.input<typeof
   const f = validClosureInput.safeParse(entry);
   if (!f.success) return { ok: false, message: f.error.issues[0].message };
   if (f.data.end < f.data.start) return { ok: false, message: "La fin précède le début." };
-  // KEY SHARE: waits for, then reads, a season date edit in progress (updateSeason() locks FOR UPDATE),
-  // and keeps the dates from changing until this closure commits (#194). Two closures still go side by side.
+  // Waits for, then reads, a season date edit in progress (updateSeason() locks FOR UPDATE), and keeps
+  // the dates from changing until this closure commits (#194). FOR NO KEY UPDATE, the lock its sync
+  // takes next, before the closure's courses (`closure_course` takes KEY SHARE on them): the season
+  // before any course (`attendance-locks.ts`, #415). Two closures of a season go one after the other.
   const [s] = await tx
     .select({ start: season.startDate, end: season.endDate })
     .from(season)
     .where(eq(season.id, seasonId))
-    .for("key share");
+    .for("no key update");
   if (!s) return { ok: false, message: "Cette saison n’existe plus." };
   // A closure belongs to one season (#189): its lessons are the ones it cancels.
   if (f.data.start < s.start || f.data.end > s.end)
@@ -236,6 +238,8 @@ export async function deleteClosure(
 ): Promise<{ ok: true; id: string; seasonId: string } | { ok: false; message: string }> {
   const refusal = { ok: false as const, message: "Cette fermeture n’existe plus." };
   if (!isUuid(id)) return refusal;
+  // Its season first, the lock the sync that follows takes (`attendance-locks.ts`, #415).
+  await lockSeasonOfClosure(tx, id);
   const [row] = await tx.delete(closure).where(eq(closure.id, id)).returning({ seasonId: closure.seasonId });
   return row ? { ok: true, id, seasonId: row.seasonId } : refusal;
 }
@@ -283,6 +287,11 @@ export async function syncLessons(
     .where(eq(season.id, seasonId))
     .for("no key update");
   if (!s) return { added: 0, removed: 0, keptForPack: 0 };
+  // Then every course of the season, by id, in one statement, before reading anything they carry
+  // (`attendance-locks.ts`, #413, #415): a count, an attendance or a cancellation in progress
+  // commits first and is read below; one that starts later waits for this sync. Callers holding a
+  // course took the season before it, so none of them waits for the season while holding a course.
+  await lockCoursesOfSeason(tx, seasonId);
   // Not bounded by the season's start: a season starting later than before (#270) leaves upcoming
   // lessons before its new start, to be removed like any other no longer expected.
   const start = [today, since ?? ""].reduce((a, b) => (b > a ? b : a));
@@ -316,7 +325,7 @@ export async function syncLessons(
       closures,
       start,
     );
-  let expectedLessons = lessonsOf(allCourses);
+  const expectedLessons = lessonsOf(allCourses);
   const readExisting = () =>
     tx
       .select({
@@ -364,32 +373,8 @@ export async function syncLessons(
       report,
     });
 
-  // The courses of the lessons it removes, before those lessons (`attendance-locks.ts`, #413):
-  // a count, an attendance or a cancellation of one of them in progress holds its course, and
-  // commits before the lessons are read again; one that starts later waits for this sync. Read
-  // again, a lesson counted or with attendance meanwhile is kept like any other (#225). Only the
-  // courses it removes lessons of, not the whole season: a caller editing a course holds that
-  // course and may wait for the season lock taken above. Again until no new course: a lesson
-  // restored meanwhile (`restoreLesson` locks only its row) may add one.
-  let existing = await readExisting();
-  let plan = planOf(existing);
-  const locked = new Set<string>();
-  const gone = new Set<string>();
-  for (;;) {
-    const courseOf = new Map(existing.map((e) => [e.id, e.courseId]));
-    const toLock = [...new Set(plan.remove.map((id) => courseOf.get(id)))].filter(
-      (c): c is string => c !== undefined && !locked.has(c),
-    );
-    if (toLock.length === 0) break;
-    const kept = new Set(await lockCourses(tx, toLock));
-    for (const c of toLock) locked.add(c);
-    // A course deleted while this sync waited for it: none of its lessons is created again.
-    const before = gone.size;
-    for (const c of toLock) if (!kept.has(c)) gone.add(c);
-    if (gone.size > before) expectedLessons = lessonsOf(allCourses.filter((c) => !gone.has(c.id)));
-    existing = await readExisting();
-    plan = planOf(existing);
-  }
+  // Read under the courses' locks: a lesson counted or with attendance is kept like any other (#225).
+  const plan = planOf(await readExisting());
 
   // Removals first: a lesson given back may take the date a removed lesson leaves.
   if (plan.remove.length > 0) await tx.delete(lesson).where(inArray(lesson.id, plan.remove));
@@ -866,8 +851,10 @@ export async function moveLesson(
     return { status: "refused", message: "La séance finirait après minuit." };
   }
   if (!isUuid(id)) return { status: "refused", message: "Cette séance n’existe plus." };
-  // The course before its lessons (`attendance-locks.ts`, #406): moving the following lessons
-  // stamps the earlier ones, then updates the course row. Attendance saved meanwhile is seen below.
+  // The season, then the course, then its lessons (`attendance-locks.ts`, #406, #415): moving the
+  // following lessons stamps the earlier ones, updates the course row, then syncs the season.
+  // Attendance saved meanwhile is seen below.
+  await lockSeasonOfLesson(tx, id);
   await lockCourseOfLesson(tx, id);
   const [s] = await tx
     .select({

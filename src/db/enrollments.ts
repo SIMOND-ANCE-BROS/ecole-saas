@@ -46,7 +46,7 @@ import type {
 } from "../domain/tariff/types";
 import { severalEntities } from "./billing-entities";
 import type { Tx } from "./index";
-import { lockCoursesOfEnrollment } from "./attendance-locks";
+import { lockCoursesOfEnrollment, lockSeason } from "./attendance-locks";
 import { paysForNonStudent, NOT_A_STUDENT_YET, payableStudents } from "./people";
 import {
   auditLog,
@@ -1022,8 +1022,10 @@ export async function dropEnrollment(tx: Tx, userId: string, id: string, dropped
 export async function cancelEnrollment(tx: Tx, userId: string, id: string): Promise<ChangeResult> {
   const locked = await readSaved(tx, id, true);
   if (!locked) return { ok: false, message: "Cette inscription a déjà été annulée." };
-  // Then its courses (`attendance-locks.ts`, #406), and the attendance check read again under
-  // them: attendance being saved or a sign-up being cancelled meanwhile is seen.
+  // Then its season and its courses (`attendance-locks.ts`, #406, #415), and the attendance check
+  // read again under them: attendance being saved or a sign-up being cancelled meanwhile is seen.
+  // The season first: a course edit or a sync holding it locks the season's courses after its own.
+  await lockSeason(tx, locked.seasonId);
   await lockCoursesOfEnrollment(tx, id);
   const e = await readSaved(tx, id);
   if (!e) return { ok: false, message: "Cette inscription a déjà été annulée." };

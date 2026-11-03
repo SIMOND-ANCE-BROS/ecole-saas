@@ -227,18 +227,27 @@ describe("a lesson removed by a closure, then given back (#206)", () => {
   });
 
   it("two closures added at the same time on the same season both go through", async () => {
-    // Each adds a closure (its foreign key takes KEY SHARE on the season), waits for the other, then syncs:
-    // with a FOR UPDATE lock on the season, the two syncs would wait on each other (deadlock).
-    let ready = 0;
-    const bothAdded = async () => {
-      ready += 1;
-      while (ready < 2) await new Promise((r) => setTimeout(r, 20));
+    // The first one added holds the season (FOR NO KEY UPDATE, the lock its sync takes, #415) until
+    // the second one waits for it, then syncs: the second one adds its closure and syncs after it.
+    // Both holding the season, then each waiting for the other (FOR UPDATE, #206), would deadlock.
+    let first = true;
+    const untilOtherWaits = async () => {
+      for (let i = 0; i < 100; i++) {
+        const [{ n }] = await admin`SELECT count(*)::int AS n FROM pg_stat_activity
+          WHERE wait_event_type = 'Lock' AND datname = current_database()`;
+        if (n >= 1) return;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      throw new Error("the second closure never waited for the first one");
     };
     const addThenSync = (day: string) =>
       withSchool(school, async (tx) => {
         const r = await addClosure(tx, season, { scope: "school", label: "Zz pont", start: day, end: day });
         if (!r.ok) throw new Error(r.message);
-        await bothAdded();
+        if (first) {
+          first = false;
+          await untilOtherWaits();
+        }
         await syncLessons(tx, season, TODAY);
         return r.id;
       });
