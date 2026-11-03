@@ -526,6 +526,7 @@ describe("a workshop's participants (#398)", () => {
         Promise.all([cancel(r.id), cancelEnrolled(enrollmentId)]),
       );
       const [signupGone, enrollmentGone] = results;
+      expect(results.filter((x) => x.ok)).toHaveLength(1);
       // The first one goes; the second then sees the attendance only it still carries.
       expect(signupGone.ok ? enrollmentGone : signupGone).toEqual(
         signupGone.ok ? { ok: false, message: ENROLLMENT_ATTENDED } : { ok: false, message: ATTENDANCE_TAKEN },
@@ -544,6 +545,7 @@ describe("a workshop's participants (#398)", () => {
         ]),
       );
       const [saved, cancelled] = results;
+      expect(results.filter((x) => x.ok)).toHaveLength(1);
       // One of them first: either the attendance is saved and the sign-up stays, or the sign-up goes and the
       // attendance is refused.
       expect(saved.ok ? cancelled : saved).toEqual(
@@ -563,6 +565,7 @@ describe("a workshop's participants (#398)", () => {
         ]),
       );
       const [saved, cancelled] = results;
+      expect(results.filter((x) => x.ok)).toHaveLength(1);
       expect(saved.ok ? cancelled : saved).toEqual(
         saved.ok ? { ok: false, message: ENROLLMENT_ATTENDED } : { ok: false, message: NOT_ON_SHEET },
       );

@@ -33,9 +33,12 @@ import { course } from "./schema";
  *
  * Why no deadlock: once a course is held, none of them asks for a payer, an enrollment or a
  * sign-up lock it did not take before. The other writers of a course take it before its lessons
- * too: `updateCourse` (`lockCourse`, `FOR UPDATE`, then its instructor and lessons), `moveCourse`
- * (its update of the course row, then its lessons), `countLesson` (`FOR KEY SHARE`, which
- * `FOR NO KEY UPDATE` lets through, then the lesson). Creating an
+ * too: `updateCourse` and `updateCourseRate` (`FOR UPDATE`, then its instructor and lessons);
+ * `moveCourse`, `moveLesson` and `deleteCourse` (`FOR NO KEY UPDATE`, then the lessons they stamp
+ * or delete, then the course row's update or delete); `countLesson` (`FOR KEY SHARE`, which
+ * `FOR NO KEY UPDATE` lets through, then the lesson). The three first never take the course
+ * `FOR UPDATE` first: another transaction's `syncLessons` inserting lessons takes `KEY SHARE` on
+ * it. Every `update(course)` comes after such a lock (grep before adding one). Creating an
  * enrollment takes `FOR KEY SHARE` on its courses (`saveEnrollment`), so it never waits for an
  * attendance being saved. Attendance and an enrollment's courses take `KEY SHARE` on the
  * students through their foreign keys, which a payer lock in `FOR NO KEY UPDATE` lets through.

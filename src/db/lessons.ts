@@ -834,6 +834,9 @@ export async function moveLesson(
     return { status: "refused", message: "La séance finirait après minuit." };
   }
   if (!isUuid(id)) return { status: "refused", message: "Cette séance n’existe plus." };
+  // The course before its lessons (`attendance-locks.ts`, #406): moving the following lessons
+  // stamps the earlier ones, then updates the course row. Attendance saved meanwhile is seen below.
+  await lockCourseOfLesson(tx, id);
   const [s] = await tx
     .select({
       courseId: lesson.courseId,
