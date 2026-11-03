@@ -266,7 +266,7 @@ const NO_PACK = "Ce carnet n’existe plus.";
  * takes KEY SHARE, which UPDATE would block. The lesson's row is locked the same way:
  * two counts of the same lesson on two packs of one student, or a cancellation
  * (`cancelLesson`), run one after the other. Locks are always taken pack first, then
- * lesson. The usages are read in statements of their own, after the locks, so that
+ * the lesson's course, then the lesson (`attendance-locks.ts`). The usages are read in statements of their own, after the locks, so that
  * they see a count committed meanwhile. The same count sent twice changes nothing.
  */
 export async function countLesson(
@@ -283,15 +283,17 @@ export async function countLesson(
     .where(eq(lessonPack.id, lessonPackId))
     .for("no key update");
   if (!locked) return { ok: false, message: NO_PACK };
-  // The lesson's course FOR KEY SHARE, before the lesson (updateCourse's order: course, then
-  // its lessons): a change of the course's entity (FOR UPDATE) waits for this count, which
-  // it then sees and refuses (entityLock), or commits first, and this count reads its new
-  // entity (#299).
+  // The lesson's course before the lesson (`attendance-locks.ts`): a change of the course's
+  // entity (FOR UPDATE) waits for this count, which it then sees and refuses (entityLock), or
+  // commits first, and this count reads its new entity (#299). FOR NO KEY UPDATE, not KEY SHARE
+  // (#411): `deleteCourse` holds the course the same way while it deletes the lessons, so this
+  // count waits for it here, instead of waiting for a deleted lesson while holding a KEY SHARE
+  // the course row's DELETE waits for (deadlock).
   const [c] = await tx
     .select({ entityId: course.billingEntityId })
     .from(course)
     .where(sql`${course.id} = (SELECT s.course_id FROM lesson s WHERE s.id = ${lessonId})`)
-    .for("key share");
+    .for("no key update");
   const [l] = await tx
     .select({ status: lesson.status, courseType: course.type })
     .from(lesson)

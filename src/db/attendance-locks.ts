@@ -35,10 +35,22 @@ import { course } from "./schema";
  * sign-up lock it did not take before. The other writers of a course take it before its lessons
  * too: `updateCourse` and `updateCourseRate` (`FOR UPDATE`, then its instructor and lessons);
  * `moveCourse`, `moveLesson` and `deleteCourse` (`FOR NO KEY UPDATE`, then the lessons they stamp
- * or delete, then the course row's update or delete); `countLesson` (`FOR KEY SHARE`, which
- * `FOR NO KEY UPDATE` lets through, then the lesson). The three first never take the course
+ * or delete, then the course row's update or delete). These three never take the course
  * `FOR UPDATE` first: another transaction's `syncLessons` inserting lessons takes `KEY SHARE` on
- * it. Every `update(course)` comes after such a lock (grep before adding one). Creating an
+ * it. Every `update(course)` comes after such a lock (grep before adding one).
+ *
+ * Lesson packs (#411) follow the same order:
+ *
+ *   - `countLesson`: the pack (`FOR NO KEY UPDATE`), then the lesson's course `FOR NO KEY UPDATE`,
+ *     then the lesson. Not `KEY SHARE` on the course: `FOR NO KEY UPDATE` lets it through, so the
+ *     count would reach the lesson `deleteCourse` had just deleted and wait for it, while the
+ *     course row's `DELETE` (`FOR UPDATE`) waited for the count's `KEY SHARE` (40P01). Holding
+ *     the course the same way as the deletion, the count waits for it, then finds no lesson; or
+ *     the deletion waits for the count, then sees its usage and refuses. No writer holding a
+ *     course asks for a pack afterwards, so the pack before the course is safe;
+ *   - `cancelLesson`: the lesson's course (`lockCourseOfLesson`), then it reads the attendance
+ *     sheet, locks the lesson and reads its usages;
+ *   - `uncountLesson` only deletes a usage: it locks neither the lesson nor its course. Creating an
  * enrollment takes `FOR KEY SHARE` on its courses (`saveEnrollment`), so it never waits for an
  * attendance being saved. Attendance and an enrollment's courses take `KEY SHARE` on the
  * students through their foreign keys, which a payer lock in `FOR NO KEY UPDATE` lets through.
