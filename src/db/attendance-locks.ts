@@ -56,25 +56,43 @@ import { course } from "./schema";
  *   - `uncountLesson` only deletes a usage: it locks neither the lesson nor its course. A refusal of
  *     `cancelLesson` or `entityLock` may then name a usage just undone: the user retries.
  *
+ * Regenerating lessons (#413): `syncLessons` locks its season, reads the lessons, then the courses
+ * of the lessons it would remove in one statement, ordered by id (`lockCourses`), then reads those
+ * lessons again and removes only what it still would: a lesson counted or with attendance
+ * committed meanwhile is kept, as one committed before (#225), instead of the delete failing on
+ * the usage's or the attendance's foreign key (23503). It locks no other course: callers editing a
+ * course (`updateCourse`, `moveCourse`, `moveLesson`) hold it before the season. If a lesson
+ * restored meanwhile (`restoreLesson`) adds a course, that one is locked in a further statement,
+ * out of the id order: a writer locking several courses by id (`cancelEnrollment`) may then meet
+ * the sync crosswise (40P01, one of them rolled back, nothing lost). Accepted: it needs a lesson
+ * restored within the sync's few statements; the single order of #415 removes it too. A course
+ * deleted while the sync waited for it (`deleteCourse` holds it first) is not returned by
+ * `lockCourses`: the sync then plans as if it had never read it, with no lesson to create for it.
+ * Writers of attendance, counts and cancellations never ask for a season, so they never deadlock
+ * with a sync. Those callers do, after their course: a sync of another transaction (a closure
+ * added) removing lessons of that very course then meets them crosswise (40P01). It did before
+ * too, on the lessons they stamp or the `KEY SHARE` its writes take on the course (#415).
+ *
  * Writes of a single lesson row that check nothing across the course (`restoreLesson`,
  * `changeInstructor`) lock only that row, and never wait on a course afterwards.
  *
  * Not covered here: a drop-out dated before lessons with attendance (#406, N3), which waits for a
- * business rule; `syncLessons`, which deletes lessons without locking their courses (#413).
+ * business rule.
  *
  * Always within `withSchool()` (RLS): a row of another school is neither seen nor locked.
  */
 
-/** These courses, `FOR NO KEY UPDATE`, ordered by id, in one statement. */
-export async function lockCourses(tx: Tx, courseIds: readonly string[]): Promise<void> {
+/** These courses, `FOR NO KEY UPDATE`, ordered by id, in one statement; returns those that still exist. */
+export async function lockCourses(tx: Tx, courseIds: readonly string[]): Promise<string[]> {
   const ids = [...new Set(courseIds)];
-  if (ids.length === 0) return;
-  await tx
+  if (ids.length === 0) return [];
+  const rows = await tx
     .select({ id: course.id })
     .from(course)
     .where(inArray(course.id, ids))
     .orderBy(asc(course.id))
     .for("no key update");
+  return rows.map((r) => r.id);
 }
 
 /** The course of a lesson (`saveAttendance`). */
