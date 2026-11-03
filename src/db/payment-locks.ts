@@ -65,7 +65,8 @@ import { installment, invoice, payment, person } from "./schema";
  * #352) locks that invoice only, never a payer, payment or installment. Enrollments and drafts lock the payer `FOR NO KEY UPDATE` (`lockPayer`,
  * `draftPayerInvoices`), then their own rows, never a payment; their inserts, attendance and
  * relationships take KEY SHARE on other people (students), which a payer lock in
- * `FOR NO KEY UPDATE` never blocks.
+ * `FOR NO KEY UPDATE` never blocks. Cancelling an enrollment then locks its courses
+ * (`attendance-locks.ts`, #406), after the payer and the enrollment, before any invoice draft.
  *
  * Always within `withSchool()` (RLS): a row of another school is neither seen nor locked.
  */

@@ -9,6 +9,8 @@ import { deleteCourse, entityLock, moveCourse, readCourse, updateCourse, validCo
 import { deleteTreatment } from "./vat-treatments";
 import { enrolledInCourse, scheduleCourse } from "./schedule";
 import { readAttendance, saveAttendance, weekLessons } from "./lessons";
+import { cancelEnrollment } from "./enrollments";
+import { cancelRefusal } from "../domain/enrollment/lifecycle";
 import { statementData } from "./statements";
 import { instructorStatement } from "../domain/payroll/statement";
 import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
@@ -133,6 +135,33 @@ const signUp = (s: Partial<SignupInput> = {}, payer = parent) =>
 const remaining = async (payer = parent) =>
   (await withSchool(school, (tx) => balanceOf(tx, payer, TODAY)))?.total.remaining ?? 0;
 const cancel = (id: string) => withSchool(school, (tx) => cancelWorkshopSignup(tx, frontDesk, id));
+
+/**
+ * Runs `start` while the admin connection holds `lock` in an open transaction, and releases it
+ * only once `waiters` sessions wait on a lock: the calls then really meet (#406).
+ */
+async function whileLocked<T>(
+  lock: (t: postgres.TransactionSql) => Promise<unknown>,
+  waiters: number,
+  start: () => Promise<T>,
+) {
+  let running: Promise<T> | undefined;
+  await admin.begin(async (t) => {
+    await lock(t);
+    running = start();
+    for (let i = 0; i < 100; i++) {
+      // Statistics are a snapshot per transaction: cleared, each read sees the sessions now.
+      await t`SELECT pg_stat_clear_snapshot()`;
+      const [{ n }] = await t`SELECT count(*)::int AS n FROM pg_stat_activity
+        WHERE wait_event_type = 'Lock' AND datname = current_database() AND pid <> pg_backend_pid()`;
+      if (n >= waiters) return;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    throw new Error("the calls never waited on the lock");
+  });
+  if (!running) throw new Error("not started");
+  return running;
+}
 
 describe("signing up for a workshop", () => {
   it("takes the workshop's price, business and VAT treatment, and raises the payer's balance by it", async () => {
@@ -373,7 +402,7 @@ describe("a workshop's participants (#398)", () => {
   });
 
   /** An enrollment of the child in the workshop, entered beside the sign-up. */
-  const enrollChild = async (status: "active" | "trial" | "dropped", droppedOn: string | null = null) => {
+  const enrollChild = async (status: "active" | "trial" | "dropped" | "waitlist", droppedOn: string | null = null) => {
     const [e] = await admin`INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period,
         gross_price_cents, status, enrolled_on, dropped_on)
       SELECT school_id, billing_entity_id, season_id, ${parent}, 'child', 'year', 10000, ${status}, '2026-10-01', ${droppedOn}
@@ -415,6 +444,133 @@ describe("a workshop's participants (#398)", () => {
     await admin`DELETE FROM attendance WHERE lesson_id = ${lessonId}`;
     await admin`DELETE FROM enrollment_course WHERE enrollment_id = ${enrollmentId}`;
     await admin`DELETE FROM enrollment WHERE id = ${enrollmentId}`;
+  });
+
+  describe("attendance kept on a sheet under concurrent cancellations (#406)", () => {
+    const cancelEnrolled = (enrollmentId: string) =>
+      withSchool(school, (tx) => cancelEnrollment(tx, frontDesk, enrollmentId));
+    const NOT_ON_SHEET = "Un des danseurs ne suit pas ce cours.";
+    const ENROLLMENT_ATTENDED = cancelRefusal({ invoiced: false, attended: true });
+    /** Students with attendance on the lesson who are on none of its sheets: counted on statements, yet listed nowhere. */
+    const orphans = async (lessonId: string) => {
+      const sheet = new Set(
+        (await withSchool(school, (tx) => readAttendance(tx, lessonId)))?.students.map((d) => d.id) ?? [],
+      );
+      const taken = await admin`SELECT student_id FROM attendance WHERE lesson_id = ${lessonId}`;
+      return taken.map((a) => a.student_id as string).filter((id) => !sheet.has(id));
+    };
+    // Even after a failure: no attendance nor enrollment of the workshop left to the next tests.
+    afterEach(async () => {
+      await admin`DELETE FROM attendance WHERE lesson_id IN (SELECT id FROM lesson WHERE course_id = ${workshop})`;
+      const enrolled = (await admin`SELECT enrollment_id FROM enrollment_course WHERE course_id = ${workshop}`).map(
+        (e) => e.enrollment_id as string,
+      );
+      if (enrolled.length === 0) return;
+      await admin`DELETE FROM enrollment_course WHERE enrollment_id IN ${admin(enrolled)}`;
+      await admin`DELETE FROM enrollment WHERE id IN ${admin(enrolled)}`;
+    });
+    /**
+     * Rows the calls write after their checks, locked by the admin connection: a sign-up's participants
+     * and an enrollment's courses (their delete waits), a lesson (an attendance insert waits).
+     */
+    const lockRowsOf = (signupId: string | null, enrollmentId: string | null, lessonId: string | null) => {
+      return async (t: postgres.TransactionSql) => {
+        if (signupId) await t`SELECT 1 FROM workshop_signup_person WHERE workshop_signup_id = ${signupId} FOR UPDATE`;
+        if (enrollmentId) await t`SELECT 1 FROM enrollment_course WHERE enrollment_id = ${enrollmentId} FOR UPDATE`;
+        // An attendance row's foreign key to its lesson takes KEY SHARE, which waits for this.
+        if (lessonId) await t`SELECT 1 FROM lesson WHERE id = ${lessonId} FOR UPDATE`;
+      };
+    };
+
+    for (const [status, droppedOn] of [
+      ["waitlist", null],
+      ["dropped", "2027-01-15"],
+    ] as const)
+      it(`refuses to cancel the enrollment carrying the attendance beside a ${status} duplicate, which keeps nobody on the sheet`, async () => {
+        const carrying = await enrollChild("active");
+        const lessonId = await workshopLesson();
+        await markChildAbsent(lessonId);
+        await enrollChild(status, droppedOn);
+        expect(await cancelEnrolled(carrying)).toEqual({ ok: false, message: ENROLLMENT_ATTENDED });
+        expect(await orphans(lessonId)).toEqual([]);
+      });
+
+    it("cancels the enrollment carrying the attendance beside a duplicate dropped on the lesson's day", async () => {
+      const carrying = await enrollChild("active");
+      const lessonId = await workshopLesson();
+      await markChildAbsent(lessonId);
+      await enrollChild("dropped", "2027-02-13");
+      expect(await cancelEnrolled(carrying)).toEqual({ ok: true, id: carrying });
+      expect(await orphans(lessonId)).toEqual([]);
+    });
+
+    it("cancels a duplicate enrollment when a sign-up carries the attendance, then refuses to cancel the sign-up", async () => {
+      const r = await signUp({ participantIds: [child] });
+      if (!r.ok) throw new Error(r.message);
+      const enrollmentId = await enrollChild("active");
+      const lessonId = await workshopLesson();
+      await markChildAbsent(lessonId);
+      expect(await cancelEnrolled(enrollmentId)).toEqual({ ok: true, id: enrollmentId });
+      expect(await cancel(r.id)).toEqual({ ok: false, message: ATTENDANCE_TAKEN });
+      expect(await orphans(lessonId)).toEqual([]);
+    });
+
+    it("lets only one of a sign-up and a duplicate enrollment go when both are cancelled at once", async () => {
+      const r = await signUp({ participantIds: [child] });
+      if (!r.ok) throw new Error(r.message);
+      const enrollmentId = await enrollChild("active");
+      const lessonId = await workshopLesson();
+      await markChildAbsent(lessonId);
+      // Each would pass its check, then wait for the admin connection before deleting.
+      const results = await whileLocked(lockRowsOf(r.id, enrollmentId, null), 2, () =>
+        Promise.all([cancel(r.id), cancelEnrolled(enrollmentId)]),
+      );
+      const [signupGone, enrollmentGone] = results;
+      expect(results.filter((x) => x.ok)).toHaveLength(1);
+      // The first one goes; the second then sees the attendance only it still carries.
+      expect(signupGone.ok ? enrollmentGone : signupGone).toEqual(
+        signupGone.ok ? { ok: false, message: ENROLLMENT_ATTENDED } : { ok: false, message: ATTENDANCE_TAKEN },
+      );
+      expect(await orphans(lessonId)).toEqual([]);
+    });
+
+    it("never leaves attendance saved while a sign-up is cancelled off every sheet", async () => {
+      const r = await signUp({ participantIds: [child] });
+      if (!r.ok) throw new Error(r.message);
+      const lessonId = await workshopLesson();
+      const results = await whileLocked(lockRowsOf(r.id, null, lessonId), 2, () =>
+        Promise.all([
+          withSchool(school, (tx) => saveAttendance(tx, lessonId, [{ studentId: child, present: true }])),
+          cancel(r.id),
+        ]),
+      );
+      const [saved, cancelled] = results;
+      expect(results.filter((x) => x.ok)).toHaveLength(1);
+      // One of them first: either the attendance is saved and the sign-up stays, or the sign-up goes and the
+      // attendance is refused.
+      expect(saved.ok ? cancelled : saved).toEqual(
+        saved.ok ? { ok: false, message: ATTENDANCE_TAKEN } : { ok: false, message: NOT_ON_SHEET },
+      );
+      expect(await orphans(lessonId)).toEqual([]);
+      await admin`DELETE FROM attendance WHERE lesson_id = ${lessonId}`;
+    });
+
+    it("never leaves attendance saved while an enrollment is cancelled off every sheet", async () => {
+      const enrollmentId = await enrollChild("active");
+      const lessonId = await workshopLesson();
+      const results = await whileLocked(lockRowsOf(null, enrollmentId, lessonId), 2, () =>
+        Promise.all([
+          withSchool(school, (tx) => saveAttendance(tx, lessonId, [{ studentId: child, present: true }])),
+          cancelEnrolled(enrollmentId),
+        ]),
+      );
+      const [saved, cancelled] = results;
+      expect(results.filter((x) => x.ok)).toHaveLength(1);
+      expect(saved.ok ? cancelled : saved).toEqual(
+        saved.ok ? { ok: false, message: ENROLLMENT_ATTENDED } : { ok: false, message: NOT_ON_SHEET },
+      );
+      expect(await orphans(lessonId)).toEqual([]);
+    });
   });
 
   describe("on the instructor's statement", () => {
