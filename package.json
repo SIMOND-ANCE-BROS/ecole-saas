@@ -27,7 +27,7 @@
     "@mantine/dates": "8.3.18",
     "@mantine/hooks": "8.3.18",
     "@mantine/notifications": "8.3.18",
-    "better-auth": "1.7.7",
+    "better-auth": "1.7.13",
     "dayjs": "1.11.23",
     "drizzle-orm": "0.45.4",
     "next": "16.4.2",
