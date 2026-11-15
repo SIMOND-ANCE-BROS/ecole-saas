@@ -268,7 +268,7 @@ describe("replacement and cancellation", () => {
 describe("courses and lessons", () => {
   it("a new regular instructor takes over the previous one's planned lessons, not a substitute's", async () => {
     // The handover reads lessons not given yet against the real clock (#310): move
-    // the planned lessons a century ahead so they are still upcoming whatever day
+    // the planned lessons about a century ahead so they are still upcoming whatever day
     // the test runs (#421). Same shift for all of them: dates stay unique.
     await admin`UPDATE lesson SET date = date + 36525 WHERE course_id = ${wednesday} AND status = 'planned'`;
     const before = await lessons();
