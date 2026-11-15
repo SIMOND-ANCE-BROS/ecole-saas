@@ -1,4 +1,5 @@
 import { unstable_rethrow } from "next/navigation";
+import { waitedTooLong } from "../db/wait-limits";
 import { has } from "./has";
 
 /**
@@ -64,3 +65,29 @@ export const orConnectionLost = <T>(call: () => Promise<T>, failed: (message: ty
 
 /** Whether a refusal comes from a call that never got an answer. */
 export const notSent = <T extends { ok: boolean }>(r: T | NotSent): r is NotSent => has(r, "sent") && r.sent === false;
+
+/** Shown when a save waited too long for another one on the same records (#364): nothing was saved. */
+export const BUSY = "Réessayez dans un instant.";
+
+/** A refusal because the save waited too long (`WAIT_LIMITS`): retrying in a moment is safe. */
+export type Busy = { ok: false; message: typeof BUSY };
+
+/**
+ * Runs a server action's `withSchool` call (#364): a lock or statement timeout (55P03, 57014,
+ * `WAIT_LIMITS`) becomes the refusal « Réessayez dans un instant. » instead of an error page.
+ * The transaction was rolled back whole, so even a creating action can be retried. Any other
+ * error goes through. `busy` builds the answer when the action's result has another shape.
+ */
+export async function orBusy<T>(call: () => Promise<T>): Promise<T | Busy>;
+export async function orBusy<T>(call: () => Promise<T>, busy: (message: typeof BUSY) => T): Promise<T>;
+export async function orBusy<T>(
+  call: () => Promise<T>,
+  busy: (message: typeof BUSY) => T | Busy = (message) => ({ ok: false, message }),
+): Promise<T | Busy> {
+  try {
+    return await call();
+  } catch (e) {
+    if (waitedTooLong(e)) return busy(BUSY);
+    throw e;
+  }
+}
