@@ -2,7 +2,8 @@
 
 - Status: Proposed
 - Date: 2026-11-02
-- Issue: #179 (follow-up of #104 and #177; e-mail service: #105)
+- Issue: #179 (follow-up of #104 and #177; e-mail service: #105, ADR 0009)
+- Amended by: ADR 0009 (providers; proof e-mails always through the application sender)
 
 ## Context
 

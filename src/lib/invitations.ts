@@ -1,4 +1,4 @@
-import { type EmailSender, emailSender } from "../connectors/email/sender";
+import { type EmailSender, type SendFailure, platformEmailSender } from "../connectors/email/sender";
 import { schoolsOf, withSchool } from "../db";
 import {
   type OpenedLink,
@@ -12,6 +12,9 @@ import {
 } from "../db/team";
 import { type JoinProof, emailProofMessage, joinProof, retryIn } from "../domain/team/email-proof";
 import { type Role, passwordRefusal } from "../domain/team/rules";
+import { linkMessage } from "../domain/team/link-messages";
+import { sendFailureMessage } from "../domain/email/settings";
+import { type SchoolSender, schoolEmailSender } from "./email";
 import { auth } from "./auth";
 import { createAccount } from "./accounts";
 import { publicAddress } from "./public-calendar";
@@ -49,7 +52,7 @@ const canSendEmail = (sender: EmailSender | null) => sender !== null;
 export async function openLink(
   schoolId: string,
   token: string,
-  sender: EmailSender | null = emailSender(),
+  sender: EmailSender | null = platformEmailSender(),
 ): Promise<(OpenedLink & { existingAccount: boolean; proof: JoinProof | null }) | null> {
   const link = await withSchool(schoolId, (tx) => readRelationship(tx, token, new Date()));
   if (!link) return null;
@@ -70,7 +73,7 @@ export type SendProofResult = { ok: true } | { ok: false; message: string; tooSo
 export async function sendEmailProof(
   schoolId: string,
   token: string,
-  sender: EmailSender | null = emailSender(),
+  sender: EmailSender | null = platformEmailSender(),
   now = new Date(),
 ): Promise<SendProofResult> {
   const link = await openLink(schoolId, token, sender);
@@ -150,7 +153,7 @@ export async function acceptLink(
   schoolId: string,
   token: string,
   entry: LinkInput,
-  sender: EmailSender | null = emailSender(),
+  sender: EmailSender | null = platformEmailSender(),
 ): Promise<LinkResult> {
   const link = await withSchool(schoolId, (tx) => readRelationship(tx, token, new Date()));
   if (!link) return { ok: false, message: EXPIRED };
@@ -195,6 +198,55 @@ export async function acceptLink(
   if (used === "shared") return { ok: false, message: SHARED };
   if (used !== "ok") return { ok: false, message: EXPIRED };
   return { ok: true, type: link.type, email: link.email };
+}
+
+/**
+ * How a new link reached its person (#105): e-mailed to the address of the
+ * invitation or the account (the link is then not shown), or to pass on by
+ * hand, with `notice` saying why when an e-mail was expected.
+ */
+export type Delivery = { sent: true; to: string } | { sent: false; link: string; notice: string | null };
+
+/**
+ * E-mails a new invitation or password link through the school's sender
+ * (`schoolEmailSender`). Without a sender, or when sending fails, the link is
+ * returned to be passed on by hand, as before #105. Logs ids and the
+ * provider's status only, never the address nor the link.
+ */
+export async function deliverLink(
+  schoolId: string,
+  token: string,
+  senderOf: (schoolId: string) => Promise<SchoolSender> = schoolEmailSender,
+): Promise<Delivery> {
+  const link = linkAddress(schoolId, token);
+  // The link exists: whatever fails from here, it is shown rather than lost.
+  const prepared = await Promise.all([
+    withSchool(schoolId, (tx) => readRelationship(tx, token, new Date())),
+    senderOf(schoolId),
+  ]).catch(() => null);
+  if (!prepared?.[0]) return { sent: false, link, notice: null };
+  const [opened, { route, sender }] = prepared;
+  if (!sender)
+    return {
+      sent: false,
+      link,
+      notice:
+        route.kind === "broken"
+          ? "Le compte d’envoi d’e-mails de l’école ne peut pas être utilisé (Paramètres › E-mails) : transmettez ce lien vous-même."
+          : null,
+    };
+  const message = linkMessage({ kind: opened.type, school: opened.school, name: opened.name, url: link });
+  // A provider must not throw; if one does, the link is shown all the same.
+  const r = await sender
+    .send({ to: opened.email, ...message })
+    .catch((): SendFailure => ({ ok: false, reason: "unavailable" }));
+  if (r.ok) return { sent: true, to: opened.email };
+  console.error(
+    `School ${schoolId}, link ${opened.id}: e-mail not sent (${route.kind}, ${r.reason} ${r.status ?? ""} ${r.code ?? ""})`,
+  );
+  // The school's own account: say what to check there. The application's: nothing for the school to fix.
+  const why = route.kind === "school" ? sendFailureMessage(r) : "Le service d’envoi n’a pas répondu.";
+  return { sent: false, link, notice: `L’e-mail n’a pas pu partir. ${why} Transmettez ce lien vous-même.` };
 }
 
 /** Address of an invitation or reset link, to copy and pass on (SMS, personal e-mail…). */

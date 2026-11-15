@@ -1,18 +1,37 @@
+import { z } from "zod";
+import { FROM_NAME_MAX } from "../../domain/email/settings";
+import { brevoSender } from "./providers";
+
 /**
- * Sending e-mail (#105, #179). One interface; the rest of the code never knows
- * the provider. No provider is chosen yet (#105, blocked): `emailSender()`
- * returns null and the screens offer nothing that needs an e-mail. The fake
- * sender keeps messages in memory and sends nothing: tests and demonstration
- * only (`EMAIL_FAKE_ALLOWED=1`), refused when `NODE_ENV=production` whatever
- * the variable says (#404): a production server never pretends to send.
+ * Sending e-mail (#105, #179, ADR 0009). One interface; the rest of the code
+ * never knows the provider (`providers.ts`: Brevo, Resend, plain `fetch`).
  *
- * A real provider must time out, retry a bounded number of times and fail
- * with `{ ok: false, reason }`; it never logs an address, a subject or a body.
+ * - The **application sender** (`platformEmailSender`): Brevo, configured by
+ *   environment variables (`BREVO_API_KEY`, `EMAIL_FROM_ADDRESS`,
+ *   `EMAIL_FROM_NAME`). It alone carries what proves an address (#179): a
+ *   school never sees those e-mails in its own provider's logs.
+ * - A **school's sender** (`email_connector`, `src/lib/email.ts`): its own
+ *   Brevo or Resend account, for invitations and password links; without one,
+ *   the application sender is used.
+ * - The **fake sender** keeps messages in memory and sends nothing: tests and
+ *   demonstration only (`EMAIL_FAKE_ALLOWED=1`), refused when
+ *   `NODE_ENV=production` whatever the variable says (#404); used only when
+ *   Brevo is not configured.
+ *
+ * A provider times out, retries a bounded number of times and fails with
+ * `{ ok: false, reason }`; it never logs an address, a subject or a body.
  */
 
 export type EmailMessage = { to: string; subject: string; text: string };
 
-export type SendResult = { ok: true } | { ok: false; reason: "unavailable" | "refused" | "timeout" };
+/**
+ * `refused`: the provider said no (4xx: wrong key, unverified sender, refused
+ * address), trying again changes nothing. `unavailable`: network, 5xx, 429.
+ * `status` and `code` are the provider's HTTP status and error code, for the
+ * screens and the logs: never personal data.
+ */
+export type SendFailure = { ok: false; reason: "unavailable" | "refused" | "timeout"; status?: number; code?: string };
+export type SendResult = { ok: true } | SendFailure;
 
 export interface EmailSender {
   send(message: EmailMessage): Promise<SendResult>;
@@ -33,8 +52,32 @@ export const fakeSender: EmailSender = {
   },
 };
 
-/** The sender configured on this server, or null when none is (no provider until #105). */
-export function emailSender(env: Env = process.env): EmailSender | null {
-  if (env.EMAIL_FAKE_ALLOWED === "1" && env.NODE_ENV !== "production") return fakeSender;
-  return null;
+export const fakeAllowed = (env: Env = process.env) => env.EMAIL_FAKE_ALLOWED === "1" && env.NODE_ENV !== "production";
+
+const validAddress = z.email();
+
+/** The application's Brevo account from the environment, or null when it is not (fully) set. */
+export function platformConfig(
+  env: Env = process.env,
+): { apiKey: string; fromAddress: string; fromName: string } | null {
+  const apiKey = env.BREVO_API_KEY?.trim();
+  const fromAddress = env.EMAIL_FROM_ADDRESS?.trim();
+  if (!apiKey || !fromAddress || !validAddress.safeParse(fromAddress).success) return null;
+  const fromName = env.EMAIL_FROM_NAME?.trim() || fromAddress;
+  return { apiKey, fromAddress, fromName };
+}
+
+/**
+ * The application sender: Brevo when configured, else the fake sender where
+ * allowed, else null (nothing that needs an e-mail is offered). With
+ * `onBehalfOf`, the e-mail reads « École X via <application> ».
+ */
+export function platformEmailSender(env: Env = process.env, onBehalfOf?: string): EmailSender | null {
+  const config = platformConfig(env);
+  if (config) {
+    const school = onBehalfOf?.replace(/[\r\n]/g, " ").trim();
+    const fromName = school ? `${school} via ${config.fromName}`.slice(0, FROM_NAME_MAX) : config.fromName;
+    return brevoSender({ ...config, fromName });
+  }
+  return fakeAllowed(env) ? fakeSender : null;
 }

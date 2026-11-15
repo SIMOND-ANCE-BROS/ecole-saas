@@ -5,11 +5,14 @@ import { z } from "zod";
 import { withSchool } from "@/db";
 import { invite, revokeInvitation, updateMember, validInvitation } from "@/db/team";
 import { ROLE_VALUES } from "@/domain/team/rules";
-import { createResetLink, linkAddress } from "@/lib/invitations";
+import { createResetLink, deliverLink, type Delivery } from "@/lib/invitations";
 import { requireRole } from "@/lib/session";
 
-/** A link is shown once: only its hash is stored. */
-export type LinkBack = { ok: true; link: string } | { ok: false; message: string };
+/**
+ * A new link is e-mailed to its person (#105), or shown once to be passed on
+ * by hand when it could not be: only its hash is stored.
+ */
+export type LinkBack = ({ ok: true } & Delivery) | { ok: false; message: string };
 export type Back = { ok: true } | { ok: false; message: string };
 
 const PATH = "/parametres/equipe";
@@ -25,7 +28,7 @@ export async function inviteMember(entry: z.input<typeof validInvitation>): Prom
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
   const r = await withSchool(schoolId, (tx) => invite(tx, userId, parsed.data, new Date()));
   revalidatePath(PATH);
-  return r.ok ? { ok: true, link: linkAddress(schoolId, r.token) } : r;
+  return r.ok ? { ok: true, ...(await deliverLink(schoolId, r.token)) } : r;
 }
 
 export async function revoke(invitationId: string): Promise<Back> {
@@ -51,5 +54,5 @@ export async function resetPassword(memberId: string): Promise<LinkBack> {
   const { schoolId, userId } = await requireRole("director");
   if (!validId.safeParse(memberId).success) return { ok: false, message: MEMBER_GONE };
   const r = await createResetLink(schoolId, userId, memberId);
-  return r.ok ? { ok: true, link: linkAddress(schoolId, r.token) } : r;
+  return r.ok ? { ok: true, ...(await deliverLink(schoolId, r.token)) } : r;
 }

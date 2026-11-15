@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { withSchool } from "@/db";
 import { listMembers, pendingInvitations } from "@/db/team";
+import { schoolEmailSender } from "@/lib/email";
 import { requireRole } from "@/lib/session";
 import { SettingsHeader } from "../settings-header";
 import { Team } from "./team";
@@ -15,6 +16,8 @@ export default async function TeamPage() {
     members: await listMembers(tx),
     invitations: await pendingInvitations(tx, now),
   }));
+  // Whether new links are e-mailed (#105): the buttons say « Envoyer » rather than « Créer le lien ».
+  const { sender } = await schoolEmailSender(schoolId);
 
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
@@ -25,6 +28,7 @@ export default async function TeamPage() {
       <Team
         members={members.map(({ userId: memberUser, ...m }) => ({ ...m, me: memberUser === userId }))}
         invitations={invitations.map((i) => ({ ...i, expiresAt: i.expiresAt.toISOString() }))}
+        emails={sender !== null}
       />
     </section>
   );

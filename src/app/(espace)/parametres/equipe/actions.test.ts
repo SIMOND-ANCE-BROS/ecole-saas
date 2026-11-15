@@ -13,8 +13,9 @@ vi.mock("@/domain/team/rules", () => import("../../../../domain/team/rules"));
 const createResetLink = vi.fn();
 vi.mock("@/lib/invitations", () => ({
   createResetLink: (...args: unknown[]) => createResetLink(...args),
-  linkAddress: () => "https://example.test/invitation",
+  deliverLink: (...args: unknown[]) => deliverLink(...args),
 }));
+const deliverLink = vi.fn();
 
 const { inviteMember, revoke, changeMember, resetPassword } = await import("./actions");
 
@@ -23,6 +24,7 @@ const ID = "8d2c6c1e-3f4a-4b5c-9d6e-7f8091a2b3c4";
 beforeEach(() => {
   withSchool.mockReset();
   createResetLink.mockReset();
+  deliverLink.mockReset();
 });
 
 describe("team actions", () => {
@@ -58,5 +60,14 @@ describe("team actions", () => {
       ok: false,
       message: "Vous ne pouvez pas modifier votre propre rôle.",
     });
+  });
+
+  it("e-mail a new password link, or give it back to pass on by hand (#105)", async () => {
+    createResetLink.mockResolvedValue({ ok: true, id: ID, token: "t" });
+    deliverLink.mockResolvedValueOnce({ sent: true, to: "zz@exemple.test" });
+    expect(await resetPassword(ID)).toEqual({ ok: true, sent: true, to: "zz@exemple.test" });
+    deliverLink.mockResolvedValueOnce({ sent: false, link: "https://example.test/l", notice: null });
+    expect(await resetPassword(ID)).toEqual({ ok: true, sent: false, link: "https://example.test/l", notice: null });
+    expect(deliverLink).toHaveBeenCalledWith("school-a", "t");
   });
 });
