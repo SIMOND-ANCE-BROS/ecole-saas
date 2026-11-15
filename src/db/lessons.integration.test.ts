@@ -316,6 +316,8 @@ describe("courses and lessons", () => {
     const after = await lessons();
     // Lesson taught (Camille) unchanged; Camille's planned lessons handed to Inès.
     expect(after[0].instructor).toBe(before[0].instructor);
+    const plannedIds = (list: typeof after) => list.filter((s) => s.status === "planned").map((s) => s.id);
+    expect(plannedIds(after)).toEqual(plannedIds(before));
     expect(after.filter((s) => s.status === "planned").every((s) => s.instructor === "Inès Prof")).toBe(true);
   });
 
