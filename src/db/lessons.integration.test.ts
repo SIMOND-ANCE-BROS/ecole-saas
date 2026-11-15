@@ -267,7 +267,12 @@ describe("replacement and cancellation", () => {
 
 describe("courses and lessons", () => {
   it("a new regular instructor takes over the previous one's planned lessons, not a substitute's", async () => {
+    // The handover reads lessons not given yet against the real clock (#310): move
+    // the planned lessons about a century ahead so they are still upcoming whatever day
+    // the test runs (#421). Same shift for all of them: dates stay unique.
+    await admin`UPDATE lesson SET date = date + 36525 WHERE course_id = ${wednesday} AND status = 'planned'`;
     const before = await lessons();
+    expect(before.some((s) => s.status === "planned" && s.instructor !== "Inès Prof")).toBe(true);
     const course = await withSchool(school, (tx) => readCourse(tx, wednesday));
     if (!course) throw new Error("cours introuvable");
     const {
@@ -311,6 +316,8 @@ describe("courses and lessons", () => {
     const after = await lessons();
     // Lesson taught (Camille) unchanged; Camille's planned lessons handed to Inès.
     expect(after[0].instructor).toBe(before[0].instructor);
+    const plannedIds = (list: typeof after) => list.filter((s) => s.status === "planned").map((s) => s.id);
+    expect(plannedIds(after)).toEqual(plannedIds(before));
     expect(after.filter((s) => s.status === "planned").every((s) => s.instructor === "Inès Prof")).toBe(true);
   });
 
