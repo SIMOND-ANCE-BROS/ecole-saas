@@ -7,6 +7,8 @@ if (existsSync(".env")) process.loadEnvFile(".env");
 
 /** Tests d'intégration : exécutés contre la vraie base PostgreSQL, migrations appliquées. */
 export default defineConfig({
+  // The `@/` imports of tsconfig.json, for tests importing a route (#423).
+  resolve: { tsconfigPaths: true },
   test: {
     include: ["src/**/*.integration.test.ts"],
     // Une seule base partagée : pas de fichiers en parallèle.
