@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { encrypt } from "../../lib/encryption";
 import { FAKE_NUMBER_PREFIX, INVOICING_TOOLS, PAYMENT_E_REPORTING } from "../../domain/billing/invoicing";
 import { type CustomerPayload, type InvoicePayload, type InvoicingConnector, InvoicingError } from "./contract";
-import { connectorFor, toolAvailable } from "./connector";
+import { connectorFor, fakeAllowed, toolAvailable } from "./connector";
 import { FAKE_REFUSED_TOKEN, type FakeFault, fakeStoreOf } from "./fake";
 import { creditNotePayload, invoicePayload, type StoredLine, totalsOf } from "./payload";
 import { guarded } from "./guard";
@@ -444,6 +444,12 @@ describe("connectorFor", () => {
     }
   });
 
+  it("refuses the fake tool in production, whatever INVOICING_FAKE_ALLOWED says (#351)", () => {
+    expect(() => make({ env: { INVOICING_FAKE_ALLOWED: "1", NODE_ENV: "production" } })).toThrow(
+      expect.objectContaining({ kind: "configuration", code: "fake_not_allowed" }) as Error,
+    );
+  });
+
   it("refuses unreadable credentials without echoing them", () => {
     const build = () =>
       connectorFor({ billingEntityId: entityId, tool: "fake", encryptedCredentials: "zz-en-clair" }, FAST);
@@ -511,6 +517,23 @@ describe("connectorFor", () => {
   });
 });
 
+describe("fakeAllowed (#351)", () => {
+  it.each([
+    [{}, false],
+    [{ INVOICING_FAKE_ALLOWED: "0" }, false],
+    [{ INVOICING_FAKE_ALLOWED: "true" }, false],
+    [{ INVOICING_FAKE_ALLOWED: "1" }, true],
+    [{ INVOICING_FAKE_ALLOWED: "1", NODE_ENV: "development" }, true],
+    [{ INVOICING_FAKE_ALLOWED: "1", NODE_ENV: "test" }, true],
+    [{ INVOICING_FAKE_ALLOWED: "1", NODE_ENV: "production" }, false],
+    [{ INVOICING_FAKE_ALLOWED: "0", NODE_ENV: "development" }, false],
+    [{ NODE_ENV: "production" }, false],
+  ])("%o → %s", (env, allowed) => {
+    expect(fakeAllowed(env)).toBe(allowed);
+    expect(toolAvailable("fake", env)).toBe(allowed);
+  });
+});
+
 describe("toolAvailable", () => {
   it("offers the fake tool only where INVOICING_FAKE_ALLOWED=1, and no real tool yet", () => {
     expect(toolAvailable("fake", { INVOICING_FAKE_ALLOWED: "1" })).toBe(true);
@@ -523,7 +546,11 @@ describe("toolAvailable", () => {
   it("agrees with connectorFor for every tool, valid credentials given", () => {
     const encryptedCredentials = credentials();
     for (const tool of INVOICING_TOOLS)
-      for (const env of [{ INVOICING_FAKE_ALLOWED: "1" }, {}]) {
+      for (const env of [
+        { INVOICING_FAKE_ALLOWED: "1" },
+        {},
+        { INVOICING_FAKE_ALLOWED: "1", NODE_ENV: "production" },
+      ]) {
         let built = true;
         try {
           connectorFor({ billingEntityId: entityId, tool, encryptedCredentials }, { ...FAST, env });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   abandonVerdict,
+  fakeRefusedNotice,
   invoiceProgress,
   isUnsentDraft,
   mayDraft,
@@ -9,6 +10,25 @@ import {
   seasonDraftable,
   sendAgainMode,
 } from "./progress";
+
+describe("fakeRefusedNotice (#351)", () => {
+  it("says nothing when no business is on the fake tool", () => {
+    expect(fakeRefusedNotice([])).toBeNull();
+  });
+
+  it("names one business, in the singular", () => {
+    expect(fakeRefusedNotice(["Zz Danse A"])).toBe(
+      "L’entreprise Zz Danse A est branchée sur l’outil de facturation fictif (mode simulation), refusé sur ce serveur : ses factures restent en préparation et ne partent pas. Prévenez l’administrateur du logiciel pour brancher son véritable outil de facturation.",
+    );
+  });
+
+  it("names every business, in the plural", () => {
+    expect(fakeRefusedNotice(["Zz Danse A", "Zz Danse B"])).toBe(
+      "Les entreprises Zz Danse A et Zz Danse B sont branchées sur l’outil de facturation fictif (mode simulation), refusé sur ce serveur : leurs factures restent en préparation et ne partent pas. Prévenez l’administrateur du logiciel pour brancher leur véritable outil de facturation.",
+    );
+    expect(fakeRefusedNotice(["A", "B", "C"])).toMatch(/^Les entreprises A, B et C sont branchées/);
+  });
+});
 
 describe("seasonDraftable (#362, #380 default)", () => {
   const current = { id: "c", endDate: "2027-06-30" };

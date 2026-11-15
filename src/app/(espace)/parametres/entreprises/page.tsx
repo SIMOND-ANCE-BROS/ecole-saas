@@ -1,5 +1,9 @@
+import { Alert } from "@mantine/core";
 import type { Metadata } from "next";
+import { fakeAllowed } from "@/connectors/invoicing/connector";
 import { withSchool } from "@/db";
+import { simulatedEntities } from "@/db/invoicing-connectors";
+import { fakeRefusedNotice } from "@/domain/invoicing/progress";
 import { listEntities } from "@/db/billing-entities";
 import { sendingProblems } from "@/db/invoice-outbox";
 import { treatmentChoices } from "@/db/vat-treatments";
@@ -21,10 +25,12 @@ export default async function EntitiesPage({ searchParams }: PageProps<"/paramet
   const { schoolId } = await requireRole("director");
   const { reprise } = await searchParams;
   const takenUp = typeof reprise === "string" && isKeyOf(TAKEN_UP, reprise) ? TAKEN_UP[reprise] : undefined;
-  const { entities, treatments, problems } = await withSchool(schoolId, async (tx) => ({
+  const { entities, treatments, problems, refusedFake } = await withSchool(schoolId, async (tx) => ({
     entities: await listEntities(tx),
     treatments: await treatmentChoices(tx),
     problems: await sendingProblems(tx),
+    // Businesses left on the simulation tool where this server refuses it (production, #351).
+    refusedFake: fakeAllowed() ? null : fakeRefusedNotice(await simulatedEntities(tx)),
   }));
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">
@@ -33,6 +39,11 @@ export default async function EntitiesPage({ searchParams }: PageProps<"/paramet
         help="Les entreprises qui facturent les cours et encaissent les paiements, chacune avec son SIREN, sa TVA et son compte bancaire. L’entreprise par défaut encaisse les paiements saisis à l’accueil."
       />
       <Banner text={takenUp} />
+      {refusedFake && (
+        <Alert color="orange" role="status" title="Factures bloquées : outil de facturation fictif">
+          {refusedFake}
+        </Alert>
+      )}
       <SendingProblems problems={problems} showEntity={entities.length > 1} />
       <Entities entities={entities} treatments={treatments} />
     </section>

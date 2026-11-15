@@ -63,7 +63,7 @@ export const tariffAudience = pgEnum("tariff_audience", ["child", "adult", "coup
 export const period = pgEnum("period", ["quarter", "year", "single"]);
 export const enrollmentStatus = pgEnum("enrollment_status", ["trial", "waitlist", "active", "dropped", "ended"]);
 export const invoiceStatus = pgEnum("invoice_status", ["to_send", "tool_draft", "issued", "rejected", "cancelled"]);
-/** `fake`: the simulation tool (#303), refused unless INVOICING_FAKE_ALLOWED=1. */
+/** `fake`: the simulation tool (#303), refused unless INVOICING_FAKE_ALLOWED=1, always in production (#351). */
 export const invoicingTool = pgEnum("invoicing_tool", INVOICING_TOOLS);
 export const paymentMethod = pgEnum("payment_method", PAYMENT_METHOD_VALUES);
 /** Kind of a reverse entry (#272): a correction, or the rejection of a deposited payment. */
