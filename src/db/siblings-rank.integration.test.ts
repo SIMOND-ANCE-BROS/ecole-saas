@@ -63,7 +63,7 @@ beforeAll(async () => {
       FROM billing_entity e WHERE e.school_id = ${s} AND e.is_default RETURNING id`;
   }
   // One family per case, two children each.
-  for (const family of ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8"]) {
+  for (const family of ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9"]) {
     [{ id: ids[family] }] =
       await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${s}, ${`Zz${family}`}, 'Zzparent') RETURNING id`;
     for (const child of ["a", "b", "c"]) {
@@ -246,5 +246,21 @@ describe("siblings ranking on the season price (owner, #445)", () => {
     const sibling = await save("f8", entry(ids.f8b, ids.jazz90));
     expect(await saved(sibling)).toMatchObject({ discount_cents: 0, net_price_cents: 15000 });
     expect(await saved(typed)).toMatchObject({ net_price_cents: 6000 });
+  });
+
+  it("the preview ranks a new enrollment by its typed amount, as the save does", async () => {
+    const saved85 = await save("f9", entry(ids.f9b, ids.jazz45));
+    // 1 h at 110 € typed down to 80 €: 240 € over the season, below the 255 € sibling, who keeps full price.
+    const typedEntry = {
+      ...entry(ids.f9a, ids.jazz60),
+      manualPrices: [{ billingEntityId: ids.entity, priceCents: 8000, reason: "Zz arrivée en cours de trimestre" }],
+    };
+    const p = await preview("f9", typedEntry);
+    if (p.status !== "ok") throw new Error(p.message);
+    expect(p.existingImpacts).toEqual([]);
+    expect(p.newEnrollments[0].price).toMatchObject({ grossPriceCents: 11000, discountCents: 1100 });
+    const typed = await save("f9", typedEntry);
+    expect(await saved(saved85)).toMatchObject({ discount_cents: 0, net_price_cents: 8500 });
+    expect(await saved(typed)).toMatchObject({ discount_cents: 1100, net_price_cents: 8000 });
   });
 });

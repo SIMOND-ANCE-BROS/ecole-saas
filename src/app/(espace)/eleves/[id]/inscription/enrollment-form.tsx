@@ -74,6 +74,15 @@ type Props = {
   answered?: string[];
 };
 
+/** Key of a price typed for one enrollment (#292): its business, students, formula and courses. */
+const typedKeyOf = (
+  billingEntityId: string,
+  audience: string,
+  period: string,
+  studentIds: readonly string[],
+  courseIds: readonly string[],
+) => [billingEntityId, audience, period, ...studentIds, ...courseIds].join("|");
+
 export function EnrollmentForm({
   payerId,
   seasonId,
@@ -122,6 +131,21 @@ export function EnrollmentForm({
   // A success leaves the form, so a new enrollment always gets a new key.
   const [key] = useState(() => crypto.randomUUID());
 
+  // #445: a typed price ranks the child among siblings by its amount, so the preview is told the
+  // typed amounts, read from the last result's enrollments (their businesses do not move with
+  // the price). A string, so a new result with the same amounts does not ask for a preview again.
+  const typedAmounts = useMemo(() => {
+    const last = lastPreview?.result;
+    if (last?.status !== "ok") return "[]";
+    return JSON.stringify(
+      last.newEnrollments.flatMap((n) => {
+        const typed = typedPrices[typedKeyOf(n.billingEntityId, chosenAudience, period, studentIds, n.courseIds)];
+        const cents = typed ? readTypedPrice(null, typed).cents : null;
+        return cents !== null ? [{ billingEntityId: n.billingEntityId, priceCents: cents, reason: "" }] : [];
+      }),
+    );
+  }, [lastPreview, typedPrices, chosenAudience, period, studentIds]);
+
   const entry: FormInput = useMemo(
     () => ({
       payerId,
@@ -131,8 +155,9 @@ export function EnrollmentForm({
       period,
       courseIds,
       status,
+      manualPrices: JSON.parse(typedAmounts) as FormInput["manualPrices"],
     }),
-    [payerId, seasonId, studentIds, chosenAudience, period, courseIds, status],
+    [payerId, seasonId, studentIds, chosenAudience, period, courseIds, status, typedAmounts],
   );
 
   // No price from a previous selection is shown as the current price.
@@ -144,8 +169,17 @@ export function EnrollmentForm({
       () => setPreview({ entry, attempt: calculationAttempt, result: null, error: true }),
     );
   }, [entry, calculationAttempt]);
-  const current = lastPreview?.entry === entry && lastPreview.attempt === calculationAttempt ? lastPreview : null;
-  const calculation = studentIds.length > 0 && courseIds.length > 0 && current === null;
+  // A typed amount alone changed (#445): the same selection's result stays on screen, its price
+  // fields with it, while the ranking is computed again; saving waits for the fresh one.
+  const sameSelection =
+    lastPreview !== null &&
+    lastPreview.attempt === calculationAttempt &&
+    JSON.stringify({ ...lastPreview.entry, manualPrices: [] }) === JSON.stringify({ ...entry, manualPrices: [] });
+  const current = sameSelection ? lastPreview : null;
+  const calculation =
+    studentIds.length > 0 &&
+    courseIds.length > 0 &&
+    (lastPreview?.entry !== entry || lastPreview.attempt !== calculationAttempt);
   const result = current?.result ?? null;
 
   const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
@@ -159,7 +193,7 @@ export function EnrollmentForm({
   // A price typed for one enrollment (#292) belongs to its business, students, formula and
   // courses: another selection shows the computed price again, the typed one comes back with it.
   const typedKey = (n: (typeof news)[number]) =>
-    [n.billingEntityId, chosenAudience, period, ...studentIds, ...n.courseIds].join("|");
+    typedKeyOf(n.billingEntityId, chosenAudience, period, studentIds, n.courseIds);
   const prices = news.map((n) => {
     const computedNetCents = n.price.status === "ok" ? n.price.netPriceCents : null;
     // No package in the grid for these courses: the price is typed directly.
@@ -181,8 +215,9 @@ export function EnrollmentForm({
   const complete = prices.every((p) => p.read.valid);
   const canSave = priceable && !calculation && !sending;
   const manualPrices = prices.flatMap((p) =>
-    // Only a price apart from the computed one: kept as computed, it follows a recomputation on save.
-    p.typed && p.read.cents !== null && p.read.differs
+    // Every typed amount, as the preview ranked on it (#445); one equal to the computed price is
+    // not kept by the server (`keptManualPrice`) and follows a recomputation.
+    p.typed && p.read.cents !== null
       ? [{ billingEntityId: p.n.billingEntityId, priceCents: p.read.cents, reason: p.typed.reason }]
       : [],
   );

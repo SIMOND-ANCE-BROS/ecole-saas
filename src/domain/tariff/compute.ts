@@ -193,7 +193,8 @@ function rankedStudents(
 function seasonPrice(e: EnrollmentRequest, pkg: Package): number {
   const price = e.manualPriceCents ?? (pkg.status === "ok" ? pkg.row.priceCents : null);
   if (price === null) return Number.POSITIVE_INFINITY;
-  return e.period === "quarter" ? price * (e.quarterCount ?? 1) : price;
+  // A quarterly enrollment covers at least one quarter (#291): a missing or zero count is read as one.
+  return e.period === "quarter" ? price * Math.max(1, e.quarterCount ?? 1) : price;
 }
 
 function discountAmount(rule: DiscountRule, priceCents: number): number {

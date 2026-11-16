@@ -541,15 +541,13 @@ async function applyRaises(
       })
       .from(enrollment)
       .where(eq(enrollment.id, i.reference));
-    const fresh = now && {
+    if (!now || now.discountCents !== i.savedDeposit) continue;
+    const fresh = {
       reference: i.reference,
       savedDiscountCents: now.discountCents,
       recalculatedDiscountCents: i.recalculatedDiscount,
     };
     if (
-      !now ||
-      !fresh ||
-      now.discountCents !== i.savedDeposit ||
       !raisedNow(fresh, {
         manual: now.manual,
         invoiced: now.invoiced,
