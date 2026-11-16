@@ -81,11 +81,11 @@ export type ProgressKind =
 export type InvoiceProgress = { kind: ProgressKind; label: string; detail: string | null };
 
 /**
- * Why a draft is held (#176 Q1, open): only quarterly enrollments get installments yet, so a
- * draft billing a yearly or drop-in package or a lesson pack does not go (`isSendable`).
+ * Why a draft is held (#176): no plan was chosen for what is not paid by the quarter (a yearly
+ * or drop-in package, a lesson pack), so its installments do not cover its total (`isSendable`).
  */
 export const HELD_DETAIL =
-  "Pas encore envoyée, rien à faire pour l’instant : les dates d’échéance des forfaits à l’année, des cours à l’unité et des carnets ne sont pas encore paramétrées dans le logiciel. Elle pourra partir une fois ces échéances en place.";
+  "Pas encore envoyée : choisissez en combien de fois la famille paie (boutons « En … fois » ci-dessus) pour fixer ses échéances. Elle partira ensuite d’elle-même.";
 
 /** What the record says of one invoice of the payer. */
 export function invoiceProgress(i: ProgressInput): InvoiceProgress {
@@ -113,7 +113,7 @@ export function invoiceProgress(i: ProgressInput): InvoiceProgress {
     case "tool_draft":
       // A draft the tool holds already went past the hold when it was claimed.
       if (i.status === "to_send" && !isSendable(i))
-        return { kind: "held", label: "En attente des échéances", detail: HELD_DETAIL };
+        return { kind: "held", label: "Échéances à choisir", detail: HELD_DETAIL };
       if (i.connection !== "ready")
         return {
           kind: "not_connected",

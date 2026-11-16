@@ -13,7 +13,7 @@ import { amountDue } from "../domain/payments/balance";
  * Allocating payments to installments (#305) with the locks of #254, as the application runs
  * it (app_user, RLS): a payment settles the oldest open installments of its payer's issued
  * invoices with the same business, once its money is collected. Installments are written
- * directly, as a school's plan (#176) will write them. Fictitious data deleted at the end;
+ * directly, as a school's plan (#176) writes them. Fictitious data deleted at the end;
  * payments, the audit log and issued invoices being immutable, the cleanup disables their
  * triggers inside an administration transaction.
  */

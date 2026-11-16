@@ -4,7 +4,7 @@ import { rowsOf } from "./columns-of";
 import { BILLS_ITS_LINES, CURRENT_SCHOOL } from "./invoice-draft-discard";
 import { connectorConfigOf } from "./invoice-outbox";
 import type { EntityConnectorConfig } from "../connectors/invoicing/connector";
-import { draftPayerInvoices } from "./invoice-drafts";
+import { draftPayerInvoices, type DraftOptions } from "./invoice-drafts";
 import type { Tx } from "./index";
 import {
   auditLog,
@@ -45,6 +45,8 @@ export type PayerInvoice = {
   /** The business's active connector's tool, null when it has none. */
   connectorTool: InvoicingToolName | null;
   createdAt: Date;
+  /** The plan chosen (#176); null: none yet. */
+  installmentCount: number | null;
   lines: { id: string; label: string; inclTaxCents: number }[];
   installments: { dueDate: string; amountCents: number }[];
 };
@@ -83,6 +85,7 @@ export async function payerInvoices(tx: Tx, payerId: string, seasonId: string): 
       sendErrorCode: invoice.sendErrorCode,
       connectorTool: invoicingConnector.tool,
       createdAt: invoice.createdAt,
+      installmentCount: invoice.installmentCount,
     })
     .from(invoice)
     .innerJoin(billingEntity, eq(billingEntity.id, invoice.billingEntityId))
@@ -287,8 +290,14 @@ export async function paysSomeSeason(tx: Tx, payerId: string): Promise<boolean> 
 }
 
 /** The payer's invoices of the season drafted again (`draftPayerInvoices`), signed by the member. */
-export async function draftForPayer(tx: Tx, userId: string, payerId: string, seasonId: string) {
-  return draftPayerInvoices(tx, await memberOf(tx, userId), payerId, seasonId);
+export async function draftForPayer(
+  tx: Tx,
+  userId: string,
+  payerId: string,
+  seasonId: string,
+  options: DraftOptions = {},
+) {
+  return draftPayerInvoices(tx, await memberOf(tx, userId), payerId, seasonId, options);
 }
 
 /** The member of the current school acting, for the audit log; null if no longer one. */

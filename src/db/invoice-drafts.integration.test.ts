@@ -153,7 +153,7 @@ describe("draftPayerInvoices (#302)", () => {
       vat_rate_bps: 2000,
     });
     expect(b.total_vat_cents).toBe(6000);
-    // The yearly package and the pack of A get no installment until #176 is decided.
+    // The yearly package and the pack of A get no installment while no plan is chosen (#176).
     const installments = await admin`SELECT invoice_id, rank, due_date::text AS due, amount_cents FROM installment
       WHERE school_id = ${ids.school} ORDER BY invoice_id = ${a.id} DESC, rank`;
     expect(installments.map((i) => [i.invoice_id === a.id ? "A" : "B", i.rank, i.due, i.amount_cents])).toEqual([
@@ -209,7 +209,7 @@ describe("draftPayerInvoices (#302)", () => {
     beforeAll(async () => {
       const [a] = await invoices();
       ids.issued = a.id;
-      // Its installment written before issuing, as a school's plan (#176) will write it.
+      // Its installment written before issuing, as a school's plan (#176) writes it.
       [{ id: ids.issuedInstallment }] = await admin`
         INSERT INTO installment (school_id, billing_entity_id, invoice_id, rank, due_date, amount_cents)
         VALUES (${ids.school}, ${ids.a}, ${a.id}, 1, '2027-09-10', 56000) RETURNING id`;

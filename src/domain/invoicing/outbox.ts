@@ -63,9 +63,9 @@ export function afterFailure(failure: SendFailure, attempts: number): AfterFailu
 }
 
 /**
- * Whether a draft may be sent. Open question #176 Q1 (when a yearly or drop-in package, or
- * a lesson pack, is due): such amounts get no installment on the drafts (#302), and the owner
- * asked that nothing be issued before it is answered. A draft goes once its installments add
+ * Whether a draft may be sent (#176): a yearly or drop-in package, or a lesson pack, gets its
+ * installments from the plan chosen on the record; with no plan chosen yet it gets none, and
+ * nothing is issued without its due dates. A draft goes once its installments add
  * up to its total; until then it waits, untouched, and a later drafting may still replace it.
  * Mirrored in SQL by `SENDABLE` (src/db/invoice-outbox.ts), checked in the claiming statement.
  */

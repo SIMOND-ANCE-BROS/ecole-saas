@@ -119,7 +119,7 @@ beforeAll(async () => {
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${s}, 'Zzfamille', 'Zzparent') RETURNING id`;
   [{ id: ids.student }] = await admin`INSERT INTO person (school_id, last_name, first_name, is_student)
     VALUES (${s}, 'Zzfamille', 'Zzalice', true) RETURNING id`;
-  // A yearly enrollment of business A (no installment yet, #176: held), a quarterly one of business B (sent).
+  // A yearly enrollment of business A (no plan chosen, #176: held), a quarterly one of business B (sent).
   [{ id: ids.yearly }] = await admin`
     INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, enrolled_on, gross_price_cents)
     VALUES (${s}, ${ids.a}, ${ids.season}, ${ids.payer}, 'child', 'year', '2027-09-10', 40000) RETURNING id`;
@@ -143,6 +143,7 @@ afterAll(async () => {
     "enrollment_course",
     "enrollment",
     "invoicing_connector",
+    "installment_plan_setting",
     "course",
     "season_quarter",
     "person",
@@ -215,7 +216,7 @@ describe("draftInvoices (#352)", () => {
     ]);
     expect(pending).toHaveLength(1);
     await runAfter();
-    // B's installments cover its total: issued by the fake tool. A's yearly package has none yet (#176): held.
+    // B's installments cover its total: issued by the fake tool. A's yearly package has none, no plan chosen (#176): held.
     const [b] = await live(ids.b);
     expect(b).toMatchObject({ status: "issued", number: expect.stringMatching(/^TEST-/) });
     const [a] = await live(ids.a);
@@ -487,5 +488,49 @@ describe("drafting the season shown on the record (#362)", () => {
 describe("sending after the answer", () => {
   it("issued B's invoice once, whatever was drafted again since", () => {
     expect(fakeStoreOf(ids.b).calls.filter((c) => c === "finalize")).toHaveLength(1);
+  });
+});
+
+describe("a plan chosen on the record (#176)", () => {
+  beforeAll(async () => {
+    await clearInvoices();
+    await admin`INSERT INTO installment_plan_setting (school_id, counts, due_day, rounding_unit_cents)
+      VALUES (${ids.school}, '{1,3,10}', 5, 100)`;
+  });
+
+  it("refuses a plan the school does not offer, without writing", async () => {
+    expect(await draftInvoices({ payerId: ids.payer, seasonId: ids.season, installmentCount: 4 })).toEqual({
+      ok: false,
+      message: "Le paiement en 4 fois n’est pas proposé par l’école.",
+    });
+    expect(await invoices()).toHaveLength(0);
+    expect(pending).toHaveLength(0);
+  });
+
+  it("« En 10 fois »: the yearly package gets its installments, so its invoice is no longer held", async () => {
+    expect(await draftInvoices({ payerId: ids.payer, seasonId: ids.season, installmentCount: 10 })).toEqual({
+      ok: true,
+      drafted: 2,
+    });
+    const [a] = await withSchool(ids.school, (tx) => payerInvoices(tx, ids.payer, ids.season));
+    expect(a.billingEntityId).toBe(ids.a);
+    expect(a.installmentCount).toBe(10);
+    expect(a.installments.map((d) => d.dueDate)).toEqual([
+      "2027-09-05",
+      "2027-10-05",
+      "2027-11-05",
+      "2027-12-05",
+      "2028-01-05",
+      "2028-02-05",
+      "2028-03-05",
+      "2028-04-05",
+      "2028-05-05",
+      "2028-06-05",
+    ]);
+    expect(a.installments.reduce((sum, d) => sum + d.amountCents, 0)).toBe(a.totalInclTaxCents);
+    expect(a.installments.slice(1).every((d) => d.amountCents % 100 === 0)).toBe(true);
+    await runAfter();
+    const [issued] = await live(ids.a);
+    expect(issued).toMatchObject({ status: "issued", number: expect.stringMatching(/^TEST-/) });
   });
 });

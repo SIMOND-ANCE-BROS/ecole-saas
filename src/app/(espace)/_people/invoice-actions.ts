@@ -10,13 +10,21 @@ import { sendSoon } from "@/jobs/invoicing/send";
 import { type ActionResult, orBusy } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
 
-const validDraft = z.object({ payerId: z.uuid(), seasonId: z.uuid() });
+const validDraft = z.object({
+  payerId: z.uuid(),
+  seasonId: z.uuid(),
+  // The plan chosen on the record (#176); checked again against the school's plans that fit.
+  installmentCount: z.number().int().min(1).max(12).optional(),
+});
 
 /**
  * Drafts the payer's invoices of the season again (#352): one per business, replacing the
  * unsent drafts in place (`draftPayerInvoices`), so a retry after a lost answer drafts the same
- * invoices, never a second set. Once committed, the sending is woken (`sendSoon`): a draft whose
- * installments cover its total goes to its business's tool, the others wait (#176).
+ * invoices, never a second set. What is not paid by the quarter is due by the plan chosen
+ * (« En 3 fois », #176), refused when the school does not offer it or it no longer fits the
+ * season; without one, each business keeps its previous plan. Once committed, the sending is
+ * woken (`sendSoon`): a draft whose installments cover its total goes to its business's tool,
+ * the others wait.
  * The season is the one the record shows (#362): an ended season other than the current one
  * is refused (`seasonDraftable`, #380 open). An unknown one is refused by `draftPayerInvoices`.
  */
@@ -30,7 +38,10 @@ export async function draftInvoices(entry: z.input<typeof validDraft>): Promise<
       const season = await seasonById(tx, p.data.seasonId);
       if (season && !seasonDraftable(season, (await currentSeason(tx, today))?.id, today))
         return { ok: false as const, message: ENDED_SEASON(season.label) };
-      return draftForPayer(tx, userId, p.data.payerId, p.data.seasonId);
+      return draftForPayer(tx, userId, p.data.payerId, p.data.seasonId, {
+        installmentCount: p.data.installmentCount,
+        today,
+      });
     }),
   );
   if (!r.ok) return r;

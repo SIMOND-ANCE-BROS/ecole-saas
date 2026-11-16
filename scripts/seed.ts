@@ -107,6 +107,9 @@ async function main() {
       INSERT INTO season_quarter (school_id, season_id, label, start_date, end_date)
       SELECT ${school.id}, ${demoSeason.id}, ${q.label}, ${q.startDate}, ${q.endDate}
       WHERE NOT EXISTS (SELECT 1 FROM season_quarter WHERE season_id = ${demoSeason.id} AND label = ${q.label})`;
+  // Installment plans (#176): 1, 3 or 10 times, on the 5th, rounded to the euro. Demo data.
+  await admin`INSERT INTO installment_plan_setting (school_id, counts, due_day, rounding_unit_cents)
+    VALUES (${school.id}, ${"{1,3,10}"}::smallint[], 5, 100) ON CONFLICT DO NOTHING`;
 
   for (const account of ACCOUNTS) {
     const [existing] = await admin`SELECT id FROM "user" WHERE email = ${account.email}`;

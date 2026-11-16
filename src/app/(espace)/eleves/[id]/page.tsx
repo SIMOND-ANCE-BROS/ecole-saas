@@ -8,6 +8,7 @@ import { paymentsOf, balanceOf } from "@/db/payments";
 import { packsOf } from "@/db/lesson-packs";
 import { signupsOf } from "@/db/workshops";
 import { severalEntities } from "@/db/billing-entities";
+import { offeredPlans } from "@/db/installment-plans";
 import { payerInvoices } from "@/db/payer-invoices";
 import { ENDED_SEASON, mayDraft, seasonDraftable } from "@/domain/invoicing/progress";
 import { InvoicesSection } from "../../_people/invoices-section";
@@ -93,6 +94,8 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
       // A student paying for themselves: their own invoices (#352).
       invoices: season && paysForThemselves ? await payerInvoices(tx, student.id, season.id) : [],
       severalEntities: await severalEntities(tx),
+      // What « Préparer les factures » offers (#176).
+      plans: season ? await offeredPlans(tx, season, today) : null,
       // Internal rules, photos and « Comment nous avez-vous connus ? » (#296).
       rules: season
         ? await studentRulesLines(
@@ -321,6 +324,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
                     seasonDraftable(season, parsed.seasons?.current.id, today) ? undefined : ENDED_SEASON(season.label)
                   }
                   isDirector={role === "director"}
+                  plans={parsed.plans}
                 />
               )}
               <PaymentsSection

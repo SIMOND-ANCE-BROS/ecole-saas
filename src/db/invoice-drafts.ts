@@ -1,4 +1,4 @@
-import { and, asc, between, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, between, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { rowsOf } from "./columns-of";
 import { BILLS_ITS_LINES, discardDrafts, lockDrafts } from "./invoice-draft-discard";
@@ -33,6 +33,8 @@ import {
   type DraftCourse,
 } from "../domain/invoicing/draft";
 import { displayedName } from "../domain/people/name";
+import { todayInParis } from "../domain/people/age";
+import { readInstallmentPlans } from "./installment-plans";
 
 /**
  * Invoice drafts of a payer for a season (#302, ADR 0006): one per business, persisted as an
@@ -46,12 +48,22 @@ const isUuid = (v: unknown): v is string => z.uuid().safeParse(v).success;
 
 export type DraftOutcome = { ok: true; invoiceIds: string[] } | { ok: false; message: string };
 
+/** What a drafting is told (#176): the plan chosen on the record, and the day it is drafted. */
+export type DraftOptions = {
+  /** The count chosen (« Préparer en 3 fois »); absent: each business keeps its previous plan. */
+  installmentCount?: number | null;
+  /** `YYYY-MM-DD` in Europe/Paris; today by default. */
+  today?: string;
+};
+
 /**
  * Drafts again the invoices of `payerId` for `seasonId`: its unsent drafts of the season are
  * replaced by new ones billing what no other invoice bills yet: the season's enrollments that
  * owe something and the lesson packs bought within the season's dates. An invoice handed to
  * the tool or issued is never touched; what it bills is left out. The payer row is locked, so
- * two draftings for the same payer run one after the other. Returns the new drafts' ids, none
+ * two draftings for the same payer run one after the other. What is not quarterly is due by the
+ * plan chosen (`options.installmentCount`), else by the plan of the payer's previous invoice of
+ * the season, its business's first (#176, `draftInvoices`). Returns the new drafts' ids, none
  * when nothing is left to bill.
  */
 export async function draftPayerInvoices(
@@ -59,6 +71,7 @@ export async function draftPayerInvoices(
   actor: string | null,
   payerId: string,
   seasonId: string,
+  options: DraftOptions = {},
 ): Promise<DraftOutcome> {
   if (!isUuid(payerId) || !isUuid(seasonId)) return { ok: false, message: "Saisie invalide." };
   const [payer] = await tx.select({ id: person.id }).from(person).where(eq(person.id, payerId)).for("no key update");
@@ -71,6 +84,40 @@ export async function draftPayerInvoices(
 
   // The unsent drafts of the season go: what they billed is drafted again below.
   const stale = await lockDrafts(tx, and(eq(invoice.payerId, payerId), eq(invoice.seasonId, seasonId)));
+  // Read before the drafts go: the plans they were due by are kept (#176).
+  const previous = await previousPlans(tx, payerId, seasonId, stale);
+  // A refusal (a plan that no longer fits, VAT on a business charging none…) rolls the
+  // discarding back with it: `withSchool` commits what a refused drafting already deleted.
+  try {
+    return await tx.transaction(async (sp) => {
+      const out = await redraft(sp, actor, payerId, seasonId, s, stale, previous, options);
+      if (!out.ok) throw new Refused(out);
+      return out;
+    });
+  } catch (e) {
+    if (e instanceof Refused) return e.outcome;
+    throw e;
+  }
+}
+
+/** A refused drafting, thrown to roll its savepoint back. */
+class Refused extends Error {
+  constructor(readonly outcome: DraftOutcome & { ok: false }) {
+    super("draft refused");
+  }
+}
+
+/** The unsent drafts discarded, then the payer's season drafted again (`draftPayerInvoices`). */
+async function redraft(
+  tx: Tx,
+  actor: string | null,
+  payerId: string,
+  seasonId: string,
+  s: { startDate: string; endDate: string },
+  stale: string[],
+  previous: Map<string, number>,
+  options: DraftOptions,
+): Promise<DraftOutcome> {
   const discarded = await discardDrafts(tx, actor, stale);
   if (!discarded.ok) return discarded;
 
@@ -80,7 +127,18 @@ export async function draftPayerInvoices(
     .select({ id: billingEntity.id, name: billingEntity.name, vatRegime: billingEntity.vatRegime })
     .from(billingEntity)
     .orderBy(desc(billingEntity.isDefault), asc(billingEntity.name));
-  const r = draftInvoices({ enrollments, packs, entities, treatments: await treatments(tx) });
+  const r = draftInvoices({
+    enrollments,
+    packs,
+    entities,
+    treatments: await treatments(tx),
+    plans: {
+      setting: await readInstallmentPlans(tx),
+      window: { season: s, today: options.today ?? todayInParis() },
+      choice: options.installmentCount ?? null,
+      previous,
+    },
+  });
   if (!r.ok) return r;
 
   const invoiceIds: string[] = [];
@@ -96,6 +154,7 @@ export async function draftPayerInvoices(
         totalInclTaxCents: d.totalInclTaxCents,
         totalExclTaxCents: d.totalExclTaxCents,
         totalVatCents: d.totalVatCents,
+        installmentCount: d.installmentCount,
       })
       .returning({ id: invoice.id });
     invoiceIds.push(id);
@@ -133,10 +192,44 @@ export async function draftPayerInvoices(
         total_incl_tax_cents: d.totalInclTaxCents,
         lines: d.lines.length,
         installments: d.installments.length,
+        installment_count: d.installmentCount,
       },
     });
   }
   return { ok: true, invoiceIds };
+}
+
+/**
+ * The plan each business's invoices of the payer's season were due by (#176): the unsent drafts
+ * about to be drafted again first, then the other invoices, newest first. A business keeps its
+ * first; the map's order is the fallback for a business with none (`draftInvoices`).
+ */
+async function previousPlans(
+  tx: Tx,
+  payerId: string,
+  seasonId: string,
+  stale: readonly string[],
+): Promise<Map<string, number>> {
+  const rows = await tx
+    .select({ billingEntityId: invoice.billingEntityId, installmentCount: invoice.installmentCount })
+    .from(invoice)
+    .where(
+      and(
+        eq(invoice.payerId, payerId),
+        eq(invoice.seasonId, seasonId),
+        isNull(invoice.creditNoteOf),
+        isNotNull(invoice.installmentCount),
+      ),
+    )
+    .orderBy(
+      ...(stale.length > 0 ? [desc(inArray(invoice.id, [...stale]))] : []),
+      desc(invoice.createdAt),
+      asc(invoice.id),
+    );
+  const plans = new Map<string, number>();
+  for (const r of rows)
+    if (r.installmentCount !== null && !plans.has(r.billingEntityId)) plans.set(r.billingEntityId, r.installmentCount);
+  return plans;
 }
 
 /**

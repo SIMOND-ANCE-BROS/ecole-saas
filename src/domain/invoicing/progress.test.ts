@@ -80,7 +80,7 @@ describe("invoiceProgress", () => {
       for (const connection of ["ready", "none", "unavailable"] as const) {
         const p = invoiceProgress(draft({ installmentsCents, connection }));
         expect(p.kind).toBe("held");
-        expect(p.label).toBe("En attente des échéances");
+        expect(p.label).toBe("Échéances à choisir");
         expect(p.detail).toMatch(/échéances/);
       }
   });

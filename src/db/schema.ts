@@ -658,6 +658,33 @@ export const paymentMethodSetting = pgTable(
   ],
 );
 
+/**
+ * The school's installment plans (#176): the counts a family may choose for what is not paid by
+ * the quarter, the day of the month installments are due and the rounding unit (100: to the
+ * euro, the remainder on the first). One row per school; none follows
+ * `DEFAULT_INSTALLMENT_PLANS` (src/domain/invoicing/plans.ts). The last installment falls
+ * within the season (`plansThatFit`).
+ */
+export const installmentPlanSetting = pgTable(
+  "installment_plan_setting",
+  {
+    schoolId: schoolIdColumn().primaryKey(),
+    counts: smallint("counts").array().notNull(),
+    dueDay: smallint("due_day").notNull(),
+    roundingUnitCents: integer("rounding_unit_cents").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // 1 to 12 each; ascending and each once by `sortedCounts` (no subquery in a check).
+    check(
+      "installment_plan_setting_counts",
+      sql`cardinality(${t.counts}) BETWEEN 1 AND 12 AND array_position(${t.counts}, NULL) IS NULL AND 1 <= ALL(${t.counts}) AND 12 >= ALL(${t.counts})`,
+    ),
+    check("installment_plan_setting_due_day", sql`${t.dueDay} BETWEEN 1 AND 28`),
+    check("installment_plan_setting_rounding", sql`${t.roundingUnitCents} IN (1, 100)`),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // Teachers
 // ---------------------------------------------------------------------------
@@ -1287,6 +1314,10 @@ export const invoice = pgTable(
     // VAT-inclusive total of the document the tool issued, as it answered (#303): differs from
     // ours on a `total_mismatch`, the amount a correcting credit note starts from.
     toolTotalInclTaxCents: integer("tool_total_incl_tax_cents"),
+    // The plan the family chose (#176): what is not paid by the quarter is due in this many
+    // installments; drafting again keeps it. NULL: none chosen yet (the draft is held), or an
+    // invoice drafted before #176. Frozen with the issued invoice.
+    installmentCount: smallint("installment_count"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -1312,6 +1343,7 @@ export const invoice = pgTable(
         sql`${t.status} = 'to_send' AND ${t.attempts} = 0 AND ${t.creditNoteOf} IS NULL AND ${t.seasonId} IS NOT NULL`,
       ),
     check("invoice_attempts", sql`${t.attempts} >= 0`),
+    check("invoice_installment_count", sql`${t.installmentCount} BETWEEN 1 AND 12`),
     // What the outbox picks up, per business, in the order it is due.
     index("invoice_outbox")
       .on(t.billingEntityId, t.nextAttemptAt)

@@ -6,6 +6,8 @@ import { listDisciplines, listPlaces, listSeasons } from "@/db/settings";
 import { listEntities } from "@/db/billing-entities";
 import { sendingProblemCount } from "@/db/invoice-outbox";
 import { readMethodSettings } from "@/db/payment-methods";
+import { readInstallmentPlans } from "@/db/installment-plans";
+import type { InstallmentPlanSetting } from "@/domain/invoicing/plans";
 import { offeredMethods } from "@/domain/payments/methods";
 import { has } from "@/lib/has";
 import { requireRole } from "@/lib/session";
@@ -21,6 +23,7 @@ export default async function SettingsPage() {
     seats: seats,
     entities,
     methods,
+    plans,
     problems,
   } = await withSchool(schoolId, async (tx) => ({
     seasons: await listSeasons(tx),
@@ -28,6 +31,7 @@ export default async function SettingsPage() {
     seats: await listPlaces(tx),
     entities: await listEntities(tx),
     methods: await readMethodSettings(tx),
+    plans: await readInstallmentPlans(tx),
     problems: await sendingProblemCount(tx),
   }));
   const accepted = offeredMethods(methods).length;
@@ -76,6 +80,11 @@ export default async function SettingsPage() {
       title: "Moyens de paiement",
       detail: `${accepted} moyen${accepted > 1 ? "s" : ""} accepté${accepted > 1 ? "s" : ""}, consignes pour l’accueil`,
     },
+    {
+      href: "/parametres/echeances",
+      title: "Paiement en plusieurs fois",
+      detail: plansDetail(plans),
+    },
     { href: "/parametres/tva", title: "TVA", detail: "Exonération ou taux de TVA des cours et des carnets" },
     { href: "/intervenants", title: "Intervenants", detail: "Professeurs, statut et rémunération" },
     { href: "/parametres/equipe", title: "Équipe", detail: "Accès de la direction et de l’accueil, invitations" },
@@ -116,4 +125,11 @@ export default async function SettingsPage() {
       </ul>
     </section>
   );
+}
+
+/** « En 1, 3 ou 10 fois, le 5 du mois »: the plans on their card. */
+function plansDetail(p: InstallmentPlanSetting): string {
+  const counts = p.counts.map(String);
+  const list = counts.length > 1 ? `${counts.slice(0, -1).join(", ")} ou ${counts.at(-1)}` : counts[0];
+  return `En ${list} fois, le ${p.dueDay === 1 ? "1er" : p.dueDay} du mois`;
 }

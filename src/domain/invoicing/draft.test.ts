@@ -13,6 +13,7 @@ import {
   type BillableEnrollment,
   type BillablePack,
   type DraftEntity,
+  type DraftPlans,
   type InvoiceDraft,
 } from "./draft";
 
@@ -317,7 +318,7 @@ describe("draftInvoices", () => {
     expect(d.totalInclTaxCents).toBe(45000);
   });
 
-  it("yearly packages and lesson packs are billed but get no installment until the school's plans are decided (#176)", () => {
+  it("yearly packages and lesson packs are billed but get no installment while no plan is chosen (#176)", () => {
     const [d] = draft(
       [enrollment(), enrollment({ id: "e2", enrolledOn: "2027-09-20", grossPriceCents: 30000 })],
       [pack(), pack({ id: "p2", billingEntityId: "B" })],
@@ -413,6 +414,105 @@ describe("draftInvoices", () => {
     const [d] = draft([enrollment({ manualPriceCents: 0 })]);
     expect(d.lines).toHaveLength(1);
     expect(d.installments).toEqual([]);
+  });
+});
+
+describe("draftInvoices with an installment plan (#176)", () => {
+  const SEASON = { startDate: "2027-09-01", endDate: "2028-06-30" };
+  const plans = (over: Partial<DraftPlans> = {}): DraftPlans => ({
+    setting: { counts: [1, 3, 10], dueDay: 5, roundingUnitCents: 100 },
+    window: { season: SEASON, today: "2027-06-20" },
+    choice: 3,
+    previous: new Map(),
+    ...over,
+  });
+  const run = (enrollments: BillableEnrollment[], packs: BillablePack[] = [], p = plans()) =>
+    draftInvoices({ enrollments, packs, entities: [A, B], treatments: TREATMENTS, plans: p });
+  const sibling = (id: string) =>
+    enrollment({ id, grossPriceCents: 41500, discountCents: 4150, discountCodes: ["fratrie"] });
+
+  it("three siblings at −10 % in 3 installments: to the euro, the cents on the first, the total exact", () => {
+    const r = run([sibling("e1"), sibling("e2"), sibling("e3")]);
+    if (!r.ok) throw new Error(r.message);
+    const [d] = r.drafts;
+    expect(d.totalInclTaxCents).toBe(112050);
+    expect(d.installments).toEqual([
+      { rank: 1, dueOn: "2027-09-05", amountCents: 37450 },
+      { rank: 2, dueOn: "2027-10-05", amountCents: 37300 },
+      { rank: 3, dueOn: "2027-11-05", amountCents: 37300 },
+    ]);
+    expect(d.installmentCount).toBe(3);
+  });
+
+  it("the plan covers yearly packages and lesson packs; quarters keep their own days, merged by date", () => {
+    const quarterly = enrollment({
+      id: "q",
+      period: "quarter",
+      enrolledOn: "2027-09-10",
+      grossPriceCents: 10000,
+      quarters: QUARTERS,
+    });
+    const r = run([quarterly, enrollment({ id: "y" })], [pack()], plans({ choice: 1 }));
+    if (!r.ok) throw new Error(r.message);
+    const [d] = r.drafts;
+    expect(d.installments).toEqual([
+      { rank: 1, dueOn: "2027-09-05", amountCents: 60000 },
+      { rank: 2, dueOn: "2027-10-01", amountCents: 10000 },
+      { rank: 3, dueOn: "2028-01-01", amountCents: 10000 },
+      { rank: 4, dueOn: "2028-04-01", amountCents: 10000 },
+    ]);
+    expect(sumInstallments(d)).toBe(d.totalInclTaxCents);
+  });
+
+  it("refuses 10 installments chosen when they no longer fit the season", () => {
+    const r = run([enrollment()], [], plans({ choice: 10, window: { season: SEASON, today: "2027-11-12" } }));
+    expect(r).toEqual({
+      ok: false,
+      message: "Le paiement en 10 fois finirait après la fin de la saison : choisissez moins d’échéances.",
+    });
+  });
+
+  it("a plan starting mid-season begins at the next due day", () => {
+    const r = run(
+      [enrollment({ enrolledOn: "2028-02-14" })],
+      [],
+      plans({ window: { season: SEASON, today: "2028-02-14" } }),
+    );
+    if (!r.ok) throw new Error(r.message);
+    expect(r.drafts[0].installments.map((i) => [i.dueOn, i.amountCents])).toEqual([
+      ["2028-03-05", 13400],
+      ["2028-04-05", 13300],
+      ["2028-05-05", 13300],
+    ]);
+  });
+
+  it("without a choice, each business keeps its previous draft's plan, else another business's", () => {
+    const r = run(
+      [enrollment(), enrollment({ id: "b", billingEntityId: "B" })],
+      [],
+      plans({ choice: null, previous: new Map([["A", 10]]) }),
+    );
+    if (!r.ok) throw new Error(r.message);
+    expect(r.drafts.map((d) => [d.billingEntityId, d.installmentCount, d.installments.length])).toEqual([
+      ["A", 10, 10],
+      ["B", 10, 10],
+    ]);
+  });
+
+  it("a previous plan that no longer fits is dropped: the draft is held until a plan is chosen", () => {
+    const r = run(
+      [enrollment()],
+      [],
+      plans({ choice: null, previous: new Map([["A", 10]]), window: { season: SEASON, today: "2027-11-12" } }),
+    );
+    if (!r.ok) throw new Error(r.message);
+    expect(r.drafts[0]).toMatchObject({ installmentCount: null, installments: [] });
+  });
+
+  it("no choice and no previous draft: held, as before #176", () => {
+    const r = run([enrollment()], [], plans({ choice: null }));
+    if (!r.ok) throw new Error(r.message);
+    expect(r.drafts[0]).toMatchObject({ installmentCount: null, installments: [] });
   });
 });
 

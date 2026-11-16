@@ -46,7 +46,7 @@ describe("afterFailure", () => {
   );
 });
 
-describe("isSendable (#176 Q1: nothing issued without due dates)", () => {
+describe("isSendable (#176: nothing issued without due dates)", () => {
   it("sends a draft whose installments add up to its total", () => {
     expect(isSendable({ totalInclTaxCents: 36000, installmentsCents: [12000, 12000, 12000] })).toBe(true);
   });
