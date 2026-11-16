@@ -1,5 +1,5 @@
 {
-  "id": "4182b57f-4fb6-4818-9d10-d2f09c416d9c",
+  "id": "f8ce0b48-f74c-466f-a87b-090f188b1480",
   "prevId": "b0a7f84f-ceec-45b7-b80e-8da80094681c",
   "version": "7",
   "dialect": "postgresql",
@@ -101,24 +101,24 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "account_user_id_user_id_fk": {
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -161,45 +161,45 @@
         "attendance_school_id_school_id_fk": {
           "name": "attendance_school_id_school_id_fk",
           "tableFrom": "attendance",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "attendance_lesson_same_school_fk": {
           "name": "attendance_lesson_same_school_fk",
           "tableFrom": "attendance",
-          "tableTo": "lesson",
           "columnsFrom": [
             "school_id",
             "lesson_id"
           ],
+          "tableTo": "lesson",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "attendance_student_same_school_fk": {
           "name": "attendance_student_same_school_fk",
           "tableFrom": "attendance",
-          "tableTo": "person",
           "columnsFrom": [
             "school_id",
             "student_id"
           ],
+          "tableTo": "person",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -300,39 +300,39 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "audit_log_school_id_school_id_fk": {
           "name": "audit_log_school_id_school_id_fk",
           "tableFrom": "audit_log",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "audit_log_actor_same_school_fk": {
           "name": "audit_log_actor_same_school_fk",
           "tableFrom": "audit_log",
-          "tableTo": "member",
           "columnsFrom": [
             "school_id",
             "actor"
           ],
+          "tableTo": "member",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -396,65 +396,65 @@
         "bank_deposit_school_id_school_id_fk": {
           "name": "bank_deposit_school_id_school_id_fk",
           "tableFrom": "bank_deposit",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "bank_deposit_billing_entity_same_school_fk": {
           "name": "bank_deposit_billing_entity_same_school_fk",
           "tableFrom": "bank_deposit",
-          "tableTo": "billing_entity",
           "columnsFrom": [
             "school_id",
             "billing_entity_id"
           ],
+          "tableTo": "billing_entity",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "bank_deposit_created_by_same_school_fk": {
           "name": "bank_deposit_created_by_same_school_fk",
           "tableFrom": "bank_deposit",
-          "tableTo": "member",
           "columnsFrom": [
             "school_id",
             "created_by"
           ],
+          "tableTo": "member",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "bank_deposit_school_id_id_unique": {
           "name": "bank_deposit_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "bank_deposit_school_id_id_billing_entity_id_unique": {
           "name": "bank_deposit_school_id_id_billing_entity_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id",
             "billing_entity_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -502,58 +502,58 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "bank_deposit_payment_school_id_school_id_fk": {
           "name": "bank_deposit_payment_school_id_school_id_fk",
           "tableFrom": "bank_deposit_payment",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "bank_deposit_payment_bank_deposit_same_entity_fk": {
           "name": "bank_deposit_payment_bank_deposit_same_entity_fk",
           "tableFrom": "bank_deposit_payment",
-          "tableTo": "bank_deposit",
           "columnsFrom": [
             "school_id",
             "bank_deposit_id",
             "billing_entity_id"
           ],
+          "tableTo": "bank_deposit",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "bank_deposit_payment_payment_same_entity_fk": {
           "name": "bank_deposit_payment_payment_same_entity_fk",
           "tableFrom": "bank_deposit_payment",
-          "tableTo": "payment",
           "columnsFrom": [
             "school_id",
             "payment_id",
             "billing_entity_id"
           ],
+          "tableTo": "payment",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -693,59 +693,59 @@
             }
           ],
           "isUnique": true,
-          "where": "\"billing_entity\".\"is_default\"",
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "where": "\"billing_entity\".\"is_default\"",
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "billing_entity_school_id_school_id_fk": {
           "name": "billing_entity_school_id_school_id_fk",
           "tableFrom": "billing_entity",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "billing_entity_default_vat_treatment_same_school_fk": {
           "name": "billing_entity_default_vat_treatment_same_school_fk",
           "tableFrom": "billing_entity",
-          "tableTo": "vat_treatment",
           "columnsFrom": [
             "school_id",
             "default_vat_treatment_id"
           ],
+          "tableTo": "vat_treatment",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "billing_entity_school_id_id_unique": {
           "name": "billing_entity_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "billing_entity_name_unique": {
           "name": "billing_entity_name_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "name"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -838,40 +838,40 @@
         "calendar_connection_school_id_school_id_fk": {
           "name": "calendar_connection_school_id_school_id_fk",
           "tableFrom": "calendar_connection",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "calendar_connection_instructor_same_school_fk": {
           "name": "calendar_connection_instructor_same_school_fk",
           "tableFrom": "calendar_connection",
-          "tableTo": "instructor",
           "columnsFrom": [
             "school_id",
             "instructor_id"
           ],
+          "tableTo": "instructor",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "calendar_connection_instructor_id_unique": {
           "name": "calendar_connection_instructor_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "instructor_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -933,41 +933,41 @@
         "closure_school_id_school_id_fk": {
           "name": "closure_school_id_school_id_fk",
           "tableFrom": "closure",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "closure_season_same_school_fk": {
           "name": "closure_season_same_school_fk",
           "tableFrom": "closure",
-          "tableTo": "season",
           "columnsFrom": [
             "school_id",
             "season_id"
           ],
+          "tableTo": "season",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "closure_school_id_id_unique": {
           "name": "closure_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1009,54 +1009,54 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "closure_course_school_id_school_id_fk": {
           "name": "closure_course_school_id_school_id_fk",
           "tableFrom": "closure_course",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "closure_course_closure_same_school_fk": {
           "name": "closure_course_closure_same_school_fk",
           "tableFrom": "closure_course",
-          "tableTo": "closure",
           "columnsFrom": [
             "school_id",
             "closure_id"
           ],
+          "tableTo": "closure",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "closure_course_course_same_school_fk": {
           "name": "closure_course_course_same_school_fk",
           "tableFrom": "closure_course",
-          "tableTo": "course",
           "columnsFrom": [
             "school_id",
             "course_id"
           ],
+          "tableTo": "course",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {
@@ -1108,54 +1108,54 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "closure_site_school_id_school_id_fk": {
           "name": "closure_site_school_id_school_id_fk",
           "tableFrom": "closure_site",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "closure_site_closure_same_school_fk": {
           "name": "closure_site_closure_same_school_fk",
           "tableFrom": "closure_site",
-          "tableTo": "closure",
           "columnsFrom": [
             "school_id",
             "closure_id"
           ],
+          "tableTo": "closure",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "closure_site_site_same_school_fk": {
           "name": "closure_site_site_same_school_fk",
           "tableFrom": "closure_site",
-          "tableTo": "site",
           "columnsFrom": [
             "school_id",
             "site_id"
           ],
+          "tableTo": "site",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {
@@ -1340,134 +1340,134 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "course_school_id_school_id_fk": {
           "name": "course_school_id_school_id_fk",
           "tableFrom": "course",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "course_billing_entity_same_school_fk": {
           "name": "course_billing_entity_same_school_fk",
           "tableFrom": "course",
-          "tableTo": "billing_entity",
           "columnsFrom": [
             "school_id",
             "billing_entity_id"
           ],
+          "tableTo": "billing_entity",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "course_vat_treatment_same_school_fk": {
           "name": "course_vat_treatment_same_school_fk",
           "tableFrom": "course",
-          "tableTo": "vat_treatment",
           "columnsFrom": [
             "school_id",
             "vat_treatment_id"
           ],
+          "tableTo": "vat_treatment",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "course_season_same_school_fk": {
           "name": "course_season_same_school_fk",
           "tableFrom": "course",
-          "tableTo": "season",
           "columnsFrom": [
             "school_id",
             "season_id"
           ],
+          "tableTo": "season",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "course_discipline_same_school_fk": {
           "name": "course_discipline_same_school_fk",
           "tableFrom": "course",
-          "tableTo": "discipline",
           "columnsFrom": [
             "school_id",
             "discipline_id"
           ],
+          "tableTo": "discipline",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "course_room_same_school_fk": {
           "name": "course_room_same_school_fk",
           "tableFrom": "course",
-          "tableTo": "room",
           "columnsFrom": [
             "school_id",
             "room_id"
           ],
+          "tableTo": "room",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "course_instructor_same_school_fk": {
           "name": "course_instructor_same_school_fk",
           "tableFrom": "course",
-          "tableTo": "instructor",
           "columnsFrom": [
             "school_id",
             "instructor_id"
           ],
+          "tableTo": "instructor",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "course_school_id_id_unique": {
           "name": "course_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "course_school_id_id_billing_entity_id_unique": {
           "name": "course_school_id_id_billing_entity_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id",
             "billing_entity_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1531,30 +1531,30 @@
         "course_date_school_id_school_id_fk": {
           "name": "course_date_school_id_school_id_fk",
           "tableFrom": "course_date",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "course_date_course_same_school_fk": {
           "name": "course_date_course_same_school_fk",
           "tableFrom": "course_date",
-          "tableTo": "course",
           "columnsFrom": [
             "school_id",
             "course_id"
           ],
+          "tableTo": "course",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {
@@ -1607,34 +1607,34 @@
         "discipline_school_id_school_id_fk": {
           "name": "discipline_school_id_school_id_fk",
           "tableFrom": "discipline",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "discipline_school_id_name_unique": {
           "name": "discipline_school_id_name_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "name"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "discipline_school_id_id_unique": {
           "name": "discipline_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1696,13 +1696,6 @@
           "notNull": true,
           "default": 1
         },
-        "from_rank": {
-          "name": "from_rank",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
         "audiences": {
           "name": "audiences",
           "type": "tariff_audience[]",
@@ -1724,41 +1717,41 @@
         "discount_school_id_school_id_fk": {
           "name": "discount_school_id_school_id_fk",
           "tableFrom": "discount",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "discount_season_same_school_fk": {
           "name": "discount_season_same_school_fk",
           "tableFrom": "discount",
-          "tableTo": "season",
           "columnsFrom": [
             "school_id",
             "season_id"
           ],
+          "tableTo": "season",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "discount_season_id_code_unique": {
           "name": "discount_season_id_code_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "season_id",
             "code"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1766,10 +1759,6 @@
         "discount_value": {
           "name": "discount_value",
           "value": "\"discount\".\"rate_bps\" IS NOT NULL OR \"discount\".\"amount_cents\" IS NOT NULL"
-        },
-        "discount_from_rank": {
-          "name": "discount_from_rank",
-          "value": "\"discount\".\"from_rank\" BETWEEN 1 AND 10"
         }
       },
       "isRLSEnabled": false
@@ -1828,15 +1817,15 @@
         "document_requirement_school_id_school_id_fk": {
           "name": "document_requirement_school_id_school_id_fk",
           "tableFrom": "document_requirement",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {
@@ -1921,15 +1910,15 @@
         "email_connector_school_id_school_id_fk": {
           "name": "email_connector_school_id_school_id_fk",
           "tableFrom": "email_connector",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -2058,8 +2047,8 @@
           "primaryKey": false,
           "notNull": false,
           "generated": {
-            "as": "coalesce(manual_price_cents, gross_price_cents - discount_cents)",
-            "type": "stored"
+            "type": "stored",
+            "as": "coalesce(manual_price_cents, gross_price_cents - discount_cents)"
           }
         },
         "discounts": {
@@ -2095,104 +2084,104 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "enrollment_school_id_school_id_fk": {
           "name": "enrollment_school_id_school_id_fk",
           "tableFrom": "enrollment",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "enrollment_billing_entity_same_school_fk": {
           "name": "enrollment_billing_entity_same_school_fk",
           "tableFrom": "enrollment",
-          "tableTo": "billing_entity",
           "columnsFrom": [
             "school_id",
             "billing_entity_id"
           ],
+          "tableTo": "billing_entity",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "enrollment_payer_same_school_fk": {
           "name": "enrollment_payer_same_school_fk",
           "tableFrom": "enrollment",
-          "tableTo": "person",
           "columnsFrom": [
             "school_id",
             "payer_id"
           ],
+          "tableTo": "person",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "enrollment_season_same_school_fk": {
           "name": "enrollment_season_same_school_fk",
           "tableFrom": "enrollment",
-          "tableTo": "season",
           "columnsFrom": [
             "school_id",
             "season_id"
           ],
+          "tableTo": "season",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "enrollment_tariff_same_school_fk": {
           "name": "enrollment_tariff_same_school_fk",
           "tableFrom": "enrollment",
-          "tableTo": "tariff",
           "columnsFrom": [
             "school_id",
             "tariff_id"
           ],
+          "tableTo": "tariff",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "enrollment_school_id_id_unique": {
           "name": "enrollment_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "enrollment_school_id_id_billing_entity_id_unique": {
           "name": "enrollment_school_id_id_billing_entity_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id",
             "billing_entity_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -2248,64 +2237,64 @@
         "enrollment_course_school_id_school_id_fk": {
           "name": "enrollment_course_school_id_school_id_fk",
           "tableFrom": "enrollment_course",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "enrollment_course_enrollment_same_entity_fk": {
           "name": "enrollment_course_enrollment_same_entity_fk",
           "tableFrom": "enrollment_course",
-          "tableTo": "enrollment",
           "columnsFrom": [
             "school_id",
             "enrollment_id",
             "billing_entity_id"
           ],
+          "tableTo": "enrollment",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "enrollment_course_student_same_school_fk": {
           "name": "enrollment_course_student_same_school_fk",
           "tableFrom": "enrollment_course",
-          "tableTo": "person",
           "columnsFrom": [
             "school_id",
             "student_id"
           ],
+          "tableTo": "person",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "enrollment_course_course_same_entity_fk": {
           "name": "enrollment_course_course_same_entity_fk",
           "tableFrom": "enrollment_course",
-          "tableTo": "course",
           "columnsFrom": [
             "school_id",
             "course_id",
             "billing_entity_id"
           ],
+          "tableTo": "course",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2358,54 +2347,54 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "enrollment_quarter_school_id_school_id_fk": {
           "name": "enrollment_quarter_school_id_school_id_fk",
           "tableFrom": "enrollment_quarter",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "enrollment_quarter_enrollment_same_school_fk": {
           "name": "enrollment_quarter_enrollment_same_school_fk",
           "tableFrom": "enrollment_quarter",
-          "tableTo": "enrollment",
           "columnsFrom": [
             "school_id",
             "enrollment_id"
           ],
+          "tableTo": "enrollment",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "enrollment_quarter_quarter_same_school_fk": {
           "name": "enrollment_quarter_quarter_same_school_fk",
           "tableFrom": "enrollment_quarter",
-          "tableTo": "season_quarter",
           "columnsFrom": [
             "school_id",
             "quarter_id"
           ],
+          "tableTo": "season_quarter",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2496,70 +2485,70 @@
             }
           ],
           "isUnique": false,
-          "where": "\"installment\".\"status\" IN ('upcoming', 'partial', 'overdue')",
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "where": "\"installment\".\"status\" IN ('upcoming', 'partial', 'overdue')",
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "installment_school_id_school_id_fk": {
           "name": "installment_school_id_school_id_fk",
           "tableFrom": "installment",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "installment_invoice_same_entity_fk": {
           "name": "installment_invoice_same_entity_fk",
           "tableFrom": "installment",
-          "tableTo": "invoice",
           "columnsFrom": [
             "school_id",
             "invoice_id",
             "billing_entity_id"
           ],
+          "tableTo": "invoice",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "installment_invoice_id_rank_unique": {
           "name": "installment_invoice_id_rank_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "invoice_id",
             "rank"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "installment_school_id_id_unique": {
           "name": "installment_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "installment_school_id_id_billing_entity_id_unique": {
           "name": "installment_school_id_id_billing_entity_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id",
             "billing_entity_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -2607,15 +2596,15 @@
         "installment_plan_setting_school_id_school_id_fk": {
           "name": "installment_plan_setting_school_id_school_id_fk",
           "tableFrom": "installment_plan_setting",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -2737,33 +2726,33 @@
         "instructor_school_id_school_id_fk": {
           "name": "instructor_school_id_school_id_fk",
           "tableFrom": "instructor",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "instructor_calendar_token_hash_unique": {
           "name": "instructor_calendar_token_hash_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "calendar_token_hash"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "instructor_school_id_id_unique": {
           "name": "instructor_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -2843,41 +2832,41 @@
         "instructor_statement_school_id_school_id_fk": {
           "name": "instructor_statement_school_id_school_id_fk",
           "tableFrom": "instructor_statement",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "instructor_statement_instructor_same_school_fk": {
           "name": "instructor_statement_instructor_same_school_fk",
           "tableFrom": "instructor_statement",
-          "tableTo": "instructor",
           "columnsFrom": [
             "school_id",
             "instructor_id"
           ],
+          "tableTo": "instructor",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "instructor_statement_instructor_id_month_unique": {
           "name": "instructor_statement_instructor_id_month_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "instructor_id",
             "month"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -2939,59 +2928,59 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "internal_rules_version_school_id_school_id_fk": {
           "name": "internal_rules_version_school_id_school_id_fk",
           "tableFrom": "internal_rules_version",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "internal_rules_version_season_same_school_fk": {
           "name": "internal_rules_version_season_same_school_fk",
           "tableFrom": "internal_rules_version",
-          "tableTo": "season",
           "columnsFrom": [
             "school_id",
             "season_id"
           ],
+          "tableTo": "season",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "internal_rules_version_school_id_id_unique": {
           "name": "internal_rules_version_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "internal_rules_version_school_id_id_season_id_unique": {
           "name": "internal_rules_version_school_id_id_season_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id",
             "season_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -3101,53 +3090,53 @@
         "invitation_school_id_school_id_fk": {
           "name": "invitation_school_id_school_id_fk",
           "tableFrom": "invitation",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "invitation_user_id_user_id_fk": {
           "name": "invitation_user_id_user_id_fk",
           "tableFrom": "invitation",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "invitation_created_by_same_school_fk": {
           "name": "invitation_created_by_same_school_fk",
           "tableFrom": "invitation",
-          "tableTo": "member",
           "columnsFrom": [
             "school_id",
             "created_by"
           ],
+          "tableTo": "member",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "invitation_token_hash_unique": {
           "name": "invitation_token_hash_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "token_hash"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -3353,10 +3342,10 @@
             }
           ],
           "isUnique": true,
-          "where": "\"invoice\".\"status\" = 'to_send' AND \"invoice\".\"attempts\" = 0 AND \"invoice\".\"credit_note_of\" IS NULL AND \"invoice\".\"season_id\" IS NOT NULL",
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "where": "\"invoice\".\"status\" = 'to_send' AND \"invoice\".\"attempts\" = 0 AND \"invoice\".\"credit_note_of\" IS NULL AND \"invoice\".\"season_id\" IS NOT NULL",
+          "concurrently": false
         },
         "invoice_outbox": {
           "name": "invoice_outbox",
@@ -3375,10 +3364,10 @@
             }
           ],
           "isUnique": false,
-          "where": "\"invoice\".\"status\" IN ('to_send', 'tool_draft') AND \"invoice\".\"credit_note_of\" IS NULL",
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "where": "\"invoice\".\"status\" IN ('to_send', 'tool_draft') AND \"invoice\".\"credit_note_of\" IS NULL",
+          "concurrently": false
         },
         "invoice_payer_id_index": {
           "name": "invoice_payer_id_index",
@@ -3391,9 +3380,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "invoice_season_id_index": {
           "name": "invoice_season_id_index",
@@ -3406,114 +3395,114 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "invoice_school_id_school_id_fk": {
           "name": "invoice_school_id_school_id_fk",
           "tableFrom": "invoice",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "invoice_billing_entity_same_school_fk": {
           "name": "invoice_billing_entity_same_school_fk",
           "tableFrom": "invoice",
-          "tableTo": "billing_entity",
           "columnsFrom": [
             "school_id",
             "billing_entity_id"
           ],
+          "tableTo": "billing_entity",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "invoice_payer_same_school_fk": {
           "name": "invoice_payer_same_school_fk",
           "tableFrom": "invoice",
-          "tableTo": "person",
           "columnsFrom": [
             "school_id",
             "payer_id"
           ],
+          "tableTo": "person",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "invoice_season_same_school_fk": {
           "name": "invoice_season_same_school_fk",
           "tableFrom": "invoice",
-          "tableTo": "season",
           "columnsFrom": [
             "school_id",
             "season_id"
           ],
+          "tableTo": "season",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "invoice_credit_note_of_same_entity_fk": {
           "name": "invoice_credit_note_of_same_entity_fk",
           "tableFrom": "invoice",
-          "tableTo": "invoice",
           "columnsFrom": [
             "school_id",
             "credit_note_of",
             "billing_entity_id"
           ],
+          "tableTo": "invoice",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "invoice_billing_entity_id_number_unique": {
           "name": "invoice_billing_entity_id_number_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "billing_entity_id",
             "number"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "invoice_school_id_id_unique": {
           "name": "invoice_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "invoice_school_id_id_billing_entity_id_unique": {
           "name": "invoice_school_id_id_billing_entity_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id",
             "billing_entity_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -3658,9 +3647,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "invoice_line_enrollment_id_index": {
           "name": "invoice_line_enrollment_id_index",
@@ -3673,9 +3662,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "invoice_line_lesson_pack_id_index": {
           "name": "invoice_line_lesson_pack_id_index",
@@ -3688,9 +3677,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "invoice_line_vat_treatment_id_index": {
           "name": "invoice_line_vat_treatment_id_index",
@@ -3703,90 +3692,90 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "invoice_line_school_id_school_id_fk": {
           "name": "invoice_line_school_id_school_id_fk",
           "tableFrom": "invoice_line",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "invoice_line_invoice_same_entity_fk": {
           "name": "invoice_line_invoice_same_entity_fk",
           "tableFrom": "invoice_line",
-          "tableTo": "invoice",
           "columnsFrom": [
             "school_id",
             "invoice_id",
             "billing_entity_id"
           ],
+          "tableTo": "invoice",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "invoice_line_enrollment_same_entity_fk": {
           "name": "invoice_line_enrollment_same_entity_fk",
           "tableFrom": "invoice_line",
-          "tableTo": "enrollment",
           "columnsFrom": [
             "school_id",
             "enrollment_id",
             "billing_entity_id"
           ],
+          "tableTo": "enrollment",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "invoice_line_lesson_pack_same_entity_fk": {
           "name": "invoice_line_lesson_pack_same_entity_fk",
           "tableFrom": "invoice_line",
-          "tableTo": "lesson_pack",
           "columnsFrom": [
             "school_id",
             "lesson_pack_id",
             "billing_entity_id"
           ],
+          "tableTo": "lesson_pack",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "invoice_line_vat_treatment_same_school_fk": {
           "name": "invoice_line_vat_treatment_same_school_fk",
           "tableFrom": "invoice_line",
-          "tableTo": "vat_treatment",
           "columnsFrom": [
             "school_id",
             "vat_treatment_id"
           ],
+          "tableTo": "vat_treatment",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3864,30 +3853,30 @@
         "invoicing_connector_school_id_school_id_fk": {
           "name": "invoicing_connector_school_id_school_id_fk",
           "tableFrom": "invoicing_connector",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "invoicing_connector_billing_entity_same_school_fk": {
           "name": "invoicing_connector_billing_entity_same_school_fk",
           "tableFrom": "invoicing_connector",
-          "tableTo": "billing_entity",
           "columnsFrom": [
             "school_id",
             "billing_entity_id"
           ],
+          "tableTo": "billing_entity",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -3988,9 +3977,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "lesson_instructor_id_date_index": {
           "name": "lesson_instructor_id_date_index",
@@ -4009,9 +3998,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "lesson_regular_instructor_id_index": {
           "name": "lesson_regular_instructor_id_index",
@@ -4024,99 +4013,99 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "lesson_school_id_school_id_fk": {
           "name": "lesson_school_id_school_id_fk",
           "tableFrom": "lesson",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "lesson_course_same_entity_fk": {
           "name": "lesson_course_same_entity_fk",
           "tableFrom": "lesson",
-          "tableTo": "course",
           "columnsFrom": [
             "school_id",
             "course_id",
             "billing_entity_id"
           ],
+          "tableTo": "course",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "cascade"
+          "onUpdate": "cascade",
+          "onDelete": "no action"
         },
         "lesson_instructor_same_school_fk": {
           "name": "lesson_instructor_same_school_fk",
           "tableFrom": "lesson",
-          "tableTo": "instructor",
           "columnsFrom": [
             "school_id",
             "instructor_id"
           ],
+          "tableTo": "instructor",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "lesson_regular_instructor_same_school_fk": {
           "name": "lesson_regular_instructor_same_school_fk",
           "tableFrom": "lesson",
-          "tableTo": "instructor",
           "columnsFrom": [
             "school_id",
             "regular_instructor_id"
           ],
+          "tableTo": "instructor",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "lesson_course_id_date_unique": {
           "name": "lesson_course_id_date_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "course_id",
             "date"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "lesson_school_id_id_unique": {
           "name": "lesson_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "lesson_school_id_id_billing_entity_id_unique": {
           "name": "lesson_school_id_id_billing_entity_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id",
             "billing_entity_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -4189,80 +4178,80 @@
         "lesson_pack_school_id_school_id_fk": {
           "name": "lesson_pack_school_id_school_id_fk",
           "tableFrom": "lesson_pack",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "lesson_pack_billing_entity_same_school_fk": {
           "name": "lesson_pack_billing_entity_same_school_fk",
           "tableFrom": "lesson_pack",
-          "tableTo": "billing_entity",
           "columnsFrom": [
             "school_id",
             "billing_entity_id"
           ],
+          "tableTo": "billing_entity",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "lesson_pack_vat_treatment_same_school_fk": {
           "name": "lesson_pack_vat_treatment_same_school_fk",
           "tableFrom": "lesson_pack",
-          "tableTo": "vat_treatment",
           "columnsFrom": [
             "school_id",
             "vat_treatment_id"
           ],
+          "tableTo": "vat_treatment",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "lesson_pack_payer_same_school_fk": {
           "name": "lesson_pack_payer_same_school_fk",
           "tableFrom": "lesson_pack",
-          "tableTo": "person",
           "columnsFrom": [
             "school_id",
             "payer_id"
           ],
+          "tableTo": "person",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "lesson_pack_school_id_id_unique": {
           "name": "lesson_pack_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "lesson_pack_school_id_id_billing_entity_id_unique": {
           "name": "lesson_pack_school_id_id_billing_entity_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id",
             "billing_entity_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -4313,54 +4302,54 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "lesson_pack_person_school_id_school_id_fk": {
           "name": "lesson_pack_person_school_id_school_id_fk",
           "tableFrom": "lesson_pack_person",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "lesson_pack_person_lesson_pack_same_school_fk": {
           "name": "lesson_pack_person_lesson_pack_same_school_fk",
           "tableFrom": "lesson_pack_person",
-          "tableTo": "lesson_pack",
           "columnsFrom": [
             "school_id",
             "lesson_pack_id"
           ],
+          "tableTo": "lesson_pack",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "lesson_pack_person_person_same_school_fk": {
           "name": "lesson_pack_person_person_same_school_fk",
           "tableFrom": "lesson_pack_person",
-          "tableTo": "person",
           "columnsFrom": [
             "school_id",
             "person_id"
           ],
+          "tableTo": "person",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -4424,42 +4413,42 @@
         "lesson_pack_tariff_school_id_school_id_fk": {
           "name": "lesson_pack_tariff_school_id_school_id_fk",
           "tableFrom": "lesson_pack_tariff",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "lesson_pack_tariff_season_same_school_fk": {
           "name": "lesson_pack_tariff_season_same_school_fk",
           "tableFrom": "lesson_pack_tariff",
-          "tableTo": "season",
           "columnsFrom": [
             "school_id",
             "season_id"
           ],
+          "tableTo": "season",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "lesson_pack_tariff_cell_unique": {
           "name": "lesson_pack_tariff_cell_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "season_id",
             "lesson_count",
             "max_people"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -4512,58 +4501,58 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "lesson_pack_usage_school_id_school_id_fk": {
           "name": "lesson_pack_usage_school_id_school_id_fk",
           "tableFrom": "lesson_pack_usage",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "lesson_pack_usage_lesson_pack_same_entity_fk": {
           "name": "lesson_pack_usage_lesson_pack_same_entity_fk",
           "tableFrom": "lesson_pack_usage",
-          "tableTo": "lesson_pack",
           "columnsFrom": [
             "school_id",
             "lesson_pack_id",
             "billing_entity_id"
           ],
+          "tableTo": "lesson_pack",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "lesson_pack_usage_lesson_same_entity_fk": {
           "name": "lesson_pack_usage_lesson_same_entity_fk",
           "tableFrom": "lesson_pack_usage",
-          "tableTo": "lesson",
           "columnsFrom": [
             "school_id",
             "lesson_id",
             "billing_entity_id"
           ],
+          "tableTo": "lesson",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -4621,30 +4610,30 @@
         "list_preference_school_id_school_id_fk": {
           "name": "list_preference_school_id_school_id_fk",
           "tableFrom": "list_preference",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "list_preference_member_same_school_fk": {
           "name": "list_preference_member_same_school_fk",
           "tableFrom": "list_preference",
-          "tableTo": "member",
           "columnsFrom": [
             "school_id",
             "member_id"
           ],
+          "tableTo": "member",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {
@@ -4703,9 +4692,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {},
@@ -4764,62 +4753,62 @@
         "member_school_id_school_id_fk": {
           "name": "member_school_id_school_id_fk",
           "tableFrom": "member",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "member_user_id_user_id_fk": {
           "name": "member_user_id_user_id_fk",
           "tableFrom": "member",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "member_instructor_same_school_fk": {
           "name": "member_instructor_same_school_fk",
           "tableFrom": "member",
-          "tableTo": "instructor",
           "columnsFrom": [
             "school_id",
             "instructor_id"
           ],
+          "tableTo": "instructor",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "member_school_id_user_id_unique": {
           "name": "member_school_id_user_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "user_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "member_school_id_id_unique": {
           "name": "member_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -4945,106 +4934,106 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "payment_school_id_school_id_fk": {
           "name": "payment_school_id_school_id_fk",
           "tableFrom": "payment",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "payment_billing_entity_same_school_fk": {
           "name": "payment_billing_entity_same_school_fk",
           "tableFrom": "payment",
-          "tableTo": "billing_entity",
           "columnsFrom": [
             "school_id",
             "billing_entity_id"
           ],
+          "tableTo": "billing_entity",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "payment_payer_same_school_fk": {
           "name": "payment_payer_same_school_fk",
           "tableFrom": "payment",
-          "tableTo": "person",
           "columnsFrom": [
             "school_id",
             "payer_id"
           ],
+          "tableTo": "person",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "payment_entered_by_same_school_fk": {
           "name": "payment_entered_by_same_school_fk",
           "tableFrom": "payment",
-          "tableTo": "member",
           "columnsFrom": [
             "school_id",
             "entered_by"
           ],
+          "tableTo": "member",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "payment_corrects_same_entity_fk": {
           "name": "payment_corrects_same_entity_fk",
           "tableFrom": "payment",
-          "tableTo": "payment",
           "columnsFrom": [
             "school_id",
             "corrects_id",
             "billing_entity_id"
           ],
+          "tableTo": "payment",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "payment_school_id_id_unique": {
           "name": "payment_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "payment_school_id_id_billing_entity_id_unique": {
           "name": "payment_school_id_id_billing_entity_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id",
             "billing_entity_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -5104,49 +5093,49 @@
         "payment_allocation_school_id_school_id_fk": {
           "name": "payment_allocation_school_id_school_id_fk",
           "tableFrom": "payment_allocation",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "payment_allocation_payment_same_entity_fk": {
           "name": "payment_allocation_payment_same_entity_fk",
           "tableFrom": "payment_allocation",
-          "tableTo": "payment",
           "columnsFrom": [
             "school_id",
             "payment_id",
             "billing_entity_id"
           ],
+          "tableTo": "payment",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "payment_allocation_installment_same_entity_fk": {
           "name": "payment_allocation_installment_same_entity_fk",
           "tableFrom": "payment_allocation",
-          "tableTo": "installment",
           "columnsFrom": [
             "school_id",
             "installment_id",
             "billing_entity_id"
           ],
+          "tableTo": "installment",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -5205,15 +5194,15 @@
         "payment_method_setting_school_id_school_id_fk": {
           "name": "payment_method_setting_school_id_school_id_fk",
           "tableFrom": "payment_method_setting",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {
@@ -5366,9 +5355,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "person_referral_source_id_index": {
           "name": "person_referral_source_id_index",
@@ -5381,50 +5370,50 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "person_school_id_school_id_fk": {
           "name": "person_school_id_school_id_fk",
           "tableFrom": "person",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "person_referral_source_same_school_fk": {
           "name": "person_referral_source_same_school_fk",
           "tableFrom": "person",
-          "tableTo": "referral_source",
           "columnsFrom": [
             "school_id",
             "referral_source_id"
           ],
+          "tableTo": "referral_source",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "person_school_id_id_unique": {
           "name": "person_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -5478,41 +5467,41 @@
             },
             {
               "expression": "lower(\"label\")",
-              "asc": true,
               "isExpression": true,
+              "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": true,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "referral_source_school_id_school_id_fk": {
           "name": "referral_source_school_id_school_id_fk",
           "tableFrom": "referral_source",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "referral_source_school_id_id_unique": {
           "name": "referral_source_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -5587,65 +5576,65 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "relationship_school_id_school_id_fk": {
           "name": "relationship_school_id_school_id_fk",
           "tableFrom": "relationship",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "relationship_person_same_school_fk": {
           "name": "relationship_person_same_school_fk",
           "tableFrom": "relationship",
-          "tableTo": "person",
           "columnsFrom": [
             "school_id",
             "person_id"
           ],
+          "tableTo": "person",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "relationship_related_person_same_school_fk": {
           "name": "relationship_related_person_same_school_fk",
           "tableFrom": "relationship",
-          "tableTo": "person",
           "columnsFrom": [
             "school_id",
             "related_person_id"
           ],
+          "tableTo": "person",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "relationship_person_id_related_person_id_unique": {
           "name": "relationship_person_id_related_person_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "person_id",
             "related_person_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -5698,41 +5687,41 @@
         "room_school_id_school_id_fk": {
           "name": "room_school_id_school_id_fk",
           "tableFrom": "room",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "room_site_same_school_fk": {
           "name": "room_site_same_school_fk",
           "tableFrom": "room",
-          "tableTo": "site",
           "columnsFrom": [
             "school_id",
             "site_id"
           ],
+          "tableTo": "site",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "room_school_id_id_unique": {
           "name": "room_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -5800,9 +5789,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "rules_acceptance_rules_version_id_index": {
           "name": "rules_acceptance_rules_version_id_index",
@@ -5815,83 +5804,83 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "rules_acceptance_school_id_school_id_fk": {
           "name": "rules_acceptance_school_id_school_id_fk",
           "tableFrom": "rules_acceptance",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "rules_acceptance_payer_same_school_fk": {
           "name": "rules_acceptance_payer_same_school_fk",
           "tableFrom": "rules_acceptance",
-          "tableTo": "person",
           "columnsFrom": [
             "school_id",
             "payer_id"
           ],
+          "tableTo": "person",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "rules_acceptance_season_same_school_fk": {
           "name": "rules_acceptance_season_same_school_fk",
           "tableFrom": "rules_acceptance",
-          "tableTo": "season",
           "columnsFrom": [
             "school_id",
             "season_id"
           ],
+          "tableTo": "season",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "rules_acceptance_rules_version_same_season_fk": {
           "name": "rules_acceptance_rules_version_same_season_fk",
           "tableFrom": "rules_acceptance",
-          "tableTo": "internal_rules_version",
           "columnsFrom": [
             "school_id",
             "rules_version_id",
             "season_id"
           ],
+          "tableTo": "internal_rules_version",
           "columnsTo": [
             "school_id",
             "id",
             "season_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "rules_acceptance_school_id_payer_id_season_id_unique": {
           "name": "rules_acceptance_school_id_payer_id_season_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "payer_id",
             "season_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -5942,10 +5931,10 @@
       "uniqueConstraints": {
         "school_slug_unique": {
           "name": "school_slug_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "slug"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -5993,34 +5982,34 @@
         "season_school_id_school_id_fk": {
           "name": "season_school_id_school_id_fk",
           "tableFrom": "season",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "season_school_id_label_unique": {
           "name": "season_school_id_label_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "label"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "season_school_id_id_unique": {
           "name": "season_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -6092,50 +6081,50 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "season_quarter_school_id_school_id_fk": {
           "name": "season_quarter_school_id_school_id_fk",
           "tableFrom": "season_quarter",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "season_quarter_season_same_school_fk": {
           "name": "season_quarter_season_same_school_fk",
           "tableFrom": "season_quarter",
-          "tableTo": "season",
           "columnsFrom": [
             "school_id",
             "season_id"
           ],
+          "tableTo": "season",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "season_quarter_school_id_id_unique": {
           "name": "season_quarter_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -6224,47 +6213,47 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "session_user_id_user_id_fk": {
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "session_selected_school_id_school_id_fk": {
           "name": "session_selected_school_id_school_id_fk",
           "tableFrom": "session",
-          "tableTo": "school",
           "columnsFrom": [
             "selected_school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "session_token_unique": {
           "name": "session_token_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "token"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -6313,26 +6302,26 @@
         "site_school_id_school_id_fk": {
           "name": "site_school_id_school_id_fk",
           "tableFrom": "site",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "site_school_id_id_unique": {
           "name": "site_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -6379,30 +6368,30 @@
         "site_hours_school_id_school_id_fk": {
           "name": "site_hours_school_id_school_id_fk",
           "tableFrom": "site_hours",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "site_hours_site_same_school_fk": {
           "name": "site_hours_site_same_school_fk",
           "tableFrom": "site_hours",
-          "tableTo": "site",
           "columnsFrom": [
             "school_id",
             "site_id"
           ],
+          "tableTo": "site",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {
@@ -6495,41 +6484,41 @@
         "student_document_school_id_school_id_fk": {
           "name": "student_document_school_id_school_id_fk",
           "tableFrom": "student_document",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "student_document_student_same_school_fk": {
           "name": "student_document_student_same_school_fk",
           "tableFrom": "student_document",
-          "tableTo": "person",
           "columnsFrom": [
             "school_id",
             "student_id"
           ],
+          "tableTo": "person",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "student_document_student_id_type_unique": {
           "name": "student_document_student_id_type_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "student_id",
             "type"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -6596,24 +6585,24 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "submission_school_id_school_id_fk": {
           "name": "submission_school_id_school_id_fk",
           "tableFrom": "submission",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {
@@ -6704,54 +6693,54 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "suspended_lesson_school_id_school_id_fk": {
           "name": "suspended_lesson_school_id_school_id_fk",
           "tableFrom": "suspended_lesson",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "suspended_lesson_course_same_school_fk": {
           "name": "suspended_lesson_course_same_school_fk",
           "tableFrom": "suspended_lesson",
-          "tableTo": "course",
           "columnsFrom": [
             "school_id",
             "course_id"
           ],
+          "tableTo": "course",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "suspended_lesson_instructor_same_school_fk": {
           "name": "suspended_lesson_instructor_same_school_fk",
           "tableFrom": "suspended_lesson",
-          "tableTo": "instructor",
           "columnsFrom": [
             "school_id",
             "instructor_id"
           ],
+          "tableTo": "instructor",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -6829,67 +6818,67 @@
         "tariff_school_id_school_id_fk": {
           "name": "tariff_school_id_school_id_fk",
           "tableFrom": "tariff",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "tariff_season_same_school_fk": {
           "name": "tariff_season_same_school_fk",
           "tableFrom": "tariff",
-          "tableTo": "season",
           "columnsFrom": [
             "school_id",
             "season_id"
           ],
+          "tableTo": "season",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "tariff_discipline_same_school_fk": {
           "name": "tariff_discipline_same_school_fk",
           "tableFrom": "tariff",
-          "tableTo": "discipline",
           "columnsFrom": [
             "school_id",
             "discipline_id"
           ],
+          "tableTo": "discipline",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "tariff_cell_unique": {
           "name": "tariff_cell_unique",
-          "nullsNotDistinct": true,
           "columns": [
             "season_id",
             "audience",
             "period",
             "combination",
             "discipline_id"
-          ]
+          ],
+          "nullsNotDistinct": true
         },
         "tariff_school_id_id_unique": {
           "name": "tariff_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -6976,39 +6965,39 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "unavailability_school_id_school_id_fk": {
           "name": "unavailability_school_id_school_id_fk",
           "tableFrom": "unavailability",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "unavailability_instructor_same_school_fk": {
           "name": "unavailability_instructor_same_school_fk",
           "tableFrom": "unavailability",
-          "tableTo": "instructor",
           "columnsFrom": [
             "school_id",
             "instructor_id"
           ],
+          "tableTo": "instructor",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -7078,10 +7067,10 @@
       "uniqueConstraints": {
         "user_email_unique": {
           "name": "user_email_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "email"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -7144,34 +7133,34 @@
         "vat_treatment_school_id_school_id_fk": {
           "name": "vat_treatment_school_id_school_id_fk",
           "tableFrom": "vat_treatment",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "vat_treatment_school_id_id_unique": {
           "name": "vat_treatment_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "vat_treatment_label_unique": {
           "name": "vat_treatment_label_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "label"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -7317,9 +7306,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "workshop_signup_course_id_index": {
           "name": "workshop_signup_course_id_index",
@@ -7332,106 +7321,106 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "workshop_signup_school_id_school_id_fk": {
           "name": "workshop_signup_school_id_school_id_fk",
           "tableFrom": "workshop_signup",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "workshop_signup_billing_entity_same_school_fk": {
           "name": "workshop_signup_billing_entity_same_school_fk",
           "tableFrom": "workshop_signup",
-          "tableTo": "billing_entity",
           "columnsFrom": [
             "school_id",
             "billing_entity_id"
           ],
+          "tableTo": "billing_entity",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "workshop_signup_course_same_entity_fk": {
           "name": "workshop_signup_course_same_entity_fk",
           "tableFrom": "workshop_signup",
-          "tableTo": "course",
           "columnsFrom": [
             "school_id",
             "course_id",
             "billing_entity_id"
           ],
+          "tableTo": "course",
           "columnsTo": [
             "school_id",
             "id",
             "billing_entity_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "workshop_signup_payer_same_school_fk": {
           "name": "workshop_signup_payer_same_school_fk",
           "tableFrom": "workshop_signup",
-          "tableTo": "person",
           "columnsFrom": [
             "school_id",
             "payer_id"
           ],
+          "tableTo": "person",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "workshop_signup_vat_treatment_same_school_fk": {
           "name": "workshop_signup_vat_treatment_same_school_fk",
           "tableFrom": "workshop_signup",
-          "tableTo": "vat_treatment",
           "columnsFrom": [
             "school_id",
             "vat_treatment_id"
           ],
+          "tableTo": "vat_treatment",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "workshop_signup_school_id_id_unique": {
           "name": "workshop_signup_school_id_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "workshop_signup_school_id_id_billing_entity_id_unique": {
           "name": "workshop_signup_school_id_id_billing_entity_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "school_id",
             "id",
             "billing_entity_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -7482,54 +7471,54 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "workshop_signup_person_school_id_school_id_fk": {
           "name": "workshop_signup_person_school_id_school_id_fk",
           "tableFrom": "workshop_signup_person",
-          "tableTo": "school",
           "columnsFrom": [
             "school_id"
           ],
+          "tableTo": "school",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "workshop_signup_person_workshop_signup_same_school_fk": {
           "name": "workshop_signup_person_workshop_signup_same_school_fk",
           "tableFrom": "workshop_signup_person",
-          "tableTo": "workshop_signup",
           "columnsFrom": [
             "school_id",
             "workshop_signup_id"
           ],
+          "tableTo": "workshop_signup",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "workshop_signup_person_person_same_school_fk": {
           "name": "workshop_signup_person_person_same_school_fk",
           "tableFrom": "workshop_signup_person",
-          "tableTo": "person",
           "columnsFrom": [
             "school_id",
             "person_id"
           ],
+          "tableTo": "person",
           "columnsTo": [
             "school_id",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -7798,10 +7787,10 @@
     }
   },
   "schemas": {},
+  "views": {},
   "sequences": {},
   "roles": {},
   "policies": {},
-  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},
