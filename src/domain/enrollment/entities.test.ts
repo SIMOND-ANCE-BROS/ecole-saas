@@ -20,6 +20,9 @@ const child = (studentId: string) => ({
   period: "quarter" as const,
 });
 
+/** Another school's siblings rule: every eligible child gets it (#290 `fromRank` 1). */
+const everyChild = { ...ribasSiblings, fromRank: 1 };
+
 function price(...requests: EnrollmentRequest[]) {
   return computeTariff({ grid: ribasGrid, discounts: [ribasSiblings], enrollments: requests });
 }
@@ -94,7 +97,8 @@ describe("pricing an enrollment over two entities (#299, #288 Q2 and Q3 defaults
     const [first] = requestsByEntity(child("zz-1"), [course("c1", A, JAZZ, 60)], ORDER);
     const [second] = requestsByEntity(child("zz-2"), [course("c2", B, ROCK, 45)], ORDER);
     const [a, b] = price({ ...first, reference: "first" }, { ...second, reference: "second" }).enrollments;
-    expect(ok(a)).toMatchObject({ grossPriceCents: 11000, discountCents: 1100, netPriceCents: 9900 });
+    // #290: the most expensive package (at A) pays full price, the 2nd child's (at B) gets the discount.
+    expect(ok(a)).toMatchObject({ grossPriceCents: 11000, discountCents: 0, netPriceCents: 11000 });
     expect(ok(b)).toMatchObject({ grossPriceCents: 8500, discountCents: 850, netPriceCents: 7650 });
   });
 
@@ -106,7 +110,11 @@ describe("pricing an enrollment over two entities (#299, #288 Q2 and Q3 defaults
       ORDER,
     );
     const sibling = { ...requestsByEntity(child("zz-2"), [course("c4", B, ROCK, 45)], ORDER)[0], reference: "zz-2" };
-    const [a, b, c] = price(...requests, sibling).enrollments;
+    const [a, b, c] = computeTariff({
+      grid: ribasGrid,
+      discounts: [everyChild],
+      enrollments: [...requests, sibling],
+    }).enrollments;
     expect(ok(a)).toMatchObject({ grossPriceCents: 16500, discountCents: 0 });
     expect(ok(a).discounts[0]).toMatchObject({
       status: "rejected",
@@ -145,7 +153,7 @@ describe("rounding and edge cases over two entities", () => {
     },
   ];
   const run = (...requests: EnrollmentRequest[]) =>
-    computeTariff({ grid, discounts: [ribasSiblings], enrollments: requests });
+    computeTariff({ grid, discounts: [everyChild], enrollments: requests });
 
   it("rounds each discount on its own enrollment, the total being the sum of the nets", () => {
     const [first] = requestsByEntity(child("zz-1"), [course("c1", A, JAZZ, 60)], ORDER);
@@ -169,6 +177,15 @@ describe("rounding and edge cases over two entities", () => {
     const couple = { studentIds: ["zz-1", "zz-2"], audience: "couple" as const, period: "quarter" as const };
     const requests = requestsByEntity(couple, [course("c1", A, JAZZ, 60), course("c2", B, ROCK, 60)], ORDER);
     expect(run(...requests).enrollments.map((r) => ok(r).grossPriceCents)).toEqual([23000, 23000]);
+  });
+
+  it("ranks a child over both entities: their two packages pay full price, the sibling's gets it (#290)", () => {
+    const requests = [
+      ...requestsByEntity(child("zz-1"), [course("c1", A, JAZZ, 60), course("c2", B, ROCK, 45)], ORDER),
+      { ...requestsByEntity(child("zz-2"), [course("c3", A, JAZZ, 60)], ORDER)[0], reference: "zz-2" },
+    ];
+    const result = computeTariff({ grid, discounts: [ribasSiblings], enrollments: requests });
+    expect(result.enrollments.map((r) => ok(r).discountCents)).toEqual([0, 0, 851]);
   });
 
   it("keeps the siblings discount of the others when one entity's enrollment of a child is left out", () => {

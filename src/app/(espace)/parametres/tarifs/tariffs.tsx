@@ -379,6 +379,17 @@ export function Grid({
   );
 }
 
+/** #290: who pays full price, as the rank from which the discount applies (`discount.from_rank`). */
+const FULL_PRICE_CHOICES = [1, 2, 3, 4].map((rank) => ({
+  value: String(rank),
+  label:
+    rank === 1
+      ? "Personne : tous ont la réduction"
+      : rank === 2
+        ? "Le forfait le plus cher"
+        : `Les ${rank - 1} forfaits les plus chers`,
+}));
+
 export function Siblings({
   seasonId: seasonId,
   siblings: siblings,
@@ -391,6 +402,7 @@ export function Siblings({
     mode: siblings?.amountCents ? "amount" : "rate",
     value: siblings?.amountCents ? inEuros(siblings.amountCents) : siblings?.rateBps ? inEuros(siblings.rateBps) : "10",
     threshold: String(siblings?.minStudents ?? 2),
+    fromRank: String(siblings?.fromRank ?? 1),
     audiences: siblings?.audiences ?? (["child"] as Audience[]),
     combinable: siblings?.combinableWithMultiDiscipline ?? false,
   });
@@ -410,6 +422,7 @@ export function Siblings({
                 rateBps: v.mode === "rate" ? value : null,
                 amountCents: v.mode === "amount" ? value : null,
                 minStudents: Number(v.threshold),
+                fromRank: Number(v.fromRank),
                 audiences: v.audiences,
                 combinableWithMultiDiscipline: v.combinable,
               }
@@ -459,7 +472,19 @@ export function Siblings({
               value={v.threshold}
               onChange={(threshold) => threshold && setV({ ...v, threshold })}
             />
+            <Select
+              label="Plein tarif pour"
+              w={260}
+              allowDeselect={false}
+              data={FULL_PRICE_CHOICES}
+              value={v.fromRank}
+              onChange={(fromRank) => fromRank && setV({ ...v, fromRank })}
+            />
           </div>
+          <Text size="xs" c="dimmed">
+            Les élèves sont classés du forfait le plus cher au moins cher ; à prix égal, le premier inscrit garde le
+            plein tarif.
+          </Text>
           <Checkbox.Group
             label="Pour les publics"
             value={v.audiences}

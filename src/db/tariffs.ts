@@ -182,6 +182,7 @@ export type Siblings = {
   rateBps: number | null;
   amountCents: number | null;
   minStudents: number;
+  fromRank: number;
   audiences: Audience[];
   combinableWithMultiDiscipline: boolean;
 };
@@ -193,6 +194,7 @@ export async function readSiblings(tx: Tx, seasonId: string): Promise<Siblings |
       rateBps: discount.rateBps,
       amountCents: discount.amountCents,
       minStudents: discount.minStudents,
+      fromRank: discount.fromRank,
       audiences: discount.audiences,
       combinableWithMultiDiscipline: discount.combinableWithMultiDiscipline,
     })
@@ -218,6 +220,10 @@ export const validSiblings = z
         .int({ error: "Seuil : un nombre entier d’élèves" })
         .min(2, "Seuil d’au moins 2 élèves")
         .max(10, "Seuil de 10 élèves au plus"),
+      fromRank: z
+        .int({ error: "Rang : un nombre entier" })
+        .min(1, "Rang d’au moins 1 (tous les élèves)")
+        .max(10, "Rang de 10 au plus"),
       audiences: z.array(audience, { error: "Public invalide" }).max(AUDIENCES.length, "Public invalide"),
       combinableWithMultiDiscipline: z.boolean({ error: "Saisie invalide." }),
     },
@@ -233,6 +239,7 @@ const siblingsRow = (f: z.output<typeof validSiblings>) => ({
   rateBps: f.rateBps,
   amountCents: f.amountCents,
   minStudents: f.minStudents,
+  fromRank: f.fromRank,
   audiences: f.audiences,
   combinableWithMultiDiscipline: f.combinableWithMultiDiscipline,
 });

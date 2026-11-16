@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { rowsOf } from "./columns-of";
 import { discardDrafts, draftsBillingEnrollment, UNSENT_DRAFT } from "./invoice-draft-discard";
 import { z } from "zod";
-import { discountImpacts } from "../domain/enrollment/impacts";
+import { discountImpacts, raisedNow } from "../domain/enrollment/impacts";
 import { alreadyTaken, duplicateRefusal, TAKEN_STATUSES, type TakenCourse } from "../domain/enrollment/duplicates";
 import {
   cancelRefusal,
@@ -130,6 +130,7 @@ export async function loadDiscounts(tx: Tx, seasonId: string): Promise<DiscountR
       rateBps: discount.rateBps,
       amountCents: discount.amountCents,
       minStudents: discount.minStudents,
+      fromRank: discount.fromRank,
       audiences: discount.audiences,
       combinableWithMultiDiscipline: discount.combinableWithMultiDiscipline,
     })
@@ -137,12 +138,31 @@ export async function loadDiscounts(tx: Tx, seasonId: string): Promise<DiscountR
     .where(eq(discount.seasonId, seasonId));
 }
 
-/** `manual`: its price was typed by hand (#292), so a change of its discount changes nothing it costs. */
-type Existing = EnrollmentRequest & { savedDeposit: number; manual: boolean };
+/** A saved enrollment as read for re-pricing (`RepricingState` in `domain/enrollment/impacts.ts`). */
+type SavedRow = {
+  id: string;
+  audience: Audience;
+  period: Period;
+  deposit: number;
+  /** Its price was typed by hand (#292), so a change of its discount changes nothing it costs. */
+  manual: boolean;
+  gross: number;
+  invoiced: boolean;
+  paidDraft: boolean;
+};
+
+type Existing = EnrollmentRequest & {
+  savedDeposit: number;
+  manual: boolean;
+  savedGross: number;
+  invoiced: boolean;
+  paidDraft: boolean;
+};
 
 /**
  * Enrollments of the payer for the season counted as siblings (`SIBLING_STATUSES`, #284 Q3),
- * in the shape expected by the engine; `except` leaves one out (the one being changed).
+ * in the shape expected by the engine, oldest first (the engine's tie-break, #290); `except`
+ * leaves one out (the one being changed).
  */
 async function existingEnrollments(tx: Tx, payerId: string, seasonId: string, except?: string): Promise<Existing[]> {
   const rows = await tx
@@ -152,6 +172,9 @@ async function existingEnrollments(tx: Tx, payerId: string, seasonId: string, ex
       period: enrollment.period,
       deposit: enrollment.discountCents,
       manual: sql<boolean>`${enrollment.manualPriceCents} IS NOT NULL`,
+      gross: enrollment.grossPriceCents,
+      invoiced: invoicedSql,
+      paidDraft: paidDraftSql,
     })
     .from(enrollment)
     .where(
@@ -161,15 +184,13 @@ async function existingEnrollments(tx: Tx, payerId: string, seasonId: string, ex
         inArray(enrollment.status, [...SIBLING_STATUSES]),
         except ? ne(enrollment.id, except) : undefined,
       ),
-    );
+    )
+    .orderBy(asc(enrollment.enrolledOn), asc(enrollment.createdAt), asc(enrollment.id));
   return withCourses(tx, rows);
 }
 
 /** Saved enrollments with their students and courses, as requests to the engine. */
-async function withCourses(
-  tx: Tx,
-  rows: { id: string; audience: Audience; period: Period; deposit: number; manual: boolean }[],
-): Promise<Existing[]> {
+async function withCourses(tx: Tx, rows: SavedRow[]): Promise<Existing[]> {
   if (rows.length === 0) return [];
   const relationships = await tx
     .select({
@@ -186,7 +207,9 @@ async function withCourses(
         enrollmentCourse.enrollmentId,
         rows.map((l) => l.id),
       ),
-    );
+    )
+    // A couple's students always in the same order: the engine's ties are broken by it (#290).
+    .orderBy(asc(enrollmentCourse.studentId), asc(enrollmentCourse.courseId));
 
   return rows.map((l) => {
     const own = relationships.filter((x) => x.enrollmentId === l.id);
@@ -201,6 +224,9 @@ async function withCourses(
       courses: [...uniqueCourses.values()],
       savedDeposit: l.deposit,
       manual: l.manual,
+      savedGross: l.gross,
+      invoiced: l.invoiced,
+      paidDraft: l.paidDraft,
     };
   });
 }
@@ -280,6 +306,11 @@ export type ExistingImpact = {
   students: string;
   savedDeposit: number;
   recalculatedDiscount: number;
+  /**
+   * #155 Q2: the raised discount is saved with the change, nothing billing the enrollment yet
+   * (`raisedNow`); false: only reported, its saved price stays.
+   */
+  applied: boolean;
 };
 
 /** One of the enrollments a submission creates: one per business selling the chosen courses (#299). */
@@ -339,7 +370,8 @@ async function entitiesInOrder(tx: Tx): Promise<{ id: string; name: string }[]> 
  * enrollment each, priced on its own combination (#288 Q3 default); siblings are counted
  * over every enrollment of the payer, whatever its business (#288 Q2 default). A quarterly
  * enrollment made on `today` covers the season's remaining quarters (#291), and is refused
- * when none is left.
+ * when none is left. The saved enrollments the new one raises the discount of are told
+ * whether it will be saved with it (#155 Q2, `ExistingImpact.applied`).
  */
 export async function enrollmentPreview(
   tx: Tx,
@@ -348,13 +380,25 @@ export async function enrollmentPreview(
   entry: EnrollmentInput,
   today: string = todayInParis(),
 ): Promise<Preview> {
+  return (await pricedPreview(tx, payerId, seasonId, entry, today)).preview;
+}
+
+/** `enrollmentPreview`, with the engine's results for the saved enrollments too (`applyRaises`). */
+async function pricedPreview(
+  tx: Tx,
+  payerId: string,
+  seasonId: string,
+  entry: EnrollmentInput,
+  today: string,
+): Promise<{ preview: Preview; recomputed: EnrollmentResult[] }> {
+  const invalid = (message: string) => ({ preview: { status: "invalid" as const, message }, recomputed: [] });
   const chosenCourses = await validate(tx, payerId, seasonId, entry);
-  if (typeof chosenCourses === "string") return { status: "invalid", message: chosenCourses };
+  if (typeof chosenCourses === "string") return invalid(chosenCourses);
   let quarters: SeasonQuarter[] = [];
   if (entry.period === "quarter") {
     const all = await quartersOf(tx, seasonId);
     const refusal = quarterEnrollmentRefusal(all, today);
-    if (refusal) return { status: "invalid", message: refusal };
+    if (refusal) return invalid(refusal);
     quarters = coveredQuarters(all, today);
   }
 
@@ -368,9 +412,10 @@ export async function enrollmentPreview(
   const grid = await loadGrid(tx, seasonId);
   const discounts = await loadDiscounts(tx, seasonId);
   const existing = await existingEnrollments(tx, payerId, seasonId);
+  // The saved enrollments first, oldest first: the engine breaks ties on package price by it (#290).
   const result = computeTariff({ grid, discounts, enrollments: [...existing, ...requests] });
 
-  return {
+  const preview: Preview = {
     status: "ok",
     newEnrollments: requests.map((r) => ({
       billingEntityId: r.reference,
@@ -380,13 +425,26 @@ export async function enrollmentPreview(
       price: result.enrollments.find((i) => i.reference === r.reference)!,
     })),
     // A trial or waitlist enrollment does not count as a sibling (Q3): the others' discounts stay as they are.
-    existingImpacts: countsAsSibling(entry.status ?? "active") ? await impactsOn(tx, existing, result.enrollments) : [],
+    existingImpacts: countsAsSibling(entry.status ?? "active")
+      ? await impactsOn(tx, existing, result.enrollments, "arriving")
+      : [],
     quarters,
   };
+  return { preview, recomputed: result.enrollments };
 }
 
-/** Q2 (#284): the payer's saved enrollments whose discount would change, named by their students' first names. */
-async function impactsOn(tx: Tx, existing: Existing[], recomputed: EnrollmentResult[]): Promise<ExistingImpact[]> {
+/**
+ * Q2 (#284, #155): the payer's saved enrollments whose discount would change, named by their
+ * students' first names. A sibling `arriving` (enrolled or confirmed) has its raises applied
+ * where nothing bills the enrollment yet (`raisedNow`, `applyRaises`); a sibling `leaving`
+ * (dropped or cancelled) never changes a saved price.
+ */
+async function impactsOn(
+  tx: Tx,
+  existing: Existing[],
+  recomputed: EnrollmentResult[],
+  sibling: "arriving" | "leaving",
+): Promise<ExistingImpact[]> {
   const impacts = discountImpacts(
     // A typed price is final (#292 Q2): its discount moving changes nothing to report.
     existing.filter((e) => !e.manual).map((e) => ({ reference: e.reference, savedDiscountCents: e.savedDeposit })),
@@ -402,14 +460,90 @@ async function impactsOn(tx: Tx, existing: Existing[], recomputed: EnrollmentRes
         .where(inArray(person.id, ids))
     : [];
   const firstNames = new Map(named.map((d) => [d.id, d.firstName ?? d.name]));
-  return impacts.map((i) => ({
-    reference: i.reference,
-    students: (existing.find((e) => e.reference === i.reference)?.studentIds ?? [])
-      .map((id) => firstNames.get(id) ?? "?")
-      .join(" et "),
-    savedDeposit: i.savedDiscountCents,
-    recalculatedDiscount: i.recalculatedDiscountCents,
-  }));
+  return impacts.map((i) => {
+    const e = existing.find((x) => x.reference === i.reference);
+    const r = recomputed.find((x) => x.reference === i.reference);
+    return {
+      reference: i.reference,
+      students: (e?.studentIds ?? []).map((id) => firstNames.get(id) ?? "?").join(" et "),
+      savedDeposit: i.savedDiscountCents,
+      recalculatedDiscount: i.recalculatedDiscountCents,
+      applied:
+        sibling === "arriving" &&
+        e !== undefined &&
+        r?.status === "ok" &&
+        raisedNow(i, {
+          manual: e.manual,
+          invoiced: e.invoiced,
+          paidDraft: e.paidDraft,
+          sameGross: r.grossPriceCents === e.savedGross,
+        }),
+    };
+  });
+}
+
+/**
+ * #155 Q2: saves the raised discounts of `impacts` marked `applied`, a sibling having just
+ * been enrolled or confirmed. Locks taken after the payer's (held by the caller): each
+ * enrollment row by id, then the unsent drafts billing it (as `cancelEnrollment`), which are
+ * thrown away to be drafted again at the new price. An enrollment an invoice began to bill
+ * meanwhile (a draft the outbox claimed, read again under the locks) or whose draft got a
+ * payment keeps its saved price: only the preview had told otherwise (`discardDrafts` refuses
+ * before deleting anything). `by`: the enrollments whose arrival raised them, for the audit log.
+ * Returns the ids raised.
+ */
+async function applyRaises(
+  tx: Tx,
+  actor: string,
+  impacts: readonly ExistingImpact[],
+  recomputed: readonly EnrollmentResult[],
+  by: readonly string[],
+): Promise<string[]> {
+  const raised: string[] = [];
+  const applied = impacts.filter((i) => i.applied).sort((a, b) => (a.reference < b.reference ? -1 : 1));
+  for (const i of applied) {
+    const r = recomputed.find((x) => x.reference === i.reference);
+    if (r?.status !== "ok") continue;
+    await tx.select({ id: enrollment.id }).from(enrollment).where(eq(enrollment.id, i.reference)).for("update");
+    const drafts = await draftsBillingEnrollment(tx, i.reference);
+    const [now] = await tx
+      .select({
+        discountCents: enrollment.discountCents,
+        grossPriceCents: enrollment.grossPriceCents,
+        manual: sql<boolean>`${enrollment.manualPriceCents} IS NOT NULL`,
+        invoiced: invoicedSql,
+      })
+      .from(enrollment)
+      .where(eq(enrollment.id, i.reference));
+    if (
+      !now ||
+      now.invoiced ||
+      now.manual ||
+      now.discountCents !== i.savedDeposit ||
+      now.grossPriceCents !== r.grossPriceCents
+    )
+      continue;
+    if (!(await discardDrafts(tx, actor, drafts)).ok) continue;
+    await tx
+      .update(enrollment)
+      .set({
+        discountCents: r.discountCents,
+        discounts: r.discounts.filter((d) => d.status === "applied").map((d) => d.code),
+      })
+      .where(eq(enrollment.id, i.reference));
+    // Ids and amounts only, never a name.
+    await tx.insert(auditLog).values({
+      schoolId: CURRENT_SCHOOL,
+      actor,
+      targetTable: "enrollment",
+      rowId: i.reference,
+      action: "update",
+      before: { discountCents: i.savedDeposit, netPriceCents: r.grossPriceCents - i.savedDeposit },
+      after: { discountCents: r.discountCents, netPriceCents: r.netPriceCents, raisedBy: [...by] },
+    });
+    raised.push(i.reference);
+  }
+  return raised;
 }
 
 /**
@@ -436,7 +570,7 @@ export async function saveEnrollment(
   if (new Set(typed.data.map((m) => m.billingEntityId)).size !== typed.data.length)
     return { ok: false, message: "Saisie invalide." };
   await lockPayer(tx, payerId);
-  const preview = await enrollmentPreview(tx, payerId, seasonId, entry, today);
+  const { preview, recomputed } = await pricedPreview(tx, payerId, seasonId, entry, today);
   if (preview.status === "invalid") return { ok: false, message: preview.message };
   if (!typed.data.every((m) => preview.newEnrollments.some((n) => n.billingEntityId === m.billingEntityId)))
     return { ok: false, message: STALE_MANUAL_PRICE };
@@ -556,6 +690,8 @@ export async function saveEnrollment(
       );
     }
   }
+  // #155 Q2: the siblings saved before get the discount the new one raises, while nothing bills them.
+  await applyRaises(tx, who.id, preview.existingImpacts, recomputed, ids);
   return { ok: true, id: ids[0], ids };
 }
 
@@ -607,6 +743,14 @@ export const quarterCountSql = sql<number>`(SELECT count(*) FROM enrollment_quar
  */
 const invoicedSql = sql<boolean>`EXISTS (SELECT 1 FROM invoice_line l JOIN invoice i ON i.id = l.invoice_id
   WHERE l.enrollment_id = ${enrollmentId} AND NOT ${UNSENT_DRAFT})`;
+
+/**
+ * A payment is allocated to an installment of an unsent draft billing the enrollment of the
+ * row (#254): that draft cannot be thrown away (`discardDrafts`), so its price cannot move.
+ */
+const paidDraftSql = sql<boolean>`EXISTS (SELECT 1 FROM invoice_line l JOIN invoice i ON i.id = l.invoice_id
+  JOIN installment s ON s.invoice_id = i.id JOIN payment_allocation a ON a.installment_id = s.id
+  WHERE l.enrollment_id = ${enrollmentId} AND ${UNSENT_DRAFT})`;
 
 /**
  * What the lines of issued invoices (and credit notes) bill for the enrollment of the row
@@ -842,12 +986,29 @@ export type ConfirmationPreview =
     };
 
 async function confirmationOf(tx: Tx, e: Saved): Promise<ConfirmationPreview> {
+  return (await pricedConfirmation(tx, e)).preview;
+}
+
+/** `confirmationOf`, with the engine's results for the payer's other enrollments too (`applyRaises`). */
+async function pricedConfirmation(
+  tx: Tx,
+  e: Saved,
+): Promise<{ preview: ConfirmationPreview; recomputed: EnrollmentResult[] }> {
   const refusal = e.invoiced
     ? cancelRefusal({ invoiced: true, attended: false })
     : transitionRefusal(e.status, "active");
-  if (refusal) return { status: "invalid", message: refusal };
+  if (refusal) return { preview: { status: "invalid", message: refusal }, recomputed: [] };
   const [target] = await withCourses(tx, [
-    { id: e.id, audience: e.audience, period: e.period, deposit: e.discountCents, manual: e.manualPriceCents !== null },
+    {
+      id: e.id,
+      audience: e.audience,
+      period: e.period,
+      deposit: e.discountCents,
+      manual: e.manualPriceCents !== null,
+      gross: e.grossPriceCents,
+      invoiced: e.invoiced,
+      paidDraft: false,
+    },
   ]);
   const existing = await existingEnrollments(tx, e.payerId, e.seasonId, e.id);
   const result = computeTariff({
@@ -861,7 +1022,7 @@ async function confirmationOf(tx: Tx, e: Saved): Promise<ConfirmationPreview> {
     e.manualPriceCents !== null && e.priceReason !== null
       ? { priceCents: e.manualPriceCents, reason: e.priceReason }
       : null;
-  return {
+  const preview: ConfirmationPreview = {
     status: "ok",
     price,
     manualPrice,
@@ -874,8 +1035,9 @@ async function confirmationOf(tx: Tx, e: Saved): Promise<ConfirmationPreview> {
           ? (manualPrice?.priceCents ?? null)
           : null,
     savedNetPriceCents: savedNetPrice(e),
-    existingImpacts: await impactsOn(tx, existing, result.enrollments),
+    existingImpacts: await impactsOn(tx, existing, result.enrollments, "arriving"),
   };
+  return { preview, recomputed: result.enrollments };
 }
 
 /** What confirming would cost, shown before the front desk confirms. */
@@ -903,7 +1065,7 @@ export async function confirmEnrollment(
   const e = await readSaved(tx, id, true);
   if (!e) return { ok: false, message: GONE };
   if (e.status === "active") return { ok: true, id, already: true };
-  const preview = await confirmationOf(tx, e);
+  const { preview, recomputed } = await pricedConfirmation(tx, e);
   if (preview.status === "invalid") return { ok: false, message: preview.message };
   const r = preview.price;
   // A typed price stands in for a missing package only; any other refusal (no course) stays.
@@ -958,12 +1120,15 @@ export async function confirmEnrollment(
       ...typed,
     },
   });
+  // #155 Q2: the siblings saved before get the discount this one raises, while nothing bills them.
+  await applyRaises(tx, who.id, preview.existingImpacts, recomputed, [id]);
   return { ok: true, id };
 }
 
 /**
  * What a drop-out or a cancellation would change for the payer's other enrollments: an
- * active enrollment leaving takes its students out of the siblings (#284 Q2, Q3). Told, never applied.
+ * active enrollment leaving takes its students out of the siblings (#284 Q2, Q3). Told, never
+ * applied (a lowered discount, #155 Q2 covering raises only).
  */
 export async function leavingImpacts(tx: Tx, id: string): Promise<ExistingImpact[]> {
   const e = await readSaved(tx, id);
@@ -975,7 +1140,7 @@ export async function leavingImpacts(tx: Tx, id: string): Promise<ExistingImpact
     discounts: await loadDiscounts(tx, e.seasonId),
     enrollments: remaining,
   });
-  return impactsOn(tx, remaining, result.enrollments);
+  return impactsOn(tx, remaining, result.enrollments, "leaving");
 }
 
 /**

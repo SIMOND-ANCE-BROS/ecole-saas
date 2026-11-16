@@ -140,23 +140,44 @@ describe("enrollments that cannot be priced", () => {
   });
 });
 
-describe("siblings discount (Ribas: -10 % from 2 children, not combinable with 2 disciplines)", () => {
-  it("applies -10 % to each of two children", () => {
+describe("siblings discount (Ribas: -10 % from the 2nd child, not combinable with 2 disciplines)", () => {
+  const twoDisciplines = () =>
+    enrollment({
+      course: [
+        { disciplineId: CLASSICAL, durationMinutes: 60 },
+        { disciplineId: JAZZ, durationMinutes: 60 },
+      ],
+    });
+
+  it("two children: the most expensive package pays full price, the other gets -10 % (110,00 € + 85,00 € → 8,50 €)", () => {
     const result = ribas(enrollment({ course: [60] }), enrollment({ course: [45] }));
-    const [a, b] = result.enrollments;
-    expect(siblings(a)).toEqual({
+    const [expensive, cheaper] = result.enrollments;
+    expect(siblings(expensive)).toEqual({
+      code: "fratrie",
+      status: "rejected",
+      amountCents: 0,
+      reason: "Plein tarif : forfait le plus élevé des 2 enfants du même payeur",
+    });
+    expect(ok(expensive)).toMatchObject({ discountCents: 0, netPriceCents: 11000 });
+    expect(siblings(cheaper)).toEqual({
       code: "fratrie",
       status: "applied",
-      amountCents: 1100,
+      amountCents: 850,
       reason: "2 enfants du même payeur : −10 %",
     });
-    expect(ok(b)).toMatchObject({ discountCents: 850, netPriceCents: 7650 });
+    expect(ok(cheaper)).toMatchObject({ discountCents: 850, netPriceCents: 7650 });
     expect(result).toMatchObject({
       full: true,
       grossTotalCents: 19500,
-      totalDiscountCents: 1950,
-      netTotalCents: 17550,
+      totalDiscountCents: 850,
+      netTotalCents: 18650,
     });
+  });
+
+  it("ranks by package price, whatever the order the enrollments come in", () => {
+    const [cheaper, expensive] = ribas(enrollment({ course: [45] }), enrollment({ course: [60] })).enrollments;
+    expect(ok(cheaper).discountCents).toBe(850);
+    expect(ok(expensive).discountCents).toBe(0);
   });
 
   it("leaves it out for a single child", () => {
@@ -170,53 +191,93 @@ describe("siblings discount (Ribas: -10 % from 2 children, not combinable with 2
     expect(ok(r).netPriceCents).toBe(11000);
   });
 
-  it("applies it to all three children of three siblings", () => {
-    const result = ribas(enrollment({}), enrollment({}), enrollment({}));
-    expect(result.enrollments.map((r) => siblings(r)?.status)).toEqual(["applied", "applied", "applied"]);
+  it("three children: only the most expensive package pays full price", () => {
+    const result = ribas(enrollment({ course: [45] }), enrollment({ course: [45, 60] }), enrollment({ course: [60] }));
+    expect(result.enrollments.map((r) => siblings(r)?.status)).toEqual(["applied", "rejected", "applied"]);
+    expect(result.enrollments.map((r) => ok(r).discountCents)).toEqual([850, 0, 1100]);
+    expect(siblings(result.enrollments[1])?.reason).toBe(
+      "Plein tarif : forfait le plus élevé des 3 enfants du même payeur",
+    );
     expect(siblings(result.enrollments[2])?.reason).toBe("3 enfants du même payeur : −10 %");
-    expect(result.netTotalCents).toBe(3 * 9900);
+    expect(result.totalDiscountCents).toBe(1950);
+  });
+
+  it("ties on the package price: the child given first pays full price", () => {
+    const first = enrollment({ course: [60] });
+    const second = enrollment({ course: [60] });
+    const one = ribas(first, second).enrollments;
+    expect(one.map((r) => ok(r).discountCents)).toEqual([0, 1100]);
+    const other = ribas(second, first).enrollments;
+    expect(other.map((r) => [r.reference, ok(r).discountCents])).toEqual([
+      [second.reference, 0],
+      [first.reference, 1100],
+    ]);
+  });
+
+  it("ranks a child by all their packages: one enrolled with both businesses pays full price on both", () => {
+    const [a1, a2, b] = ribas(
+      enrollment({ studentIds: ["a"], course: [60] }),
+      enrollment({ studentIds: ["a"], course: [45] }),
+      enrollment({ studentIds: ["b"], course: [60] }),
+    ).enrollments;
+    expect([ok(a1).discountCents, ok(a2).discountCents, ok(b).discountCents]).toEqual([0, 0, 1100]);
   });
 
   it("does not count an adult of the same payer, and leaves it out for them", () => {
-    const [child, adult] = ribas(enrollment({}), enrollment({ audience: "adult" })).enrollments;
+    const [child, adult] = ribas(enrollment({}), enrollment({ audience: "adult", course: [90] })).enrollments;
     expect(siblings(child)?.status).toBe("rejected");
+    expect(siblings(child)?.reason).toBe("1 enfant du même payeur, 2 requis");
     expect(siblings(adult)).toMatchObject({ status: "rejected", reason: "Réservée au public enfant" });
   });
 
-  it("leaves it out for a couple", () => {
-    const [r] = ribas(enrollment({ audience: "couple", studentIds: ["a", "b"] })).enrollments;
-    expect(siblings(r)?.status).toBe("rejected");
-  });
-
-  it("leaves it out on a 2-discipline package, but the child counts for their siblings", () => {
-    const [twoDisciplines, sibling] = ribas(
-      enrollment({
-        course: [
-          { disciplineId: CLASSICAL, durationMinutes: 60 },
-          { disciplineId: JAZZ, durationMinutes: 60 },
-        ],
-      }),
+  it("leaves it out for a couple, and two children keep their own ranking beside it", () => {
+    const [couple, a, b] = ribas(
+      enrollment({ audience: "couple", studentIds: ["x", "y"], period: "year", course: [90] }),
+      enrollment({ course: [45] }),
       enrollment({ course: [60] }),
     ).enrollments;
-    expect(siblings(twoDisciplines)).toEqual({
+    expect(siblings(couple)?.status).toBe("rejected");
+    expect(ok(couple).netPriceCents).toBe(75500);
+    expect([ok(a).discountCents, ok(b).discountCents]).toEqual([850, 0]);
+  });
+
+  it("Q1 (#155): the most expensive package being a 2-discipline one, the other child is the 2nd and gets it", () => {
+    const [two, sibling] = ribas(twoDisciplines(), enrollment({ course: [60] })).enrollments;
+    expect(siblings(two)).toMatchObject({
+      status: "rejected",
+      reason: "Plein tarif : forfait le plus élevé des 2 enfants du même payeur",
+    });
+    expect(ok(two).netPriceCents).toBe(18500);
+    expect(siblings(sibling)).toMatchObject({ status: "applied", amountCents: 1100 });
+  });
+
+  it("Q1 (#155): a cheaper 2-discipline package counts as a sibling but gets no discount of its own", () => {
+    const [two, expensive] = ribas(twoDisciplines(), enrollment({ course: [60, 90] })).enrollments;
+    expect(siblings(two)).toEqual({
       code: "fratrie",
       status: "rejected",
       amountCents: 0,
       reason: "Non cumulable avec un forfait 2 disciplines",
     });
-    expect(ok(twoDisciplines).netPriceCents).toBe(18500);
-    expect(siblings(sibling)?.status).toBe("applied");
+    expect(siblings(expensive)?.status).toBe("rejected");
+    expect(ok(expensive).netPriceCents).toBe(22000);
+  });
+
+  it("Q1 (#155): with a 2-discipline child, the 3rd child still gets it", () => {
+    const [two, a, b] = ribas(twoDisciplines(), enrollment({ course: [60] }), enrollment({ course: [45] })).enrollments;
+    expect([ok(two).discountCents, ok(a).discountCents, ok(b).discountCents]).toEqual([0, 1100, 850]);
   });
 
   it("applies it to two courses of the same discipline", () => {
     const [twoJazzCourses] = ribas(
       enrollment({
         course: [
-          { disciplineId: JAZZ, durationMinutes: 60 },
+          { disciplineId: JAZZ, durationMinutes: 45 },
+          { disciplineId: JAZZ, durationMinutes: 45 },
           { disciplineId: JAZZ, durationMinutes: 60 },
         ],
       }),
-      enrollment({}),
+      enrollment({ course: [60, 90] }),
     ).enrollments;
     expect(siblings(twoJazzCourses)?.status).toBe("applied");
   });
@@ -227,7 +288,7 @@ describe("siblings discount (Ribas: -10 % from 2 children, not combinable with 2
     expect(siblings(t2)?.status).toBe("rejected");
   });
 
-  it("counts a child whose package is entered by hand", () => {
+  it("counts a child whose package is entered by hand, ranked first: the priced child gets it", () => {
     const [, sibling] = ribas(enrollment({ course: [45, 45] }), enrollment({})).enrollments;
     expect(siblings(sibling)?.status).toBe("applied");
   });
@@ -243,6 +304,7 @@ describe("nothing is specific to one school", () => {
     rateBps: null,
     amountCents: null,
     minStudents: 1,
+    fromRank: 1,
     audiences: [],
     combinableWithMultiDiscipline: true,
     ...partial,
@@ -271,6 +333,33 @@ describe("nothing is specific to one school", () => {
     expect(ok(single)).toMatchObject({ discountCents: 1500, netPriceCents: 0 });
   });
 
+  it("keeps every eligible student discounted from rank 1 (another school's choice)", () => {
+    const result = computeTariff({
+      grid,
+      discounts: [rule({ rateBps: 1000, minStudents: 2 })],
+      enrollments: [adult(), adult("single")],
+    });
+    expect(result.enrollments.map((r) => ok(r).discountCents)).toEqual([1235, 150]);
+  });
+
+  it("from the 3rd student: the two most expensive packages pay full price", () => {
+    const result = computeTariff({
+      grid,
+      discounts: [rule({ rateBps: 1000, minStudents: 2, fromRank: 3 })],
+      enrollments: [adult("single"), adult(), adult()],
+    });
+    expect(result.enrollments.map((r) => ok(r).discountCents)).toEqual([150, 0, 0]);
+    expect(siblings(result.enrollments[1])?.reason).toBe(
+      "Plein tarif : un des 2 forfaits les plus élevés des 3 danseurs du même payeur",
+    );
+    const two = computeTariff({
+      grid,
+      discounts: [rule({ rateBps: 1000, minStudents: 2, fromRank: 3 })],
+      enrollments: [adult(), adult("single")],
+    });
+    expect(two.totalDiscountCents).toBe(0);
+  });
+
   it("leaves out a discount type unknown to the engine", () => {
     const [r] = computeTariff({
       grid,
@@ -291,5 +380,8 @@ describe("nothing is specific to one school", () => {
     const calculation = (r: DiscountRule) => () => computeTariff({ grid, discounts: [r], enrollments: [adult()] });
     expect(calculation(rule({}))).toThrow("Réduction « fratrie » : renseigner un taux ou un montant, pas les deux");
     expect(calculation(rule({ rateBps: 1000, amountCents: 500 }))).toThrow(TypeError);
+    expect(calculation(rule({ rateBps: 1000, fromRank: 0 }))).toThrow(
+      "Réduction « fratrie » : rang de départ invalide (0)",
+    );
   });
 });

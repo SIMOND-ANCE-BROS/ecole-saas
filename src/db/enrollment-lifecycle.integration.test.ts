@@ -172,10 +172,13 @@ describe("confirming a trial or waitlist enrollment", () => {
       discounts: ["fratrie"],
     });
     expect(row.tariff_id).not.toBeNull();
-    // The sibling saved before is never re-priced on its own (Q2).
+    // The sibling saved before, which nothing bills yet, gets the discount the confirmation raises (#155 Q2).
     expect((await admin`SELECT discount_cents FROM enrollment WHERE id = ${f.enrollments[0]}`)[0].discount_cents).toBe(
-      0,
+      1100,
     );
+    expect(await auditOf(f.enrollments[0])).toMatchObject([
+      { action: "update", before: { discountCents: 0 }, after: { discountCents: 1100, raisedBy: [trial] } },
+    ]);
     const [log] = await auditOf(trial);
     expect(log).toMatchObject({
       action: "update",

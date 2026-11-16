@@ -10,7 +10,9 @@ import type { EnrollmentStatus } from "./statuses";
  * 1. What is owed for a dropped or trial enrollment: `DUE_STATUSES` (`src/domain/payments/balance.ts`, #99).
  *    The school's rules (2026-10-29): a paid quarter or year not attended is neither carried over
  *    nor refunded, so a drop-out stays due; a trial or waitlist enrollment is not due.
- * 2. A status change never re-prices another saved enrollment: `discountImpacts` (`./impacts.ts`) only reports it.
+ * 2. A status change never lowers the price of another saved enrollment: `discountImpacts` (`./impacts.ts`)
+ *    only reports it. A siblings discount raised by an enrollment created or confirmed is saved on a
+ *    sibling no invoice bills yet (#155 Q2, `raisedNow`), only reported once invoiced.
  * 3. Only active enrollments count as siblings: `SIBLING_STATUSES` below.
  * 4. The price is recomputed at confirmation: `confirmationPrice` below.
  * 5. A full course is a warning, not a hard limit: `overfilledCourses` below. Which courses are
