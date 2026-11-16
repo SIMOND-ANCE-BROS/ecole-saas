@@ -153,12 +153,20 @@ export function pendingInvitations(tx: Tx, now: Date): Promise<PendingInvitation
 
 export const validInvitation = z.object(
   {
-    email: z.email("E-mail invalide").trim().toLowerCase().max(200, "E-mail : 200 caractères au plus"),
+    // Trimmed before the format check: an address pasted with a space is accepted.
+    email: z
+      .string({ error: "E-mail invalide" })
+      .trim()
+      .toLowerCase()
+      .max(200, "E-mail : 200 caractères au plus")
+      .pipe(z.email("E-mail invalide")),
     name: z
       .string({ error: "Nom obligatoire" })
       .trim()
       .min(1, "Nom obligatoire")
-      .max(100, "Nom : 100 caractères au plus"),
+      .max(100, "Nom : 100 caractères au plus")
+      // E-mailed in the greeting (#105): one line, no control or direction character.
+      .refine((v) => !/[\p{Cc}\u202A-\u202E\u2066-\u2069]/u.test(v), "Nom : une seule ligne, sans caractère spécial."),
     role: z.enum(INVITABLE_ROLES, { error: "Choisissez un rôle." }),
   },
   { error: "Saisie invalide." },
@@ -298,6 +306,33 @@ export async function resetLink(tx: Tx, userId: string, memberId: string, now: D
     .returning(LOGGED_LINK);
   await logLinks(tx, who, "insert", [created]);
   return { ok: true, id: created.id, token };
+}
+
+/**
+ * When this school created the other links of the same person in the last 24
+ * hours (#105): invitations to the address, password links of the account,
+ * read from the audit log (a replaced invitation is deleted, its log stays).
+ * Every link counts, e-mailed or not, so a director looping on « Envoyer »
+ * cannot flood an address through the e-mail service (`addressWait`).
+ */
+export async function recentLinksTo(tx: Tx, link: OpenedLink, now: Date): Promise<{ person: Date[]; school: Date[] }> {
+  const since = new Date(now.getTime() - 24 * 60 * 60_000);
+  const person =
+    link.type === "invitation"
+      ? sql`${auditLog.after}->>'email' = ${link.email} AND ${auditLog.after}->>'type' = 'invitation'`
+      : sql`${auditLog.after}->>'userId' = ${link.userId} AND ${auditLog.after}->>'type' = 'reset'`;
+  const rows = await tx
+    .select({ at: auditLog.at, samePerson: sql<boolean>`coalesce(${person}, false)` })
+    .from(auditLog)
+    .where(
+      and(
+        eq(auditLog.targetTable, "invitation"),
+        eq(auditLog.action, "insert"),
+        gt(auditLog.at, since),
+        sql`${auditLog.rowId} <> ${link.id}`,
+      ),
+    );
+  return { person: rows.filter((r) => r.samePerson).map((r) => r.at), school: rows.map((r) => r.at) };
 }
 
 export type OpenedLink = {

@@ -29,6 +29,7 @@ vi.mock("@/domain/invoicing/progress", () => import("../../../domain/invoicing/p
 vi.mock("@/jobs/invoicing/send", () => import("../../../jobs/invoicing/send"));
 vi.mock("@/db/schedule", () => import("../../../db/schedule"));
 vi.mock("@/domain/people/age", () => import("../../../domain/people/age"));
+vi.mock("@/lib/action-result", () => import("../../../lib/action-result"));
 
 process.env.INVOICING_FAKE_ALLOWED = "1";
 // CI has no encryption key: a throwaway one encrypts the fake tool's test token.

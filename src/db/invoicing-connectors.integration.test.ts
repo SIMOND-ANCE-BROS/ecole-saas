@@ -1,7 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
-import { inSimulation } from "./invoicing-connectors";
+import { inSimulation, simulatedEntities } from "./invoicing-connectors";
 import { defaultEntityFor } from "./billing-entity.integration-helpers";
 
 /**
@@ -85,5 +85,18 @@ describe("simulation mode", () => {
     expect(await withSchool(school, inSimulation)).toBe(false);
     await admin`UPDATE invoicing_connector SET active = true WHERE billing_entity_id = ${entity}`;
     expect(await withSchool(school, inSimulation)).toBe(true);
+  });
+});
+
+describe("businesses on the fake tool (#351)", () => {
+  it("names the school's own businesses whose active connector is the fake tool", async () => {
+    // Own setup, whatever the tests above left: Zz Danse S on the fake tool (active), Zz Danse T too.
+    await admin`DELETE FROM invoicing_connector WHERE school_id IN (${school}, ${otherSchool})`;
+    await admin`INSERT INTO invoicing_connector (school_id, billing_entity_id, tool, encrypted_credentials)
+                VALUES (${school}, ${entity}, 'fake', 'zz-chiffre'), (${otherSchool}, ${otherEntity}, 'fake', 'zz-chiffre')`;
+    expect(await withSchool(school, simulatedEntities)).toEqual(["Zz Danse S"]);
+    expect(await withSchool(otherSchool, simulatedEntities)).toEqual(["Zz Danse T"]);
+    await admin`UPDATE invoicing_connector SET active = false WHERE billing_entity_id = ${entity}`;
+    expect(await withSchool(school, simulatedEntities)).toEqual([]);
   });
 });

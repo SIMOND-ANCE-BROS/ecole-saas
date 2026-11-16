@@ -15,7 +15,8 @@ import {
  * Simulation tool (#303): behaves like an invoicing tool without leaving the
  * server, for the contract tests and for a school trying the software. Its
  * numbers start with « TEST- » and mean nothing; `connectorFor` refuses it
- * unless `INVOICING_FAKE_ALLOWED=1`, and the interface shows « Mode simulation ».
+ * unless `INVOICING_FAKE_ALLOWED=1`, always when `NODE_ENV=production` (#351), and
+ * the interface shows « Mode simulation ».
  *
  * Its documents live in memory, one store per billing entity, kept across
  * requests of the same server process only: after a restart, or on another

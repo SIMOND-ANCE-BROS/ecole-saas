@@ -7,6 +7,7 @@ import { withSchool } from "@/db";
 import { type SaleInput, sellLessonPack } from "@/db/lesson-packs";
 import { once, storedLessonPack } from "@/db/submissions";
 import { todayInParis } from "@/domain/people/age";
+import { orBusy } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
 
 /** Return to the record the sale was opened from: only a student or contact record. */
@@ -26,9 +27,11 @@ export async function sellPack(
 ): Promise<{ message: string }> {
   const { schoolId, userId } = await requireRole("director", "front_desk");
   if (!z.uuid().safeParse(key).success || !z.uuid().safeParse(payerId).success) return { message: "Saisie invalide." };
-  const r = await withSchool(schoolId, (tx) =>
-    once(tx, "lesson_pack", key, { payerId, entry }, storedLessonPack, () =>
-      sellLessonPack(tx, userId, payerId, entry, todayInParis()),
+  const r = await orBusy(() =>
+    withSchool(schoolId, (tx) =>
+      once(tx, "lesson_pack", key, { payerId, entry }, storedLessonPack, () =>
+        sellLessonPack(tx, userId, payerId, entry, todayInParis()),
+      ),
     ),
   );
   if (!r.ok) return { message: r.message };

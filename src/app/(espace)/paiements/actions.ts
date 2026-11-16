@@ -9,7 +9,7 @@ import { REFUND_METHODS, REFUND_ROLES } from "@/domain/payments/refund";
 import { CANCEL_REFUND_ROLES } from "@/domain/payments/refund-cancellation";
 import { once, storedPayments } from "@/db/submissions";
 import { todayInParis } from "@/domain/people/age";
-import { type ActionResult, actionResult } from "@/lib/action-result";
+import { type ActionResult, actionResult, orBusy } from "@/lib/action-result";
 import { topErrorsOf } from "@/lib/form-errors";
 import { requireRole } from "@/lib/session";
 
@@ -34,9 +34,11 @@ export async function collectPayments(
   if (!z.uuid().safeParse(key).success) return { message: "Saisie invalide." };
   const entity = z.uuid().optional().safeParse(billingEntityId);
   if (!entity.success) return { message: "Choisissez l’entreprise qui encaisse ce paiement." };
-  const r = await withSchool(schoolId, (tx) =>
-    once(tx, "payment", key, { payerId, entry, billingEntityId: entity.data }, storedPayments, () =>
-      collect(tx, userId, payerId, entry as never, entity.data),
+  const r = await orBusy(() =>
+    withSchool(schoolId, (tx) =>
+      once(tx, "payment", key, { payerId, entry, billingEntityId: entity.data }, storedPayments, () =>
+        collect(tx, userId, payerId, entry as never, entity.data),
+      ),
     ),
   );
   if (!r.ok) return { message: r.message };
@@ -77,9 +79,11 @@ export async function correct(correction: z.input<typeof validCorrection>): Prom
   }
   const { paymentId, amountCents, back, rejectedOn, key } = c.data;
   // A retry after a lost response returns the first result instead of a second reverse entry.
-  const r = await withSchool(schoolId, (tx) =>
-    once(tx, "payment", key, { paymentId, amountCents, rejectedOn }, storedPayments, () =>
-      correctPayment(tx, userId, paymentId, amountCents, todayInParis(), rejectedOn),
+  const r = await orBusy(() =>
+    withSchool(schoolId, (tx) =>
+      once(tx, "payment", key, { paymentId, amountCents, rejectedOn }, storedPayments, () =>
+        correctPayment(tx, userId, paymentId, amountCents, todayInParis(), rejectedOn),
+      ),
     ),
   );
   if (!r.ok) return actionResult(r);
@@ -130,9 +134,11 @@ export async function refund(request: z.input<typeof validRefundRequest>): Promi
   const { payerId, billingEntityId, method, amountCents, date, reference, back, key } = c.data;
   const entry = { method, amountCents, date, reference };
   // A retry after a lost response returns the first result instead of a second refund.
-  const r = await withSchool(schoolId, (tx) =>
-    once(tx, "payment", key, { refund: { payerId, billingEntityId, entry } }, storedPayments, () =>
-      refundPayer(tx, userId, payerId, entry, todayInParis(), billingEntityId),
+  const r = await orBusy(() =>
+    withSchool(schoolId, (tx) =>
+      once(tx, "payment", key, { refund: { payerId, billingEntityId, entry } }, storedPayments, () =>
+        refundPayer(tx, userId, payerId, entry, todayInParis(), billingEntityId),
+      ),
     ),
   );
   if (!r.ok) return actionResult(r);
@@ -168,9 +174,11 @@ export async function cancelRefund(cancellation: z.input<typeof validRefundCance
   }
   const { refundId, amountCents, back, key } = c.data;
   // A retry after a lost response returns the first result instead of a second cancellation.
-  const r = await withSchool(schoolId, (tx) =>
-    once(tx, "payment", key, { cancelRefund: { refundId, amountCents } }, storedPayments, () =>
-      cancelRefundPayment(tx, userId, refundId, amountCents, todayInParis()),
+  const r = await orBusy(() =>
+    withSchool(schoolId, (tx) =>
+      once(tx, "payment", key, { cancelRefund: { refundId, amountCents } }, storedPayments, () =>
+        cancelRefundPayment(tx, userId, refundId, amountCents, todayInParis()),
+      ),
     ),
   );
   if (!r.ok) return actionResult(r);

@@ -7,7 +7,7 @@ import { withSchool } from "@/db";
 import { once, storedWorkshopSignup } from "@/db/submissions";
 import { cancelWorkshopSignup, type SignupInput, signUpForWorkshop } from "@/db/workshops";
 import { todayInParis } from "@/domain/people/age";
-import type { ActionResult } from "@/lib/action-result";
+import { type ActionResult, orBusy } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
 
 /** Return to the record the sign-up was opened from: only a student or contact record. */
@@ -27,9 +27,11 @@ export async function signUp(
 ): Promise<{ message: string }> {
   const { schoolId, userId } = await requireRole("director", "front_desk");
   if (!z.uuid().safeParse(key).success || !z.uuid().safeParse(payerId).success) return { message: "Saisie invalide." };
-  const r = await withSchool(schoolId, (tx) =>
-    once(tx, "workshop_signup", key, { payerId, entry }, storedWorkshopSignup, () =>
-      signUpForWorkshop(tx, userId, payerId, entry, todayInParis()),
+  const r = await orBusy(() =>
+    withSchool(schoolId, (tx) =>
+      once(tx, "workshop_signup", key, { payerId, entry }, storedWorkshopSignup, () =>
+        signUpForWorkshop(tx, userId, payerId, entry, todayInParis()),
+      ),
     ),
   );
   if (!r.ok) return { message: r.message };
@@ -42,6 +44,6 @@ export async function signUp(
 export async function cancelSignup(signupId: string): Promise<ActionResult> {
   const { schoolId, userId } = await requireRole("director", "front_desk");
   if (!z.uuid().safeParse(signupId).success) return { ok: false, message: "Saisie invalide." };
-  const r = await withSchool(schoolId, (tx) => cancelWorkshopSignup(tx, userId, signupId));
+  const r = await orBusy(() => withSchool(schoolId, (tx) => cancelWorkshopSignup(tx, userId, signupId)));
   return r.ok ? { ok: true } : { ok: false, message: r.message };
 }

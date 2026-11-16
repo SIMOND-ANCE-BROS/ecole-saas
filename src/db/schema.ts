@@ -39,6 +39,7 @@ import { PAYMENT_METHOD_VALUES } from "../domain/payments/methods";
 import { DOCUMENT_TYPES } from "../domain/people/documents";
 import { VAT_CATEGORIES } from "../domain/billing/vat";
 import { FAKE_NUMBER_PREFIX, INVOICING_TOOLS } from "../domain/billing/invoicing";
+import { EMAIL_PROVIDER_VALUES, FROM_NAME_MAX } from "../domain/email/settings";
 
 // ---------------------------------------------------------------------------
 // Enumerated types
@@ -63,7 +64,7 @@ export const tariffAudience = pgEnum("tariff_audience", ["child", "adult", "coup
 export const period = pgEnum("period", ["quarter", "year", "single"]);
 export const enrollmentStatus = pgEnum("enrollment_status", ["trial", "waitlist", "active", "dropped", "ended"]);
 export const invoiceStatus = pgEnum("invoice_status", ["to_send", "tool_draft", "issued", "rejected", "cancelled"]);
-/** `fake`: the simulation tool (#303), refused unless INVOICING_FAKE_ALLOWED=1. */
+/** `fake`: the simulation tool (#303), refused unless INVOICING_FAKE_ALLOWED=1, always in production (#351). */
 export const invoicingTool = pgEnum("invoicing_tool", INVOICING_TOOLS);
 export const paymentMethod = pgEnum("payment_method", PAYMENT_METHOD_VALUES);
 /** Kind of a reverse entry (#272): a correction, or the rejection of a deposited payment. */
@@ -71,6 +72,8 @@ export const reversalKind = pgEnum("reversal_kind", REVERSAL_KINDS);
 export const installmentStatus = pgEnum("installment_status", ["upcoming", "paid", "partial", "overdue", "cancelled"]);
 export const statementStatus = pgEnum("statement_status", ["to_check", "matching", "discrepancy", "paid"]);
 export const memberRole = pgEnum("member_role", ROLE_VALUES);
+/** A school's own e-mail provider (#105, ADR 0009); the fake sender is never a setting. */
+export const emailProvider = pgEnum("email_provider", EMAIL_PROVIDER_VALUES);
 
 // ---------------------------------------------------------------------------
 // Tenant: the school
@@ -222,6 +225,31 @@ export const invoicingConnector = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [sameSchool(t, t.billingEntityId, billingEntity).onDelete("cascade")],
+);
+
+/**
+ * A school's own e-mail sending account (#105, ADR 0009): one per school.
+ * Without one, the application sender (Brevo) sends on the school's behalf.
+ * Only the API key is secret and encrypted on the application side
+ * (`src/lib/encryption.ts`), never read back to a screen; the sender address
+ * and name are shown. Proof-of-address e-mails (#179) never use it.
+ */
+export const emailConnector = pgTable(
+  "email_connector",
+  {
+    schoolId: schoolIdColumn().primaryKey(),
+    provider: emailProvider("provider").notNull(),
+    encryptedApiKey: text("encrypted_api_key").notNull(), // encrypted on the application side
+    fromAddress: text("from_address").notNull(),
+    fromName: text("from_name").notNull(),
+    active: boolean("active").notNull().default(true),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("email_connector_from_name", sql`char_length(${t.fromName}) BETWEEN 1 AND ${sql.raw(String(FROM_NAME_MAX))}`),
+    check("email_connector_from_address", sql`char_length(${t.fromAddress}) BETWEEN 3 AND 254`),
+    check("email_connector_key", sql`${t.encryptedApiKey} LIKE 'v1.%'`),
+  ],
 );
 
 /**
