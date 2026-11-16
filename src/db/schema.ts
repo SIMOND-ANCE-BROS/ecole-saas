@@ -1311,6 +1311,10 @@ export const invoice = pgTable(
     // claim's end (another run skips it until then), the earliest next attempt (backoff), and
     // the last failure as a technical kind and code (never a tool's text: no personal data).
     attempts: smallint("attempts").notNull().default(0),
+    // The attempts already made when the current retry cycle started (#440): « Envoyer à
+    // nouveau » sets it to `attempts`, so the backoff and the 10-attempt limit count from there
+    // while `attempts` keeps every attempt ever made.
+    cycleStartAttempts: smallint("cycle_start_attempts").notNull().default(0),
     claimedUntil: timestamp("claimed_until", { withTimezone: true }),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
     sendErrorKind: text("send_error_kind"),
@@ -1347,6 +1351,7 @@ export const invoice = pgTable(
         sql`${t.status} = 'to_send' AND ${t.attempts} = 0 AND ${t.creditNoteOf} IS NULL AND ${t.seasonId} IS NOT NULL`,
       ),
     check("invoice_attempts", sql`${t.attempts} >= 0`),
+    check("invoice_cycle_start_attempts", sql`${t.cycleStartAttempts} BETWEEN 0 AND ${t.attempts}`),
     check("invoice_installment_count", sql`${t.installmentCount} BETWEEN 1 AND 12`),
     // What the outbox picks up, per business, in the order it is due.
     index("invoice_outbox")

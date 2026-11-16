@@ -146,6 +146,7 @@ async function lockRejected(tx: Tx, invoiceId: string) {
       toolRef: invoice.toolRef,
       payerId: invoice.payerId,
       seasonId: invoice.seasonId,
+      attempts: invoice.attempts,
     })
     .from(invoice)
     .where(and(eq(invoice.id, invoiceId), eq(invoice.status, "rejected"), isNull(invoice.creditNoteOf)))
@@ -192,9 +193,12 @@ async function setAside(tx: Tx, actor: string | null, invoiceId: string, reason:
 
 /**
  * « Envoyer à nouveau » on a rejected invoice (`sendAgainMode`): one the tool holds goes back
- * to `tool_draft`, due at once (its attempts never decrease: one more failure rejects it again
- * once past the limit); one the tool never held is set aside and the payer's season drafted
- * again. The caller wakes the sending after the commit (`sendSoon`).
+ * to `tool_draft`, due at once, for a full retry cycle (#440): its attempts never decrease, the
+ * cycle starts from them (`cycle_start_attempts`), so the backoff and the 10-attempt limit count
+ * again from zero, and the audit log keeps how many were made before. Its next run reads its
+ * status in the tool first (`sendOne`): one the tool issued meanwhile is recorded, never issued
+ * twice. One the tool never held is set aside and the payer's season drafted again (a new
+ * invoice, its own cycle). The caller wakes the sending after the commit (`sendSoon`).
  */
 export async function sendRejectedAgain(tx: Tx, userId: string, invoiceId: string): Promise<RejectedOutcome> {
   if (!isUuid(invoiceId)) return { ok: false, message: "Saisie invalide." };
@@ -210,13 +214,14 @@ export async function sendRejectedAgain(tx: Tx, userId: string, invoiceId: strin
       .update(invoice)
       .set({
         status: "tool_draft",
+        cycleStartAttempts: sql`${invoice.attempts}`,
         nextAttemptAt: sql`now()`,
         claimedUntil: null,
         sendErrorKind: null,
         sendErrorCode: null,
       })
       .where(and(eq(invoice.id, invoiceId), eq(invoice.status, "rejected")));
-    await audit(tx, actor, invoiceId, { status: "tool_draft", reason: "sent_again" });
+    await audit(tx, actor, invoiceId, { status: "tool_draft", reason: "sent_again", attempts: row.attempts });
     return { ok: true, mode };
   }
   // Drafts are per season: an invoice of no season cannot be drafted again, only abandoned.
