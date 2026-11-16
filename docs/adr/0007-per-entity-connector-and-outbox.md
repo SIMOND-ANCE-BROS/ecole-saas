@@ -104,3 +104,22 @@ and the front desk must never wait for a third-party service.
 - A business still on the fake tool where it is refused keeps its drafts `to_send`, unclaimed
   and uncounted (`sendEntityInvoices` reports `fake_not_allowed`); Paramètres › Entreprises names
   it for management, and the « Mode simulation » banner is not shown.
+
+## « Envoyer à nouveau »: a full retry cycle (#440)
+
+- Owner decision (2026-11-16, #352 Q4): « Envoyer à nouveau » (Paramètres › Entreprises ›
+  Factures à reprendre) on an invoice the tool holds a draft of gives it a **full retry cycle**:
+  up to 10 new attempts with the usual backoff (1 min, 5 min, 30 min…), instead of the single
+  attempt it got before. A tool down for a long time gets its 10 spaced attempts again.
+- `attempts` still never decreases: it counts every attempt ever made (a draft attempted once is
+  never drafted again). A second column, `cycle_start_attempts` (migration 0067), records the
+  attempts already made when the current cycle started; the backoff and the limit count
+  `attempts - cycle_start_attempts` (`Claimed.cycleAttempts`). Nothing that happened is rewritten:
+  the audit log records each rejection and each « Envoyer à nouveau » with the attempts made so far.
+- Nothing is reset blindly: the first attempt of the new cycle reads the invoice's status in the
+  tool before anything else, as every `tool_draft` attempt does. One the tool issued meanwhile (an
+  answer lost before the outage) is recorded as issued, never issued twice.
+- A rejected invoice the tool never held is not retried in place: it is set aside and the payer's
+  season drafted again, a new invoice starting its own cycle.
+- Idempotent with the submission key of #438: a replay of the same click returns its first result
+  and never restarts the cycle, even once the invoice was rejected again.

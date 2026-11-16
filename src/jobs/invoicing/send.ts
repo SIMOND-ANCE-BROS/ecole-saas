@@ -251,10 +251,11 @@ async function failed(
   e: unknown,
 ): Promise<Outcome> {
   const failure = failureOf(e);
-  const decision = afterFailure(failure, c.attempts);
+  // The backoff and the limit count the current cycle only (#440): « Envoyer à nouveau » starts a new one.
+  const decision = afterFailure(failure, c.cycleAttempts);
   // Technical facts only: an unknown error's message may quote data, so only its name is kept.
   console.error(
-    `Invoice ${c.id}: sending failed (${failure.kind}${failure.code ? `: ${failure.code}` : ""}, attempt ${c.attempts})`,
+    `Invoice ${c.id}: sending failed (${failure.kind}${failure.code ? `: ${failure.code}` : ""}, attempt ${c.cycleAttempts} of this cycle, ${c.attempts} in all)`,
     failure.kind === "internal" && e instanceof Error ? e.name : "",
   );
   const delay = decision.status === "retry" ? decision.delayMinutes : null;

@@ -50,8 +50,10 @@ export type Claimed = {
   id: string;
   status: "to_send" | "tool_draft";
   toolRef: string | null;
-  /** Attempts including this one. */
+  /** Attempts including this one, every one ever made. */
   attempts: number;
+  /** Attempts of the current retry cycle including this one (#440): what the backoff and the limit count. */
+  cycleAttempts: number;
   /** The claim, as Postgres prints it (microseconds kept): the key of every later write. */
   claim: string;
 };
@@ -79,6 +81,7 @@ export async function claimDue(tx: Tx, billingEntityId: string, limit: number): 
     status: Claimed["status"];
     tool_ref: string | null;
     attempts: number;
+    cycle_attempts: number;
     claim: string;
   }>(sql`
     WITH picked AS MATERIALIZED (
@@ -95,8 +98,16 @@ export async function claimDue(tx: Tx, billingEntityId: string, limit: number): 
     )
     UPDATE invoice SET attempts = attempts + 1, claimed_until = now() + make_interval(mins => ${CLAIM_MINUTES})
     FROM picked WHERE invoice.id = picked.id
-    RETURNING invoice.id, invoice.status, invoice.tool_ref, invoice.attempts, invoice.claimed_until::text AS claim`);
-  return rows.map((r) => ({ id: r.id, status: r.status, toolRef: r.tool_ref, attempts: r.attempts, claim: r.claim }));
+    RETURNING invoice.id, invoice.status, invoice.tool_ref, invoice.attempts,
+      invoice.attempts - invoice.cycle_start_attempts AS cycle_attempts, invoice.claimed_until::text AS claim`);
+  return rows.map((r) => ({
+    id: r.id,
+    status: r.status,
+    toolRef: r.tool_ref,
+    attempts: r.attempts,
+    cycleAttempts: r.cycle_attempts,
+    claim: r.claim,
+  }));
 }
 
 /** What the tool is sent for one invoice: the invoice as stored, its payer as the tool's customer. */
@@ -265,7 +276,7 @@ export async function recordCancelled(tx: Tx, c: Pick<Claimed, "id" | "claim">):
  */
 export async function recordFailure(
   tx: Tx,
-  c: Pick<Claimed, "id" | "claim">,
+  c: Pick<Claimed, "id" | "claim" | "attempts">,
   failure: SendFailure,
   retryInMinutes: number | null,
   held: { tool: InvoicingToolName; toolRef: string } | null = null,
@@ -291,6 +302,7 @@ export async function recordFailure(
   if (rows.length > 0 && retryInMinutes === null)
     await audit(tx, c.id, {
       status: "rejected",
+      attempts: c.attempts,
       send_error_kind: failure.kind,
       send_error_code: failure.code,
       ...(held ? { tool_ref: held.toolRef } : {}),
