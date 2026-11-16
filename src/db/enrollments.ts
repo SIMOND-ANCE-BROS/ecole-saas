@@ -337,6 +337,12 @@ export type NewEnrollment = {
   /** Ids of its courses, among the chosen ones. */
   courseIds: string[];
   price: EnrollmentResult;
+  /**
+   * Net price computed with no typed amount in the siblings ranking: a typed price is one that
+   * differs from it (`readTypedPrice`, `keptManualPrice`). A typed amount equal to it is not a
+   * typed price, so it never ranks the child (#445): the ranking stays what the saved rows give.
+   */
+  referenceNetCents: number | null;
 };
 
 export type Preview =
@@ -420,24 +426,31 @@ async function pricedPreview(
 
   const entities = await entitiesInOrder(tx);
   // References of the new requests are entity ids, never an enrollment id of `existing`.
-  // Ranked among siblings on its season price (#445): the quarters it covers and its typed price, if any.
-  const typedPrices = validManualPrices.safeParse(entry.manualPrices ?? []);
-  const requests = requestsByEntity(
+  // Ranked among siblings on its season price (#445): the quarters it covers, then its typed price.
+  const base = requestsByEntity(
     entry,
     chosenCourses,
     entities.map((e) => e.id),
-  ).map((r) => ({
-    ...r,
-    quarterCount: quarters.length,
-    manualPriceCents: typedPrices.success
-      ? (typedPrices.data.find((m) => m.billingEntityId === r.reference)?.priceCents ?? null)
-      : null,
-  }));
+  ).map((r) => ({ ...r, quarterCount: quarters.length, manualPriceCents: null }));
   const grid = await loadGrid(tx, seasonId);
   const discounts = await loadDiscounts(tx, seasonId);
   const existing = await existingEnrollments(tx, payerId, seasonId);
   // The saved enrollments first, oldest first: the engine breaks ties on package price by it (#290).
-  const result = computeTariff({ grid, discounts, enrollments: [...existing, ...requests] });
+  const reference = computeTariff({ grid, discounts, enrollments: [...existing, ...base] }).enrollments;
+  const referenceNet = (ref: string) => {
+    const r = reference.find((x) => x.reference === ref);
+    return r?.status === "ok" ? r.netPriceCents : null;
+  };
+  // A typed amount ranks the child only when it is a typed price, kept on save: one that differs
+  // from the price computed without it. Equal, it would rank on an amount the saved row never holds.
+  const typedPrices = validManualPrices.safeParse(entry.manualPrices ?? []);
+  const requests = base.map((r) => {
+    const typed = typedPrices.success ? typedPrices.data.find((m) => m.billingEntityId === r.reference) : undefined;
+    return typed && typed.priceCents !== referenceNet(r.reference) ? { ...r, manualPriceCents: typed.priceCents } : r;
+  });
+  const result = requests.some((r) => r.manualPriceCents !== null)
+    ? computeTariff({ grid, discounts, enrollments: [...existing, ...requests] })
+    : { enrollments: reference };
 
   const preview: Preview = {
     status: "ok",
@@ -447,6 +460,7 @@ async function pricedPreview(
       courseIds: chosenCourses.filter((c) => c.billingEntityId === r.reference).map((c) => c.courseId),
       // The engine returns one result per request, each new one included.
       price: result.enrollments.find((i) => i.reference === r.reference)!,
+      referenceNetCents: referenceNet(r.reference),
     })),
     // A trial or waitlist enrollment does not count as a sibling (Q3): the others' discounts stay as they are.
     existingImpacts: countsAsSibling(entry.status ?? "active")
@@ -622,7 +636,8 @@ export async function saveEnrollment(
     // Only a missing package is priced by hand; an enrollment without a course stays refused.
     if (n.price.status === "error" && (manual === null || n.price.error.code !== "missing_combination"))
       return named(n, n.price.error.message);
-    const computedNetCents = n.price.status === "ok" ? n.price.netPriceCents : null;
+    // Against the price computed without typed amounts, as the form compares (#445).
+    const computedNetCents = n.referenceNetCents;
     const refusal = manualPriceRefusal({ computedNetCents, manual }, who.role);
     if (refusal) return named(n, refusal);
     priced.push({ n, manual: keptManualPrice(computedNetCents, manual) });
@@ -699,7 +714,7 @@ export async function saveEnrollment(
         ...(manual
           ? {
               manualPriceCents: manual.priceCents,
-              computedNetPriceCents: r.status === "ok" ? r.netPriceCents : null,
+              computedNetPriceCents: n.referenceNetCents,
               reason: manual.reason,
             }
           : {}),

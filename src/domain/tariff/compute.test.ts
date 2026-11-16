@@ -314,6 +314,15 @@ describe("siblings ranking on the season price (owner, #445)", () => {
     expect(ok(yearly).discountCents).toBe(0);
   });
 
+  it("reads a quarterly enrollment with no quarter counted as one quarter, never as 0 €", () => {
+    const [quarterly, cheaper] = ribas(
+      enrollment({ course: [90], quarterCount: 0 }),
+      enrollment({ course: [60], quarterCount: 1 }),
+    ).enrollments;
+    expect(ok(quarterly).discountCents).toBe(0);
+    expect(ok(cheaper).discountCents).toBe(1100);
+  });
+
   it("a typed price ranks by the typed price: 60 € a quarter ranks below a 150 € sibling, who pays full price", () => {
     const [typed, sibling] = ribas(
       enrollment({ course: [45, 45], quarterCount: 3, manualPriceCents: 6000 }),

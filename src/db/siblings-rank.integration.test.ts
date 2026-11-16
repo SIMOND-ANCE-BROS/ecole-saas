@@ -36,6 +36,7 @@ beforeAll(async () => {
     ["quarter", "{45}", 8500],
     ["quarter", "{60}", 11000],
     ["quarter", "{90}", 15000],
+    ["quarter", "{45,60}", 16500],
     ["year", "{60}", 28000],
   ] as const) {
     await admin`INSERT INTO tariff (school_id, season_id, audience, period, combination, price_cents)
@@ -63,7 +64,7 @@ beforeAll(async () => {
       FROM billing_entity e WHERE e.school_id = ${s} AND e.is_default RETURNING id`;
   }
   // One family per case, two children each.
-  for (const family of ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9"]) {
+  for (const family of ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11"]) {
     [{ id: ids[family] }] =
       await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${s}, ${`Zz${family}`}, 'Zzparent') RETURNING id`;
     for (const child of ["a", "b", "c"]) {
@@ -262,5 +263,43 @@ describe("siblings ranking on the season price (owner, #445)", () => {
     const typed = await save("f9", typedEntry);
     expect(await saved(saved85)).toMatchObject({ discount_cents: 0, net_price_cents: 8500 });
     expect(await saved(typed)).toMatchObject({ discount_cents: 1100, net_price_cents: 8000 });
+  });
+
+  it("a typed amount below a sibling, apart from the price computed without it, is kept and ranks the child", async () => {
+    const sibling = await save("f10", entry(ids.f10b, ids.jazz90));
+    // 45 min + 1 h is 165 € a quarter; typed 148,50 €, below the sibling's 150 €.
+    const typedEntry = {
+      ...entry(ids.f10a, ids.jazz45),
+      courseIds: [ids.jazz45, ids.jazz60],
+      manualPrices: [{ billingEntityId: ids.entity, priceCents: 14850, reason: "Zz geste commercial" }],
+    };
+    const p = await preview("f10", typedEntry);
+    if (p.status !== "ok") throw new Error(p.message);
+    // Without the typed amount the child would be the most expensive, at full price.
+    expect(p.newEnrollments[0].referenceNetCents).toBe(16500);
+    expect(p.existingImpacts).toEqual([]);
+    const typed = await save("f10", typedEntry);
+    expect(await saved(sibling)).toMatchObject({ discount_cents: 0, net_price_cents: 15000 });
+    expect(await saved(typed)).toMatchObject({ net_price_cents: 14850 });
+    const [row] = await admin`SELECT manual_price_cents FROM enrollment WHERE id = ${typed}`;
+    expect(row.manual_price_cents).toBe(14850);
+  });
+
+  it("a typed amount equal to the price computed without it is no typed price: it never ranks the child", async () => {
+    const sibling = await save("f11", entry(ids.f11b, ids.jazz90));
+    // The same 165 € package typed at 165 €: the grid price, so the child ranks first as without it.
+    const typedEntry = {
+      ...entry(ids.f11a, ids.jazz45),
+      courseIds: [ids.jazz45, ids.jazz60],
+      manualPrices: [{ billingEntityId: ids.entity, priceCents: 16500, reason: "" }],
+    };
+    const p = await preview("f11", typedEntry);
+    if (p.status !== "ok") throw new Error(p.message);
+    expect(p.newEnrollments[0].price).toMatchObject({ grossPriceCents: 16500, discountCents: 0 });
+    expect(p.existingImpacts).toMatchObject([{ reference: sibling, recalculatedDiscount: 1500, applied: true }]);
+    const typed = await save("f11", typedEntry);
+    const [row] = await admin`SELECT manual_price_cents, discount_cents FROM enrollment WHERE id = ${typed}`;
+    expect(row).toMatchObject({ manual_price_cents: null, discount_cents: 0 });
+    expect(await saved(sibling)).toMatchObject({ discount_cents: 1500 });
   });
 });

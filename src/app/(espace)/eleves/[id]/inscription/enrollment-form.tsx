@@ -132,19 +132,26 @@ export function EnrollmentForm({
   const [key] = useState(() => crypto.randomUUID());
 
   // #445: a typed price ranks the child among siblings by its amount, so the preview is told the
-  // typed amounts, read from the last result's enrollments (their businesses do not move with
-  // the price). A string, so a new result with the same amounts does not ask for a preview again.
-  const typedAmounts = useMemo(() => {
-    const last = lastPreview?.result;
-    if (last?.status !== "ok") return "[]";
-    return JSON.stringify(
-      last.newEnrollments.flatMap((n) => {
-        const typed = typedPrices[typedKeyOf(n.billingEntityId, chosenAudience, period, studentIds, n.courseIds)];
-        const cents = typed ? readTypedPrice(null, typed).cents : null;
-        return cents !== null ? [{ billingEntityId: n.billingEntityId, priceCents: cents, reason: "" }] : [];
-      }),
-    );
-  }, [lastPreview, typedPrices, chosenAudience, period, studentIds]);
+  // typed amounts the server accepts, read from the last priced result's enrollments (their
+  // businesses do not move with the price; an invalid or failed result keeps them, so it never
+  // drops the amounts and asks again on its own). A string, so a new result with the same
+  // amounts does not ask for a preview again.
+  const [pricedEnrollments, setPricedEnrollments] = useState<
+    readonly { billingEntityId: string; courseIds: string[] }[]
+  >([]);
+  const typedAmounts = useMemo(
+    () =>
+      JSON.stringify(
+        pricedEnrollments.flatMap((n) => {
+          const typed = typedPrices[typedKeyOf(n.billingEntityId, chosenAudience, period, studentIds, n.courseIds)];
+          const read = typed ? readTypedPrice(null, typed) : null;
+          return read && read.cents !== null && read.problem === null
+            ? [{ billingEntityId: n.billingEntityId, priceCents: read.cents, reason: "" }]
+            : [];
+        }),
+      ),
+    [pricedEnrollments, typedPrices, chosenAudience, period, studentIds],
+  );
 
   const entry: FormInput = useMemo(
     () => ({
@@ -165,7 +172,10 @@ export function EnrollmentForm({
     if (entry.studentIds.length === 0 || entry.courseIds.length === 0) return;
     return deferredQuery(
       () => preview(entry),
-      (result) => setPreview({ entry, attempt: calculationAttempt, result, error: false }),
+      (result) => {
+        setPreview({ entry, attempt: calculationAttempt, result, error: false });
+        if (result.status === "ok") setPricedEnrollments(result.newEnrollments);
+      },
       () => setPreview({ entry, attempt: calculationAttempt, result: null, error: true }),
     );
   }, [entry, calculationAttempt]);
@@ -195,7 +205,8 @@ export function EnrollmentForm({
   const typedKey = (n: (typeof news)[number]) =>
     typedKeyOf(n.billingEntityId, chosenAudience, period, studentIds, n.courseIds);
   const prices = news.map((n) => {
-    const computedNetCents = n.price.status === "ok" ? n.price.netPriceCents : null;
+    // A typed price is one apart from the price computed without typed amounts (#445).
+    const computedNetCents = n.referenceNetCents;
     // No package in the grid for these courses: the price is typed directly.
     const offGrid = n.price.status === "error" && n.price.error.code === "missing_combination";
     const typed = typedPrices[typedKey(n)] ?? (offGrid ? { price: "", reason: "" } : null);
