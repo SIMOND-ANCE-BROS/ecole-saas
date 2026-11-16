@@ -714,6 +714,7 @@ export async function saveEnrollment(
         ...(manual
           ? {
               manualPriceCents: manual.priceCents,
+              // The price computed without typed amounts (#445), not the stored gross less discount.
               computedNetPriceCents: n.referenceNetCents,
               reason: manual.reason,
             }

@@ -143,6 +143,8 @@ export function EnrollmentForm({
     () =>
       JSON.stringify(
         pricedEnrollments.flatMap((n) => {
+          // An enrollment of an earlier selection whose courses are no longer all chosen sends nothing.
+          if (!n.courseIds.every((id) => courseIds.includes(id))) return [];
           const typed = typedPrices[typedKeyOf(n.billingEntityId, chosenAudience, period, studentIds, n.courseIds)];
           const read = typed ? readTypedPrice(null, typed) : null;
           return read && read.cents !== null && read.problem === null
@@ -150,7 +152,7 @@ export function EnrollmentForm({
             : [];
         }),
       ),
-    [pricedEnrollments, typedPrices, chosenAudience, period, studentIds],
+    [pricedEnrollments, typedPrices, chosenAudience, period, studentIds, courseIds],
   );
 
   const entry: FormInput = useMemo(
@@ -217,7 +219,9 @@ export function EnrollmentForm({
       computedNetCents,
       typed,
       read,
-      netPriceCents: read.differs ? read.cents : computedNetCents,
+      // What is saved: the typed price, else the engine's final price, which a price typed for the
+      // child's other business may move (#445 ranking on the sum); never the reference.
+      netPriceCents: read.differs ? read.cents : n.price.status === "ok" ? n.price.netPriceCents : null,
     };
   });
   const setTyped = (n: (typeof news)[number], typed: TypedPrice | null) =>
@@ -226,8 +230,8 @@ export function EnrollmentForm({
   const complete = prices.every((p) => p.read.valid);
   const canSave = priceable && !calculation && !sending;
   const manualPrices = prices.flatMap((p) =>
-    // Every typed amount, as the preview ranked on it (#445); one equal to the computed price is
-    // not kept by the server (`keptManualPrice`) and follows a recomputation.
+    // Every typed amount the server accepts; it ranks and keeps only one apart from the price
+    // computed without typed amounts (`referenceNetCents`, #445), the others follow a recomputation.
     p.typed && p.read.cents !== null
       ? [{ billingEntityId: p.n.billingEntityId, priceCents: p.read.cents, reason: p.typed.reason }]
       : [],
