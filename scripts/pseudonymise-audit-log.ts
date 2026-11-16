@@ -7,7 +7,7 @@
  * Administration script, like submissions:purge: the owner connection only lists the schools whose
  * audit log still holds personal values; each school is then handled by the application, under its
  * own RLS (`withSchool`, one transaction per batch: `pseudonymiseDue`), and the database function writes the change itself
- * (`pseudonymise_audit_entries`, migration 0068). Payments, invoices and their lines are never
+ * (`pseudonymise_audit_entries`, migration 0069). Payments, invoices and their lines are never
  * touched. The output holds counts and key names only, never a value.
  */
 import { withSchool } from "../src/db";

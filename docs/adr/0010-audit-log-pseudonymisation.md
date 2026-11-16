@@ -21,7 +21,7 @@ and its technical values (amounts, dates, ids, methods) are kept.
 ## Decision
 
 - **app_user can no longer UPDATE, DELETE or TRUNCATE `audit_log`**
-  (migration 0068). The privileges guard holds this as its one exception.
+  (migration 0069). The privileges guard holds this as its one exception.
 - **One way to change a row**: `pseudonymise_audit_entries(ids bigint[])`,
   SECURITY DEFINER, `search_path` empty, owned by the migration role. It reads
   the school from `app.school_id` (set by `withSchool`; it refuses to run
