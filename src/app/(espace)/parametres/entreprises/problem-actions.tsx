@@ -38,7 +38,11 @@ export function ProblemActions({
   // à nouveau » says « plus à reprendre » rather than « déjà envoyée avec d’autres valeurs ».
   // Renewed after any other answer, so an invoice rejected again and listed anew is really sent again.
   const [keys, setKeys] = useState(() => ({ send: crypto.randomUUID(), abandon: crypto.randomUUID() }));
-  const run = (action: keyof typeof keys, call: (key: string) => ReturnType<typeof sendAgain>) =>
+  // The button whose action runs, which shows the spinner.
+  const [running, setRunning] = useState<keyof typeof keys>("send");
+  const run = (action: keyof typeof keys, call: (key: string) => ReturnType<typeof sendAgain>) => {
+    // Outside the transition: shown at once, with `busy`.
+    setRunning(action);
     startTransition(async () => {
       const r = await settle(() => call(keys[action]));
       const unanswered = notSent(r) || (!r.ok && r.message === BUSY);
@@ -59,6 +63,7 @@ export function ProblemActions({
               : "retiree";
       router.replace(`/parametres/entreprises?reprise=${done}`, { scroll: false });
     });
+  };
   return (
     <div className="flex flex-col gap-1">
       <Modal opened={asking} onClose={() => setAsking(false)} title="Abandonner cette facture ?" centered>
@@ -94,7 +99,7 @@ export function ProblemActions({
           size="compact-sm"
           variant="light"
           aria-disabled={busy || undefined}
-          rightSection={busy ? <Loader size="xs" /> : null}
+          rightSection={busy && running === "send" ? <Loader size="xs" /> : null}
           aria-label={`Envoyer à nouveau ${invoice}`}
           onClick={() => !busy && run("send", (k) => sendAgain(invoiceId, k))}
         >
@@ -105,6 +110,7 @@ export function ProblemActions({
           variant="subtle"
           color="red"
           aria-disabled={busy || undefined}
+          rightSection={busy && running === "abandon" ? <Loader size="xs" color="currentColor" /> : null}
           aria-label={`Abandonner ${invoice}`}
           onClick={() => !busy && setAsking(true)}
         >

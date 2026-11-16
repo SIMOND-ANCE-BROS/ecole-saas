@@ -290,7 +290,11 @@ describe("a rejected invoice (#352)", () => {
     // The answer lost, the browser sends the same click again (#260): the first result, nothing drafted again.
     expect(await sendAgain(a.id, first)).toEqual({ ok: true, result: "redraft", drafted: 1 });
     expect((await live(ids.a)).map((i) => i.id)).toEqual([fresh.id]);
-    // The same key for another invoice: refused, never replayed.
+    // The same key for another action or another invoice: refused, never replayed.
+    expect(await abandon(a.id, first)).toEqual({
+      ok: false,
+      message: "Cette saisie a déjà été envoyée avec d’autres valeurs : rechargez la page.",
+    });
     expect(await sendAgain(fresh.id, first)).toEqual({
       ok: false,
       message: "Cette saisie a déjà été envoyée avec d’autres valeurs : rechargez la page.",
