@@ -24,14 +24,18 @@ export function prorate(cents: number, numerator: number, denominator: number): 
   return Math.floor((2 * cents * numerator + denominator) / (2 * denominator));
 }
 
-/** Splits an amount into n installments; the leftover cents go on the first one. */
-export function split(cents: number, n: number): number[] {
-  if (!Number.isInteger(cents) || !Number.isInteger(n) || n < 1) {
-    throw new TypeError("Montant entier et nombre d'échéances ≥ 1 attendus");
+/**
+ * Splits an amount into n installments: every one but the first is the share rounded down to a
+ * multiple of `unitCents` (1 by default: to the cent; 100: to the euro, #176), the first takes
+ * the rest, cents included. Always adds up to the amount. Integers only.
+ */
+export function split(cents: number, n: number, unitCents = 1): number[] {
+  if (!Number.isInteger(cents) || !Number.isInteger(n) || n < 1 || !Number.isInteger(unitCents) || unitCents < 1) {
+    throw new TypeError("Montant entier, nombre d'échéances ≥ 1 et arrondi ≥ 1 attendus");
   }
-  const base = Math.trunc(cents / n);
-  const remaining = cents - base * n;
-  return Array.from({ length: n }, (_, i) => (i === 0 ? base + remaining : base));
+  // Integer division of integers: no floating-point amount.
+  const base = Math.trunc(cents / (n * unitCents)) * unitCents;
+  return Array.from({ length: n }, (_, i) => (i === 0 ? cents - base * (n - 1) : base));
 }
 
 // BigInt constants: the compile target (ES2017) has no BigInt literal.

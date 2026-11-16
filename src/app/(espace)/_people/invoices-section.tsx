@@ -1,10 +1,12 @@
 import { Badge, Paper, Text, Title } from "@mantine/core";
 import { toolAvailable } from "@/connectors/invoicing/connector";
+import type { OfferedPlans } from "@/db/installment-plans";
 import type { PayerInvoice } from "@/db/payer-invoices";
 import { type Connection, invoiceProgress, isUnsentDraft, type ProgressKind } from "@/domain/invoicing/progress";
 import { TextLink } from "../_ui/text-link";
 import { frenchDate } from "@/lib/dates";
 import { formatEuros } from "@/lib/money";
+import { planLabel } from "@/domain/invoicing/plans";
 import { DraftInvoices } from "./draft-invoices";
 
 const COLORS: Record<ProgressKind, string> = {
@@ -83,7 +85,10 @@ function InvoiceCard({ i, showEntity, isDirector }: { i: PayerInvoice; showEntit
       <Text size="xs" c="dimmed" className="tabular-nums">
         {i.installments.length === 0
           ? "Aucune échéance."
-          : `Échéances : ${i.installments.map((d) => `${frenchDate(d.dueDate)} ${formatEuros(d.amountCents)}`).join(" · ")}`}
+          : `Échéances${i.installmentCount === null ? "" : ` (${planLabel(i.installmentCount)})`} : ${i.installments
+              // A date and its amount never split across two lines.
+              .map((d) => `${frenchDate(d.dueDate)}\u00a0${formatEuros(d.amountCents)}`)
+              .join(" · ")}`}
       </Text>
     </li>
   );
@@ -92,7 +97,8 @@ function InvoiceCard({ i, showEntity, isDirector }: { i: PayerInvoice; showEntit
 /**
  * A payer's invoices of the season (#352): one per business, where each stands on its way to
  * the business's invoicing tool, and « Préparer les factures » for the front desk and
- * management. Drafting again replaces the drafts not sent yet; an invoice sent or issued stays.
+ * management, one button per plan that fits (#176). Drafting again replaces the drafts not
+ * sent yet; an invoice sent or issued stays.
  */
 export function InvoicesSection({
   payerId,
@@ -102,6 +108,7 @@ export function InvoicesSection({
   canDraft,
   endedNote,
   isDirector,
+  plans,
 }: {
   payerId: string;
   season: { id: string; label: string };
@@ -112,16 +119,29 @@ export function InvoicesSection({
   endedNote?: string;
   /** Management: a link to « Factures à reprendre » on a rejected invoice. */
   isDirector: boolean;
+  /** The school's plans for this season (#176). */
+  plans: OfferedPlans | null;
 }) {
-  const unsent = invoices.some(isUnsentDraft);
+  const unsent = invoices.filter(isUnsentDraft);
+  const current = unsent.find((i) => i.installmentCount !== null)?.installmentCount ?? null;
+  const drafting = canDraft && !endedNote && plans !== null;
   return (
     <section aria-labelledby="factures" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <Title order={2} size="h5" id="factures" tabIndex={-1}>
           Factures {season.label}
         </Title>
-        {canDraft && !endedNote && <DraftInvoices payerId={payerId} seasonId={season.id} again={unsent} />}
+        {drafting && (
+          <DraftInvoices
+            payerId={payerId}
+            seasonId={season.id}
+            again={unsent.length > 0}
+            counts={plans?.counts ?? []}
+            current={current}
+          />
+        )}
       </div>
+      {drafting && plans && <PlanNote plans={plans} current={current} />}
       {canDraft && endedNote && (
         <Text size="sm" c="dimmed">
           {endedNote}
@@ -141,5 +161,31 @@ export function InvoicesSection({
         </Paper>
       )}
     </section>
+  );
+}
+
+/**
+ * When the plan's installments fall (#176): « Sauf forfaits au trimestre : échéances le 5 du
+ * mois, la dernière au plus tard le 30/06/2028. », the plan chosen, and the plans the season no
+ * longer fits.
+ */
+function PlanNote({ plans, current }: { plans: OfferedPlans; current: number | null }) {
+  const chosen = current === null ? "" : ` Choix actuel : ${planLabel(current)}.`;
+  if (plans.noneLeft)
+    return (
+      <Text size="xs" c="dimmed">
+        {`Plus aucune échéance possible dans la saison : sauf forfaits au trimestre, la facture est due en une fois, à la date du jour.${chosen}`}
+      </Text>
+    );
+  const tooLong = plans.tooLong.map(planLabel);
+  const day = plans.dueDay === 1 ? "1er" : plans.dueDay;
+  return (
+    <Text size="xs" c="dimmed">
+      {`Sauf forfaits au trimestre (payés à chaque trimestre) : échéances le ${day} du mois, la dernière au plus tard le ${frenchDate(plans.seasonEnd)}.${chosen}`}
+      {tooLong.length > 0 &&
+        ` Le paiement ${tooLong.join(" ou ")} n’est plus possible : la dernière échéance tomberait après la fin de la saison.`}
+      {plans.counts.length === 0 &&
+        " Aucun plan proposé ne tient dans la saison : la direction peut proposer « en une fois » dans Paramètres › Paiement en plusieurs fois."}
+    </Text>
   );
 }

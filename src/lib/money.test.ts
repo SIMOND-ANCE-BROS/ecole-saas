@@ -45,6 +45,16 @@ describe("split", () => {
     expect(installments).toEqual([33334, 33333, 33333]);
     expect(installments.reduce((a, b) => a + b, 0)).toBe(100000);
   });
+
+  it("rounds to a unit, the rest on the first one", () => {
+    expect(split(41500, 3, 100)).toEqual([13900, 13800, 13800]);
+    expect(split(37350, 3, 100)).toEqual([12550, 12400, 12400]);
+    expect(split(250, 3, 100)).toEqual([250, 0, 0]);
+  });
+
+  it("refuses a unit below one cent", () => {
+    expect(() => split(100, 2, 0)).toThrow(TypeError);
+  });
 });
 
 describe("formatEuros", () => {

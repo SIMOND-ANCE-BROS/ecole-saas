@@ -2,6 +2,7 @@ import { allocate } from "../../lib/money";
 import { NO_VAT_CHARGED, vatBreakdown, type VatRegime, type VatTreatment } from "../billing/vat";
 import { quarterlyDues, type SeasonQuarter } from "../enrollment/quarters";
 import { DUE_STATUSES, type EnrollmentStatus } from "../payments/balance";
+import { planSchedule, type InstallmentPlanSetting, type PlanWindow } from "./plans";
 import { combinationLabel } from "../tariff/compute";
 import type { Audience, Period, TariffRow } from "../tariff/types";
 
@@ -21,10 +22,10 @@ import type { Audience, Period, TariffRow } from "../tariff/types";
  * - Q3 (what a dropped or trial enrollment owes, #99): as the balance counts it,
  *   `DUE_STATUSES` (a drop-out owes all it covers, a trial or waitlist nothing yet).
  *
- * Not decided here: when what is not quarterly (a yearly or drop-in package, a lesson pack) is
- * due. That is the school's installment plans, an open question with no default yet (#176 Q1):
- * such amounts get no installment on the draft (`installmentsOf`), and a draft must not be
- * issued before #176 is answered, since an issued invoice's installments are frozen.
+ * What is not quarterly (a yearly or drop-in package, a lesson pack) is due by the plan the
+ * family chose among the school's (#176, `planSchedule`): the draft records its count
+ * (`installmentCount`). With no plan chosen yet, that part gets no installment and the draft
+ * is held (`isSendable`): an issued invoice's installments are frozen.
  */
 
 /** Label of the negative line taking a discount off a package, one per VAT treatment (#289). */
@@ -185,6 +186,18 @@ export type DraftLine = {
 
 export type DraftInstallment = { rank: number; dueOn: string; amountCents: number };
 
+/**
+ * The installment plans of a drafting (#176): the school's setting and the season's window,
+ * the count chosen on the record (`choice`, for every business of the payer), else the
+ * count of the payer's previous drafts of the season, its business's first (`previous`).
+ */
+export type DraftPlans = {
+  setting: InstallmentPlanSetting;
+  window: PlanWindow;
+  choice: number | null;
+  previous: ReadonlyMap<string, number>;
+};
+
 /** One invoice to be issued by a business's tool: no number, the tool gives it. */
 export type InvoiceDraft = {
   billingEntityId: string;
@@ -193,6 +206,8 @@ export type InvoiceDraft = {
   totalExclTaxCents: number;
   totalVatCents: number;
   installments: DraftInstallment[];
+  /** The plan the not-quarterly part is due by (#176); null: none chosen, the draft is held. */
+  installmentCount: number | null;
 };
 
 export type DraftResult = { ok: true; drafts: InvoiceDraft[] } | { ok: false; message: string };
@@ -243,19 +258,24 @@ function enrollmentLines(e: BillableEnrollment): RawLine[] {
 }
 
 /**
- * Q2 default (#291): an invoice's installments, one per quarter: each quarter of a quarterly
- * enrollment is due on its own cashing day (`quarterlyDues`), the quarters of several
- * enrollments due the same day making one installment. Ranks in date order; a day owing
- * nothing has none. A yearly or drop-in package and a lesson pack get none until the school's
- * installment plans are decided (#176 Q1, no default): the installments then add up to the
- * quarterly part of the invoice only.
+ * Q2 default (#291): each quarter of a quarterly enrollment is due on its own cashing day
+ * (`quarterlyDues`), the amounts of a day added up.
  */
-function installmentsOf(enrollments: readonly BillableEnrollment[]): DraftInstallment[] {
+function quarterlyByDay(enrollments: readonly BillableEnrollment[]): Map<string, number> {
   const byDay = new Map<string, number>();
   for (const e of enrollments)
     if (e.period === "quarter")
       for (const d of quarterlyDues(e.quarters, netOf(e), e.enrolledOn))
         byDay.set(d.dueOn, (byDay.get(d.dueOn) ?? 0) + d.amountCents);
+  return byDay;
+}
+
+/**
+ * An invoice's installments: its quarters (`quarterlyByDay`) and the plan's installments of the
+ * rest (#176), the amounts due the same day making one installment. Ranks in date order; a
+ * day owing nothing has none.
+ */
+function ranked(byDay: ReadonlyMap<string, number>): DraftInstallment[] {
   return [...byDay]
     .filter(([, cents]) => cents !== 0)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -268,14 +288,19 @@ function installmentsOf(enrollments: readonly BillableEnrollment[]): DraftInstal
  * each enrollment's package and « Remise » lines per VAT treatment, then each pack; VAT taken
  * out of the VAT-inclusive prices per treatment over the whole invoice (`vatBreakdown`), the
  * treatment's category, rate and mention copied onto each line. A business with nothing to bill
- * gets no draft. Refused, in French, when a line carries VAT for a business that charges none,
- * or when an enrollment has no course or a negative price.
+ * gets no draft. What is not quarterly is due by the chosen plan (`plans`, #176): a plan the
+ * record chose that does not fit is refused; one carried over from a previous draft that no
+ * longer fits is dropped, the draft held until a plan is chosen. Refused, in French, when a
+ * line carries VAT for a business that charges none, or when an enrollment has no course or a
+ * negative price.
  */
 export function draftInvoices(input: {
   enrollments: readonly BillableEnrollment[];
   packs: readonly BillablePack[];
   entities: readonly DraftEntity[];
   treatments: readonly VatTreatment[];
+  /** No plans: the not-quarterly part gets no installment (held). */
+  plans?: DraftPlans;
 }): DraftResult {
   const treatments = new Map(input.treatments.map((t) => [t.id, t]));
   const known = new Set(input.entities.map((e) => e.id));
@@ -286,6 +311,14 @@ export function draftInvoices(input: {
     return { ok: false, message: "Une inscription sans cours ne peut pas être facturée : ajoutez-lui ses cours." };
   if (due.some((e) => netOf(e) < 0))
     return { ok: false, message: "Une inscription a une remise plus grande que son prix : corrigez son prix." };
+  // A count chosen but not offered, or not fitting the season, is refused once for every business.
+  const plans = input.plans;
+  if (plans && plans.choice !== null) {
+    const offered = planSchedule({ amountCents: 0, count: plans.choice, setting: plans.setting, window: plans.window });
+    if (!offered.ok) return offered;
+  }
+  // Several businesses billing: a refusal of one's split names it.
+  const billing = new Set([...due, ...input.packs].map((x) => x.billingEntityId));
   const drafts: InvoiceDraft[] = [];
   for (const entity of input.entities) {
     const enrollments = due.filter((e) => e.billingEntityId === entity.id);
@@ -323,13 +356,34 @@ export function draftInvoices(input: {
       };
     });
     const sum = (k: "inclTaxCents" | "exclTaxCents" | "vatCents") => vat.byTreatment.reduce((s, g) => s + g[k], 0);
+    const byDay = quarterlyByDay(enrollments);
+    const rest =
+      enrollments.filter((e) => e.period !== "quarter").reduce((s, e) => s + netOf(e), 0) +
+      packs.reduce((s, p) => s + p.priceCents, 0);
+    let installmentCount =
+      plans?.choice ?? plans?.previous.get(entity.id) ?? (plans ? [...plans.previous.values()][0] : null) ?? null;
+    // Nothing outside the quarters: no plan applies, none is recorded.
+    if (rest === 0) installmentCount = null;
+    if (plans && installmentCount !== null) {
+      const plan = planSchedule({
+        amountCents: rest,
+        count: installmentCount,
+        setting: plans.setting,
+        window: plans.window,
+      });
+      if (plan.ok) for (const i of plan.installments) byDay.set(i.dueOn, (byDay.get(i.dueOn) ?? 0) + i.amountCents);
+      else if (plans.choice !== null)
+        return { ok: false, message: billing.size > 1 ? `${entity.name} : ${plan.message}` : plan.message };
+      else installmentCount = null;
+    }
     drafts.push({
       billingEntityId: entity.id,
       lines,
       totalInclTaxCents: sum("inclTaxCents"),
       totalExclTaxCents: sum("exclTaxCents"),
       totalVatCents: sum("vatCents"),
-      installments: installmentsOf(enrollments),
+      installments: ranked(byDay),
+      installmentCount: plans ? installmentCount : null,
     });
   }
   return { ok: true, drafts };

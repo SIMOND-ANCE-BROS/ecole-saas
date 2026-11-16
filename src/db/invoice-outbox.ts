@@ -58,7 +58,7 @@ export type Claimed = {
 
 /**
  * The invoice aliased `i` may go to the tool: already a draft there, or its installments add up
- * to its total. Mirrors `isSendable` (src/domain/invoicing/outbox.ts, #176 Q1) in SQL, so the
+ * to its total. Mirrors `isSendable` (src/domain/invoicing/outbox.ts, #176) in SQL, so the
  * hold is checked in the very statement that claims, whatever the size of the held backlog.
  */
 const SENDABLE = sql.raw(`(i.status = 'tool_draft' OR (

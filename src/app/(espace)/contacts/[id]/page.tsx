@@ -8,6 +8,7 @@ import { paymentsOf, balanceOf } from "@/db/payments";
 import { packsOf } from "@/db/lesson-packs";
 import { signupsOf } from "@/db/workshops";
 import { severalEntities } from "@/db/billing-entities";
+import { offeredPlans } from "@/db/installment-plans";
 import { payerInvoices, paysSomeSeason } from "@/db/payer-invoices";
 import { ENDED_SEASON, mayDraft, seasonDraftable } from "@/domain/invoicing/progress";
 import { InvoicesSection } from "../../_people/invoices-section";
@@ -68,6 +69,8 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
       workshops: await signupsOf(tx, contact.id),
       invoices: season ? await payerInvoices(tx, contact.id, season.id) : [],
       severalEntities: await severalEntities(tx),
+      // What « Préparer les factures » offers (#176).
+      plans: season ? await offeredPlans(tx, season, today) : null,
       // The season's internal rules, signed by this payer (#296).
       rules: season ? ((await payersRules(tx, [contact.id], season.id))[0] ?? null) : null,
     };
@@ -234,6 +237,7 @@ export default async function PageContact({ params, searchParams }: PageProps<"/
                 seasonDraftable(season, parsed.seasons?.current.id, today) ? undefined : ENDED_SEASON(season.label)
               }
               isDirector={role === "director"}
+              plans={parsed.plans}
             />
           )}
           <PaymentsSection

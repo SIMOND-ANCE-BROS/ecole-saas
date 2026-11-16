@@ -7,36 +7,57 @@ export type ScheduleRequest = {
   firstDate: string;
   /** Gap between two installments, in months (1 by default). */
   monthInterval?: number;
+  /**
+   * Every installment but the first is a whole multiple of this unit (#176 Q2: 100, rounded to
+   * the euro); the remainder, cents included, goes on the first. 1 by default: to the cent.
+   */
+  roundingUnitCents?: number;
+  /** Latest date the last installment may fall on, `YYYY-MM-DD` (#176 Q3: the season's end). */
+  lastDate?: string;
 };
 
 export type Installment = { rank: number; plannedDate: string; amountCents: number };
 
 /**
- * Splits an amount into installments. Count, first date and interval are
- * parameters (specific to each school); the leftover cents go on the first
- * installment (`split`). Each date is computed from the first one, brought
- * back to the last day of the month if needed.
+ * Splits an amount into installments. Count, first date, interval, rounding unit and last date
+ * are parameters (school settings, #176): every installment but the first is the amount's
+ * share rounded down to `roundingUnitCents`, the first takes the rest, so the installments
+ * add up to the amount to the cent. Each date is computed from the first one, brought back to
+ * the last day of the month if needed. A RangeError when the last installment would fall
+ * after `lastDate`, or when the rounding leaves an installment of 0 (amount too small): the
+ * callers offer only the plans that fit (`planSchedule`).
  */
 export function computeSchedule(request: ScheduleRequest): Installment[] {
-  const {
-    amountCents: amountCents,
-    installmentCount: installmentCount,
-    firstDate: firstDate,
-    monthInterval: monthInterval = 1,
-  } = request;
+  const { amountCents, installmentCount, firstDate, monthInterval = 1, roundingUnitCents = 1, lastDate } = request;
   if (!Number.isInteger(amountCents) || amountCents <= 0) {
     throw new TypeError(`Montant invalide : ${amountCents}`);
+  }
+  if (!Number.isInteger(installmentCount) || installmentCount < 1) {
+    throw new TypeError(`Nombre d’échéances invalide : ${installmentCount}`);
   }
   if (!Number.isInteger(monthInterval) || monthInterval < 1) {
     throw new TypeError(`Intervalle invalide : ${monthInterval}`);
   }
+  if (!Number.isInteger(roundingUnitCents) || roundingUnitCents < 1) {
+    throw new TypeError(`Arrondi invalide : ${roundingUnitCents}`);
+  }
   readDate(firstDate);
+  if (lastDate !== undefined) readDate(lastDate);
 
-  return split(amountCents, installmentCount).map((amount, i) => ({
+  const amounts = split(amountCents, installmentCount, roundingUnitCents);
+  if (amounts.some((a) => a === 0)) {
+    throw new RangeError(`Montant trop petit pour ${installmentCount} échéances : ${amountCents}`);
+  }
+  const installments = amounts.map((amount, i) => ({
     rank: i + 1,
     plannedDate: addMonths(firstDate, i * monthInterval),
     amountCents: amount,
   }));
+  const last = installments[installments.length - 1].plannedDate;
+  if (lastDate !== undefined && last > lastDate) {
+    throw new RangeError(`Dernière échéance le ${last}, après le ${lastDate}`);
+  }
+  return installments;
 }
 
 /** `YYYY-MM-DD` + n months, brought back to the last day of the month (31 January + 1 → 28 or 29 February). */
