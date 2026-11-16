@@ -176,7 +176,7 @@ const runAfter = async () => {
   for (const fn of pending.splice(0)) await fn();
 };
 const invoices = () =>
-  admin`SELECT id, billing_entity_id, season_id, status, number, attempts, tool_ref, send_error_kind,
+  admin`SELECT id, billing_entity_id, season_id, status, number, attempts, cycle_start_attempts, tool_ref, send_error_kind,
       next_attempt_at <= now() AS due
     FROM invoice WHERE school_id = ${ids.school} ORDER BY created_at, id`;
 /** The business's invoices of the season still standing. */
@@ -324,10 +324,27 @@ describe("a rejected invoice (#352)", () => {
       VALUES (${ids.school}, ${ids.a}, ${id}, 'Zz cours', 6000, 6000, 6000, 0, ${ids.exempt}, 'exempt', 'Zz mention')`;
     await admin`INSERT INTO installment (school_id, billing_entity_id, invoice_id, rank, due_date, amount_cents)
       VALUES (${ids.school}, ${ids.a}, ${id}, 1, '2027-10-01', 6000)`;
-    expect(await sendAgain(id, key())).toEqual({ ok: true, result: "retry_in_tool" });
+    const click = key();
+    expect(await sendAgain(id, click)).toEqual({ ok: true, result: "retry_in_tool" });
     const row = async () => (await invoices()).find((i) => i.id === id);
-    expect(await row()).toMatchObject({ status: "tool_draft", attempts: 10, send_error_kind: null, due: true });
+    // A full retry cycle from its 10 attempts (#440), the earlier ones in the audit log.
+    expect(await row()).toMatchObject({
+      status: "tool_draft",
+      attempts: 10,
+      cycle_start_attempts: 10,
+      send_error_kind: null,
+      due: true,
+    });
     expect(pending).toHaveLength(1);
+    // The same click again (answer lost), even once the invoice was rejected again meanwhile: its
+    // first result, the cycle never restarted by a replay.
+    await admin`UPDATE invoice SET status = 'rejected', attempts = 20 WHERE id = ${id}`;
+    expect(await sendAgain(id, click)).toEqual({ ok: true, result: "retry_in_tool" });
+    expect(await row()).toMatchObject({ status: "rejected", attempts: 20, cycle_start_attempts: 10 });
+    // Test set-up only, never a real lowering of attempts: the state as the click left it, for what follows.
+    await admin`UPDATE invoice SET status = 'tool_draft', attempts = 10 WHERE id = ${id}`;
+    const sentAgain = await admin`SELECT after FROM audit_log WHERE row_id = ${id} AND after->>'reason' = 'sent_again'`;
+    expect(sentAgain.map((a) => a.after)).toEqual([{ status: "tool_draft", reason: "sent_again", attempts: 10 }]);
     // Sent: the tool is asked where it stands first (its draft is gone: created again), issued once.
     fakeStoreOf(ids.a).calls.length = 0;
     await runAfter();

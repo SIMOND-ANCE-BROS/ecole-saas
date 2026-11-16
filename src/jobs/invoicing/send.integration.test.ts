@@ -5,6 +5,7 @@ import { type FakeFault, fakeStoreOf } from "../../connectors/invoicing/fake";
 import { withSchool } from "../../db";
 import { defaultEntityFor, treatmentFor } from "../../db/billing-entity.integration-helpers";
 import { claimDue, dueWork, recordFailure, sendingProblemCount, sendingProblems } from "../../db/invoice-outbox";
+import { sendRejectedAgain } from "../../db/payer-invoices";
 import { MAX_ATTEMPTS } from "../../domain/invoicing/outbox";
 import { encrypt } from "../../lib/encryption";
 import { type RunOptions, sendEntityInvoices, sweep } from "./send";
@@ -113,7 +114,7 @@ async function newInvoice(
 
 const row = async (id: string) =>
   (
-    await admin`SELECT status, tool, tool_ref, number, issued_on::text AS issued_on, attempts, claimed_until,
+    await admin`SELECT status, tool, tool_ref, number, issued_on::text AS issued_on, attempts, cycle_start_attempts, claimed_until,
       send_error_kind, send_error_code, tool_total_incl_tax_cents AS tool_total, round(extract(epoch FROM next_attempt_at - now()) / 60) AS wait_minutes
       FROM invoice WHERE id = ${id}`
   )[0];
@@ -438,5 +439,84 @@ describe("sending through the fake tool", () => {
     const [{ n }] = await admin`SELECT count(*)::int AS n FROM invoice
       WHERE billing_entity_id = ${ids.a} AND status = 'to_send' AND attempts = 0`;
     expect(n).toBe(30);
+  });
+});
+
+describe("« Envoyer à nouveau » after a rejection (#440)", () => {
+  /** One attempt of a draft the tool holds, failing: its status read and its quick retry both fail. */
+  const failedAttempt = async (id: string) => {
+    await admin`UPDATE invoice SET next_attempt_at = now() WHERE id = ${id}`;
+    faults(ids.a, { kind: "server" }, { kind: "server" });
+    await sendEntityInvoices(ids.school, ids.a, RUN);
+    return row(id);
+  };
+  const sendAgain = (id: string) => withSchool(ids.school, (tx) => sendRejectedAgain(tx, "zz-nobody", id));
+  const audits = async (id: string) =>
+    (await admin`SELECT after FROM audit_log WHERE row_id = ${id} ORDER BY id`).map((a) => a.after);
+  /** A draft the tool holds (created there, its issuing failed): its first attempt spent. */
+  const heldDraft = async () => {
+    const id = await newInvoice(ids.a);
+    faults(ids.a, noFault, noFault, { kind: "server" }, { kind: "server" });
+    expect(await sendEntityInvoices(ids.school, ids.a, RUN)).toMatchObject({ retried: 1 });
+    expect(await row(id)).toMatchObject({ status: "tool_draft", attempts: 1, wait_minutes: "1" });
+    return id;
+  };
+
+  it("gives a failing tool 10 new spaced attempts, the earlier ones kept and traced", async () => {
+    const id = await heldDraft();
+    const waits: string[] = [];
+    for (let n = 2; n < MAX_ATTEMPTS; n++) waits.push((await failedAttempt(id)).wait_minutes);
+    expect(waits).toEqual(["5", "30", "120", "360", "720", "720", "720", "720"]);
+    expect(await failedAttempt(id)).toMatchObject({ status: "rejected", attempts: MAX_ATTEMPTS });
+
+    expect(await sendAgain(id)).toEqual({ ok: true, mode: "retry_in_tool" });
+    // Its attempts never decrease: the new cycle starts from the ones already made.
+    expect(await row(id)).toMatchObject({
+      status: "tool_draft",
+      attempts: MAX_ATTEMPTS,
+      cycle_start_attempts: MAX_ATTEMPTS,
+      send_error_kind: null,
+      wait_minutes: "0",
+    });
+
+    // A full cycle again: the usual backoff from 1 min, rejected at its 10th attempt only.
+    const again: string[] = [];
+    for (let n = 1; n < MAX_ATTEMPTS; n++) {
+      const r = await failedAttempt(id);
+      expect(r).toMatchObject({ status: "tool_draft", attempts: MAX_ATTEMPTS + n });
+      again.push(r.wait_minutes);
+    }
+    expect(again).toEqual(["1", "5", "30", "120", "360", "720", "720", "720", "720"]);
+    expect(await failedAttempt(id)).toMatchObject({ status: "rejected", attempts: 2 * MAX_ATTEMPTS });
+
+    // The audit log tells both cycles apart: rejected after 10, sent again, rejected after 20.
+    expect(await audits(id)).toEqual([
+      expect.objectContaining({ status: "rejected", attempts: MAX_ATTEMPTS }),
+      expect.objectContaining({ status: "tool_draft", reason: "sent_again", attempts: MAX_ATTEMPTS }),
+      expect.objectContaining({ status: "rejected", attempts: 2 * MAX_ATTEMPTS }),
+    ]);
+    // Sent again once more: another full cycle, from 20.
+    expect(await sendAgain(id)).toEqual({ ok: true, mode: "retry_in_tool" });
+    expect(await failedAttempt(id)).toMatchObject({ status: "tool_draft", attempts: 21, wait_minutes: "1" });
+  });
+
+  it("records the issue the tool made before the outage hid it, never issuing twice", async () => {
+    const id = await newInvoice(ids.a);
+    // Created and issued in the tool, its answer lost (the call and its quick retry).
+    faults(ids.a, noFault, noFault, { kind: "lost_response" }, { kind: "lost_response" });
+    expect(await sendEntityInvoices(ids.school, ids.a, RUN)).toMatchObject({ retried: 1 });
+    await admin`UPDATE invoice SET attempts = ${MAX_ATTEMPTS - 1} WHERE id = ${id}`;
+    expect(await failedAttempt(id)).toMatchObject({ status: "rejected", attempts: MAX_ATTEMPTS });
+
+    expect(await sendAgain(id)).toEqual({ ok: true, mode: "retry_in_tool" });
+    const store = fakeStoreOf(ids.a);
+    store.calls.length = 0;
+    expect(await sendEntityInvoices(ids.school, ids.a, RUN)).toMatchObject({ issued: 1 });
+    // Its status read first: issued there already, recorded as such, nothing created nor finalized.
+    expect(store.calls).toEqual(["readStatus"]);
+    expect(store.documents.size).toBe(1);
+    const r = await row(id);
+    expect(r).toMatchObject({ status: "issued", attempts: MAX_ATTEMPTS + 1 });
+    expect(r.number).toMatch(/^TEST-F-/);
   });
 });

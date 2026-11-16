@@ -1,5 +1,5 @@
 {
-  "id": "e19c5a97-a322-4ed3-a1f4-890745ea729d",
+  "id": "b0a7f84f-ceec-45b7-b80e-8da80094681c",
   "prevId": "cbc178c7-bef0-4b75-8e7d-27ea49cd8a0a",
   "version": "7",
   "dialect": "postgresql",
@@ -1696,13 +1696,6 @@
           "notNull": true,
           "default": 1
         },
-        "from_rank": {
-          "name": "from_rank",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
         "audiences": {
           "name": "audiences",
           "type": "tariff_audience[]",
@@ -1766,10 +1759,6 @@
         "discount_value": {
           "name": "discount_value",
           "value": "\"discount\".\"rate_bps\" IS NOT NULL OR \"discount\".\"amount_cents\" IS NOT NULL"
-        },
-        "discount_from_rank": {
-          "name": "discount_from_rank",
-          "value": "\"discount\".\"from_rank\" BETWEEN 1 AND 10"
         }
       },
       "isRLSEnabled": false
@@ -3271,6 +3260,13 @@
           "notNull": true,
           "default": 0
         },
+        "cycle_start_attempts": {
+          "name": "cycle_start_attempts",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "claimed_until": {
           "name": "claimed_until",
           "type": "timestamp with time zone",
@@ -3522,6 +3518,10 @@
         "invoice_attempts": {
           "name": "invoice_attempts",
           "value": "\"invoice\".\"attempts\" >= 0"
+        },
+        "invoice_cycle_start_attempts": {
+          "name": "invoice_cycle_start_attempts",
+          "value": "\"invoice\".\"cycle_start_attempts\" BETWEEN 0 AND \"invoice\".\"attempts\""
         },
         "invoice_installment_count": {
           "name": "invoice_installment_count",
