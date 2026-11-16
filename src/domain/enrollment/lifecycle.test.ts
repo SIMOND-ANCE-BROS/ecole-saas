@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  attendedDropRefusal,
   canChange,
   confirmationPrice,
   countsAsSibling,
@@ -88,9 +89,10 @@ describe("cancelRefusal", () => {
   });
 });
 
-describe("siblings (Q3 default)", () => {
-  it("counts only active enrollments as siblings", () => {
+describe("siblings (#284 Q3, owner decision #99 Q4 2026-11-15)", () => {
+  it("counts only active enrollments as siblings: never trial, waitlist, dropped nor ended", () => {
     expect([...SIBLING_STATUSES]).toEqual(["active"]);
+    expect(STATUSES.filter(countsAsSibling)).toEqual(["active"]);
   });
 });
 
@@ -142,6 +144,24 @@ describe("drop-out dates", () => {
       "La date de l’abandon ne peut pas précéder l’inscription ni le début de la saison.",
     );
     expect(dropDateRefusal("", bounds)).toBe("Indiquez la date de l’abandon.");
+  });
+});
+
+describe("attendedDropRefusal (#410: never before the last lesson with attendance taken)", () => {
+  const last = { date: "2027-01-20", course: "Jazz 18:00" };
+  it("refuses a date before that lesson, naming its date and course", () => {
+    expect(attendedDropRefusal("2027-01-10", last)).toBe(
+      "Une présence est déjà relevée à la séance du 20/01/2027 (Jazz 18:00) : l’abandon ne peut pas être daté avant ce jour.",
+    );
+  });
+
+  it("accepts that lesson's day (the student stays on its sheet) or later", () => {
+    expect(attendedDropRefusal("2027-01-20", last)).toBeNull();
+    expect(attendedDropRefusal("2027-02-01", last)).toBeNull();
+  });
+
+  it("accepts any date when no attendance was taken", () => {
+    expect(attendedDropRefusal("2026-09-15", null)).toBeNull();
   });
 });
 

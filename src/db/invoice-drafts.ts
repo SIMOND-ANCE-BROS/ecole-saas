@@ -251,6 +251,7 @@ async function billableEnrollments(tx: Tx, payerId: string, seasonId: string): P
       id: enrollment.id,
       billingEntityId: enrollment.billingEntityId,
       status: enrollment.status,
+      droppedOn: enrollment.droppedOn,
       audience: enrollment.audience,
       period: enrollment.period,
       enrolledOn: enrollment.enrolledOn,
@@ -314,6 +315,7 @@ async function billableEnrollments(tx: Tx, payerId: string, seasonId: string): P
       id: e.id,
       billingEntityId: e.billingEntityId,
       status: e.status,
+      droppedOn: e.droppedOn,
       period: e.period,
       label: enrollmentLabel(
         [...byCourse.values()].map((c) => c.durationMinutes),

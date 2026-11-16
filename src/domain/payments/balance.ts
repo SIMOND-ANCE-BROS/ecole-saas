@@ -11,14 +11,16 @@ export type EnrollmentStatus = "trial" | "waitlist" | "active" | "dropped" | "en
 
 /**
  * Statuses counted in the amount due. A drop-out stays due: the school's rules say a paid
- * quarter or year not attended is neither carried over nor refunded (#284, #99); management
- * grants a credit case by case. Trial and waitlist are not due yet, shown apart.
+ * quarter or year not attended is neither carried over nor refunded (#284, #99); a quarterly
+ * one owes the quarters started by its drop-out day only (#99 Q2, `owedQuarters`); management
+ * grants a credit case by case (#99 Q3). Trial and waitlist are not due, shown apart: a trial
+ * lesson is free (#99 Q1, owner decision 2026-11-15).
  */
 export const DUE_STATUSES: EnrollmentStatus[] = ["active", "ended", "dropped"];
 
 /**
  * An enrollment as the balance counts it: its net price, owed once a season, or once per
- * covered quarter for a quarterly package (#291, `seasonDueCents`).
+ * owed quarter for a quarterly package (#291, #99, `seasonDueCents`, `quarterCountSql`).
  */
 export type EnrollmentDue = { status: EnrollmentStatus; period: Period; netPriceCents: number; quarterCount: number };
 export type BalancePayment = { amountCents: number; plannedPayment: string | null };

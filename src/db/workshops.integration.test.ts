@@ -9,7 +9,7 @@ import { deleteCourse, entityLock, moveCourse, readCourse, updateCourse, validCo
 import { deleteTreatment } from "./vat-treatments";
 import { enrolledInCourse, scheduleCourse } from "./schedule";
 import { readAttendance, saveAttendance, weekLessons } from "./lessons";
-import { cancelEnrollment } from "./enrollments";
+import { cancelEnrollment, dropEnrollment } from "./enrollments";
 import { cancelRefusal } from "../domain/enrollment/lifecycle";
 import { statementData } from "./statements";
 import { instructorStatement } from "../domain/payroll/statement";
@@ -512,6 +512,28 @@ describe("a workshop's participants (#398)", () => {
       await markChildAbsent(lessonId);
       expect(await cancelEnrolled(enrollmentId)).toEqual({ ok: true, id: enrollmentId });
       expect(await cancel(r.id)).toEqual({ ok: false, message: ATTENDANCE_TAKEN });
+      expect(await orphans(lessonId)).toEqual([]);
+    });
+
+    it("refuses a drop-out dated before the lesson once the sign-up was cancelled, the enrollment alone carrying the attendance (#410)", async () => {
+      const r = await signUp({ participantIds: [child] });
+      if (!r.ok) throw new Error(r.message);
+      const enrollmentId = await enrollChild("active");
+      const lessonId = await workshopLesson();
+      await markChildAbsent(lessonId);
+      // The enrollment keeps the child on the sheet: the sign-up may go.
+      expect(await cancel(r.id)).toEqual({ ok: true });
+      expect(await withSchool(school, (tx) => dropEnrollment(tx, frontDesk, enrollmentId, "2027-01-20"))).toEqual({
+        ok: false,
+        message: expect.stringMatching(
+          /^Une présence est déjà relevée à la séance du 13\/02\/2027 \(Zz Danse de mariage \d{2}:\d{2}\) : /,
+        ),
+      });
+      expect(await orphans(lessonId)).toEqual([]);
+      expect(await withSchool(school, (tx) => dropEnrollment(tx, frontDesk, enrollmentId, "2027-02-13"))).toEqual({
+        ok: true,
+        id: enrollmentId,
+      });
       expect(await orphans(lessonId)).toEqual([]);
     });
 

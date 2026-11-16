@@ -5,6 +5,8 @@ import { z } from "zod";
 import { discountImpacts } from "../domain/enrollment/impacts";
 import { alreadyTaken, duplicateRefusal, TAKEN_STATUSES, type TakenCourse } from "../domain/enrollment/duplicates";
 import {
+  attendedDropRefusal,
+  type AttendedLesson,
   cancelRefusal,
   confirmationPrice,
   countsAsSibling,
@@ -27,8 +29,10 @@ import {
 import { STATUS_PRIORITY, type EnrollmentStatus } from "../domain/enrollment/statuses";
 import {
   coveredQuarters,
+  owedQuarters,
   quarterEnrollmentRefusal,
   seasonDueCents,
+  type QuarterDates,
   type SeasonQuarter,
 } from "../domain/enrollment/quarters";
 import { todayInParis } from "../domain/people/age";
@@ -568,10 +572,15 @@ export type SeasonEnrollment = {
   courses: string[];
   /** Its price: one quarter's for a quarterly package. */
   netPriceCents: number;
-  /** Quarters a quarterly enrollment covers (#291), in date order; empty for any other period. */
+  /**
+   * Quarters a quarterly enrollment owes (#291, `owedQuarters`), in date order: those it covers,
+   * or once dropped those started by its drop-out day (#99); empty for any other period.
+   */
   quarters: string[];
-  /** Number of covered quarters, as the balance counts them (`seasonDueCents`). */
+  /** Number of owed quarters, as the balance counts them (`seasonDueCents`). */
   quarterCount: number;
+  /** Quarters it covers from its enrollment day, dropped or not: what a drop-out date is weighed against. */
+  coveredQuarters: QuarterDates[];
   /** What it costs over the season: its price once per covered quarter when quarterly (#291). */
   seasonDueCents: number;
   /** Reason of a price typed by hand (#292); null when the price is the grid's. */
@@ -597,8 +606,17 @@ export type SeasonEnrollment = {
 
 const enrollmentId = sql`${enrollment}.${sql.identifier("id")}`;
 
-/** Number of quarters the enrollment of the row covers (#291): what `seasonDueCents` multiplies a quarterly price by. */
-export const quarterCountSql = sql<number>`(SELECT count(*) FROM enrollment_quarter q WHERE q.enrollment_id = ${enrollmentId})::int`;
+const enrollmentDroppedOn = sql`${enrollment}.${sql.identifier("dropped_on")}`;
+
+/**
+ * Number of quarters the enrollment of the row owes (#291, #99): what `seasonDueCents` multiplies
+ * a quarterly price by. Every quarter it covers, or once dropped those started by its drop-out
+ * day: `owedQuarters` (`src/domain/enrollment/quarters.ts`) in SQL, for the balance and the dashboard.
+ */
+export const quarterCountSql = sql<number>`(SELECT count(*) FROM enrollment_quarter q
+  JOIN season_quarter sq ON sq.id = q.quarter_id
+  WHERE q.enrollment_id = ${enrollmentId}
+    AND (${enrollmentDroppedOn} IS NULL OR sq.start_date <= ${enrollmentDroppedOn}))::int`;
 
 /**
  * A line of an invoice other than an unsent draft refers to the enrollment of the row. An
@@ -618,6 +636,23 @@ const invoicedCentsSql = sql<number | null>`(SELECT sum(l.incl_tax_cents) FROM i
   WHERE l.enrollment_id = ${enrollmentId} AND i.status = ${SETTLED_INVOICE_STATUS})::int`;
 
 /**
+ * The lesson `s` of the enrollment course `c`, whose attendance was taken for its student, has
+ * no other enrollment nor workshop sign-up (#398) of that student keeping them on its sheet:
+ * this enrollment alone does. The other enrollment counts as the sheet reads it
+ * (`onAttendanceSheet`): active, on trial, or dropped on or after the lesson's day.
+ */
+const KEPT_BY_NO_OTHER = sql.raw(`NOT EXISTS (
+      SELECT 1 FROM enrollment_course o
+      JOIN enrollment oe ON oe.id = o.enrollment_id
+        AND (oe.status IN ('active', 'trial') OR (oe.status = 'dropped' AND oe.dropped_on >= s.date))
+      WHERE o.student_id = c.student_id AND o.course_id = c.course_id AND o.enrollment_id <> c.enrollment_id
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM workshop_signup_person wp JOIN workshop_signup w ON w.id = wp.workshop_signup_id
+      WHERE wp.person_id = c.student_id AND w.course_id = c.course_id
+    )`);
+
+/**
  * Attendance was taken for a student of the enrollment of the row in one of its courses,
  * and no other enrollment nor workshop sign-up (#398) of that student keeps them on that
  * lesson's sheet (a duplicate entered by mistake stays cancellable when the right one has the
@@ -629,18 +664,29 @@ const attendedSql = sql<boolean>`EXISTS (
   SELECT 1 FROM enrollment_course c
   JOIN lesson s ON s.course_id = c.course_id
   JOIN attendance a ON a.lesson_id = s.id AND a.student_id = c.student_id
-  WHERE c.enrollment_id = ${enrollmentId}
-    AND NOT EXISTS (
-      SELECT 1 FROM enrollment_course o
-      JOIN enrollment oe ON oe.id = o.enrollment_id
-        AND (oe.status IN ('active', 'trial') OR (oe.status = 'dropped' AND oe.dropped_on >= s.date))
-      WHERE o.student_id = c.student_id AND o.course_id = c.course_id AND o.enrollment_id <> c.enrollment_id
-    )
-    AND NOT EXISTS (
-      SELECT 1 FROM workshop_signup_person wp JOIN workshop_signup w ON w.id = wp.workshop_signup_id
-      WHERE wp.person_id = c.student_id AND w.course_id = c.course_id
-    )
+  WHERE c.enrollment_id = ${enrollmentId} AND ${KEPT_BY_NO_OTHER}
 )`;
+
+/**
+ * The last lesson whose attendance, present or absent, was taken for a student of the
+ * enrollment and that this enrollment alone keeps on its sheet (#410, `attendedDropRefusal`),
+ * named by its course's discipline and its time; null when there is none. To be read under the
+ * enrollment's course locks (`lockCoursesOfEnrollment`), so attendance saved meanwhile is seen.
+ */
+async function lastAttendedLesson(tx: Tx, id: string): Promise<AttendedLesson | null> {
+  const [row] = await tx.execute<{ date: string; discipline: string; time: string }>(sql`
+    SELECT s.date::text AS date, d.name AS discipline,
+      to_char(coalesce(s.start_time, co.start_time), 'HH24:MI') AS time
+    FROM enrollment_course c
+    JOIN lesson s ON s.course_id = c.course_id
+    JOIN attendance a ON a.lesson_id = s.id AND a.student_id = c.student_id
+    JOIN course co ON co.id = c.course_id
+    JOIN discipline d ON d.id = co.discipline_id
+    WHERE c.enrollment_id = ${id} AND ${KEPT_BY_NO_OTHER}
+    ORDER BY s.date DESC, time DESC
+    LIMIT 1`);
+  return row ? { date: row.date, course: `${row.discipline} ${row.time}` } : null;
+}
 
 /**
  * Enrollments of the season, every status, sorted by student: the ones a person pays for
@@ -682,7 +728,12 @@ export async function seasonEnrollments(
   if (rows.length === 0) return [];
   const namedEntity = await severalEntities(tx);
   const covered = await tx
-    .select({ enrollmentId: enrollmentQuarter.enrollmentId, label: seasonQuarter.label })
+    .select({
+      enrollmentId: enrollmentQuarter.enrollmentId,
+      label: seasonQuarter.label,
+      startDate: seasonQuarter.startDate,
+      endDate: seasonQuarter.endDate,
+    })
     .from(enrollmentQuarter)
     .innerJoin(seasonQuarter, eq(seasonQuarter.id, enrollmentQuarter.quarterId))
     .where(
@@ -718,7 +769,10 @@ export async function seasonEnrollments(
   return rows
     .map((l) => {
       const own = relationships.filter((x) => x.enrollmentId === l.id);
-      const quarters = covered.filter((q) => q.enrollmentId === l.id).map((q) => q.label);
+      const mine = covered
+        .filter((q) => q.enrollmentId === l.id)
+        .map(({ label, startDate, endDate }) => ({ label, startDate, endDate }));
+      const quarters = owedQuarters(mine, l.droppedOn).map((q) => q.label);
       const netPriceCents = l.netPriceCents ?? 0;
       return {
         id: l.id,
@@ -727,6 +781,7 @@ export async function seasonEnrollments(
         netPriceCents,
         quarters,
         quarterCount: quarters.length,
+        coveredQuarters: mine,
         seasonDueCents: seasonDueCents({ period: l.period, netPriceCents, quarterCount: quarters.length }),
         priceReason: l.priceReason,
         status: l.status,
@@ -978,11 +1033,24 @@ export async function leavingImpacts(tx: Tx, id: string): Promise<ExistingImpact
   return impactsOn(tx, remaining, result.enrollments);
 }
 
+/** Quarters the enrollment covers (`enrollment_quarter`), in date order. */
+async function coveredQuartersOf(tx: Tx, id: string): Promise<QuarterDates[]> {
+  return tx
+    .select({ label: seasonQuarter.label, startDate: seasonQuarter.startDate, endDate: seasonQuarter.endDate })
+    .from(enrollmentQuarter)
+    .innerJoin(seasonQuarter, eq(seasonQuarter.id, enrollmentQuarter.quarterId))
+    .where(eq(enrollmentQuarter.enrollmentId, id))
+    .orderBy(asc(seasonQuarter.startDate));
+}
+
 /**
  * Records a drop-out on `droppedOn` (from the enrollment day, within its season): the
  * student leaves the attendance sheets of the lessons after that day. Its price stays as
- * saved and stays due (#284 Q1: the school neither carries over nor refunds). The same
- * drop-out sent twice changes nothing.
+ * saved and stays due (#284 Q1: the school neither carries over nor refunds); a quarterly one
+ * owes the quarters started by that day only (#99 Q2, `owedQuarters`), and its unsent invoice
+ * drafts, billing quarters it no longer owes, are thrown away whole (#302) to be drafted again.
+ * Refused before the last lesson whose attendance it alone keeps on a sheet (#410,
+ * `attendedDropRefusal`). The same drop-out sent twice changes nothing.
  */
 export async function dropEnrollment(tx: Tx, userId: string, id: string, droppedOn: string): Promise<ChangeResult> {
   const e = await readSaved(tx, id, true);
@@ -996,8 +1064,23 @@ export async function dropEnrollment(tx: Tx, userId: string, id: string, dropped
     .where(eq(season.id, e.seasonId));
   const dateRefusal = s ? dropDateRefusal(droppedOn, dropDateBounds(e.enrolledOn, s)) : GONE;
   if (dateRefusal) return { ok: false, message: dateRefusal };
+  // Then its season and its courses (`attendance-locks.ts`, #406, #410), as `cancelEnrollment`,
+  // and the attendance read under them: attendance being saved or a sign-up being cancelled
+  // meanwhile is seen, and waits for the drop-out to be seen by its own check.
+  await lockSeason(tx, e.seasonId);
+  await lockCoursesOfEnrollment(tx, id);
+  const attended = attendedDropRefusal(droppedOn, await lastAttendedLesson(tx, id));
+  if (attended) return { ok: false, message: attended };
   const who = await memberOf(tx, userId);
   if (!who) return { ok: false, message: "Accès refusé." };
+  if (e.period === "quarter") {
+    const covered = await coveredQuartersOf(tx, id);
+    if (owedQuarters(covered, droppedOn).length < covered.length) {
+      // Refused before any write when a payment is allocated to one of them (`PAID_DRAFT`).
+      const discarded = await discardDrafts(tx, who.id, await draftsBillingEnrollment(tx, id));
+      if (!discarded.ok) return discarded;
+    }
+  }
   await tx.update(enrollment).set({ status: "dropped", droppedOn }).where(eq(enrollment.id, id));
   await tx.insert(auditLog).values({
     schoolId: CURRENT_SCHOOL,

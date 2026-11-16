@@ -1,6 +1,6 @@
 import { allocate } from "../../lib/money";
 import { NO_VAT_CHARGED, vatBreakdown, type VatRegime, type VatTreatment } from "../billing/vat";
-import { quarterlyDues, type SeasonQuarter } from "../enrollment/quarters";
+import { owedQuarters, quarterlyDues, type SeasonQuarter } from "../enrollment/quarters";
 import { DUE_STATUSES, type EnrollmentStatus } from "../payments/balance";
 import { oneOffDue, planSchedule, type InstallmentPlanSetting, type PlanWindow } from "./plans";
 import { combinationLabel } from "../tariff/compute";
@@ -19,8 +19,10 @@ import type { Audience, Period, TariffRow } from "../tariff/types";
  *   weekly minutes when a course has none (`splitWeights`).
  * - Q2 (quarterly billing): one invoice per season with one installment per quarter
  *   (`installmentsOf`, `quarterlyDues`).
- * - Q3 (what a dropped or trial enrollment owes, #99): as the balance counts it,
- *   `DUE_STATUSES` (a drop-out owes all it covers, a trial or waitlist nothing yet).
+ * - Q3 (what a dropped or trial enrollment owes, #99, owner decisions 2026-11-15): as the
+ *   balance counts it, `DUE_STATUSES` (a trial or waitlist owes nothing yet; a yearly drop-out
+ *   its whole price), a quarterly drop-out the quarters started by its drop-out day only
+ *   (`owedQuarters`).
  *
  * A yearly package is due by the plan the family chose among the school's (#176,
  * `planSchedule`): the draft records its count (`installmentCount`). With no plan chosen yet,
@@ -143,6 +145,8 @@ export type BillableEnrollment = {
   id: string;
   billingEntityId: string;
   status: EnrollmentStatus;
+  /** Day of its drop-out, null unless dropped: a quarterly one then owes the quarters started (#99). */
+  droppedOn: string | null;
   period: Period;
   /** Package line label: « Forfait 45 min + 1 h 00 — Zz Alice ». */
   label: string;
@@ -155,9 +159,15 @@ export type BillableEnrollment = {
   manualPriceCents: number | null;
   /** Its courses, each once (a couple's two students share them). */
   courses: readonly DraftCourse[];
-  /** Quarters a quarterly enrollment covers (`enrollment_quarter`); ignored otherwise. */
+  /**
+   * Quarters a quarterly enrollment covers (`enrollment_quarter`); ignored otherwise. It is
+   * billed for those it owes (`owedQuarters`): all of them unless dropped.
+   */
   quarters: readonly SeasonQuarter[];
 };
+
+/** Quarters a quarterly enrollment is billed for (#99 Q2): those started by its drop-out day, if dropped. */
+const billedQuarters = (e: BillableEnrollment) => owedQuarters(e.quarters, e.droppedOn);
 
 /** A lesson pack of the payer not invoiced yet. */
 export type BillablePack = {
@@ -230,13 +240,13 @@ const netOf = (e: BillableEnrollment) => e.manualPriceCents ?? e.grossPriceCents
 type RawLine = Omit<DraftLine, "exclTaxCents" | "vatCents" | "vatCategory" | "vatRateBps" | "vatMention">;
 
 /**
- * An enrollment's lines. A quarterly package bills each covered quarter at its own cents
+ * An enrollment's lines. A quarterly package bills each quarter it owes (`billedQuarters`) at its own cents
  * (#291 Q3: the discount already taken off each quarter): every line holds one quarter's
  * amount as its unit price, times the number of quarters, so nothing is recomputed on the
  * season total. A quarterly enrollment covering no quarter owes nothing (`seasonDueCents`).
  */
 function enrollmentLines(e: BillableEnrollment): RawLine[] {
-  const count = e.period === "quarter" ? e.quarters.length : 1;
+  const count = e.period === "quarter" ? billedQuarters(e).length : 1;
   if (count === 0) return [];
   const weights = splitWeights(e.courses);
   const quarters = e.period === "quarter" ? ` — ${count} trimestre${count > 1 ? "s" : ""}` : "";
@@ -268,7 +278,7 @@ function quarterlyByDay(enrollments: readonly BillableEnrollment[]): Map<string,
   const byDay = new Map<string, number>();
   for (const e of enrollments)
     if (e.period === "quarter")
-      for (const d of quarterlyDues(e.quarters, netOf(e), e.enrolledOn))
+      for (const d of quarterlyDues(billedQuarters(e), netOf(e), e.enrolledOn))
         byDay.set(d.dueOn, (byDay.get(d.dueOn) ?? 0) + d.amountCents);
   return byDay;
 }

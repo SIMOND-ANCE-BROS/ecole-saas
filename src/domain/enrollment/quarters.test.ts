@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   coveredQuarters,
   defaultQuarters,
+  owedQuarters,
   quarterlyDues,
   quarterMonths,
   quartersOutside,
@@ -121,6 +122,32 @@ describe("seasonDueCents", () => {
   it("yearly and drop-in: the net price once, whatever the quarters", () => {
     expect(seasonDueCents({ period: "year", netPriceCents: 30_000, quarterCount: 3 })).toBe(30_000);
     expect(seasonDueCents({ period: "single", netPriceCents: 1_500, quarterCount: 0 })).toBe(1_500);
+  });
+});
+
+describe("owedQuarters (#99 Q2: a drop-out owes every quarter started, not the following ones)", () => {
+  it("a running enrollment owes every quarter it covers, in date order", () => {
+    expect(ids(owedQuarters([QUARTERS[2], QUARTERS[0], QUARTERS[1]], null))).toEqual(["q1", "q2", "q3"]);
+  });
+
+  it("dropped in November owes October–December only: 3 × 110,00 € becomes 110,00 €", () => {
+    const owed = owedQuarters(QUARTERS, "2027-11-15");
+    expect(ids(owed)).toEqual(["q1"]);
+    expect(seasonDueCents({ period: "quarter", netPriceCents: 11_000, quarterCount: owed.length })).toBe(11_000);
+  });
+
+  it("a quarter starting on the drop-out day is started: owed; the day before it is not", () => {
+    expect(ids(owedQuarters(QUARTERS, "2028-01-01"))).toEqual(["q1", "q2"]);
+    expect(ids(owedQuarters(QUARTERS, "2027-12-31"))).toEqual(["q1"]);
+  });
+
+  it("dropped in the last quarter owes all three; before the first one starts (September), none", () => {
+    expect(ids(owedQuarters(QUARTERS, "2028-05-20"))).toEqual(["q1", "q2", "q3"]);
+    expect(owedQuarters(QUARTERS, "2027-09-20")).toEqual([]);
+  });
+
+  it("enrolled in January then dropped in February owes the 2nd quarter only", () => {
+    expect(ids(owedQuarters(coveredQuarters(QUARTERS, "2028-01-10"), "2028-02-15"))).toEqual(["q2"]);
   });
 });
 

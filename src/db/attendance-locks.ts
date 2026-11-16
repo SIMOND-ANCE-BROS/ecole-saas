@@ -35,6 +35,7 @@ import { course, season } from "./schema";
  *   - `cancelEnrollment`: its payer and the enrollment (`payment-locks.ts`), then its season, then
  *     its courses by id (`lockCoursesOfEnrollment`). Without the season it could hold a course of
  *     a lower id that a course edit's sync then asks for, while waiting for the edited course;
+ *   - `dropEnrollment` (#410): the same, for the same reason;
  *   - `updateSeason`, `copySeason`: the season `FOR UPDATE`, then the courses they create, then
  *     the sync.
  *
@@ -56,11 +57,14 @@ import { course, season } from "./schema";
  *
  * Attendance of a student on a lesson only makes sense while an enrollment or a workshop sign-up
  * puts them on that lesson's sheet (`onAttendanceSheet`); statements count it (`attendanceCount`).
- * Three writes each check the other side, then write:
+ * Four writes each check the other side, then write:
  *
  * - `saveAttendance` reads the sheet, then saves attendance for whoever is on it;
  * - `cancelEnrollment` refuses once attendance was taken that no other enrollment nor sign-up
  *   covers (`attendedSql`), then deletes the enrollment's courses;
+ * - `dropEnrollment` refuses a date before the last lesson with such attendance
+ *   (`lastAttendedLesson`, `attendedDropRefusal`, #410), then dates the drop-out, which takes the
+ *   student off the sheets after that day;
  * - `cancelWorkshopSignup` refuses once attendance was taken that no enrollment covers, then
  *   deletes the sign-up.
  *
@@ -75,6 +79,8 @@ import { course, season } from "./schema";
  *   - `cancelEnrollment`: the payer and the enrollment (`readSaved`, see `payment-locks.ts`),
  *     then every course of the enrollment in one statement, ordered by id
  *     (`lockCoursesOfEnrollment`), then its unsent drafts (`discardDrafts`);
+ *   - `dropEnrollment`: the same order as `cancelEnrollment` (payer, enrollment, season, courses),
+ *     then the unsent drafts billing quarters it no longer owes (#99);
  *   - `cancelWorkshopSignup`: the workshop's course, then the sign-up `FOR UPDATE`;
  *   - `signUpForWorkshop` already locked the workshop's course first, the same way, before reading
  *     its sign-ups.
@@ -194,7 +200,7 @@ export async function lockCourseOfLesson(tx: Tx, lessonId: string): Promise<void
     .for("no key update");
 }
 
-/** Every course of an enrollment, ordered by id, in one statement (`cancelEnrollment`). */
+/** Every course of an enrollment, ordered by id, in one statement (`cancelEnrollment`, `dropEnrollment`). */
 export async function lockCoursesOfEnrollment(tx: Tx, enrollmentId: string): Promise<void> {
   await tx
     .select({ id: course.id })

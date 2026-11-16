@@ -1137,7 +1137,8 @@ export const enrollmentCourse = pgTable(
 /**
  * Quarters a quarterly enrollment covers (#291), set when it is saved: by default the
  * remaining ones from its enrollment day (`coveredQuarters`). What it owes is its net price
- * once per covered quarter (`seasonDueCents`). A quarter covered by an enrollment cannot be
+ * once per covered quarter (`seasonDueCents`), or once dropped per quarter started by its
+ * drop-out day (`owedQuarters`, #99): the rows stay as saved. A quarter covered by an enrollment cannot be
  * removed from its season.
  */
 export const enrollmentQuarter = pgTable(
