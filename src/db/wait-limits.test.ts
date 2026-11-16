@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BUSY, orBusy } from "../lib/action-result";
-import { waitedTooLong } from "./wait-limits";
+import { timeoutCodeOf, waitedTooLong } from "./wait-limits";
 
 /** The driver's error as Drizzle wraps it (`DrizzleQueryError`): the Postgres code is on `cause`. */
 const wrapped = (code: string) =>
@@ -11,6 +11,8 @@ describe("waitedTooLong (#364)", () => {
     expect(waitedTooLong({ code: "55P03" })).toBe(true);
     expect(waitedTooLong(wrapped("55P03"))).toBe(true);
     expect(waitedTooLong(wrapped("57014"))).toBe(true);
+    expect(timeoutCodeOf(wrapped("57014"))).toBe("57014");
+    expect(timeoutCodeOf(wrapped("40P01"))).toBeNull();
   });
 
   it("leaves every other error alone: deadlock, unique violation, plain errors, non-errors", () => {

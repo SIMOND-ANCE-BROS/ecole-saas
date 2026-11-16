@@ -10,6 +10,7 @@ import { defaultAcceptedOn } from "@/domain/people/internal-rules";
 import { once, storedEnrollment } from "@/db/submissions";
 import { INITIAL_STATUSES } from "@/domain/enrollment/lifecycle";
 import { todayInParis } from "@/domain/people/age";
+import { orBusy } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
 
 const validInput = z.object({
@@ -64,34 +65,36 @@ export async function enroll(entry: EnrollInput, key: string): Promise<{ message
   if (!parsed.success || !z.uuid().safeParse(key).success) return { message: "Saisie invalide." };
   const { payerId: payerId, rulesSigned, referralId, refusesPhotos, ...rest } = parsed.data;
   const today = todayInParis();
-  const result = await withSchool(schoolId, async (tx) => {
-    const season = await currentSeason(tx, today);
-    if (!season) return { ok: false as const, message: NO_SEASON_MESSAGE };
-    return once(tx, "enrollment", key, parsed.data, storedEnrollment, async () => {
-      const saved = await saveEnrollment(tx, userId, payerId, season.id, rest, today);
-      if (!saved.ok) return saved;
-      // Signed with this enrollment: on its date (#296 default). One already recorded keeps its own.
-      if (rulesSigned) {
-        const [rules] = await payersRules(tx, [payerId], season.id);
-        if (rules && rules.rulesRecorded && rules.acceptedOn === null) {
-          // The payer's first enrollment day of the season, this one included: as the record offers it.
-          const on = defaultAcceptedOn(rules.firstEnrolledOn, today);
-          const r = await acceptRules(tx, userId, payerId, season.id, on, today);
+  const result = await orBusy(() =>
+    withSchool(schoolId, async (tx) => {
+      const season = await currentSeason(tx, today);
+      if (!season) return { ok: false as const, message: NO_SEASON_MESSAGE };
+      return once(tx, "enrollment", key, parsed.data, storedEnrollment, async () => {
+        const saved = await saveEnrollment(tx, userId, payerId, season.id, rest, today);
+        if (!saved.ok) return saved;
+        // Signed with this enrollment: on its date (#296 default). One already recorded keeps its own.
+        if (rulesSigned) {
+          const [rules] = await payersRules(tx, [payerId], season.id);
+          if (rules && rules.rulesRecorded && rules.acceptedOn === null) {
+            // The payer's first enrollment day of the season, this one included: as the record offers it.
+            const on = defaultAcceptedOn(rules.firstEnrolledOn, today);
+            const r = await acceptRules(tx, userId, payerId, season.id, on, today);
+            if (!r.ok) return r;
+          }
+        }
+        if (referralId) {
+          const r = await setReferralIfNone(tx, userId, rest.studentIds, referralId);
           if (!r.ok) return r;
         }
-      }
-      if (referralId) {
-        const r = await setReferralIfNone(tx, userId, rest.studentIds, referralId);
-        if (!r.ok) return r;
-      }
-      if (refusesPhotos)
-        for (const studentId of rest.studentIds) {
-          const r = await setRefusesPhotos(tx, userId, studentId, true);
-          if (!r.ok) return r;
-        }
-      return saved;
-    });
-  });
+        if (refusesPhotos)
+          for (const studentId of rest.studentIds) {
+            const r = await setRefusesPhotos(tx, userId, studentId, true);
+            if (!r.ok) return r;
+          }
+        return saved;
+      });
+    }),
+  );
   if (!result.ok) return { message: result.message };
   // Courses of two businesses: one enrollment each (#299), said in the banner.
   const several = (result.ids?.length ?? 1) > 1;

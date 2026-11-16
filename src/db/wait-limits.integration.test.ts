@@ -115,6 +115,8 @@ describe("bounded waits in withSchool (#364)", () => {
   }, 20_000);
 
   it("sets both limits inside the transaction only, from WAIT_LIMITS", async () => {
+    // The connection's own default (0 on a plain server), read outside any withSchool.
+    const [before] = await db.execute<{ lock: string }>(sql`select current_setting('lock_timeout') as lock`);
     const inside = await withSchool(school, async (tx) => {
       const [row] = await tx.execute<{ lock: string; statement: string }>(
         sql`select current_setting('lock_timeout') as lock, current_setting('statement_timeout') as statement`,
@@ -125,7 +127,7 @@ describe("bounded waits in withSchool (#364)", () => {
     // SET LOCAL: the pooled connection is back to the server defaults once the transaction ends.
     for (let i = 0; i < 12; i++) {
       const [row] = await db.execute<{ lock: string }>(sql`select current_setting('lock_timeout') as lock`);
-      expect(row?.lock).toBe("0");
+      expect(row?.lock).toBe(before?.lock);
     }
   });
 

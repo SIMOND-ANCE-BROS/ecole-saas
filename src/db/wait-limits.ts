@@ -15,18 +15,24 @@
 export const WAIT_LIMITS = { lockTimeout: "5s", statementTimeout: "30s" } as const;
 
 /** `lock_not_available` (lock timeout) and `query_canceled` (statement timeout). */
-const WAITED_TOO_LONG = new Set(["55P03", "57014"]);
+const TIMEOUT_CODES = ["55P03", "57014"] as const;
+type TimeoutCode = (typeof TIMEOUT_CODES)[number];
+const isTimeoutCode = (code: unknown): code is TimeoutCode => TIMEOUT_CODES.some((c) => c === code);
 
 /**
- * Whether `e` is a wait that ran out (`WAIT_LIMITS`). Drizzle wraps the driver's error
- * (`DrizzleQueryError`), whose Postgres code is on `cause`: the chain is followed a few levels.
+ * The SQLSTATE of a wait that ran out (`WAIT_LIMITS`), or null for any other error. Drizzle
+ * wraps the driver's error (`DrizzleQueryError`), whose Postgres code is on `cause`: the chain
+ * is followed a few levels.
  */
-export function waitedTooLong(e: unknown): boolean {
+export function timeoutCodeOf(e: unknown): TimeoutCode | null {
   let current: unknown = e;
   for (let depth = 0; depth < 4 && typeof current === "object" && current !== null; depth++) {
     const { code, cause } = current as { code?: unknown; cause?: unknown };
-    if (typeof code === "string" && WAITED_TOO_LONG.has(code)) return true;
+    if (isTimeoutCode(code)) return code;
     current = cause;
   }
-  return false;
+  return null;
 }
+
+/** Whether `e` is a wait that ran out (`WAIT_LIMITS`). */
+export const waitedTooLong = (e: unknown): boolean => timeoutCodeOf(e) !== null;

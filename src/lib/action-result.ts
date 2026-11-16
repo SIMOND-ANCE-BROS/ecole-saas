@@ -1,5 +1,5 @@
 import { unstable_rethrow } from "next/navigation";
-import { waitedTooLong } from "../db/wait-limits";
+import { timeoutCodeOf } from "../db/wait-limits";
 import { has } from "./has";
 
 /**
@@ -87,7 +87,10 @@ export async function orBusy<T>(
   try {
     return await call();
   } catch (e) {
-    if (waitedTooLong(e)) return busy(BUSY);
-    throw e;
+    const code = timeoutCodeOf(e);
+    if (code === null) throw e;
+    // Seen in the logs if timeouts keep happening; the SQLSTATE only, never the query or its values.
+    console.warn("withSchool wait ran out", { code });
+    return busy(BUSY);
   }
 }
