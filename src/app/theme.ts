@@ -121,7 +121,8 @@ export const theme = createTheme({
  * Mantine 9 paints the `light` variant (alerts, badges, light buttons, the « Mode simulation »
  * banner, `--alerte-fond`) with solid tints and shade 9 / shade 0 text (#129). The contrast
  * fixes above were measured on the 8.x translucent tints: `v8CssVariablesResolver` keeps them,
- * our values still override it.
+ * our values still override it. A shaded colour on a light variant (`color="red.7"
+ * variant="light"`) skips these variables and gets Mantine 9's solid fill: use plain colours.
  */
 export const cssVariablesResolver: CSSVariablesResolver = (t) => {
   const v8 = v8CssVariablesResolver(t);

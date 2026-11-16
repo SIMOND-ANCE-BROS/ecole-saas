@@ -79,6 +79,8 @@ body {
   --button-height-compact-md: 2rem;
 }
 .mantine-ActionIcon-root {
+  /* Same as buttons: 600 in Mantine 8, `medium` (500 here) in Mantine 9 (#129). */
+  font-weight: 600;
   --ai-size-xs: 2rem;
   --ai-size-sm: 2rem;
   --ai-size-md: 2rem;
