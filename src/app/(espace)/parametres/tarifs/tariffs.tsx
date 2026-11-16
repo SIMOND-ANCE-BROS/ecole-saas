@@ -380,15 +380,16 @@ export function Grid({
 }
 
 /** #290: who pays full price, as the rank from which the discount applies (`discount.from_rank`). */
-const FULL_PRICE_CHOICES = [1, 2, 3, 4].map((rank) => ({
-  value: String(rank),
-  label:
-    rank === 1
-      ? "Personne : tous ont la réduction"
-      : rank === 2
-        ? "Le forfait le plus cher"
-        : `Les ${rank - 1} forfaits les plus chers`,
-}));
+const fullPriceChoices = (saved: number) =>
+  [...new Set([1, 2, 3, 4, saved])].map((rank) => ({
+    value: String(rank),
+    label:
+      rank === 1
+        ? "Personne : tous ont la réduction"
+        : rank === 2
+          ? "Le forfait le plus cher"
+          : `Les ${rank - 1} forfaits les plus chers`,
+  }));
 
 export function Siblings({
   seasonId: seasonId,
@@ -476,7 +477,7 @@ export function Siblings({
               label="Plein tarif pour"
               w={260}
               allowDeselect={false}
-              data={FULL_PRICE_CHOICES}
+              data={fullPriceChoices(Number(v.fromRank))}
               value={v.fromRank}
               onChange={(fromRank) => fromRank && setV({ ...v, fromRank })}
             />

@@ -43,7 +43,8 @@ export type RepricingState = {
  * (an unsent draft aside, drafted again) has only future installments: it gets the raised
  * discount at once. One already invoiced is only reported: its issued invoice and installments
  * are frozen, and lowering what is left of them has no mechanism yet (#155). A lowered discount
- * (a sibling leaving) is never applied (#284 Q2).
+ * (a sibling leaving) is never applied (#284 Q2), and neither is a raise when the same change
+ * lowers another sibling (`raisesMayApply`).
  */
 export function raisedNow(impact: DiscountImpact, state: RepricingState): boolean {
   return (
@@ -53,4 +54,13 @@ export function raisedNow(impact: DiscountImpact, state: RepricingState): boolea
     !state.paidDraft &&
     state.sameGross
   );
+}
+
+/**
+ * Whether the raises of one change may be applied at all: not when the same change lowers
+ * another saved enrollment's discount (a child moving up the ranking, #290), which is only
+ * reported. Applying the raise alone would discount the family twice.
+ */
+export function raisesMayApply(impacts: readonly DiscountImpact[]): boolean {
+  return impacts.every((i) => i.recalculatedDiscountCents >= i.savedDiscountCents);
 }

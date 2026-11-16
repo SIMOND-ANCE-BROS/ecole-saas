@@ -153,8 +153,7 @@ function evaluate(
   // #290: the students ranked before `fromRank`, most expensive package first, pay full price.
   const fullPrice = new Set(ranked.slice(0, rule.fromRank - 1));
   if (enrollment.studentIds.some((id) => fullPrice.has(id))) {
-    const highest =
-      fullPrice.size === 1 ? "forfait le plus élevé" : `un des ${fullPrice.size} forfaits les plus élevés`;
+    const highest = fullPrice.size === 1 ? "forfait le plus cher" : `un des ${fullPrice.size} forfaits les plus chers`;
     return { status: "rejected", reason: `Plein tarif : ${highest} des ${countLabel}` };
   }
 

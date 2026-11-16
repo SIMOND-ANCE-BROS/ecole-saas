@@ -165,7 +165,8 @@ export function Billing({
               </Anchor>
             </span>
           ))}{" "}
-          : réduction fratrie.
+          {/* #290: which child gets the siblings discount depends on the packages' prices. */}: fratrie, la réduction
+          dépend du prix des forfaits (voir le détail du prix de chaque inscription).
         </Text>
       )}
 

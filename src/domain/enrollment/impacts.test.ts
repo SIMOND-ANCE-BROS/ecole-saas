@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { computeTariff } from "../tariff/compute";
 import { ribasGrid, ribasSiblings } from "../tariff/fixtures/ribas-grid-2026";
 import type { EnrollmentRequest } from "../tariff/types";
-import { discountImpacts, raisedNow } from "./impacts";
+import { discountImpacts, raisedNow, raisesMayApply } from "./impacts";
 
 const child = (reference: string, minutes = 60): EnrollmentRequest => ({
   reference,
@@ -61,6 +61,33 @@ describe("discountImpacts", () => {
   it("does not report an enrollment the engine can no longer price", () => {
     const unpriced = price({ ...child("a"), courses: [] });
     expect(discountImpacts([{ reference: "a", savedDiscountCents: 500 }], unpriced)).toEqual([]);
+  });
+});
+
+describe("raisesMayApply (#290, #155 Q2)", () => {
+  it("lets raises apply when no saved discount goes down", () => {
+    expect(raisesMayApply([{ reference: "a", savedDiscountCents: 0, recalculatedDiscountCents: 850 }])).toBe(true);
+  });
+
+  it("holds every raise back when the same arrival lowers another sibling (a child moving up the ranking)", () => {
+    // B 150 € at full price, A 110 € with 11 € off; A enrolls again at 85 € elsewhere and becomes the most expensive.
+    const b = { ...child("b", 90), studentIds: ["student-b"] };
+    const a1 = { ...child("a1", 60), studentIds: ["student-a"] };
+    const a2 = { ...child("a2", 45), studentIds: ["student-a"] };
+    const grid = [...ribasGrid];
+    const now = computeTariff({ grid, discounts: [ribasSiblings], enrollments: [b, a1, a2] }).enrollments;
+    const impacts = discountImpacts(
+      [
+        { reference: "b", savedDiscountCents: 0 },
+        { reference: "a1", savedDiscountCents: 1100 },
+      ],
+      now,
+    );
+    expect(impacts).toEqual([
+      { reference: "b", savedDiscountCents: 0, recalculatedDiscountCents: 1500 },
+      { reference: "a1", savedDiscountCents: 1100, recalculatedDiscountCents: 0 },
+    ]);
+    expect(raisesMayApply(impacts)).toBe(false);
   });
 });
 

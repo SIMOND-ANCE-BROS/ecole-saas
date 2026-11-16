@@ -156,7 +156,7 @@ describe("siblings discount (Ribas: -10 % from the 2nd child, not combinable wit
       code: "fratrie",
       status: "rejected",
       amountCents: 0,
-      reason: "Plein tarif : forfait le plus élevé des 2 enfants du même payeur",
+      reason: "Plein tarif : forfait le plus cher des 2 enfants du même payeur",
     });
     expect(ok(expensive)).toMatchObject({ discountCents: 0, netPriceCents: 11000 });
     expect(siblings(cheaper)).toEqual({
@@ -196,7 +196,7 @@ describe("siblings discount (Ribas: -10 % from the 2nd child, not combinable wit
     expect(result.enrollments.map((r) => siblings(r)?.status)).toEqual(["applied", "rejected", "applied"]);
     expect(result.enrollments.map((r) => ok(r).discountCents)).toEqual([850, 0, 1100]);
     expect(siblings(result.enrollments[1])?.reason).toBe(
-      "Plein tarif : forfait le plus élevé des 3 enfants du même payeur",
+      "Plein tarif : forfait le plus cher des 3 enfants du même payeur",
     );
     expect(siblings(result.enrollments[2])?.reason).toBe("3 enfants du même payeur : −10 %");
     expect(result.totalDiscountCents).toBe(1950);
@@ -245,7 +245,7 @@ describe("siblings discount (Ribas: -10 % from the 2nd child, not combinable wit
     const [two, sibling] = ribas(twoDisciplines(), enrollment({ course: [60] })).enrollments;
     expect(siblings(two)).toMatchObject({
       status: "rejected",
-      reason: "Plein tarif : forfait le plus élevé des 2 enfants du même payeur",
+      reason: "Plein tarif : forfait le plus cher des 2 enfants du même payeur",
     });
     expect(ok(two).netPriceCents).toBe(18500);
     expect(siblings(sibling)).toMatchObject({ status: "applied", amountCents: 1100 });
@@ -350,7 +350,7 @@ describe("nothing is specific to one school", () => {
     });
     expect(result.enrollments.map((r) => ok(r).discountCents)).toEqual([150, 0, 0]);
     expect(siblings(result.enrollments[1])?.reason).toBe(
-      "Plein tarif : un des 2 forfaits les plus élevés des 3 danseurs du même payeur",
+      "Plein tarif : un des 2 forfaits les plus chers des 3 danseurs du même payeur",
     );
     const two = computeTariff({
       grid,

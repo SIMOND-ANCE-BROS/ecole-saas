@@ -58,10 +58,10 @@ beforeAll(async () => {
       FROM billing_entity e WHERE e.school_id = ${s} AND e.is_default RETURNING id`;
   }
   // One family per case, two children each.
-  for (const family of ["f1", "f2", "f3", "f4", "f5"]) {
+  for (const family of ["f1", "f2", "f3", "f4", "f5", "f6"]) {
     [{ id: ids[family] }] =
       await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${s}, ${`Zz${family}`}, 'Zzparent') RETURNING id`;
-    for (const child of ["a", "b"]) {
+    for (const child of ["a", "b", "c"]) {
       const key = `${family}${child}`;
       [{ id: ids[key] }] =
         await admin`INSERT INTO person (school_id, last_name, first_name, is_student) VALUES (${s}, ${`Zz${family}`}, ${`Zz${child}`}, true) RETURNING id`;
@@ -119,8 +119,8 @@ const entry = (studentId: string, courseId: string, status?: "trial") => ({
 const preview = (payer: string, e: ReturnType<typeof entry>) =>
   withSchool(ids.school, (tx) => enrollmentPreview(tx, ids[payer], ids.season, e, ENROLLED_ON));
 
-async function save(payer: string, e: ReturnType<typeof entry>): Promise<string> {
-  const r = await withSchool(ids.school, (tx) => saveEnrollment(tx, frontDesk, ids[payer], ids.season, e, ENROLLED_ON));
+async function save(payer: string, e: ReturnType<typeof entry>, on = ENROLLED_ON): Promise<string> {
+  const r = await withSchool(ids.school, (tx) => saveEnrollment(tx, frontDesk, ids[payer], ids.season, e, on));
   if (!r.ok) throw new Error(r.message);
   return r.id;
 }
@@ -197,5 +197,26 @@ describe("a discount raised by a new sibling (#155 Q2)", () => {
     if (!confirmed.ok) throw new Error(confirmed.message);
     expect(await saved(cheaper)).toMatchObject({ discount_cents: 0, net_price_cents: 8500 });
     expect(await admin`SELECT id FROM invoice WHERE id = ${drafted.invoiceIds[0]}`).toHaveLength(1);
+  });
+
+  it("a confirmed trial keeps its place by enrollment date: a later sibling never shifts the full price", async () => {
+    // Trial B enrolled first, A active later, same price: B, once confirmed, is the one at full price.
+    const trial = await save("f6", entry(ids.f6b, ids.jazz60, "trial"), "2026-09-10");
+    const active = await save("f6", entry(ids.f6a, ids.jazz60), "2026-09-12");
+    expect(await saved(active)).toMatchObject({ discount_cents: 0 });
+    const confirmed = await withSchool(ids.school, (tx) => confirmEnrollment(tx, frontDesk, trial, 11000));
+    if (!confirmed.ok) throw new Error(confirmed.message);
+    expect(await saved(trial)).toMatchObject({ discount_cents: 0 });
+    expect(await saved(active)).toMatchObject({ discount_cents: 1100 });
+    // A cheaper 3rd child changes nothing for the two others: no discount counted twice.
+    const p = await preview("f6", entry(ids.f6c, ids.jazz45));
+    if (p.status !== "ok") throw new Error(p.message);
+    expect(p.existingImpacts).toEqual([]);
+    const third = await save("f6", entry(ids.f6c, ids.jazz45), "2026-09-14");
+    expect([await saved(trial), await saved(active), await saved(third)]).toMatchObject([
+      { discount_cents: 0 },
+      { discount_cents: 1100 },
+      { discount_cents: 850 },
+    ]);
   });
 });

@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { rowsOf } from "./columns-of";
 import { discardDrafts, draftsBillingEnrollment, UNSENT_DRAFT } from "./invoice-draft-discard";
 import { z } from "zod";
-import { discountImpacts, raisedNow } from "../domain/enrollment/impacts";
+import { discountImpacts, raisedNow, raisesMayApply } from "../domain/enrollment/impacts";
 import { alreadyTaken, duplicateRefusal, TAKEN_STATUSES, type TakenCourse } from "../domain/enrollment/duplicates";
 import {
   cancelRefusal,
@@ -162,9 +162,16 @@ type Existing = EnrollmentRequest & {
 /**
  * Enrollments of the payer for the season counted as siblings (`SIBLING_STATUSES`, #284 Q3),
  * in the shape expected by the engine, oldest first (the engine's tie-break, #290); `except`
- * leaves one out (the one being changed).
+ * leaves one out (the one being changed), `include` adds one whatever its status (a trial
+ * being confirmed, in its place by date so the tie-break stays the same once it is active).
  */
-async function existingEnrollments(tx: Tx, payerId: string, seasonId: string, except?: string): Promise<Existing[]> {
+async function existingEnrollments(
+  tx: Tx,
+  payerId: string,
+  seasonId: string,
+  except?: string,
+  include?: string,
+): Promise<Existing[]> {
   const rows = await tx
     .select({
       id: enrollment.id,
@@ -181,7 +188,9 @@ async function existingEnrollments(tx: Tx, payerId: string, seasonId: string, ex
       and(
         eq(enrollment.payerId, payerId),
         eq(enrollment.seasonId, seasonId),
-        inArray(enrollment.status, [...SIBLING_STATUSES]),
+        include
+          ? or(inArray(enrollment.status, [...SIBLING_STATUSES]), eq(enrollment.id, include))
+          : inArray(enrollment.status, [...SIBLING_STATUSES]),
         except ? ne(enrollment.id, except) : undefined,
       ),
     )
@@ -460,6 +469,8 @@ async function impactsOn(
         .where(inArray(person.id, ids))
     : [];
   const firstNames = new Map(named.map((d) => [d.id, d.firstName ?? d.name]));
+  // A change that also lowers a sibling (a child moving up the ranking, #290) applies nothing.
+  const mayApply = sibling === "arriving" && raisesMayApply(impacts);
   return impacts.map((i) => {
     const e = existing.find((x) => x.reference === i.reference);
     const r = recomputed.find((x) => x.reference === i.reference);
@@ -469,7 +480,7 @@ async function impactsOn(
       savedDeposit: i.savedDiscountCents,
       recalculatedDiscount: i.recalculatedDiscountCents,
       applied:
-        sibling === "arriving" &&
+        mayApply &&
         e !== undefined &&
         r?.status === "ok" &&
         raisedNow(i, {
@@ -515,12 +526,21 @@ async function applyRaises(
       })
       .from(enrollment)
       .where(eq(enrollment.id, i.reference));
+    const fresh = now && {
+      reference: i.reference,
+      savedDiscountCents: now.discountCents,
+      recalculatedDiscountCents: i.recalculatedDiscount,
+    };
     if (
       !now ||
-      now.invoiced ||
-      now.manual ||
+      !fresh ||
       now.discountCents !== i.savedDeposit ||
-      now.grossPriceCents !== r.grossPriceCents
+      !raisedNow(fresh, {
+        manual: now.manual,
+        invoiced: now.invoiced,
+        paidDraft: false, // `discardDrafts` below refuses a paid draft before deleting anything
+        sameGross: now.grossPriceCents === r.grossPriceCents,
+      })
     )
       continue;
     if (!(await discardDrafts(tx, actor, drafts)).ok) continue;
@@ -998,23 +1018,13 @@ async function pricedConfirmation(
     ? cancelRefusal({ invoiced: true, attended: false })
     : transitionRefusal(e.status, "active");
   if (refusal) return { preview: { status: "invalid", message: refusal }, recomputed: [] };
-  const [target] = await withCourses(tx, [
-    {
-      id: e.id,
-      audience: e.audience,
-      period: e.period,
-      deposit: e.discountCents,
-      manual: e.manualPriceCents !== null,
-      gross: e.grossPriceCents,
-      invoiced: e.invoiced,
-      paidDraft: false,
-    },
-  ]);
-  const existing = await existingEnrollments(tx, e.payerId, e.seasonId, e.id);
+  // The target among the others, by enrollment date: the order every later pricing uses (#290 ties).
+  const all = await existingEnrollments(tx, e.payerId, e.seasonId, undefined, e.id);
+  const existing = all.filter((x) => x.reference !== e.id);
   const result = computeTariff({
     grid: await loadGrid(tx, e.seasonId),
     discounts: await loadDiscounts(tx, e.seasonId),
-    enrollments: [...existing, target],
+    enrollments: all,
   });
   // The engine returns one result per request, the target included.
   const price = result.enrollments.find((r) => r.reference === e.id)!;
