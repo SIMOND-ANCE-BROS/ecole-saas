@@ -42,6 +42,13 @@ export type GridRow = {
   price: Partial<Record<Period, { id: string; cents: number; used: boolean }>>;
 };
 
+/** Whether the season has a tariff grid (#376 Q2): without one, the enrollment form says every price is typed. */
+export async function hasTariffGrid(tx: Tx, seasonId: string): Promise<boolean> {
+  if (!isUuid(seasonId)) return false;
+  const [row] = await tx.select({ id: tariff.id }).from(tariff).where(eq(tariff.seasonId, seasonId)).limit(1);
+  return row !== undefined;
+}
+
 /** Rows of a season's grid, grouped by audience, combination and discipline; shortest to longest. */
 export async function seasonGrid(tx: Tx, seasonId: string): Promise<GridRow[]> {
   if (!isUuid(seasonId)) return [];

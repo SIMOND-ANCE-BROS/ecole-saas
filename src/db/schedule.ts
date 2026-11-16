@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, inArray, lte, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { COURSE_LIST_CANDIDATES, onCourseList, oneRowPerStudent } from "../domain/enrollment/lifecycle";
+import { enrollSeasonRefusal } from "../domain/enrollment/season";
 import { SIGNUP_LIST_STATUS, withSignups } from "../domain/workshop/participants";
 import { courseDatesSql } from "./courses";
 import type { Tx } from "./index";
@@ -75,6 +76,26 @@ export async function recordSeasons(
     current,
     seasons: await schoolSeasons(tx),
   };
+}
+
+/** Refusal of an enrollment in a season that is not the school's (another school's, unknown, malformed). */
+export const UNKNOWN_SEASON = "Cette saison n’existe pas.";
+
+/**
+ * The season an enrollment is made in (#376): one of the school's (RLS), the current one or a
+ * later one (`mayEnrollIn`), with the current season to come back to the record on. A past
+ * season, another school's or an unknown id is refused with the French message to show.
+ */
+export async function enrollableSeason(
+  tx: Tx,
+  asked: unknown,
+  day: string,
+): Promise<{ ok: true; season: Season; current: Season } | { ok: false; message: string }> {
+  const season = await seasonById(tx, asked);
+  const current = season && (await currentSeason(tx, day));
+  if (!season || !current) return { ok: false, message: UNKNOWN_SEASON };
+  const refusal = enrollSeasonRefusal(season, current, day);
+  return refusal ? { ok: false, message: refusal } : { ok: true, season, current };
 }
 
 /** Season of a course; null for an unknown course. */

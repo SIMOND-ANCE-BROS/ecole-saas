@@ -37,6 +37,8 @@ import { Relatives } from "./relatives";
 import { RulesSection } from "../../_people/rules-section";
 import { currentRulesVersion, listReferralSources, studentChoices, studentRulesLines } from "@/db/internal-rules";
 import { defaultAcceptedOn } from "@/domain/people/internal-rules";
+import { enrollButtonLabel } from "@/domain/enrollment/season";
+import { seasonParam, withSeason } from "../../planning/season-link";
 import { ButtonLink } from "../../_ui/button-link";
 import { BackToList } from "../../_ui/list-return";
 import { TextLink } from "../../_ui/text-link";
@@ -144,6 +146,15 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   const banner = BANNERS[String(inscription ?? carnet ?? stage ?? enregistre)];
   // Who pays a pack sold from this record: the student's payer, or themselves.
   const packPayer = e.billedTo.type === "person" ? e.billedTo.id : e.billedTo.type === "self" ? e.id : null;
+  // « Inscrire » enrolls in the season shown (#376); without any season, the form says so.
+  const seasons = parsed.seasons;
+  const enrollLabel = seasons
+    ? enrollButtonLabel(firstName, seasons.shown, seasons.current, today)
+    : `Inscrire ${firstName}`;
+  const enrollHref = withSeason(
+    `/eleves/${e.id}/inscription`,
+    seasons ? seasonParam(seasons.shown.id, seasons.current.id) : undefined,
+  );
 
   return (
     <article className="flex w-full min-w-0 flex-col gap-5">
@@ -178,11 +189,8 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
           <ButtonLink href={`/eleves/${e.id}/modifier`} variant="default">
             Modifier l’identité
           </ButtonLink>
-          {/* Enrolling is in the current season only, said when another one is shown (#362). */}
-          <ButtonLink href={`/eleves/${e.id}/inscription`}>
-            Inscrire {firstName}
-            {parsed.seasons && season?.id !== parsed.seasons.current.id && ` en ${parsed.seasons.current.label}`}
-          </ButtonLink>
+          {/* Enrolls in the season shown (#376): the current one or a later one; none on a past season. */}
+          {enrollLabel && <ButtonLink href={enrollHref}>{enrollLabel}</ButtonLink>}
         </div>
       </header>
 

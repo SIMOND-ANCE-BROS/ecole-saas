@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { withSchool } from "@/db";
 import { type Preview, enrollmentPreview, saveEnrollment, validManualPrices } from "@/db/enrollments";
-import { currentSeason } from "@/db/schedule";
+import { enrollableSeason } from "@/db/schedule";
 import { acceptRules, payersRules, setReferralIfNone, setRefusesPhotos } from "@/db/internal-rules";
 import { defaultAcceptedOn } from "@/domain/people/internal-rules";
 import { once, storedEnrollment } from "@/db/submissions";
@@ -12,9 +12,12 @@ import { INITIAL_STATUSES } from "@/domain/enrollment/lifecycle";
 import { todayInParis } from "@/domain/people/age";
 import { orBusy } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
+import { seasonParam, withSeason } from "../../../planning/season-link";
 
 const validInput = z.object({
   payerId: z.uuid(),
+  // The season the form enrolls in (#376): checked on the server against the school's seasons.
+  seasonId: z.uuid(),
   studentIds: z.array(z.uuid()).max(2),
   audience: z.enum(["child", "adult", "couple", "student"]),
   period: z.enum(["quarter", "year", "single"]),
@@ -40,19 +43,23 @@ const validEnrollment = validInput.extend({
 });
 export type EnrollInput = z.infer<typeof validEnrollment>;
 
-const NO_SEASON_MESSAGE = "Aucune saison n’est paramétrée.";
-const WITHOUT_SEASON: Preview = { status: "invalid", message: NO_SEASON_MESSAGE };
-
 /** Price preview, recomputed on the server on every change to the input. */
 export async function preview(entry: FormInput): Promise<Preview> {
-  const { schoolId: schoolId } = await requireRole("director", "front_desk");
+  const { schoolId } = await requireRole("director", "front_desk");
   const parsed = validInput.safeParse(entry);
   if (!parsed.success) return { status: "invalid", message: "Saisie invalide." };
-  const { payerId: payerId, ...rest } = parsed.data;
-  return withSchool(schoolId, async (tx) => {
-    const season = await currentSeason(tx, todayInParis());
-    return season ? enrollmentPreview(tx, payerId, season.id, rest) : WITHOUT_SEASON;
-  });
+  const { payerId, seasonId, ...rest } = parsed.data;
+  const today = todayInParis();
+  return orBusy(
+    () =>
+      withSchool(schoolId, async (tx): Promise<Preview> => {
+        // The current season or a later one of the school (#376); a past one or another school's is refused.
+        const chosen = await enrollableSeason(tx, seasonId, today);
+        if (!chosen.ok) return { status: "invalid", message: chosen.message };
+        return enrollmentPreview(tx, payerId, chosen.season.id, rest, today);
+      }),
+    (message): Preview => ({ status: "invalid", message }),
+  );
 }
 
 /**
@@ -60,16 +67,18 @@ export async function preview(entry: FormInput): Promise<Preview> {
  * generated once by the form: a retry after a lost response enrolls nothing twice (#260).
  */
 export async function enroll(entry: EnrollInput, key: string): Promise<{ message: string }> {
-  const { schoolId: schoolId, userId } = await requireRole("director", "front_desk");
+  const { schoolId, userId } = await requireRole("director", "front_desk");
   const parsed = validEnrollment.safeParse(entry);
   if (!parsed.success || !z.uuid().safeParse(key).success) return { message: "Saisie invalide." };
-  const { payerId: payerId, rulesSigned, referralId, refusesPhotos, ...rest } = parsed.data;
+  const { payerId, seasonId, rulesSigned, referralId, refusesPhotos, ...rest } = parsed.data;
   const today = todayInParis();
   const result = await orBusy(() =>
     withSchool(schoolId, async (tx) => {
-      const season = await currentSeason(tx, today);
-      if (!season) return { ok: false as const, message: NO_SEASON_MESSAGE };
-      return once(tx, "enrollment", key, parsed.data, storedEnrollment, async () => {
+      // The current season or a later one of the school (#376): re-enrollments in June.
+      const chosen = await enrollableSeason(tx, seasonId, today);
+      if (!chosen.ok) return chosen;
+      const { season, current } = chosen;
+      const done = await once(tx, "enrollment", key, parsed.data, storedEnrollment, async () => {
         const saved = await saveEnrollment(tx, userId, payerId, season.id, rest, today);
         if (!saved.ok) return saved;
         // Signed with this enrollment: on its date (#296 default). One already recorded keeps its own.
@@ -93,10 +102,14 @@ export async function enroll(entry: EnrollInput, key: string): Promise<{ message
           }
         return saved;
       });
+      return done.ok ? { ...done, shown: seasonParam(season.id, current.id) } : done;
     }),
   );
   if (!result.ok) return { message: result.message };
   // Courses of two businesses: one enrollment each (#299), said in the banner.
   const several = (result.ids?.length ?? 1) > 1;
-  redirect(`/eleves/${rest.studentIds[0]}?inscription=${several ? "enregistrees" : "enregistree"}`);
+  // Back to the record on the season enrolled in (#376).
+  redirect(
+    withSeason(`/eleves/${rest.studentIds[0]}?inscription=${several ? "enregistrees" : "enregistree"}`, result.shown),
+  );
 }
