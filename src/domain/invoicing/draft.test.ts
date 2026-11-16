@@ -308,14 +308,23 @@ describe("draftInvoices", () => {
     expect(d.installments.map((i) => i.dueOn)).toEqual(["2028-02-01", "2028-04-01"]);
   });
 
-  it("a drop-out mid-term still owes all it covers (#99 default); trial and waitlist are not drafted yet", () => {
+  it("a drop-out owes the quarters it kept (#99 Q2); trial, waitlist and a dropped trial are free (#99 Q1, #442)", () => {
     const [d] = draft([
-      enrollment({ id: "dropped", status: "dropped", period: "quarter", grossPriceCents: 15000, quarters: QUARTERS }),
+      // Dropped in November: its 2nd and 3rd quarters were released at the drop-out.
+      enrollment({
+        id: "dropped",
+        status: "dropped",
+        period: "quarter",
+        grossPriceCents: 15000,
+        quarters: QUARTERS.slice(0, 1),
+      }),
       enrollment({ id: "trial", status: "trial" }),
       enrollment({ id: "waitlist", status: "waitlist" }),
+      enrollment({ id: "trial-dropped", status: "dropped", droppedDuringTrial: true }),
     ]);
     expect(new Set(d.lines.map((l) => l.enrollmentId))).toEqual(new Set(["dropped"]));
-    expect(d.totalInclTaxCents).toBe(45000);
+    expect(d.totalInclTaxCents).toBe(15000);
+    expect(d.installments).toEqual([{ rank: 1, dueOn: "2027-10-01", amountCents: 15000 }]);
   });
 
   it("yearly packages and lesson packs are billed but get no installment while no plan is chosen (#176)", () => {

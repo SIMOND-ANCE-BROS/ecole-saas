@@ -1083,6 +1083,8 @@ export const enrollment = pgTable(
     // Day of the drop-out (#284): the student stays on attendance sheets up to this day included.
     // Only on a dropped enrollment; NULL on a drop-out written before #284.
     droppedOn: date("dropped_on"),
+    // Dropped while on trial, never confirmed (#442): a trial is free (#99 Q1), so it owes nothing.
+    droppedDuringTrial: boolean("dropped_during_trial").notNull().default(false),
     // Grid price and its discounts, as computed by the tariff engine. Without a package in the
     // grid for the courses (price typed by hand, #292), the typed price and no discount.
     // With a typed price, both (and `discounts`) are for information only: what is owed and
@@ -1105,6 +1107,7 @@ export const enrollment = pgTable(
   },
   (t) => [
     check("enrollment_dropped_on", sql`${t.droppedOn} IS NULL OR ${t.status} = 'dropped'`),
+    check("enrollment_dropped_during_trial", sql`NOT ${t.droppedDuringTrial} OR ${t.status} = 'dropped'`),
     // A typed price always has its reason, never blank (#292), and is never negative.
     check(
       "enrollment_manual_price",
@@ -1141,8 +1144,9 @@ export const enrollmentCourse = pgTable(
 /**
  * Quarters a quarterly enrollment covers (#291), set when it is saved: by default the
  * remaining ones from its enrollment day (`coveredQuarters`). What it owes is its net price
- * once per covered quarter (`seasonDueCents`). A quarter covered by an enrollment cannot be
- * removed from its season.
+ * once per covered quarter (`seasonDueCents`). A drop-out keeps the rows of the quarters started
+ * by its drop-out day and deletes the others (`owedQuarters`, `dropEnrollment`, #99), their ids in
+ * the audit log. A quarter covered by an enrollment cannot be removed from its season.
  */
 export const enrollmentQuarter = pgTable(
   "enrollment_quarter",

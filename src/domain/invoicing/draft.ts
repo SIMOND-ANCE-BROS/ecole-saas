@@ -1,7 +1,7 @@
 import { allocate } from "../../lib/money";
 import { NO_VAT_CHARGED, vatBreakdown, type VatRegime, type VatTreatment } from "../billing/vat";
 import { quarterlyDues, type SeasonQuarter } from "../enrollment/quarters";
-import { DUE_STATUSES, type EnrollmentStatus } from "../payments/balance";
+import { owesItsPrice, type EnrollmentStatus } from "../payments/balance";
 import { oneOffDue, planSchedule, type InstallmentPlanSetting, type PlanWindow } from "./plans";
 import { combinationLabel } from "../tariff/compute";
 import type { Audience, Period, TariffRow } from "../tariff/types";
@@ -20,7 +20,7 @@ import type { Audience, Period, TariffRow } from "../tariff/types";
  * - Q2 (quarterly billing): one invoice per season with one installment per quarter
  *   (`installmentsOf`, `quarterlyDues`).
  * - Q3 (what a dropped or trial enrollment owes, #99): as the balance counts it,
- *   `DUE_STATUSES` (a drop-out owes all it covers, a trial or waitlist nothing yet).
+ *   `owesItsPrice` (a drop-out owes the quarters it kept, #99 Q2; a trial or waitlist nothing yet, nor a trial dropped without being confirmed, #99 Q1, #442).
  *
  * A yearly package is due by the plan the family chose among the school's (#176,
  * `planSchedule`): the draft records its count (`installmentCount`). With no plan chosen yet,
@@ -143,6 +143,8 @@ export type BillableEnrollment = {
   id: string;
   billingEntityId: string;
   status: EnrollmentStatus;
+  /** Dropped while on trial, never confirmed (#442): owes nothing. */
+  droppedDuringTrial?: boolean;
   period: Period;
   /** Package line label: « Forfait 45 min + 1 h 00 — Zz Alice ». */
   label: string;
@@ -287,7 +289,7 @@ function ranked(byDay: ReadonlyMap<string, number>): DraftInstallment[] {
 
 /**
  * A payer's invoice drafts for a season (#302): one per business, in the order of `entities`,
- * for the enrollments that owe something (`DUE_STATUSES`) and the lesson packs given. Lines:
+ * for the enrollments that owe something (`owesItsPrice`) and the lesson packs given. Lines:
  * each enrollment's package and « Remise » lines per VAT treatment, then each pack; VAT taken
  * out of the VAT-inclusive prices per treatment over the whole invoice (`vatBreakdown`), the
  * treatment's category, rate and mention copied onto each line. A business with nothing to bill
@@ -311,7 +313,7 @@ export function draftInvoices(input: {
   const known = new Set(input.entities.map((e) => e.id));
   for (const x of [...input.enrollments, ...input.packs])
     if (!known.has(x.billingEntityId)) throw new RangeError(`Entreprise inconnue : ${x.billingEntityId}`);
-  const due = input.enrollments.filter((e) => DUE_STATUSES.includes(e.status));
+  const due = input.enrollments.filter((e) => owesItsPrice(e));
   if (due.some((e) => e.courses.length === 0))
     return { ok: false, message: "Une inscription sans cours ne peut pas être facturée : ajoutez-lui ses cours." };
   if (due.some((e) => netOf(e) < 0))

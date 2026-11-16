@@ -1,0 +1,2 @@
+ALTER TABLE "enrollment" ADD COLUMN "dropped_during_trial" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "enrollment" ADD CONSTRAINT "enrollment_dropped_during_trial" CHECK (NOT "enrollment"."dropped_during_trial" OR "enrollment"."status" = 'dropped');

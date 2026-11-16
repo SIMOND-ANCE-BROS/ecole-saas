@@ -13,7 +13,7 @@ import {
   takenCourses,
 } from "./enrollments";
 import { readPerson } from "./people";
-import { readAttendance } from "./lessons";
+import { readAttendance, saveAttendance } from "./lessons";
 import { enrolledInCourse } from "./schedule";
 import { balanceOf } from "./payments";
 import { overlapping } from "./overlap.integration-helpers";
@@ -148,6 +148,11 @@ const sheet = async (date: string) =>
   ((await inSchool((tx) => readAttendance(tx, ids[`lesson-${school}-${date}`]))) ?? { students: [] }).students.map(
     (d) => d.id,
   );
+
+/** Attendance of `student` on the lesson of `date`, taken by hand. */
+const take = (date: string, student: string, present: boolean) =>
+  admin`INSERT INTO attendance (school_id, lesson_id, student_id, present)
+    VALUES (${school}, ${ids[`lesson-${school}-${date}`]}, ${student}, ${present})`;
 
 describe("confirming a trial or waitlist enrollment", () => {
   it("recomputes the price with the payer's active enrollments, saves it only when confirmed, and logs it", async () => {
@@ -336,14 +341,189 @@ describe("waitlist and drop-outs", () => {
     });
   });
 
-  it("a drop-out stays due on the payer's balance (the school neither carries over nor refunds)", async () => {
+  it("a quarterly drop-out in November owes October–December only, not the following quarters (#99 Q2)", async () => {
     const f = await family(school, ["active"]);
-    await inSchool((tx) => dropEnrollment(tx, desk, f.enrollments[0], "2027-11-15"));
+    const [e] = f.enrollments;
     // 110,00 € a quarter, enrolled for the season's three quarters (#291).
+    expect((await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20")))?.total).toMatchObject({ due: 33000 });
+    await inSchool((tx) => dropEnrollment(tx, desk, e, "2027-11-15"));
+    // The quarter started stays owed in full (neither carried over nor refunded).
     expect((await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20")))?.total).toMatchObject({
-      due: 33000,
+      due: 11000,
       outsideCalculation: {},
     });
+    const [listed] = (
+      await inSchool((tx) => seasonEnrollments(tx, { payerId: f.payer }, ids[`season-${school}`]))
+    ).filter((i) => i.id === e);
+    expect(listed).toMatchObject({ quarters: ["1er trimestre"], quarterCount: 1, seasonDueCents: 11000 });
+    // The quarters not started are released, their ids in the audit log.
+    expect(listed.coveredQuarters.map((q) => q.label)).toEqual(["1er trimestre"]);
+    expect(await auditOf(e)).toMatchObject([
+      { after: { status: "dropped", droppedOn: "2027-11-15", releasedQuarterIds: quarters[school].slice(1) } },
+    ]);
+  });
+
+  it("owes the same once dropped when the season's quarter dates are edited afterwards", async () => {
+    const f = await family(school, ["active"]);
+    await inSchool((tx) => dropEnrollment(tx, desk, f.enrollments[0], "2027-12-20"));
+    const [, second] = quarters[school];
+    const [{ start }] = await admin`SELECT start_date::text AS start FROM season_quarter WHERE id = ${second}`;
+    try {
+      // The 2nd quarter now starts before the drop-out day: what was released stays released.
+      await admin`UPDATE season_quarter SET start_date = '2027-12-15' WHERE id = ${second}`;
+      expect((await inSchool((tx) => balanceOf(tx, f.payer, "2027-12-21")))?.total).toMatchObject({ due: 11000 });
+    } finally {
+      await admin`UPDATE season_quarter SET start_date = ${start} WHERE id = ${second}`;
+    }
+  });
+
+  it("a trial dropped without being confirmed owes nothing (#99 Q1, #442), counted with the trials", async () => {
+    const f = await family(school, ["trial"]);
+    const [e] = f.enrollments;
+    await take("2027-11-08", f.students[0], true);
+    expect(await inSchool((tx) => dropEnrollment(tx, desk, e, "2027-11-08"))).toEqual({ ok: true, id: e });
+    expect((await admin`SELECT dropped_during_trial FROM enrollment WHERE id = ${e}`)[0].dropped_during_trial).toBe(
+      true,
+    );
+    expect((await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20")))?.total).toMatchObject({
+      due: 0,
+      outsideCalculation: { trial: 11000 },
+    });
+    // The lesson attended on trial keeps its attendance on the sheet.
+    expect(await sheet("2027-11-08")).toContain(f.students[0]);
+  });
+
+  it("an enrollment dropped once confirmed is not taken for a trial", async () => {
+    const f = await family(school, ["active"]);
+    await inSchool((tx) => dropEnrollment(tx, desk, f.enrollments[0], "2027-11-15"));
+    expect(
+      (await admin`SELECT dropped_during_trial FROM enrollment WHERE id = ${f.enrollments[0]}`)[0].dropped_during_trial,
+    ).toBe(false);
+  });
+
+  it("keeps a trial mark only on a dropped enrollment (database check)", async () => {
+    const f = await family(school, ["trial"]);
+    await expect(
+      admin`UPDATE enrollment SET dropped_during_trial = true WHERE id = ${f.enrollments[0]}`,
+    ).rejects.toThrow(/enrollment_dropped_during_trial/);
+  });
+
+  it("a quarterly drop-out on the first day of a quarter owes that quarter too", async () => {
+    const f = await family(school, ["active"]);
+    await inSchool((tx) => dropEnrollment(tx, desk, f.enrollments[0], "2028-01-01"));
+    expect((await inSchool((tx) => balanceOf(tx, f.payer, "2028-01-02")))?.total).toMatchObject({ due: 22000 });
+  });
+
+  it("a yearly drop-out still owes its whole price", async () => {
+    const f = await family(school, ["active"]);
+    await admin`UPDATE enrollment SET period = 'year', gross_price_cents = 30000 WHERE id = ${f.enrollments[0]}`;
+    await admin`DELETE FROM enrollment_quarter WHERE enrollment_id = ${f.enrollments[0]}`;
+    await inSchool((tx) => dropEnrollment(tx, desk, f.enrollments[0], "2027-11-15"));
+    expect((await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20")))?.total).toMatchObject({ due: 30000 });
+  });
+
+  it("a trial enrollment is free (#99 Q1): out of the amount due, shown apart", async () => {
+    const f = await family(school, ["trial"]);
+    expect((await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20")))?.total).toMatchObject({
+      due: 0,
+      outsideCalculation: { trial: 33000 },
+    });
+  });
+
+  it("drafts again at once an unsent invoice draft billing quarters no longer owed", async () => {
+    const f = await family(school, ["active"]);
+    const [e] = f.enrollments;
+    const [inv] = await admin`INSERT INTO invoice (school_id, billing_entity_id, payer_id, season_id)
+      VALUES (${school}, ${entity}, ${f.payer}, ${ids[`season-${school}`]}) RETURNING id`;
+    await admin`INSERT INTO invoice_line (school_id, billing_entity_id, invoice_id, label, unit_price_cents, enrollment_id,
+        incl_tax_cents, excl_tax_cents, vat_cents, vat_treatment_id, vat_category, vat_mention)
+      VALUES (${school}, ${entity}, ${inv.id}, 'Forfait', 11000, ${e}, 33000, 33000, 0,
+        (SELECT default_vat_treatment_id FROM billing_entity WHERE id = ${entity}), 'exempt', 'Zz mention')`;
+    expect(await inSchool((tx) => dropEnrollment(tx, desk, e, "2027-11-15"))).toEqual({ ok: true, id: e });
+    expect(await admin`SELECT id FROM invoice WHERE id = ${inv.id}`).toHaveLength(0);
+    // The new draft bills the quarter kept only.
+    const drafts =
+      await admin`SELECT total_incl_tax_cents FROM invoice WHERE payer_id = ${f.payer} AND status = 'to_send'`;
+    expect(drafts.map((d) => d.total_incl_tax_cents)).toEqual([11000]);
+  });
+
+  it("keeps an unsent draft when the drop-out leaves every quarter owed (dropped in the last one)", async () => {
+    const f = await family(school, ["active"]);
+    const [e] = f.enrollments;
+    const [inv] =
+      await admin`INSERT INTO invoice (school_id, billing_entity_id, payer_id) VALUES (${school}, ${entity}, ${f.payer}) RETURNING id`;
+    await admin`INSERT INTO invoice_line (school_id, billing_entity_id, invoice_id, label, unit_price_cents, enrollment_id,
+        incl_tax_cents, excl_tax_cents, vat_cents, vat_treatment_id, vat_category, vat_mention)
+      VALUES (${school}, ${entity}, ${inv.id}, 'Forfait', 11000, ${e}, 33000, 33000, 0,
+        (SELECT default_vat_treatment_id FROM billing_entity WHERE id = ${entity}), 'exempt', 'Zz mention')`;
+    expect(await inSchool((tx) => dropEnrollment(tx, desk, e, "2028-05-02"))).toEqual({ ok: true, id: e });
+    expect(await admin`SELECT id FROM invoice WHERE id = ${inv.id}`).toHaveLength(1);
+  });
+});
+
+describe("a drop-out dated before attendance taken (#410)", () => {
+  const REFUSED_22 =
+    "Une présence est déjà relevée à la séance du 22/11/2027 (Jazz 17:00) : l’abandon ne peut pas être daté avant ce jour.";
+
+  it("is refused before the last lesson with the student marked present, naming that lesson; nothing is saved", async () => {
+    const f = await family(school, ["active"]);
+    const [e] = f.enrollments;
+    await take("2027-11-08", f.students[0], true);
+    await take("2027-11-22", f.students[0], true);
+    expect(await inSchool((tx) => dropEnrollment(tx, desk, e, "2027-11-15"))).toEqual({
+      ok: false,
+      message: REFUSED_22,
+    });
+    expect((await admin`SELECT status, dropped_on FROM enrollment WHERE id = ${e}`)[0]).toEqual({
+      status: "active",
+      dropped_on: null,
+    });
+    expect(await auditOf(e)).toHaveLength(0);
+    // On that lesson's day the student stays on its sheet: accepted.
+    expect(await inSchool((tx) => dropEnrollment(tx, desk, e, "2027-11-22"))).toEqual({ ok: true, id: e });
+    expect(await sheet("2027-11-22")).toContain(f.students[0]);
+  });
+
+  it("is refused alike when the student was marked absent (#410 Q2)", async () => {
+    const f = await family(school, ["trial"]);
+    await take("2027-11-22", f.students[0], false);
+    expect(await inSchool((tx) => dropEnrollment(tx, desk, f.enrollments[0], "2027-11-21"))).toEqual({
+      ok: false,
+      message: REFUSED_22,
+    });
+  });
+
+  it("is accepted when another enrollment of the student keeps that lesson on its sheet", async () => {
+    const f = await family(school, ["active"]);
+    const [other] = await admin`
+      INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, gross_price_cents, status)
+      VALUES (${school}, ${entity}, ${ids[`season-${school}`]}, ${f.payer}, 'child', 'year', 30000, 'active') RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id)
+      VALUES (${school}, ${entity}, ${other.id}, ${f.students[0]}, ${ids[`course-${school}`]})`;
+    await take("2027-11-22", f.students[0], true);
+    expect(await inSchool((tx) => dropEnrollment(tx, desk, f.enrollments[0], "2027-11-10"))).toMatchObject({
+      ok: true,
+    });
+    expect(await sheet("2027-11-22")).toContain(f.students[0]);
+  });
+
+  it("waits for attendance being saved for the lesson, then sees it and is refused", async () => {
+    const f = await family(school, ["active"]);
+    const [e] = f.enrollments;
+    const lesson = ids[`lesson-${school}-2027-11-22`];
+    const [saved, dropped] = await overlapping(
+      admin,
+      (hold) =>
+        inSchool(async (tx) => {
+          const r = await saveAttendance(tx, lesson, [{ studentId: f.students[0], present: true }]);
+          await hold();
+          return r;
+        }),
+      () => inSchool((tx) => dropEnrollment(tx, desk, e, "2027-11-15")),
+    );
+    expect(saved).toMatchObject({ ok: true });
+    expect(dropped).toEqual({ ok: false, message: REFUSED_22 });
+    expect(await sheet("2027-11-22")).toContain(f.students[0]);
   });
 });
 

@@ -1,3 +1,4 @@
+import { frenchDate } from "../../lib/dates";
 import type { EnrollmentStatus } from "./statuses";
 
 /**
@@ -5,15 +6,16 @@ import type { EnrollmentStatus } from "./statuses";
  * actions the front desk is offered, and who appears on attendance sheets and
  * course lists. Pure functions, no database.
  *
- * The rules still to be confirmed by the school (#284, « Open questions ») each
- * live in one place, with their recommended default:
+ * The rules asked of the school (#284, « Open questions ») each live in one place:
  * 1. What is owed for a dropped or trial enrollment: `DUE_STATUSES` (`src/domain/payments/balance.ts`, #99).
  *    The school's rules (2026-10-29): a paid quarter or year not attended is neither carried over
- *    nor refunded, so a drop-out stays due; a trial or waitlist enrollment is not due.
+ *    nor refunded, so a drop-out stays due; a trial or waitlist enrollment is not due (owner
+ *    decision 2026-11-15, #99 Q1: a trial lesson is free, even dropped, #442). A dropped quarterly
+ *    enrollment owes the quarters started by its drop-out day only (#99 Q2, `owedQuarters` in `./quarters.ts`).
  * 2. A status change never lowers the price of another saved enrollment: `discountImpacts` (`./impacts.ts`)
  *    only reports it. A siblings discount raised by an enrollment created or confirmed is saved on a
  *    sibling no invoice bills yet (#155 Q2, `raisedNow`), only reported once invoiced.
- * 3. Only active enrollments count as siblings: `SIBLING_STATUSES` below.
+ * 3. Only active enrollments count as siblings: `SIBLING_STATUSES` below (confirmed by the owner, #99 Q4).
  * 4. The price is recomputed at confirmation: `confirmationPrice` below.
  * 5. A full course is a warning, not a hard limit: `overfilledCourses` below. Which courses are
  *    limited is data (`course.max_capacity`): the school limits children's courses only (answers
@@ -130,6 +132,25 @@ export function dropDateRefusal(droppedOn: string, bounds: { min: string; max: s
   if (droppedOn < bounds.min)
     return "La date de l’abandon ne peut pas précéder l’inscription ni le début de la saison.";
   return null;
+}
+
+/**
+ * The last lesson whose attendance (present or absent) was taken for a student of an enrollment
+ * and that no other enrollment nor workshop sign-up of that student keeps on its sheet:
+ * `course` names it, « Jazz 18:00 ».
+ */
+export type AttendedLesson = { date: string; course: string };
+
+/**
+ * Why a drop-out date is refused for the attendance already taken (#410, owner decision
+ * 2026-11-15, option a); null when accepted. A drop-out dated before `lastAttended` would take
+ * the student off that lesson's sheet (`onAttendanceSheet`) while its attendance stays counted on
+ * the instructor statement, out of anyone's sight. Marked present or absent alike (#410 Q2). The
+ * lesson's own day is accepted: the student stays on the sheets up to the drop-out day included.
+ */
+export function attendedDropRefusal(droppedOn: string, lastAttended: AttendedLesson | null): string | null {
+  if (lastAttended === null || droppedOn >= lastAttended.date) return null;
+  return `Une présence est déjà relevée à la séance du ${frenchDate(lastAttended.date)} (${lastAttended.course}) : l’abandon ne peut pas être daté avant ce jour.`;
 }
 
 /** A price as stored on an enrollment, in cents. */
