@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   DEFAULT_INSTALLMENT_PLANS,
   type InstallmentPlanSetting,
+  noDueDayLeft,
   planSettingRefusal,
   plansThatFit,
   sortedCounts,
@@ -96,7 +97,14 @@ export async function saveInstallmentPlans(
 }
 
 /** The plans the record offers for a season (#176): the ones that fit, and the ones no longer fitting. */
-export type OfferedPlans = { counts: number[]; tooLong: number[]; dueDay: number; seasonEnd: string };
+export type OfferedPlans = {
+  counts: number[];
+  tooLong: number[];
+  dueDay: number;
+  seasonEnd: string;
+  /** No due day left in the season (#380): one installment, dated the day it is drafted. */
+  noneLeft: boolean;
+};
 
 /** What « Préparer les factures » offers for `season` on `today` (`plansThatFit`). */
 export async function offeredPlans(
@@ -105,11 +113,13 @@ export async function offeredPlans(
   today: string,
 ): Promise<OfferedPlans> {
   const setting = await readInstallmentPlans(tx);
-  const counts = plansThatFit(setting, { season, today });
+  const window = { season, today };
+  const counts = plansThatFit(setting, window);
   return {
     counts,
     tooLong: setting.counts.filter((c) => !counts.includes(c)),
     dueDay: setting.dueDay,
     seasonEnd: season.endDate,
+    noneLeft: noDueDayLeft(setting, window),
   };
 }

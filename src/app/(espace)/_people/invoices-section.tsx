@@ -85,7 +85,10 @@ function InvoiceCard({ i, showEntity, isDirector }: { i: PayerInvoice; showEntit
       <Text size="xs" c="dimmed" className="tabular-nums">
         {i.installments.length === 0
           ? "Aucune échéance."
-          : `Échéances${i.installmentCount === null ? "" : ` (${planLabel(i.installmentCount)})`} : ${i.installments.map((d) => `${frenchDate(d.dueDate)} ${formatEuros(d.amountCents)}`).join(" · ")}`}
+          : `Échéances${i.installmentCount === null ? "" : ` (${planLabel(i.installmentCount)})`} : ${i.installments
+              // A date and its amount never split across two lines.
+              .map((d) => `${frenchDate(d.dueDate)}\u00a0${formatEuros(d.amountCents)}`)
+              .join(" · ")}`}
       </Text>
     </li>
   );
@@ -138,7 +141,7 @@ export function InvoicesSection({
           />
         )}
       </div>
-      {drafting && plans && <PlanNote plans={plans} />}
+      {drafting && plans && <PlanNote plans={plans} current={current} />}
       {canDraft && endedNote && (
         <Text size="sm" c="dimmed">
           {endedNote}
@@ -162,16 +165,27 @@ export function InvoicesSection({
 }
 
 /**
- * When the plan's installments fall (#176): « Échéances le 5 du mois, la dernière au plus tard
- * le 30 juin 2028. », and the plans the season no longer fits.
+ * When the plan's installments fall (#176): « Sauf forfaits au trimestre : échéances le 5 du
+ * mois, la dernière au plus tard le 30/06/2028. », the plan chosen, and the plans the season no
+ * longer fits.
  */
-function PlanNote({ plans }: { plans: OfferedPlans }) {
-  const tooLong = plans.tooLong.map((c) => `en ${c} fois`);
+function PlanNote({ plans, current }: { plans: OfferedPlans; current: number | null }) {
+  const chosen = current === null ? "" : ` Choix actuel : ${planLabel(current)}.`;
+  if (plans.noneLeft)
+    return (
+      <Text size="xs" c="dimmed">
+        {`Plus aucune échéance possible dans la saison : sauf forfaits au trimestre, la facture est due en une fois, à la date du jour.${chosen}`}
+      </Text>
+    );
+  const tooLong = plans.tooLong.map(planLabel);
+  const day = plans.dueDay === 1 ? "1er" : plans.dueDay;
   return (
     <Text size="xs" c="dimmed">
-      {`Hors trimestres, échéances le ${plans.dueDay === 1 ? "1er" : plans.dueDay} du mois, la dernière au plus tard le ${frenchDate(plans.seasonEnd)}.`}
+      {`Sauf forfaits au trimestre (payés à chaque trimestre) : échéances le ${day} du mois, la dernière au plus tard le ${frenchDate(plans.seasonEnd)}.${chosen}`}
       {tooLong.length > 0 &&
         ` Le paiement ${tooLong.join(" ou ")} n’est plus possible : la dernière échéance tomberait après la fin de la saison.`}
+      {plans.counts.length === 0 &&
+        " Aucun plan proposé ne tient dans la saison : la direction peut proposer « en une fois » dans Paramètres › Paiement en plusieurs fois."}
     </Text>
   );
 }

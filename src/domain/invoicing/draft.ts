@@ -311,6 +311,14 @@ export function draftInvoices(input: {
     return { ok: false, message: "Une inscription sans cours ne peut pas être facturée : ajoutez-lui ses cours." };
   if (due.some((e) => netOf(e) < 0))
     return { ok: false, message: "Une inscription a une remise plus grande que son prix : corrigez son prix." };
+  // A count chosen but not offered, or not fitting the season, is refused once for every business.
+  const plans = input.plans;
+  if (plans && plans.choice !== null) {
+    const offered = planSchedule({ amountCents: 0, count: plans.choice, setting: plans.setting, window: plans.window });
+    if (!offered.ok) return offered;
+  }
+  // Several businesses billing: a refusal of one's split names it.
+  const billing = new Set([...due, ...input.packs].map((x) => x.billingEntityId));
   const drafts: InvoiceDraft[] = [];
   for (const entity of input.entities) {
     const enrollments = due.filter((e) => e.billingEntityId === entity.id);
@@ -352,9 +360,10 @@ export function draftInvoices(input: {
     const rest =
       enrollments.filter((e) => e.period !== "quarter").reduce((s, e) => s + netOf(e), 0) +
       packs.reduce((s, p) => s + p.priceCents, 0);
-    const plans = input.plans;
     let installmentCount =
       plans?.choice ?? plans?.previous.get(entity.id) ?? (plans ? [...plans.previous.values()][0] : null) ?? null;
+    // Nothing outside the quarters: no plan applies, none is recorded.
+    if (rest === 0) installmentCount = null;
     if (plans && installmentCount !== null) {
       const plan = planSchedule({
         amountCents: rest,
@@ -363,7 +372,8 @@ export function draftInvoices(input: {
         window: plans.window,
       });
       if (plan.ok) for (const i of plan.installments) byDay.set(i.dueOn, (byDay.get(i.dueOn) ?? 0) + i.amountCents);
-      else if (plans.choice !== null) return plan;
+      else if (plans.choice !== null)
+        return { ok: false, message: billing.size > 1 ? `${entity.name} : ${plan.message}` : plan.message };
       else installmentCount = null;
     }
     drafts.push({

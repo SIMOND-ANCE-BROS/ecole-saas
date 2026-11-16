@@ -509,6 +509,41 @@ describe("draftInvoices with an installment plan (#176)", () => {
     expect(r.drafts[0]).toMatchObject({ installmentCount: null, installments: [] });
   });
 
+  it("a payer paying only by the quarter records no plan, whatever was clicked", () => {
+    const r = run([enrollment({ period: "quarter", grossPriceCents: 10000, quarters: QUARTERS })]);
+    if (!r.ok) throw new Error(r.message);
+    expect(r.drafts[0].installmentCount).toBeNull();
+    expect(r.drafts[0].installments.map((i) => i.dueOn)).toEqual(["2027-10-01", "2028-01-01", "2028-04-01"]);
+  });
+
+  it("a plan installment and a quarter due the same day make one installment", () => {
+    const quarterly = enrollment({ id: "q", period: "quarter", grossPriceCents: 10000, quarters: QUARTERS });
+    const r = run(
+      [quarterly, enrollment({ id: "y", grossPriceCents: 30000 })],
+      [],
+      plans({ setting: { counts: [1, 3, 10], dueDay: 1, roundingUnitCents: 100 } }),
+    );
+    if (!r.ok) throw new Error(r.message);
+    expect(r.drafts[0].installments).toEqual([
+      { rank: 1, dueOn: "2027-09-01", amountCents: 10000 },
+      { rank: 2, dueOn: "2027-10-01", amountCents: 20000 },
+      { rank: 3, dueOn: "2027-11-01", amountCents: 10000 },
+      { rank: 4, dueOn: "2028-01-01", amountCents: 10000 },
+      { rank: 5, dueOn: "2028-04-01", amountCents: 10000 },
+    ]);
+    expect(sumInstallments(r.drafts[0])).toBe(r.drafts[0].totalInclTaxCents);
+  });
+
+  it("a chosen plan one business cannot split is refused, naming that business", () => {
+    const r = run(
+      [enrollment(), enrollment({ id: "b", billingEntityId: "B", grossPriceCents: 900 })],
+      [],
+      plans({ choice: 10 }),
+    );
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.message).toMatch(/^Zz Danse B : .* ne se partagent pas en 10 échéances/);
+  });
+
   it("no choice and no previous draft: held, as before #176", () => {
     const r = run([enrollment()], [], plans({ choice: null }));
     if (!r.ok) throw new Error(r.message);

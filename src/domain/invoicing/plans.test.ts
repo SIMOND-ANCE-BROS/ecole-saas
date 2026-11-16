@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_INSTALLMENT_PLANS,
   firstDueDate,
+  noDueDayLeft,
   planLabel,
   planSchedule,
   planSettingRefusal,
@@ -40,6 +41,13 @@ describe("plansThatFit", () => {
 
   it("an ended season gets one installment (#380 Q2)", () => {
     expect(plansThatFit(RIBAS, at("2028-07-15"))).toEqual([1]);
+  });
+});
+
+describe("noDueDayLeft", () => {
+  it("is true only once the season has no due day left", () => {
+    expect(noDueDayLeft(RIBAS, at("2028-06-05"))).toBe(false);
+    expect(noDueDayLeft(RIBAS, at("2028-06-06"))).toBe(true);
   });
 });
 
@@ -126,14 +134,15 @@ describe("planSchedule", () => {
   it("the default setting: one installment, to the cent", () => {
     expect(plan(41550, 1, "2027-06-20", DEFAULT_INSTALLMENT_PLANS)).toEqual({
       ok: true,
-      installments: [{ dueOn: "2027-09-05", amountCents: 41550 }],
+      installments: [{ dueOn: "2027-09-01", amountCents: 41550 }],
     });
   });
 });
 
 describe("planSettingRefusal", () => {
-  it("accepts the owner's setting", () => {
+  it("accepts the owner's setting and the edges: 12 installments, the 28th", () => {
     expect(planSettingRefusal(RIBAS)).toBeNull();
+    expect(planSettingRefusal({ counts: [12], dueDay: 28, roundingUnitCents: 1 })).toBeNull();
   });
 
   it("refuses no plan, a count out of range, a duplicate, a due day past the 28th and an unknown rounding", () => {

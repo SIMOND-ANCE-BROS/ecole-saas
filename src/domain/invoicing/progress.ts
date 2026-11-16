@@ -85,7 +85,7 @@ export type InvoiceProgress = { kind: ProgressKind; label: string; detail: strin
  * or drop-in package, a lesson pack), so its installments do not cover its total (`isSendable`).
  */
 export const HELD_DETAIL =
-  "Pas encore envoyée : choisissez en combien de fois la famille paie (boutons « En … fois » ci-dessus) pour fixer ses échéances. Elle partira ensuite d’elle-même.";
+  "Pas encore envoyée : ses échéances attendent que l’on choisisse en combien de fois la famille paie, en préparant à nouveau les factures. Elle partira ensuite d’elle-même.";
 
 /** What the record says of one invoice of the payer. */
 export function invoiceProgress(i: ProgressInput): InvoiceProgress {

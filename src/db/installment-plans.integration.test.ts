@@ -127,6 +127,7 @@ describe("installment_plan_setting (#176)", () => {
       tooLong: [10],
       dueDay: 5,
       seasonEnd: "2028-06-30",
+      noneLeft: false,
     });
   });
 });

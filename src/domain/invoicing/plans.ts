@@ -17,8 +17,8 @@ export type InstallmentPlanSetting = {
   roundingUnitCents: number;
 };
 
-/** A school with no setting row: one installment, due on the 5th, to the cent. */
-export const DEFAULT_INSTALLMENT_PLANS: InstallmentPlanSetting = { counts: [1], dueDay: 5, roundingUnitCents: 1 };
+/** A school with no setting row: one installment, due on the 1st, to the cent. */
+export const DEFAULT_INSTALLMENT_PLANS: InstallmentPlanSetting = { counts: [1], dueDay: 1, roundingUnitCents: 1 };
 
 export const MAX_INSTALLMENTS = 12;
 export const MAX_DUE_DAY = 28;
@@ -63,6 +63,11 @@ function planDates(setting: InstallmentPlanSetting, w: PlanWindow) {
   const from = w.today > w.season.startDate ? w.today : w.season.startDate;
   const first = firstDueDate(from, setting.dueDay);
   return first > w.season.endDate ? { first: from, last: null } : { first, last: w.season.endDate };
+}
+
+/** Whether the season has no due day left (ended, #380): a single installment dated today. */
+export function noDueDayLeft(setting: InstallmentPlanSetting, w: PlanWindow): boolean {
+  return planDates(setting, w).last === null;
 }
 
 /**

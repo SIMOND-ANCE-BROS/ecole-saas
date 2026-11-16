@@ -1,3 +1,5 @@
+import { split } from "../../lib/money";
+
 export type ScheduleRequest = {
   amountCents: number;
   installmentCount: number;
@@ -42,15 +44,14 @@ export function computeSchedule(request: ScheduleRequest): Installment[] {
   readDate(firstDate);
   if (lastDate !== undefined) readDate(lastDate);
 
-  // Integer division of two positive integers: no floating-point amount.
-  const base = Math.trunc(amountCents / (installmentCount * roundingUnitCents)) * roundingUnitCents;
-  if (installmentCount > 1 && base === 0) {
+  const amounts = split(amountCents, installmentCount, roundingUnitCents);
+  if (amounts.some((a) => a === 0)) {
     throw new RangeError(`Montant trop petit pour ${installmentCount} échéances : ${amountCents}`);
   }
-  const installments = Array.from({ length: installmentCount }, (_, i) => ({
+  const installments = amounts.map((amount, i) => ({
     rank: i + 1,
     plannedDate: addMonths(firstDate, i * monthInterval),
-    amountCents: i === 0 ? amountCents - base * (installmentCount - 1) : base,
+    amountCents: amount,
   }));
   const last = installments[installments.length - 1].plannedDate;
   if (lastDate !== undefined && last > lastDate) {

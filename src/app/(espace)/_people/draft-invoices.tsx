@@ -4,26 +4,26 @@ import { Button, Loader, Text } from "@mantine/core";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { notSent, settle } from "@/lib/action-result";
+import { planLabel } from "@/domain/invoicing/plans";
 import { draftInvoices } from "./invoice-actions";
 
 // Drafting again replaces the unsent drafts in place: retrying never makes a second set.
 const FAILED = "Factures non préparées : réessayez. Si le problème continue, vérifiez la connexion.";
 
-/** `again`: drafts not sent yet existed, and were replaced. */
-const prepared = (n: number, again: boolean) =>
-  n === 0
-    ? "Rien de nouveau à facturer : tout est déjà sur une facture."
-    : again
-      ? "Factures mises à jour."
-      : `${n} facture${n > 1 ? "s" : ""} préparée${n > 1 ? "s" : ""}.`;
+/** `again`: drafts not sent yet existed, and were replaced; `count`: the plan clicked. */
+const prepared = (n: number, again: boolean, count: number | undefined) => {
+  if (n === 0) return "Rien de nouveau à facturer : tout est déjà sur une facture.";
+  const done = again ? "Factures mises à jour" : `${n} facture${n > 1 ? "s" : ""} préparée${n > 1 ? "s" : ""}`;
+  return count === undefined ? `${done}.` : `${done} : ${planLabel(count)}.`;
+};
 
 /** « En une fois », « En 3 fois »: a plan's button. */
-const planButton = (count: number) => (count === 1 ? "En une fois" : `En ${count} fois`);
+const planButton = (count: number) => planLabel(count).replace(/^en/, "En");
 
 /**
  * « Préparer les factures » (#352): drafts the payer's invoices of the season, one per
  * business, in one click per plan the school offers and the season still fits (#176):
- * « En une fois », « En 3 fois »… The plan of the drafts not sent yet is highlighted; clicking
+ * « En une fois », « En 3 fois »… The plan of the drafts not sent yet is ticked; clicking
  * another drafts them again with it. With no plan left that fits, one button keeps each
  * business's previous plan.
  */
@@ -52,7 +52,9 @@ export function DraftInvoices({
     startTransition(async () => {
       const r = await settle(() => draftInvoices({ payerId, seasonId, installmentCount }));
       setMessage(
-        r.ok ? { ok: true, text: prepared(r.drafted, again) } : { ok: false, text: notSent(r) ? FAILED : r.message },
+        r.ok
+          ? { ok: true, text: prepared(r.drafted, again, installmentCount) }
+          : { ok: false, text: notSent(r) ? FAILED : r.message },
       );
       setBusy(null);
       if (r.ok) router.refresh();
@@ -81,13 +83,15 @@ export function DraftInvoices({
             <Button
               key={c}
               size="compact-sm"
-              variant={c === current ? "filled" : "light"}
+              // Secondary like every plan (one primary button per view); the current one is ticked.
+              variant="light"
+              aria-pressed={c === current}
               aria-disabled={busy !== null || undefined}
+              leftSection={c === current ? <span aria-hidden>✓</span> : null}
               rightSection={busy === c ? <Loader size="xs" color="currentColor" /> : null}
               onClick={() => draft(c)}
             >
               {planButton(c)}
-              {c === current && <span className="sr-only"> (choix actuel)</span>}
             </Button>
           ))}
         </div>
