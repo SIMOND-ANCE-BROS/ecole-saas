@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  holdsPersonalValue,
   PERSONAL_KEYS,
   PLACEHOLDER,
   pseudonymisationCutoff,
@@ -92,22 +91,6 @@ describe("redactEntry", () => {
   });
 });
 
-describe("holdsPersonalValue", () => {
-  it("is true while a personal key holds text", () => {
-    expect(holdsPersonalValue({ targetTable: "lesson_pack", before: null, after: { reason: "Zz" } })).toBe(true);
-  });
-
-  it("is false once redacted, or with no personal text", () => {
-    expect(holdsPersonalValue({ targetTable: "lesson_pack", before: null, after: { reason: PLACEHOLDER } })).toBe(
-      false,
-    );
-    expect(
-      holdsPersonalValue({ targetTable: "enrollment", before: { reason: null }, after: { status: "active" } }),
-    ).toBe(false);
-    expect(holdsPersonalValue({ targetTable: "payment", before: null, after: { reason: "Zz" } })).toBe(false);
-  });
-});
-
 describe("key lists", () => {
   it("never list a key both personal and technical", () => {
     for (const [table, keys] of Object.entries(PERSONAL_KEYS))
@@ -138,11 +121,14 @@ describe("unclassifiedKeys", () => {
     ).toEqual(["enrollment.phone", "new_table.*"]);
   });
 
-  it("reports nothing for the keys the writers use today", () => {
-    const found = Object.entries(TECHNICAL_KEYS).flatMap(([targetTable, keys]) =>
-      keys.map((key) => ({ targetTable, key })),
-    );
-    expect(unclassifiedKeys(found)).toEqual([]);
+  it("reports nothing for keys of a school-data table, nor for listed keys", () => {
+    expect(
+      unclassifiedKeys([
+        { targetTable: "invoice", key: "total_incl_tax_cents" },
+        { targetTable: "invitation", key: "email" },
+        { targetTable: "invitation", key: "expiresAt" },
+      ]),
+    ).toEqual([]);
   });
 });
 

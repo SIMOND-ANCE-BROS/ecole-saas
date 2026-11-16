@@ -2,6 +2,7 @@ import postgres from "postgres";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db, withSchool } from "./index";
+import { defaultEntityFor } from "./billing-entity.integration-helpers";
 import { dueEntries, pseudonymiseDue, pseudonymiseEntries } from "./audit-pseudonymisation";
 import { PERSONAL_KEYS, PLACEHOLDER, redactEntry } from "../domain/audit/pseudonymise";
 
@@ -77,10 +78,16 @@ let newStudent: number; // payer gone, student's record created this year: not d
 let oldPack: number; // due
 let oldSignupDeleted: number; // workshop sign-up deleted, `priceReason`: due
 let namesNobody: number; // a reason naming no person: never chosen
+let cancelledInvoice: number; // payer gone, with a cancelled and a rejected draft never issued: due
+let invoiceOnItsWay: number; // payer gone but with an invoice still to send: not due
+let paidThisYear: number; // payer gone but paid in 2026: not due
+let livePack: number; // a pack bought this season, its payer read from the live row only: not due
+let cancelledWithStudent: number; // enrollment cancelled, its student under `courses[*]` created this year: not due
 let oldPayment: number; // a payment entry of a gone payer: no personal key, never touched
 let goneInvitation: number; // expired in 2021, address of a member deactivated in 2022: due
 let memberInvitation: number; // expired in 2021, address of an active member: not due
 let reinvited: number; // expired in 2021, same address invited again in 2026: not due
+let malformed: number; // an `expiresAt` that is not a date: never due, and fails nothing
 let otherSchoolEntry: number; // school B, same as `oldEnrollment`
 
 const enrollmentAfter = (payerId: string, studentIds: string[]) => ({
@@ -133,6 +140,40 @@ beforeAll(async () => {
     },
   });
   namesNobody = await entry({ table: "enrollment", action: "update", after: { status: "active", reason: "Zz" } });
+
+  const entity = await defaultEntityFor(admin, school);
+  const [{ treatment }] =
+    await admin`SELECT default_vat_treatment_id AS treatment FROM billing_entity WHERE id = ${entity}`;
+  const cancelledPayer = await person(school);
+  await admin`INSERT INTO invoice (school_id, billing_entity_id, payer_id, status)
+    VALUES (${school}, ${entity}, ${cancelledPayer}, 'cancelled'), (${school}, ${entity}, ${cancelledPayer}, 'rejected')`;
+  cancelledInvoice = await entry({ table: "enrollment", after: enrollmentAfter(cancelledPayer, []), at: OLD });
+  const draftPayer = await person(school);
+  await admin`INSERT INTO invoice (school_id, billing_entity_id, payer_id, status)
+    VALUES (${school}, ${entity}, ${draftPayer}, 'to_send')`;
+  invoiceOnItsWay = await entry({ table: "enrollment", after: enrollmentAfter(draftPayer, []), at: OLD });
+  const payingPayer = await person(school);
+  await admin`INSERT INTO payment (school_id, billing_entity_id, payer_id, amount_cents, method, date)
+    VALUES (${school}, ${entity}, ${payingPayer}, 5000, 'cash', '2026-10-01')`;
+  paidThisYear = await entry({
+    table: "lesson_pack",
+    after: { payerId: payingPayer, priceCents: 5_000, reason: "Zz" },
+  });
+  const packPayer = await person(school);
+  const [{ id: pack }] = await admin`INSERT INTO lesson_pack
+      (school_id, payer_id, billing_entity_id, vat_treatment_id, people_count, lesson_count, price_cents, purchased_on)
+    VALUES (${school}, ${packPayer}, ${entity}, ${treatment}, 1, 5, 20000, '2026-09-10') RETURNING id`;
+  livePack = await entry({ table: "lesson_pack", rowId: pack, after: { priceCents: 20_000, reason: "Zz" } });
+  cancelledWithStudent = await entry({
+    table: "enrollment",
+    action: "delete",
+    before: {
+      payerId: gonePayer,
+      grossPriceCents: 45_000,
+      reason: "Zz",
+      courses: [{ studentId: recentStudent, courseId: crypto.randomUUID() }],
+    },
+  });
   oldPayment = await entry({
     table: "payment",
     after: { montant_centimes: 12_000, method: "cheque", date: "2020-01-15", reason: "Zz" },
@@ -165,6 +206,7 @@ beforeAll(async () => {
   const again = `zz-encore-${suffix}@exemple.test`;
   reinvited = await entry({ table: "invitation", after: invitation(again, "2021-03-08T10:00:00.000Z") });
   await entry({ table: "invitation", after: invitation(again.toUpperCase(), "2026-11-20T10:00:00.000Z") });
+  malformed = await entry({ table: "invitation", after: invitation(`zz-x-${suffix}@exemple.test`, "bientôt") });
 
   const otherPayer = await person(other);
   otherSchoolEntry = await entry({
@@ -180,8 +222,11 @@ afterAll(async () => {
     await t`ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only`;
     await t`DELETE FROM audit_log WHERE school_id IN (${school}, ${other})`;
     await t`ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only`;
+    await t`ALTER TABLE payment DISABLE TRIGGER payment_immutable`;
+    await t.unsafe("DELETE FROM payment WHERE school_id IN ($1, $2)", [school, other]);
+    await t`ALTER TABLE payment ENABLE TRIGGER payment_immutable`;
   });
-  for (const t of ["member", "rules_acceptance", "season", "person"])
+  for (const t of ["invoice", "lesson_pack", "member", "rules_acceptance", "season", "person"])
     await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [school, other]);
   await admin`DELETE FROM "user" WHERE id IN (${activeUser}, ${goneUser})`;
   await admin`DELETE FROM school WHERE id IN (${school}, ${other})`;
@@ -306,22 +351,28 @@ describe("pseudonymisation of the due entries (proposed end of the relationship)
   it("chooses the entries of people gone for 3 years and invitees gone for 3 years", async () => {
     const due = await withSchool(school, (tx) => dueEntries(tx, TODAY));
     expect(due.sort((a, b) => a - b)).toEqual(
-      [oldEnrollment, oldPack, oldSignupDeleted, goneInvitation].sort((a, b) => a - b),
+      [oldEnrollment, oldPack, oldSignupDeleted, goneInvitation, cancelledInvoice].sort((a, b) => a - b),
     );
     expect(due).not.toContain(paidRecently);
     expect(due).not.toContain(newStudent);
     expect(due).not.toContain(namesNobody);
+    expect(due).toContain(cancelledInvoice);
+    expect(due).not.toContain(invoiceOnItsWay);
+    expect(due).not.toContain(paidThisYear);
+    expect(due).not.toContain(livePack);
+    expect(due).not.toContain(cancelledWithStudent);
     expect(due).not.toContain(oldPayment);
     expect(due).not.toContain(memberInvitation);
     expect(due).not.toContain(reinvited);
+    expect(due).not.toContain(malformed);
     expect(due).not.toContain(otherSchoolEntry);
   });
 
   it("replaces their personal values only, keeps amounts, ids and dates, and logs ids and a count", async () => {
     const before = await read(oldEnrollment);
     const payment = await read(oldPayment);
-    const run = await withSchool(school, (tx) => pseudonymiseDue(tx, TODAY));
-    expect(run.pseudonymised).toBe(4);
+    const run = await pseudonymiseDue((fn) => withSchool(school, fn), TODAY);
+    expect(run.pseudonymised).toBe(5);
 
     expect((await read(oldEnrollment)).after).toEqual({ ...(before.after as object), reason: PLACEHOLDER });
     expect((await read(oldPack)).after).toMatchObject({
@@ -341,15 +392,15 @@ describe("pseudonymisation of the due entries (proposed end of the relationship)
       SELECT after, actor FROM audit_log WHERE school_id = ${school} AND target_table = 'audit_log'`;
     expect(logs).toHaveLength(1);
     expect(logs[0].actor).toBeNull();
-    expect(logs[0].after.pseudonymised).toBe(4);
+    expect(logs[0].after.pseudonymised).toBe(5);
     expect(logs[0].after.ids.map(Number).sort((a, b) => a - b)).toEqual(
-      [oldEnrollment, oldPack, oldSignupDeleted, goneInvitation].sort((a, b) => a - b),
+      [oldEnrollment, oldPack, oldSignupDeleted, goneInvitation, cancelledInvoice].sort((a, b) => a - b),
     );
     expect(Object.keys(logs[0].after).sort()).toEqual(["ids", "pseudonymised"]);
   });
 
   it("changes nothing, and logs nothing, when run again", async () => {
-    const run = await withSchool(school, (tx) => pseudonymiseDue(tx, TODAY));
+    const run = await pseudonymiseDue((fn) => withSchool(school, fn), TODAY);
     expect(run.pseudonymised).toBe(0);
     expect(await withSchool(school, (tx) => pseudonymiseEntries(tx, [oldEnrollment, oldPack]))).toBe(0);
     const [{ n }] =
@@ -357,9 +408,12 @@ describe("pseudonymisation of the due entries (proposed end of the relationship)
     expect(n).toBe(1);
   });
 
-  it("reports no unclassified key for the entries the writers make", async () => {
-    const run = await withSchool(school, (tx) => pseudonymiseDue(tx, TODAY));
-    // `payment` is school data; every other key of these fixtures is classified.
+  it("reports the keys no list classifies, by name only", async () => {
+    // Every key of the fixtures above is classified (`payment` is school data); one more is not.
+    const run = await pseudonymiseDue((fn) => withSchool(school, fn), TODAY);
     expect(run.unclassified).toEqual([]);
+    await entry({ table: "enrollment", after: { phone: "Zz" } });
+    const again = await pseudonymiseDue((fn) => withSchool(school, fn), TODAY);
+    expect(again.unclassified).toEqual(["enrollment.phone"]);
   });
 });

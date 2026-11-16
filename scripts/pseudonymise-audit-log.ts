@@ -6,7 +6,7 @@
  *
  * Administration script, like submissions:purge: the owner connection only lists the schools whose
  * audit log still holds personal values; each school is then handled by the application, under its
- * own RLS (`withSchool`, `pseudonymiseDue`), and the database function writes the change itself
+ * own RLS (`withSchool`, one transaction per batch: `pseudonymiseDue`), and the database function writes the change itself
  * (`pseudonymise_audit_entries`, migration 0068). Payments, invoices and their lines are never
  * touched. The output holds counts and key names only, never a value.
  */
@@ -30,7 +30,7 @@ runScheduledTask({ name: "audit:pseudonymise", timeoutMs: 30 * 60_000 }, async (
   for (const { id } of schools) {
     // One school failing does not stop the others; the next run catches up.
     try {
-      const run = await withSchool(id, (tx) => pseudonymiseDue(tx, today));
+      const run = await pseudonymiseDue((fn) => withSchool(id, fn), today);
       pseudonymised += run.pseudonymised;
       for (const k of run.unclassified) unclassified.add(k);
     } catch (e: unknown) {

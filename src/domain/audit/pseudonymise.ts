@@ -112,25 +112,13 @@ export function redactJson(table: string, value: unknown): unknown {
 
 export type AuditEntry = { targetTable: string; before: unknown; after: unknown };
 
-/** The entry with its personal values pseudonymised. */
+/** The entry with its personal values pseudonymised: the mirror of `audit_redacted()`, tested equal. */
 export function redactEntry<E extends AuditEntry>(entry: E): E {
   return {
     ...entry,
     before: redactJson(entry.targetTable, entry.before),
     after: redactJson(entry.targetTable, entry.after),
   };
-}
-
-/** Whether the entry still holds a personal value (a string other than the placeholder). */
-export function holdsPersonalValue(entry: AuditEntry): boolean {
-  const personal = personalKeysOf(entry.targetTable);
-  return [entry.before, entry.after].some(
-    (side) =>
-      side !== null &&
-      typeof side === "object" &&
-      !Array.isArray(side) &&
-      Object.entries(side).some(([k, v]) => personal.includes(k) && typeof v === "string" && v !== PLACEHOLDER),
-  );
 }
 
 /**

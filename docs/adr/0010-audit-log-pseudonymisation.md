@@ -69,8 +69,22 @@ and its technical values (amounts, dates, ids, methods) are kept.
 - Each new personal value logged needs a migration extending
   `audit_personal_keys()` and its mirror; the run prints keys nobody
   classified (« Clés du journal à classer »).
+- Which entries are due is enforced in TypeScript only: the function would
+  redact early any personal value of the current school it is given. It must
+  never be reachable from a request (route, server action); only the
+  scheduled script calls it.
+- Only top-level keys are redacted: a writer nesting a personal value inside
+  a sub-object (`courses`, `fields`) would escape it, and must log it at the
+  top level instead.
+- The run's own entry has `target_table = 'audit_log'` and `row_id` = the
+  school id; the redacted entries are listed in `after.ids`.
 - Tests that clean up as the owner keep disabling the trigger by name, as
   before.
 - Open questions for the owner (#184): the definition of the end of the
-  relationship; whether the school's own sender (`email_connector`) and the
-  `person` entries (photos refusal, referral answer) count as personal values.
+  relationship; whether the school's own sender (`email_connector`), the
+  answers to « Comment nous avez-vous connus ? » (`referral_source.label`, free
+  text that could name someone) and the `person` entries (photos refusal,
+  referral answer) count as personal values. Known edges of the proposed rule:
+  people imported from the previous software count as « in a relationship »
+  for 3 years after the import (their record is new); an invitee who later
+  changes their account e-mail no longer matches their membership.

@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import type { Tx } from "./index";
 import { pseudonymisationCutoff, unclassifiedKeys } from "../domain/audit/pseudonymise";
 
@@ -13,8 +13,9 @@ import { pseudonymisationCutoff, unclassifiedKeys } from "../domain/audit/pseudo
  * - A person is still in a relationship with the school when, on or after the cutoff, they are the
  *   payer or a student of an enrollment of a season ending then; the payer or a named student of a
  *   lesson pack bought or used then; the payer or a participant of a workshop sign-up made then or
- *   of a season ending then; the payer of a payment dated then, of an invoice issued then or not
- *   issued yet; the payer of a rules acceptance dated then; or their record was created then.
+ *   of a season ending then; the payer of a payment dated then, of an invoice issued then or still
+ *   on its way to the invoicing tool (`to_send`, `tool_draft`; a cancelled or rejected one never
+ *   issued does not count); the payer of a rules acceptance dated then; or their record was created then.
  * - An entry of an enrollment, lesson pack or workshop sign-up is due when every person it names
  *   (payer, students, participants: from the live rows and from every audit entry of that row) is
  *   no longer in a relationship. An entry naming nobody is left as it is.
@@ -26,6 +27,17 @@ import { pseudonymisationCutoff, unclassifiedKeys } from "../domain/audit/pseudo
 
 /** Rows per call of `pseudonymise_audit_entries` (its own limit is 500). */
 const BATCH = 500;
+
+/**
+ * The `expiresAt` of the invitation entry aliased `alias`, as written by `logLinks` (an ISO
+ * string); NULL when it is missing or malformed, so one odd entry never fails a school's run
+ * (the entry is then never due, and never counts as a recent invitation either, see its caller).
+ */
+const expiresAt = (alias: SQL) => sql`(CASE
+    WHEN COALESCE(${alias}.after, ${alias}.before) ->> 'expiresAt'
+      ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$'
+    THEN (COALESCE(${alias}.after, ${alias}.before) ->> 'expiresAt')::timestamptz
+  END)`;
 
 const DUE_ENTRIES = (cutoff: string, limit: number) => sql`
   WITH cutoff AS (
@@ -69,7 +81,7 @@ const DUE_ENTRIES = (cutoff: string, limit: number) => sql`
     UNION SELECT payer_id FROM recent_signups
     UNION SELECT wp.person_id FROM workshop_signup_person wp JOIN recent_signups r ON r.id = wp.workshop_signup_id
     UNION SELECT p.payer_id FROM payment p, cutoff WHERE p.date >= cutoff.day
-    UNION SELECT i.payer_id FROM invoice i, cutoff WHERE i.issued_on IS NULL OR i.issued_on >= cutoff.day
+    UNION SELECT i.payer_id FROM invoice i, cutoff WHERE i.status IN ('to_send', 'tool_draft') OR i.issued_on >= cutoff.day
     UNION SELECT r.payer_id FROM rules_acceptance r, cutoff WHERE r.accepted_on >= cutoff.day
     UNION SELECT p.id FROM person p, cutoff WHERE p.created_at >= cutoff.at
   ),
@@ -77,7 +89,9 @@ const DUE_ENTRIES = (cutoff: string, limit: number) => sql`
     SELECT x.target_table, x.row_id, n.value #>> '{}' AS person_id
     FROM audit_log x
     CROSS JOIN LATERAL (VALUES (x.before), (x.after)) side(value)
-    CROSS JOIN LATERAL (VALUES ('lax $.payerId'::jsonpath), ('lax $.studentIds[*]'), ('lax $.participantIds[*]')) p(path)
+    CROSS JOIN LATERAL (VALUES
+      ('lax $.payerId'::jsonpath), ('lax $.studentIds[*]'), ('lax $.participantIds[*]'), ('lax $.courses[*].studentId')
+    ) p(path)
     CROSS JOIN LATERAL jsonb_path_query(side.value, p.path) n(value)
     WHERE side.value IS NOT NULL
       AND (x.target_table, x.row_id) IN (SELECT target_table, row_id FROM candidates)
@@ -98,12 +112,12 @@ const DUE_ENTRIES = (cutoff: string, limit: number) => sql`
         WHERE s.target_table = c.target_table AND s.row_id = c.row_id
       )
     WHEN c.target_table = 'invitation' THEN
-      (COALESCE(c.after, c.before) ->> 'expiresAt')::timestamptz < cutoff.at
+      ${expiresAt(sql`c`)} < cutoff.at
       AND NOT EXISTS (
         SELECT 1 FROM audit_log o
         WHERE o.target_table = 'invitation'
           AND lower(COALESCE(o.after, o.before) ->> 'email') = lower(COALESCE(c.after, c.before) ->> 'email')
-          AND (COALESCE(o.after, o.before) ->> 'expiresAt')::timestamptz >= cutoff.at
+          AND COALESCE(${expiresAt(sql`o`)}, 'infinity') >= cutoff.at
       )
       AND NOT EXISTS (
         SELECT 1 FROM member m JOIN "user" u ON u.id = m.user_id
@@ -152,16 +166,23 @@ export async function unclassifiedAuditKeys(tx: Tx): Promise<string[]> {
 
 export type PseudonymisationRun = { pseudonymised: number; unclassified: string[] };
 
-/** Pseudonymises every due entry of the current school, batch by batch. */
-export async function pseudonymiseDue(tx: Tx, today: string): Promise<PseudonymisationRun> {
+/** Runs `fn` in its own transaction of the school (`withSchool(id, fn)`). */
+export type SchoolRunner = <T>(fn: (tx: Tx) => Promise<T>) => Promise<T>;
+
+/**
+ * Pseudonymises every due entry of a school, one transaction per batch: a batch failing (a timeout)
+ * keeps the batches already done, and the next run goes on from there.
+ */
+export async function pseudonymiseDue(run: SchoolRunner, today: string): Promise<PseudonymisationRun> {
   let pseudonymised = 0;
   for (;;) {
-    const ids = await dueEntries(tx, today);
-    if (ids.length === 0) break;
-    const changed = await pseudonymiseEntries(tx, ids);
-    pseudonymised += changed;
-    // Entries chosen but left unchanged would be chosen again: stop rather than loop.
-    if (changed < ids.length) break;
+    const batch = await run(async (tx) => {
+      const ids = await dueEntries(tx, today);
+      return { chosen: ids.length, changed: await pseudonymiseEntries(tx, ids) };
+    });
+    pseudonymised += batch.changed;
+    // Done; or entries chosen but left unchanged, which would be chosen again: stop rather than loop.
+    if (batch.chosen === 0 || batch.changed < batch.chosen) break;
   }
-  return { pseudonymised, unclassified: await unclassifiedAuditKeys(tx) };
+  return { pseudonymised, unclassified: await run(unclassifiedAuditKeys) };
 }

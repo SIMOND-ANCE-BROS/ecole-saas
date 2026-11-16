@@ -73,14 +73,9 @@ $$;--> statement-breakpoint
 CREATE OR REPLACE FUNCTION audit_log_append_only() RETURNS trigger
   LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
+  -- Every column but before/after unchanged, a column added later included.
   IF TG_OP = 'UPDATE'
-    AND NEW.id = OLD.id
-    AND NEW.school_id = OLD.school_id
-    AND NEW.at = OLD.at
-    AND NEW.actor IS NOT DISTINCT FROM OLD.actor
-    AND NEW.target_table = OLD.target_table
-    AND NEW.row_id = OLD.row_id
-    AND NEW.action = OLD.action
+    AND (pg_catalog.to_jsonb(NEW) - 'before' - 'after') = (pg_catalog.to_jsonb(OLD) - 'before' - 'after')
     AND public.audit_redaction_allowed(OLD.target_table, OLD.before, NEW.before)
     AND public.audit_redaction_allowed(OLD.target_table, OLD.after, NEW.after)
   THEN
