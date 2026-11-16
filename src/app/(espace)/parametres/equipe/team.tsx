@@ -4,6 +4,7 @@ import { Badge, Button, CopyButton, Group, Modal, Paper, Select, Table, Text, Te
 import { notifications } from "@mantine/notifications";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { MemberListItem, PendingInvitation } from "@/db/team";
+import { LINK_VALIDITY_TEXT } from "@/domain/team/link-messages";
 import { INVITABLE_ROLES, ROLE_LABELS, type Role } from "@/domain/team/rules";
 import { type Back, changeMember, inviteMember, type LinkBack, resetPassword, revoke } from "./actions";
 import { settle } from "@/lib/action-result";
@@ -12,7 +13,10 @@ type Member = Omit<MemberListItem, "userId"> & { me: boolean };
 type Invitation = Omit<PendingInvitation, "expiresAt"> & { expiresAt: string };
 /** Where a refusal is shown: next to what the user just did. */
 type Section = "members" | "invite" | "invitations";
-type Shown = { link: string; who: string; kind: "invitation" | "reset" };
+/** A new link: e-mailed to `to`, or to pass on by hand (`link`), with why when an e-mail was expected. */
+type Shown =
+  | { who: string; kind: "invitation" | "reset"; sent: true; to: string; simulated: boolean }
+  | { who: string; kind: "invitation" | "reset"; sent: false; link: string; notice: string | null };
 /** A change that needs a « yes » first (DESIGN.md: destructive actions ask for confirmation). */
 type Pending = {
   title: string;
@@ -28,17 +32,44 @@ const INVITABLE = INVITABLE_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] 
 const ALL_ROLES = [...INVITABLE, { value: "teacher", label: ROLE_LABELS.teacher }];
 const day = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", timeZone: "Europe/Paris" });
 
-/** A link to pass on by hand: shown once, with who it is for and how long it is valid. */
+/**
+ * A new link: e-mailed (#105), said once; otherwise to pass on by hand, shown
+ * once, with who it is for and how long it is valid.
+ */
 function ShownLink({ shown, onClose }: { shown: Shown; onClose: () => void }) {
   const copyButton = useRef<HTMLButtonElement>(null);
+  const link = shown.sent ? null : shown.link;
   // Ready to copy with Enter: the link is what the director came for.
-  useEffect(() => copyButton.current?.focus(), [shown.link]);
-  const validity = shown.kind === "invitation" ? "7 jours" : "24 heures";
+  useEffect(() => copyButton.current?.focus(), [link]);
+  const validity = LINK_VALIDITY_TEXT[shown.kind];
+  const what = shown.kind === "invitation" ? "Invitation de" : "Nouveau mot de passe pour";
+  if (shown.sent)
+    return (
+      <Paper withBorder role="status" p="sm" className="flex flex-wrap items-center gap-2 text-sm">
+        <p className="min-w-0 flex-1">
+          <strong>
+            {what} {shown.who}
+          </strong>{" "}
+          : lien envoyé par e-mail à <span className="wrap-anywhere">{shown.to}</span>, valable {validity}. La personne
+          y choisira elle-même son mot de passe. Pas reçu ? Vérifiez les indésirables, ou{" "}
+          {shown.kind === "invitation" ? "envoyez l’invitation de nouveau" : "envoyez un nouveau lien"}.
+          {shown.simulated && " (Mode simulation : aucun e-mail n’est réellement parti.)"}
+        </p>
+        <Button variant="subtle" onClick={onClose}>
+          Fermer
+        </Button>
+      </Paper>
+    );
   return (
     <Paper withBorder role="status" p="sm" className="flex flex-col gap-2 border-accent text-sm">
+      {shown.notice && (
+        <Text size="sm" c="orange.8" className="font-medium">
+          {shown.notice}
+        </Text>
+      )}
       <p>
         <strong>
-          {shown.kind === "invitation" ? "Invitation de" : "Nouveau mot de passe pour"} {shown.who}
+          {what} {shown.who}
         </strong>{" "}
         : lien à lui transmettre (SMS, e-mail personnel…), valable {validity}. La personne y choisira elle-même son mot
         de passe. Le lien ne sera plus affiché ensuite : en cas de perte, créez-en un nouveau.
@@ -74,11 +105,21 @@ function Refusal({ text }: { text: string | undefined }) {
   ) : null;
 }
 
-export function Team({ members, invitations }: { members: Member[]; invitations: Invitation[] }) {
+export function Team({
+  members,
+  invitations,
+  emails,
+}: {
+  members: Member[];
+  invitations: Invitation[];
+  /** New links are e-mailed (#105); otherwise shown to pass on by hand. */
+  emails: boolean;
+}) {
   const [inProgress, startTransition] = useTransition();
   const [refusal, setRefusal] = useState<{ section: Section; text: string } | null>(null);
   const [shown, setShown] = useState<Shown | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
+  const nameField = useRef<HTMLInputElement>(null);
   const [entry, setEntry] = useState<{ name: string; email: string; role: (typeof INVITABLE_ROLES)[number] }>({
     name: "",
     email: "",
@@ -100,7 +141,14 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
     startTransition(async () => {
       const r = await settle(action);
       setRefusal(r.ok ? null : { section, text: r.message });
-      setShown(r.ok ? { link: r.link, who, kind } : null);
+      if (!r.ok) return setShown(null);
+      // E-mailed invitation: ready for the next person.
+      if (r.sent && kind === "invitation") nameField.current?.focus();
+      setShown(
+        r.sent
+          ? { who, kind, sent: true, to: r.to, simulated: r.simulated }
+          : { who, kind, sent: false, link: r.link, notice: r.notice },
+      );
     });
 
   const askRole = (m: Member, role: Role) =>
@@ -169,10 +217,10 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
             size="compact-sm"
             variant="subtle"
             disabled={inProgress}
-            aria-label={`Créer un lien de mot de passe pour ${m.name}`}
+            aria-label={`${emails ? "Envoyer" : "Créer"} un lien de mot de passe pour ${m.name}`}
             onClick={() => withLink("members", () => resetPassword(m.id), "reset", m.name)}
           >
-            Créer un lien de mot de passe
+            {emails ? "Envoyer un lien de mot de passe" : "Créer un lien de mot de passe"}
           </Button>
         )}
         <Button
@@ -291,6 +339,7 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
           }}
         >
           <TextInput
+            ref={nameField}
             label="Nom"
             required
             value={entry.name}
@@ -316,8 +365,12 @@ export function Team({ members, invitations }: { members: Member[]; invitations:
               if (role) setEntry({ ...entry, role });
             }}
           />
-          <Button type="submit" variant={shown?.kind === "invitation" ? "default" : "filled"} loading={inProgress}>
-            Créer le lien d’invitation
+          <Button
+            type="submit"
+            variant={shown?.kind === "invitation" && !shown.sent ? "default" : "filled"}
+            loading={inProgress}
+          >
+            {emails ? "Envoyer l’invitation" : "Créer le lien d’invitation"}
           </Button>
         </Paper>
         <Refusal text={refusalIn("invite")} />

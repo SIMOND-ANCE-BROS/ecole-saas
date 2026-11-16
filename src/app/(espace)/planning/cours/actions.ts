@@ -24,6 +24,7 @@ import { conflicts } from "@/domain/schedule/overlap";
 import { outsideHours } from "@/domain/schedule/hours";
 import { SHORT_DAYS } from "@/domain/schedule/days";
 import { todayInParis } from "@/domain/people/age";
+import { orBusy } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
 import { errorsOf, type FieldErrors, topErrorsOf } from "@/lib/form-errors";
 import { z } from "zod";
@@ -55,44 +56,46 @@ export async function saveCourse(
     };
   }
   const today = todayInParis();
-  const result = await withSchool(schoolId, async (tx) => {
-    // Locked before reading the rate kept and audited below: a rate saved meanwhile
-    // from the instructor page (#276) is seen, not overwritten. Its season first (#415).
-    if (id !== null) await lockCourse(tx, id);
-    const existing = id !== null ? await readCourse(tx, id) : null;
-    const target =
-      id !== null
-        ? existing?.seasonId
-        : seasonId
-          ? (await seasonById(tx, seasonId))?.id
-          : (await currentSeason(tx, today))?.id;
-    if (!target)
-      return {
-        ok: false as const,
-        message:
-          id !== null
-            ? "Ce cours n’existe plus."
-            : seasonId
-              ? "Cette saison n’existe plus."
-              : "Aucune saison n’est paramétrée.",
+  const result = await orBusy(() =>
+    withSchool(schoolId, async (tx) => {
+      // Locked before reading the rate kept and audited below: a rate saved meanwhile
+      // from the instructor page (#276) is seen, not overwritten. Its season first (#415).
+      if (id !== null) await lockCourse(tx, id);
+      const existing = id !== null ? await readCourse(tx, id) : null;
+      const target =
+        id !== null
+          ? existing?.seasonId
+          : seasonId
+            ? (await seasonById(tx, seasonId))?.id
+            : (await currentSeason(tx, today))?.id;
+      if (!target)
+        return {
+          ok: false as const,
+          message:
+            id !== null
+              ? "Ce cours n’existe plus."
+              : seasonId
+                ? "Cette saison n’existe plus."
+                : "Aucune saison n’est paramétrée.",
+        };
+      // A new course: its season before anything, as `lockCourse` does for an edit (`attendance-locks.ts`, #415).
+      if (id === null) await lockSeason(tx, target);
+      const before = existing ? await courseRateState(tx, existing.id) : null;
+      const save = async () => {
+        const r = id !== null ? await updateCourse(tx, id, parsed.data) : await createCourse(tx, target, parsed.data);
+        // A change of the instructor's rate for this course, or of its unit, is kept in the audit log (#191, #268).
+        const after = r.ok ? await courseRateState(tx, r.id) : null;
+        if (r.ok && after) await logCourseRate(tx, userId, r.id, before, after);
+        // Upcoming lessons recomputed in the same transaction (day changed, new course…).
+        if (r.ok) await syncLessons(tx, target, today);
+        return r.ok ? { ...r, season: await seasonOfLink(tx, target, today) } : r;
       };
-    // A new course: its season before anything, as `lockCourse` does for an edit (`attendance-locks.ts`, #415).
-    if (id === null) await lockSeason(tx, target);
-    const before = existing ? await courseRateState(tx, existing.id) : null;
-    const save = async () => {
-      const r = id !== null ? await updateCourse(tx, id, parsed.data) : await createCourse(tx, target, parsed.data);
-      // A change of the instructor's rate for this course, or of its unit, is kept in the audit log (#191, #268).
-      const after = r.ok ? await courseRateState(tx, r.id) : null;
-      if (r.ok && after) await logCourseRate(tx, userId, r.id, before, after);
-      // Upcoming lessons recomputed in the same transaction (day changed, new course…).
-      if (r.ok) await syncLessons(tx, target, today);
-      return r.ok ? { ...r, season: await seasonOfLink(tx, target, today) } : r;
-    };
-    // A new course is created at most once per key: a retry gets the first course back.
-    return id === null && key !== undefined
-      ? once(tx, "course", key, { entry: parsed.data, seasonId: target }, storedCourse, save)
-      : save();
-  });
+      // A new course is created at most once per key: a retry gets the first course back.
+      return id === null && key !== undefined
+        ? once(tx, "course", key, { entry: parsed.data, seasonId: target }, storedCourse, save)
+        : save();
+    }),
+  );
   if (!result.ok) return { message: result.message, errors: {} };
   redirect(
     id === null
@@ -104,11 +107,13 @@ export async function saveCourse(
 export async function remove(id: string): Promise<Refusal> {
   const { schoolId: schoolId } = await requireRole("director");
   const today = todayInParis();
-  const result = await withSchool(schoolId, async (tx) => {
-    const seasonId = (await readCourse(tx, id))?.seasonId;
-    const r = await deleteCourse(tx, id);
-    return r.ok ? { ...r, season: seasonId ? await seasonOfLink(tx, seasonId, today) : undefined } : r;
-  });
+  const result = await orBusy(() =>
+    withSchool(schoolId, async (tx) => {
+      const seasonId = (await readCourse(tx, id))?.seasonId;
+      const r = await deleteCourse(tx, id);
+      return r.ok ? { ...r, season: seasonId ? await seasonOfLink(tx, seasonId, today) : undefined } : r;
+    }),
+  );
   if (!result.ok) return { message: result.message, errors: {} };
   // Back on the planning of the deleted course's season.
   redirect(withSeason("/planning?supprime=1", result.season));
@@ -150,62 +155,68 @@ const shortDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "sho
 export async function move(courseId: string, slot: unknown, confirmed: boolean): Promise<MoveResponse> {
   const { schoolId: schoolId } = await requireRole("director");
   const today = todayInParis();
-  const r = await withSchool(schoolId, async (tx) => {
-    const d = await moveCourse(tx, courseId, slot as Parameters<typeof moveCourse>[2], confirmed);
-    if (d.status !== "ok") return d;
-    const c = await readCourse(tx, courseId);
-    if (!c) return { status: "refused" as const, message: "Ce cours n’existe plus." };
-    await syncLessons(tx, c.seasonId, today);
-    const calendar = await seasonCalendar(tx, c.seasonId, today);
-    const schedule = (await seasonCourses(tx, c.seasonId)).map((p) => ({
-      ...p,
-      lessonDates: calendar ? lessonDatesOf(p, calendar) : undefined,
-    }));
-    const me = schedule.find((p) => p.id === courseId);
-    const warnings = me
-      ? conflicts(me, schedule).map((x) => {
-          const other = schedule.find((p) => p.id === x.id)!;
-          // A workshop has no weekday: name the first date both share.
-          const shared = other.lessonDates?.find((d) => me.lessonDates?.includes(d));
-          const day =
-            other.weekday === null && shared
-              ? shortDate.format(new Date(`${shared}T00:00:00Z`))
-              : SHORT_DAYS[other.weekday ?? 0];
-          const when = `${other.discipline}, ${day} ${other.startTime}`;
-          if (x.room && x.instructor) return `${other.room} et ${other.instructor} déjà pris (${when})`;
-          return x.room ? `${other.room} déjà occupée (${when})` : `${other.instructor} donne déjà un cours (${when})`;
-        })
-      : [];
-    if (me && c.weekday) {
-      const outside = outsideHours(
-        { weekday: c.weekday, startTime: c.startTime, durationMinutes: c.durationMinutes },
-        (await hoursBySite(tx))[me.siteId] ?? [],
-      );
-      if (outside) warnings.push(outside);
-    }
-    if (c.weekday) {
-      const dates = await slotConflicts(
-        tx,
-        {
-          seasonId: c.seasonId,
-          instructorId: c.instructorId,
-          weekday: c.weekday,
-          startTime: c.startTime,
-          durationMinutes: c.durationMinutes,
-        },
-        today,
-      );
-      if (dates.length > 0) {
-        warnings.push(
-          `Intervenant indisponible le ${dates
-            .slice(0, 4)
-            .map((x) => shortDate.format(new Date(`${x}T00:00:00Z`)))
-            .join(", ")}${dates.length > 4 ? "…" : ""}`,
-        );
-      }
-    }
-    return { status: "ok" as const, warnings };
-  });
+  const r = await orBusy(
+    () =>
+      withSchool(schoolId, async (tx) => {
+        const d = await moveCourse(tx, courseId, slot as Parameters<typeof moveCourse>[2], confirmed);
+        if (d.status !== "ok") return d;
+        const c = await readCourse(tx, courseId);
+        if (!c) return { status: "refused" as const, message: "Ce cours n’existe plus." };
+        await syncLessons(tx, c.seasonId, today);
+        const calendar = await seasonCalendar(tx, c.seasonId, today);
+        const schedule = (await seasonCourses(tx, c.seasonId)).map((p) => ({
+          ...p,
+          lessonDates: calendar ? lessonDatesOf(p, calendar) : undefined,
+        }));
+        const me = schedule.find((p) => p.id === courseId);
+        const warnings = me
+          ? conflicts(me, schedule).map((x) => {
+              const other = schedule.find((p) => p.id === x.id)!;
+              // A workshop has no weekday: name the first date both share.
+              const shared = other.lessonDates?.find((d) => me.lessonDates?.includes(d));
+              const day =
+                other.weekday === null && shared
+                  ? shortDate.format(new Date(`${shared}T00:00:00Z`))
+                  : SHORT_DAYS[other.weekday ?? 0];
+              const when = `${other.discipline}, ${day} ${other.startTime}`;
+              if (x.room && x.instructor) return `${other.room} et ${other.instructor} déjà pris (${when})`;
+              return x.room
+                ? `${other.room} déjà occupée (${when})`
+                : `${other.instructor} donne déjà un cours (${when})`;
+            })
+          : [];
+        if (me && c.weekday) {
+          const outside = outsideHours(
+            { weekday: c.weekday, startTime: c.startTime, durationMinutes: c.durationMinutes },
+            (await hoursBySite(tx))[me.siteId] ?? [],
+          );
+          if (outside) warnings.push(outside);
+        }
+        if (c.weekday) {
+          const dates = await slotConflicts(
+            tx,
+            {
+              seasonId: c.seasonId,
+              instructorId: c.instructorId,
+              weekday: c.weekday,
+              startTime: c.startTime,
+              durationMinutes: c.durationMinutes,
+            },
+            today,
+          );
+          if (dates.length > 0) {
+            warnings.push(
+              `Intervenant indisponible le ${dates
+                .slice(0, 4)
+                .map((x) => shortDate.format(new Date(`${x}T00:00:00Z`)))
+                .join(", ")}${dates.length > 4 ? "…" : ""}`,
+            );
+          }
+        }
+        return { status: "ok" as const, warnings };
+      }),
+    (message) => ({ status: "refused" as const, message }),
+  );
   revalidatePath("/planning");
   return r;
 }

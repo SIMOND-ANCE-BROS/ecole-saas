@@ -15,7 +15,8 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <MantineProvider theme={theme} cssVariablesResolver={cssVariablesResolver} defaultColorScheme="auto">
       <DatesProvider settings={{ locale: "fr", firstDayOfWeek: 1 }}>
-        <Notifications position="bottom-right" />
+        {/* Mantine 9 pauses every message when one is hovered; keep 8.x: only the hovered one (#129). */}
+        <Notifications position="bottom-right" pauseResetOnHover="notification" />
         {children}
       </DatesProvider>
     </MantineProvider>

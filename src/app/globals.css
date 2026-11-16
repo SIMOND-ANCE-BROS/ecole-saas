@@ -68,12 +68,19 @@ body {
  * its height grows, and its label stays centred (a `min-height` would leave it at the top).
  */
 .mantine-Button-root {
+  /*
+   * Mantine 9 writes button labels with `--mantine-font-weight-medium`, which theme.ts keeps at
+   * 500 for field labels and menus (#129); buttons were 600 in Mantine 8. A `fw` prop still wins.
+   */
+  font-weight: 600;
   --button-height-xs: 2rem;
   --button-height-compact-xs: 2rem;
   --button-height-compact-sm: 2rem;
   --button-height-compact-md: 2rem;
 }
 .mantine-ActionIcon-root {
+  /* Same as buttons: 600 in Mantine 8, `medium` (500 here) in Mantine 9 (#129). */
+  font-weight: 600;
   --ai-size-xs: 2rem;
   --ai-size-sm: 2rem;
   --ai-size-md: 2rem;

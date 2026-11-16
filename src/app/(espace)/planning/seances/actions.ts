@@ -17,7 +17,7 @@ import {
 } from "@/db/lessons";
 import { countLesson, uncountLesson } from "@/db/lesson-packs";
 import { todayInParis } from "@/domain/people/age";
-import { actionResult, type ActionResult } from "@/lib/action-result";
+import { actionResult, type ActionResult, orBusy } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
 
 // Typed for the call sites; still parsed, since a server action receives whatever the browser sends.
@@ -37,7 +37,7 @@ export async function doAttendance(
   if (!id.success) return { ok: false, message: NO_LESSON };
   const a = validAttendance.safeParse(attendances);
   if (!a.success) return { ok: false, message: INVALID };
-  const r = await withSchool(schoolId, (tx) => saveAttendance(tx, id.data, a.data));
+  const r = await orBusy(() => withSchool(schoolId, (tx) => saveAttendance(tx, id.data, a.data)));
   revalidatePath(`/planning/seances/${id.data}`);
   return actionResult(r);
 }
@@ -48,7 +48,7 @@ export async function replace(lessonId: string, instructorId: string): Promise<A
   if (!id.success) return { ok: false, message: NO_LESSON };
   const by = validId.safeParse(instructorId);
   if (!by.success) return { ok: false, message: "Intervenant introuvable ou inactif." };
-  const r = await withSchool(schoolId, (tx) => changeInstructor(tx, id.data, by.data));
+  const r = await orBusy(() => withSchool(schoolId, (tx) => changeInstructor(tx, id.data, by.data)));
   revalidatePath(`/planning/seances/${id.data}`);
   return actionResult(r);
 }
@@ -65,8 +65,10 @@ export async function countOnPack(lessonId: string, packId: string, counted: boo
   if (!pack.success) return { ok: false, message: "Ce carnet n’existe plus." };
   const c = z.boolean().safeParse(counted);
   if (!c.success) return { ok: false, message: INVALID };
-  const r = await withSchool(schoolId, (tx) =>
-    c.data ? countLesson(tx, userId, id.data, pack.data) : uncountLesson(tx, userId, id.data, pack.data),
+  const r = await orBusy(() =>
+    withSchool(schoolId, (tx) =>
+      c.data ? countLesson(tx, userId, id.data, pack.data) : uncountLesson(tx, userId, id.data, pack.data),
+    ),
   );
   revalidatePath(`/planning/seances/${id.data}`);
   return actionResult(r);
@@ -78,7 +80,9 @@ export async function cancel(lessonId: string, cancelled: boolean): Promise<Acti
   if (!id.success) return { ok: false, message: NO_LESSON };
   const c = z.boolean().safeParse(cancelled);
   if (!c.success) return { ok: false, message: INVALID };
-  const r = await withSchool(schoolId, (tx) => (c.data ? cancelLesson(tx, id.data) : restoreLesson(tx, id.data)));
+  const r = await orBusy(() =>
+    withSchool(schoolId, (tx) => (c.data ? cancelLesson(tx, id.data) : restoreLesson(tx, id.data))),
+  );
   revalidatePath(`/planning/seances/${id.data}`);
   return actionResult(r);
 }
@@ -97,18 +101,20 @@ async function withSeasonOf(
   report?: { start: string; end: string },
 ): Promise<ActionResult<SyncCounts>> {
   const today = todayInParis();
-  const r = await withSchool(schoolId, async (tx) => {
-    const season = seasonId ? await seasonById(tx, seasonId) : await currentSeason(tx, today);
-    if (!season)
-      return {
-        ok: false as const,
-        message: seasonId ? "Cette saison n’existe plus." : "Aucune saison n’est paramétrée.",
-      };
-    const result = (await action(season.id)(tx)) as { ok: true } | { ok: false; message: string };
-    if (!result.ok) return result;
-    const { removed, keptForPack } = await syncLessons(tx, season.id, today, undefined, report);
-    return { ok: true as const, removed, keptForPack };
-  });
+  const r = await orBusy(() =>
+    withSchool(schoolId, async (tx) => {
+      const season = seasonId ? await seasonById(tx, seasonId) : await currentSeason(tx, today);
+      if (!season)
+        return {
+          ok: false as const,
+          message: seasonId ? "Cette saison n’existe plus." : "Aucune saison n’est paramétrée.",
+        };
+      const result = (await action(season.id)(tx)) as { ok: true } | { ok: false; message: string };
+      if (!result.ok) return result;
+      const { removed, keptForPack } = await syncLessons(tx, season.id, today, undefined, report);
+      return { ok: true as const, removed, keptForPack };
+    }),
+  );
   revalidatePath("/planning/fermetures");
   return r.ok ? { ok: true, removed: r.removed, keptForPack: r.keptForPack } : { ok: false, message: r.message };
 }
@@ -133,11 +139,13 @@ export async function reopen(closureId: string): Promise<ActionResult> {
   const id = validId.safeParse(closureId);
   if (!id.success) return { ok: false, message: "Cette fermeture n’existe plus." };
   const today = todayInParis();
-  const r = await withSchool(schoolId, async (tx) => {
-    const result = await deleteClosure(tx, id.data);
-    if (result.ok) await syncLessons(tx, result.seasonId, today);
-    return result;
-  });
+  const r = await orBusy(() =>
+    withSchool(schoolId, async (tx) => {
+      const result = await deleteClosure(tx, id.data);
+      if (result.ok) await syncLessons(tx, result.seasonId, today);
+      return result;
+    }),
+  );
   revalidatePath("/planning/fermetures");
   return actionResult(r);
 }

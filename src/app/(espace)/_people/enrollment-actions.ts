@@ -11,7 +11,7 @@ import {
   type ExistingImpact,
   leavingImpacts,
 } from "@/db/enrollments";
-import type { ActionResult } from "@/lib/action-result";
+import { type ActionResult, orBusy } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
 
 /**
@@ -38,7 +38,9 @@ export async function confirmAction(enrollmentId: string, expectedNetCents: numb
   const { schoolId, userId } = await requireRole("director", "front_desk");
   if (!id.safeParse(enrollmentId).success || !cents.safeParse(expectedNetCents).success)
     return { ok: false, message: INVALID };
-  const r = await withSchool(schoolId, (tx) => confirmEnrollment(tx, userId, enrollmentId, expectedNetCents));
+  const r = await orBusy(() =>
+    withSchool(schoolId, (tx) => confirmEnrollment(tx, userId, enrollmentId, expectedNetCents)),
+  );
   return r.ok ? { ok: true } : { ok: false, message: r.message };
 }
 
@@ -54,7 +56,7 @@ export async function dropAction(enrollmentId: string, droppedOn: string): Promi
   const { schoolId, userId } = await requireRole("director", "front_desk");
   if (!id.safeParse(enrollmentId).success) return { ok: false, message: INVALID };
   if (!dropDate.safeParse(droppedOn).success) return { ok: false, message: "Indiquez la date de l’abandon." };
-  const r = await withSchool(schoolId, (tx) => dropEnrollment(tx, userId, enrollmentId, droppedOn));
+  const r = await orBusy(() => withSchool(schoolId, (tx) => dropEnrollment(tx, userId, enrollmentId, droppedOn)));
   return r.ok ? { ok: true } : { ok: false, message: r.message };
 }
 
@@ -62,6 +64,6 @@ export async function dropAction(enrollmentId: string, droppedOn: string): Promi
 export async function cancelAction(enrollmentId: string): Promise<ActionResult> {
   const { schoolId, userId } = await requireRole("director", "front_desk");
   if (!id.safeParse(enrollmentId).success) return { ok: false, message: INVALID };
-  const r = await withSchool(schoolId, (tx) => cancelEnrollment(tx, userId, enrollmentId));
+  const r = await orBusy(() => withSchool(schoolId, (tx) => cancelEnrollment(tx, userId, enrollmentId)));
   return r.ok ? { ok: true } : { ok: false, message: r.message };
 }

@@ -8,6 +8,7 @@ import { conflicts } from "@/domain/schedule/overlap";
 import { outsideHours } from "@/domain/schedule/hours";
 import { todayInParis } from "@/domain/people/age";
 import { weekdayOf, mondayOf } from "@/domain/schedule/week";
+import { orBusy } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
 import type { CalendarResponse } from "./calendar";
 import { shortDate, end } from "./format";
@@ -25,47 +26,51 @@ export async function moveOneLesson(
 ): Promise<CalendarResponse> {
   const { schoolId: schoolId } = await requireRole("director");
   const today = todayInParis();
-  const r = await withSchool(schoolId, async (tx): Promise<CalendarResponse> => {
-    const d = await moveLesson(tx, lessonId, slot, scope);
-    if (d.status === "refused") return d;
-    if (d.since) await syncLessons(tx, d.seasonId, today, d.since);
+  const r = await orBusy(
+    () =>
+      withSchool(schoolId, async (tx): Promise<CalendarResponse> => {
+        const d = await moveLesson(tx, lessonId, slot, scope);
+        if (d.status === "refused") return d;
+        if (d.since) await syncLessons(tx, d.seasonId, today, d.since);
 
-    const week = await weekLessons(tx, mondayOf(slot.date));
-    const day = week
-      .filter((s) => s.date === slot.date && s.status !== "cancelled")
-      .map((s) => ({ ...s, weekday: weekdayOf(s.date) }));
-    const me = day.find(
-      (s) => s.courseId === week.find((x) => x.id === lessonId)?.courseId && s.startTime === slot.startTime,
-    );
-    const warnings: string[] = [];
-    if (me) {
-      for (const x of conflicts(me, day)) {
-        const other = day.find((s) => s.id === x.id)!;
-        const when = `${other.discipline} à ${other.startTime}`;
-        warnings.push(
-          x.room && x.instructor
-            ? `${other.room} et ${other.instructor} déjà pris (${when})`
-            : x.room
-              ? `${other.room} déjà occupée (${when})`
-              : `${other.instructor} donne déjà un cours (${when})`,
+        const week = await weekLessons(tx, mondayOf(slot.date));
+        const day = week
+          .filter((s) => s.date === slot.date && s.status !== "cancelled")
+          .map((s) => ({ ...s, weekday: weekdayOf(s.date) }));
+        const me = day.find(
+          (s) => s.courseId === week.find((x) => x.id === lessonId)?.courseId && s.startTime === slot.startTime,
         );
-      }
-      const outside = outsideHours(
-        { weekday: me.weekday, startTime: me.startTime, durationMinutes: me.durationMinutes },
-        (await hoursBySite(tx))[me.siteId] ?? [],
-      );
-      if (outside) warnings.push(outside);
-    }
-    const when = `${shortDate(slot.date, true)} ${slot.startTime}–${end(slot.startTime, slot.durationMinutes)}`;
-    return {
-      status: "ok",
-      text:
-        scope === "lesson"
-          ? `Séance déplacée au ${when}.`
-          : `Cours déplacé à partir du ${when} : les séances suivantes suivent.`,
-      warnings,
-    };
-  });
+        const warnings: string[] = [];
+        if (me) {
+          for (const x of conflicts(me, day)) {
+            const other = day.find((s) => s.id === x.id)!;
+            const when = `${other.discipline} à ${other.startTime}`;
+            warnings.push(
+              x.room && x.instructor
+                ? `${other.room} et ${other.instructor} déjà pris (${when})`
+                : x.room
+                  ? `${other.room} déjà occupée (${when})`
+                  : `${other.instructor} donne déjà un cours (${when})`,
+            );
+          }
+          const outside = outsideHours(
+            { weekday: me.weekday, startTime: me.startTime, durationMinutes: me.durationMinutes },
+            (await hoursBySite(tx))[me.siteId] ?? [],
+          );
+          if (outside) warnings.push(outside);
+        }
+        const when = `${shortDate(slot.date, true)} ${slot.startTime}–${end(slot.startTime, slot.durationMinutes)}`;
+        return {
+          status: "ok",
+          text:
+            scope === "lesson"
+              ? `Séance déplacée au ${when}.`
+              : `Cours déplacé à partir du ${when} : les séances suivantes suivent.`,
+          warnings,
+        };
+      }),
+    (message) => ({ status: "refused" as const, message }),
+  );
   revalidatePath("/planning");
   return r;
 }

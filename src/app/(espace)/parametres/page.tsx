@@ -79,6 +79,11 @@ export default async function SettingsPage() {
     { href: "/parametres/tva", title: "TVA", detail: "Exonération ou taux de TVA des cours et des carnets" },
     { href: "/intervenants", title: "Intervenants", detail: "Professeurs, statut et rémunération" },
     { href: "/parametres/equipe", title: "Équipe", detail: "Accès de la direction et de l’accueil, invitations" },
+    {
+      href: "/parametres/e-mails",
+      title: "E-mails",
+      detail: "Envoi des invitations et des liens de mot de passe, compte Brevo ou Resend de l’école",
+    },
   ];
   return (
     <section className="flex w-full min-w-0 flex-col gap-4">

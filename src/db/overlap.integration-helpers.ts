@@ -15,7 +15,9 @@ export async function overlapping<A, B>(
   admin: postgres.Sql,
   first: (hold: () => Promise<void>) => Promise<A>,
   second: () => Promise<B>,
-  timeoutMs = 5000,
+  // Under `WAIT_LIMITS.lockTimeout` (5 s, #364): a wait the poll below misses (advisory lock…)
+  // is released before `second` gives up with 55P03, never at the same moment.
+  timeoutMs = 3000,
 ): Promise<[A, B]> {
   let reached!: () => void;
   const atHold = new Promise<void>((resolve) => (reached = resolve));
