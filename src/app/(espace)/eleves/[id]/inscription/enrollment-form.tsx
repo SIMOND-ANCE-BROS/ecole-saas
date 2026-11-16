@@ -51,6 +51,8 @@ const PERIODS = [
 
 type Props = {
   payerId: string;
+  /** The season enrolled in (#376): the current one or a later one, checked again on the server. */
+  seasonId: string;
   students: { id: string; firstName: string; age: number | null }[];
   courses: ScheduleCourse[];
   /** Courses the payer's students already take this season (#333): marked, and saving them again asks first. */
@@ -71,6 +73,7 @@ type Props = {
 
 export function EnrollmentForm({
   payerId,
+  seasonId,
   students,
   courses,
   taken,
@@ -118,13 +121,14 @@ export function EnrollmentForm({
   const entry: FormInput = useMemo(
     () => ({
       payerId,
+      seasonId,
       studentIds,
       audience: chosenAudience,
       period,
       courseIds,
       status,
     }),
-    [payerId, studentIds, chosenAudience, period, courseIds, status],
+    [payerId, seasonId, studentIds, chosenAudience, period, courseIds, status],
   );
 
   // No price from a previous selection is shown as the current price.
