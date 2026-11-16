@@ -429,6 +429,7 @@ async function balancesOf(tx: Tx, payerId: string, today: string) {
   const enrollments = await tx
     .select({
       status: enrollment.status,
+      droppedDuringTrial: enrollment.droppedDuringTrial,
       period: enrollment.period,
       netPriceCents: sql<number>`coalesce(${enrollment.netPriceCents}, 0)::int`,
       billingEntityId: enrollment.billingEntityId,

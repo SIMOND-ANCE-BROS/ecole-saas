@@ -12,17 +12,36 @@ export type EnrollmentStatus = "trial" | "waitlist" | "active" | "dropped" | "en
 /**
  * Statuses counted in the amount due. A drop-out stays due: the school's rules say a paid
  * quarter or year not attended is neither carried over nor refunded (#284, #99); a quarterly
- * one owes the quarters started by its drop-out day only (#99 Q2, `owedQuarters`); management
- * grants a credit case by case (#99 Q3). Trial and waitlist are not due, shown apart: a trial
- * lesson is free (#99 Q1, owner decision 2026-11-15).
+ * one keeps only the quarters started by its drop-out day (#99 Q2, `owedQuarters`); management
+ * grants a credit case by case (#99 Q3, #441). Trial and waitlist are not due, shown apart: a
+ * trial is free (#99 Q1, owner decision 2026-11-15), even once dropped (`dueStatusOf`).
  */
 export const DUE_STATUSES: EnrollmentStatus[] = ["active", "ended", "dropped"];
 
 /**
  * An enrollment as the balance counts it: its net price, owed once a season, or once per
- * owed quarter for a quarterly package (#291, #99, `seasonDueCents`, `quarterCountSql`).
+ * covered quarter for a quarterly package (#291, `seasonDueCents`). `droppedDuringTrial`: a
+ * trial dropped without being confirmed (#442).
  */
-export type EnrollmentDue = { status: EnrollmentStatus; period: Period; netPriceCents: number; quarterCount: number };
+export type EnrollmentDue = {
+  status: EnrollmentStatus;
+  period: Period;
+  netPriceCents: number;
+  quarterCount: number;
+  droppedDuringTrial?: boolean;
+};
+
+/**
+ * The status an enrollment is counted under (#99 Q1, #442): a trial dropped without being
+ * confirmed stays a trial, which is free; any other its own status. The one place the balance,
+ * the enrollments section and the invoice drafts read it from.
+ */
+export const dueStatusOf = (i: { status: EnrollmentStatus; droppedDuringTrial?: boolean }): EnrollmentStatus =>
+  i.status === "dropped" && i.droppedDuringTrial === true ? "trial" : i.status;
+
+/** Whether an enrollment not invoiced yet owes its price (`DUE_STATUSES`, `dueStatusOf`). */
+export const owesItsPrice = (i: { status: EnrollmentStatus; droppedDuringTrial?: boolean }): boolean =>
+  DUE_STATUSES.includes(dueStatusOf(i));
 export type BalancePayment = { amountCents: number; plannedPayment: string | null };
 
 /**
@@ -56,9 +75,9 @@ const invoicedOf = (i: EnrollmentBilled): number | null =>
 /**
  * Whether an enrollment counts in what its payer owes, as the balance counts it
  * (`payerBalance`): billed by an issued invoice, whatever its status, or else of a status in
- * `DUE_STATUSES`.
+ * `DUE_STATUSES` (`owesItsPrice`).
  */
-export const isCounted = (i: EnrollmentBilled): boolean => invoicedOf(i) !== null || DUE_STATUSES.includes(i.status);
+export const isCounted = (i: EnrollmentBilled): boolean => invoicedOf(i) !== null || owesItsPrice(i);
 
 /**
  * What an enrollment comes to (#358): what issued invoices bill for it once one does (#305),
@@ -88,8 +107,9 @@ export function payerBalance(
   const outsideCalculation: Balance["outsideCalculation"] = {};
   for (const i of enrollments) {
     if (i.invoiced) continue;
-    if (DUE_STATUSES.includes(i.status)) due += seasonDueCents(i);
-    else outsideCalculation[i.status] = (outsideCalculation[i.status] ?? 0) + seasonDueCents(i);
+    const status = dueStatusOf(i);
+    if (DUE_STATUSES.includes(status)) due += seasonDueCents(i);
+    else outsideCalculation[status] = (outsideCalculation[status] ?? 0) + seasonDueCents(i);
   }
   const paid = payments.reduce((s, p) => s + p.amountCents, 0);
   const toCollect = payments

@@ -47,7 +47,6 @@ const enrollment = (over: Partial<BillableEnrollment> = {}): BillableEnrollment 
   id: "e1",
   billingEntityId: "A",
   status: "active",
-  droppedOn: null,
   period: "year",
   label: "Forfait 1 h 00 — Zz Alice",
   enrolledOn: "2027-09-10",
@@ -309,42 +308,23 @@ describe("draftInvoices", () => {
     expect(d.installments.map((i) => i.dueOn)).toEqual(["2028-02-01", "2028-04-01"]);
   });
 
-  it("a quarterly drop-out owes the quarters started, not the following ones (#99 Q2); trial and waitlist are free (Q1)", () => {
+  it("a drop-out owes the quarters it kept (#99 Q2); trial, waitlist and a dropped trial are free (#99 Q1, #442)", () => {
     const [d] = draft([
+      // Dropped in November: its 2nd and 3rd quarters were released at the drop-out.
       enrollment({
         id: "dropped",
         status: "dropped",
-        droppedOn: "2027-11-15",
         period: "quarter",
         grossPriceCents: 15000,
-        quarters: QUARTERS,
+        quarters: QUARTERS.slice(0, 1),
       }),
       enrollment({ id: "trial", status: "trial" }),
       enrollment({ id: "waitlist", status: "waitlist" }),
+      enrollment({ id: "trial-dropped", status: "dropped", droppedDuringTrial: true }),
     ]);
     expect(new Set(d.lines.map((l) => l.enrollmentId))).toEqual(new Set(["dropped"]));
-    expect(d.lines[0]).toMatchObject({ label: "Forfait 1 h 00 — Zz Alice — 1 trimestre", quantityThousandths: 1000 });
     expect(d.totalInclTaxCents).toBe(15000);
     expect(d.installments).toEqual([{ rank: 1, dueOn: "2027-10-01", amountCents: 15000 }]);
-  });
-
-  it("a yearly drop-out still owes its whole price (#284 Q1: neither carried over nor refunded)", () => {
-    const [d] = draft([enrollment({ status: "dropped", droppedOn: "2027-11-15" })]);
-    expect(d.totalInclTaxCents).toBe(40000);
-  });
-
-  it("a quarterly drop-out dated before its first quarter owes nothing: no draft", () => {
-    expect(
-      draft([
-        enrollment({
-          status: "dropped",
-          droppedOn: "2027-09-25",
-          period: "quarter",
-          grossPriceCents: 15000,
-          quarters: QUARTERS,
-        }),
-      ]),
-    ).toEqual([]);
   });
 
   it("yearly packages and lesson packs are billed but get no installment while no plan is chosen (#176)", () => {

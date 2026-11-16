@@ -477,6 +477,13 @@
       "when": 1794827385780,
       "tag": "0067_retry_cycle",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1794832736591,
+      "tag": "0068_dropped_during_trial",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { amountDue, balancesByEntity, dueCents, entityOwingMost, familyOwed, isCounted, payerBalance } from "./balance";
+import {
+  amountDue,
+  balancesByEntity,
+  dueCents,
+  dueStatusOf,
+  entityOwingMost,
+  familyOwed,
+  isCounted,
+  payerBalance,
+} from "./balance";
 import { signupDueCents } from "../workshop/signup";
 
 const TODAY = "2026-10-21";
@@ -64,6 +73,32 @@ describe("payerBalance", () => {
       toCollect: 0,
       outsideCalculation: { trial: 1_500, waitlist: 9_000 },
     });
+  });
+});
+
+describe("a trial is free, even dropped without being confirmed (#99 Q1, #442)", () => {
+  const droppedTrial = {
+    status: "dropped",
+    droppedDuringTrial: true,
+    period: "quarter",
+    quarterCount: 1,
+    netPriceCents: 11_000,
+  } as const;
+
+  it("is counted as a trial: out of the amount due, shown apart", () => {
+    expect(dueStatusOf(droppedTrial)).toBe("trial");
+    expect(payerBalance([droppedTrial], [], [], TODAY)).toMatchObject({
+      due: 0,
+      outsideCalculation: { trial: 11_000 },
+    });
+    expect(amountDue([droppedTrial])).toBe(0);
+    expect(isCounted(droppedTrial)).toBe(false);
+  });
+
+  it("an enrollment dropped once confirmed stays due", () => {
+    const dropped = { ...droppedTrial, droppedDuringTrial: false };
+    expect(dueStatusOf(dropped)).toBe("dropped");
+    expect(payerBalance([dropped], [], [], TODAY)).toMatchObject({ due: 11_000, outsideCalculation: {} });
   });
 });
 

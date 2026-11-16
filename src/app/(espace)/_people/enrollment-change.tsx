@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState, useTransition } from "react";
 import type { ConfirmationPreview, ExistingImpact } from "@/db/enrollments";
 import { dropDateBounds, type EnrollmentActions } from "@/domain/enrollment/lifecycle";
+import type { EnrollmentStatus } from "@/domain/enrollment/statuses";
 import { owedQuarters, quarterMonths, type QuarterDates, seasonDueCents } from "@/domain/enrollment/quarters";
 import type { Period } from "@/domain/tariff/types";
 import { NOT_SAVED, settle } from "@/lib/action-result";
@@ -40,6 +41,8 @@ export type ChangeableEnrollment = {
   netPriceCents: number;
   /** Handed to the invoicing tool: a credit note alone takes a quarter off its invoice. */
   invoiced: boolean;
+  /** A trial dropped is free (#99 Q1, #442): the dialog says so. */
+  status: EnrollmentStatus;
   /** Why it cannot be cancelled (invoiced, attended), shown instead of « Annuler… »; null when it can. */
   cancelRefusal: string | null;
   /** Day it was entered: a drop-out cannot be dated before. */
@@ -260,28 +263,35 @@ function ChangeDialog({
         </>
       );
   } else if (change === "drop") {
+    // What stays due is said above the field: its calendar, once open, covers what lies below.
     body = (
       <>
+        <Text size="sm">{who} n’apparaîtra plus sur les appels des séances après la date de l’abandon.</Text>
+        {enrollment.status === "trial" ? (
+          <Text size="sm" fw={500}>
+            Essai non poursuivi : rien n’est dû, le cours d’essai est gratuit.
+          </Text>
+        ) : enrollment.period === "quarter" ? (
+          <QuartersStillDue enrollment={enrollment} droppedOn={droppedOn} />
+        ) : (
+          <Text size="sm" fw={500}>
+            Reste dû : {formatEuros(enrollment.seasonDueCents)}, le prix de l’inscription. Un avoir éventuel se décide à
+            part.
+          </Text>
+        )}
         <DateField
           label="Date de l’abandon"
           required
           minDate={bounds.min}
           maxDate={bounds.max}
           value={droppedOn}
-          onChange={setDroppedOn}
+          onChange={(v) => {
+            setDroppedOn(v);
+            // A refusal was about the date typed before: it no longer applies.
+            setMessage(null);
+          }}
           w={160}
         />
-        <Text size="sm">
-          {who} n’apparaîtra plus sur les appels des séances après cette date.{" "}
-          {enrollment.period === "quarter" ? (
-            <QuartersStillDue enrollment={enrollment} droppedOn={droppedOn} />
-          ) : (
-            <>
-              Le prix de l’inscription ({formatEuros(enrollment.seasonDueCents)}) reste dû ; un avoir éventuel se décide
-              à part.
-            </>
-          )}
-        </Text>
         <DiscountImpacts impacts={preview.impacts} />
       </>
     );
@@ -332,19 +342,31 @@ function ChangeDialog({
  * stay on the invoice until a credit note cancels them.
  */
 function QuartersStillDue({ enrollment, droppedOn }: { enrollment: ChangeableEnrollment; droppedOn: string }) {
+  // Nothing typed yet (or a date being typed): no amount rather than a wrong one.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(droppedOn)) return null;
   const owed = owedQuarters(enrollment.coveredQuarters, droppedOn);
   const n = owed.length;
   const total = seasonDueCents({ period: "quarter", netPriceCents: enrollment.netPriceCents, quarterCount: n });
   const later = enrollment.coveredQuarters.length - n;
   return (
     <>
-      {n === 0
-        ? "Aucun trimestre n’est commencé à cette date : rien n’est dû."
-        : `Reste dû : ${owed.map((q) => `${q.label} (${quarterMonths(q)})`).join(", ")}, soit ${n} × ${formatEuros(enrollment.netPriceCents)} = ${formatEuros(total)}.`}
-      {later > 0 &&
-        (enrollment.invoiced
-          ? ` Déjà facturée : ${later === 1 ? "le trimestre suivant reste" : `les ${later} trimestres suivants restent`} sur la facture tant qu’un avoir ne ${later === 1 ? "l’annule" : "les annule"} pas.`
-          : ` ${later === 1 ? "Le trimestre suivant n’est pas dû" : `Les ${later} trimestres suivants ne sont pas dus`}.`)}
+      <Text size="sm" fw={500}>
+        {n === 0
+          ? "Aucun trimestre n’a commencé à cette date : rien n’est dû."
+          : `Reste dû : ${formatEuros(total)} (${owed.map((q) => `${q.label}, ${quarterMonths(q)}`).join(" ; ")}${n > 1 ? ` : ${n} × ${formatEuros(enrollment.netPriceCents)}` : ""}).`}
+      </Text>
+      {n > 0 && later > 0 && (
+        <Text size="sm">
+          {enrollment.invoiced
+            ? `L’inscription est déjà facturée : ${later === 1 ? "le trimestre suivant reste" : `les ${later} trimestres suivants restent`} sur la facture jusqu’à un avoir de la direction.`
+            : `${later === 1 ? "Le trimestre suivant n’est pas dû" : `Les ${later} trimestres suivants ne sont pas dus`}.`}
+        </Text>
+      )}
+      {n === 0 && enrollment.invoiced && (
+        <Text size="sm">
+          L’inscription est déjà facturée : ses trimestres restent sur la facture jusqu’à un avoir de la direction.
+        </Text>
+      )}
     </>
   );
 }

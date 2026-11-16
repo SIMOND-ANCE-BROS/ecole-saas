@@ -63,8 +63,9 @@ export function quarterEnrollmentRefusal(quarters: readonly QuarterDates[], enro
  * quarter it covers while it runs; once dropped, every quarter started by its drop-out day (that
  * day included), not the following ones. A quarter started stays owed in full: a drop-out is
  * neither carried over nor refunded (#284 Q1). A drop-out without a date (written before #284)
- * owes every covered quarter, as before. `quarterCountSql` (`src/db/enrollments.ts`) counts them
- * the same way for the balance and the dashboard.
+ * owes every covered quarter, as before. `dropEnrollment` (`src/db/enrollments.ts`) releases the
+ * others at the drop-out (their `enrollment_quarter` rows), so the balance, the dashboard and the
+ * invoice drafts, which count the rows, owe these, whatever the quarter dates become later.
  */
 export function owedQuarters<Q extends QuarterDates>(covered: readonly Q[], droppedOn: string | null): Q[] {
   const sorted = [...covered].sort(byStart);

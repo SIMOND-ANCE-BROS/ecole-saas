@@ -80,7 +80,8 @@ import { course, season } from "./schema";
  *     then every course of the enrollment in one statement, ordered by id
  *     (`lockCoursesOfEnrollment`), then its unsent drafts (`discardDrafts`);
  *   - `dropEnrollment`: the same order as `cancelEnrollment` (payer, enrollment, season, courses),
- *     then the unsent drafts billing quarters it no longer owes (#99);
+ *     then, when it releases quarters (#99), the payer's unsent drafts of the season, drafted again
+ *     (`draftPayerInvoices`, payer already held);
  *   - `cancelWorkshopSignup`: the workshop's course, then the sign-up `FOR UPDATE`;
  *   - `signUpForWorkshop` already locked the workshop's course first, the same way, before reading
  *     its sign-ups.
