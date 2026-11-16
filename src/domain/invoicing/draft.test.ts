@@ -426,6 +426,8 @@ describe("draftInvoices with an installment plan (#176)", () => {
     previous: new Map(),
     ...over,
   });
+  /** Drafted during the season, the day the fixture pack is bought. */
+  const IN_SEASON = { season: SEASON, today: "2027-09-20" };
   const run = (enrollments: BillableEnrollment[], packs: BillablePack[] = [], p = plans()) =>
     draftInvoices({ enrollments, packs, entities: [A, B], treatments: TREATMENTS, plans: p });
   const sibling = (id: string) =>
@@ -452,14 +454,14 @@ describe("draftInvoices with an installment plan (#176)", () => {
       grossPriceCents: 10000,
       quarters: QUARTERS,
     });
-    const r = run([quarterly, enrollment({ id: "y" })], [pack()], plans({ choice: 1 }));
+    const r = run([quarterly, enrollment({ id: "y" })], [pack()], plans({ choice: 1, window: IN_SEASON }));
     if (!r.ok) throw new Error(r.message);
     const [d] = r.drafts;
     // The pack is due on the day of the drafting (#436), the yearly package by the plan.
     expect(d.installments).toEqual([
-      { rank: 1, dueOn: "2027-06-20", amountCents: 20000 },
-      { rank: 2, dueOn: "2027-09-05", amountCents: 40000 },
-      { rank: 3, dueOn: "2027-10-01", amountCents: 10000 },
+      { rank: 1, dueOn: "2027-09-20", amountCents: 20000 },
+      { rank: 2, dueOn: "2027-10-01", amountCents: 10000 },
+      { rank: 3, dueOn: "2027-10-05", amountCents: 40000 },
       { rank: 4, dueOn: "2028-01-01", amountCents: 10000 },
       { rank: 5, dueOn: "2028-04-01", amountCents: 10000 },
     ]);
@@ -547,11 +549,11 @@ describe("draftInvoices with an installment plan (#176)", () => {
   });
 
   it("a pack-only payer: one installment on the day of the drafting, no plan needed nor recorded (#436)", () => {
-    for (const choice of [null, 3, 10]) {
-      const r = run([], [pack(), pack({ id: "p2", priceCents: 9950 })], plans({ choice }));
+    for (const choice of [null, 1, 3]) {
+      const r = run([], [pack(), pack({ id: "p2", priceCents: 9950 })], plans({ choice, window: IN_SEASON }));
       if (!r.ok) throw new Error(r.message);
       const [d] = r.drafts;
-      expect(d.installments).toEqual([{ rank: 1, dueOn: "2027-06-20", amountCents: 29950 }]);
+      expect(d.installments).toEqual([{ rank: 1, dueOn: "2027-09-20", amountCents: 29950 }]);
       expect(d.installmentCount).toBeNull();
       expect(sumInstallments(d)).toBe(d.totalInclTaxCents);
     }
@@ -559,9 +561,9 @@ describe("draftInvoices with an installment plan (#176)", () => {
 
   it("a drop-in package is paid in one installment too, outside the plan (#436)", () => {
     const dropIn = enrollment({ id: "d", period: "single", grossPriceCents: 1500 });
-    const r = run([dropIn], [], plans({ choice: 10 }));
+    const r = run([dropIn], [], plans({ choice: 3, window: IN_SEASON }));
     if (!r.ok) throw new Error(r.message);
-    expect(r.drafts[0].installments).toEqual([{ rank: 1, dueOn: "2027-06-20", amountCents: 1500 }]);
+    expect(r.drafts[0].installments).toEqual([{ rank: 1, dueOn: "2027-09-20", amountCents: 1500 }]);
     expect(r.drafts[0].installmentCount).toBeNull();
   });
 
@@ -584,29 +586,70 @@ describe("draftInvoices with an installment plan (#176)", () => {
   });
 
   it("a plan splits the yearly part alone: a pack never makes a small package splittable (#436)", () => {
-    // 9 € of yearly package do not split into 10 euro installments; the pack's 200 € are not split.
-    const r = run([enrollment({ grossPriceCents: 900 })], [pack()], plans({ choice: 10 }));
+    // 2 € of yearly package do not split into 3 euro installments; the pack's 200 € are not split.
+    const r = run([enrollment({ grossPriceCents: 200 })], [pack()], plans({ choice: 3, window: IN_SEASON }));
     expect(r.ok).toBe(false);
-    const fits = run([enrollment({ grossPriceCents: 900 })], [pack()], plans({ choice: 1 }));
+    const fits = run([enrollment({ grossPriceCents: 200 })], [pack()], plans({ choice: 1, window: IN_SEASON }));
     if (!fits.ok) throw new Error(fits.message);
     expect(fits.drafts[0].installments).toEqual([
-      { rank: 1, dueOn: "2027-06-20", amountCents: 20000 },
-      { rank: 2, dueOn: "2027-09-05", amountCents: 900 },
+      { rank: 1, dueOn: "2027-09-20", amountCents: 20000 },
+      { rank: 2, dueOn: "2027-10-05", amountCents: 200 },
     ]);
   });
 
   it("a yearly part held for its plan still lets the pack carry its installment", () => {
-    const r = run([enrollment()], [pack()], plans({ choice: null }));
+    const r = run([enrollment()], [pack()], plans({ choice: null, window: IN_SEASON }));
     if (!r.ok) throw new Error(r.message);
     expect(r.drafts[0]).toMatchObject({
       installmentCount: null,
-      installments: [{ rank: 1, dueOn: "2027-06-20", amountCents: 20000 }],
+      installments: [{ rank: 1, dueOn: "2027-09-20", amountCents: 20000 }],
     });
+  });
+
+  it("packs and a quarter due the same day make one installment", () => {
+    const quarterly = enrollment({ id: "q", period: "quarter", grossPriceCents: 10000, quarters: QUARTERS });
+    const r = run([quarterly], [pack()], plans({ choice: null, window: { season: SEASON, today: "2027-10-01" } }));
+    if (!r.ok) throw new Error(r.message);
+    expect(r.drafts[0].installments).toEqual([
+      { rank: 1, dueOn: "2027-10-01", amountCents: 30000 },
+      { rank: 2, dueOn: "2028-01-01", amountCents: 10000 },
+      { rank: 3, dueOn: "2028-04-01", amountCents: 10000 },
+    ]);
+  });
+
+  it("a drop-in keeps its cents: only the yearly part is rounded to the euro", () => {
+    const r = run(
+      [sibling("e1"), enrollment({ id: "d", period: "single", grossPriceCents: 1550 })],
+      [],
+      plans({ choice: 3, window: IN_SEASON }),
+    );
+    if (!r.ok) throw new Error(r.message);
+    expect(r.drafts[0].installments).toEqual([
+      { rank: 1, dueOn: "2027-09-20", amountCents: 1550 },
+      { rank: 2, dueOn: "2027-10-05", amountCents: 12550 },
+      { rank: 3, dueOn: "2027-11-05", amountCents: 12400 },
+      { rank: 4, dueOn: "2027-12-05", amountCents: 12400 },
+    ]);
+    expect(sumInstallments(r.drafts[0])).toBe(r.drafts[0].totalInclTaxCents);
   });
 
   describe("drafted in June for a season starting on 13 September (#436)", () => {
     const LATE = { startDate: "2027-09-13", endDate: "2028-06-30" };
     const june = (choice: number) => plans({ choice, window: { season: LATE, today: "2027-06-20" } });
+
+    it("a drop-in or a pack is due on 5 September, with the plan's first installment (#380)", () => {
+      const dropIn = enrollment({ id: "d", period: "single", grossPriceCents: 1500 });
+      const r = run([dropIn, enrollment({ id: "y", grossPriceCents: 30000 })], [pack()], june(3));
+      if (!r.ok) throw new Error(r.message);
+      expect(r.drafts[0].installments).toEqual([
+        { rank: 1, dueOn: "2027-09-05", amountCents: 21500 + 10000 },
+        { rank: 2, dueOn: "2027-10-05", amountCents: 10000 },
+        { rank: 3, dueOn: "2027-11-05", amountCents: 10000 },
+      ]);
+      const alone = run([dropIn], [], june(3));
+      if (!alone.ok) throw new Error(alone.message);
+      expect(alone.drafts[0].installments).toEqual([{ rank: 1, dueOn: "2027-09-05", amountCents: 1500 }]);
+    });
 
     it("3 installments: the first on 5 September, nothing due before the season", () => {
       const r = run([sibling("e1"), sibling("e2"), sibling("e3")], [], june(3));

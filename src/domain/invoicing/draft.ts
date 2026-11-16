@@ -2,7 +2,7 @@ import { allocate } from "../../lib/money";
 import { NO_VAT_CHARGED, vatBreakdown, type VatRegime, type VatTreatment } from "../billing/vat";
 import { quarterlyDues, type SeasonQuarter } from "../enrollment/quarters";
 import { DUE_STATUSES, type EnrollmentStatus } from "../payments/balance";
-import { planSchedule, type InstallmentPlanSetting, type PlanWindow } from "./plans";
+import { oneOffDue, planSchedule, type InstallmentPlanSetting, type PlanWindow } from "./plans";
 import { combinationLabel } from "../tariff/compute";
 import type { Audience, Period, TariffRow } from "../tariff/types";
 
@@ -26,8 +26,9 @@ import type { Audience, Period, TariffRow } from "../tariff/types";
  * `planSchedule`): the draft records its count (`installmentCount`). With no plan chosen yet,
  * it gets no installment and the draft is held (`isSendable`): an issued invoice's
  * installments are frozen. Lesson packs and drop-in packages are paid in one installment of
- * their own, outside the plan, due on the day of the drafting (owner decision 2026-11-16,
- * #436): they need no plan.
+ * their own, outside the plan, due on the day of the drafting, or on the plan's first date
+ * when drafted before the season starts (owner decisions 2026-11-16, #436, #380): they need
+ * no plan.
  */
 
 /** Label of the negative line taking a discount off a package, one per VAT treatment (#289). */
@@ -208,7 +209,7 @@ export type InvoiceDraft = {
   totalExclTaxCents: number;
   totalVatCents: number;
   installments: DraftInstallment[];
-  /** The plan the not-quarterly part is due by (#176); null: none chosen, the draft is held. */
+  /** The plan the yearly packages are due by (#176, #436); null: none chosen, the draft is held. */
   installmentCount: number | null;
 };
 
@@ -293,7 +294,8 @@ function ranked(byDay: ReadonlyMap<string, number>): DraftInstallment[] {
  * gets no draft. Yearly packages are due by the chosen plan (`plans`, #176): a plan the
  * record chose that does not fit is refused; one carried over from a previous draft that no
  * longer fits is dropped, the draft held until a plan is chosen. Lesson packs and drop-in
- * packages are due at once, on `plans.window.today` (#436). Refused, in French, when a
+ * packages are due at once, on the drafting day or, before the season, its first due date
+ * (`oneOffDue`, #436). Refused, in French, when a
  * line carries VAT for a business that charges none, or when an enrollment has no course or a
  * negative price.
  */
@@ -364,7 +366,10 @@ export function draftInvoices(input: {
     const atOnce =
       enrollments.filter((e) => e.period === "single").reduce((s, e) => s + netOf(e), 0) +
       packs.reduce((s, p) => s + p.priceCents, 0);
-    if (plans && atOnce !== 0) byDay.set(plans.window.today, (byDay.get(plans.window.today) ?? 0) + atOnce);
+    if (plans && atOnce !== 0) {
+      const day = oneOffDue(plans.setting, plans.window);
+      byDay.set(day, (byDay.get(day) ?? 0) + atOnce);
+    }
     const rest = enrollments.filter((e) => e.period === "year").reduce((s, e) => s + netOf(e), 0);
     let installmentCount =
       plans?.choice ?? plans?.previous.get(entity.id) ?? (plans ? [...plans.previous.values()][0] : null) ?? null;

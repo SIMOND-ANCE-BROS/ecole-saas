@@ -14,7 +14,7 @@ export default async function InstallmentPlansSettingsPage() {
     <section className="flex w-full min-w-0 flex-col gap-4">
       <SettingsHeader
         title="Paiement en plusieurs fois"
-        help="En combien de fois une famille peut payer un forfait à l’année, et quand tombent les échéances. Les forfaits au trimestre se paient à chaque trimestre ; les carnets et les cours à l’unité en une fois, le jour où la facture est préparée. Les factures déjà préparées gardent leurs échéances jusqu’à leur mise à jour ; une facture émise ne change plus."
+        help="En combien de fois une famille peut payer un forfait à l’année, et quand tombent les échéances. Les forfaits au trimestre se paient à chaque trimestre ; les carnets et les cours à l’unité en une fois, le jour où la facture est préparée (avant la rentrée : à la première échéance). Les factures déjà préparées gardent leurs échéances jusqu’à leur mise à jour ; une facture émise ne change plus."
       />
       <PlanSettings setting={{ ...setting, counts: [...setting.counts] }} />
     </section>

@@ -181,7 +181,7 @@ function PlanNote({ plans, current }: { plans: OfferedPlans; current: number | n
   const day = plans.dueDay === 1 ? "1er" : plans.dueDay;
   return (
     <Text size="xs" c="dimmed">
-      {`Forfaits à l’année : échéances le ${day} du mois, la première le ${frenchDate(plans.firstDue)}, la dernière au plus tard le ${frenchDate(plans.seasonEnd)}. Forfaits au trimestre : à chaque trimestre. Carnets et cours à l’unité : en une fois, à la date du jour.${chosen}`}
+      {`Forfaits à l’année : échéances le ${day} du mois, la première le ${frenchDate(plans.firstDue)}, la dernière au plus tard le ${frenchDate(plans.seasonEnd)}. Forfaits au trimestre : à chaque trimestre. Carnets et cours à l’unité : en une fois, le ${frenchDate(plans.oneOffDue)}.${chosen}`}
       {tooLong.length > 0 &&
         ` Le paiement ${tooLong.join(" ou ")} n’est plus possible : la dernière échéance tomberait après la fin de la saison.`}
       {plans.counts.length === 0 &&

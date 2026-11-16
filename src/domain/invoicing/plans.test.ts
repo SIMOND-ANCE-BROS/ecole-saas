@@ -3,9 +3,11 @@ import {
   DEFAULT_INSTALLMENT_PLANS,
   firstDueDate,
   noDueDayLeft,
+  oneOffDue,
   planLabel,
   planSchedule,
   planSettingRefusal,
+  planStart,
   plansThatFit,
   type InstallmentPlanSetting,
 } from "./plans";
@@ -84,6 +86,18 @@ describe("a draft made before the season starts (#436)", () => {
   it("a season ending early still caps the plan: no count runs past its end", () => {
     const short = { season: { startDate: "2027-09-13", endDate: "2028-01-31" }, today: "2027-06-20" };
     expect(plansThatFit(RIBAS, short)).toEqual([1, 3]);
+  });
+
+  it("drafted on the 1st or the 3rd of the season's month, before its start: the 5th of that month", () => {
+    for (const today of ["2027-09-01", "2027-09-03"]) expect(planStart(RIBAS, before(today))).toBe("2027-09-05");
+  });
+
+  it("packs and drop-ins: due with the plan's first installment before the season, else on the day", () => {
+    expect(oneOffDue(RIBAS, before("2027-06-20"))).toBe("2027-09-05");
+    expect(oneOffDue(RIBAS, before("2027-09-08"))).toBe("2027-10-05");
+    expect(oneOffDue(RIBAS, before("2027-09-13"))).toBe("2027-09-13");
+    expect(oneOffDue(RIBAS, before("2027-11-12"))).toBe("2027-11-12");
+    expect(oneOffDue(RIBAS, before("2028-08-20"))).toBe("2028-08-20");
   });
 
   it("a draft once the season started keeps the next due day (unchanged)", () => {

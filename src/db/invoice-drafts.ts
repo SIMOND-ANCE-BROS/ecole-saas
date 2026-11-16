@@ -46,7 +46,8 @@ import { readInstallmentPlans } from "./installment-plans";
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const isUuid = (v: unknown): v is string => z.uuid().safeParse(v).success;
 
-export type DraftOutcome = { ok: true; invoiceIds: string[] } | { ok: false; message: string };
+/** `planned`: a draft is due by a plan; false when only quarters, packs or drop-ins are billed (#436). */
+export type DraftOutcome = { ok: true; invoiceIds: string[]; planned: boolean } | { ok: false; message: string };
 
 /** What a drafting is told (#176): the plan chosen on the record, and the day it is drafted. */
 export type DraftOptions = {
@@ -197,7 +198,7 @@ async function redraft(
       },
     });
   }
-  return { ok: true, invoiceIds };
+  return { ok: true, invoiceIds, planned: r.drafts.some((d) => d.installmentCount !== null) };
 }
 
 /**

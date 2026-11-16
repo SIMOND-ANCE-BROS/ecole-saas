@@ -64,7 +64,8 @@ export type PlanWindow = {
  */
 function planDates(setting: InstallmentPlanSetting, w: PlanWindow) {
   const firstMonth = `${w.season.startDate.slice(0, 8)}01`;
-  const from = w.today >= w.season.startDate || w.today > firstMonth ? w.today : firstMonth;
+  // Once the season started, today is always past its first month's 1st: `today` again.
+  const from = w.today > firstMonth ? w.today : firstMonth;
   const first = firstDueDate(from, setting.dueDay);
   return first > w.season.endDate ? { first: from, last: null } : { first, last: w.season.endDate };
 }
@@ -72,6 +73,16 @@ function planDates(setting: InstallmentPlanSetting, w: PlanWindow) {
 /** The first installment's date of a plan drafted on `w.today` (#436): what the record says. */
 export function planStart(setting: InstallmentPlanSetting, w: PlanWindow): string {
   return planDates(setting, w).first;
+}
+
+/**
+ * When lesson packs and drop-in packages are due, in one installment (#436): on the day of the
+ * drafting; drafted before the season starts, on the plan's first date (the due day of the
+ * season's first month), since nothing is due before the season (owner decision 2026-11-16 on
+ * #380).
+ */
+export function oneOffDue(setting: InstallmentPlanSetting, w: PlanWindow): string {
+  return w.today < w.season.startDate ? planStart(setting, w) : w.today;
 }
 
 /** Whether the season has no due day left (ended, #380): a single installment dated today. */

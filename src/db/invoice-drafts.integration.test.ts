@@ -214,10 +214,11 @@ describe("draftPayerInvoices (#302)", () => {
     beforeAll(async () => {
       const [a] = await invoices();
       ids.issued = a.id;
-      // Its installment written before issuing, as a school's plan (#176) writes it.
+      // Its yearly installment written before issuing, as a school's plan (#176) writes it, after
+      // the pack's own (rank 1, #436).
       [{ id: ids.issuedInstallment }] = await admin`
         INSERT INTO installment (school_id, billing_entity_id, invoice_id, rank, due_date, amount_cents)
-        VALUES (${ids.school}, ${ids.a}, ${a.id}, 1, '2027-09-10', 56000) RETURNING id`;
+        VALUES (${ids.school}, ${ids.a}, ${a.id}, 2, '2027-10-05', 36000) RETURNING id`;
       // As the invoicing tool's return will write it (#304): its number and its date.
       await admin`UPDATE invoice SET status = 'issued', number = 'Zz-A-1', issued_on = '2027-11-20', tool_ref = 'zz'
         WHERE id = ${a.id}`;

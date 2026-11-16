@@ -89,7 +89,7 @@ const draft = (installmentCount: number | undefined, today: string) =>
   withSchool(ids.school, (tx) => draftPayerInvoices(tx, null, ids.payer, ids.season, { installmentCount, today }));
 const dues = () => admin`SELECT i.installment_count, d.rank, d.due_date::text AS due_date, d.amount_cents
   FROM invoice i JOIN installment d ON d.invoice_id = i.id
-  WHERE i.school_id = ${ids.school} AND i.status = 'to_send' ORDER BY d.rank`;
+  WHERE i.payer_id = ${ids.payer} AND i.status = 'to_send' ORDER BY d.rank`;
 
 describe("installment_plan_setting (#176)", () => {
   it("a school with no setting follows the default", async () => {
@@ -129,6 +129,7 @@ describe("installment_plan_setting (#176)", () => {
       tooLong: [10],
       dueDay: 5,
       firstDue: "2027-12-05",
+      oneOffDue: "2027-11-12",
       seasonEnd: "2028-06-30",
       noneLeft: false,
     });
@@ -207,6 +208,7 @@ describe("a June draft for a season starting on 13 September, packs paid at once
       counts: [1, 3, 10],
       tooLong: [],
       firstDue: "2027-09-05",
+      oneOffDue: "2027-09-05",
       noneLeft: false,
     });
   });

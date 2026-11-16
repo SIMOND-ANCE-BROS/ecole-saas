@@ -211,7 +211,7 @@ describe("draftInvoices (#352)", () => {
   });
 
   it("drafts one invoice per business, then wakes the sending once committed", async () => {
-    expect(await draft()).toEqual({ ok: true, drafted: 2 });
+    expect(await draft()).toEqual({ ok: true, drafted: 2, planned: false });
     // Nothing sent before the answer: both are unsent drafts, the sending is queued.
     expect((await invoices()).map((i) => [i.status, i.attempts])).toEqual([
       ["to_send", 0],
@@ -245,8 +245,8 @@ describe("draftInvoices (#352)", () => {
 
   it("drafts again in place: the held draft replaced, the issued one untouched, nothing billed twice", async () => {
     const [before] = await live(ids.a);
-    expect(await draft()).toEqual({ ok: true, drafted: 1 });
-    expect(await draft()).toEqual({ ok: true, drafted: 1 });
+    expect(await draft()).toEqual({ ok: true, drafted: 1, planned: false });
+    expect(await draft()).toEqual({ ok: true, drafted: 1, planned: false });
     const a = await live(ids.a);
     expect(a).toHaveLength(1);
     expect(a[0].id).not.toBe(before.id);
@@ -270,7 +270,7 @@ describe("a rejected invoice (#352)", () => {
     expect((await live(ids.a))[0].status).toBe("rejected");
     // The front desk drafts meanwhile: its lines, given back, go on a new draft; the record no longer
     // shows the rejected one beside it (the same amount twice), management still has it.
-    expect(await draft()).toEqual({ ok: true, drafted: 1 });
+    expect(await draft()).toEqual({ ok: true, drafted: 1, planned: false });
     const shown = await withSchool(ids.school, (tx) => payerInvoices(tx, ids.payer, ids.season));
     expect(shown.filter((i) => i.billingEntityId === ids.a).map((i) => i.status)).toEqual(["to_send"]);
     expect(await billing(ids.yearly)).toBe(1);
@@ -383,7 +383,7 @@ describe("a rejected invoice (#352)", () => {
     expect(await live(ids.a)).toHaveLength(0);
     expect(await billing(ids.yearly)).toBe(0);
     as("front_desk");
-    expect(await draft()).toEqual({ ok: true, drafted: 1 });
+    expect(await draft()).toEqual({ ok: true, drafted: 1, planned: false });
     expect(await billing(ids.yearly)).toBe(1);
     const audit = await admin`SELECT after FROM audit_log WHERE row_id = ${a.id} AND action = 'update' ORDER BY id`;
     expect(audit.at(-1)?.after).toEqual({ status: "cancelled", reason: "abandoned" });
@@ -487,7 +487,11 @@ describe("drafting the season shown on the record (#362)", () => {
       (await invoices()).filter((i) => i.season_id === seasonId).map((i) => [i.id, i.status]);
     const before = await ofSeason(ids.season);
 
-    expect(await draftInvoices({ payerId: ids.payer, seasonId: next })).toEqual({ ok: true, drafted: 1 });
+    expect(await draftInvoices({ payerId: ids.payer, seasonId: next })).toEqual({
+      ok: true,
+      drafted: 1,
+      planned: false,
+    });
     const drafted = (await invoices()).filter((i) => i.season_id === next);
     expect(drafted.map((i) => [i.billing_entity_id, i.status])).toEqual([[ids.a, "to_send"]]);
     const shown = await withSchool(s, (tx) => payerInvoices(tx, ids.payer, next));
@@ -551,6 +555,7 @@ describe("a plan chosen on the record (#176)", () => {
     expect(await draftInvoices({ payerId: ids.payer, seasonId: ids.season, installmentCount: 3 })).toEqual({
       ok: true,
       drafted: 2,
+      planned: true,
     });
     const [a] = await withSchool(ids.school, (tx) => payerInvoices(tx, ids.payer, ids.season));
     expect(a.billingEntityId).toBe(ids.a);
