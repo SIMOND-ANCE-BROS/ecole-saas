@@ -10,7 +10,10 @@ import { draftInvoices } from "./invoice-actions";
 // Drafting again replaces the unsent drafts in place: retrying never makes a second set.
 const FAILED = "Factures non préparées : réessayez. Si le problème continue, vérifiez la connexion.";
 
-/** `again`: drafts not sent yet existed, and were replaced; `count`: the plan clicked. */
+/**
+ * `again`: drafts not sent yet existed, and were replaced; `count`: the plan clicked, named only
+ * when a draft is due by it (packs and drop-ins are paid at once, #436).
+ */
 const prepared = (n: number, again: boolean, count: number | undefined) => {
   if (n === 0) return "Rien de nouveau à facturer : tout est déjà sur une facture.";
   const done = again ? "Factures mises à jour" : `${n} facture${n > 1 ? "s" : ""} préparée${n > 1 ? "s" : ""}`;
@@ -53,7 +56,7 @@ export function DraftInvoices({
       const r = await settle(() => draftInvoices({ payerId, seasonId, installmentCount }));
       setMessage(
         r.ok
-          ? { ok: true, text: prepared(r.drafted, again, installmentCount) }
+          ? { ok: true, text: prepared(r.drafted, again, r.planned ? installmentCount : undefined) }
           : { ok: false, text: notSent(r) ? FAILED : r.message },
       );
       setBusy(null);

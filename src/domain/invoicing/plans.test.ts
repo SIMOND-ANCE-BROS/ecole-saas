@@ -3,9 +3,11 @@ import {
   DEFAULT_INSTALLMENT_PLANS,
   firstDueDate,
   noDueDayLeft,
+  oneOffDue,
   planLabel,
   planSchedule,
   planSettingRefusal,
+  planStart,
   plansThatFit,
   type InstallmentPlanSetting,
 } from "./plans";
@@ -41,6 +43,68 @@ describe("plansThatFit", () => {
 
   it("an ended season gets one installment (#380 Q2)", () => {
     expect(plansThatFit(RIBAS, at("2028-07-15"))).toEqual([1]);
+  });
+});
+
+describe("a draft made before the season starts (#436)", () => {
+  // A season starting after the due day of its first month: 13 September, due on the 5th.
+  const LATE_START = { startDate: "2027-09-13", endDate: "2028-06-30" };
+  const before = (today: string) => ({ season: LATE_START, today });
+
+  it("starts the plan on the due day of the season's first month, even before the start day", () => {
+    const r = planSchedule({ amountCents: 41500, count: 3, setting: RIBAS, window: before("2027-06-20") });
+    if (!r.ok) throw new Error(r.message);
+    expect(r.installments.map((i) => i.dueOn)).toEqual(["2027-09-05", "2027-10-05", "2027-11-05"]);
+  });
+
+  it("still offers 10 installments, September to June, within the season", () => {
+    expect(plansThatFit(RIBAS, before("2027-06-20"))).toEqual([1, 3, 10]);
+    const r = planSchedule({ amountCents: 64500, count: 10, setting: RIBAS, window: before("2027-06-20") });
+    if (!r.ok) throw new Error(r.message);
+    expect(r.installments.map((i) => i.dueOn)).toEqual([
+      "2027-09-05",
+      "2027-10-05",
+      "2027-11-05",
+      "2027-12-05",
+      "2028-01-05",
+      "2028-02-05",
+      "2028-03-05",
+      "2028-04-05",
+      "2028-05-05",
+      "2028-06-05",
+    ]);
+  });
+
+  it("never dates an installment before the day of the drafting", () => {
+    // Drafted on 8 September, before the 13th: the 5th has passed, the plan starts on 5 October.
+    const r = planSchedule({ amountCents: 30000, count: 3, setting: RIBAS, window: before("2027-09-08") });
+    if (!r.ok) throw new Error(r.message);
+    expect(r.installments[0].dueOn).toBe("2027-10-05");
+    expect(plansThatFit(RIBAS, before("2027-09-08"))).toEqual([1, 3]);
+  });
+
+  it("a season ending early still caps the plan: no count runs past its end", () => {
+    const short = { season: { startDate: "2027-09-13", endDate: "2028-01-31" }, today: "2027-06-20" };
+    expect(plansThatFit(RIBAS, short)).toEqual([1, 3]);
+  });
+
+  it("drafted on the 1st or the 3rd of the season's month, before its start: the 5th of that month", () => {
+    for (const today of ["2027-09-01", "2027-09-03"]) expect(planStart(RIBAS, before(today))).toBe("2027-09-05");
+  });
+
+  it("packs and drop-ins: due with the plan's first installment before the season, else on the day", () => {
+    expect(oneOffDue(RIBAS, before("2027-06-20"))).toBe("2027-09-05");
+    expect(oneOffDue(RIBAS, before("2027-09-08"))).toBe("2027-10-05");
+    expect(oneOffDue(RIBAS, before("2027-09-13"))).toBe("2027-09-13");
+    expect(oneOffDue(RIBAS, before("2027-11-12"))).toBe("2027-11-12");
+    expect(oneOffDue(RIBAS, before("2028-08-20"))).toBe("2028-08-20");
+  });
+
+  it("a draft once the season started keeps the next due day (unchanged)", () => {
+    expect(plansThatFit(RIBAS, before("2027-09-20"))).toEqual([1, 3]);
+    const r = planSchedule({ amountCents: 30000, count: 3, setting: RIBAS, window: before("2027-09-20") });
+    if (!r.ok) throw new Error(r.message);
+    expect(r.installments[0].dueOn).toBe("2027-10-05");
   });
 });
 

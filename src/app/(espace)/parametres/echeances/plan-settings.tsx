@@ -95,7 +95,7 @@ export function PlanSettings({ setting }: { setting: InstallmentPlanSetting }) {
           </Checkbox.Group>
           <NumberInput
             label="Jour d’échéance dans le mois"
-            description={`Du 1er au ${MAX_DUE_DAY} : chaque échéance tombe ce jour-là, chaque mois.`}
+            description={`Du 1er au ${MAX_DUE_DAY} : chaque échéance tombe ce jour-là, chaque mois. Préparée avant la rentrée, une facture a sa première échéance ce jour-là du premier mois de la saison, ou du mois suivant si ce jour est passé.`}
             min={1}
             max={MAX_DUE_DAY}
             allowDecimal={false}

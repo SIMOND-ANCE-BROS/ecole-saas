@@ -28,7 +28,9 @@ const validDraft = z.object({
  * The season is the one the record shows (#362): an ended season other than the current one
  * is refused (`seasonDraftable`, #380 open). An unknown one is refused by `draftPayerInvoices`.
  */
-export async function draftInvoices(entry: z.input<typeof validDraft>): Promise<ActionResult<{ drafted: number }>> {
+export async function draftInvoices(
+  entry: z.input<typeof validDraft>,
+): Promise<ActionResult<{ drafted: number; planned: boolean }>> {
   const { schoolId, userId } = await requireRole(...DRAFT_ROLES);
   const p = validDraft.safeParse(entry);
   if (!p.success) return { ok: false, message: "Factures non préparées : rechargez la fiche." };
@@ -47,5 +49,5 @@ export async function draftInvoices(entry: z.input<typeof validDraft>): Promise<
   if (!r.ok) return r;
   // After the commit: `withSchool` has returned. The sending runs once the answer is gone.
   if (r.invoiceIds.length > 0) sendSoon(schoolId);
-  return { ok: true, drafted: r.invoiceIds.length };
+  return { ok: true, drafted: r.invoiceIds.length, planned: r.planned };
 }

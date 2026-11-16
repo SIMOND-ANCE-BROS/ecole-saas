@@ -2,7 +2,7 @@ import { allocate } from "../../lib/money";
 import { NO_VAT_CHARGED, vatBreakdown, type VatRegime, type VatTreatment } from "../billing/vat";
 import { quarterlyDues, type SeasonQuarter } from "../enrollment/quarters";
 import { DUE_STATUSES, type EnrollmentStatus } from "../payments/balance";
-import { planSchedule, type InstallmentPlanSetting, type PlanWindow } from "./plans";
+import { oneOffDue, planSchedule, type InstallmentPlanSetting, type PlanWindow } from "./plans";
 import { combinationLabel } from "../tariff/compute";
 import type { Audience, Period, TariffRow } from "../tariff/types";
 
@@ -22,10 +22,13 @@ import type { Audience, Period, TariffRow } from "../tariff/types";
  * - Q3 (what a dropped or trial enrollment owes, #99): as the balance counts it,
  *   `DUE_STATUSES` (a drop-out owes all it covers, a trial or waitlist nothing yet).
  *
- * What is not quarterly (a yearly or drop-in package, a lesson pack) is due by the plan the
- * family chose among the school's (#176, `planSchedule`): the draft records its count
- * (`installmentCount`). With no plan chosen yet, that part gets no installment and the draft
- * is held (`isSendable`): an issued invoice's installments are frozen.
+ * A yearly package is due by the plan the family chose among the school's (#176,
+ * `planSchedule`): the draft records its count (`installmentCount`). With no plan chosen yet,
+ * it gets no installment and the draft is held (`isSendable`): an issued invoice's
+ * installments are frozen. Lesson packs and drop-in packages are paid in one installment of
+ * their own, outside the plan, due on the day of the drafting, or on the plan's first date
+ * when drafted before the season starts (owner decisions 2026-11-16, #436, #380): they need
+ * no plan.
  */
 
 /** Label of the negative line taking a discount off a package, one per VAT treatment (#289). */
@@ -206,7 +209,7 @@ export type InvoiceDraft = {
   totalExclTaxCents: number;
   totalVatCents: number;
   installments: DraftInstallment[];
-  /** The plan the not-quarterly part is due by (#176); null: none chosen, the draft is held. */
+  /** The plan the yearly packages are due by (#176, #436); null: none chosen, the draft is held. */
   installmentCount: number | null;
 };
 
@@ -288,9 +291,11 @@ function ranked(byDay: ReadonlyMap<string, number>): DraftInstallment[] {
  * each enrollment's package and « Remise » lines per VAT treatment, then each pack; VAT taken
  * out of the VAT-inclusive prices per treatment over the whole invoice (`vatBreakdown`), the
  * treatment's category, rate and mention copied onto each line. A business with nothing to bill
- * gets no draft. What is not quarterly is due by the chosen plan (`plans`, #176): a plan the
+ * gets no draft. Yearly packages are due by the chosen plan (`plans`, #176): a plan the
  * record chose that does not fit is refused; one carried over from a previous draft that no
- * longer fits is dropped, the draft held until a plan is chosen. Refused, in French, when a
+ * longer fits is dropped, the draft held until a plan is chosen. Lesson packs and drop-in
+ * packages are due at once, on the drafting day or, before the season, its first due date
+ * (`oneOffDue`, #436). Refused, in French, when a
  * line carries VAT for a business that charges none, or when an enrollment has no course or a
  * negative price.
  */
@@ -299,7 +304,7 @@ export function draftInvoices(input: {
   packs: readonly BillablePack[];
   entities: readonly DraftEntity[];
   treatments: readonly VatTreatment[];
-  /** No plans: the not-quarterly part gets no installment (held). */
+  /** No plans: yearly packages, packs and drop-ins get no installment (held). */
   plans?: DraftPlans;
 }): DraftResult {
   const treatments = new Map(input.treatments.map((t) => [t.id, t]));
@@ -357,12 +362,18 @@ export function draftInvoices(input: {
     });
     const sum = (k: "inclTaxCents" | "exclTaxCents" | "vatCents") => vat.byTreatment.reduce((s, g) => s + g[k], 0);
     const byDay = quarterlyByDay(enrollments);
-    const rest =
-      enrollments.filter((e) => e.period !== "quarter").reduce((s, e) => s + netOf(e), 0) +
+    // Packs and drop-ins: one installment of their own on the day of the drafting (#436).
+    const atOnce =
+      enrollments.filter((e) => e.period === "single").reduce((s, e) => s + netOf(e), 0) +
       packs.reduce((s, p) => s + p.priceCents, 0);
+    if (plans && atOnce !== 0) {
+      const day = oneOffDue(plans.setting, plans.window);
+      byDay.set(day, (byDay.get(day) ?? 0) + atOnce);
+    }
+    const rest = enrollments.filter((e) => e.period === "year").reduce((s, e) => s + netOf(e), 0);
     let installmentCount =
       plans?.choice ?? plans?.previous.get(entity.id) ?? (plans ? [...plans.previous.values()][0] : null) ?? null;
-    // Nothing outside the quarters: no plan applies, none is recorded.
+    // No yearly package: no plan applies, none is recorded.
     if (rest === 0) installmentCount = null;
     if (plans && installmentCount !== null) {
       const plan = planSchedule({

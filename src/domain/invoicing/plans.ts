@@ -2,9 +2,9 @@ import { formatEuros } from "../../lib/money";
 import { computeSchedule } from "./installments";
 
 /**
- * The school's installment plans (#176): how many installments a family may choose for what
- * is not paid by the quarter (a yearly or drop-in package, a lesson pack), the day of the
- * month they are due, the rounding unit, all school data (`installment_plan_setting`). The
+ * The school's installment plans (#176): how many installments a family may choose for its
+ * yearly packages (lesson packs and drop-in packages are paid in one installment, #436), the
+ * day of the month they are due, the rounding unit, all school data (`installment_plan_setting`). The
  * last installment falls on or before the season's end (owner decision, 2026-11-15). Pure
  * functions, no database.
  */
@@ -55,14 +55,34 @@ export type PlanWindow = {
 };
 
 /**
- * When a plan's installments fall: from the first due day on or after the later of today and
- * the season's start, monthly, the last on or before the season's end. When no due day is
- * left in the season (an ended season, #380 Q2), a single installment dated from today.
+ * When a plan's installments fall: monthly, the last on or before the season's end. Drafted
+ * during the season, from the first due day on or after today. Drafted before it starts (June
+ * re-enrollments, #436), from the due day of the season's first month (the 5th of September
+ * for a season starting on the 13th), never before today: nothing is due before the season's
+ * month. When no due day is left in the season (an ended season, #380 Q2), a single
+ * installment dated from today.
  */
 function planDates(setting: InstallmentPlanSetting, w: PlanWindow) {
-  const from = w.today > w.season.startDate ? w.today : w.season.startDate;
+  const firstMonth = `${w.season.startDate.slice(0, 8)}01`;
+  // Once the season started, today is always past its first month's 1st: `today` again.
+  const from = w.today > firstMonth ? w.today : firstMonth;
   const first = firstDueDate(from, setting.dueDay);
   return first > w.season.endDate ? { first: from, last: null } : { first, last: w.season.endDate };
+}
+
+/** The first installment's date of a plan drafted on `w.today` (#436): what the record says. */
+export function planStart(setting: InstallmentPlanSetting, w: PlanWindow): string {
+  return planDates(setting, w).first;
+}
+
+/**
+ * When lesson packs and drop-in packages are due, in one installment (#436): on the day of the
+ * drafting; drafted before the season starts, on the plan's first date (the due day of the
+ * season's first month), since nothing is due before the season (owner decision 2026-11-16 on
+ * #380).
+ */
+export function oneOffDue(setting: InstallmentPlanSetting, w: PlanWindow): string {
+  return w.today < w.season.startDate ? planStart(setting, w) : w.today;
 }
 
 /** Whether the season has no due day left (ended, #380): a single installment dated today. */

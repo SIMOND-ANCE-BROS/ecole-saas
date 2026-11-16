@@ -120,7 +120,10 @@ afterAll(async () => {
   await admin.end();
 });
 
-const draft = () => withSchool(ids.school, (tx) => draftPayerInvoices(tx, null, ids.payer, ids.season));
+// Drafted on a fixed day: a lesson pack is due on the day of the drafting (#436).
+const TODAY = "2027-09-25";
+const draft = () =>
+  withSchool(ids.school, (tx) => draftPayerInvoices(tx, null, ids.payer, ids.season, { today: TODAY }));
 const invoices = () =>
   admin`SELECT * FROM invoice WHERE school_id = ${ids.school} ORDER BY billing_entity_id = ${ids.a} DESC, created_at`;
 
@@ -153,10 +156,12 @@ describe("draftPayerInvoices (#302)", () => {
       vat_rate_bps: 2000,
     });
     expect(b.total_vat_cents).toBe(6000);
-    // The yearly package and the pack of A get no installment while no plan is chosen (#176).
+    // The yearly package of A gets no installment while no plan is chosen (#176); its pack is
+    // due at once, on the day of the drafting (#436).
     const installments = await admin`SELECT invoice_id, rank, due_date::text AS due, amount_cents FROM installment
       WHERE school_id = ${ids.school} ORDER BY invoice_id = ${a.id} DESC, rank`;
     expect(installments.map((i) => [i.invoice_id === a.id ? "A" : "B", i.rank, i.due, i.amount_cents])).toEqual([
+      ["A", 1, TODAY, 20000],
       ["B", 1, "2027-11-15", 12000],
       ["B", 2, "2028-01-01", 12000],
       ["B", 3, "2028-04-01", 12000],
@@ -209,10 +214,11 @@ describe("draftPayerInvoices (#302)", () => {
     beforeAll(async () => {
       const [a] = await invoices();
       ids.issued = a.id;
-      // Its installment written before issuing, as a school's plan (#176) writes it.
+      // Its yearly installment written before issuing, as a school's plan (#176) writes it, after
+      // the pack's own (rank 1, #436).
       [{ id: ids.issuedInstallment }] = await admin`
         INSERT INTO installment (school_id, billing_entity_id, invoice_id, rank, due_date, amount_cents)
-        VALUES (${ids.school}, ${ids.a}, ${a.id}, 1, '2027-09-10', 56000) RETURNING id`;
+        VALUES (${ids.school}, ${ids.a}, ${a.id}, 2, '2027-10-05', 36000) RETURNING id`;
       // As the invoicing tool's return will write it (#304): its number and its date.
       await admin`UPDATE invoice SET status = 'issued', number = 'Zz-A-1', issued_on = '2027-11-20', tool_ref = 'zz'
         WHERE id = ${a.id}`;

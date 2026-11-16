@@ -46,7 +46,8 @@ import { readInstallmentPlans } from "./installment-plans";
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const isUuid = (v: unknown): v is string => z.uuid().safeParse(v).success;
 
-export type DraftOutcome = { ok: true; invoiceIds: string[] } | { ok: false; message: string };
+/** `planned`: a draft is due by a plan; false when only quarters, packs or drop-ins are billed (#436). */
+export type DraftOutcome = { ok: true; invoiceIds: string[]; planned: boolean } | { ok: false; message: string };
 
 /** What a drafting is told (#176): the plan chosen on the record, and the day it is drafted. */
 export type DraftOptions = {
@@ -61,9 +62,10 @@ export type DraftOptions = {
  * replaced by new ones billing what no other invoice bills yet: the season's enrollments that
  * owe something and the lesson packs bought within the season's dates. An invoice handed to
  * the tool or issued is never touched; what it bills is left out. The payer row is locked, so
- * two draftings for the same payer run one after the other. What is not quarterly is due by the
+ * two draftings for the same payer run one after the other. A yearly package is due by the
  * plan chosen (`options.installmentCount`), else by the plan of the payer's previous invoice of
- * the season, its business's first (#176, `draftInvoices`). Returns the new drafts' ids, none
+ * the season, its business's first (#176, `draftInvoices`); lesson packs and drop-in packages on the
+ * day of the drafting (#436). Returns the new drafts' ids, none
  * when nothing is left to bill.
  */
 export async function draftPayerInvoices(
@@ -196,7 +198,7 @@ async function redraft(
       },
     });
   }
-  return { ok: true, invoiceIds };
+  return { ok: true, invoiceIds, planned: r.drafts.some((d) => d.installmentCount !== null) };
 }
 
 /**

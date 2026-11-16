@@ -5,6 +5,8 @@ import {
   type InstallmentPlanSetting,
   noDueDayLeft,
   planSettingRefusal,
+  oneOffDue,
+  planStart,
   plansThatFit,
   sortedCounts,
 } from "../domain/invoicing/plans";
@@ -101,6 +103,10 @@ export type OfferedPlans = {
   counts: number[];
   tooLong: number[];
   dueDay: number;
+  /** The first installment's date (#436): in June, the due day of the season's first month. */
+  firstDue: string;
+  /** When packs and drop-ins are due, at once (#436): today, or `firstDue` before the season. */
+  oneOffDue: string;
   seasonEnd: string;
   /** No due day left in the season (#380): one installment, dated the day it is drafted. */
   noneLeft: boolean;
@@ -119,6 +125,8 @@ export async function offeredPlans(
     counts,
     tooLong: setting.counts.filter((c) => !counts.includes(c)),
     dueDay: setting.dueDay,
+    firstDue: planStart(setting, window),
+    oneOffDue: oneOffDue(setting, window),
     seasonEnd: season.endDate,
     noneLeft: noDueDayLeft(setting, window),
   };

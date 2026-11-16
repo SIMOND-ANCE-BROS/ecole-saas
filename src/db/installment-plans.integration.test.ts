@@ -9,7 +9,8 @@ import { DEFAULT_INSTALLMENT_PLANS } from "../domain/invoicing/plans";
 /**
  * Installment plans (#176) against the real database, run as the application (app_user, RLS):
  * the school's setting, its checks, and a draft due by the chosen plan, kept when drafted
- * again, a refused plan leaving the previous drafts as they were. Fictitious data, deleted at
+ * again, a refused plan leaving the previous drafts as they were; a June draft for a season
+ * starting mid-September and a lesson pack paid at once (#436). Fictitious data, deleted at
  * the end.
  */
 
@@ -69,6 +70,7 @@ afterAll(async () => {
   for (const t of [
     "enrollment_course",
     "enrollment",
+    "lesson_pack",
     "course",
     "person",
     "instructor",
@@ -87,7 +89,7 @@ const draft = (installmentCount: number | undefined, today: string) =>
   withSchool(ids.school, (tx) => draftPayerInvoices(tx, null, ids.payer, ids.season, { installmentCount, today }));
 const dues = () => admin`SELECT i.installment_count, d.rank, d.due_date::text AS due_date, d.amount_cents
   FROM invoice i JOIN installment d ON d.invoice_id = i.id
-  WHERE i.school_id = ${ids.school} AND i.status = 'to_send' ORDER BY d.rank`;
+  WHERE i.payer_id = ${ids.payer} AND i.status = 'to_send' ORDER BY d.rank`;
 
 describe("installment_plan_setting (#176)", () => {
   it("a school with no setting follows the default", async () => {
@@ -126,6 +128,8 @@ describe("installment_plan_setting (#176)", () => {
       counts: [1, 3],
       tooLong: [10],
       dueDay: 5,
+      firstDue: "2027-12-05",
+      oneOffDue: "2027-11-12",
       seasonEnd: "2028-06-30",
       noneLeft: false,
     });
@@ -167,5 +171,85 @@ describe("drafting by a plan (#176)", () => {
     await expect(
       admin`UPDATE invoice SET installment_count = 13 WHERE school_id = ${ids.school} AND status = 'to_send'`,
     ).rejects.toThrow(/invoice_installment_count/);
+  });
+});
+
+describe("a June draft for a season starting on 13 September, packs paid at once (#436)", () => {
+  const LATE = { startDate: "2027-09-13", endDate: "2028-06-30" };
+
+  beforeAll(async () => {
+    const s = ids.school;
+    await withSchool(s, (tx) => saveInstallmentPlans(tx, "no-such-user", RIBAS));
+    [{ id: ids.late }] = await admin`INSERT INTO season (school_id, label, start_date, end_date)
+      VALUES (${s}, 'Zz 2027-2028 bis', ${LATE.startDate}, ${LATE.endDate}) RETURNING id`;
+    const [course] = await admin`
+      INSERT INTO course (school_id, season_id, billing_entity_id, vat_treatment_id, discipline_id, room_id, instructor_id,
+        weekday, start_time, duration_minutes)
+      VALUES (${s}, ${ids.late}, ${ids.entity}, ${ids.exempt}, ${ids.jazz}, ${ids.room}, ${ids.teacher}, 4, '18:00', 60)
+      RETURNING id`;
+    [{ id: ids.latePayer }] = await admin`INSERT INTO person (school_id, last_name, first_name, is_student)
+      VALUES (${s}, 'Zzjuin', 'Zzadulte', true) RETURNING id`;
+    const [e] = await admin`
+      INSERT INTO enrollment (school_id, billing_entity_id, season_id, payer_id, audience, period, enrolled_on,
+        gross_price_cents)
+      VALUES (${s}, ${ids.entity}, ${ids.late}, ${ids.latePayer}, 'adult', 'year', '2027-06-20', 64500) RETURNING id`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id)
+      VALUES (${s}, ${ids.entity}, ${e.id}, ${ids.latePayer}, ${course.id})`;
+  });
+
+  const draftLate = (installmentCount: number | undefined, today: string) =>
+    withSchool(ids.school, (tx) => draftPayerInvoices(tx, null, ids.latePayer, ids.late, { installmentCount, today }));
+  const lateDues = () => admin`SELECT i.installment_count, d.due_date::text AS due_date, d.amount_cents
+    FROM invoice i JOIN installment d ON d.invoice_id = i.id
+    WHERE i.payer_id = ${ids.latePayer} AND i.status = 'to_send' ORDER BY d.rank`;
+
+  it("offers every plan in June: the first installment falls on 5 September", async () => {
+    expect(await withSchool(ids.school, (tx) => offeredPlans(tx, LATE, "2027-06-20"))).toMatchObject({
+      counts: [1, 3, 10],
+      tooLong: [],
+      firstDue: "2027-09-05",
+      oneOffDue: "2027-09-05",
+      noneLeft: false,
+    });
+  });
+
+  it("3 installments drafted in June: 5 September, October, November", async () => {
+    expect(await draftLate(3, "2027-06-20")).toMatchObject({ ok: true });
+    expect((await lateDues()).map((d) => [d.installment_count, d.due_date, d.amount_cents])).toEqual([
+      [3, "2027-09-05", 21500],
+      [3, "2027-10-05", 21500],
+      [3, "2027-11-05", 21500],
+    ]);
+  });
+
+  it("10 installments drafted in June: 5 September to 5 June, within the season", async () => {
+    expect(await draftLate(10, "2027-06-20")).toMatchObject({ ok: true });
+    const dues = await lateDues();
+    expect(dues.map((d) => d.due_date)).toEqual([
+      "2027-09-05",
+      "2027-10-05",
+      "2027-11-05",
+      "2027-12-05",
+      "2028-01-05",
+      "2028-02-05",
+      "2028-03-05",
+      "2028-04-05",
+      "2028-05-05",
+      "2028-06-05",
+    ]);
+    expect(dues.reduce((sum, d) => sum + d.amount_cents, 0)).toBe(64500);
+  });
+
+  it("a lesson pack bought in the season gets one installment of its own, on the day of the drafting", async () => {
+    await admin`
+      INSERT INTO lesson_pack (school_id, billing_entity_id, payer_id, people_count, lesson_count, price_cents, purchased_on)
+      VALUES (${ids.school}, ${ids.entity}, ${ids.latePayer}, 1, 5, 20050, '2027-10-02')`;
+    expect(await draftLate(3, "2027-10-02")).toMatchObject({ ok: true });
+    expect((await lateDues()).map((d) => [d.due_date, d.amount_cents])).toEqual([
+      ["2027-10-02", 20050],
+      ["2027-10-05", 21500],
+      ["2027-11-05", 21500],
+      ["2027-12-05", 21500],
+    ]);
   });
 });
