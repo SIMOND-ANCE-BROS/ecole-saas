@@ -74,6 +74,15 @@ type Props = {
   answered?: string[];
 };
 
+/** Key of a price typed for one enrollment (#292): its business, students, formula and courses. */
+const typedKeyOf = (
+  billingEntityId: string,
+  audience: string,
+  period: string,
+  studentIds: readonly string[],
+  courseIds: readonly string[],
+) => [billingEntityId, audience, period, ...studentIds, ...courseIds].join("|");
+
 export function EnrollmentForm({
   payerId,
   seasonId,
@@ -122,6 +131,30 @@ export function EnrollmentForm({
   // A success leaves the form, so a new enrollment always gets a new key.
   const [key] = useState(() => crypto.randomUUID());
 
+  // #445: a typed price ranks the child among siblings by its amount, so the preview is told the
+  // typed amounts the server accepts, read from the last priced result's enrollments (their
+  // businesses do not move with the price; an invalid or failed result keeps them, so it never
+  // drops the amounts and asks again on its own). A string, so a new result with the same
+  // amounts does not ask for a preview again.
+  const [pricedEnrollments, setPricedEnrollments] = useState<
+    readonly { billingEntityId: string; courseIds: string[] }[]
+  >([]);
+  const typedAmounts = useMemo(
+    () =>
+      JSON.stringify(
+        pricedEnrollments.flatMap((n) => {
+          // An enrollment of an earlier selection whose courses are no longer all chosen sends nothing.
+          if (!n.courseIds.every((id) => courseIds.includes(id))) return [];
+          const typed = typedPrices[typedKeyOf(n.billingEntityId, chosenAudience, period, studentIds, n.courseIds)];
+          const read = typed ? readTypedPrice(null, typed) : null;
+          return read && read.cents !== null && read.problem === null
+            ? [{ billingEntityId: n.billingEntityId, priceCents: read.cents, reason: "" }]
+            : [];
+        }),
+      ),
+    [pricedEnrollments, typedPrices, chosenAudience, period, studentIds, courseIds],
+  );
+
   const entry: FormInput = useMemo(
     () => ({
       payerId,
@@ -131,8 +164,9 @@ export function EnrollmentForm({
       period,
       courseIds,
       status,
+      manualPrices: JSON.parse(typedAmounts) as FormInput["manualPrices"],
     }),
-    [payerId, seasonId, studentIds, chosenAudience, period, courseIds, status],
+    [payerId, seasonId, studentIds, chosenAudience, period, courseIds, status, typedAmounts],
   );
 
   // No price from a previous selection is shown as the current price.
@@ -140,12 +174,24 @@ export function EnrollmentForm({
     if (entry.studentIds.length === 0 || entry.courseIds.length === 0) return;
     return deferredQuery(
       () => preview(entry),
-      (result) => setPreview({ entry, attempt: calculationAttempt, result, error: false }),
+      (result) => {
+        setPreview({ entry, attempt: calculationAttempt, result, error: false });
+        if (result.status === "ok") setPricedEnrollments(result.newEnrollments);
+      },
       () => setPreview({ entry, attempt: calculationAttempt, result: null, error: true }),
     );
   }, [entry, calculationAttempt]);
-  const current = lastPreview?.entry === entry && lastPreview.attempt === calculationAttempt ? lastPreview : null;
-  const calculation = studentIds.length > 0 && courseIds.length > 0 && current === null;
+  // A typed amount alone changed (#445): the same selection's result stays on screen, its price
+  // fields with it, while the ranking is computed again; saving waits for the fresh one.
+  const sameSelection =
+    lastPreview !== null &&
+    lastPreview.attempt === calculationAttempt &&
+    JSON.stringify({ ...lastPreview.entry, manualPrices: [] }) === JSON.stringify({ ...entry, manualPrices: [] });
+  const current = sameSelection ? lastPreview : null;
+  const calculation =
+    studentIds.length > 0 &&
+    courseIds.length > 0 &&
+    (lastPreview?.entry !== entry || lastPreview.attempt !== calculationAttempt);
   const result = current?.result ?? null;
 
   const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
@@ -159,9 +205,10 @@ export function EnrollmentForm({
   // A price typed for one enrollment (#292) belongs to its business, students, formula and
   // courses: another selection shows the computed price again, the typed one comes back with it.
   const typedKey = (n: (typeof news)[number]) =>
-    [n.billingEntityId, chosenAudience, period, ...studentIds, ...n.courseIds].join("|");
+    typedKeyOf(n.billingEntityId, chosenAudience, period, studentIds, n.courseIds);
   const prices = news.map((n) => {
-    const computedNetCents = n.price.status === "ok" ? n.price.netPriceCents : null;
+    // A typed price is one apart from the price computed without typed amounts (#445).
+    const computedNetCents = n.referenceNetCents;
     // No package in the grid for these courses: the price is typed directly.
     const offGrid = n.price.status === "error" && n.price.error.code === "missing_combination";
     const typed = typedPrices[typedKey(n)] ?? (offGrid ? { price: "", reason: "" } : null);
@@ -172,7 +219,9 @@ export function EnrollmentForm({
       computedNetCents,
       typed,
       read,
-      netPriceCents: read.differs ? read.cents : computedNetCents,
+      // What is saved: the typed price, else the engine's final price, which a price typed for the
+      // child's other business may move (#445 ranking on the sum); never the reference.
+      netPriceCents: read.differs ? read.cents : n.price.status === "ok" ? n.price.netPriceCents : null,
     };
   });
   const setTyped = (n: (typeof news)[number], typed: TypedPrice | null) =>
@@ -181,8 +230,9 @@ export function EnrollmentForm({
   const complete = prices.every((p) => p.read.valid);
   const canSave = priceable && !calculation && !sending;
   const manualPrices = prices.flatMap((p) =>
-    // Only a price apart from the computed one: kept as computed, it follows a recomputation on save.
-    p.typed && p.read.cents !== null && p.read.differs
+    // Every typed amount the server accepts; it ranks and keeps only one apart from the price
+    // computed without typed amounts (`referenceNetCents`, #445), the others follow a recomputation.
+    p.typed && p.read.cents !== null
       ? [{ billingEntityId: p.n.billingEntityId, priceCents: p.read.cents, reason: p.typed.reason }]
       : [],
   );

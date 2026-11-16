@@ -196,8 +196,9 @@ describe("quarterly enrollments (#291)", () => {
       quarterCount: 2,
       seasonDueCents: 19800,
     });
+    // The sibling saved before, billed by nothing yet, gets the discount too (#155 Q2): 99,00 € × 3.
     expect((await withSchool(ids.school, (tx) => balanceOf(tx, ids.payer, "2028-01-10")))?.total).toMatchObject({
-      due: 33000 + 19800,
+      due: 29700 + 19800,
     });
   });
 

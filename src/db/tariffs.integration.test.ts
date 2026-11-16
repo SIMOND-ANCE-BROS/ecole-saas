@@ -236,13 +236,16 @@ describe("siblings and lesson packs", () => {
       rateBps: 1000,
       amountCents: null,
       minStudents: 2,
+      fromRank: 2,
       audiences: ["child" as const],
       combinableWithMultiDiscipline: false,
     };
     expect((await withSchool(school, (tx) => saveSiblings(tx, season, rule))).ok).toBe(true);
-    await withSchool(school, (tx) => saveSiblings(tx, season, { ...rule, rateBps: 1500 }));
+    expect(await withSchool(school, (tx) => readSiblings(tx, season))).toMatchObject({ fromRank: 2 });
+    await withSchool(school, (tx) => saveSiblings(tx, season, { ...rule, rateBps: 1500, fromRank: 1 }));
     expect(await withSchool(school, (tx) => readSiblings(tx, season))).toMatchObject({
       rateBps: 1500,
+      fromRank: 1,
       audiences: ["child"],
     });
     expect(await withSchool(school, (tx) => saveSiblings(tx, season, { ...rule, amountCents: 1000 }))).toEqual({

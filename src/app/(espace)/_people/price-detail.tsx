@@ -48,17 +48,27 @@ export function PriceDetail({
 }
 
 /**
- * Saved enrollments of the payer whose discount would change (#155, #284 Q2):
- * told, never re-priced on their own.
+ * Saved enrollments of the payer whose discount would change (#155, #284 Q2): a raise
+ * is saved with the change while nothing bills the enrollment yet (`applied`); any
+ * other difference is told, the saved price staying as it is.
  */
 export function DiscountImpacts({ impacts }: { impacts: readonly ExistingImpact[] }) {
-  return impacts.map((a) => (
-    <Alert key={a.reference} color="yellow" p="xs">
-      <Text size="xs">
-        L’inscription déjà enregistrée {ofName(a.students)} aurait une remise de {formatEuros(a.recalculatedDiscount)}{" "}
-        au lieu {a.savedDeposit === 0 ? "d’aucune remise" : `de ${formatEuros(a.savedDeposit)}`} : son prix enregistré
-        ne change pas, à corriger si l’école le décide.
-      </Text>
-    </Alert>
-  ));
+  return impacts.map((a) => {
+    const instead = `au lieu ${a.savedDeposit === 0 ? "d’aucune remise" : `de ${formatEuros(a.savedDeposit)}`}`;
+    return a.applied ? (
+      <Alert key={a.reference} color="blue" p="xs">
+        <Text size="xs">
+          L’inscription déjà enregistrée {ofName(a.students)} passera à une remise de{" "}
+          {formatEuros(a.recalculatedDiscount)} {instead} : son prix enregistré sera mis à jour en même temps.
+        </Text>
+      </Alert>
+    ) : (
+      <Alert key={a.reference} color="yellow" p="xs">
+        <Text size="xs">
+          L’inscription déjà enregistrée {ofName(a.students)} aurait une remise de {formatEuros(a.recalculatedDiscount)}{" "}
+          {instead} : son prix enregistré ne change pas, à corriger si l’école le décide.
+        </Text>
+      </Alert>
+    );
+  });
 }

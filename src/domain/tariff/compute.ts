@@ -9,6 +9,7 @@ import type {
   Audience,
   DiscountRule,
   EnrollmentResult,
+  TariffError,
   TariffResult,
 } from "./types";
 
@@ -26,7 +27,8 @@ import type {
 export function computeTariff(request: TariffRequest): TariffResult {
   request.discounts.forEach(checkRule);
 
-  const enrollments = request.enrollments.map((enrollment) => price(enrollment, request));
+  const packages = request.enrollments.map((enrollment) => packageOf(enrollment, request.grid));
+  const enrollments = request.enrollments.map((enrollment, i) => price(enrollment, packages[i], packages, request));
   const priced = enrollments.filter((r) => r.status === "ok");
   const sum = (key: "grossPriceCents" | "discountCents" | "netPriceCents") =>
     priced.reduce((total, r) => total + r[key], 0);
@@ -40,21 +42,20 @@ export function computeTariff(request: TariffRequest): TariffResult {
   };
 }
 
-function price(enrollment: EnrollmentRequest, request: TariffRequest): EnrollmentResult {
-  const { reference, courses } = enrollment;
-  if (courses.length === 0) {
+/** The grid row pricing an enrollment, or why there is none. */
+type Package = { status: "ok"; row: TariffRow; combination: number[] } | { status: "error"; error: TariffError };
+
+function packageOf(enrollment: EnrollmentRequest, grid: readonly TariffRow[]): Package {
+  if (enrollment.courses.length === 0) {
     return {
-      reference,
       status: "error",
       error: { code: "no_courses", message: "Aucun cours choisi : impossible de déterminer le forfait." },
     };
   }
-
-  const combination = sort(courses.map((c) => c.durationMinutes));
-  const row = findRow(request.grid, enrollment, combination);
+  const combination = sort(enrollment.courses.map((c) => c.durationMinutes));
+  const row = findRow(grid, enrollment, combination);
   if (!row) {
     return {
-      reference,
       status: "error",
       error: {
         code: "missing_combination",
@@ -64,11 +65,23 @@ function price(enrollment: EnrollmentRequest, request: TariffRequest): Enrollmen
       },
     };
   }
+  return { status: "ok", row, combination };
+}
+
+function price(
+  enrollment: EnrollmentRequest,
+  pkg: Package,
+  packages: readonly Package[],
+  request: TariffRequest,
+): EnrollmentResult {
+  const { reference } = enrollment;
+  if (pkg.status === "error") return { reference, status: "error", error: pkg.error };
+  const { row, combination } = pkg;
 
   const grossPriceCents = row.priceCents;
   let remaining = grossPriceCents;
   const discounts = request.discounts.map((rule): DiscountDetail => {
-    const decision = evaluate(rule, enrollment, request.enrollments);
+    const decision = evaluate(rule, enrollment, request.enrollments, packages);
     if (decision.status === "rejected") {
       return { code: rule.code, status: "rejected", amountCents: 0, reason: decision.reason };
     }
@@ -110,7 +123,12 @@ function findRow(
 
 type Decision = { status: "applied" | "rejected"; reason: string };
 
-function evaluate(rule: DiscountRule, enrollment: EnrollmentRequest, all: readonly EnrollmentRequest[]): Decision {
+function evaluate(
+  rule: DiscountRule,
+  enrollment: EnrollmentRequest,
+  all: readonly EnrollmentRequest[],
+  packages: readonly Package[],
+): Decision {
   if (rule.code !== "fratrie") {
     return { status: "rejected", reason: "Type de réduction non pris en charge par le moteur de tarif" };
   }
@@ -125,11 +143,18 @@ function evaluate(rule: DiscountRule, enrollment: EnrollmentRequest, all: readon
   }
 
   // Distinct students of the payer in an eligible audience, including those whose
-  // package is to be entered by hand or is a two-disciplines package.
-  const students = new Set(all.filter((i) => eligible(i.audience)).flatMap((i) => i.studentIds));
-  const countLabel = `${students.size} ${studentWord(rule, students.size)} du même payeur`;
-  if (students.size < rule.minStudents) {
+  // package is to be entered by hand or is a two-disciplines package (#155 Q1).
+  const ranked = rankedStudents(all, packages, (i) => eligible(i.audience));
+  const countLabel = `${ranked.length} ${studentWord(rule, ranked.length)} du même payeur`;
+  if (ranked.length < rule.minStudents) {
     return { status: "rejected", reason: `${countLabel}, ${rule.minStudents} requis` };
+  }
+
+  // #290: the students ranked before `fromRank`, most expensive package first, pay full price.
+  const fullPrice = new Set(ranked.slice(0, rule.fromRank - 1));
+  if (enrollment.studentIds.some((id) => fullPrice.has(id))) {
+    const highest = fullPrice.size === 1 ? "forfait le plus cher" : `un des ${fullPrice.size} forfaits les plus chers`;
+    return { status: "rejected", reason: `Plein tarif : ${highest} des ${countLabel}` };
   }
 
   if (!rule.combinableWithMultiDiscipline && new Set(enrollment.courses.map((c) => c.disciplineId)).size >= 2) {
@@ -137,6 +162,39 @@ function evaluate(rule: DiscountRule, enrollment: EnrollmentRequest, all: readon
   }
 
   return { status: "applied", reason: `${countLabel} : −${value(rule)}` };
+}
+
+/**
+ * Distinct students of the `included` enrollments, from the most expensive to the cheapest
+ * (#290), on what each costs over the season (owner, #445): a quarterly package counts once
+ * per quarter it covers, against a yearly one; a typed price (#292) counts instead of the
+ * grid's. A student's price is the sum of their packages (a child enrolled with both
+ * businesses has two, #445). A package with neither grid nor typed price (a price still to
+ * be typed) ranks its students first, as paying full price. Ties keep the order the students
+ * first appear in `all`: callers give the saved enrollments first, oldest first, so a
+ * newcomer at the same price never takes the full price over from a sibling already enrolled.
+ */
+function rankedStudents(
+  all: readonly EnrollmentRequest[],
+  packages: readonly Package[],
+  included: (e: EnrollmentRequest) => boolean,
+): string[] {
+  const prices = new Map<string, number>();
+  all.forEach((e, i) => {
+    if (!included(e)) return;
+    const cents = seasonPrice(e, packages[i]);
+    for (const id of e.studentIds) prices.set(id, (prices.get(id) ?? 0) + cents);
+  });
+  // A Map keeps insertion order and the sort is stable: ties stay in order of appearance.
+  return [...prices.entries()].sort(([, a], [, b]) => b - a).map(([id]) => id);
+}
+
+/** What an enrollment costs over the season, for the siblings ranking only (#445). */
+function seasonPrice(e: EnrollmentRequest, pkg: Package): number {
+  const price = e.manualPriceCents ?? (pkg.status === "ok" ? pkg.row.priceCents : null);
+  if (price === null) return Number.POSITIVE_INFINITY;
+  // A quarterly enrollment covers at least one quarter (#291): a missing or zero count is read as one.
+  return e.period === "quarter" ? price * Math.max(1, e.quarterCount ?? 1) : price;
 }
 
 function discountAmount(rule: DiscountRule, priceCents: number): number {
@@ -147,6 +205,9 @@ function discountAmount(rule: DiscountRule, priceCents: number): number {
 function checkRule(rule: DiscountRule) {
   if ((rule.rateBps === null) === (rule.amountCents === null)) {
     throw new TypeError(`Réduction « ${rule.code} » : renseigner un taux ou un montant, pas les deux`);
+  }
+  if (!Number.isInteger(rule.fromRank) || rule.fromRank < 1) {
+    throw new TypeError(`Réduction « ${rule.code} » : rang de départ invalide (${rule.fromRank})`);
   }
 }
 

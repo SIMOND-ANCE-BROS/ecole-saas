@@ -81,6 +81,7 @@ describe("settings actions", () => {
       rateBps: 1000,
       amountCents: 500,
       minStudents: 2,
+      fromRank: 2,
       audiences: [],
       combinableWithMultiDiscipline: false,
     });

@@ -117,12 +117,16 @@ export const ribasLessonPacksGrid: LessonPackTariffRow[] = (
   })),
 );
 
-/** « 2 enfants et plus (frères et sœurs) : -10 % — non cumulable avec un forfait 2 disciplines » */
+/**
+ * « 2 enfants et plus (frères et sœurs) : -10 % — non cumulable avec un forfait 2 disciplines »;
+ * « 10 % à partir du 2ème » (#155, #290): the child with the most expensive package pays full price.
+ */
 export const ribasSiblings: DiscountRule = {
   code: "fratrie",
   rateBps: 1000,
   amountCents: null,
   minStudents: 2,
+  fromRank: 2,
   audiences: ["child"],
   combinableWithMultiDiscipline: false,
 };

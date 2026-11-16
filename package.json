@@ -17,6 +17,7 @@
     "calendars:sync": "tsx --env-file=.env scripts/sync-calendars.ts",
     "submissions:purge": "tsx --env-file=.env scripts/purge-submissions.ts",
     "installments:overdue": "tsx --env-file=.env scripts/mark-overdue-installments.ts",
+    "audit:pseudonymise": "tsx --env-file=.env scripts/pseudonymise-audit-log.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "preflight": "sh scripts/preflight.sh",

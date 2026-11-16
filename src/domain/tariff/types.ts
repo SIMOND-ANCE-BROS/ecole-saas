@@ -27,6 +27,12 @@ export type DiscountRule = {
   amountCents: number | null;
   /** Minimum number of eligible students of the same payer. */
   minStudents: number;
+  /**
+   * Rank from which an eligible student gets the discount (#290), students ranked from the
+   * most expensive package to the cheapest: 1 = every eligible student, 2 = all but the one
+   * with the most expensive package, who pays full price.
+   */
+  fromRank: number;
   /** Eligible audiences; empty = all. */
   audiences: readonly Audience[];
   /** false: rejected on a package whose courses belong to at least 2 disciplines. */
@@ -44,6 +50,16 @@ export type EnrollmentRequest = {
   audience: Audience;
   period: Period;
   courses: readonly ChosenCourse[];
+  /**
+   * Quarters a quarterly enrollment covers (#291), for the siblings ranking by season price
+   * (#445): its price counts that many times. Absent: 1. Ignored for any other period.
+   */
+  quarterCount?: number;
+  /**
+   * Price typed by the front desk (#292), per period like a grid price: the siblings ranking
+   * uses it instead of the grid's (#445). Absent or null: the grid price.
+   */
+  manualPriceCents?: number | null;
 };
 
 /** All enrollments of the same payer for a season, with the school's tariff grid. */

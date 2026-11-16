@@ -1,6 +1,4 @@
 {
-  "id": "4752c667-ab26-4bbc-be1f-d61f16040615",
-  "prevId": "b0a7f84f-ceec-45b7-b80e-8da80094681c",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1696,6 +1694,13 @@
           "notNull": true,
           "default": 1
         },
+        "from_rank": {
+          "name": "from_rank",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
         "audiences": {
           "name": "audiences",
           "type": "tariff_audience[]",
@@ -1759,6 +1764,10 @@
         "discount_value": {
           "name": "discount_value",
           "value": "\"discount\".\"rate_bps\" IS NOT NULL OR \"discount\".\"amount_cents\" IS NOT NULL"
+        },
+        "discount_from_rank": {
+          "name": "discount_from_rank",
+          "value": "\"discount\".\"from_rank\" BETWEEN 1 AND 10"
         }
       },
       "isRLSEnabled": false
@@ -7803,8 +7812,10 @@
   "policies": {},
   "views": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
-  }
+    "tables": {},
+    "columns": {}
+  },
+  "id": "4752c667-ab26-4bbc-be1f-d61f16040615",
+  "prevId": "d230b00d-9573-43ac-9fd1-9b39bd96de94"
 }
