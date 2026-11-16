@@ -341,6 +341,7 @@ describe("a rejected invoice (#352)", () => {
     await admin`UPDATE invoice SET status = 'rejected', attempts = 20 WHERE id = ${id}`;
     expect(await sendAgain(id, click)).toEqual({ ok: true, result: "retry_in_tool" });
     expect(await row()).toMatchObject({ status: "rejected", attempts: 20, cycle_start_attempts: 10 });
+    // Test set-up only, never a real lowering of attempts: the state as the click left it, for what follows.
     await admin`UPDATE invoice SET status = 'tool_draft', attempts = 10 WHERE id = ${id}`;
     const sentAgain = await admin`SELECT after FROM audit_log WHERE row_id = ${id} AND after->>'reason' = 'sent_again'`;
     expect(sentAgain.map((a) => a.after)).toEqual([{ status: "tool_draft", reason: "sent_again", attempts: 10 }]);
