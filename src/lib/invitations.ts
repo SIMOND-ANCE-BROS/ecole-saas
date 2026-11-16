@@ -4,6 +4,7 @@ import {
   type OpenedLink,
   resetLink,
   readRelationship,
+  recentLinksTo,
   SHARED,
   consumeLink,
   newEmailCode,
@@ -12,7 +13,7 @@ import {
 } from "../db/team";
 import { type JoinProof, emailProofMessage, joinProof, retryIn } from "../domain/team/email-proof";
 import { type Role, passwordRefusal } from "../domain/team/rules";
-import { linkMessage } from "../domain/team/link-messages";
+import { LINK_EMAILS_SCHOOL_DAILY_MAX, linkEmailHold, linkMessage } from "../domain/team/link-messages";
 import { sendFailureMessage } from "../domain/email/settings";
 import { type SchoolSender, schoolEmailSender } from "./email";
 import { auth } from "./auth";
@@ -205,7 +206,9 @@ export async function acceptLink(
  * invitation or the account (the link is then not shown), or to pass on by
  * hand, with `notice` saying why when an e-mail was expected.
  */
-export type Delivery = { sent: true; to: string } | { sent: false; link: string; notice: string | null };
+export type Delivery =
+  | { sent: true; to: string; /** The fake sender: nothing really left. */ simulated: boolean }
+  | { sent: false; link: string; notice: string | null };
 
 /**
  * E-mails a new invitation or password link through the school's sender
@@ -220,12 +223,19 @@ export async function deliverLink(
 ): Promise<Delivery> {
   const link = linkAddress(schoolId, token);
   // The link exists: whatever fails from here, it is shown rather than lost.
+  const now = new Date();
   const prepared = await Promise.all([
-    withSchool(schoolId, (tx) => readRelationship(tx, token, new Date())),
+    withSchool(schoolId, async (tx) => {
+      const found = await readRelationship(tx, token, now);
+      return found && { link: found, earlier: await recentLinksTo(tx, found, now) };
+    }),
     senderOf(schoolId),
-  ]).catch(() => null);
+  ]).catch((e: unknown) => {
+    console.error(`School ${schoolId}: link e-mail not prepared`, e instanceof Error ? e.name : "");
+    return null;
+  });
   if (!prepared?.[0]) return { sent: false, link, notice: null };
-  const [opened, { route, sender }] = prepared;
+  const [{ link: opened, earlier }, { route, sender }] = prepared;
   if (!sender)
     return {
       sent: false,
@@ -235,12 +245,29 @@ export async function deliverLink(
           ? "Le compte d’envoi d’e-mails de l’école ne peut pas être utilisé (Paramètres › E-mails) : transmettez ce lien vous-même."
           : null,
     };
-  const message = linkMessage({ kind: opened.type, school: opened.school, name: opened.name, url: link });
+  // Spaced out like the proof e-mails (ADR 0008), and capped per school (`linkEmailHold`).
+  const hold = linkEmailHold(earlier, now);
+  if (hold)
+    return {
+      sent: false,
+      link,
+      notice:
+        hold.scope === "person"
+          ? `Un e-mail est déjà parti récemment pour cette personne : pour ne pas encombrer sa boîte, celui-ci ne part pas (prochain envoi possible ${retryIn(hold.wait)}). Transmettez ce lien vous-même.`
+          : `L’école a déjà envoyé ${LINK_EMAILS_SCHOOL_DAILY_MAX} e-mails d’invitation ou de mot de passe en 24 heures : celui-ci ne part pas (prochain envoi possible ${retryIn(hold.wait)}). Transmettez ce lien vous-même.`,
+    };
+  // Through the application's account, no text typed by a director in the e-mail: the greeting stays generic.
+  const message = linkMessage({
+    kind: opened.type,
+    school: opened.school,
+    name: route.kind === "school" ? opened.name : null,
+    url: link,
+  });
   // A provider must not throw; if one does, the link is shown all the same.
   const r = await sender
     .send({ to: opened.email, ...message })
     .catch((): SendFailure => ({ ok: false, reason: "unavailable" }));
-  if (r.ok) return { sent: true, to: opened.email };
+  if (r.ok) return { sent: true, to: opened.email, simulated: route.kind === "fake" };
   console.error(
     `School ${schoolId}, link ${opened.id}: e-mail not sent (${route.kind}, ${r.reason} ${r.status ?? ""} ${r.code ?? ""})`,
   );

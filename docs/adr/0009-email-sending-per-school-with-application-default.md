@@ -49,9 +49,21 @@ sent through it.
   fails at once. About 17 s at most, the time a director waits on a button.
   Resend gets one idempotency key per message, the same on the retry; Brevo has
   none, so a timed-out first attempt that did go out may arrive twice (the same
-  link twice: harmless). Failures are `{ ok: false, reason, status, code }`
+  link twice: harmless). A director who retries after a lost answer replaces
+  the invitation: a first e-mail that did go out then carries a dead link,
+  and the person uses the second one. Failures are `{ ok: false, reason, status, code }`
   (`unavailable`, `refused`, `timeout`); logs carry school and link ids, the
   route and the status, never an address, subject, body or key.
+- **Spacing**: an invitation or password e-mail waits like a proof e-mail
+  (`addressWait`: two minutes apart, five a day per person and school),
+  counted from the links the school created for that person (audit log),
+  and at most 30 a day per school, all people together (`linkEmailHold`);
+  past that, the link is shown to pass on by hand, never refused.
+- **Content**: the invitee's name and the school's name are one line, without
+  control or direction characters, 100 characters at most (refused at entry,
+  cleaned again in the e-mail, `mailText`). Through the application's account
+  the greeting carries no name typed by a director: its domain never relays a
+  school's free text beyond the school's own name.
 - A « Tester l’envoi » action sends a test e-mail with the saved setting to
   the director's own address only, limited per school.
 

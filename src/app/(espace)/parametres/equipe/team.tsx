@@ -15,7 +15,7 @@ type Invitation = Omit<PendingInvitation, "expiresAt"> & { expiresAt: string };
 type Section = "members" | "invite" | "invitations";
 /** A new link: e-mailed to `to`, or to pass on by hand (`link`), with why when an e-mail was expected. */
 type Shown =
-  | { who: string; kind: "invitation" | "reset"; sent: true; to: string }
+  | { who: string; kind: "invitation" | "reset"; sent: true; to: string; simulated: boolean }
   | { who: string; kind: "invitation" | "reset"; sent: false; link: string; notice: string | null };
 /** A change that needs a « yes » first (DESIGN.md: destructive actions ask for confirmation). */
 type Pending = {
@@ -50,8 +50,10 @@ function ShownLink({ shown, onClose }: { shown: Shown; onClose: () => void }) {
           <strong>
             {what} {shown.who}
           </strong>{" "}
-          : lien envoyé par e-mail à <span className="break-all">{shown.to}</span>, valable {validity}. La personne y
-          choisira elle-même son mot de passe. Pas reçu ? Vérifiez les indésirables, ou créez un nouveau lien.
+          : lien envoyé par e-mail à <span className="wrap-anywhere">{shown.to}</span>, valable {validity}. La personne
+          y choisira elle-même son mot de passe. Pas reçu ? Vérifiez les indésirables, ou{" "}
+          {shown.kind === "invitation" ? "envoyez l’invitation de nouveau" : "envoyez un nouveau lien"}.
+          {shown.simulated && " (Mode simulation : aucun e-mail n’est réellement parti.)"}
         </p>
         <Button variant="subtle" onClick={onClose}>
           Fermer
@@ -117,6 +119,7 @@ export function Team({
   const [refusal, setRefusal] = useState<{ section: Section; text: string } | null>(null);
   const [shown, setShown] = useState<Shown | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
+  const nameField = useRef<HTMLInputElement>(null);
   const [entry, setEntry] = useState<{ name: string; email: string; role: (typeof INVITABLE_ROLES)[number] }>({
     name: "",
     email: "",
@@ -139,10 +142,13 @@ export function Team({
       const r = await settle(action);
       setRefusal(r.ok ? null : { section, text: r.message });
       if (!r.ok) return setShown(null);
+      // E-mailed invitation: ready for the next person.
+      if (r.sent && kind === "invitation") nameField.current?.focus();
       setShown(
-        r.sent ? { who, kind, sent: true, to: r.to } : { who, kind, sent: false, link: r.link, notice: r.notice },
+        r.sent
+          ? { who, kind, sent: true, to: r.to, simulated: r.simulated }
+          : { who, kind, sent: false, link: r.link, notice: r.notice },
       );
-      if (r.sent) notifications.show({ message: `E-mail envoyé à ${r.to}`, color: "green" });
     });
 
   const askRole = (m: Member, role: Role) =>
@@ -333,6 +339,7 @@ export function Team({
           }}
         >
           <TextInput
+            ref={nameField}
             label="Nom"
             required
             value={entry.name}
@@ -358,7 +365,11 @@ export function Team({
               if (role) setEntry({ ...entry, role });
             }}
           />
-          <Button type="submit" variant={shown?.kind === "invitation" ? "default" : "filled"} loading={inProgress}>
+          <Button
+            type="submit"
+            variant={shown?.kind === "invitation" && !shown.sent ? "default" : "filled"}
+            loading={inProgress}
+          >
             {emails ? "Envoyer l’invitation" : "Créer le lien d’invitation"}
           </Button>
         </Paper>

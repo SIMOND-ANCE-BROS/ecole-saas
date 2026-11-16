@@ -2,8 +2,8 @@
 
 import { Alert, Button, Checkbox, Paper, PasswordInput, Radio, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useState, useTransition } from "react";
-import type { EmailSetting } from "@/db/email-connectors";
+import { useRef, useState, useTransition } from "react";
+import { type EmailSetting, KEY_REQUIRED } from "@/db/email-connectors";
 import {
   API_KEY_MAX,
   EMAIL_PROVIDER_DETAILS,
@@ -50,14 +50,22 @@ export function EmailSettings({
   const [testing, startTest] = useTransition();
   // Bumped after a save or a removal: the unsaved-input guard starts again from what was saved.
   const [saves, setSaves] = useState(0);
+  const keyField = useRef<HTMLInputElement>(null);
   // A new provider needs its own key: the saved one belongs to the other.
   const keySaved = setting !== null && setting.provider === entry.provider;
   const change = (patch: Partial<Entry>) => setEntry((e) => ({ ...e, ...patch }));
 
   return (
     <FormPage key={saves} className="flex max-w-2xl flex-col gap-6">
-      <Alert color={routeOk ? "blue" : "orange"} variant="light" role="status" title="Envoi actuel">
+      <Alert color={routeOk ? undefined : "yellow"} variant="light" role="status" title="Envoi actuel">
         {route}
+        {setting && !setting.active && (
+          <>
+            {" "}
+            Le compte {EMAIL_PROVIDER_LABELS[setting.provider]} de l’école est enregistré mais pas utilisé (case «
+            Utiliser ce compte » décochée).
+          </>
+        )}
       </Alert>
 
       <section aria-labelledby="essai" className="flex flex-col gap-2">
@@ -65,8 +73,8 @@ export function EmailSettings({
           Tester l’envoi
         </Title>
         <Text size="sm" c="dimmed">
-          Un e-mail d’essai part vers votre adresse, <span className="break-all">{me}</span>, avec le réglage
-          enregistré.
+          Un e-mail d’essai part vers votre adresse, <span className="wrap-anywhere">{me}</span>, par l’envoi actuel
+          ci-dessus (enregistrez d’abord un changement de compte).
         </Text>
         <div>
           <Button
@@ -76,7 +84,13 @@ export function EmailSettings({
               startTest(async () => {
                 const r = await settle(() => sendTestEmail());
                 setTestMessage(r.ok ? null : r.message);
-                if (r.ok) notifications.show({ color: "green", message: `E-mail d’essai envoyé à ${r.to}.` });
+                if (r.ok)
+                  notifications.show({
+                    color: "green",
+                    message: r.simulated
+                      ? `Mode simulation : l’e-mail d’essai pour ${r.to} n’est pas réellement parti.`
+                      : `E-mail d’essai envoyé à ${r.to}.`,
+                  });
               })
             }
           >
@@ -96,7 +110,8 @@ export function EmailSettings({
         </Title>
         <Text size="sm" c="dimmed">
           Facultatif. Avant d’enregistrer, validez l’adresse d’expédition chez le service choisi (domaine vérifié, SPF
-          et DKIM), sinon les e-mails sont refusés ou classés en indésirables.
+          et DKIM), sinon les e-mails sont refusés ou classés en indésirables. Ces réglages se font chez l’hébergeur du
+          nom de domaine de l’école : demandez-les à la personne qui gère votre site ou vos adresses e-mail.
         </Text>
         <Paper
           withBorder
@@ -108,6 +123,7 @@ export function EmailSettings({
             startTransition(async () => {
               const r = await settle(() => saveEmailSettings(entry));
               setMessage(r.ok ? null : r.message);
+              if (!r.ok && r.message === KEY_REQUIRED) keyField.current?.focus();
               if (r.ok) {
                 change({ apiKey: "" });
                 setSaves((n) => n + 1);
@@ -163,6 +179,8 @@ export function EmailSettings({
               maxLength={API_KEY_MAX}
               value={entry.apiKey}
               onChange={(e) => change({ apiKey: e.currentTarget.value })}
+              ref={keyField}
+              error={message === KEY_REQUIRED ? message : undefined}
             />
             <Checkbox
               label="Utiliser ce compte"
@@ -170,7 +188,7 @@ export function EmailSettings({
               checked={entry.active}
               onChange={(e) => change({ active: e.currentTarget.checked })}
             />
-            {message && (
+            {message && message !== KEY_REQUIRED && (
               <Text role="alert" size="sm" c="red">
                 {message}
               </Text>

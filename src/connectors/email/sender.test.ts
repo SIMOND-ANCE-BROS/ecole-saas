@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FAKE_OUTBOX, fakeSender, platformConfig, platformEmailSender } from "./sender";
 
 describe("platformEmailSender", () => {
@@ -19,6 +19,25 @@ describe("platformEmailSender", () => {
     expect(platformConfig({ ...BREVO, BREVO_API_KEY: " " })).toBeNull();
     expect(platformConfig({ ...BREVO, EMAIL_FROM_ADDRESS: "pas une adresse" })).toBeNull();
     expect(platformEmailSender({ ...BREVO, EMAIL_FROM_ADDRESS: "" })).toBeNull();
+  });
+
+  it("on a school's behalf: « École via App », one line, 70 characters at most", async () => {
+    const calls: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls.push(JSON.parse(String(init.body)));
+        return new Response("{}", { status: 201 });
+      }),
+    );
+    try {
+      await platformEmailSender(BREVO, "École\r\nTest")?.send({ to: "zz@exemple.test", subject: "s", text: "t" });
+      await platformEmailSender(BREVO, "É".repeat(100))?.send({ to: "zz@exemple.test", subject: "s", text: "t" });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(calls[0]).toMatchObject({ sender: { email: "envoi@exemple.test", name: "École  Test via Appli" } });
+    expect((calls[1] as { sender: { name: string } }).sender.name).toHaveLength(70);
   });
 
   it("the sender name defaults to the address", () => {

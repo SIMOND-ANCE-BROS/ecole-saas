@@ -10,6 +10,7 @@ import { createAccount } from "./accounts";
 import { schoolEmailSender } from "./email";
 import { decrypt } from "./encryption";
 import { deliverLink } from "./invitations";
+import { LINK_EMAILS_SCHOOL_DAILY_MAX } from "../domain/team/link-messages";
 
 /**
  * A school's own e-mail account (#105, ADR 0009), against the real database:
@@ -119,7 +120,7 @@ describe("email_connector", () => {
   it("the audit log says whether the key changed, never the key", async () => {
     const rows = await admin`SELECT action, before, after FROM audit_log
       WHERE school_id = ${school} AND target_table = 'email_connector' ORDER BY id`;
-    expect(rows.map((r) => [r.action, r.after.api_key_changed])).toEqual([
+    expect(rows.map((r) => [r.action, r.after.apiKeyChanged])).toEqual([
       ["insert", true],
       ["update", false],
     ]);
@@ -207,13 +208,13 @@ describe("deliverLink", () => {
     const f = recordingFetch();
     const r = await deliverLink(school, token, (id) => schoolEmailSender(id, FAKE, { fetch: f.fetch }));
     // School A has its own account: it goes there, not to the fake sender of the environment.
-    expect(r).toEqual({ sent: true, to: `zz-invitee-1-${suffix}@exemple.test` });
+    expect(r).toEqual({ sent: true, to: `zz-invitee-1-${suffix}@exemple.test`, simulated: false });
     expect(FAKE_OUTBOX).toHaveLength(0);
     expect(f.calls).toHaveLength(1);
     expect(f.calls[0]).toMatchObject({ url: RESEND_URL, body: { to: [`zz-invitee-1-${suffix}@exemple.test`] } });
     await withSchool(school, (tx) => deleteEmailSetting(tx, director));
     const sent = await deliverLink(school, token, (id) => schoolEmailSender(id, FAKE));
-    expect(sent).toEqual({ sent: true, to: `zz-invitee-1-${suffix}@exemple.test` });
+    expect(sent).toEqual({ sent: true, to: `zz-invitee-1-${suffix}@exemple.test`, simulated: true });
     expect(FAKE_OUTBOX).toHaveLength(1);
     expect(FAKE_OUTBOX[0].to).toBe(`zz-invitee-1-${suffix}@exemple.test`);
     expect(FAKE_OUTBOX[0].subject).toBe("Invitation à rejoindre Zz École Mail A");
@@ -247,11 +248,72 @@ describe("deliverLink", () => {
     });
   });
 
+  it("a second invitation of the same person within two minutes is not e-mailed: its link is shown", async () => {
+    const email = `zz-invitee-5-${suffix}@exemple.test`;
+    FAKE_OUTBOX.length = 0;
+    const first = await deliverLink(school, await newInvitation(email), (id) => schoolEmailSender(id, FAKE));
+    expect(first).toMatchObject({ sent: true });
+    const token = await newInvitation(email);
+    const second = await deliverLink(school, token, (id) => schoolEmailSender(id, FAKE));
+    expect(second).toMatchObject({ sent: false, link: expect.stringContaining(token) });
+    expect(second.sent === false && second.notice).toContain("déjà parti récemment");
+    expect(FAKE_OUTBOX).toHaveLength(1);
+    // Another address of the same school is not held back.
+    expect(
+      await deliverLink(school, await newInvitation(`zz-invitee-6-${suffix}@exemple.test`), (id) =>
+        schoolEmailSender(id, FAKE),
+      ),
+    ).toMatchObject({ sent: true });
+  });
+
+  it("an invitee's name on several lines is refused (it goes into the e-mail)", async () => {
+    const r = await withSchool(school, (tx) =>
+      invite(
+        tx,
+        director,
+        { email: `zz-x-${suffix}@exemple.test`, name: "Zz\nCliquez ici", role: "front_desk" },
+        new Date(),
+      ),
+    );
+    expect(r).toMatchObject({ ok: false, message: "Nom : une seule ligne, sans caractère spécial." });
+  });
+
   it("another school's token is never e-mailed nor shown as valid", async () => {
     const token = await newInvitation(`zz-invitee-4-${suffix}@exemple.test`);
     FAKE_OUTBOX.length = 0;
     const r = await deliverLink(otherSchool, token, (id) => schoolEmailSender(id, FAKE));
     expect(r).toMatchObject({ sent: false, notice: null });
+    expect(FAKE_OUTBOX).toHaveLength(0);
+  });
+
+  it("through the application's sender, the greeting carries no name typed by a director", async () => {
+    FAKE_OUTBOX.length = 0;
+    const r = await withSchool(school, (tx) =>
+      invite(
+        tx,
+        director,
+        { email: `zz-invitee-7-${suffix}@exemple.test`, name: "Zz Nommée", role: "front_desk" },
+        new Date(),
+      ),
+    );
+    if (!r.ok) throw new Error(r.message);
+    expect(await deliverLink(school, r.token, (id) => schoolEmailSender(id, FAKE))).toMatchObject({ sent: true });
+    expect(FAKE_OUTBOX[0].text.split("\n")[0]).toBe("Bonjour,");
+    expect(FAKE_OUTBOX[0].text).not.toContain("Zz Nommée");
+  });
+
+  it("past LINK_EMAILS_SCHOOL_DAILY_MAX links in 24 hours, the school's next link is shown, not e-mailed", async () => {
+    // Links of other people created in the last hours, as the audit log records them.
+    for (let i = 0; i < LINK_EMAILS_SCHOOL_DAILY_MAX; i++)
+      await admin`INSERT INTO audit_log (school_id, target_table, row_id, action, after, at)
+        VALUES (${school}, 'invitation', gen_random_uuid(), 'insert',
+                ${admin.json({ type: "invitation", email: `zz-flot-${i}-${suffix}@exemple.test` })},
+                now() - interval '1 hour')`;
+    FAKE_OUTBOX.length = 0;
+    const token = await newInvitation(`zz-invitee-8-${suffix}@exemple.test`);
+    const r = await deliverLink(school, token, (id) => schoolEmailSender(id, FAKE));
+    expect(r).toMatchObject({ sent: false, link: expect.stringContaining(token) });
+    expect(r.sent === false && r.notice).toContain(`déjà envoyé ${LINK_EMAILS_SCHOOL_DAILY_MAX} e-mails`);
     expect(FAKE_OUTBOX).toHaveLength(0);
   });
 });

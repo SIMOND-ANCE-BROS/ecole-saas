@@ -64,8 +64,8 @@ describe("team actions", () => {
 
   it("e-mail a new password link, or give it back to pass on by hand (#105)", async () => {
     createResetLink.mockResolvedValue({ ok: true, id: ID, token: "t" });
-    deliverLink.mockResolvedValueOnce({ sent: true, to: "zz@exemple.test" });
-    expect(await resetPassword(ID)).toEqual({ ok: true, sent: true, to: "zz@exemple.test" });
+    deliverLink.mockResolvedValueOnce({ sent: true, to: "zz@exemple.test", simulated: false });
+    expect(await resetPassword(ID)).toEqual({ ok: true, sent: true, to: "zz@exemple.test", simulated: false });
     deliverLink.mockResolvedValueOnce({ sent: false, link: "https://example.test/l", notice: null });
     expect(await resetPassword(ID)).toEqual({ ok: true, sent: false, link: "https://example.test/l", notice: null });
     expect(deliverLink).toHaveBeenCalledWith("school-a", "t");

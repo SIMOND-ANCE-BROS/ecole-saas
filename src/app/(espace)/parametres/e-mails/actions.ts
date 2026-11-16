@@ -36,7 +36,7 @@ const TESTS = new Map<string, TokenBucket>();
  * (never an address typed on screen: the button cannot be used to write to
  * anyone else). Says in French what to check when it fails.
  */
-export async function sendTestEmail(): Promise<ActionResult<{ to: string }>> {
+export async function sendTestEmail(): Promise<ActionResult<{ to: string; simulated: boolean }>> {
   const { schoolId } = await requireRole("director");
   const { user } = await currentSession();
   const now = Date.now();
@@ -59,7 +59,16 @@ export async function sendTestEmail(): Promise<ActionResult<{ to: string }>> {
       ].join("\n"),
     })
     .catch((): SendFailure => ({ ok: false, reason: "unavailable" }));
-  if (r.ok) return { ok: true, to: user.email };
-  console.error(`School ${schoolId}: test e-mail not sent (${route.kind}, ${r.reason})`);
-  return { ok: false, message: sendFailureMessage(r) };
+  if (r.ok) return { ok: true, to: user.email, simulated: route.kind === "fake" };
+  console.error(
+    `School ${schoolId}: test e-mail not sent (${route.kind}, ${r.reason} ${r.status ?? ""} ${r.code ?? ""})`,
+  );
+  // The school's own account: what to check there. The application's: nothing for the school to fix.
+  return {
+    ok: false,
+    message:
+      route.kind === "school"
+        ? sendFailureMessage(r)
+        : "Le service d’envoi de l’application n’a pas pu envoyer l’e-mail. Réessayez plus tard ; si le problème continue, prévenez l’éditeur du logiciel.",
+  };
 }

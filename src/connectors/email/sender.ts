@@ -55,6 +55,7 @@ export const fakeSender: EmailSender = {
 export const fakeAllowed = (env: Env = process.env) => env.EMAIL_FAKE_ALLOWED === "1" && env.NODE_ENV !== "production";
 
 const validAddress = z.email();
+let warned = false;
 
 /** The application's Brevo account from the environment, or null when it is not (fully) set. */
 export function platformConfig(
@@ -62,7 +63,13 @@ export function platformConfig(
 ): { apiKey: string; fromAddress: string; fromName: string } | null {
   const apiKey = env.BREVO_API_KEY?.trim();
   const fromAddress = env.EMAIL_FROM_ADDRESS?.trim();
-  if (!apiKey || !fromAddress || !validAddress.safeParse(fromAddress).success) return null;
+  if (!apiKey) return null;
+  if (!fromAddress || !validAddress.safeParse(fromAddress).success) {
+    // A typo in production would silently turn every e-mail into a manual link: say it, once (names only).
+    if (!warned) console.error("BREVO_API_KEY is set but EMAIL_FROM_ADDRESS is missing or invalid: no e-mail sent");
+    warned = true;
+    return null;
+  }
   const fromName = env.EMAIL_FROM_NAME?.trim() || fromAddress;
   return { apiKey, fromAddress, fromName };
 }

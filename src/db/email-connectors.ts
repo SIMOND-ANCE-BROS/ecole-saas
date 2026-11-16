@@ -15,6 +15,8 @@ import { auditLog, emailConnector, member } from "./schema";
 
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 export type Result = { ok: true } | { ok: false; message: string };
+/** Refusal of a save without a key where one is needed (the screen puts it on the key field). */
+export const KEY_REQUIRED = "Saisissez la clé d’API du compte.";
 
 /** The setting as a screen sees it: everything but the key. */
 export type EmailSetting = { provider: EmailProvider; fromAddress: string; fromName: string; active: boolean };
@@ -58,11 +60,13 @@ const singleLine = (label: string, max: number) =>
 export const validEmailSetting = z.object(
   {
     provider: z.enum(EMAIL_PROVIDER_VALUES, { error: "Choisissez un service d’envoi." }),
+    // Trimmed before the format check: an address pasted with a space is accepted.
     fromAddress: z
-      .email("Adresse d’expédition invalide.")
+      .string({ error: "Adresse d’expédition invalide." })
       .trim()
       .toLowerCase()
-      .max(254, "Adresse d’expédition trop longue."),
+      .max(254, "Adresse d’expédition trop longue.")
+      .pipe(z.email("Adresse d’expédition invalide.")),
     fromName: singleLine("Nom de l’expéditeur", FROM_NAME_MAX),
     /** Empty: keep the saved key (same provider only). */
     apiKey: z
@@ -94,8 +98,7 @@ export async function saveEmailSetting(tx: Tx, userId: string, entry: EmailSetti
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('email_connector'), hashtext(${CURRENT_SCHOOL}::text))`);
   const before = await readEmailSetting(tx);
   const keyChanged = next.apiKey !== "";
-  if (!keyChanged && (!before || before.provider !== next.provider))
-    return { ok: false, message: "Saisissez la clé d’API du compte." };
+  if (!keyChanged && (!before || before.provider !== next.provider)) return { ok: false, message: KEY_REQUIRED };
   const fields = {
     provider: next.provider,
     fromAddress: next.fromAddress,
@@ -103,7 +106,12 @@ export async function saveEmailSetting(tx: Tx, userId: string, entry: EmailSetti
     active: next.active,
   };
   if (keyChanged) {
-    const encryptedApiKey = encrypt(next.apiKey);
+    let encryptedApiKey: string;
+    try {
+      encryptedApiKey = encrypt(next.apiKey);
+    } catch {
+      return { ok: false, message: "Le serveur ne peut pas chiffrer la clé : prévenez l’éditeur du logiciel." };
+    }
     await tx
       .insert(emailConnector)
       .values({
@@ -144,7 +152,7 @@ export async function saveEmailSetting(tx: Tx, userId: string, entry: EmailSetti
     rowId: CURRENT_SCHOOL,
     action: before ? "update" : "insert",
     before,
-    after: { ...fields, api_key_changed: keyChanged },
+    after: { ...fields, apiKeyChanged: keyChanged },
   });
   return { ok: true };
 }
