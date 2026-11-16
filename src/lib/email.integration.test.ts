@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -58,6 +59,8 @@ function recordingFetch() {
 }
 
 beforeAll(async () => {
+  // Its own key, as the other suites storing secrets: CI has no CLE_CHIFFREMENT.
+  process.env.CLE_CHIFFREMENT = randomBytes(32).toString("base64");
   [{ id: school }] =
     await admin`INSERT INTO school (name, slug) VALUES ('Zz École Mail A', ${`mail-a-${suffix}`}) RETURNING id`;
   [{ id: otherSchool }] =
