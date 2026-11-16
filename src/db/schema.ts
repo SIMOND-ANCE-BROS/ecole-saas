@@ -931,7 +931,8 @@ export const suspendedLesson = pgTable(
 
 /**
  * One row per form submission that creates records (payment, enrollment,
- * course, lesson pack, workshop sign-up), or takes up a rejected invoice (#352), keyed by an id the browser generates once (#260): a retry after a
+ * course, lesson pack, workshop sign-up), or takes up a rejected invoice
+ * (#352), keyed by an id the browser generates once (#260): a retry after a
  * lost response finds the row and gets the first result back instead of
  * creating a duplicate. Rows older than a week are purged (#262,
  * `npm run submissions:purge`).

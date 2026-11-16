@@ -3,7 +3,7 @@
 import { Button, Group, Loader, Modal, Text } from "@mantine/core";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { notSent, settle } from "@/lib/action-result";
+import { BUSY, notSent, settle } from "@/lib/action-result";
 import { formatEuros } from "@/lib/money";
 import { abandon, sendAgain } from "./actions";
 import type { TakenUp } from "./taken-up";
@@ -33,18 +33,20 @@ export function ProblemActions({
   const [asking, setAsking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
-  // One key per click that went through (#260): a retry after a lost answer sends the same one and
-  // gets the first result back. Renewed after an answer, so an invoice rejected again and listed
-  // anew is really sent again; a refusal frees its key on the server, so keeping it is safe.
-  const [key, setKey] = useState(() => crypto.randomUUID());
-  const run = (call: (key: string) => ReturnType<typeof sendAgain>) =>
+  // One key per button (#260): a retry after a lost answer (or « Réessayez dans un instant ») sends
+  // the same one and gets the first result back. Kept apart, so « Abandonner » after a lost « Envoyer
+  // à nouveau » says « plus à reprendre » rather than « déjà envoyée avec d’autres valeurs ».
+  // Renewed after any other answer, so an invoice rejected again and listed anew is really sent again.
+  const [keys, setKeys] = useState(() => ({ send: crypto.randomUUID(), abandon: crypto.randomUUID() }));
+  const run = (action: keyof typeof keys, call: (key: string) => ReturnType<typeof sendAgain>) =>
     startTransition(async () => {
-      const r = await settle(() => call(key));
+      const r = await settle(() => call(keys[action]));
+      const unanswered = notSent(r) || (!r.ok && r.message === BUSY);
+      if (!unanswered) setKeys((k) => ({ ...k, [action]: crypto.randomUUID() }));
       if (!r.ok) {
         setMessage(notSent(r) ? FAILED : r.message);
         return;
       }
-      setKey(crypto.randomUUID());
       setMessage(null);
       // The row leaves the list; the page says what became of it (`TAKEN_UP` banners).
       const done: TakenUp =
@@ -80,7 +82,7 @@ export function ProblemActions({
             color="red"
             onClick={() => {
               setAsking(false);
-              run((k) => abandon(invoiceId, k));
+              run("abandon", (k) => abandon(invoiceId, k));
             }}
           >
             Abandonner la facture
@@ -94,7 +96,7 @@ export function ProblemActions({
           aria-disabled={busy || undefined}
           rightSection={busy ? <Loader size="xs" /> : null}
           aria-label={`Envoyer à nouveau ${invoice}`}
-          onClick={() => !busy && run((k) => sendAgain(invoiceId, k))}
+          onClick={() => !busy && run("send", (k) => sendAgain(invoiceId, k))}
         >
           Envoyer à nouveau
         </Button>

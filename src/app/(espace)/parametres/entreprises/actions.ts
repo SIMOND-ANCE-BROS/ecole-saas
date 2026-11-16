@@ -35,7 +35,12 @@ const done = (r: RejectedOutcome | Busy): Done =>
       ? { ok: true, result: r.mode, drafted: r.drafted }
       : { ok: true, result: r.mode };
 
-/** « Envoyer à nouveau »: woken at once after the commit (`sendSoon`). */
+/**
+ * « Envoyer à nouveau »: woken at once after the commit (`sendSoon`). A replay returns what the
+ * first click did, even if the invoice was rejected again since (past the attempt limit, one
+ * failure does it): the banner then says « renvoyée » while the list shows it again, and the next
+ * click, with a new key, really sends it.
+ */
 export async function sendAgain(invoiceId: string, key: string): Promise<Done> {
   const { schoolId, userId } = await requireRole(...REJECTED_ROLES);
   const id = validId.safeParse(invoiceId);

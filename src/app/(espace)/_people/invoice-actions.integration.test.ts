@@ -403,8 +403,11 @@ describe("a rejected invoice (#352)", () => {
       VALUES (${ids.school}, ${ids.b}, ${payment}, ${inst}, 5000)`;
     const audits = async () => (await admin`SELECT count(*)::int AS n FROM audit_log WHERE row_id = ${a.id}`)[0].n;
     const before = await audits();
-    const r = await sendAgain(a.id, key());
+    const click = key();
+    const r = await sendAgain(a.id, click);
     expect(r).toMatchObject({ ok: false, message: expect.stringMatching(/paiement/) });
+    // The refusal is thrown, not returned: the submission key rolls back with the rest, free for a retry (#260).
+    expect(await admin`SELECT 1 FROM submission WHERE school_id = ${ids.school} AND key = ${click}`).toHaveLength(0);
     expect((await admin`SELECT status FROM invoice WHERE id = ${a.id}`)[0].status).toBe("rejected");
     expect(await audits()).toBe(before);
     expect(pending).toHaveLength(0);
