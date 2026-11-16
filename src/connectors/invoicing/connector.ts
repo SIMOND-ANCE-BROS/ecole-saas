@@ -23,9 +23,13 @@ export type ConnectorOptions = {
   recordPayment?: boolean;
 };
 
-/** Whether the simulation tool may run here: never unless `INVOICING_FAKE_ALLOWED=1`. */
+/**
+ * Whether the simulation tool may run here: only with `INVOICING_FAKE_ALLOWED=1`, and never when
+ * `NODE_ENV=production` whatever the variable says (#351, as the fake e-mail sender, #404): a
+ * production server never numbers « TEST- » invoices for a real school. Tests, local demonstration.
+ */
 export const fakeAllowed = (env: Readonly<Record<string, string | undefined>> = process.env) =>
-  env.INVOICING_FAKE_ALLOWED === "1";
+  env.INVOICING_FAKE_ALLOWED === "1" && env.NODE_ENV !== "production";
 
 /**
  * Whether `connectorFor` can build a connector of `tool` on this server, credentials aside: what

@@ -336,6 +336,17 @@ describe("sending through the fake tool", () => {
     expect(await row(id)).toMatchObject({ status: "to_send", attempts: 0 });
   });
 
+  it("leaves a draft waiting, uncounted, on a production server even with INVOICING_FAKE_ALLOWED=1 (#351)", async () => {
+    const id = await newInvoice(ids.a);
+    const production = { ...RUN, env: { INVOICING_FAKE_ALLOWED: "1", NODE_ENV: "production" } };
+    expect(await sendEntityInvoices(ids.school, ids.a, production)).toMatchObject({
+      claimed: 0,
+      skipped: "fake_not_allowed",
+    });
+    expect(await row(id)).toMatchObject({ status: "to_send", attempts: 0, number: null, claimed_until: null });
+    expect(fakeStoreOf(ids.a).calls).toEqual([]);
+  });
+
   it("flags a total difference found after a lost answer, when the tool's status shows it issued", async () => {
     const id = await newInvoice(ids.a);
     // The tool issues, its answer is lost (the call and its retry); next run reads another total.

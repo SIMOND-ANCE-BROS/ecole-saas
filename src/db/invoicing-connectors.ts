@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { Tx } from "./index";
-import { invoicingConnector } from "./schema";
+import { billingEntity, invoicingConnector } from "./schema";
 
 /**
  * Invoicing connectors of a school (#303, ADR 0007): one per billing entity.
@@ -19,4 +19,24 @@ export async function inSimulation(tx: Tx): Promise<boolean> {
     .where(and(eq(invoicingConnector.tool, "fake"), eq(invoicingConnector.active, true)))
     .limit(1);
   return rows.length > 0;
+}
+
+/**
+ * Names of the school's businesses whose active connector is the simulation tool, by name: on a
+ * server that refuses it (production, #351), management is told their invoices are held.
+ */
+export async function simulatedEntities(tx: Tx): Promise<string[]> {
+  const rows = await tx
+    .select({ name: billingEntity.name })
+    .from(invoicingConnector)
+    .innerJoin(
+      billingEntity,
+      and(
+        eq(billingEntity.schoolId, invoicingConnector.schoolId),
+        eq(billingEntity.id, invoicingConnector.billingEntityId),
+      ),
+    )
+    .where(and(eq(invoicingConnector.tool, "fake"), eq(invoicingConnector.active, true)))
+    .orderBy(asc(billingEntity.name));
+  return rows.map((r) => r.name);
 }

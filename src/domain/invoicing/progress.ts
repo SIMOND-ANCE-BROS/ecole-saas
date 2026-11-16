@@ -40,12 +40,26 @@ export const ENDED_SEASON = (label: string) =>
  */
 export const REJECTED_ROLES = ["director"] as const satisfies readonly Role[];
 
+/**
+ * What Paramètres › Entreprises tells management of businesses still on the simulation tool where
+ * this server refuses it (production, #351): their invoices wait, never sent nor numbered. Null
+ * when there is none.
+ */
+export function fakeRefusedNotice(names: readonly string[]): string | null {
+  if (names.length === 0) return null;
+  const listed = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} et ${names.at(-1)}`;
+  return names.length === 1
+    ? `L’entreprise ${listed} est branchée sur l’outil de facturation fictif (mode simulation), refusé sur ce serveur : ses factures restent en préparation et ne partent pas. Prévenez l’administrateur du logiciel pour brancher son véritable outil de facturation.`
+    : `Les entreprises ${listed} sont branchées sur l’outil de facturation fictif (mode simulation), refusé sur ce serveur : leurs factures restent en préparation et ne partent pas. Prévenez l’administrateur du logiciel pour brancher leur véritable outil de facturation.`;
+}
+
 export type InvoiceStatus = "to_send" | "tool_draft" | "issued" | "rejected" | "cancelled";
 
 /**
  * Whether the invoice's business can send: `ready` (an active connector this server may run),
  * `unavailable` (a connector this server may not run: the fake tool without
- * `INVOICING_FAKE_ALLOWED=1`, a tool whose connector does not exist yet), `none` (no active one).
+ * `INVOICING_FAKE_ALLOWED=1` or in production (#351), a tool whose connector does not exist yet),
+ * `none` (no active one).
  */
 export type Connection = "ready" | "unavailable" | "none";
 

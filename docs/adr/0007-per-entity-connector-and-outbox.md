@@ -85,3 +85,22 @@ and the front desk must never wait for a third-party service.
   drafting; one rejected while the tool holds a draft keeps them (`billsItsLines`).
 - Nothing is sent while #176 Q1 (when yearly packages and lesson packs are due) is open: a draft
   goes only once its installments add up to its total (`isSendable`).
+
+## Fake tool in production (#351)
+
+- Owner decision (2026-11-15): the fake tool is refused in production for a real school.
+  `fakeAllowed()` requires `INVOICING_FAKE_ALLOWED=1` **and** `NODE_ENV` other than
+  `production`, as the fake e-mail sender (#404): a server started by `next start` never numbers
+  « TEST- » invoices, whatever its variables say. No production demonstration instance is
+  planned (no staging environment yet, `docs/guides/issues.md`); one would need its own explicit
+  guard, decided then, rather than relaxing this one.
+- « TEST- » invoices therefore only exist in demonstration and test databases. They are never
+  purged from a real school's database by disabling the immutability triggers, and moving a
+  business from the fake tool to a real one is not a production path. In a demonstration
+  database, what « TEST- » invoices billed stays billed (`billsItsLines`) and is not billed again
+  by a real tool. Moving a business between two accounts of the same real tool, or between two
+  real tools, is a separate question (`tool_ref` is not tied to an account), left to the real
+  connectors (#288).
+- A business still on the fake tool where it is refused keeps its drafts `to_send`, unclaimed
+  and uncounted (`sendEntityInvoices` reports `fake_not_allowed`); Paramètres › Entreprises names
+  it for management, and the « Mode simulation » banner is not shown.
