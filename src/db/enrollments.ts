@@ -149,6 +149,9 @@ type SavedRow = {
   gross: number;
   invoiced: boolean;
   paidDraft: boolean;
+  /** For the siblings ranking on the season price (#445): its typed price and quarters covered. */
+  manualPriceCents: number | null;
+  quarterCount: number;
 };
 
 type Existing = EnrollmentRequest & {
@@ -182,6 +185,8 @@ async function existingEnrollments(
       gross: enrollment.grossPriceCents,
       invoiced: invoicedSql,
       paidDraft: paidDraftSql,
+      manualPriceCents: enrollment.manualPriceCents,
+      quarterCount: quarterCountSql,
     })
     .from(enrollment)
     .where(
@@ -236,6 +241,8 @@ async function withCourses(tx: Tx, rows: SavedRow[]): Promise<Existing[]> {
       savedGross: l.gross,
       invoiced: l.invoiced,
       paidDraft: l.paidDraft,
+      manualPriceCents: l.manualPriceCents,
+      quarterCount: l.quarterCount,
     };
   });
 }
@@ -413,11 +420,19 @@ async function pricedPreview(
 
   const entities = await entitiesInOrder(tx);
   // References of the new requests are entity ids, never an enrollment id of `existing`.
+  // Ranked among siblings on its season price (#445): the quarters it covers and its typed price, if any.
+  const typedPrices = validManualPrices.safeParse(entry.manualPrices ?? []);
   const requests = requestsByEntity(
     entry,
     chosenCourses,
     entities.map((e) => e.id),
-  );
+  ).map((r) => ({
+    ...r,
+    quarterCount: quarters.length,
+    manualPriceCents: typedPrices.success
+      ? (typedPrices.data.find((m) => m.billingEntityId === r.reference)?.priceCents ?? null)
+      : null,
+  }));
   const grid = await loadGrid(tx, seasonId);
   const discounts = await loadDiscounts(tx, seasonId);
   const existing = await existingEnrollments(tx, payerId, seasonId);

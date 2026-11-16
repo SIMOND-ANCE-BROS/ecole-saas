@@ -288,9 +288,69 @@ describe("siblings discount (Ribas: -10 % from the 2nd child, not combinable wit
     expect(siblings(t2)?.status).toBe("rejected");
   });
 
-  it("counts a child whose package is entered by hand, ranked first: the priced child gets it", () => {
+  it("counts a child whose price is still to be typed, ranked first: the priced child gets it", () => {
     const [, sibling] = ribas(enrollment({ course: [45, 45] }), enrollment({})).enrollments;
     expect(siblings(sibling)?.status).toBe("applied");
+  });
+});
+
+describe("siblings ranking on the season price (owner, #445)", () => {
+  it("a quarterly package counts once per quarter covered: 1 h 30 × 3 (450 €) outranks a yearly 1 h (280 €)", () => {
+    const [quarterly, yearly] = ribas(
+      enrollment({ course: [90], period: "quarter", quarterCount: 3 }),
+      enrollment({ course: [60], period: "year" }),
+    ).enrollments;
+    expect(siblings(quarterly)?.status).toBe("rejected");
+    expect(ok(quarterly).discountCents).toBe(0);
+    expect(ok(yearly)).toMatchObject({ grossPriceCents: 28000, discountCents: 2800 });
+  });
+
+  it("a quarterly package covering one quarter only (150 €) ranks below a yearly 1 h (280 €)", () => {
+    const [quarterly, yearly] = ribas(
+      enrollment({ course: [90], period: "quarter", quarterCount: 1 }),
+      enrollment({ course: [60], period: "year" }),
+    ).enrollments;
+    expect(ok(quarterly).discountCents).toBe(1500);
+    expect(ok(yearly).discountCents).toBe(0);
+  });
+
+  it("a typed price ranks by the typed price: 60 € a quarter ranks below a 150 € sibling, who pays full price", () => {
+    const [typed, sibling] = ribas(
+      enrollment({ course: [45, 45], quarterCount: 3, manualPriceCents: 6000 }),
+      enrollment({ course: [90], quarterCount: 3 }),
+    ).enrollments;
+    expect(typed.status).toBe("error");
+    expect(siblings(sibling)).toMatchObject({
+      status: "rejected",
+      reason: "Plein tarif : forfait le plus cher des 2 enfants du même payeur",
+    });
+  });
+
+  it("a typed price above the sibling's ranks first: the sibling gets the discount", () => {
+    const [, sibling] = ribas(
+      enrollment({ course: [45, 45], quarterCount: 3, manualPriceCents: 20000 }),
+      enrollment({ course: [90], quarterCount: 3 }),
+    ).enrollments;
+    expect(ok(sibling).discountCents).toBe(1500);
+  });
+
+  it("a typed price replaces the grid price of a priced package for the ranking", () => {
+    const [typed, sibling] = ribas(
+      enrollment({ course: [60], manualPriceCents: 5000 }),
+      enrollment({ course: [45] }),
+    ).enrollments;
+    expect(siblings(sibling)?.status).toBe("rejected");
+    expect(siblings(typed)?.status).toBe("applied");
+  });
+
+  it("sums a child's packages over the season: two quarterly ones outrank a yearly sibling", () => {
+    // Child a: 45 min (85 €) and 1 h (110 €) with two businesses, 3 quarters each = 585 €; child b: yearly 1 h 30 (380 €).
+    const [a1, a2, b] = ribas(
+      enrollment({ studentIds: ["a"], course: [45], quarterCount: 3 }),
+      enrollment({ studentIds: ["a"], course: [60], quarterCount: 3 }),
+      enrollment({ studentIds: ["b"], course: [90], period: "year" }),
+    ).enrollments;
+    expect([ok(a1).discountCents, ok(a2).discountCents, ok(b).discountCents]).toEqual([0, 0, 3800]);
   });
 });
 

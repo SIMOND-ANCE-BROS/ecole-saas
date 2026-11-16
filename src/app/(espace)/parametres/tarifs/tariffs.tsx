@@ -483,8 +483,8 @@ export function Siblings({
             />
           </div>
           <Text size="xs" c="dimmed">
-            Les élèves sont classés du forfait le plus cher au moins cher ; à prix égal, le premier inscrit garde le
-            plein tarif.
+            Les élèves sont classés du plus cher au moins cher sur la saison (forfait trimestriel compté pour chaque
+            trimestre, prix saisi à la main compris) ; à prix égal, le premier inscrit garde le plein tarif.
           </Text>
           <Checkbox.Group
             label="Pour les publics"

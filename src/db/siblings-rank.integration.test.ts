@@ -1,7 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { schoolWithDefaultEntity } from "./billing-entity.integration-helpers";
-import { confirmEnrollment, enrollmentPreview, saveEnrollment } from "./enrollments";
+import { confirmEnrollment, enrollmentPreview, saveEnrollment, type EnrollmentInput } from "./enrollments";
 import { withSchool } from "./index";
 import { draftPayerInvoices } from "./invoice-drafts";
 import { withDefaultQuarters } from "./season-quarters.integration-helpers";
@@ -25,18 +25,21 @@ const ENROLLED_ON = "2026-09-15";
 
 beforeAll(async () => {
   [{ id: ids.school }] = await schoolWithDefaultEntity(admin, "Zz École fratrie", `zzrank-${suffix}`);
+  [{ id: ids.entity }] = await admin`SELECT id FROM billing_entity WHERE school_id = ${ids.school} AND is_default`;
   const s = ids.school;
   await admin`INSERT INTO "user" (id, name, email) VALUES (${frontDesk}, 'Zz Accueil', ${`${frontDesk}@exemple.test`})`;
   await admin`INSERT INTO member (school_id, user_id, role) VALUES (${s}, ${frontDesk}, 'front_desk')`;
   [{ id: ids.season }] =
     await admin`INSERT INTO season (school_id, label, start_date, end_date) VALUES (${s}, '2026-2027', '2026-09-01', '2027-06-30') RETURNING id`;
   await withDefaultQuarters(admin, ids.season);
-  for (const [combination, price] of [
-    ["{45}", 8500],
-    ["{60}", 11000],
+  for (const [period, combination, price] of [
+    ["quarter", "{45}", 8500],
+    ["quarter", "{60}", 11000],
+    ["quarter", "{90}", 15000],
+    ["year", "{60}", 28000],
   ] as const) {
     await admin`INSERT INTO tariff (school_id, season_id, audience, period, combination, price_cents)
-      VALUES (${s}, ${ids.season}, 'child', 'quarter', ${combination}::smallint[], ${price})`;
+      VALUES (${s}, ${ids.season}, 'child', ${period}, ${combination}::smallint[], ${price})`;
   }
   // The demo school's rule: -10 % from 2 children, the most expensive package at full price.
   await admin`INSERT INTO discount (school_id, season_id, code, rate_bps, min_students, from_rank, audiences, combinable_with_multi_discipline)
@@ -51,6 +54,8 @@ beforeAll(async () => {
   for (const [key, duration, day] of [
     ["jazz45", 45, 1],
     ["jazz60", 60, 2],
+    ["jazz90", 90, 3],
+    ["jazz30", 30, 4],
   ] as const) {
     [{ id: ids[key] }] =
       await admin`INSERT INTO course (school_id, billing_entity_id, vat_treatment_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
@@ -58,7 +63,7 @@ beforeAll(async () => {
       FROM billing_entity e WHERE e.school_id = ${s} AND e.is_default RETURNING id`;
   }
   // One family per case, two children each.
-  for (const family of ["f1", "f2", "f3", "f4", "f5", "f6"]) {
+  for (const family of ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8"]) {
     [{ id: ids[family] }] =
       await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${s}, ${`Zz${family}`}, 'Zzparent') RETURNING id`;
     for (const child of ["a", "b", "c"]) {
@@ -108,7 +113,7 @@ afterAll(async () => {
   await admin.end();
 });
 
-const entry = (studentId: string, courseId: string, status?: "trial") => ({
+const entry = (studentId: string, courseId: string, status?: "trial"): EnrollmentInput => ({
   studentIds: [studentId],
   audience: "child" as const,
   period: "quarter" as const,
@@ -116,10 +121,10 @@ const entry = (studentId: string, courseId: string, status?: "trial") => ({
   ...(status ? { status } : {}),
 });
 
-const preview = (payer: string, e: ReturnType<typeof entry>) =>
+const preview = (payer: string, e: EnrollmentInput) =>
   withSchool(ids.school, (tx) => enrollmentPreview(tx, ids[payer], ids.season, e, ENROLLED_ON));
 
-async function save(payer: string, e: ReturnType<typeof entry>, on = ENROLLED_ON): Promise<string> {
+async function save(payer: string, e: EnrollmentInput, on = ENROLLED_ON): Promise<string> {
   const r = await withSchool(ids.school, (tx) => saveEnrollment(tx, frontDesk, ids[payer], ids.season, e, on));
   if (!r.ok) throw new Error(r.message);
   return r.id;
@@ -218,5 +223,28 @@ describe("a discount raised by a new sibling (#155 Q2)", () => {
       { discount_cents: 1100 },
       { discount_cents: 850 },
     ]);
+  });
+});
+
+describe("siblings ranking on the season price (owner, #445)", () => {
+  it("a quarterly 1 h 30 over three quarters (450 €) outranks a yearly 1 h (280 €): the yearly child gets the discount", async () => {
+    const quarterly = await save("f7", entry(ids.f7a, ids.jazz90));
+    const yearly = await save("f7", { ...entry(ids.f7b, ids.jazz60), period: "year" });
+    expect(await saved(quarterly)).toMatchObject({ discount_cents: 0, net_price_cents: 15000 });
+    expect(await saved(yearly)).toMatchObject({ discount_cents: 2800, net_price_cents: 25200 });
+  });
+
+  it("a typed price ranks by the typed price: 60 € a quarter ranks below a 150 € sibling, who pays full price", async () => {
+    // 30 min has no package in the grid: its price is typed.
+    const typed = await save("f8", {
+      ...entry(ids.f8a, ids.jazz30),
+      manualPrices: [{ billingEntityId: ids.entity, priceCents: 6000, reason: "Zz cours court" }],
+    });
+    const p = await preview("f8", entry(ids.f8b, ids.jazz90));
+    if (p.status !== "ok") throw new Error(p.message);
+    expect(p.newEnrollments[0].price).toMatchObject({ grossPriceCents: 15000, discountCents: 0 });
+    const sibling = await save("f8", entry(ids.f8b, ids.jazz90));
+    expect(await saved(sibling)).toMatchObject({ discount_cents: 0, net_price_cents: 15000 });
+    expect(await saved(typed)).toMatchObject({ net_price_cents: 6000 });
   });
 });

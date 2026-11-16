@@ -166,11 +166,13 @@ function evaluate(
 
 /**
  * Distinct students of the `included` enrollments, from the most expensive to the cheapest
- * (#290). A student's price is the sum of their packages (a child enrolled with both
- * businesses has two); a package to be entered by hand has no grid price and ranks its
- * students first, as paying full price. Ties keep the order the students first appear in
- * `all`: callers give the saved enrollments first, oldest first, so a newcomer at the same
- * price never takes the full price over from a sibling already enrolled.
+ * (#290), on what each costs over the season (owner, #445): a quarterly package counts once
+ * per quarter it covers, against a yearly one; a typed price (#292) counts instead of the
+ * grid's. A student's price is the sum of their packages (a child enrolled with both
+ * businesses has two, #445). A package with neither grid nor typed price (a price still to
+ * be typed) ranks its students first, as paying full price. Ties keep the order the students
+ * first appear in `all`: callers give the saved enrollments first, oldest first, so a
+ * newcomer at the same price never takes the full price over from a sibling already enrolled.
  */
 function rankedStudents(
   all: readonly EnrollmentRequest[],
@@ -180,12 +182,18 @@ function rankedStudents(
   const prices = new Map<string, number>();
   all.forEach((e, i) => {
     if (!included(e)) return;
-    const pkg = packages[i];
-    const cents = pkg.status === "ok" ? pkg.row.priceCents : Number.POSITIVE_INFINITY;
+    const cents = seasonPrice(e, packages[i]);
     for (const id of e.studentIds) prices.set(id, (prices.get(id) ?? 0) + cents);
   });
   // A Map keeps insertion order and the sort is stable: ties stay in order of appearance.
   return [...prices.entries()].sort(([, a], [, b]) => b - a).map(([id]) => id);
+}
+
+/** What an enrollment costs over the season, for the siblings ranking only (#445). */
+function seasonPrice(e: EnrollmentRequest, pkg: Package): number {
+  const price = e.manualPriceCents ?? (pkg.status === "ok" ? pkg.row.priceCents : null);
+  if (price === null) return Number.POSITIVE_INFINITY;
+  return e.period === "quarter" ? price * (e.quarterCount ?? 1) : price;
 }
 
 function discountAmount(rule: DiscountRule, priceCents: number): number {
