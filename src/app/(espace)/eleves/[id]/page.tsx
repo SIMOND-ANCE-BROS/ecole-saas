@@ -148,7 +148,9 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   const packPayer = e.billedTo.type === "person" ? e.billedTo.id : e.billedTo.type === "self" ? e.id : null;
   // « Inscrire » enrolls in the season shown (#376); without any season, the form says so.
   const seasons = parsed.seasons;
-  const enrollLabel = seasons ? enrollButtonLabel(firstName, seasons.shown, seasons.current) : `Inscrire ${firstName}`;
+  const enrollLabel = seasons
+    ? enrollButtonLabel(firstName, seasons.shown, seasons.current, today)
+    : `Inscrire ${firstName}`;
   const enrollHref = withSeason(
     `/eleves/${e.id}/inscription`,
     seasons ? seasonParam(seasons.shown.id, seasons.current.id) : undefined,

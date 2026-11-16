@@ -52,12 +52,22 @@ beforeAll(async () => {
   [{ id: ids.nextCourse }] =
     await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
     VALUES (${e}, (SELECT id FROM billing_entity WHERE school_id = ${e} AND is_default), ${ids.next}, ${jazz.id}, ${room.id}, ${teacher.id}, 1, '17:00', 60) RETURNING id`;
+  [{ id: ids.currentCourse }] =
+    await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+    VALUES (${e}, (SELECT id FROM billing_entity WHERE school_id = ${e} AND is_default), ${ids.current}, ${jazz.id}, ${room.id}, ${teacher.id}, 2, '17:00', 60) RETURNING id`;
+  // Siblings discount of the next season only: a sibling enrolled in the current one never counts.
+  await admin`INSERT INTO discount (school_id, season_id, code, rate_bps, min_students, audiences, combinable_with_multi_discipline)
+    VALUES (${e}, ${ids.next}, 'fratrie', 1000, 2, '{child}', false)`;
+  [{ id: ids.entity }] = await admin`SELECT id FROM billing_entity WHERE school_id = ${e} AND is_default`;
   [{ id: ids.payer }] =
     await admin`INSERT INTO person (school_id, last_name, first_name) VALUES (${e}, 'Zz Famille', 'Zz') RETURNING id`;
   [{ id: ids.student }] =
     await admin`INSERT INTO person (school_id, last_name, first_name, is_student) VALUES (${e}, 'Zz Famille', 'Zoé', true) RETURNING id`;
-  await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for)
-    VALUES (${e}, ${ids.payer}, ${ids.student}, 'legal_guardian', true)`;
+  [{ id: ids.brother }] =
+    await admin`INSERT INTO person (school_id, last_name, first_name, is_student) VALUES (${e}, 'Zz Famille', 'Noé', true) RETURNING id`;
+  for (const student of [ids.student, ids.brother])
+    await admin`INSERT INTO relationship (school_id, person_id, related_person_id, type, pays_for)
+      VALUES (${e}, ${ids.payer}, ${student}, 'legal_guardian', true)`;
 });
 
 afterAll(async () => {
@@ -80,6 +90,7 @@ afterAll(async () => {
       "site",
       "discipline",
       "tariff",
+      "discount",
       "season_quarter",
       "season",
       "member",
@@ -110,7 +121,8 @@ describe("enrollableSeason (#376)", () => {
   it("refuses a past season, naming it", async () => {
     expect(await check(ids.past)).toEqual({
       ok: false,
-      message: "La saison Zz 2025-2026 est passée : on inscrit en Zz 2026-2027 ou dans une saison suivante.",
+      message:
+        "La saison Zz 2025-2026 est terminée : les inscriptions se font en Zz 2026-2027 ou dans une saison suivante.",
     });
   });
 
@@ -160,6 +172,55 @@ describe("Enrolling in the next season (#376)", () => {
       (SELECT count(*)::int FROM enrollment_quarter q WHERE q.enrollment_id = e.id) AS quarters
       FROM enrollment e WHERE id = ${r.id}`;
     expect(row).toEqual({ season_id: ids.next, on: TODAY, net_price_cents: 12000, quarters: 3 });
+  });
+});
+
+describe("Seasons kept apart (#376)", () => {
+  const child = (studentId: string, courseId: string) => ({
+    studentIds: [studentId],
+    audience: "child" as const,
+    period: "quarter" as const,
+    courseIds: [courseId],
+  });
+
+  it("prices a season without a grid only by a typed price, with its reason, over every remaining quarter", async () => {
+    const refused = await withSchool(ids.school, (tx) =>
+      saveEnrollment(tx, frontDesk, ids.payer, ids.current, child(ids.brother, ids.currentCourse), TODAY),
+    );
+    expect(refused.ok).toBe(false);
+    const r = await withSchool(ids.school, (tx) =>
+      saveEnrollment(
+        tx,
+        frontDesk,
+        ids.payer,
+        ids.current,
+        {
+          ...child(ids.brother, ids.currentCourse),
+          manualPrices: [{ billingEntityId: ids.entity, priceCents: 9900, reason: "Zz grille à venir" }],
+        },
+        TODAY,
+      ),
+    );
+    if (!r.ok) throw new Error(r.message);
+    const [row] = await admin`SELECT manual_price_cents, tariff_id, price_reason,
+      (SELECT count(*)::int FROM enrollment_quarter q WHERE q.enrollment_id = e.id) AS quarters
+      FROM enrollment e WHERE id = ${r.id}`;
+    // On 20 June only the season's last quarter (April–June) is still to come.
+    expect(row).toEqual({ manual_price_cents: 9900, tariff_id: null, price_reason: "Zz grille à venir", quarters: 1 });
+  });
+
+  it("gives the siblings discount from the next season's enrollments only", async () => {
+    // Noé is enrolled in the current season (above), Zoé in the next one: in the next season,
+    // Noé is a second child of the payer only through Zoé.
+    const p = await withSchool(ids.school, (tx) =>
+      enrollmentPreview(tx, ids.payer, ids.next, child(ids.brother, ids.nextCourse), TODAY),
+    );
+    if (p.status !== "ok") throw new Error(p.message);
+    expect(p.newEnrollments[0].price).toMatchObject({ status: "ok", grossPriceCents: 12000, discountCents: 1200 });
+    const [zoe] = await admin`SELECT discount_cents FROM enrollment
+      WHERE season_id = ${ids.next} AND school_id = ${ids.school}
+        AND id IN (SELECT enrollment_id FROM enrollment_course WHERE student_id = ${ids.student})`;
+    expect(zoe.discount_cents).toBe(0);
   });
 });
 

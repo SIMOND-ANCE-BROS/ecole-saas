@@ -45,7 +45,7 @@ export default async function EnrollmentPage({ params, searchParams }: PageProps
     const season = asked.data.saison ? await seasonById(tx, asked.data.saison) : current;
     if (asked.data.saison && !season) return null;
     // A past season takes no new enrollment (#376 Q1): said instead of the form.
-    const refusal = season && current ? enrollSeasonRefusal(season, current) : null;
+    const refusal = season && current ? enrollSeasonRefusal(season, current, today) : null;
     const open = season && !refusal ? season : null;
     const students = payerId ? await payableStudents(tx, payerId) : [];
     return {
@@ -105,7 +105,8 @@ export default async function EnrollmentPage({ params, searchParams }: PageProps
       </nav>
       <div>
         <Title order={1} fz="xl">
-          Nouvelle inscription{season && ` ${season.label}`}
+          {refusal && season ? `Inscription impossible en ${season.label}` : "Nouvelle inscription"}
+          {!refusal && season && ` ${season.label}`}
         </Title>
         {payerId && !refusal && (
           <Text size="sm" c="dimmed">
@@ -117,9 +118,9 @@ export default async function EnrollmentPage({ params, searchParams }: PageProps
         <Text size="sm">Aucune saison n’est paramétrée.</Text>
       ) : refusal ? (
         <Text size="sm">
-          {refusal}{" "}
-          <TextLink href={record} size="sm" inherit className="inline-link">
-            Revenir à la fiche
+          {refusal} {/* Straight to the form of the current season, the one to enroll in. */}
+          <TextLink href={`/eleves/${student.id}/inscription`} size="sm" inherit className="inline-link">
+            Inscrire {student.firstName ?? name} en {current?.label}
           </TextLink>
           .
         </Text>
@@ -139,14 +140,14 @@ export default async function EnrollmentPage({ params, searchParams }: PageProps
                 Aucun prix ne se calcule : saisissez le prix de chaque inscription, avec son motif.{" "}
                 {role === "director" ? (
                   <>
-                    Pour que les prix se calculent,{" "}
+                    Pour qu’ils se calculent, la grille se saisit d’abord :{" "}
                     <TextLink
                       href={`/parametres/tarifs?saison=${encodeURIComponent(season.id)}`}
                       size="sm"
                       inherit
                       className="inline-link"
                     >
-                      saisissez la grille de {season.label}
+                      grille de {season.label}
                     </TextLink>
                     .
                   </>
@@ -159,6 +160,7 @@ export default async function EnrollmentPage({ params, searchParams }: PageProps
           <EnrollmentForm
             payerId={payerId}
             seasonId={season.id}
+            shownSeason={current ? seasonParam(season.id, current.id) : undefined}
             students={students.map((d) => ({
               id: d.id,
               firstName: d.firstName,

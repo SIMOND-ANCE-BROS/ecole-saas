@@ -94,7 +94,7 @@ export async function enrollableSeason(
   const season = await seasonById(tx, asked);
   const current = season && (await currentSeason(tx, day));
   if (!season || !current) return { ok: false, message: UNKNOWN_SEASON };
-  const refusal = enrollSeasonRefusal(season, current);
+  const refusal = enrollSeasonRefusal(season, current, day);
   return refusal ? { ok: false, message: refusal } : { ok: true, season, current };
 }
 

@@ -32,6 +32,7 @@ import { CheckSaved } from "@/app/(espace)/_ui/check-saved";
 import { DiscountImpacts, PriceDetail } from "@/app/(espace)/_people/price-detail";
 import { dayOf } from "@/app/(espace)/_people/sections";
 import { REFERRAL_UNANSWERED } from "@/domain/people/internal-rules";
+import { withSeason } from "@/app/(espace)/planning/season-link";
 
 const DAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const AUDIENCES = [
@@ -53,6 +54,8 @@ type Props = {
   payerId: string;
   /** The season enrolled in (#376): the current one or a later one, checked again on the server. */
   seasonId: string;
+  /** `?saison=` of the record for that season: undefined for the current one. */
+  shownSeason?: string;
   students: { id: string; firstName: string; age: number | null }[];
   courses: ScheduleCourse[];
   /** Courses the payer's students already take this season (#333): marked, and saving them again asks first. */
@@ -74,6 +77,7 @@ type Props = {
 export function EnrollmentForm({
   payerId,
   seasonId,
+  shownSeason,
   students,
   courses,
   taken,
@@ -636,7 +640,8 @@ export function EnrollmentForm({
         )}
         <CheckSaved
           message={refusal}
-          href={`/eleves/${studentIds[0] ?? ""}`}
+          // On the season enrolled in (#376): the enrollment perhaps saved is shown there.
+          href={withSeason(`/eleves/${studentIds[0] ?? ""}`, shownSeason)}
           label="Voir les inscriptions de l’élève"
           safeRetry
         />
