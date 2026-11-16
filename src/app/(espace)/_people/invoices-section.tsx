@@ -165,9 +165,9 @@ export function InvoicesSection({
 }
 
 /**
- * When the plan's installments fall (#176): « Sauf forfaits au trimestre : échéances le 5 du
- * mois, la dernière au plus tard le 30/06/2028. », the plan chosen, and the plans the season no
- * longer fits.
+ * When what is billed falls due (#176, #436): « Forfaits à l’année : échéances le 5 du mois,
+ * la première le 05/09/2027, la dernière au plus tard le 30/06/2028. », then the quarters, the
+ * packs and drop-ins paid at once, the plan chosen, and the plans the season no longer fits.
  */
 function PlanNote({ plans, current }: { plans: OfferedPlans; current: number | null }) {
   const chosen = current === null ? "" : ` Choix actuel : ${planLabel(current)}.`;
@@ -181,7 +181,7 @@ function PlanNote({ plans, current }: { plans: OfferedPlans; current: number | n
   const day = plans.dueDay === 1 ? "1er" : plans.dueDay;
   return (
     <Text size="xs" c="dimmed">
-      {`Sauf forfaits au trimestre (payés à chaque trimestre) : échéances le ${day} du mois, la dernière au plus tard le ${frenchDate(plans.seasonEnd)}.${chosen}`}
+      {`Forfaits à l’année : échéances le ${day} du mois, la première le ${frenchDate(plans.firstDue)}, la dernière au plus tard le ${frenchDate(plans.seasonEnd)}. Forfaits au trimestre : à chaque trimestre. Carnets et cours à l’unité : en une fois, à la date du jour.${chosen}`}
       {tooLong.length > 0 &&
         ` Le paiement ${tooLong.join(" ou ")} n’est plus possible : la dernière échéance tomberait après la fin de la saison.`}
       {plans.counts.length === 0 &&

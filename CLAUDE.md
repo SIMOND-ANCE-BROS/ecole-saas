@@ -116,6 +116,7 @@ A missing term is added here in the same PR that introduces it.
 - The school is **two sole-trader businesses** under one brand (the two owners): each has its own SIRET, enrollments, invoices, cashing and bank account; a student taking courses of both gets two invoices (#288). Lessons are exempt from VAT (CGI art. 261, 4, 4° b), except, in one business, the courses of some teachers at 20 %; grid prices are VAT-inclusive (#289). Wording and regime await the accountant: never assume « 293 B ».
 - Calendar: school holidays zone A, gala in June.
 - Payment methods (#293): cheque, ANCV holiday vouchers on paper and ANCV Connect, cash, transfer (full amount), card probably from the 2027 season; no direct debit, no Pass’Sport.
+- Installment plans (#176, #436): 1, 3 or 10 installments on the 5th, to the euro, for yearly packages only; lesson packs and drop-in packages are paid in one installment on the day the invoice is drafted. An invoice drafted before its season starts (June re-enrollments) has its first installment on the due day of the season's first month, and the plan still ends within the season; one plan for both businesses of a payer.
 
 These values live in data (`billing_entity`, `tariff`, `discount`, `site`, `room`, `instructor`, `closure` tables). **Never hard-coded.**
 
