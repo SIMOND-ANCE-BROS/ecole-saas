@@ -1,6 +1,7 @@
 import {
   createTheme,
   defaultVariantColorsResolver,
+  v8CssVariablesResolver,
   type CSSVariablesResolver,
   type MantineColorsTuple,
   type VariantColorsResolver,
@@ -75,6 +76,9 @@ export const theme = createTheme({
   fontFamily: "var(--font-geist-sans), system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
   fontFamilyMonospace: "var(--font-geist-mono), ui-monospace, monospace",
   headings: { fontWeight: "600" },
+  // Mantine 9 writes field labels, menus, segmented controls and notification titles with
+  // `medium`, raised from their 8.x 500 to 600 (#129): keep 500. Buttons stay 600 (globals.css).
+  fontWeights: { medium: "500" },
   variantColorResolver,
   defaultRadius: "md",
   radius: { xs: "4px", sm: "6px", md: "8px", lg: "12px", xl: "16px" },
@@ -113,8 +117,24 @@ export const theme = createTheme({
  * takes gray 5 (4.8:1 on white, 4.4:1 on the light page) and dark 2 (6.7:1 on the dark box,
  * 7.3:1 on the dark page, 5.5:1 on the `--accent-doux` of a hovered row, where dark 3 fell to
  * 3:1, #396); globals.css applies it to unticked boxes only.
+ *
+ * Mantine 9 paints the `light` variant (alerts, badges, light buttons, the « Mode simulation »
+ * banner, `--alerte-fond`) with solid tints and shade 9 / shade 0 text (#129). The contrast
+ * fixes above were measured on the 8.x translucent tints: `v8CssVariablesResolver` keeps them,
+ * our values still override it. A shaded colour on a light variant (`color="red.7"
+ * variant="light"`) skips these variables and gets Mantine 9's solid fill: use plain colours.
  */
-export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
+export const cssVariablesResolver: CSSVariablesResolver = (t) => {
+  const v8 = v8CssVariablesResolver(t);
+  const ours = ownCssVariables(t);
+  return {
+    variables: { ...v8.variables, ...ours.variables },
+    light: { ...v8.light, ...ours.light },
+    dark: { ...v8.dark, ...ours.dark },
+  };
+};
+
+const ownCssVariables: CSSVariablesResolver = (t) => ({
   variables: {},
   light: {
     "--filled-text": "var(--mantine-color-white)",
