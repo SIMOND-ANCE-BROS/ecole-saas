@@ -26,6 +26,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/db", () => import("../../../db/index"));
 vi.mock("@/db/courses", () => import("../../../db/courses"));
 vi.mock("@/lib/form-errors", () => import("../../../lib/form-errors"));
+vi.mock("@/lib/action-result", () => import("../../../lib/action-result"));
 vi.mock("@/domain/people/age", () => ({ todayInParis: () => session.today }));
 
 const { saveCourseRate } = await import("./course-rate-actions");
