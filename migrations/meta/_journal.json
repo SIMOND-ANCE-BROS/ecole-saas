@@ -463,6 +463,13 @@
       "when": 1794815490172,
       "tag": "0065_installment_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1794818723527,
+      "tag": "0066_rejected_invoice_submission",
+      "breakpoints": true
     }
   ]
 }

@@ -3,7 +3,7 @@
 import { Button, Group, Loader, Modal, Text } from "@mantine/core";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { notSent, settle } from "@/lib/action-result";
+import { BUSY, notSent, settle } from "@/lib/action-result";
 import { formatEuros } from "@/lib/money";
 import { abandon, sendAgain } from "./actions";
 import type { TakenUp } from "./taken-up";
@@ -33,9 +33,20 @@ export function ProblemActions({
   const [asking, setAsking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
-  const run = (call: () => ReturnType<typeof sendAgain>) =>
+  // One key per button (#260): a retry after a lost answer (or « Réessayez dans un instant ») sends
+  // the same one and gets the first result back. Kept apart, so « Abandonner » after a lost « Envoyer
+  // à nouveau » says « plus à reprendre » rather than « déjà envoyée avec d’autres valeurs ».
+  // Renewed after any other answer, so an invoice rejected again and listed anew is really sent again.
+  const [keys, setKeys] = useState(() => ({ send: crypto.randomUUID(), abandon: crypto.randomUUID() }));
+  // The button whose action runs, which shows the spinner.
+  const [running, setRunning] = useState<keyof typeof keys>("send");
+  const run = (action: keyof typeof keys, call: (key: string) => ReturnType<typeof sendAgain>) => {
+    // Outside the transition: shown at once, with `busy`.
+    setRunning(action);
     startTransition(async () => {
-      const r = await settle(call);
+      const r = await settle(() => call(keys[action]));
+      const unanswered = notSent(r) || (!r.ok && r.message === BUSY);
+      if (!unanswered) setKeys((k) => ({ ...k, [action]: crypto.randomUUID() }));
       if (!r.ok) {
         setMessage(notSent(r) ? FAILED : r.message);
         return;
@@ -52,6 +63,7 @@ export function ProblemActions({
               : "retiree";
       router.replace(`/parametres/entreprises?reprise=${done}`, { scroll: false });
     });
+  };
   return (
     <div className="flex flex-col gap-1">
       <Modal opened={asking} onClose={() => setAsking(false)} title="Abandonner cette facture ?" centered>
@@ -75,7 +87,7 @@ export function ProblemActions({
             color="red"
             onClick={() => {
               setAsking(false);
-              run(() => abandon(invoiceId));
+              run("abandon", (k) => abandon(invoiceId, k));
             }}
           >
             Abandonner la facture
@@ -87,9 +99,9 @@ export function ProblemActions({
           size="compact-sm"
           variant="light"
           aria-disabled={busy || undefined}
-          rightSection={busy ? <Loader size="xs" /> : null}
+          rightSection={busy && running === "send" ? <Loader size="xs" /> : null}
           aria-label={`Envoyer à nouveau ${invoice}`}
-          onClick={() => !busy && run(() => sendAgain(invoiceId))}
+          onClick={() => !busy && run("send", (k) => sendAgain(invoiceId, k))}
         >
           Envoyer à nouveau
         </Button>
@@ -98,6 +110,7 @@ export function ProblemActions({
           variant="subtle"
           color="red"
           aria-disabled={busy || undefined}
+          rightSection={busy && running === "abandon" ? <Loader size="xs" color="currentColor" /> : null}
           aria-label={`Abandonner ${invoice}`}
           onClick={() => !busy && setAsking(true)}
         >

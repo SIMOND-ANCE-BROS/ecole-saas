@@ -931,7 +931,8 @@ export const suspendedLesson = pgTable(
 
 /**
  * One row per form submission that creates records (payment, enrollment,
- * course, lesson pack), keyed by an id the browser generates once (#260): a retry after a
+ * course, lesson pack, workshop sign-up), or takes up a rejected invoice
+ * (#352), keyed by an id the browser generates once (#260): a retry after a
  * lost response finds the row and gets the first result back instead of
  * creating a duplicate. Rows older than a week are purged (#262,
  * `npm run submissions:purge`).
@@ -950,7 +951,10 @@ export const submission = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.schoolId, t.key] }),
-    check("submission_kind", sql`${t.kind} IN ('payment', 'enrollment', 'course', 'lesson_pack', 'workshop_signup')`),
+    check(
+      "submission_kind",
+      sql`${t.kind} IN ('payment', 'enrollment', 'course', 'lesson_pack', 'workshop_signup', 'rejected_invoice')`,
+    ),
     check("submission_request_hash", sql`length(${t.requestHash}) = 64`),
     // The purge of old keys (#262) reads one school's oldest rows.
     index().on(t.schoolId, t.createdAt),
