@@ -33,13 +33,18 @@ export function ProblemActions({
   const [asking, setAsking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
-  const run = (call: () => ReturnType<typeof sendAgain>) =>
+  // One key per click that went through (#260): a retry after a lost answer sends the same one and
+  // gets the first result back. Renewed after an answer, so an invoice rejected again and listed
+  // anew is really sent again; a refusal frees its key on the server, so keeping it is safe.
+  const [key, setKey] = useState(() => crypto.randomUUID());
+  const run = (call: (key: string) => ReturnType<typeof sendAgain>) =>
     startTransition(async () => {
-      const r = await settle(call);
+      const r = await settle(() => call(key));
       if (!r.ok) {
         setMessage(notSent(r) ? FAILED : r.message);
         return;
       }
+      setKey(crypto.randomUUID());
       setMessage(null);
       // The row leaves the list; the page says what became of it (`TAKEN_UP` banners).
       const done: TakenUp =
@@ -75,7 +80,7 @@ export function ProblemActions({
             color="red"
             onClick={() => {
               setAsking(false);
-              run(() => abandon(invoiceId));
+              run((k) => abandon(invoiceId, k));
             }}
           >
             Abandonner la facture
@@ -89,7 +94,7 @@ export function ProblemActions({
           aria-disabled={busy || undefined}
           rightSection={busy ? <Loader size="xs" /> : null}
           aria-label={`Envoyer à nouveau ${invoice}`}
-          onClick={() => !busy && run(() => sendAgain(invoiceId))}
+          onClick={() => !busy && run((k) => sendAgain(invoiceId, k))}
         >
           Envoyer à nouveau
         </Button>

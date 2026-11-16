@@ -30,6 +30,7 @@ vi.mock("@/jobs/invoicing/send", () => import("../../../jobs/invoicing/send"));
 vi.mock("@/db/schedule", () => import("../../../db/schedule"));
 vi.mock("@/domain/people/age", () => import("../../../domain/people/age"));
 vi.mock("@/lib/action-result", () => import("../../../lib/action-result"));
+vi.mock("@/db/submissions", () => import("../../../db/submissions"));
 
 process.env.INVOICING_FAKE_ALLOWED = "1";
 // CI has no encryption key: a throwaway one encrypts the fake tool's test token.
@@ -191,6 +192,8 @@ const billing = async (enrollmentId: string) =>
         AND i.status <> 'cancelled' AND NOT (i.status = 'rejected' AND i.tool_ref IS NULL)`
   )[0].n;
 const draft = () => draftInvoices({ payerId: ids.payer, seasonId: ids.season });
+/** A submission key, as the buttons generate one (#260). */
+const key = () => crypto.randomUUID();
 
 describe("draftInvoices (#352)", () => {
   beforeAll(clearInvoices);
@@ -262,8 +265,8 @@ describe("a rejected invoice (#352)", () => {
     const [a] = await live(ids.a);
     await reject(a.id, null);
     as("front_desk");
-    await expect(sendAgain(a.id)).rejects.toThrow("NEXT_REDIRECT");
-    await expect(abandon(a.id)).rejects.toThrow("NEXT_REDIRECT");
+    await expect(sendAgain(a.id, key())).rejects.toThrow("NEXT_REDIRECT");
+    await expect(abandon(a.id, key())).rejects.toThrow("NEXT_REDIRECT");
     expect((await live(ids.a))[0].status).toBe("rejected");
     // The front desk drafts meanwhile: its lines, given back, go on a new draft; the record no longer
     // shows the rejected one beside it (the same amount twice), management still has it.
@@ -276,15 +279,24 @@ describe("a rejected invoice (#352)", () => {
   it("never held by the tool: sent again by drafting its lines afresh, never billed twice", async () => {
     as("director");
     const [a] = await live(ids.a);
-    expect(await sendAgain(a.id)).toEqual({ ok: true, result: "redraft", drafted: 1 });
+    const first = key();
+    expect(await sendAgain(a.id, first)).toEqual({ ok: true, result: "redraft", drafted: 1 });
     const [old] = (await invoices()).filter((i) => i.id === a.id);
     expect(old.status).toBe("cancelled");
     const [fresh] = await live(ids.a);
     expect(fresh).toMatchObject({ status: "to_send", attempts: 0 });
     expect(await billing(ids.yearly)).toBe(1);
     expect(pending).toHaveLength(1);
-    // Taken up already: a second click finds nothing to do.
-    expect(await sendAgain(a.id)).toEqual({
+    // The answer lost, the browser sends the same click again (#260): the first result, nothing drafted again.
+    expect(await sendAgain(a.id, first)).toEqual({ ok: true, result: "redraft", drafted: 1 });
+    expect((await live(ids.a)).map((i) => i.id)).toEqual([fresh.id]);
+    // The same key for another invoice: refused, never replayed.
+    expect(await sendAgain(fresh.id, first)).toEqual({
+      ok: false,
+      message: "Cette saisie a déjà été envoyée avec d’autres valeurs : rechargez la page.",
+    });
+    // Taken up already: a new click finds nothing to do.
+    expect(await sendAgain(a.id, key())).toEqual({
       ok: false,
       message: "Cette facture n’est plus à reprendre : rechargez la page.",
     });
@@ -295,7 +307,7 @@ describe("a rejected invoice (#352)", () => {
     // A draft held for its due dates (#176) never goes back to the tool this way.
     const [a] = await live(ids.a);
     await reject(a.id, "zz-ref");
-    expect(await sendAgain(a.id)).toMatchObject({ ok: false, message: expect.stringMatching(/échéances/) });
+    expect(await sendAgain(a.id, key())).toMatchObject({ ok: false, message: expect.stringMatching(/échéances/) });
     expect((await live(ids.a))[0]).toMatchObject({ id: a.id, status: "rejected" });
     expect(pending).toHaveLength(0);
     // One the tool held a draft of (its installments cover its total), of no season.
@@ -308,7 +320,7 @@ describe("a rejected invoice (#352)", () => {
       VALUES (${ids.school}, ${ids.a}, ${id}, 'Zz cours', 6000, 6000, 6000, 0, ${ids.exempt}, 'exempt', 'Zz mention')`;
     await admin`INSERT INTO installment (school_id, billing_entity_id, invoice_id, rank, due_date, amount_cents)
       VALUES (${ids.school}, ${ids.a}, ${id}, 1, '2027-10-01', 6000)`;
-    expect(await sendAgain(id)).toEqual({ ok: true, result: "retry_in_tool" });
+    expect(await sendAgain(id, key())).toEqual({ ok: true, result: "retry_in_tool" });
     const row = async () => (await invoices()).find((i) => i.id === id);
     expect(await row()).toMatchObject({ status: "tool_draft", attempts: 10, send_error_kind: null, due: true });
     expect(pending).toHaveLength(1);
@@ -342,20 +354,28 @@ describe("a rejected invoice (#352)", () => {
     };
     // Still a draft in the tool, or issued there after a lost answer: refused, lines kept.
     store.documents.set("zz-held", doc);
-    expect(await abandon(a.id)).toMatchObject({ ok: false, message: expect.stringMatching(/supprimez-le/) });
+    expect(await abandon(a.id, key())).toMatchObject({ ok: false, message: expect.stringMatching(/supprimez-le/) });
     store.documents.set("zz-held", { ...doc, status: "issued", number: "TEST-ZZ-1", issuedOn: "2027-09-20" });
-    expect(await abandon(a.id)).toMatchObject({ ok: false, message: expect.stringMatching(/l’a émise/) });
+    expect(await abandon(a.id, key())).toMatchObject({ ok: false, message: expect.stringMatching(/l’a émise/) });
     expect((await live(ids.a))[0]).toMatchObject({ id: a.id, status: "rejected" });
     expect(await billing(ids.yearly)).toBe(1);
     // Its business now on another tool: that tool is never asked, the lines stay.
     await admin`UPDATE invoicing_connector SET tool = 'pennylane' WHERE billing_entity_id = ${ids.a}`;
     store.documents.delete("zz-held");
-    expect(await abandon(a.id)).toMatchObject({ ok: false, message: expect.stringMatching(/pas pu être consulté/) });
+    expect(await abandon(a.id, key())).toMatchObject({
+      ok: false,
+      message: expect.stringMatching(/pas pu être consulté/),
+    });
     await admin`UPDATE invoicing_connector SET tool = 'fake' WHERE billing_entity_id = ${ids.a}`;
     // Cancelled in the tool: abandoned.
     store.documents.set("zz-held", { ...doc, status: "cancelled" });
-    expect(await abandon(a.id)).toEqual({ ok: true, result: "abandoned" });
+    const click = key();
+    expect(await abandon(a.id, click)).toEqual({ ok: true, result: "abandoned" });
     store.documents.delete("zz-held");
+    // The answer lost, the same click again (#260): the first result, the tool not asked again.
+    store.calls.length = 0;
+    expect(await abandon(a.id, click)).toEqual({ ok: true, result: "abandoned" });
+    expect(store.calls).toEqual([]);
     expect(await live(ids.a)).toHaveLength(0);
     expect(await billing(ids.yearly)).toBe(0);
     as("front_desk");
@@ -383,7 +403,7 @@ describe("a rejected invoice (#352)", () => {
       VALUES (${ids.school}, ${ids.b}, ${payment}, ${inst}, 5000)`;
     const audits = async () => (await admin`SELECT count(*)::int AS n FROM audit_log WHERE row_id = ${a.id}`)[0].n;
     const before = await audits();
-    const r = await sendAgain(a.id);
+    const r = await sendAgain(a.id, key());
     expect(r).toMatchObject({ ok: false, message: expect.stringMatching(/paiement/) });
     expect((await admin`SELECT status FROM invoice WHERE id = ${a.id}`)[0].status).toBe("rejected");
     expect(await audits()).toBe(before);
@@ -397,13 +417,25 @@ describe("a rejected invoice (#352)", () => {
     as("director");
     const [b] = await live(ids.b);
     const gone = { ok: false, message: "Cette facture n’est plus à reprendre : rechargez la page." };
-    expect(await abandon(b.id)).toEqual(gone);
-    expect(await sendAgain("not-a-uuid")).toEqual({ ok: false, message: "Facture introuvable : rechargez la page." });
+    expect(await abandon(b.id, key())).toEqual(gone);
+    expect(await sendAgain("not-a-uuid", key())).toEqual({
+      ok: false,
+      message: "Facture introuvable : rechargez la page.",
+    });
+    // A tampered submission key: refused before anything is read.
+    expect(await abandon(b.id, "not-a-key")).toEqual({
+      ok: false,
+      message: "Facture introuvable : rechargez la page.",
+    });
+    expect(await sendAgain(b.id, "not-a-key")).toEqual({
+      ok: false,
+      message: "Facture introuvable : rechargez la page.",
+    });
     // Another school's rejected invoice: out of reach (RLS).
     const otherEntity = (await admin`SELECT id FROM billing_entity WHERE school_id = ${ids.other}`)[0].id;
     const [{ id: foreign }] = await admin`INSERT INTO invoice (school_id, billing_entity_id, payer_id, status, attempts)
       VALUES (${ids.other}, ${otherEntity}, ${ids.otherPayer}, 'rejected', 10) RETURNING id`;
-    expect(await abandon(foreign)).toEqual(gone);
+    expect(await abandon(foreign, key())).toEqual(gone);
     expect((await admin`SELECT status FROM invoice WHERE id = ${foreign}`)[0].status).toBe("rejected");
     // A rejected invoice with a payment allocated to its installment.
     const [{ id: paid }] = await admin`INSERT INTO invoice (school_id, billing_entity_id, payer_id, season_id, status,
@@ -422,8 +454,8 @@ describe("a rejected invoice (#352)", () => {
       message:
         "Un paiement est affecté à une échéance de cette facture : elle ne peut pas être abandonnée ni refaite ici.",
     };
-    expect(await abandon(paid)).toEqual(paidRefusal);
-    expect(await sendAgain(paid)).toEqual(paidRefusal);
+    expect(await abandon(paid, key())).toEqual(paidRefusal);
+    expect(await sendAgain(paid, key())).toEqual(paidRefusal);
     expect((await admin`SELECT status FROM invoice WHERE id = ${paid}`)[0].status).toBe("rejected");
   });
 });

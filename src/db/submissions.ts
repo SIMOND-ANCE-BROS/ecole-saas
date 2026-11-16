@@ -8,7 +8,14 @@ import { submission } from "./schema";
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 
 /** Kinds of submission made safe to retry (#260). */
-export type SubmissionKind = "payment" | "enrollment" | "course" | "lesson_pack" | "workshop_signup";
+export type SubmissionKind =
+  | "payment"
+  | "enrollment"
+  | "course"
+  | "lesson_pack"
+  | "workshop_signup"
+  // « Envoyer à nouveau » or « Abandonner » on a rejected invoice (#352).
+  | "rejected_invoice";
 
 /** The same key sent with other values: never replayed, never applied. */
 export const KEY_REUSED = "Cette saisie a déjà été envoyée avec d’autres valeurs : rechargez la page.";
@@ -43,6 +50,14 @@ export const storedEnrollment = z.object({ ok: z.literal(true), id: z.uuid(), id
 export const storedLessonPack = z.object({ ok: z.literal(true), id: z.uuid() });
 /** What a first workshop sign-up stored: the sign-up it created (#297). */
 export const storedWorkshopSignup = z.object({ ok: z.literal(true), id: z.uuid() });
+/**
+ * What a first « Envoyer à nouveau » or « Abandonner » on a rejected invoice stored (#352): what
+ * became of it, so a retry after a lost answer shows the same banner instead of « plus à reprendre ».
+ */
+export const storedRejectedInvoice = z.union([
+  z.object({ ok: z.literal(true), mode: z.enum(["retry_in_tool", "abandoned"]) }),
+  z.object({ ok: z.literal(true), mode: z.literal("redraft"), drafted: z.number().int() }),
+]);
 /** What a first course submission stored: the course and the planning to go back to. */
 export const storedCourse = z.object({
   ok: z.literal(true),
