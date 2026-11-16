@@ -196,7 +196,11 @@ export function Enrollments({
                     <TableTd fw={500}>
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         {i.students}
-                        <EnrollmentStatusBadge status={i.status} droppedOn={i.droppedOn} />
+                        <EnrollmentStatusBadge
+                          status={i.status}
+                          droppedOn={i.droppedOn}
+                          droppedDuringTrial={i.droppedDuringTrial}
+                        />
                       </span>
                     </TableTd>
                     <TableTd>

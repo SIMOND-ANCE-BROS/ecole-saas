@@ -7,7 +7,9 @@ import {
   entityOwingMost,
   familyOwed,
   isCounted,
+  owesItsPrice,
   payerBalance,
+  type EnrollmentStatus,
 } from "./balance";
 import { signupDueCents } from "../workshop/signup";
 
@@ -93,6 +95,17 @@ describe("a trial is free, even dropped without being confirmed (#99 Q1, #442)",
     });
     expect(amountDue([droppedTrial])).toBe(0);
     expect(isCounted(droppedTrial)).toBe(false);
+  });
+
+  it("owesItsPrice: active, ended and dropped owe; trial, waitlist and a dropped trial do not", () => {
+    const at = (status: EnrollmentStatus, droppedDuringTrial = false) => owesItsPrice({ status, droppedDuringTrial });
+    expect([at("active"), at("ended"), at("dropped")]).toEqual([true, true, true]);
+    expect([at("trial"), at("waitlist"), at("dropped", true)]).toEqual([false, false, false]);
+  });
+
+  it("a yearly enrollment dropped once confirmed owes its whole price (#284 Q1)", () => {
+    const yearly = { status: "dropped", period: "year", quarterCount: 0, netPriceCents: 30_000 } as const;
+    expect(payerBalance([yearly], [], [], TODAY)).toMatchObject({ due: 30_000 });
   });
 
   it("an enrollment dropped once confirmed stays due", () => {

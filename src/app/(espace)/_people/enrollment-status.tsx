@@ -20,13 +20,22 @@ const WRAPPING = { label: { whiteSpace: "normal", overflow: "visible" } } as con
  * attendance sheets; a word, never colour alone. Nothing for an active
  * enrollment. Outlined: its text keeps AA contrast in light and dark mode.
  */
-export function EnrollmentStatusBadge({ status, droppedOn }: { status: EnrollmentStatus; droppedOn?: string | null }) {
+export function EnrollmentStatusBadge({
+  status,
+  droppedOn,
+  droppedDuringTrial = false,
+}: {
+  status: EnrollmentStatus;
+  droppedOn?: string | null;
+  /** A trial dropped without being confirmed (#442): « essai non poursuivi », free. */
+  droppedDuringTrial?: boolean;
+}) {
   if (status === "active") return null;
   const b = BADGES[status];
   return (
     // « abandon le 15/11/2026 » wraps in a narrow cell (phone) rather than being cut.
     <Badge color={b.color} variant="outline" tt="none" h="auto" maw="100%" styles={WRAPPING}>
-      {b.label}
+      {status === "dropped" && droppedDuringTrial ? "essai non poursuivi" : b.label}
       {status === "dropped" && droppedOn ? ` le ${frenchDate(droppedOn)}` : ""}
     </Badge>
   );

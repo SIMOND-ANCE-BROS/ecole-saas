@@ -1062,9 +1062,12 @@ export const DROP_PAID_DRAFT =
  *   others are released (their `enrollment_quarter` rows deleted, their ids in the audit log), so
  *   a later edit of the season's quarter dates never changes what it owes;
  * - a trial never confirmed owes nothing (#99 Q1, #442): `dropped_during_trial`.
- * When quarters are released, the payer's unsent drafts billing it are drafted again at once
- * (`draftPayerInvoices`, which keeps the plan chosen); the whole drop-out is refused if they
- * cannot be. Refused before the last lesson whose attendance it alone keeps on a sheet (#410,
+ * When quarters are released and an unsent draft bills it, the payer's whole season is drafted
+ * again at once (`draftPayerInvoices`): the plan chosen is kept while it still fits the season
+ * (else dropped and the yearly packages held until a plan is chosen again), and what no draft
+ * billed yet is added. The whole drop-out is refused, in French, if that drafting is (a payment
+ * already allocated to the draft: `DROP_PAID_DRAFT`). A trial dropped releases its quarters too:
+ * informative only, a trial owing nothing. Refused before the last lesson whose attendance it alone keeps on a sheet (#410,
  * `attendedDropRefusal`). The same drop-out sent twice changes nothing.
  */
 export async function dropEnrollment(tx: Tx, userId: string, id: string, droppedOn: string): Promise<ChangeResult> {

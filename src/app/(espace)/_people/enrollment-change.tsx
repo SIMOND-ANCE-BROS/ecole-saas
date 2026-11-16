@@ -348,23 +348,37 @@ function QuartersStillDue({ enrollment, droppedOn }: { enrollment: ChangeableEnr
   const n = owed.length;
   const total = seasonDueCents({ period: "quarter", netPriceCents: enrollment.netPriceCents, quarterCount: n });
   const later = enrollment.coveredQuarters.length - n;
+  // « 220,00 € (2 × 110,00 €) pour le 1er trimestre (oct.–déc.) et le 2e trimestre (janv.–mars) ».
+  const named = owed.map((q) => `le ${q.label} (${quarterMonths(q)})`);
+  const listed = named.length > 1 ? `${named.slice(0, -1).join(", ")} et ${named.at(-1)}` : named.join("");
+  const detail = `${n > 1 ? `(${n} × ${formatEuros(enrollment.netPriceCents)}) ` : ""}pour ${listed}`;
+  // Invoiced (#443): the balance keeps the invoice's amount until a credit note, so the reduced
+  // amount is said to come after it, never as « Reste dû ».
+  if (enrollment.invoiced && later > 0)
+    return (
+      <>
+        <Text size="sm" fw={500}>
+          {n === 0
+            ? "Aucun trimestre n’a commencé à cette date : rien n’est dû une fois l’avoir fait."
+            : `Dû une fois l’avoir fait : ${formatEuros(total)} ${detail}.`}
+        </Text>
+        <Text size="sm">
+          L’inscription est déjà facturée :{" "}
+          {later === 1 ? "le trimestre suivant reste" : `les ${later} trimestres non commencés restent`} sur la facture
+          jusqu’à un avoir de la direction.
+        </Text>
+      </>
+    );
   return (
     <>
       <Text size="sm" fw={500}>
         {n === 0
           ? "Aucun trimestre n’a commencé à cette date : rien n’est dû."
-          : `Reste dû : ${formatEuros(total)} (${owed.map((q) => `${q.label}, ${quarterMonths(q)}`).join(" ; ")}${n > 1 ? ` : ${n} × ${formatEuros(enrollment.netPriceCents)}` : ""}).`}
+          : `Reste dû : ${formatEuros(total)} ${detail}.`}
       </Text>
       {n > 0 && later > 0 && (
         <Text size="sm">
-          {enrollment.invoiced
-            ? `L’inscription est déjà facturée : ${later === 1 ? "le trimestre suivant reste" : `les ${later} trimestres suivants restent`} sur la facture jusqu’à un avoir de la direction.`
-            : `${later === 1 ? "Le trimestre suivant n’est pas dû" : `Les ${later} trimestres suivants ne sont pas dus`}.`}
-        </Text>
-      )}
-      {n === 0 && enrollment.invoiced && (
-        <Text size="sm">
-          L’inscription est déjà facturée : ses trimestres restent sur la facture jusqu’à un avoir de la direction.
+          {later === 1 ? "Le trimestre suivant n’est pas dû" : `Les ${later} trimestres suivants ne sont pas dus`}.
         </Text>
       )}
     </>
