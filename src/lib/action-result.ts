@@ -66,7 +66,10 @@ export const orConnectionLost = <T>(call: () => Promise<T>, failed: (message: ty
 /** Whether a refusal comes from a call that never got an answer. */
 export const notSent = <T extends { ok: boolean }>(r: T | NotSent): r is NotSent => has(r, "sent") && r.sent === false;
 
-/** Shown when a save waited too long for another one on the same records (#364): nothing was saved. */
+/**
+ * Shown when a save waited too long for another one on the same records (#364): this attempt
+ * saved nothing (an earlier attempt with the same submission key may have; a retry returns it).
+ */
 export const BUSY = "Réessayez dans un instant.";
 
 /** A refusal because the save waited too long (`WAIT_LIMITS`): retrying in a moment is safe. */
