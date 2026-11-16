@@ -8,12 +8,13 @@ What production must run on a schedule, and how to tell that a run failed (#337)
 
 ## Tasks
 
-| Task                 | How it runs                    | Frequency                  | Time limit        | Environment                                                                                                  |
-| -------------------- | ------------------------------ | -------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------ |
-| Invoice outbox sweep | `POST /api/taches/factures`    | every minute               | 5 min (HTTP call) | on the web server: `JOBS_SECRET`, `DATABASE_URL`, `CLE_CHIFFREMENT`; scheduler: the same `JOBS_SECRET`       |
-| Calendar sync        | `npm run calendars:sync`       | every hour                 | 15 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`, `CLE_CHIFFREMENT`, `GOOGLE_*` / `MICROSOFT_*` of the providers offered |
-| Submission purge     | `npm run submissions:purge`    | once a day, at night       | 10 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`                                                                         |
-| Overdue installments | `npm run installments:overdue` | once a day, after midnight | 10 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`                                                                         |
+| Task                   | How it runs                    | Frequency                  | Time limit        | Environment                                                                                                  |
+| ---------------------- | ------------------------------ | -------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| Invoice outbox sweep   | `POST /api/taches/factures`    | every minute               | 5 min (HTTP call) | on the web server: `JOBS_SECRET`, `DATABASE_URL`, `CLE_CHIFFREMENT`; scheduler: the same `JOBS_SECRET`       |
+| Calendar sync          | `npm run calendars:sync`       | every hour                 | 15 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`, `CLE_CHIFFREMENT`, `GOOGLE_*` / `MICROSOFT_*` of the providers offered |
+| Submission purge       | `npm run submissions:purge`    | once a day, at night       | 10 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`                                                                         |
+| Overdue installments   | `npm run installments:overdue` | once a day, after midnight | 10 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`                                                                         |
+| Audit pseudonymisation | `npm run audit:pseudonymise`   | once a month, at night     | 30 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`                                                                         |
 
 Times are `Europe/Paris`; the nightly purge can run at any quiet hour (03:00 for example).
 
@@ -33,6 +34,12 @@ Times are `Europe/Paris`; the nightly purge can run at any quiet hour (03:00 for
   the day after their due date (`Europe/Paris`). A payment or a release refreshes the statuses it
   touches at once; this task catches the installments nobody paid. Run it after midnight (00:15
   for example) so that the day's statuses are right from the morning.
+- **Audit pseudonymisation** (#184, ADR 0010): replaces the personal values kept in the audit log
+  (e-mail of an invitation, reason typed for a price) with « [pseudonymisé] » 3 years after the end
+  of the relationship (`src/db/audit-pseudonymisation.ts`, rule awaiting the owner’s answer). The
+  rows, their amounts, dates and ids stay; payments and invoices are never touched. Keys no list
+  classifies are printed by name on their own line (« Clés du journal à classer »): classify them
+  in `src/domain/audit/pseudonymise.ts`, and a new personal key in a migration.
 
 The scripts use `DATABASE_ADMIN_URL` only to list which schools have work; each school is then
 handled with `DATABASE_URL` under its own row-level security (`withSchool`). The npm scripts load

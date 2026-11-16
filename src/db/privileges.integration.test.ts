@@ -5,6 +5,8 @@ import { afterAll, describe, expect, it } from "vitest";
  * Privileges of the application role `app_user`: every table and sequence of the
  * public schema is accessible to it (RLS then filters the rows), including
  * those created by a future migration (default privileges, migration 0006).
+ * One exception, itself tested: the audit log, which app_user may read and append to only
+ * (migration 0068, #184): its rows change only through `pseudonymise_audit_entries`.
  */
 
 const url = process.env.DATABASE_ADMIN_URL;
@@ -20,7 +22,9 @@ const QUERY_WITHOUT_PRIVILEGES = `
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
   WHERE CASE c.relkind
-    WHEN 'r' THEN NOT has_table_privilege('app_user', c.oid, 'SELECT,INSERT,UPDATE,DELETE')
+    WHEN 'r' THEN CASE WHEN c.relname = 'audit_log'
+      THEN NOT has_table_privilege('app_user', c.oid, 'SELECT,INSERT')
+      ELSE NOT has_table_privilege('app_user', c.oid, 'SELECT,INSERT,UPDATE,DELETE') END
     WHEN 'p' THEN NOT has_table_privilege('app_user', c.oid, 'SELECT,INSERT,UPDATE,DELETE')
     WHEN 'S' THEN NOT has_sequence_privilege('app_user', c.oid, 'USAGE,SELECT')
     ELSE false
@@ -42,6 +46,15 @@ class Cancellation extends Error {
 describe("app_user privileges", () => {
   it("cover every existing table and sequence", async () => {
     expect(await withoutPrivileges(admin)).toEqual([]);
+  });
+
+  it("on the audit log, are reading and appending only", async () => {
+    const [p] = await admin<{ update: boolean; delete: boolean; truncate: boolean; append: boolean }[]>`
+      SELECT has_table_privilege('app_user', 'audit_log', 'UPDATE') AS update,
+             has_table_privilege('app_user', 'audit_log', 'DELETE') AS delete,
+             has_table_privilege('app_user', 'audit_log', 'TRUNCATE') AS truncate,
+             has_table_privilege('app_user', 'audit_log', 'SELECT,INSERT') AS append`;
+    expect(p).toEqual({ update: false, delete: false, truncate: false, append: true });
   });
 
   it("cover a table created by a future migration", async () => {
