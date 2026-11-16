@@ -172,13 +172,18 @@ describe("Enrollment", () => {
     if (!r.ok) throw new Error(r.message);
     const [row] = await admin`SELECT gross_price_cents, discount_cents, discounts FROM enrollment WHERE id = ${r.id}`;
     expect(row).toMatchObject({ gross_price_cents: 16500, discount_cents: 1650, discounts: ["fratrie"] });
+    // Zoé, saved first and billed by nothing yet, gets the discount Noé raises (#155 Q2; this
+    // school's rule discounts every child, `from_rank` 1).
+    const [zoe] = await admin`SELECT discount_cents, discounts FROM enrollment
+      WHERE payer_id = ${ids.payer} AND id <> ${r.id} AND season_id = ${ids.season}`;
+    expect(zoe).toMatchObject({ discount_cents: 1100, discounts: ["fratrie"] });
   });
 
   it("lists the enrollments paid by the person for the season", async () => {
     const list = await withSchool(ids.school, (tx) => seasonEnrollments(tx, { payerId: ids.payer }, ids.season));
     expect(list.map((i) => [i.students, i.netPriceCents])).toEqual([
       ["Noé", 14850],
-      ["Zoé", 11000],
+      ["Zoé", 9900],
     ]);
   });
 });
@@ -224,14 +229,14 @@ describe("Dashboard and headcounts", () => {
   it("counts the season's enrollments, students and total amount", async () => {
     const digits = await withSchool(ids.school, (tx) => seasonFigures(tx, ids.season));
     // Quarterly prices, three quarters each (#291).
-    expect(digits).toEqual({ enrollments: 2, students: 2, netTotalCents: (11000 + 14850) * 3 });
+    expect(digits).toEqual({ enrollments: 2, students: 2, netTotalCents: (9900 + 14850) * 3 });
   });
 
   it("lists the latest enrollments, most recent first", async () => {
     const latest = await withSchool(ids.school, (tx) => lastEnrollments(tx, ids.season));
     expect(latest.map((d) => [d.students, d.payer, d.netPriceCents])).toEqual([
       ["Noé", "Test Famille", 14850],
-      ["Zoé", "Test Famille", 11000],
+      ["Zoé", "Test Famille", 9900],
     ]);
   });
 

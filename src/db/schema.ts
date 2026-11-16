@@ -1019,6 +1019,9 @@ export const discount = pgTable(
       .default(sql`'{}'::text[]`),
     // Minimum number of eligible students of the same payer (siblings: 2).
     minStudents: smallint("min_students").notNull().default(1),
+    // Rank from which a student gets it, ranked from the most expensive package down (#290):
+    // 1 = every eligible student; 2 = the most expensive package pays full price.
+    fromRank: smallint("from_rank").notNull().default(1),
     // Eligible audiences; empty = all.
     audiences: tariffAudience("audiences")
       .array()
@@ -1030,6 +1033,7 @@ export const discount = pgTable(
   (t) => [
     unique().on(t.seasonId, t.code),
     check("discount_value", sql`${t.rateBps} IS NOT NULL OR ${t.amountCents} IS NOT NULL`),
+    check("discount_from_rank", sql`${t.fromRank} BETWEEN 1 AND 10`),
     sameSchool(t, t.seasonId, season),
   ],
 );

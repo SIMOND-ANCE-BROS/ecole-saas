@@ -257,8 +257,8 @@ async function main() {
       }
     }
     await admin`
-      INSERT INTO discount (school_id, season_id, code, rate_bps, min_students, audiences, combinable_with_multi_discipline)
-      VALUES (${school.id}, ${season.id}, 'fratrie', 1000, 2, '{child}', false)`;
+      INSERT INTO discount (school_id, season_id, code, rate_bps, min_students, from_rank, audiences, combinable_with_multi_discipline)
+      VALUES (${school.id}, ${season.id}, 'fratrie', 1000, 2, 2, '{child}', false)`;
   }
 
   // Demo closures (fictitious dates) then upcoming lessons, as the application creates them.

@@ -176,8 +176,8 @@ export async function createSeason(
       INSERT INTO tariff (school_id, season_id, audience, period, combination, discipline_id, price_cents)
       SELECT school_id, ${id}, audience, period, combination, discipline_id, price_cents FROM tariff WHERE season_id = ${copyFrom}`);
     await tx.execute(sql`
-      INSERT INTO discount (school_id, season_id, code, rate_bps, amount_cents, not_combinable_with, min_students, audiences, combinable_with_multi_discipline)
-      SELECT school_id, ${id}, code, rate_bps, amount_cents, not_combinable_with, min_students, audiences, combinable_with_multi_discipline
+      INSERT INTO discount (school_id, season_id, code, rate_bps, amount_cents, not_combinable_with, min_students, from_rank, audiences, combinable_with_multi_discipline)
+      SELECT school_id, ${id}, code, rate_bps, amount_cents, not_combinable_with, min_students, from_rank, audiences, combinable_with_multi_discipline
       FROM discount WHERE season_id = ${copyFrom}`);
     await tx.execute(sql`
       INSERT INTO lesson_pack_tariff (school_id, season_id, lesson_count, max_people, price_cents)

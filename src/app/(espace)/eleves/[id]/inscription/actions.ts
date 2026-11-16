@@ -23,6 +23,8 @@ const validInput = z.object({
   period: z.enum(["quarter", "year", "single"]),
   courseIds: z.array(z.uuid()).max(10),
   status: z.enum(INITIAL_STATUSES),
+  // Typed amounts (#292): the siblings ranking uses them (#445), so the preview is told them too.
+  manualPrices: validManualPrices,
 });
 
 export type FormInput = z.infer<typeof validInput>;
