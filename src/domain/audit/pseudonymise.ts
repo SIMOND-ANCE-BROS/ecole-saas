@@ -5,7 +5,7 @@
  * values inside audit entries (`before`/`after`) are replaced by a placeholder 3 years after the end
  * of the relationship, the row and its technical values (amounts, dates, ids, methods) kept.
  *
- * The database applies it (`pseudonymise_audit_entries`, migration 0069) from its own list
+ * The database applies it (`pseudonymise_audit_entries`, migration 0068) from its own list
  * (`audit_personal_keys()`); `PERSONAL_KEYS` is its mirror, kept equal by an integration test, so
  * the code can say which keys it expects to be redacted and spot keys nobody classified.
  */

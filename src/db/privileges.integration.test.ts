@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
  * public schema is accessible to it (RLS then filters the rows), including
  * those created by a future migration (default privileges, migration 0006).
  * One exception, itself tested: the audit log, which app_user may read and append to only
- * (migration 0069, #184): its rows change only through `pseudonymise_audit_entries`.
+ * (migration 0068, #184): its rows change only through `pseudonymise_audit_entries`.
  */
 
 const url = process.env.DATABASE_ADMIN_URL;

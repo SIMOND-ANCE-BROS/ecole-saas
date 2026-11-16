@@ -7,7 +7,7 @@ import { dueEntries, pseudonymiseDue, pseudonymiseEntries } from "./audit-pseudo
 import { PERSONAL_KEYS, PLACEHOLDER, redactEntry } from "../domain/audit/pseudonymise";
 
 /**
- * Pseudonymisation of the audit log (#184, migration 0069, ADR 0010), against the real database:
+ * Pseudonymisation of the audit log (#184, migration 0068, ADR 0010), against the real database:
  * the trigger still refuses every ordinary change, the function replaces personal values only,
  * money values stay, another school is never touched, and the « end of relationship » rule picks
  * the right entries. Fictitious data deleted at the end (the audit log's trigger disabled inside an
@@ -233,7 +233,7 @@ afterAll(async () => {
   await admin.end();
 });
 
-describe("the audit log trigger (migration 0069)", () => {
+describe("the audit log trigger (migration 0068)", () => {
   it("refuses app_user any update or delete, even a redaction", async () => {
     const update = await withSchool(school, (tx) =>
       tx.execute(sql`UPDATE audit_log SET after = after || '{"reason": "[pseudonymisé]"}' WHERE id = ${oldPack}`),

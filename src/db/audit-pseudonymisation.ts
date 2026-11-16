@@ -5,7 +5,7 @@ import { pseudonymisationCutoff, unclassifiedKeys } from "../domain/audit/pseudo
 /**
  * Pseudonymisation of personal values in the current school's audit log (#184, ADR 0010), run by
  * `npm run audit:pseudonymise` inside `withSchool`. The database does the redaction
- * (`pseudonymise_audit_entries`, migration 0069); this module chooses the entries.
+ * (`pseudonymise_audit_entries`, migration 0068); this module chooses the entries.
  *
  * END OF THE RELATIONSHIP — PROPOSED, AWAITING THE OWNER (#184, open question). Kept here, in
  * `DUE_ENTRIES`, and nowhere else. With `cutoff` = today − 3 years (`pseudonymisationCutoff`):
