@@ -1,7 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withSchool } from "./index";
-import { addClosure } from "./lessons";
+import { addClosure, deleteClosure } from "./lessons";
 import {
   createDiscipline,
   createSeason,
@@ -196,6 +196,73 @@ describe("seasons", () => {
     });
     const [s] = await admin`SELECT end_date::text AS e FROM season WHERE id = ${season2026}`;
     expect(s.e).toBe("2027-06-30");
+  });
+
+  it("lets a season edit through once a closure deleted at the same time is gone (#194)", async () => {
+    // Season 2026-08-20 → 2027-06-30. A deletes « Zz Rentrée » (25/08) and keeps its transaction
+    // open; B makes the season start on the 26th meanwhile. deleteClosure() holds the
+    // season first (`attendance-locks.ts`), so B waits, then reads the closure gone.
+    const [last] = await admin`SELECT id FROM closure WHERE season_id = ${season2026} AND label = 'Zz Rentrée'`;
+    let release = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    let deleted = () => {};
+    const isDeleted = new Promise<void>((r) => (deleted = r));
+    const a = withSchool(school, async (tx) => {
+      const r = await deleteClosure(tx, last.id);
+      deleted();
+      await held;
+      return r;
+    });
+    await isDeleted;
+    let bDone = false;
+    const b = withSchool(school, (tx) =>
+      updateSeason(tx, season2026, { label: "2026-2027", startDate: "2026-08-26", endDate: "2027-06-30" }, TODAY),
+    ).finally(() => (bDone = true));
+    await new Promise((r) => setTimeout(r, 300));
+    // B waits for the season A holds: it neither refuses on the closure nor saves yet.
+    expect(bDone).toBe(false);
+    release();
+    expect((await a).ok).toBe(true);
+    expect(await b).toEqual({ ok: true, id: season2026, outside: 0 });
+    const [s] = await admin`SELECT start_date::text AS s FROM season WHERE id = ${season2026}`;
+    expect(s.s).toBe("2026-08-26");
+  });
+
+  it("refuses a closure added on a day a season edit in progress removes (#194)", async () => {
+    // Season 2026-08-26 → 2027-06-30. B makes it start on the 28th and keeps its transaction open
+    // (season FOR UPDATE); A adds a closure on the 27th meanwhile: it waits for the season,
+    // then reads the new dates and is refused. No closure ends up outside its season.
+    let release = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    let edited = () => {};
+    const isEdited = new Promise<void>((r) => (edited = r));
+    const b = withSchool(school, async (tx) => {
+      const r = await updateSeason(
+        tx,
+        season2026,
+        { label: "2026-2027", startDate: "2026-08-28", endDate: "2027-06-30" },
+        TODAY,
+      );
+      edited();
+      await held;
+      return r;
+    });
+    await isEdited;
+    const a = withSchool(school, (tx) =>
+      addClosure(tx, season2026, {
+        scope: "school",
+        label: "Zz Portes ouvertes",
+        start: "2026-08-27",
+        end: "2026-08-27",
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 300));
+    release();
+    expect(await b).toEqual({ ok: true, id: season2026, outside: 0 });
+    expect(await a).toEqual({ ok: false, message: "Les dates doivent être comprises dans la saison." });
+    const outside = await admin`SELECT c.label FROM closure c JOIN season s ON s.id = c.season_id
+        WHERE c.season_id = ${season2026} AND (c.start_date < s.start_date OR c.end_date > s.end_date)`;
+    expect(outside).toEqual([]);
   });
 });
 

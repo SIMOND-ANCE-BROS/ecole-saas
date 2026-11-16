@@ -20,6 +20,7 @@ import { closedCourseLabel } from "../domain/schedule/closure-scope";
 import { defaultQuarters, quartersOutside, quartersRefusal, type SeasonQuarter } from "../domain/enrollment/quarters";
 import { biweeklySwapped, recurrenceOf } from "../domain/schedule/lessons";
 import { frenchDate } from "../lib/dates";
+import { seasonClosuresRefusal } from "../domain/schedule/season-closures";
 import { issuePath } from "../lib/form-errors";
 
 /**
@@ -187,32 +188,17 @@ export async function createSeason(
 }
 
 /**
- * New season dates must keep every closure of the season inside them (#194,
- * recommended rule pending the school's validation): the edit is refused,
- * naming the closures, rather than clipping or deleting them silently.
+ * New season dates must keep every closure of the season inside them (#194, owner decision
+ * 2026-11-15): refused, naming the closures (`seasonClosuresRefusal`); nothing is clipped or
+ * deleted. Read under the season's `FOR UPDATE`: a closure being added or deleted holds the
+ * season first (`attendance-locks.ts`), so it has committed, and is read here, or waits.
  */
 async function closuresOutside(tx: Tx, seasonId: string, s: z.output<typeof validSeasonInput>): Promise<string | null> {
-  const outside = await tx
-    .select({ label: closure.label, start: closure.startDate, end: closure.endDate })
+  const closures = await tx
+    .select({ label: closure.label, startDate: closure.startDate, endDate: closure.endDate })
     .from(closure)
-    .where(
-      and(
-        eq(closure.seasonId, seasonId),
-        or(sql`${closure.startDate} < ${s.startDate}`, sql`${closure.endDate} > ${s.endDate}`),
-      ),
-    )
-    .orderBy(asc(closure.startDate), asc(closure.label));
-  if (outside.length === 0) return null;
-  const names = outside
-    .map((c) =>
-      c.start === c.end
-        ? `${c.label} (le ${frenchDate(c.start)})`
-        : `${c.label} (du ${frenchDate(c.start)} au ${frenchDate(c.end)})`,
-    )
-    .join(", ");
-  return outside.length === 1
-    ? `Cette fermeture sortirait de la saison : ${names}. Supprimez-la dans Planning › Fermetures, puis recréez-la avec les bonnes dates.`
-    : `Ces fermetures sortiraient de la saison : ${names}. Supprimez-les dans Planning › Fermetures, puis recréez-les avec les bonnes dates.`;
+    .where(eq(closure.seasonId, seasonId));
+  return seasonClosuresRefusal(closures, s);
 }
 
 /**
