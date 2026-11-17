@@ -1,6 +1,6 @@
 import { frenchDate } from "../../lib/dates";
 
-/** Dates of a season (`YYYY-MM-DD`, both included). */
+/** Dates of a season or a closure (`YYYY-MM-DD`, both included). */
 export type SeasonDates = { startDate: string; endDate: string };
 
 /** A closure as the season edit checks it: its label and dates (`YYYY-MM-DD`, both included). */
@@ -11,7 +11,7 @@ export type DatedClosure = { label: string; startDate: string; endDate: string }
  * used when a closure is added and when a season's dates change. A closure on the very bounds
  * is inside.
  */
-export function isOutsideSeason(c: { startDate: string; endDate: string }, season: SeasonDates): boolean {
+export function isOutsideSeason(c: SeasonDates, season: SeasonDates): boolean {
   return c.startDate < season.startDate || c.endDate > season.endDate;
 }
 

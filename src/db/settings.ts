@@ -193,7 +193,11 @@ export async function createSeason(
  * deleted. Read under the season's `FOR UPDATE`: a closure being added or deleted holds the
  * season first (`attendance-locks.ts`), so it has committed, and is read here, or waits.
  */
-async function closuresOutside(tx: Tx, seasonId: string, s: z.output<typeof validSeasonInput>): Promise<string | null> {
+async function closuresLeftOutside(
+  tx: Tx,
+  seasonId: string,
+  s: z.output<typeof validSeasonInput>,
+): Promise<string | null> {
   const closures = await tx
     .select({ label: closure.label, startDate: closure.startDate, endDate: closure.endDate })
     .from(closure)
@@ -267,7 +271,7 @@ export async function updateSeason(
   const after = { start: s.data.startDate, end: s.data.endDate };
   const refusal =
     (await checkSeason(tx, s.data, id)) ??
-    (await closuresOutside(tx, id, s.data)) ??
+    (await closuresLeftOutside(tx, id, s.data)) ??
     (await quartersLeftOutside(tx, id, s.data)) ??
     (before.start !== after.start ? await swappedBiweekly(tx, id, before, after, today) : null);
   if (refusal) return { ok: false, message: refusal };

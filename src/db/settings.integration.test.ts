@@ -202,13 +202,13 @@ describe("seasons", () => {
     // Season 2026-08-20 → 2027-06-30. A deletes « Zz Rentrée » (25/08) and keeps its transaction
     // open; B makes the season start on the 26th meanwhile. deleteClosure() holds the
     // season first (`attendance-locks.ts`), so B waits, then reads the closure gone.
-    const [last] = await admin`SELECT id FROM closure WHERE season_id = ${season2026} AND label = 'Zz Rentrée'`;
+    const [rentree] = await admin`SELECT id FROM closure WHERE season_id = ${season2026} AND label = 'Zz Rentrée'`;
     let release = () => {};
     const held = new Promise<void>((r) => (release = r));
     let deleted = () => {};
     const isDeleted = new Promise<void>((r) => (deleted = r));
     const a = withSchool(school, async (tx) => {
-      const r = await deleteClosure(tx, last.id);
+      const r = await deleteClosure(tx, rentree.id);
       deleted();
       await held;
       return r;
@@ -248,6 +248,7 @@ describe("seasons", () => {
       return r;
     });
     await isEdited;
+    let aDone = false;
     const a = withSchool(school, (tx) =>
       addClosure(tx, season2026, {
         scope: "school",
@@ -255,8 +256,10 @@ describe("seasons", () => {
         start: "2026-08-27",
         end: "2026-08-27",
       }),
-    );
+    ).finally(() => (aDone = true));
     await new Promise((r) => setTimeout(r, 300));
+    // A waits for the season B holds: it has neither saved nor refused yet.
+    expect(aDone).toBe(false);
     release();
     expect(await b).toEqual({ ok: true, id: season2026, outside: 0 });
     expect(await a).toEqual({ ok: false, message: "Les dates doivent être comprises dans la saison." });
