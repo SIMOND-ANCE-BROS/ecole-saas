@@ -4,24 +4,29 @@
 # Every task, its frequency and its environment: docs/guides/deployment.md.
 #
 # Times are Europe/Paris: set the VPS time zone (timedatectl set-timezone Europe/Paris), or add
-# CRON_TZ=Europe/Paris where the cron supports it (cronie). Nothing runs between 02:00 and 03:00,
-# skipped or doubled when the clocks change.
+# CRON_TZ=Europe/Paris where the cron supports it (cronie; Debian's cron ignores it), and restart
+# cron after changing the time zone. No daily or monthly task runs between 02:00 and 03:00, skipped
+# or doubled when the clocks change; the hourly and per-minute ones are idempotent.
 #
 # Limits given to run-task.sh are each script's own limit plus one minute: the script stops itself
 # first (exit 2); run-task.sh only catches a run that hangs harder (exit 124).
 
 SHELL=/bin/sh
 PATH=/usr/local/bin:/usr/bin:/bin
-# Alert hook called on any failure (see deploy/run-task.sh); optional heartbeat on success.
+# Alert hook called on any failure (see deploy/run-task.sh); optional heartbeat on success. Use a
+# stateful check (it alerts once while failing), not a plain message topic: a sweep failing for an
+# hour calls it 60 times.
 ALERT_URL=<alert-url>
 HEARTBEAT_URL=
 
 RUN=/opt/ecole-saas/run-task.sh
 LOG=/var/log/ecole-saas/tasks.log
 # Same image as the web container: the deployment tags the running version ecole-saas:current.
-# --init forwards run-task.sh's SIGTERM to the script. jobs.env: DATABASE_URL, DATABASE_ADMIN_URL,
+# --init forwards run-task.sh's SIGTERM to the script; the other options harden the container as in
+# the guide. With a provider CA, add -v /etc/ecole-saas/ca-base.pem:/etc/ecole-saas/ca-base.pem:ro
+# and NODE_EXTRA_CA_CERTS to jobs.env. jobs.env: DATABASE_URL, DATABASE_ADMIN_URL,
 # CLE_CHIFFREMENT and the GOOGLE_* / MICROSOFT_* of the providers offered (chmod 600).
-JOB=docker run --rm --init --env-file /etc/ecole-saas/jobs.env ecole-saas:current node
+JOB=docker run --rm --init --cap-drop=ALL --security-opt no-new-privileges --read-only --tmpfs /tmp --env-file /etc/ecole-saas/jobs.env ecole-saas:current node
 
 # Invoice outbox sweep (ADR 0007): every minute, on the web container published on the loopback.
 # The header file holds « Authorization: Bearer <JOBS_SECRET> » (chmod 600), never the command line.

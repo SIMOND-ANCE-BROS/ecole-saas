@@ -33,8 +33,9 @@ case "$name" in
     exit 64
     ;;
 esac
+# 0 would mean no limit at all for timeout(1).
 case "$limit" in
-  '' | *[!0-9]*)
+  '' | 0 | *[!0-9]*)
     echo "run-task.sh: invalid time limit" >&2
     exit 64
     ;;
@@ -42,10 +43,13 @@ esac
 
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
-# Bounded, no retry beyond two, never prints the URL (it may hold a token).
+# Bounded, no retry beyond two, never prints the URL (it may hold a token): the URL goes to curl
+# through its config on stdin, not as an argument other local users could read in `ps`. A URL
+# holding `"` or `\` would be misread there: real alert URLs hold neither.
 ping() {
-  curl --fail --silent --show-error --max-time 10 --retry 2 --output /dev/null \
-    --data-raw "task=$name exit=$1" "$2" 2>/dev/null
+  printf 'url = "%s"\n' "$2" |
+    curl --config - --fail --silent --show-error --max-time 10 --retry 2 --output /dev/null \
+      --data-raw "task=$name exit=$1" 2>/dev/null
 }
 
 start=$(date +%s)

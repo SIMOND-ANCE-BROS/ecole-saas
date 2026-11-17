@@ -3,7 +3,7 @@
 How production runs (#337): one Docker image, a managed PostgreSQL, scheduled tasks, alerts,
 backups.
 
-> **Owner decision (2026-11-15).** The application starts on a **VPS** with a **managed
+> **Owner decision (2026-11-15), ADR 0011.** The application starts on a **VPS** with a **managed
 > PostgreSQL** (Scaleway or Clever Cloud, with backups). The image is configured by environment
 > variables only, so that moving to Clever Cloud later changes the host, not the image. Scheduled
 > tasks run from the VPS's cron through `deploy/run-task.sh`, which alerts on a non-zero exit;
@@ -31,14 +31,26 @@ without pushing it (job `image`).
 
 Always start containers with `--init`: it forwards `SIGTERM` to Node, so that `docker stop` lets
 the server finish its requests and pending `after()` work (invoice sending), and the time limit of
-`run-task.sh` can stop a script.
+`run-task.sh` can stop a script. Start them hardened too: no capability, no privilege gain, a
+read-only file system (the web server writes only to `/tmp` and Next's cache, both in memory), and
+bounded logs.
 
 ```sh
+HARDEN="--cap-drop=ALL --security-opt no-new-privileges --read-only --tmpfs /tmp"
+# With a provider CA (see Database connections), add to every run:
+#   -v /etc/ecole-saas/ca-base.pem:/etc/ecole-saas/ca-base.pem:ro, and NODE_EXTRA_CA_CERTS in the env file
 docker build -t ecole-saas:<git-sha> .
-docker run --rm --init --env-file /etc/ecole-saas/migrate.env ecole-saas:<git-sha> node scripts/migrate.mjs
-docker run -d --init --name ecole-saas-web --restart unless-stopped \
+docker run --rm --init $HARDEN --env-file /etc/ecole-saas/migrate.env ecole-saas:<git-sha> node scripts/migrate.mjs
+docker run -d --init $HARDEN --tmpfs /app/.next/cache:uid=1000,gid=1000 \
+  --log-opt max-size=10m --log-opt max-file=5 --name ecole-saas-web --restart unless-stopped \
   --env-file /etc/ecole-saas/web.env -p 127.0.0.1:3000:3000 ecole-saas:<git-sha>
 ```
+
+The image's health check marks the container « unhealthy » but restarts nothing and alerts no one:
+an external uptime check of the public sign-in page does that.
+
+The image is built on the VPS (or pushed to a **private** registry): never to a public one. The
+build writes a Server Actions encryption key into `.next/`, so the image is not meant to be shared.
 
 The web container is published on the loopback only: a reverse proxy on the VPS (Caddy, nginx)
 terminates HTTPS, limits request sizes and writes the client's IP into the header named by
@@ -94,43 +106,52 @@ copy outside the VPS (a password manager); a restored database is of little use 
 1. Build the image from the merged commit and tag it with its SHA.
 2. **Outside desk hours** (evening or early morning, never while the enrollment desk is open),
    apply the migrations with that image:
-   `docker run --rm --init --env-file /etc/ecole-saas/migrate.env ecole-saas:<sha> node scripts/migrate.mjs`.
+   `docker run --rm --init $HARDEN --env-file /etc/ecole-saas/migrate.env ecole-saas:<sha> node scripts/migrate.mjs`.
    A failure stops here: the running version is untouched; the fix is a new migration in a new PR.
-3. Replace the web container (`docker stop ecole-saas-web` gives requests in flight 10 s, then
-   `docker rm` and `docker run` as above), then tag the image `ecole-saas:current` so that the
+3. Replace the web container (`docker stop --time 30 ecole-saas-web`: 30 s for requests in flight
+   and pending invoice sending, then `docker rm` and `docker run` as above), then tag the image `ecole-saas:current` so that the
    scheduled tasks run the same version (`docker tag ecole-saas:<sha> ecole-saas:current`).
-4. Check that the sign-in page answers and that `docker logs ecole-saas-web` shows no error.
+4. Check that the sign-in page answers and that `docker logs ecole-saas-web` shows no error. A tab
+   left open across the deployment fails its first action: the front desk reloads the page.
+5. Keep the last three images and remove older ones (`docker image rm`), or the disk fills.
 
-Rolling back means running the previous image; migrations are not undone, so a migration stays
-compatible with the version before it (add first, remove in a later release).
+Rolling back means running the previous image **and** tagging it `ecole-saas:current` again;
+migrations are not undone, so a migration stays compatible with the version before it (add first,
+remove in a later release).
 
 ## Backups and restore test
 
 - **Backups** come from the managed PostgreSQL: daily automatic backups kept at least 30 days, and
   point-in-time recovery when the plan offers it. The VPS holds no business data: its env files and
   the image tag are enough to rebuild it.
-- **Off-provider copy**, once a week: `pg_dump --format=custom` with `DATABASE_ADMIN_URL`, encrypted
-  before it leaves the VPS, kept with another provider. The dump holds personal data of minors:
-  never on a personal computer, never unencrypted.
+- **Off-provider copy**, once a week: `pg_dump --format=custom` as the owner role, its password in a
+  `PGPASSFILE` (`chmod 600`), never on the command line, streamed straight into an encryption tool
+  with a public key (`pg_dump -Fc … | age -r <public-key> > dump.age`) so that no plain dump touches
+  the disk, then kept with another provider. The private key stays off the VPS. The dump holds
+  personal data of minors: never on a personal computer, never unencrypted.
 - **Restore test**, every quarter and before the go-live: restore the latest backup into a new,
-  throw-away database of the provider; run `node scripts/migrate.mjs` against it (nothing left to
-  apply); point a local container at it (`DATABASE_URL` of its `app_user`), sign in, open a student
-  and an invoice; then delete that database. Note the date and how long it took in an issue. A
-  backup never restored is not a backup.
+  throw-away database of the provider, reachable from the VPS only (IP allowlist, `verify-full`);
+  run `node scripts/migrate.mjs` against it (nothing left to apply); start a second web container
+  on the VPS pointed at it (`DATABASE_URL` of its `app_user`, another loopback port), reach it
+  through an SSH tunnel, sign in, open a student and an invoice; then stop that container and delete
+  that database the same day. Real data never reaches a personal computer. Note the date and how
+  long it took in an issue. A backup never restored is not a backup.
 
 ## Moving to Clever Cloud
 
 The image runs anywhere Docker runs; the move changes the host, not the code:
 
 1. Create a Docker application from this repository's `Dockerfile` and give it the web variables
-   of the table above (port 3000; `HOSTNAME` is set by the image).
+   of the table above, plus `PORT=8080` (the port the platform expects for Docker applications,
+   to confirm at the move; the image and its health check read `PORT`).
 2. Database: keep the current managed PostgreSQL (same URLs), or move to a Clever Cloud
    PostgreSQL add-on after checking the role requirements above (second login role, BYPASSRLS),
    by dump and restore outside desk hours.
 3. Migrations: run `node scripts/migrate.mjs` in a one-off container of the new image before
    switching traffic, as in step 2 of a deployment.
-4. Scheduled tasks: the commands of `deploy/crontab.example`, from the platform's scheduler (or a
-   small machine left with the cron), through `deploy/run-task.sh` or with the platform's own alert
+4. Scheduled tasks: the commands of `deploy/crontab.example`, from the platform's scheduler if it
+   can run commands in a Docker application (to verify at the move), otherwise from a small
+   machine left with the cron, through `deploy/run-task.sh` or with the platform's own alert
    on a non-zero exit. The sweep becomes an HTTPS call to the public address.
 5. `IP_CLIENT_EN_TETE`: the header the platform's proxy writes (from its documentation; never a
    header the client can set).
@@ -145,20 +166,31 @@ What production must run on a schedule, and how to tell that a run failed. On th
 `deploy/crontab.example` runs every task through `deploy/run-task.sh` (copied to
 `/opt/ecole-saas/`): a time limit, one log line per run (task name, exit code, duration), and a
 POST to `ALERT_URL` on any failure. Any other scheduler that can run a command (systemd timer, a
-platform's « scheduled job ») or call an HTTPS URL fits the same way. Rotate the log
-(`/var/log/ecole-saas/tasks.log`, logrotate weekly): the sweep adds one line a minute.
+platform's « scheduled job ») or call an HTTPS URL fits the same way.
+
+Logs are bounded: `/var/log/ecole-saas/tasks.log` rotated weekly by logrotate and kept 4 weeks (the
+sweep adds one line a minute), and Docker's own logs capped for every container in
+`/etc/docker/daemon.json` (`"log-driver": "json-file", "log-opts": {"max-size": "10m",
+"max-file": "5"}`) as well as on the web container's command line. A container log may carry a
+database error detail: it stays on the VPS and is never copied elsewhere.
+
+When `run-task.sh` has to kill a script (exit 137), the `docker run` client dies but its container
+may keep running: `docker ps --filter ancestor=ecole-saas:current` finds it, `docker stop` ends it.
+Its advisory lock makes the next runs skip until then.
 
 ### Tasks
 
-| Task                   | How it runs                    | Frequency                  | Time limit        | Environment                                                                                                  |
-| ---------------------- | ------------------------------ | -------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------ |
-| Invoice outbox sweep   | `POST /api/taches/factures`    | every minute               | 5 min (HTTP call) | on the web server: `JOBS_SECRET`, `DATABASE_URL`, `CLE_CHIFFREMENT`; scheduler: the same `JOBS_SECRET`       |
-| Calendar sync          | `npm run calendars:sync`       | every hour                 | 15 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`, `CLE_CHIFFREMENT`, `GOOGLE_*` / `MICROSOFT_*` of the providers offered |
-| Submission purge       | `npm run submissions:purge`    | once a day, at night       | 10 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`                                                                         |
-| Overdue installments   | `npm run installments:overdue` | once a day, after midnight | 10 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`                                                                         |
-| Audit pseudonymisation | `npm run audit:pseudonymise`   | once a month, at night     | 30 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`                                                                         |
+| Task                   | How it runs                             | Frequency                  | Time limit        | Environment                                                                                                  |
+| ---------------------- | --------------------------------------- | -------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| Invoice outbox sweep   | `POST /api/taches/factures`             | every minute               | 5 min (HTTP call) | on the web server: `JOBS_SECRET`, `DATABASE_URL`, `CLE_CHIFFREMENT`; scheduler: the same `JOBS_SECRET`       |
+| Calendar sync          | `scripts/sync-calendars.mjs`            | every hour                 | 15 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`, `CLE_CHIFFREMENT`, `GOOGLE_*` / `MICROSOFT_*` of the providers offered |
+| Submission purge       | `scripts/purge-submissions.mjs`         | once a day, at night       | 10 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`                                                                         |
+| Overdue installments   | `scripts/mark-overdue-installments.mjs` | once a day, after midnight | 10 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`                                                                         |
+| Audit pseudonymisation | `scripts/pseudonymise-audit-log.mjs`    | once a month, at night     | 30 min (built in) | `DATABASE_URL`, `DATABASE_ADMIN_URL`                                                                         |
 
-Times are `Europe/Paris`; the nightly purge can run at any quiet hour (03:00 for example).
+Scripts run as `node scripts/<name>.mjs` in the image (`npm run calendars:sync`,
+`submissions:purge`, `installments:overdue`, `audit:pseudonymise` in development). Times are
+`Europe/Paris`; the nightly purge can run at any quiet hour (03:00 for example).
 
 - **Invoice outbox sweep** (ADR 0007, #304): sends drafted invoices to each business's invoicing
   tool and retries failures with backoff. Invoices are also sent right after they are drafted
@@ -205,11 +237,11 @@ codes below, when that file is missing.
 
 ### Telling that a run failed
 
-| Task          | Success              | Failure                                                                                                                                                                              |
-| ------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Scripts       | exit code 0          | 1: a school failed or a calendar failure could not be recorded, the database is unreachable or a variable is missing; 2: time limit reached                                          |
-| Outbox sweep  | HTTP 200 with counts | 401: wrong or missing `JOBS_SECRET`; 500: a business's run failed (its invoices wait)                                                                                                |
-| `run-task.sh` | the command's code   | the command's code; 124 (143 with BusyBox): its own time limit stopped a hung command, 137 if it had to be killed; curl 22: the sweep answered 4xx or 5xx, 7: web server unreachable |
+| Task          | Success              | Failure                                                                                                                                                                                                                                                                                            |
+| ------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scripts       | exit code 0          | 1: a school failed or a calendar failure could not be recorded, the database is unreachable or a variable is missing; 2: time limit reached                                                                                                                                                        |
+| Outbox sweep  | HTTP 200 with counts | 401: wrong or missing `JOBS_SECRET`; 500: a business's run failed (its invoices wait)                                                                                                                                                                                                              |
+| `run-task.sh` | the command's code   | the command's code; 124 (143 with BusyBox): its own time limit stopped a hung command, 137 if it had to be killed; curl 22: the sweep answered 4xx or 5xx, 7: web server unreachable; docker 125: image or tag missing (`ecole-saas:current` not tagged yet), 126/127: the command could not start |
 
 The scheduler must alert the developer on a non-zero exit code or a non-2xx answer. A single
 calendar failing (revoked access, provider down) does not fail the run: it is recorded on the
@@ -237,8 +269,9 @@ curl --fail --silent --show-error --max-time 300 -X POST \
   -H @/etc/ecole-saas/jobs-header http://127.0.0.1:3000/api/taches/factures
 ```
 
-`ALERT_URL` receives one POST per failure, body `task=<name> exit=<code>`: for example the
-« fail » endpoint of a Healthchecks-style check, or a notification topic the developer follows.
+`ALERT_URL` receives one POST per failure, body `task=<name> exit=<code>`: the « fail » endpoint of
+a Healthchecks-style check, which alerts once while a task keeps failing. Not a plain message
+topic: a sweep failing for an hour would post 60 messages.
 `HEARTBEAT_URL`, optional, receives the same after each success: a check expecting a ping every
 few minutes then also reports a cron, a VPS or a Docker daemon that stopped running anything.
 

@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-#
 # Production image (#337): the web server and the administration scripts (migrations, scheduled
 # tasks) from one build, configured only by environment variables. Nothing secret is copied or
 # baked in: .env files are excluded (.dockerignore) and no variable is read at build time.
@@ -10,12 +8,12 @@
 #
 # docs/guides/deployment.md lists the variables of each process and the scheduled commands.
 
-# Node 22 (the version CI runs), Alpine, pinned by the digest of its multi-arch index. Updated by
-# Dependabot (docker ecosystem, 14-day cooldown) like any dependency.
-ARG NODE_IMAGE=node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
+# Node 22 (the version CI runs), Alpine, pinned by the digest of its multi-arch index. Written
+# once as a literal so that Dependabot (docker ecosystem, 14-day cooldown) can update it.
+FROM node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS base
 
 # --- Dependencies: exactly the lockfile, dev tools included (the build needs them) -------------
-FROM ${NODE_IMAGE} AS deps
+FROM base AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 # --ignore-scripts: `prepare` installs git hooks, meaningless here; no dependency needs its own
@@ -23,7 +21,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 
 # --- Build: Next standalone server + one bundled file per administration script ---------------
-FROM ${NODE_IMAGE} AS build
+FROM base AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
@@ -43,7 +41,7 @@ RUN node_modules/.bin/esbuild \
       "--banner:js=import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
 
 # --- Runtime -----------------------------------------------------------------------------------
-FROM ${NODE_IMAGE} AS runtime
+FROM base AS runtime
 WORKDIR /app
 # NODE_ENV=production also refuses the fake invoicing tool and the fake e-mail sender (#351, #404).
 # HOSTNAME: Docker sets it to the container id; the standalone server listens on it.
