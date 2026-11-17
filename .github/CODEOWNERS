@@ -12,3 +12,5 @@
 /.github/workflows/          @GabinSMD
 /.github/CODEOWNERS          @GabinSMD
 /docker/                     @GabinSMD
+/Dockerfile                  @GabinSMD
+/deploy/                     @GabinSMD

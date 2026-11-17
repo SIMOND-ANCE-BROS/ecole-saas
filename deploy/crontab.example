@@ -1,0 +1,40 @@
+# Scheduled tasks of production (#337), for the cron of the VPS user that runs the containers
+# (member of the docker group). Install with `crontab deploy/crontab.example` once every <…> is
+# filled in; the installed crontab is readable by that user only (it holds ALERT_URL).
+# Every task, its frequency and its environment: docs/guides/deployment.md.
+#
+# Times are Europe/Paris: set the VPS time zone (timedatectl set-timezone Europe/Paris), or add
+# CRON_TZ=Europe/Paris where the cron supports it (cronie). Nothing runs between 02:00 and 03:00,
+# skipped or doubled when the clocks change.
+#
+# Limits given to run-task.sh are each script's own limit plus one minute: the script stops itself
+# first (exit 2); run-task.sh only catches a run that hangs harder (exit 124).
+
+SHELL=/bin/sh
+PATH=/usr/local/bin:/usr/bin:/bin
+# Alert hook called on any failure (see deploy/run-task.sh); optional heartbeat on success.
+ALERT_URL=<alert-url>
+HEARTBEAT_URL=
+
+RUN=/opt/ecole-saas/run-task.sh
+LOG=/var/log/ecole-saas/tasks.log
+# Same image as the web container: the deployment tags the running version ecole-saas:current.
+# --init forwards run-task.sh's SIGTERM to the script. jobs.env: DATABASE_URL, DATABASE_ADMIN_URL,
+# CLE_CHIFFREMENT and the GOOGLE_* / MICROSOFT_* of the providers offered (chmod 600).
+JOB=docker run --rm --init --env-file /etc/ecole-saas/jobs.env ecole-saas:current node
+
+# Invoice outbox sweep (ADR 0007): every minute, on the web container published on the loopback.
+# The header file holds « Authorization: Bearer <JOBS_SECRET> » (chmod 600), never the command line.
+* * * * *   $RUN invoices:sweep 330 curl --fail --silent --show-error --max-time 300 -X POST -o /dev/null -H @/etc/ecole-saas/jobs-header http://127.0.0.1:3000/api/taches/factures >> $LOG 2>&1
+
+# Calendar sync: every hour (15 min limit).
+7 * * * *   $RUN calendars:sync 960 $JOB scripts/sync-calendars.mjs >> $LOG 2>&1
+
+# Overdue installments: every day after midnight (10 min limit).
+15 0 * * *  $RUN installments:overdue 660 $JOB scripts/mark-overdue-installments.mjs >> $LOG 2>&1
+
+# Submission and e-mail proof purge: every night (10 min limit).
+30 3 * * *  $RUN submissions:purge 660 $JOB scripts/purge-submissions.mjs >> $LOG 2>&1
+
+# Audit log pseudonymisation: the 1st of each month, at night (30 min limit).
+0 4 1 * *   $RUN audit:pseudonymise 1860 $JOB scripts/pseudonymise-audit-log.mjs >> $LOG 2>&1

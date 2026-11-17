@@ -96,12 +96,31 @@ jobs:
           fi
           sh scripts/gitleaks.sh git --redact --no-banner --log-level warn --log-opts="$range"
 
+  # Production image (#337): builds the Dockerfile, never pushes it. Plain `docker build` (the
+  # runner's Docker): no extra action, no registry credentials, read-only token.
+  image:
+    name: Docker image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the production image
+        run: docker build --pull -t ecole-saas:ci .
+      - name: Image runs as non-root and holds the bundled scripts
+        run: |
+          test "$(docker image inspect ecole-saas:ci --format '{{.Config.User}}')" = node
+          docker run --rm ecole-saas:ci ls scripts/migrate.mjs scripts/sync-calendars.mjs \
+            scripts/purge-submissions.mjs scripts/mark-overdue-installments.mjs \
+            scripts/pseudonymise-audit-log.mjs migrations/meta/_journal.json server.js
+
   # Single check to require on main: fails if any job above failed or was skipped.
   ci-success:
     name: ci-success
     runs-on: ubuntu-24.04
     timeout-minutes: 2
-    needs: [verify, audit, secret-scan]
+    needs: [verify, audit, secret-scan, image]
     if: always()
     steps:
       - name: All required jobs passed

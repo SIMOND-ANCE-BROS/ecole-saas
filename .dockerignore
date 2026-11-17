@@ -1,0 +1,22 @@
+# Build context of the production image (#337): only what the build needs. Secrets and local
+# state never enter it.
+.env*
+!.env.example
+*.pem
+.git
+.githooks
+.github
+.claude
+.playwright-mcp
+.impeccable
+.next
+node_modules
+coverage
+dist
+docs
+deploy
+docker
+Dockerfile
+.dockerignore
+*.tsbuildinfo
+npm-debug.log*
