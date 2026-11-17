@@ -6,6 +6,7 @@ import { SIGNUP_LIST_STATUS, withSignups } from "../domain/workshop/participants
 import { headcountSql } from "./schedule";
 import { closedCourseLabel, type ScopedClosure } from "../domain/schedule/closure-scope";
 import { recurrenceOf, type SeasonCalendar } from "../domain/schedule/lessons";
+import { isOutsideSeason } from "../domain/schedule/season-closures";
 import { planLessonSync, seasonLessons } from "../domain/schedule/lesson-sync";
 import type { Tx } from "./index";
 import { lockCourseOfLesson, lockCoursesOfSeason, lockSeasonOfClosure, lockSeasonOfLesson } from "./attendance-locks";
@@ -186,7 +187,7 @@ export async function addClosure(tx: Tx, seasonId: string, entry: z.input<typeof
     .for("no key update");
   if (!s) return { ok: false, message: "Cette saison n’existe plus." };
   // A closure belongs to one season (#189): its lessons are the ones it cancels.
-  if (f.data.start < s.start || f.data.end > s.end)
+  if (isOutsideSeason({ startDate: f.data.start, endDate: f.data.end }, { startDate: s.start, endDate: s.end }))
     return { ok: false, message: "Les dates doivent être comprises dans la saison." };
   // The chosen sites, or courses of this season, must still exist (RLS: only this school's).
   const siteIds = f.data.scope === "sites" ? [...new Set(f.data.siteIds)] : [];

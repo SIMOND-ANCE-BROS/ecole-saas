@@ -37,7 +37,8 @@ import { course, season } from "./schema";
  *     a lower id that a course edit's sync then asks for, while waiting for the edited course;
  *   - `dropEnrollment` (#410): the same, for the same reason;
  *   - `updateSeason`, `copySeason`: the season `FOR UPDATE`, then the courses they create, then
- *     the sync.
+ *     the sync. `updateSeason` reads the season's closures under that lock (#194): a closure
+ *     being added or deleted holds the season first, so it has committed, or waits for the edit.
  *
  * Before #415 the course form, `moveCourse` and `moveLesson` held their course, then waited for
  * the season, while a closure's sync held the season and waited for that course (40P01). So did

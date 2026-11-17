@@ -183,4 +183,12 @@ describe("settings actions", () => {
     const r = await actions.changeSeason(ID, entry);
     expect(r.ok && r.note).toMatch(/^3 séances restent en dehors des nouvelles dates/);
   });
+
+  it("answer « Réessayez » when a season edit waits too long for a closure being saved (#194)", async () => {
+    const entry = { label: "2027-2028", startDate: "2027-09-01", endDate: "2028-06-30" };
+    withSchool.mockRejectedValueOnce(Object.assign(new Error("lock timeout"), { code: "55P03" }));
+    vi.spyOn(console, "warn").mockImplementationOnce(() => {});
+
+    expect(await actions.changeSeason(ID, entry)).toEqual({ ok: false, message: "Réessayez dans un instant." });
+  });
 });

@@ -45,7 +45,7 @@ import {
   validEntityInput,
   type EntityInput,
 } from "@/db/billing-entities";
-import { actionResult, type ActionResult } from "@/lib/action-result";
+import { actionResult, orBusy, type ActionResult } from "@/lib/action-result";
 import { requireRole } from "@/lib/session";
 
 /** A write in the school's transaction; `userId` (from the session) for the ones the audit log signs. */
@@ -106,7 +106,8 @@ export async function changeSeason(
   const { schoolId } = await requireRole("director");
   const message = refusal(validSeasonInput, entry) ?? refusal(validId, id, SEASON_GONE);
   if (message) return { ok: false, message };
-  const r = await withSchool(schoolId, (tx) => updateSeason(tx, id, entry, todayInParis()));
+  // A closure being added or deleted holds the season (#194): past the wait limit, « Réessayez ».
+  const r = await orBusy(() => withSchool(schoolId, (tx) => updateSeason(tx, id, entry, todayInParis())));
   revalidatePath("/parametres/saisons");
   // Every planning page, and the home page's lessons of the day.
   revalidatePath("/planning", "layout");
