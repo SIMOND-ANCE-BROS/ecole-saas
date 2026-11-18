@@ -1,7 +1,7 @@
 "use client";
 
 import { Alert, Button, Group, Paper, Select, Table, Text, TextInput } from "@mantine/core";
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import type { SeasonRow } from "@/db/settings";
 import { DateField, refusedDateField } from "../../_ui/date-field";
 import { EscapeCancelsRow } from "../../_ui/escape-asks";
@@ -39,15 +39,21 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
   );
   // Season whose quarters are being edited (#291), under the table.
   const [quartersOf, setQuartersOf] = useState<string | null>(null);
+  // Refusal of « Créer la saison », under its form.
   const [message, setMessage] = useState<string | null>(null);
+  // Refusal of a season edit, under the edited row so that it shows where « Enregistrer » was pressed (#450).
+  const [editMessage, setEditMessage] = useState<string | null>(null);
   // Lessons a date edit left outside the season's new dates (#270): a warning, not a refusal.
   const [note, setNote] = useState<string | null>(null);
   const [inProgress, startTransition] = useTransition();
+  const [editInProgress, startEditTransition] = useTransition();
   const focusAfter = useFocusAfter();
-  // Leaving the edit (saved, « Annuler », Escape): focus goes back to the row's « Modifier » (#186).
+  // Leaving the edit (saved, « Annuler », Escape): focus goes back to the row's « Modifier » (#186),
+  // and the edit's refusal goes with it.
   const closeEdit = (id: string) => {
     focusAfter(`[data-edit="${id}"]`);
     setEdition(null);
+    setEditMessage(null);
   };
   // A refusal or a lost connection keeps what was typed, with its message (#243).
   const act = (action: () => Promise<ActionResult>, after?: () => void) =>
@@ -59,9 +65,11 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
     });
 
   const saveEdition = (id: string, e: { label: string; startDate: string; endDate: string }) =>
-    startTransition(async () => {
+    startEditTransition(async () => {
+      // Cleared first: the same refusal given again is announced again.
+      setEditMessage(null);
       const r = await settle(() => changeSeason(id, { label: e.label, startDate: e.startDate, endDate: e.endDate }));
-      setMessage(r.ok ? null : r.message);
+      setEditMessage(r.ok ? null : r.message);
       setNote(r.ok ? r.note : null);
       if (r.ok) closeEdit(id);
     });
@@ -87,75 +95,91 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
             <Table.Tbody className={PHONE_TABLE.body}>
               {seasons.map((s) =>
                 edition?.id === s.id ? (
-                  <EscapeCancelsRow
-                    key={s.id}
-                    className={PHONE_TABLE.row}
-                    // A table row cannot hold a form: Enter saves by hand. Escape cancels, asking
-                    // first if anything was changed (#339).
-                    close={() => closeEdit(s.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
-                        e.preventDefault();
-                        if (!refusedDateField(e.currentTarget)) saveEdition(s.id, edition);
-                      }
-                    }}
-                  >
-                    <Table.Td className={`${cell} ${PHONE_TABLE.title}`}>
-                      <span className={PHONE_LABEL} aria-hidden>
-                        Libellé
-                      </span>
-                      <TextInput
-                        aria-label="Libellé"
-                        w={128}
-                        autoFocus
-                        value={edition.label}
-                        onChange={(e) => setEdition({ ...edition, label: e.currentTarget.value })}
-                      />
-                    </Table.Td>
-                    <Table.Td className={cell}>
-                      <span className={PHONE_LABEL} aria-hidden>
-                        Du
-                      </span>
-                      <DateField
-                        aria-label="Début"
-                        w={140}
-                        value={edition.startDate}
-                        onChange={(startDate) => setEdition({ ...edition, startDate })}
-                      />
-                    </Table.Td>
-                    <Table.Td className={cell}>
-                      <span className={PHONE_LABEL} aria-hidden>
-                        Au
-                      </span>
-                      <DateField
-                        aria-label="Fin"
-                        w={140}
-                        value={edition.endDate}
-                        onChange={(endDate) => setEdition({ ...edition, endDate })}
-                      />
-                    </Table.Td>
-                    <Table.Td className={`${number} max-sm:hidden`}>{s.course}</Table.Td>
-                    <Table.Td className={`${number} max-sm:hidden`}>{s.tariffs}</Table.Td>
-                    <Table.Td className={`${cell} max-sm:hidden`}>{s.quarters.map(quarterMonths).join(" · ")}</Table.Td>
-                    <Table.Td className={`${cell} ${PHONE_TABLE.title}`}>
-                      <Group gap="xs" wrap="nowrap">
-                        <Button
-                          size="compact-sm"
-                          variant="light"
-                          loading={inProgress}
-                          onClick={(e) => {
-                            const row = e.currentTarget.closest("tr");
-                            if (!row || !refusedDateField(row)) saveEdition(s.id, edition);
-                          }}
-                        >
-                          Enregistrer
-                        </Button>
-                        <Button size="compact-sm" variant="subtle" color="gray" onClick={() => closeEdit(s.id)}>
-                          Annuler
-                        </Button>
-                      </Group>
-                    </Table.Td>
-                  </EscapeCancelsRow>
+                  <Fragment key={s.id}>
+                    <EscapeCancelsRow
+                      // No line between the row and its refusal: they read as one.
+                      className={`${PHONE_TABLE.row} ${editMessage ? "border-b-0" : ""}`}
+                      // A table row cannot hold a form: Enter saves by hand. Escape cancels, asking
+                      // first if anything was changed (#339).
+                      close={() => closeEdit(s.id)}
+                      // While it saves, Escape does nothing: a refusal arriving then stays on screen.
+                      busy={editInProgress}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
+                          e.preventDefault();
+                          // One save at a time, as the button's spinner does for clicks.
+                          if (!editInProgress && !refusedDateField(e.currentTarget)) saveEdition(s.id, edition);
+                        }
+                      }}
+                    >
+                      <Table.Td className={`${cell} ${PHONE_TABLE.title}`}>
+                        <span className={PHONE_LABEL} aria-hidden>
+                          Libellé
+                        </span>
+                        <TextInput
+                          aria-label="Libellé"
+                          w={128}
+                          autoFocus
+                          value={edition.label}
+                          onChange={(e) => setEdition({ ...edition, label: e.currentTarget.value })}
+                        />
+                      </Table.Td>
+                      <Table.Td className={cell}>
+                        <span className={PHONE_LABEL} aria-hidden>
+                          Du
+                        </span>
+                        <DateField
+                          aria-label="Début"
+                          w={140}
+                          value={edition.startDate}
+                          onChange={(startDate) => setEdition({ ...edition, startDate })}
+                        />
+                      </Table.Td>
+                      <Table.Td className={cell}>
+                        <span className={PHONE_LABEL} aria-hidden>
+                          Au
+                        </span>
+                        <DateField
+                          aria-label="Fin"
+                          w={140}
+                          value={edition.endDate}
+                          onChange={(endDate) => setEdition({ ...edition, endDate })}
+                        />
+                      </Table.Td>
+                      <Table.Td className={`${number} max-sm:hidden`}>{s.course}</Table.Td>
+                      <Table.Td className={`${number} max-sm:hidden`}>{s.tariffs}</Table.Td>
+                      <Table.Td className={`${cell} max-sm:hidden`}>
+                        {s.quarters.map(quarterMonths).join(" · ")}
+                      </Table.Td>
+                      <Table.Td className={`${cell} ${PHONE_TABLE.title}`}>
+                        <Group gap="xs" wrap="nowrap">
+                          <Button
+                            size="compact-sm"
+                            variant="light"
+                            loading={editInProgress}
+                            onClick={(e) => {
+                              const row = e.currentTarget.closest("tr");
+                              if (!row || !refusedDateField(row)) saveEdition(s.id, edition);
+                            }}
+                          >
+                            Enregistrer
+                          </Button>
+                          <Button size="compact-sm" variant="subtle" color="gray" onClick={() => closeEdit(s.id)}>
+                            Annuler
+                          </Button>
+                        </Group>
+                      </Table.Td>
+                    </EscapeCancelsRow>
+                    {editMessage && (
+                      <Table.Tr className={`${PHONE_TABLE.row} max-sm:pt-0`}>
+                        <Table.Td colSpan={7} className={`${cell} ${PHONE_TABLE.title} pt-0`}>
+                          <Text role="alert" size="sm" c="red">
+                            {editMessage}
+                          </Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    )}
+                  </Fragment>
                 ) : (
                   <Table.Tr key={s.id} className={PHONE_TABLE.row}>
                     <Table.Td className={`${cell} ${PHONE_TABLE.title} font-medium`}>{s.label}</Table.Td>
@@ -186,7 +210,10 @@ export function Seasons({ seasons }: { seasons: SeasonRow[] }) {
                           variant="subtle"
                           aria-label={`Modifier la saison ${s.label}`}
                           data-edit={s.id}
-                          onClick={() => setEdition(s)}
+                          onClick={() => {
+                            setEdition(s);
+                            setEditMessage(null);
+                          }}
                         >
                           Modifier
                         </Button>
