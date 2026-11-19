@@ -24,7 +24,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 GitHub issues of `SIMOND-ANCE-BROS/ecole-saas` are the source of truth for work. Full conventions: **`docs/guides/issues.md`**, to follow when creating, editing or closing an issue.
 
 - **Code → issue.** Every PR references at least one issue (`Closes #N`, or `Refs #N` if the issue needs more PRs). No issue? Create it first, after searching for duplicates.
-- **Branches.** Never push directly to `main`. Allowed prefixes (checked in CI): `feature/ fix/ refactor/ test/ docs/ chore/ hotfix/ claude/ dependabot/` — not `feat/` nor `ci/`. Suggested name: `feature/11-tariff-engine`.
+- **Branches.** Never push directly to `main`. Name `<type>/<issue>-<a-few-words>` (checked in CI, same rule in every project): `feat/ fix/ refactor/ perf/ test/ docs/ chore/ ci/ build/ security/ hotfix/ revert/`. Example: `feat/11-tariff-engine`.
 - **Commits and PR titles.** Conventional commits in English: `feat(scope): imperative sentence`.
 - **PR.** Follow `.github/pull_request_template.md`: issue, summary, « Pour l’accueil et la direction » (French), test plan. **No merge without explicit approval**, PR by PR.
 - **Discoveries → issue.** A bug, debt, security gap or stale doc found on the way is neither fixed silently nor left in the conversation: open an issue with evidence (`file:line`, output), cited in the final report.
