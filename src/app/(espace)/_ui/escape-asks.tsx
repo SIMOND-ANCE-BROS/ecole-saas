@@ -94,15 +94,18 @@ export function EscapeCancelsForm({
 
 /**
  * A table row edited in place (a season): a row cannot hold a form, so the row itself is what
- * Escape cancels, as `EscapeCancelsForm`. Its own `onKeyDown` (Enter saves) runs first.
+ * Escape cancels, as `EscapeCancelsForm` (`busy` included). Its own `onKeyDown` (Enter saves)
+ * runs first.
  */
 export function EscapeCancelsRow({
   close,
+  busy = false,
   onKeyDown,
   children,
   ...props
 }: Omit<TableTrProps, "ref" | "onKeyDown"> & {
   close: () => void;
+  busy?: boolean;
   onKeyDown?: (e: KeyboardEvent<HTMLTableRowElement>) => void;
 }) {
   const root = useRef<HTMLTableRowElement>(null);
@@ -113,7 +116,7 @@ export function EscapeCancelsRow({
       ref={root}
       onKeyDown={(e) => {
         onKeyDown?.(e);
-        escape.onKeyDown(e);
+        if (!busy) escape.onKeyDown(e);
       }}
     >
       {children}

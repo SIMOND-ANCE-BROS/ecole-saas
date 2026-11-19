@@ -122,9 +122,10 @@ export function DateField({
           e.preventDefault();
           e.stopPropagation();
         }
-        // Refused text: the message shows, the calendar no longer covers it.
-        if (e.key === "Enter" && settle(e.currentTarget.value)) {
-          e.preventDefault();
+        // Enter settles the date: the calendar closes, so it covers neither the field's
+        // message (refused text) nor the form's answer to the save Enter may trigger (#450).
+        if (e.key === "Enter") {
+          if (settle(e.currentTarget.value)) e.preventDefault();
           setOpen(false);
         }
         onKeyDown?.(e);
