@@ -41,6 +41,8 @@ export type ChangeableEnrollment = {
   netPriceCents: number;
   /** Handed to the invoicing tool: a credit note alone takes a quarter off its invoice. */
   invoiced: boolean;
+  /** What an invoice the tool holds bills for it (#449), as the balance counts it; null when none does. */
+  invoicedCents: number | null;
   /** A trial dropped is free (#99 Q1, #442): the dialog says so. */
   status: EnrollmentStatus;
   /** Why it cannot be cancelled (invoiced, attended), shown instead of « Annuler… »; null when it can. */
@@ -288,8 +290,10 @@ function ChangeDialog({
               <QuartersStillDue enrollment={enrollment} droppedOn={droppedOn} />
             ) : (
               <Text size="sm" fw={500}>
-                Dû pour cette inscription : {formatEuros(enrollment.seasonDueCents)}, son prix. Un avoir éventuel se
-                décide à part.
+                {enrollment.invoicedCents === null
+                  ? `Dû pour cette inscription : ${formatEuros(enrollment.seasonDueCents)}, son prix.`
+                  : `Dû pour cette inscription : ${formatEuros(enrollment.invoicedCents)}, le montant facturé.`}{" "}
+                Un avoir éventuel se décide à part.
               </Text>
             )}
             <Text size="xs" c="dimmed">
@@ -384,7 +388,7 @@ function QuartersStillDue({ enrollment, droppedOn }: { enrollment: ChangeableEnr
         <Text size="sm">
           L’inscription est déjà facturée :{" "}
           {later === 1 ? "le trimestre suivant reste" : `les ${later} trimestres non commencés restent`} sur la facture
-          jusqu’à un avoir de la direction.
+          jusqu’à un avoir de la direction, possible une fois la facture émise.
         </Text>
       </>
     );

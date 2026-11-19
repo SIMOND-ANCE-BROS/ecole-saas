@@ -537,6 +537,17 @@ describe("draftInvoices with an installment plan (#176)", () => {
     expect(quarterly.droppedPlans).toEqual([]);
   });
 
+  it("reports a dropped plan only to the business whose draft had it, not to one that borrowed it", () => {
+    const r = run(
+      [enrollment(), enrollment({ id: "b", billingEntityId: "B" })],
+      [],
+      plans({ choice: null, previous: new Map([["A", 10]]), window: { season: SEASON, today: "2027-11-12" } }),
+    );
+    if (!r.ok) throw new Error(r.message);
+    expect(r.drafts.map((d) => d.installmentCount)).toEqual([null, null]);
+    expect(r.droppedPlans).toEqual([{ billingEntityId: "A", installmentCount: 10 }]);
+  });
+
   it("a payer paying only by the quarter records no plan, whatever was clicked", () => {
     const r = run([enrollment({ period: "quarter", grossPriceCents: 10000, quarters: QUARTERS })]);
     if (!r.ok) throw new Error(r.message);

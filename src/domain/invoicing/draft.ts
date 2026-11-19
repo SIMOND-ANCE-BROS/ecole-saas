@@ -394,7 +394,8 @@ export function draftInvoices(input: {
       else if (plans.choice !== null)
         return { ok: false, message: billing.size > 1 ? `${entity.name} : ${plan.message}` : plan.message };
       else {
-        droppedPlans.push({ billingEntityId: entity.id, installmentCount });
+        // Told only to a business whose draft had it: one borrowed from another business was never its own.
+        if (plans.previous.has(entity.id)) droppedPlans.push({ billingEntityId: entity.id, installmentCount });
         installmentCount = null;
       }
     }
