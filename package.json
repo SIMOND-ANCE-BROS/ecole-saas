@@ -24,10 +24,10 @@
     "prepare": "sh scripts/install-git-hooks.sh"
   },
   "dependencies": {
-    "@mantine/core": "9.7.4",
-    "@mantine/dates": "9.7.4",
-    "@mantine/hooks": "9.7.4",
-    "@mantine/notifications": "9.7.4",
+    "@mantine/core": "9.7.5",
+    "@mantine/dates": "9.7.5",
+    "@mantine/hooks": "9.7.5",
+    "@mantine/notifications": "9.7.5",
     "better-auth": "1.7.15",
     "dayjs": "1.11.23",
     "drizzle-orm": "0.45.4",
