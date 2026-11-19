@@ -205,7 +205,8 @@ describe("draftPayerInvoices (#302)", () => {
       VALUES (${ids.school}, ${ids.b}, ${ids.payer}, 12000, 'cash', '2027-11-15') RETURNING id`;
     await admin`INSERT INTO payment_allocation (school_id, billing_entity_id, payment_id, installment_id, amount_cents)
       VALUES (${ids.school}, ${ids.b}, ${ids.payment}, ${inst}, 12000)`;
-    expect(await draft()).toEqual({ ok: false, message: PAID_DRAFT });
+    // The business of the draft paid is named, for a drop-out's refusal (#449).
+    expect(await draft()).toEqual({ ok: false, message: PAID_DRAFT, paidEntityId: ids.b });
     expect((await invoices()).map((i) => i.id)).toContain(b.id);
     await admin`DELETE FROM payment_allocation WHERE payment_id = ${ids.payment}`;
   });

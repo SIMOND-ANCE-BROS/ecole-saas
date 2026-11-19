@@ -7,6 +7,8 @@ import {
   confirmEnrollment,
   confirmationPreview,
   dropEnrollment,
+  dropPaidDraft,
+  droppedPlanNotice,
   leavingImpacts,
   saveEnrollment,
   seasonEnrollments,
@@ -18,6 +20,7 @@ import { enrolledInCourse } from "./schedule";
 import { balanceOf } from "./payments";
 import { overlapping } from "./overlap.integration-helpers";
 import { defaultEntityFor } from "./billing-entity.integration-helpers";
+import { draftPayerInvoices } from "./invoice-drafts";
 
 /**
  * Enrollment lifecycle (#284), run as the application (app_user, RLS): confirm a trial
@@ -86,6 +89,7 @@ afterAll(async () => {
     await t`ALTER TABLE payment DISABLE TRIGGER payment_immutable`;
     await t`ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only`;
     await t`DELETE FROM audit_log WHERE school_id IN (${school}, ${otherSchool})`;
+    await t`DELETE FROM payment_allocation WHERE school_id IN (${school}, ${otherSchool})`;
     await t`DELETE FROM payment WHERE school_id IN (${school}, ${otherSchool})`;
     await t`ALTER TABLE payment ENABLE TRIGGER payment_immutable`;
     await t`ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only`;
@@ -108,6 +112,7 @@ afterAll(async () => {
     "discount",
     "tariff",
     "season",
+    "installment_plan_setting",
     "member",
   ])
     await admin.unsafe(`DELETE FROM ${t} WHERE school_id IN ($1, $2)`, [school, otherSchool]);
@@ -385,9 +390,10 @@ describe("waitlist and drop-outs", () => {
     expect((await admin`SELECT dropped_during_trial FROM enrollment WHERE id = ${e}`)[0].dropped_during_trial).toBe(
       true,
     );
+    // Nor shown with the trials going on (#449).
     expect((await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20")))?.total).toMatchObject({
       due: 0,
-      outsideCalculation: { trial: 11000 },
+      outsideCalculation: {},
     });
     // The lesson attended on trial keeps its attendance on the sheet.
     expect(await sheet("2027-11-08")).toContain(f.students[0]);
@@ -730,5 +736,206 @@ describe("enrolling a student again in a course they take (#333)", () => {
   it("re-enrolls a student who dropped the course without asking", async () => {
     const f = await family(school, ["dropped"]);
     expect((await again(f)).ok).toBe(true);
+  });
+});
+
+/**
+ * A drop-out drafts the payer's season again (#449): every unsent draft of it, a sibling's and
+ * another business's included. Last in the file: its last test gives the school a second business.
+ */
+describe("a drop-out drafting the payer's invoices again (#449)", () => {
+  const seasonId = () => ids[`season-${school}`];
+  const draft = (payer: string, installmentCount?: number) =>
+    inSchool((tx) => draftPayerInvoices(tx, null, payer, seasonId(), installmentCount ? { installmentCount } : {}));
+  const draftsOf = (payer: string) =>
+    admin`SELECT id, billing_entity_id, total_incl_tax_cents, installment_count FROM invoice
+      WHERE payer_id = ${payer} AND status = 'to_send' ORDER BY total_incl_tax_cents`;
+  /** A payment allocated to the first installment of `invoiceId` (#254). */
+  const paidOn = async (invoiceId: string, payer: string) => {
+    const [i] =
+      await admin`SELECT id, billing_entity_id, amount_cents FROM installment WHERE invoice_id = ${invoiceId} AND rank = 1`;
+    const [p] = await admin`INSERT INTO payment (school_id, billing_entity_id, payer_id, amount_cents, method, date)
+      VALUES (${school}, ${i.billing_entity_id}, ${payer}, ${i.amount_cents}, 'cash', '2027-11-10') RETURNING id`;
+    await admin`INSERT INTO payment_allocation (school_id, billing_entity_id, payment_id, installment_id, amount_cents)
+      VALUES (${school}, ${i.billing_entity_id}, ${p.id}, ${i.id}, ${i.amount_cents})`;
+  };
+  /** A sibling's yearly package (300,00 €), on the season's 60-minute course of `entityId`'s. */
+  const yearly = (e: string) =>
+    admin`UPDATE enrollment SET period = 'year', gross_price_cents = 30000 WHERE id = ${e}`.then(
+      () => admin`DELETE FROM enrollment_quarter WHERE enrollment_id = ${e}`,
+    );
+  const discountOf = async (e: string) =>
+    (await admin`SELECT discount_cents FROM enrollment WHERE id = ${e}`)[0].discount_cents as number;
+
+  beforeAll(async () => {
+    await admin`INSERT INTO installment_plan_setting (school_id, counts, due_day, rounding_unit_cents)
+      VALUES (${school}, '{1,3,10}', 5, 100)`;
+  });
+
+  it("keeps the siblings discount raised by a confirmation (#446) on the draft made again", async () => {
+    const f = await family(school, ["active", "trial"]);
+    const [first, second] = f.enrollments;
+    const preview = await inSchool((tx) => confirmationPreview(tx, second));
+    const net = preview.status === "ok" ? preview.netPriceCents : null;
+    if (net === null) throw new Error("not confirmable");
+    expect(await inSchool((tx) => confirmEnrollment(tx, desk, second, net))).toMatchObject({ ok: true });
+    // From the 1st child here (`from_rank` 1): the confirmation raised the first one's discount too.
+    expect([await discountOf(first), await discountOf(second)]).toEqual([1100, 1100]);
+    expect((await draft(f.payer)).ok).toBe(true);
+    expect((await draftsOf(f.payer)).map((d) => d.total_incl_tax_cents)).toEqual([59400]);
+
+    expect(await inSchool((tx) => dropEnrollment(tx, desk, first, "2027-11-15"))).toEqual({ ok: true, id: first });
+    // 1 quarter kept at 99,00 €, the sibling's 3 quarters with the discount it was saved with.
+    expect((await draftsOf(f.payer)).map((d) => d.total_incl_tax_cents)).toEqual([9900 + 3 * 9900]);
+    expect(await discountOf(second)).toBe(1100);
+  });
+
+  it("the most expensive child dropping (from the 2nd child): the sibling keeps its discount, told only", async () => {
+    await admin`UPDATE discount SET from_rank = 2 WHERE season_id = ${seasonId()}`;
+    try {
+      const f = await family(school, ["active", "active"]);
+      const [dearer, cheaper] = f.enrollments;
+      await admin`UPDATE enrollment SET manual_price_cents = 15000, price_reason = 'Zz cours en plus' WHERE id = ${dearer}`;
+      await admin`UPDATE enrollment SET discount_cents = 1100, discounts = '{fratrie}' WHERE id = ${cheaper}`;
+      expect((await draft(f.payer)).ok).toBe(true);
+      expect(await inSchool((tx) => leavingImpacts(tx, dearer))).toMatchObject([
+        { reference: cheaper, savedDeposit: 1100, recalculatedDiscount: 0 },
+      ]);
+      expect(await inSchool((tx) => dropEnrollment(tx, desk, dearer, "2027-11-15"))).toEqual({ ok: true, id: dearer });
+      expect((await draftsOf(f.payer)).map((d) => d.total_incl_tax_cents)).toEqual([15000 + 3 * 9900]);
+      expect(await discountOf(cheaper)).toBe(1100);
+    } finally {
+      await admin`UPDATE discount SET from_rank = 1 WHERE season_id = ${seasonId()}`;
+    }
+  });
+
+  it("is refused whole when a payment sits on the draft: nothing changes", async () => {
+    const f = await family(school, ["active"]);
+    const [e] = f.enrollments;
+    expect((await draft(f.payer)).ok).toBe(true);
+    const [inv] = await draftsOf(f.payer);
+    await paidOn(inv.id, f.payer);
+    expect(await inSchool((tx) => dropEnrollment(tx, desk, e, "2027-11-15"))).toEqual({
+      ok: false,
+      message: dropPaidDraft(null),
+    });
+    const [row] = await admin`SELECT status, dropped_on FROM enrollment WHERE id = ${e}`;
+    expect(row).toEqual({ status: "active", dropped_on: null });
+    const [{ kept }] = await admin`SELECT count(*)::int AS kept FROM enrollment_quarter WHERE enrollment_id = ${e}`;
+    expect(kept).toBe(3);
+    expect((await draftsOf(f.payer)).map((d) => d.id)).toEqual([inv.id]);
+    expect(await auditOf(e)).toEqual([]);
+  });
+
+  it("leaves a draft the outbox tried alone; the balance counts it at its amount from then on", async () => {
+    const f = await family(school, ["active"]);
+    const [e] = f.enrollments;
+    expect((await draft(f.payer)).ok).toBe(true);
+    const [inv] = await draftsOf(f.payer);
+    await admin`UPDATE invoice SET attempts = 1 WHERE id = ${inv.id}`;
+    expect(await inSchool((tx) => dropEnrollment(tx, desk, e, "2027-11-15"))).toEqual({ ok: true, id: e });
+    expect((await admin`SELECT total_incl_tax_cents FROM invoice WHERE id = ${inv.id}`)[0].total_incl_tax_cents).toBe(
+      33000,
+    );
+    // The invoice will be issued as it is: its 3 quarters are due until a credit note, not 1 then 3.
+    expect((await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20")))?.total).toMatchObject({ due: 33000 });
+    const [listed] = (await inSchool((tx) => seasonEnrollments(tx, { payerId: f.payer }, seasonId()))).filter(
+      (i) => i.id === e,
+    );
+    expect(listed).toMatchObject({ invoiced: true, invoicedCents: 33000 });
+  });
+
+  it.each([
+    ["an unsent draft", "to_send", 0, null, 36000],
+    ["a draft the outbox tried", "to_send", 1, null, 33000],
+    ["an invoice drafted in the tool", "tool_draft", 1, "zz-ref", 33000],
+    ["a rejected invoice the tool still holds", "rejected", 10, "zz-ref", 33000],
+    ["a rejected invoice the tool never held", "rejected", 10, null, 36000],
+    ["a cancelled invoice", "cancelled", 1, "zz-ref", 36000],
+  ])(
+    "counts %s at the right amount: the invoice's, or the enrollment's price",
+    async (_, status, attempts, ref, due) => {
+      const f = await family(school, ["active"]);
+      expect((await draft(f.payer)).ok).toBe(true);
+      const [inv] = await draftsOf(f.payer);
+      // Drafted at 3 × 110,00 €; the price moved since (120,00 € a quarter).
+      await admin`UPDATE enrollment SET gross_price_cents = 12000 WHERE id = ${f.enrollments[0]}`;
+      await admin`UPDATE invoice SET status = ${status}, attempts = ${attempts}, tool_ref = ${ref} WHERE id = ${inv.id}`;
+      expect((await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20")))?.total.due).toBe(due);
+    },
+  );
+
+  it("a trial dropped before confirmation no longer holds back a refund of what was paid for it", async () => {
+    const f = await family(school, ["trial"]);
+    await admin`INSERT INTO payment (school_id, billing_entity_id, payer_id, amount_cents, method, date)
+      VALUES (${school}, ${entity}, ${f.payer}, 11000, 'cash', '2027-09-10')`;
+    const refundable = async () =>
+      (await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20")))?.refunds.map((r) => r.refundable);
+    // On trial, its price is held (#294).
+    expect(await refundable()).toEqual([0]);
+    await inSchool((tx) => dropEnrollment(tx, desk, f.enrollments[0], "2027-09-20"));
+    expect(await refundable()).toEqual([11000]);
+  });
+
+  it("keeps the plan chosen when it still fits", async () => {
+    const f = await family(school, ["active", "active"]);
+    const [quarterly, sibling] = f.enrollments;
+    await yearly(sibling);
+    expect(await draft(f.payer, 3)).toMatchObject({ ok: true, planned: true });
+    expect(await inSchool((tx) => dropEnrollment(tx, desk, quarterly, "2027-11-15"))).toEqual({
+      ok: true,
+      id: quarterly,
+    });
+    expect(await draftsOf(f.payer)).toMatchObject([{ total_incl_tax_cents: 11000 + 30000, installment_count: 3 }]);
+  });
+
+  it("tells the front desk when the sibling's plan no longer applies, the draft held", async () => {
+    const f = await family(school, ["active", "active"]);
+    const [quarterly, sibling] = f.enrollments;
+    await yearly(sibling);
+    expect(await draft(f.payer, 3)).toMatchObject({ ok: true, planned: true });
+    // The school no longer offers 3 installments: the plan carried over is dropped.
+    await admin`UPDATE installment_plan_setting SET counts = '{1,10}' WHERE school_id = ${school}`;
+    try {
+      expect(await inSchool((tx) => dropEnrollment(tx, desk, quarterly, "2027-11-15"))).toEqual({
+        ok: true,
+        id: quarterly,
+        notices: [droppedPlanNotice(null, 3)],
+      });
+      expect(await draftsOf(f.payer)).toMatchObject([{ total_incl_tax_cents: 41000, installment_count: null }]);
+    } finally {
+      await admin`UPDATE installment_plan_setting SET counts = '{1,3,10}' WHERE school_id = ${school}`;
+    }
+  });
+
+  it("is refused, naming the business, when another business's draft holds a payment", async () => {
+    const [b] =
+      await admin`INSERT INTO billing_entity (school_id, name, legal_name, vat_regime, default_vat_treatment_id)
+      VALUES (${school}, 'Zz Entreprise B', 'Zz Entreprise B', 'not_applicable',
+        (SELECT default_vat_treatment_id FROM billing_entity WHERE id = ${entity})) RETURNING id`;
+    const [courseB] =
+      await admin`INSERT INTO course (school_id, billing_entity_id, season_id, discipline_id, room_id, instructor_id, weekday, start_time, duration_minutes)
+      SELECT school_id, ${b.id}, season_id, discipline_id, room_id, instructor_id, 3, '18:00', 60 FROM course WHERE id = ${ids[`course-${school}`]}
+      RETURNING id`;
+    const f = await family(school, ["active", "active"]);
+    const [dropped, other] = f.enrollments;
+    // The sibling's enrollment belongs to business B (#288).
+    await admin`DELETE FROM enrollment_course WHERE enrollment_id = ${other}`;
+    await admin`UPDATE enrollment SET billing_entity_id = ${b.id} WHERE id = ${other}`;
+    await admin`INSERT INTO enrollment_course (school_id, billing_entity_id, enrollment_id, student_id, course_id)
+      VALUES (${school}, ${b.id}, ${other}, ${f.students[1]}, ${courseB.id})`;
+    expect((await draft(f.payer)).ok).toBe(true);
+    const drafts = await draftsOf(f.payer);
+    expect(drafts.map((d) => d.billing_entity_id).sort()).toEqual([entity, b.id].sort());
+    const ofB = drafts.find((d) => d.billing_entity_id === b.id);
+    if (!ofB) throw new Error("no draft for business B");
+    await paidOn(ofB.id, f.payer);
+
+    expect(await inSchool((tx) => dropEnrollment(tx, desk, dropped, "2027-11-15"))).toEqual({
+      ok: false,
+      message: dropPaidDraft("Zz Entreprise B"),
+    });
+    expect((await admin`SELECT status FROM enrollment WHERE id = ${dropped}`)[0].status).toBe("active");
+    expect((await draftsOf(f.payer)).map((d) => d.id).sort()).toEqual(drafts.map((d) => d.id).sort());
   });
 });

@@ -520,6 +520,32 @@ describe("draftInvoices with an installment plan (#176)", () => {
     );
     if (!r.ok) throw new Error(r.message);
     expect(r.drafts[0]).toMatchObject({ installmentCount: null, installments: [] });
+    // Told, so the front desk can choose another (#449).
+    expect(r.droppedPlans).toEqual([{ billingEntityId: "A", installmentCount: 10 }]);
+  });
+
+  it("reports no dropped plan when the previous plan still fits, nor for a business with no yearly package", () => {
+    const fits = run([enrollment()], [], plans({ choice: null, previous: new Map([["A", 10]]) }));
+    if (!fits.ok) throw new Error(fits.message);
+    expect(fits.droppedPlans).toEqual([]);
+    const quarterly = run(
+      [enrollment({ period: "quarter", grossPriceCents: 10000, quarters: QUARTERS })],
+      [],
+      plans({ choice: null, previous: new Map([["A", 10]]), window: { season: SEASON, today: "2027-11-12" } }),
+    );
+    if (!quarterly.ok) throw new Error(quarterly.message);
+    expect(quarterly.droppedPlans).toEqual([]);
+  });
+
+  it("reports a dropped plan only to the business whose draft had it, not to one that borrowed it", () => {
+    const r = run(
+      [enrollment(), enrollment({ id: "b", billingEntityId: "B" })],
+      [],
+      plans({ choice: null, previous: new Map([["A", 10]]), window: { season: SEASON, today: "2027-11-12" } }),
+    );
+    if (!r.ok) throw new Error(r.message);
+    expect(r.drafts.map((d) => d.installmentCount)).toEqual([null, null]);
+    expect(r.droppedPlans).toEqual([{ billingEntityId: "A", installmentCount: 10 }]);
   });
 
   it("a payer paying only by the quarter records no plan, whatever was clicked", () => {

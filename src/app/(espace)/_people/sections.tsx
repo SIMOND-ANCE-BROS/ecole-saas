@@ -217,7 +217,7 @@ export function Enrollments({
                     <TableTd ta="right" className="tabular-nums" c={owed ? undefined : "dimmed"}>
                       {formatEuros(dueCents(i))}
                       {i.invoicedCents !== null && (
-                        // Billed by an issued invoice (#358): counted at what it bills, as the balance.
+                        // Billed by an invoice the tool holds, issued or on its way (#358, #449): counted at what it bills, as the balance.
                         <Text size="xs" c="dimmed" ta="right">
                           Facturé
                           {i.invoicedCents !== i.seasonDueCents &&

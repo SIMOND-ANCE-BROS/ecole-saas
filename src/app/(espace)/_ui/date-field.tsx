@@ -1,7 +1,7 @@
 "use client";
 
 import { DateInput, type DateInputProps } from "@mantine/dates";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { frenchDate, parseTypedDate, typedDateRefusal } from "@/lib/dates";
 
 type Props = Omit<DateInputProps, "value" | "onChange" | "valueFormat" | "dateParser" | "minDate" | "maxDate"> & {
@@ -17,6 +17,12 @@ type Props = Omit<DateInputProps, "value" | "onChange" | "valueFormat" | "datePa
    * half-typed date (« 12/09/20 » on the way to 2027).
    */
   onCommit?: (value: string) => void;
+  /**
+   * Takes the focus when it appears in a dialog (shown once the dialog has read what it needs),
+   * its calendar closed so that what the dialog says stays in view (#449); a click or typing
+   * opens it.
+   */
+  dialogFocus?: boolean;
 };
 
 /**
@@ -51,6 +57,7 @@ export function DateField({
   getDayProps,
   minDate,
   maxDate,
+  dialogFocus,
   ...props
 }: Props) {
   // Why the text in the field is refused, and whether that is shown yet.
@@ -59,6 +66,8 @@ export function DateField({
   // The calendar is opened here rather than by Mantine, so that a refused
   // save can focus the field without the calendar covering the message.
   const [open, setOpen] = useState(false);
+  // The focus given by the dialog opening leaves the calendar closed, once.
+  const quietFirstFocus = useRef(dialogFocus === true);
   // Mantine only rewrites the text when the value changes with its calendar
   // closed, never on blur without `fixOnBlur` (which would also wipe refused
   // text): a new key redraws the field from its value, as « jj/mm/aaaa ».
@@ -92,7 +101,13 @@ export function DateField({
       maxDate={maxDate}
       // An open calendar is marked like an open list, so Escape closes it first, in a side panel
       // and in an inline form alike (`listOpenOn`, #339): Mantine's DateInput marks nothing.
+      // `data-mantine-stop-propagation` is what a Mantine Modal reads to leave that Escape to
+      // the calendar, rather than closing the whole dialog (#449).
       data-expanded={open || undefined}
+      data-mantine-stop-propagation={open || undefined}
+      ref={
+        dialogFocus ? (input: HTMLInputElement | null) => void (quietFirstFocus.current && input?.focus()) : undefined
+      }
       popoverProps={{
         ...popoverProps,
         opened: open,
@@ -122,16 +137,18 @@ export function DateField({
           e.preventDefault();
           e.stopPropagation();
         }
-        // Refused text: the message shows, the calendar no longer covers it.
-        if (e.key === "Enter" && settle(e.currentTarget.value)) {
-          e.preventDefault();
+        // Enter settles the date: the calendar closes, so neither the field's own message nor a
+        // refusal of the form saved by this Enter is covered by it (#449). Refused text keeps the form.
+        if (e.key === "Enter") {
           setOpen(false);
+          if (settle(e.currentTarget.value)) e.preventDefault();
         }
         onKeyDown?.(e);
       }}
       onFocus={(e) => {
         // Focus given by `refusedDateField()`: the message stays visible.
         if (e.currentTarget.dataset.quietFocus) delete e.currentTarget.dataset.quietFocus;
+        else if (quietFirstFocus.current) quietFirstFocus.current = false;
         else setOpen(true);
         onFocus?.(e);
       }}

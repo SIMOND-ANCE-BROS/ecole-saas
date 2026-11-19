@@ -1,7 +1,7 @@
 import { and, asc, between, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { rowsOf } from "./columns-of";
-import { BILLS_ITS_LINES, discardDrafts, lockDrafts } from "./invoice-draft-discard";
+import { BILLS_ITS_LINES, discardDrafts, lockDrafts, type DiscardRefusal } from "./invoice-draft-discard";
 import { loadGrid } from "./enrollments";
 import type { Tx } from "./index";
 import {
@@ -31,6 +31,7 @@ import {
   type BillableEnrollment,
   type BillablePack,
   type DraftCourse,
+  type DroppedPlan,
 } from "../domain/invoicing/draft";
 import { displayedName } from "../domain/people/name";
 import { todayInParis } from "../domain/people/age";
@@ -46,8 +47,13 @@ import { readInstallmentPlans } from "./installment-plans";
 const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 const isUuid = (v: unknown): v is string => z.uuid().safeParse(v).success;
 
-/** `planned`: a draft is due by a plan; false when only quarters, packs or drop-ins are billed (#436). */
-export type DraftOutcome = { ok: true; invoiceIds: string[]; planned: boolean } | { ok: false; message: string };
+/**
+ * `planned`: a draft is due by a plan; false when only quarters, packs or drop-ins are billed (#436).
+ * `droppedPlans`: plans carried over that no longer fit, their drafts held (#449). A refusal
+ * caused by a payment on a draft names that draft's business (`paidEntityId`).
+ */
+export type DraftOutcome =
+  { ok: true; invoiceIds: string[]; planned: boolean; droppedPlans: DroppedPlan[] } | DiscardRefusal;
 
 /** What a drafting is told (#176): the plan chosen on the record, and the day it is drafted. */
 export type DraftOptions = {
@@ -198,7 +204,12 @@ async function redraft(
       },
     });
   }
-  return { ok: true, invoiceIds, planned: r.drafts.some((d) => d.installmentCount !== null) };
+  return {
+    ok: true,
+    invoiceIds,
+    planned: r.drafts.some((d) => d.installmentCount !== null),
+    droppedPlans: r.droppedPlans,
+  };
 }
 
 /**

@@ -9,7 +9,7 @@ import { dropDateBounds, type EnrollmentActions } from "@/domain/enrollment/life
 import type { EnrollmentStatus } from "@/domain/enrollment/statuses";
 import { owedQuarters, quarterMonths, type QuarterDates, seasonDueCents } from "@/domain/enrollment/quarters";
 import type { Period } from "@/domain/tariff/types";
-import { NOT_SAVED, settle } from "@/lib/action-result";
+import { type ActionResult, NOT_SAVED, settle } from "@/lib/action-result";
 import { ofName } from "@/lib/french";
 import { formatEuros } from "@/lib/money";
 import { DateField, refusedDateField } from "../_ui/date-field";
@@ -41,6 +41,8 @@ export type ChangeableEnrollment = {
   netPriceCents: number;
   /** Handed to the invoicing tool: a credit note alone takes a quarter off its invoice. */
   invoiced: boolean;
+  /** What an invoice the tool holds bills for it (#449), as the balance counts it; null when none does. */
+  invoicedCents: number | null;
   /** A trial dropped is free (#99 Q1, #442): the dialog says so. */
   status: EnrollmentStatus;
   /** Why it cannot be cancelled (invoiced, attended), shown instead of « Annuler… »; null when it can. */
@@ -59,9 +61,10 @@ type Props = {
 
 /**
  * Status changes of a saved enrollment (#284), as buttons in its row: each opens a
- * short dialog that shows what will change before saving. The dialog starts on its
- * safe button (« Fermer », « Garder l’inscription »), so Enter by reflex changes
- * nothing; Escape closes it.
+ * short dialog that shows what will change before saving. The confirmation and the
+ * cancellation start on their safe button (« Fermer », « Garder l’inscription »), so Enter
+ * by reflex changes nothing; the drop-out starts on its date, the one thing to type (#449),
+ * its calendar closed. Escape closes an open calendar, then the dialog.
  */
 export function EnrollmentChanges({ enrollment, today, season }: Props) {
   // The open dialog, and the button that opened it: focus goes back to it when the dialog closes without a change.
@@ -137,6 +140,12 @@ const DONE: Record<Change, string> = {
   cancel: "Inscription annulée",
 };
 
+/**
+ * Under what a drop-out owes (#449): the amount is the enrollment's, not what is left once the
+ * payer's payments are counted, which the balance alone says (payments go to the payer).
+ */
+const PAYMENTS_APART = "Sans déduire les paiements déjà reçus : ils figurent sur le solde du payeur.";
+
 /** A drop-out date to start from: today, within the allowed days. */
 const within = (today: string, b: { min: string; max: string }) =>
   today < b.min ? b.min : today > b.max ? b.max : today;
@@ -172,7 +181,8 @@ function ChangeDialog({
 
   const save = () =>
     startSending(async () => {
-      const r = await settle(() =>
+      // Only a drop-out tells `notices` (#449).
+      const r = await settle((): Promise<ActionResult<{ notices?: string[] }>> =>
         change === "confirm"
           ? confirmAction(enrollment.id, confirmedNet ?? -1)
           : change === "drop"
@@ -187,6 +197,9 @@ function ChangeDialog({
       }
       onClose(true);
       notifications.show({ color: "green", message: DONE[change] });
+      // A drop-out drafting the payer's invoices again may have held one (#449): said until closed.
+      for (const notice of r.notices ?? [])
+        notifications.show({ color: "yellow", title: "Facture à revoir", message: notice, autoClose: false });
       router.refresh();
       // The button that opened the dialog may be gone with the change: the section keeps the focus.
       requestAnimationFrame(() => document.getElementById(ENROLLMENTS_HEADING)?.focus());
@@ -271,13 +284,22 @@ function ChangeDialog({
           <Text size="sm" fw={500}>
             Essai non poursuivi : rien n’est dû, le cours d’essai est gratuit.
           </Text>
-        ) : enrollment.period === "quarter" ? (
-          <QuartersStillDue enrollment={enrollment} droppedOn={droppedOn} />
         ) : (
-          <Text size="sm" fw={500}>
-            Reste dû : {formatEuros(enrollment.seasonDueCents)}, le prix de l’inscription. Un avoir éventuel se décide à
-            part.
-          </Text>
+          <>
+            {enrollment.period === "quarter" ? (
+              <QuartersStillDue enrollment={enrollment} droppedOn={droppedOn} />
+            ) : (
+              <Text size="sm" fw={500}>
+                {enrollment.invoicedCents === null
+                  ? `Dû pour cette inscription : ${formatEuros(enrollment.seasonDueCents)}, son prix.`
+                  : `Dû pour cette inscription : ${formatEuros(enrollment.invoicedCents)}, le montant facturé.`}{" "}
+                Un avoir éventuel se décide à part.
+              </Text>
+            )}
+            <Text size="xs" c="dimmed">
+              {PAYMENTS_APART}
+            </Text>
+          </>
         )}
         <DateField
           label="Date de l’abandon"
@@ -291,6 +313,7 @@ function ChangeDialog({
             setMessage(null);
           }}
           w={160}
+          dialogFocus
         />
         <DiscountImpacts impacts={preview.impacts} />
       </>
@@ -324,7 +347,7 @@ function ChangeDialog({
           </Text>
         )}
         <Group justify="flex-end" mt="xs">
-          <Button variant="default" onClick={() => onClose(false)} data-autofocus>
+          <Button variant="default" onClick={() => onClose(false)} data-autofocus={change !== "drop" || undefined}>
             {change === "cancel" ? "Garder l’inscription" : "Fermer"}
           </Button>
           <Button type="submit" color={change === "cancel" ? "red" : undefined} disabled={!ready} loading={sending}>
@@ -353,7 +376,7 @@ function QuartersStillDue({ enrollment, droppedOn }: { enrollment: ChangeableEnr
   const listed = named.length > 1 ? `${named.slice(0, -1).join(", ")} et ${named.at(-1)}` : named.join("");
   const detail = `${n > 1 ? `(${n} × ${formatEuros(enrollment.netPriceCents)}) ` : ""}pour ${listed}`;
   // Invoiced (#443): the balance keeps the invoice's amount until a credit note, so the reduced
-  // amount is said to come after it, never as « Reste dû ».
+  // amount is said to come after it, never as what is due now.
   if (enrollment.invoiced && later > 0)
     return (
       <>
@@ -365,7 +388,7 @@ function QuartersStillDue({ enrollment, droppedOn }: { enrollment: ChangeableEnr
         <Text size="sm">
           L’inscription est déjà facturée :{" "}
           {later === 1 ? "le trimestre suivant reste" : `les ${later} trimestres non commencés restent`} sur la facture
-          jusqu’à un avoir de la direction.
+          jusqu’à un avoir de la direction, possible une fois la facture émise.
         </Text>
       </>
     );
@@ -374,7 +397,7 @@ function QuartersStillDue({ enrollment, droppedOn }: { enrollment: ChangeableEnr
       <Text size="sm" fw={500}>
         {n === 0
           ? "Aucun trimestre n’a commencé à cette date : rien n’est dû."
-          : `Reste dû : ${formatEuros(total)} ${detail}.`}
+          : `Dû pour cette inscription : ${formatEuros(total)} ${detail}.`}
       </Text>
       {n > 0 && later > 0 && (
         <Text size="sm">
