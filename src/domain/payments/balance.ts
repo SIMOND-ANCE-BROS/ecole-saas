@@ -4,7 +4,10 @@ import type { Period } from "../tariff/types";
 /**
  * A payer's balance (#97), in cents. What an issued invoice bills is due at the invoice's
  * amount (#305); what no issued invoice bills yet is due at its enrollment or lesson pack
- * price, as before invoices existed. Payments are recorded against the payer.
+ * price, as before invoices existed. Payments are recorded against the payer. « Issued » here
+ * covers an invoice on its way to it too, once the outbox tried to send it (#449,
+ * `HELD_BY_TOOL` in `src/db/invoice-draft-discard.ts`): nothing drafts it again, so its amount
+ * is the one that will be issued.
  */
 
 export type EnrollmentStatus = "trial" | "waitlist" | "active" | "dropped" | "ended";
@@ -59,7 +62,11 @@ export type Balance = {
   remaining: number;
   /** Cheques received but to be cashed after today (counted in « payé »). */
   toCollect: number;
-  /** Enrollments left out of the calculation, by status (amounts), so that management sees them. */
+  /**
+   * Enrollments left out of the calculation, by status (amounts), so that management sees them:
+   * those still on trial or on the waitlist, never a trial dropped without being confirmed, which
+   * owes nothing and will not (#449).
+   */
   outsideCalculation: Partial<Record<EnrollmentStatus, number>>;
 };
 
@@ -109,7 +116,7 @@ export function payerBalance(
     if (i.invoiced) continue;
     const status = dueStatusOf(i);
     if (DUE_STATUSES.includes(status)) due += seasonDueCents(i);
-    else outsideCalculation[status] = (outsideCalculation[status] ?? 0) + seasonDueCents(i);
+    else if (i.status !== "dropped") outsideCalculation[status] = (outsideCalculation[status] ?? 0) + seasonDueCents(i);
   }
   const paid = payments.reduce((s, p) => s + p.amountCents, 0);
   const toCollect = payments

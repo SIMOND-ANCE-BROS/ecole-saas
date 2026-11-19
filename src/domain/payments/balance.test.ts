@@ -87,9 +87,11 @@ describe("a trial is free, even dropped without being confirmed (#99 Q1, #442)",
     netPriceCents: 11_000,
   } as const;
 
-  it("is counted as a trial: out of the amount due, shown apart", () => {
+  it("is counted as a trial: out of the amount due, and no longer shown with the trials going on (#449)", () => {
     expect(dueStatusOf(droppedTrial)).toBe("trial");
-    expect(payerBalance([droppedTrial], [], [], TODAY)).toMatchObject({
+    expect(payerBalance([droppedTrial], [], [], TODAY)).toMatchObject({ due: 0, outsideCalculation: {} });
+    const onTrial = { ...droppedTrial, status: "trial", droppedDuringTrial: false } as const;
+    expect(payerBalance([droppedTrial, onTrial], [], [], TODAY)).toMatchObject({
       due: 0,
       outsideCalculation: { trial: 11_000 },
     });

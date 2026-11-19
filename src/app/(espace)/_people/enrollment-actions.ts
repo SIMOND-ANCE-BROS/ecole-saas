@@ -51,13 +51,16 @@ export async function leavingImpactsAction(enrollmentId: string): Promise<Existi
   return withSchool(schoolId, (tx) => leavingImpacts(tx, enrollmentId));
 }
 
-/** Records a drop-out on `droppedOn` (`YYYY-MM-DD`). */
-export async function dropAction(enrollmentId: string, droppedOn: string): Promise<ActionResult> {
+/** Records a drop-out on `droppedOn` (`YYYY-MM-DD`), with what it changed besides (`notices`, #449). */
+export async function dropAction(
+  enrollmentId: string,
+  droppedOn: string,
+): Promise<ActionResult<{ notices: string[] }>> {
   const { schoolId, userId } = await requireRole("director", "front_desk");
   if (!id.safeParse(enrollmentId).success) return { ok: false, message: INVALID };
   if (!dropDate.safeParse(droppedOn).success) return { ok: false, message: "Indiquez la date de l’abandon." };
   const r = await orBusy(() => withSchool(schoolId, (tx) => dropEnrollment(tx, userId, enrollmentId, droppedOn)));
-  return r.ok ? { ok: true } : { ok: false, message: r.message };
+  return r.ok ? { ok: true, notices: r.notices ?? [] } : { ok: false, message: r.message };
 }
 
 /** Cancels an enrollment entered by mistake (never one already invoiced). */

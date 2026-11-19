@@ -215,7 +215,11 @@ export type InvoiceDraft = {
   installmentCount: number | null;
 };
 
-export type DraftResult = { ok: true; drafts: InvoiceDraft[] } | { ok: false; message: string };
+/** A plan carried over from a previous draft that no longer fits (#449): the business's draft is held. */
+export type DroppedPlan = { billingEntityId: string; installmentCount: number };
+
+export type DraftResult =
+  { ok: true; drafts: InvoiceDraft[]; droppedPlans: DroppedPlan[] } | { ok: false; message: string };
 
 /** What an enrollment's package bills per period: the typed price alone (#292 Q2), or the grid price and its discount. */
 function priceOf(e: BillableEnrollment) {
@@ -295,7 +299,8 @@ function ranked(byDay: ReadonlyMap<string, number>): DraftInstallment[] {
  * treatment's category, rate and mention copied onto each line. A business with nothing to bill
  * gets no draft. Yearly packages are due by the chosen plan (`plans`, #176): a plan the
  * record chose that does not fit is refused; one carried over from a previous draft that no
- * longer fits is dropped, the draft held until a plan is chosen. Lesson packs and drop-in
+ * longer fits is dropped, the draft held until a plan is chosen, and reported (`droppedPlans`,
+ * #449) so the front desk is told. Lesson packs and drop-in
  * packages are due at once, on the drafting day or, before the season, its first due date
  * (`oneOffDue`, #436). Refused, in French, when a
  * line carries VAT for a business that charges none, or when an enrollment has no course or a
@@ -327,6 +332,7 @@ export function draftInvoices(input: {
   // Several businesses billing: a refusal of one's split names it.
   const billing = new Set([...due, ...input.packs].map((x) => x.billingEntityId));
   const drafts: InvoiceDraft[] = [];
+  const droppedPlans: DroppedPlan[] = [];
   for (const entity of input.entities) {
     const enrollments = due.filter((e) => e.billingEntityId === entity.id);
     const packs = input.packs.filter((p) => p.billingEntityId === entity.id);
@@ -387,7 +393,10 @@ export function draftInvoices(input: {
       if (plan.ok) for (const i of plan.installments) byDay.set(i.dueOn, (byDay.get(i.dueOn) ?? 0) + i.amountCents);
       else if (plans.choice !== null)
         return { ok: false, message: billing.size > 1 ? `${entity.name} : ${plan.message}` : plan.message };
-      else installmentCount = null;
+      else {
+        droppedPlans.push({ billingEntityId: entity.id, installmentCount });
+        installmentCount = null;
+      }
     }
     drafts.push({
       billingEntityId: entity.id,
@@ -399,7 +408,7 @@ export function draftInvoices(input: {
       installmentCount: plans ? installmentCount : null,
     });
   }
-  return { ok: true, drafts };
+  return { ok: true, drafts, droppedPlans };
 }
 
 /** « Forfait 45 min + 1 h 00 — Zz Alice et Zz Bruno »: the package line of an enrollment. */

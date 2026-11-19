@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { rowsOf } from "./columns-of";
-import { discardDrafts, draftsBillingEnrollment, PAID_DRAFT, UNSENT_DRAFT } from "./invoice-draft-discard";
+import { discardDrafts, draftsBillingEnrollment, HELD_BY_TOOL, UNSENT_DRAFT } from "./invoice-draft-discard";
 import { draftPayerInvoices } from "./invoice-drafts";
 import { allOrNothing } from "./all-or-nothing";
 import { z } from "zod";
@@ -38,8 +38,8 @@ import {
   type SeasonQuarter,
 } from "../domain/enrollment/quarters";
 import { todayInParis } from "../domain/people/age";
+import { planLabel } from "../domain/invoicing/plans";
 import { has } from "../lib/has";
-import { SETTLED_INVOICE_STATUS } from "../domain/payments/allocation";
 import { computeTariff } from "../domain/tariff/compute";
 import { requestsByEntity, type EntityCourse } from "../domain/enrollment/entities";
 import type {
@@ -819,13 +819,13 @@ const paidDraftSql = sql<boolean>`EXISTS (SELECT 1 FROM invoice_line l JOIN invo
   WHERE l.enrollment_id = ${enrollmentId} AND ${UNSENT_DRAFT})`;
 
 /**
- * What the lines of issued invoices (and credit notes) bill for the enrollment of the row
- * (#358), null when none does: the balance counts it so (`invoicedBy` in `src/db/payments.ts`,
- * `SETTLED_INVOICE_STATUS`).
+ * What the lines of invoices (and credit notes) held by the tool bill for the enrollment of the
+ * row (#358, #449: issued, or on their way), null when none does: the balance counts it so
+ * (`invoicedBy` in `src/db/payments.ts`, `HELD_BY_TOOL`).
  */
 const invoicedCentsSql = sql<number | null>`(SELECT sum(l.incl_tax_cents) FROM invoice_line l
   JOIN invoice i ON i.id = l.invoice_id
-  WHERE l.enrollment_id = ${enrollmentId} AND i.status = ${SETTLED_INVOICE_STATUS})::int`;
+  WHERE l.enrollment_id = ${enrollmentId} AND ${HELD_BY_TOOL})::int`;
 
 /**
  * The lesson `s` of the enrollment course `c`, whose attendance was taken for its student, has
@@ -1142,7 +1142,9 @@ export async function confirmationPreview(tx: Tx, id: string): Promise<Confirmat
   return e ? confirmationOf(tx, e) : { status: "invalid", message: GONE };
 }
 
-export type ChangeResult = { ok: true; id: string; already?: true } | { ok: false; message: string };
+/** `notices`: what the change did besides, told to the front desk (#449). */
+export type ChangeResult =
+  { ok: true; id: string; already?: true; notices?: string[] } | { ok: false; message: string };
 
 /**
  * Confirms a trial or waitlist enrollment (→ active) at the price recomputed now, which
@@ -1254,9 +1256,28 @@ async function coveredQuartersOf(tx: Tx, id: string): Promise<SeasonQuarter[]> {
     .orderBy(asc(seasonQuarter.startDate));
 }
 
-/** A drop-out refused because its invoice draft cannot be drafted again (a payment reached it). */
-export const DROP_PAID_DRAFT =
-  "Un paiement est déjà affecté au brouillon de facture de cette inscription : l’abandon ne peut pas être enregistré. Demandez à la direction.";
+/**
+ * A drop-out refused because a draft of the payer's season, which it would draft again, holds a
+ * payment (#449): that draft may bill a sibling or another business's courses, named when the
+ * school has several.
+ */
+export const dropPaidDraft = (entity: string | null) =>
+  `Un paiement est déjà affecté à une facture en préparation de ce payeur${entity ? ` pour ${entity}` : ""} : l’abandon la referait, il ne peut donc pas être enregistré. Demandez à la direction.`;
+
+/**
+ * What the front desk is told when drafting again held a draft whose plan no longer fits (#449:
+ * no longer offered, or ending after the season): the draft may bill a sibling's yearly package,
+ * so it is said rather than left silent.
+ */
+export const droppedPlanNotice = (entity: string | null, installmentCount: number) =>
+  `La facture en préparation${entity ? ` de ${entity}` : ""} n’est plus à payer ${planLabel(installmentCount)} : l’école ne le propose plus, ou il finirait après la saison. Choisissez-en un autre dans « Factures », sur la fiche du payeur.`;
+
+/** The name of a business, only when the school has several (else nothing to tell apart). */
+async function entityNamed(tx: Tx, id: string): Promise<string | null> {
+  if (!(await severalEntities(tx))) return null;
+  const [e] = await tx.select({ name: billingEntity.name }).from(billingEntity).where(eq(billingEntity.id, id));
+  return e?.name ?? null;
+}
 
 /**
  * Records a drop-out on `droppedOn` (from the enrollment day, within its season): the
@@ -1269,8 +1290,9 @@ export const DROP_PAID_DRAFT =
  * When quarters are released and an unsent draft bills it, the payer's whole season is drafted
  * again at once (`draftPayerInvoices`): the plan chosen is kept while it still fits the season
  * (else dropped and the yearly packages held until a plan is chosen again), and what no draft
- * billed yet is added. The whole drop-out is refused, in French, if that drafting is (a payment
- * already allocated to the draft: `DROP_PAID_DRAFT`). A trial dropped releases its quarters too:
+ * billed yet is added; a plan dropped that way is told (`notices`, `droppedPlanNotice`, #449). The
+ * whole drop-out is refused, in French, if that drafting is (a payment already allocated to one
+ * of those drafts: `dropPaidDraft`, naming its business). A trial dropped releases its quarters too:
  * informative only, a trial owing nothing. Refused before the last lesson whose attendance it alone keeps on a sheet (#410,
  * `attendedDropRefusal`). The same drop-out sent twice changes nothing.
  */
@@ -1321,12 +1343,17 @@ export async function dropEnrollment(tx: Tx, userId: string, id: string, dropped
         ...(released.length > 0 ? { releasedQuarterIds: released } : {}),
       },
     });
-    if (stale.length > 0) {
-      const drafted = await draftPayerInvoices(sp, who.id, e.payerId, e.seasonId);
-      if (!drafted.ok)
-        return { ok: false, message: drafted.message === PAID_DRAFT ? DROP_PAID_DRAFT : drafted.message };
-    }
-    return { ok: true, id };
+    if (stale.length === 0) return { ok: true, id };
+    const drafted = await draftPayerInvoices(sp, who.id, e.payerId, e.seasonId);
+    if (!drafted.ok)
+      return {
+        ok: false,
+        message: drafted.paidEntityId ? dropPaidDraft(await entityNamed(sp, drafted.paidEntityId)) : drafted.message,
+      };
+    const notices: string[] = [];
+    for (const p of drafted.droppedPlans)
+      notices.push(droppedPlanNotice(await entityNamed(sp, p.billingEntityId), p.installmentCount));
+    return notices.length > 0 ? { ok: true, id, notices } : { ok: true, id };
   });
 }
 

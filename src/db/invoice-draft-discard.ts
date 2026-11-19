@@ -1,4 +1,4 @@
-import { and, eq, exists, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, exists, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { rowsOf } from "./columns-of";
 import type { Tx } from "./index";
 import { auditLog, installment, invoice, invoiceLine, paymentAllocation } from "./schema";
@@ -14,15 +14,23 @@ import { auditLog, installment, invoice, invoiceLine, paymentAllocation } from "
 export const CURRENT_SCHOOL = sql`nullif(current_setting('app.school_id', true), '')::uuid`;
 
 /** The invoice aliased `i` is an unsent draft: never attempted by the outbox. */
-export const UNSENT_DRAFT = sql.raw(`(i.status = 'to_send' AND i.attempts = 0)`);
+const UNSENT = `(i.status = 'to_send' AND i.attempts = 0)`;
+export const UNSENT_DRAFT = sql.raw(UNSENT);
 
 /**
  * The invoice aliased `i` still bills its lines (`billsItsLines`, src/domain/invoicing/outbox.ts):
  * all but a cancelled one, or one rejected before the tool held any document of it.
  */
-export const BILLS_ITS_LINES = sql.raw(
-  `(i.status <> 'cancelled' AND NOT (i.status = 'rejected' AND i.tool_ref IS NULL))`,
-);
+const BILLS = `(i.status <> 'cancelled' AND NOT (i.status = 'rejected' AND i.tool_ref IS NULL))`;
+export const BILLS_ITS_LINES = sql.raw(BILLS);
+
+/**
+ * The invoice aliased `i` holds what it bills for good: past the unsent draft (the outbox tried
+ * it, the tool holds it, or it is issued) and still billing its lines. Nothing drafts that again,
+ * so the balance counts it at its own amount from then on, not only once issued: otherwise a
+ * drop-out or a discount changed meanwhile would show one amount, then the invoice's (#449).
+ */
+export const HELD_BY_TOOL = sql.raw(`(NOT ${UNSENT} AND ${BILLS})`);
 
 export const PAID_DRAFT =
   "Un paiement est déjà affecté à une échéance de ce brouillon de facture : il ne peut pas être refait.";
@@ -49,6 +57,9 @@ export const draftsBillingEnrollment = (tx: Tx, enrollmentId: string) =>
     ),
   );
 
+/** A discarding refused: `paidEntityId` names the business of the draft a payment reached (#449). */
+export type DiscardRefusal = { ok: false; message: string; paidEntityId?: string };
+
 /**
  * Deletes unsent drafts with their lines and installments; the audit log keeps their ids and
  * amounts (never a name). Refused, in French, once a payment is allocated to one of their
@@ -58,7 +69,7 @@ export async function discardDrafts(
   tx: Tx,
   actor: string | null,
   ids: readonly string[],
-): Promise<{ ok: true } | { ok: false; message: string }> {
+): Promise<{ ok: true } | DiscardRefusal> {
   if (ids.length === 0) return { ok: true };
   // Their installments locked first: a payment allocated meanwhile waits, then finds them gone.
   await tx
@@ -66,13 +77,14 @@ export async function discardDrafts(
     .from(installment)
     .where(inArray(installment.invoiceId, [...ids]))
     .for("update");
-  const paid = await tx
-    .select({ one: sql`1` })
+  const [paid] = await tx
+    .select({ billingEntityId: installment.billingEntityId })
     .from(paymentAllocation)
     .innerJoin(installment, eq(installment.id, paymentAllocation.installmentId))
     .where(inArray(installment.invoiceId, [...ids]))
+    .orderBy(asc(installment.billingEntityId))
     .limit(1);
-  if (paid.length > 0) return { ok: false, message: PAID_DRAFT };
+  if (paid) return { ok: false, message: PAID_DRAFT, paidEntityId: paid.billingEntityId };
   const gone = await tx
     .select({
       id: invoice.id,

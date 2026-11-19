@@ -37,7 +37,7 @@ import { alreadyCorrected } from "./payments-sql";
 import { allocatePayer, allocatePayments, releaseUncovered } from "./allocations";
 import { lockPayerAndPaymentsOf, lockPayers, lockPaymentsOfPayer } from "./payment-locks";
 import { allOrNothing } from "./all-or-nothing";
-import { SETTLED_INVOICE_STATUS } from "../domain/payments/allocation";
+import { HELD_BY_TOOL } from "./invoice-draft-discard";
 import { todayInParis } from "../domain/people/age";
 
 /**
@@ -420,9 +420,12 @@ export async function balanceOf(tx: Tx, payerId: string, today: string): Promise
   };
 }
 
-/** Billed by a line (alias `l`) of an issued invoice (#305, `SETTLED_INVOICE_STATUS`). */
+/**
+ * Billed by a line (alias `l`) of an invoice held by the tool (#305, #449, `HELD_BY_TOOL`): issued,
+ * or on its way, its amount then counted instead.
+ */
 const invoicedBy = (line: SQL) =>
-  sql<boolean>`EXISTS (SELECT 1 FROM invoice_line l JOIN invoice i ON i.id = l.invoice_id WHERE ${line} AND i.status = ${SETTLED_INVOICE_STATUS})`;
+  sql<boolean>`EXISTS (SELECT 1 FROM invoice_line l JOIN invoice i ON i.id = l.invoice_id WHERE ${line} AND ${HELD_BY_TOOL})`;
 
 /** A payer's balance per entity id and in total (#300), or null if they never paid nor owed anything. */
 async function balancesOf(tx: Tx, payerId: string, today: string) {
@@ -450,11 +453,17 @@ async function balancesOf(tx: Tx, payerId: string, today: string) {
     .where(eq(lessonPack.payerId, payerId));
   // Workshop sign-ups (#297): counted like a lesson pack, at their price; no invoice bills them yet.
   const workshops = await signupDuesOf(tx, payerId);
-  // Issued invoices and credit notes (#305): what they bill is due at their amount.
+  // Invoices and credit notes held by the tool (#305, #449): what they bill is due at their amount,
+  // from the outbox's first attempt rather than only once issued.
   const invoices = await tx
     .select({ billingEntityId: invoice.billingEntityId, totalInclTaxCents: invoice.totalInclTaxCents })
     .from(invoice)
-    .where(and(eq(invoice.payerId, payerId), eq(invoice.status, SETTLED_INVOICE_STATUS)));
+    .where(
+      and(
+        eq(invoice.payerId, payerId),
+        sql`EXISTS (SELECT 1 FROM invoice i WHERE i.id = ${invoice.id} AND ${HELD_BY_TOOL})`,
+      ),
+    );
   const payments = await tx
     .select({
       amountCents: payment.amountCents,
