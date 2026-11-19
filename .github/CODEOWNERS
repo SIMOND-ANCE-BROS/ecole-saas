@@ -12,3 +12,7 @@
 /.github/workflows/          @GabinSMD
 /.github/CODEOWNERS          @GabinSMD
 /docker/                     @GabinSMD
+/Dockerfile                  @GabinSMD
+/.dockerignore               @GabinSMD
+/next.config.ts              @GabinSMD
+/deploy/                     @GabinSMD

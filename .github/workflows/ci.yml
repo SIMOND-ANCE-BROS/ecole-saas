@@ -96,12 +96,70 @@ jobs:
           fi
           sh scripts/gitleaks.sh git --redact --no-banner --log-level warn --log-opts="$range"
 
+  # Production image (#337): builds the Dockerfile, never pushes it, then runs it the way
+  # production does against a throw-away database. Plain `docker build` (the runner's Docker): no
+  # extra action, no registry credentials, read-only token.
+  image:
+    name: Docker image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_USER: proprio
+          POSTGRES_PASSWORD: proprio
+          POSTGRES_DB: ecole
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Values reserved for CI, unrelated to any real secret.
+      DATABASE_URL: postgres://app_user:app_user@localhost:5432/ecole
+      DATABASE_ADMIN_URL: postgres://proprio:proprio@localhost:5432/ecole
+      BETTER_AUTH_URL: http://localhost:3000
+      HARDEN: --cap-drop=ALL --security-opt no-new-privileges --read-only --tmpfs /tmp
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Throw-away secrets for this run only: none is written in the repository.
+      - name: Random secrets for the web server
+        run: |
+          echo "BETTER_AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "JOBS_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - name: Build the production image
+        run: docker build --pull -t ecole-saas:ci .
+      - name: Image runs as non-root
+        run: test "$(docker image inspect ecole-saas:ci --format '{{.Config.User}}')" = node
+      - name: PostgreSQL roles
+        run: PGPASSWORD=proprio psql -h localhost -U proprio -d ecole -f docker/init.sql
+      # The bundled scripts run as in production: a module esbuild could not resolve fails here.
+      - name: Migrations and scheduled scripts from the image
+        run: |
+          for script in migrate purge-submissions mark-overdue-installments pseudonymise-audit-log sync-calendars; do
+            docker run --rm --init $HARDEN --network host \
+              -e DATABASE_URL -e DATABASE_ADMIN_URL ecole-saas:ci node "scripts/$script.mjs"
+          done
+      - name: Web server answers
+        run: |
+          docker run -d --init $HARDEN --tmpfs /app/.next/cache:uid=1000,gid=1000 --network host \
+            -e DATABASE_URL -e BETTER_AUTH_SECRET -e BETTER_AUTH_URL -e JOBS_SECRET \
+            --name web ecole-saas:ci
+          for _ in $(seq 30); do curl -sf -o /dev/null http://127.0.0.1:3000/connexion && break; sleep 1; done
+          curl -sf -o /dev/null http://127.0.0.1:3000/connexion
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3000/api/taches/factures)" = 401
+          curl -sf -o /dev/null -X POST -H "Authorization: Bearer $JOBS_SECRET" http://127.0.0.1:3000/api/taches/factures
+      - name: Web server log
+        if: failure()
+        run: docker logs web || true
+
   # Single check to require on main: fails if any job above failed or was skipped.
   ci-success:
     name: ci-success
     runs-on: ubuntu-24.04
     timeout-minutes: 2
-    needs: [verify, audit, secret-scan]
+    needs: [verify, audit, secret-scan, image]
     if: always()
     steps:
       - name: All required jobs passed

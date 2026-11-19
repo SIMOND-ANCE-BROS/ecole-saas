@@ -4,18 +4,19 @@ One file per structural decision, numbered, never rewritten: a decision that
 changes is **superseded** by a new record that links to the old one (and the
 old one gets `Status: Superseded by NNNN`).
 
-| #                                                                 | Decision                                                                 | Status             |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------ |
-| [0001](0001-multi-school-row-level-security.md)                   | Multi-school isolation with PostgreSQL Row Level Security                | Accepted           |
-| [0002](0002-invoicing-delegated-to-the-school-tool.md)            | Invoicing delegated to the school's invoicing tool                       | Superseded by 0006 |
-| [0003](0003-mantine-for-the-interface.md)                         | Mantine for every interface control, Tailwind for layout                 | Accepted           |
-| [0004](0004-english-code-french-interface.md)                     | English code and process, French interface                               | Accepted           |
-| [0005](0005-business-registry-search.md)                          | Business registry search, server-side and optional                       | Accepted           |
-| [0006](0006-billing-entities-and-vat-per-course.md)               | Invoice through billing entities inside a school, VAT per course         | Accepted           |
-| [0007](0007-per-entity-connector-and-outbox.md)                   | Send invoices through a per-entity connector and an outbox               | Accepted           |
-| [0008](0008-invitation-email-proof-and-account-disclosure.md)     | Prove an unverified account’s e-mail before it joins another school      | Proposed           |
-| [0009](0009-email-sending-per-school-with-application-default.md) | Send e-mail through a per-school connector, with an application default  | Proposed           |
-| [0010](0010-audit-log-pseudonymisation.md)                        | Pseudonymise personal values in the audit log after the retention period | Proposed           |
+| #                                                                 | Decision                                                                        | Status             |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------ |
+| [0001](0001-multi-school-row-level-security.md)                   | Multi-school isolation with PostgreSQL Row Level Security                       | Accepted           |
+| [0002](0002-invoicing-delegated-to-the-school-tool.md)            | Invoicing delegated to the school's invoicing tool                              | Superseded by 0006 |
+| [0003](0003-mantine-for-the-interface.md)                         | Mantine for every interface control, Tailwind for layout                        | Accepted           |
+| [0004](0004-english-code-french-interface.md)                     | English code and process, French interface                                      | Accepted           |
+| [0005](0005-business-registry-search.md)                          | Business registry search, server-side and optional                              | Accepted           |
+| [0006](0006-billing-entities-and-vat-per-course.md)               | Invoice through billing entities inside a school, VAT per course                | Accepted           |
+| [0007](0007-per-entity-connector-and-outbox.md)                   | Send invoices through a per-entity connector and an outbox                      | Accepted           |
+| [0008](0008-invitation-email-proof-and-account-disclosure.md)     | Prove an unverified account’s e-mail before it joins another school             | Proposed           |
+| [0009](0009-email-sending-per-school-with-application-default.md) | Send e-mail through a per-school connector, with an application default         | Proposed           |
+| [0010](0010-audit-log-pseudonymisation.md)                        | Pseudonymise personal values in the audit log after the retention period        | Proposed           |
+| [0011](0011-docker-image-vps-managed-postgres-cron.md)            | Run production as one Docker image on a VPS, with a managed PostgreSQL and cron | Proposed           |
 
 ## Template
 

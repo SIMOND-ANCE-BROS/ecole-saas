@@ -8,6 +8,8 @@ const liste = (valeur: string | undefined) =>
     .filter(Boolean);
 
 const nextConfig: NextConfig = {
+  // Self-contained server in .next/standalone, used by the production image (Dockerfile, #337).
+  output: "standalone",
   // Développement seulement : autres noms d'hôte autorisés (ex. l'IP du poste
   // sur le réseau local pour tester depuis une autre machine). Voir .env.example.
   allowedDevOrigins: liste(process.env.ORIGINES_DEV),
