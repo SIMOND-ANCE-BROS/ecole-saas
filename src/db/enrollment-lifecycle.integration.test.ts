@@ -845,6 +845,38 @@ describe("a drop-out drafting the payer's invoices again (#449)", () => {
     expect(listed).toMatchObject({ invoiced: true, invoicedCents: 33000 });
   });
 
+  it.each([
+    ["an unsent draft", "to_send", 0, null, 36000],
+    ["a draft the outbox tried", "to_send", 1, null, 33000],
+    ["an invoice drafted in the tool", "tool_draft", 1, "zz-ref", 33000],
+    ["a rejected invoice the tool still holds", "rejected", 10, "zz-ref", 33000],
+    ["a rejected invoice the tool never held", "rejected", 10, null, 36000],
+    ["a cancelled invoice", "cancelled", 1, "zz-ref", 36000],
+  ])(
+    "counts %s at the right amount: the invoice's, or the enrollment's price",
+    async (_, status, attempts, ref, due) => {
+      const f = await family(school, ["active"]);
+      expect((await draft(f.payer)).ok).toBe(true);
+      const [inv] = await draftsOf(f.payer);
+      // Drafted at 3 × 110,00 €; the price moved since (120,00 € a quarter).
+      await admin`UPDATE enrollment SET gross_price_cents = 12000 WHERE id = ${f.enrollments[0]}`;
+      await admin`UPDATE invoice SET status = ${status}, attempts = ${attempts}, tool_ref = ${ref} WHERE id = ${inv.id}`;
+      expect((await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20")))?.total.due).toBe(due);
+    },
+  );
+
+  it("a trial dropped before confirmation no longer holds back a refund of what was paid for it", async () => {
+    const f = await family(school, ["trial"]);
+    await admin`INSERT INTO payment (school_id, billing_entity_id, payer_id, amount_cents, method, date)
+      VALUES (${school}, ${entity}, ${f.payer}, 11000, 'cash', '2027-09-10')`;
+    const refundable = async () =>
+      (await inSchool((tx) => balanceOf(tx, f.payer, "2027-11-20")))?.refunds.map((r) => r.refundable);
+    // On trial, its price is held (#294).
+    expect(await refundable()).toEqual([0]);
+    await inSchool((tx) => dropEnrollment(tx, desk, f.enrollments[0], "2027-09-20"));
+    expect(await refundable()).toEqual([11000]);
+  });
+
   it("keeps the plan chosen when it still fits", async () => {
     const f = await family(school, ["active", "active"]);
     const [quarterly, sibling] = f.enrollments;
