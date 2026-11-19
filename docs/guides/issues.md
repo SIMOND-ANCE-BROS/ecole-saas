@@ -161,22 +161,29 @@ An epic is closed when all its sub-issues are closed.
 **Branches.** Never push directly to `main`. A branch starts from `main` with
 an allowed prefix, checked in CI (`.github/workflows/pr-conventions.yml`, which also checks that the PR title is a conventional commit):
 
-| Prefix                   | For                                    |
-| ------------------------ | -------------------------------------- |
-| `feature/`               | Feature (`feature/11-tariff-engine`)   |
-| `fix/`                   | Bug fix                                |
-| `refactor/`              | Restructuring without behaviour change |
-| `test/`                  | Tests only                             |
-| `docs/`                  | Documentation                          |
-| `chore/`                 | CI, dependencies, tooling (not `ci/`)  |
-| `hotfix/`                | Urgent fix                             |
-| `claude/`, `dependabot/` | Branches created by tools              |
+| Prefix      | For                                    |
+| ----------- | -------------------------------------- |
+| `feat/`     | Feature (`feat/11-tariff-engine`)      |
+| `fix/`      | Bug fix                                |
+| `refactor/` | Restructuring without behaviour change |
+| `perf/`     | Performance                            |
+| `test/`     | Tests only                             |
+| `docs/`     | Documentation                          |
+| `chore/`    | Dependencies, tooling                  |
+| `ci/`       | CI workflows                           |
+| `build/`    | Build system                           |
+| `security/` | Security fix                           |
+| `hotfix/`   | Urgent fix                             |
+| `revert/`   | Revert                                 |
 
-Suggested name: `<prefix>/<issue number>-<a-few-words>`.
+Bot branches (Dependabot) are not checked. The same convention applies to every
+project.
+
+Name: `<prefix>/<issue number>-<a-few-words>`, lowercase with hyphens.
 
 **Commits and PR titles.** Conventional commits in English, imperative mood:
-`<type>(<scope>): <sentence>`, types `feat`, `fix`, `refactor`, `test`,
-`docs`, `chore`, `perf`, `security`; the scope is a module (`enrollment`,
+`<type>(<scope>): <sentence>`, types `feat`, `fix`, `refactor`, `perf`,
+`test`, `docs`, `chore`, `ci`, `build`, `security`, `hotfix`, `revert`; the scope is a module (`enrollment`,
 `lists`, `team`, `ci`…). The PR is squash-merged with its title as the commit
 subject.
 
